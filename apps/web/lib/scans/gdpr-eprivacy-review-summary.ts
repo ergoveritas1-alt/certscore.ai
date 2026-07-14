@@ -482,8 +482,8 @@ export function deriveGdprEprivacyReviewSummary(
   if (rejectPathObserved && rowIs(postRejectTracking, "Gap observed") && postRejectPersistenceEvidence) {
     addBullet(bullets, {
       copy: postRejectVendors.length > 0
-        ? `CertScore observed a visible Decline option, but also observed non-essential tracking activity around refusal for ${postRejectVendors.join(", ")}.`
-        : "CertScore observed a visible Decline option, but also observed non-essential tracking activity around the reject interaction.",
+        ? `CertScore.ai observed a visible Decline option, but also observed non-essential tracking activity around refusal for ${postRejectVendors.join(", ")}.`
+        : "CertScore.ai observed a visible Decline option, but also observed non-essential tracking activity around the reject interaction.",
       headline: "Reject path observed, but tracking persisted around refusal",
       id: "reject_path_observed_tracking_persisted"
     });
@@ -495,7 +495,7 @@ export function deriveGdprEprivacyReviewSummary(
     preConsentVendors.length > 0
   ) {
     addBullet(bullets, {
-      copy: `CertScore observed 3rd party tracking activity before a recorded consent action for ${preConsentVendors.join(", ")}.`,
+      copy: `CertScore.ai observed 3rd party tracking activity before a recorded consent action for ${preConsentVendors.join(", ")}.`,
       headline: "3rd party tracking observed before recorded consent",
       id: "pre_consent_tracking_observed"
     });
@@ -504,7 +504,7 @@ export function deriveGdprEprivacyReviewSummary(
   const sessionReplayVendors = getSessionReplayVendors(sessionReplay);
   if ((rowIs(sessionReplay, "Review signal") || rowIs(sessionReplay, "Observed")) && sessionReplayVendors.length > 0) {
     addBullet(bullets, {
-      copy: `CertScore observed ${sessionReplayVendors.join(", ")} in the tested runtime context.`,
+      copy: `CertScore.ai observed ${sessionReplayVendors.join(", ")} in the tested runtime context.`,
       headline: "Session replay / behavioral analytics vendor observed",
       id: "session_replay_behavioral_analytics_observed"
     });
@@ -512,7 +512,7 @@ export function deriveGdprEprivacyReviewSummary(
 
   if (rowIs(sessionReplayBeforeConsent, "Gap observed") && sessionReplayVendors.length > 0) {
     addBullet(bullets, {
-      copy: `CertScore observed session replay or behavioral analytics before a recorded consent action for ${sessionReplayVendors.join(", ")}.`,
+      copy: `CertScore.ai observed session replay or behavioral analytics before a recorded consent action for ${sessionReplayVendors.join(", ")}.`,
       headline: "Session replay observed before recorded consent",
       id: "session_replay_before_consent_gap"
     });
@@ -529,8 +529,8 @@ export function deriveGdprEprivacyReviewSummary(
   if (rowIs(sessionReplaySensitiveSurface, "Gap observed")) {
     addBullet(bullets, {
       copy: sessionReplayVendors.length > 0
-        ? `CertScore observed session replay on a sensitive surface for ${sessionReplayVendors.join(", ")}.`
-        : "CertScore observed session replay on a sensitive surface in the tested context.",
+        ? `CertScore.ai observed session replay on a sensitive surface for ${sessionReplayVendors.join(", ")}.`
+        : "CertScore.ai observed session replay on a sensitive surface in the tested context.",
       headline: "Session replay observed on a sensitive surface",
       id: "session_replay_sensitive_surface_gap"
     });
@@ -539,8 +539,8 @@ export function deriveGdprEprivacyReviewSummary(
   if (rowIs(sessionReplayAfterRefusal, "Gap observed")) {
     addBullet(bullets, {
       copy: sessionReplayVendors.length > 0
-        ? `CertScore observed session replay persistence after a confirmed refusal or opt-out action for ${sessionReplayVendors.join(", ")}.`
-        : "CertScore observed session replay persistence after a confirmed refusal or opt-out action.",
+        ? `CertScore.ai observed session replay persistence after a confirmed refusal or opt-out action for ${sessionReplayVendors.join(", ")}.`
+        : "CertScore.ai observed session replay persistence after a confirmed refusal or opt-out action.",
       headline: "Session replay persisted after refusal",
       id: "session_replay_after_refusal_gap"
     });
@@ -562,8 +562,8 @@ export function deriveGdprEprivacyReviewSummary(
   ) {
     addBullet(bullets, {
       copy: rowIs(consentSurface, "Observed")
-        ? "A banner was observed, but CertScore did not find a visible post-choice control to reopen or change preferences."
-        : "CertScore did not find a visible post-choice Cookie Settings, Privacy Preferences, or equivalent withdrawal control in the tested context.",
+        ? "A banner was observed, but CertScore.ai did not find a visible post-choice control to reopen or change preferences."
+        : "CertScore.ai did not find a visible post-choice Cookie Settings, Privacy Preferences, or equivalent withdrawal control in the tested context.",
       headline: "Post-choice consent controls may be hard to revisit",
       id: "post_choice_controls_hard_to_revisit"
     });
@@ -576,7 +576,7 @@ export function deriveGdprEprivacyReviewSummary(
     getString(sensitiveEvidence, ["sensitiveThirdPartyTrackingCorrelationStatus"]) === "ok"
   ) {
     addBullet(bullets, {
-      copy: "CertScore did not observe eligible sensitive fields alongside 3rd party tracking in the tested context.",
+      copy: "CertScore.ai did not observe eligible sensitive fields alongside 3rd party tracking in the tested context.",
       headline: "Sensitive form tracking was not observed in the tested path",
       id: "sensitive_surface_tracking_not_observed"
     });
@@ -584,7 +584,7 @@ export function deriveGdprEprivacyReviewSummary(
 
   if (rowIs(policyTextExtraction, "Not testable") && policyTextExtractionLimited(policyTextExtraction)) {
     addBullet(bullets, {
-      copy: "GDPR Transparency disclosure checks were limited because CertScore found a privacy-policy surface but did not extract enough usable policy text to evaluate individual Article 13 disclosures.",
+      copy: "GDPR Transparency disclosure checks were limited because CertScore.ai found a privacy-policy surface but did not extract enough usable policy text to evaluate individual Article 13 disclosures.",
       headline: "Policy text extraction limited transparency review",
       id: "policy_text_extraction_limited"
     });

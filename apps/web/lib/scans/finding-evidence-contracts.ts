@@ -189,7 +189,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "moderate" },
       ftc: false
     },
-    notes: "365 days is a CertScore review threshold, not a statutory cookie-lifetime threshold."
+    notes: "365 days is a CertScore.ai review threshold, not a statutory cookie-lifetime threshold."
   },
   {
     findingId: "policy_behavior_contradiction_detected",
@@ -218,7 +218,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "moderate" },
       ftc: { requiresContractPass: true, minimumTier: "moderate" }
     },
-    notes: "Producer-provided complete/promotion fields are revalidated by CertScore before surfacing or executive projection."
+    notes: "Producer-provided complete/promotion fields are revalidated by CertScore.ai before surfacing or executive projection."
   },
   {
     findingId: "pre_consent_tracking_detected",
@@ -473,7 +473,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "CertScore owns regulatory framing; the contract only requires same-page video context plus runtime tracking evidence."
+    notes: "CertScore.ai owns regulatory framing; the contract only requires same-page video context plus runtime tracking evidence."
   },
   {
     findingId: "fingerprinting_observed",
@@ -508,7 +508,7 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
       ftc: { requiresContractPass: true, minimumTier: "strong" }
     },
-    notes: "Represents possible replay risk on a sensitive input surface; CertScore owns risk framing and requires retained same-page or same-flow co-occurrence evidence."
+    notes: "Represents possible replay risk on a sensitive input surface; CertScore.ai owns risk framing and requires retained same-page or same-flow co-occurrence evidence."
   },
   {
     findingId: "session_replay_present_with_sensitive_surfaces_observed",

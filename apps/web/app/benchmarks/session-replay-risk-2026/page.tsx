@@ -65,7 +65,7 @@ export default function SessionReplayRiskBenchmarkPage() {
           { href: "/guides/session-replay-risk", label: "session replay risk" },
           { href: "/guides/privacy-scanner-vs-cookie-scanner", label: "privacy scanner vs cookie scanner" },
           { href: "/benchmarks/website-consent-tracking-2026", label: "website consent benchmark" },
-          { href: "/methodology", label: "CertScore methodology" }
+          { href: "/methodology", label: "CertScore.ai methodology" }
         ]}
         schema={schema}
         sections={[
@@ -84,10 +84,10 @@ export default function SessionReplayRiskBenchmarkPage() {
             ]
           },
           {
-            title: "What CertScore observes",
+            title: "What CertScore.ai observes",
             paragraphs: [
               "CertScore.ai observes public page context, recording-related vendors or scripts, timing, and whether behavior appears near sensitive input surfaces where evidence is available.",
-              "CertScore findings remain automated signals for review, not legal advice, certification, or compliance determinations."
+              "CertScore.ai findings remain automated signals for review, not legal advice, certification, or compliance determinations."
             ]
           },
           {

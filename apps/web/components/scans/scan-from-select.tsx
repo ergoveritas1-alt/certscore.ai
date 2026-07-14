@@ -7,19 +7,19 @@ import { ScanFromMarker } from "./scan-from-icons";
 
 export const SCAN_FROM_OPTIONS = [
   {
-    description: "Run from CertScore's Dublin Lambda scanner.",
+    description: "Run from CertScore.ai's Dublin Lambda scanner.",
     flag: "🇮🇪",
     label: "EU-IR",
     value: "eu_ie"
   },
   {
-    description: "Run from CertScore's Frankfurt Lambda scanner.",
+    description: "Run from CertScore.ai's Frankfurt Lambda scanner.",
     flag: "🇩🇪",
     label: "EU-DE",
     value: "eu_de"
   },
   {
-    description: "Run from CertScore's US-West Lambda scanner.",
+    description: "Run from CertScore.ai's US-West Lambda scanner.",
     flag: "california",
     label: "California",
     value: "california"

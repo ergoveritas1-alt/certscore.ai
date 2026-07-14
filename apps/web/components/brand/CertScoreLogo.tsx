@@ -5,6 +5,7 @@ import { cn } from "@website-signal-risk-scanner/ui";
 type CertScoreLogoProps = {
   className?: string;
   compact?: boolean;
+  size?: "default" | "small";
   showText?: boolean;
   theme?: "light" | "dark";
 };
@@ -24,6 +25,7 @@ type CertScoreMarkProps = {
 export default function CertScoreLogo({
   className,
   compact = false,
+  size = "default",
   showText = false,
   theme = "light"
 }: CertScoreLogoProps) {
@@ -40,14 +42,14 @@ export default function CertScoreLogo({
         className
       )}
     >
-      <CertScoreMark compact={compact} theme={theme} className={compact ? "h-9 w-auto" : "h-[52px] w-auto"} />
+      <CertScoreMark compact={compact} theme={theme} className={compact ? (size === "small" ? "h-[2.1rem] w-auto" : "h-9 w-auto") : "h-[52px] w-auto"} />
 
       {!compact || showText ? (
         <span className="inline-flex items-baseline tracking-tight leading-none">
-          <span className={cn("font-bold", compact ? "text-[1.35rem]" : "text-[1.7rem]")} style={{ color: NAVY }}>
+          <span className={cn("font-bold", compact ? (size === "small" ? "text-[1.28rem]" : "text-[1.35rem]") : "text-[1.7rem]")} style={{ color: NAVY }}>
             CertScore
           </span>
-          <span className={cn("font-bold", compact ? "text-[1.35rem]" : "text-[1.7rem]")} style={{ color: GREEN }}>
+          <span className={cn("font-bold", compact ? (size === "small" ? "text-[1.28rem]" : "text-[1.35rem]") : "text-[1.7rem]")} style={{ color: GREEN }}>
             .ai
           </span>
         </span>

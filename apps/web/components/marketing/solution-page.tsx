@@ -113,7 +113,7 @@ export function SolutionPage({ config }: { config: SolutionPageConfig }) {
           </div>
           <div className="border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
             <p>
-              CertScore scans public website behavior for review signals. Findings are automated observations backed by retained evidence, not legal advice, certification, or compliance determinations.
+              CertScore.ai scans public website behavior for review signals. Findings are automated observations backed by retained evidence, not legal advice, certification, or compliance determinations.
             </p>
           </div>
         </div>

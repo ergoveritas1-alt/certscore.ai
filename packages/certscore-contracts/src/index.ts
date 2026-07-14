@@ -40,6 +40,7 @@ export const consentControlInventoryRejectionReasonSchema = z.enum([
   "composite_control_container",
   "generic_container_fewer_than_two_classified_controls",
   "frame_inaccessible",
+  "inventory_probe_failed",
   "timing_expired_before_controls_surfaced",
 ]);
 
@@ -1649,7 +1650,12 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
   const consentSurfaceObserved = Boolean(visibleObservation || (input.cmpRuntimeObservations ?? []).length > 0);
   const preConsentRun = (input.modulesRun ?? []).find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
   const observationFailed = observations.length === 0 || observations.some((observation) =>
-    observation.basis.includes("bounded_capture_timeout_or_failure")
+    observation.basis.includes("bounded_capture_timeout_or_failure") ||
+    observation.basis.includes("inventory:probe_failed") ||
+    observation.basis.includes("geometry_capture_unavailable")
+  );
+  const settledInventoryCompleted = observations.some((observation) =>
+    observation.basis.includes("settled_control_inventory_completed")
   );
   const materialLimitationKeys = (input.runtimeCoverage?.limitationKeys ?? []).filter(
     (key) => key !== "post_consent_flow_runtime_disabled"
@@ -1666,6 +1672,9 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
       : null,
     observations.length === 0 ? "consent_surface_inspection_observation_missing" : null,
     observationFailed ? "consent_surface_inspection_observation_incomplete" : null,
+    !consentSurfaceObserved && !settledInventoryCompleted
+      ? "consent_surface_inspection_settled_inventory_missing"
+      : null,
     !retainedVisualOrDomEvidence ? "consent_surface_inspection_visual_or_dom_missing" : null,
   ].filter((value): value is string => value !== null)
     .filter((value, index, values) => values.indexOf(value) === index)

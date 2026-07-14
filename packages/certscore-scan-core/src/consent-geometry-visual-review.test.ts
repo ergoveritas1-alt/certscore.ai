@@ -65,6 +65,20 @@ test("normalizeNanoVisualReview keeps visual booleans consistent with listed opt
   assert.equal(lequipeReview.scannerAgreement.options, "agree");
 });
 
+test("normalizeNanoVisualReview treats essential-only as a visible first-layer reject equivalent", () => {
+  const review = normalizeNanoVisualReview("onetrust.com", acceptRejectOnlyGeometry(), {
+    visualFirstLayerAccept: true,
+    visualFirstLayerReject: false,
+    visualFirstLayerOptions: true,
+    visibleLabels: ["Accept all", "Essential only", "Customize Settings"],
+    notes: [],
+    limitations: [],
+  }, "test-nano");
+
+  assert.equal(review.visualFirstLayerReject, true);
+  assert.equal(review.scannerAgreement.reject, "agree");
+});
+
 test("normalizeNanoVisualReview treats visible target pages with no consent controls as false A/R/O", () => {
   const review = normalizeNanoVisualReview("euronews.com", noVisibleControlsGeometry(), {
     visualFirstLayerAccept: "uncertain",

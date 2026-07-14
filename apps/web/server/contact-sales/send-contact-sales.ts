@@ -54,12 +54,12 @@ export async function sendContactSalesAction(
     };
   }
 
-  if (requestType === "sales" && !website && !message && !company) {
-    return { error: "Add at least a website, company, or short note so we know how to follow up." };
+  if (requestType === "sales" && !message) {
+    return { error: "Please add a short message so we know how to help." };
   }
 
   const gmailConfig = getGmailConfig();
-  const toEmail = process.env.CONTACT_SALES_TO_EMAIL?.trim() || "sales@certscore.ai";
+  const toEmail = "support@certscore.ai";
 
   if (!gmailConfig) {
     return {

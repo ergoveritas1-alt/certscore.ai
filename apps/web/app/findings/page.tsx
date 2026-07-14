@@ -4,13 +4,13 @@ import { FindingsReferencePage } from "./findings-reference-page";
 
 export const metadata: Metadata = {
   ...createPageMetadata({
-    title: "CertScore findings reference",
+    title: "CertScore.ai findings reference",
     description:
-      "Review CertScore findings, evidence, signals, and observations surfaced from public-web runtime scans.",
+      "Review CertScore.ai findings, evidence, signals, and observations surfaced from public-web runtime scans.",
     path: "/findings"
   }),
   title: {
-    absolute: "CertScore findings reference | CertScore.ai"
+    absolute: "CertScore.ai findings reference | CertScore.ai"
   }
 };
 

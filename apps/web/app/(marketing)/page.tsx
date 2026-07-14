@@ -12,7 +12,7 @@ import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 const SAMPLE_REPORT_URL = "https://certscore.ai/scan/f20f885d-10d4-4a07-899f-f7ea5a1825d8";
-const BOOK_DEMO_URL = "https://calendly.com/bmasek-w7ou/30min";
+const BOOK_DEMO_URL = "/contact-sales";
 export const metadata: Metadata = {
   ...createPageMetadata({
     title: "CertScore.ai — Evidence-Based Website Risk Signal Scanner",
@@ -173,7 +173,7 @@ export default async function MarketingHomePage() {
             </h1>
             <div className="max-w-[650px]">
               <p className="text-base leading-8 text-slate-300 sm:text-xl">
-                Scan consent behavior, cookies, trackers, and privacy disclosures—with evidence retained behind every finding.
+                Scan for consent behavior, cookies, trackers, and privacy disclosures with evidence retained behind every finding.
               </p>
               <p className="mt-2 text-sm font-semibold text-sky-400">
                 Built for GDPR and ePrivacy review
@@ -182,24 +182,30 @@ export default async function MarketingHomePage() {
             <div id="homepage-scan" className="max-w-[650px] scroll-mt-24 pt-2">
               <DomainScanForm buttonLabel="Scan a website" inputLabel="Website URL to scan" inputPlaceholder="Enter website here:" mode="full" scanSource="homepage" variant="homepage-hero" />
             </div>
-            <div className="flex flex-wrap gap-x-9 gap-y-4 text-sm font-medium text-slate-100">
-              <span className="flex items-center gap-2.5 text-[13px]">
+            <div className="flex flex-nowrap gap-x-6 overflow-x-auto pb-1 text-sm font-medium text-slate-100">
+              <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">
                 <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="9.25" /><path d="m8 12.2 2.5 2.5 5.5-6" />
                 </svg>
-                15-day trial
+                7-day trial
               </span>
-              <span className="flex items-center gap-2.5 text-[13px]">
+              <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">
                 <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="2.75" y="5.25" width="18.5" height="13.5" rx="1.25" /><path d="M3 9h18M7 14h3M3.5 3.5l17 17" />
                 </svg>
                 No credit card
               </span>
-              <span className="flex items-center gap-2.5 text-[13px]">
+              <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">
                 <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="9.25" /><path d="M12 6.8V12l3.4 2.1" />
                 </svg>
-                Results in about 30 seconds
+                Results in ~ 10 to 40s
+              </span>
+              <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">
+                <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m8.5 7-4 5 4 5" /><path d="m15.5 7 4 5-4 5" /><path d="m13.5 5-3 14" />
+                </svg>
+                API/SDK/MCP ready
               </span>
             </div>
             <div className="relative flex flex-col gap-3 sm:flex-row">

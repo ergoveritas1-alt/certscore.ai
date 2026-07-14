@@ -59,7 +59,7 @@ export default function PrivacyScannerVsCookieScannerPage() {
             ]
           },
           {
-            title: "What CertScore adds",
+            title: "What CertScore.ai adds",
             paragraphs: [
               "CertScore.ai reviews observed public website behavior around tracking requests, cookie timing, consent surfaces, accessibility signals, session recording indicators, fingerprinting-related signals, and disclosure consistency.",
               "The output is designed to help teams review risk signals with retained evidence rather than rely only on a static cookie list."

@@ -9,7 +9,7 @@ function baseInput(): Parameters<typeof deriveConsentSurfaceInspectionOutcome>[0
       observationId: "consent_ui_pre_consent",
       observedAtMs: 900,
       likelyPresent: false,
-      basis: ["insufficient_banner_keywords"],
+      basis: ["insufficient_banner_keywords", "settled_control_inventory_completed"],
       layerInspected: "unknown" as const,
       visibleChoiceLabels: [],
       defaultTogglePurposeLabels: [],
@@ -82,12 +82,52 @@ test("completed recapture after an earlier timeout can retain a complete negativ
   input.consentUiObservations![0]!.basis = [
     "insufficient_banner_keywords",
     "recapture:post_timeout_completed_without_first_layer_controls",
+    "settled_control_inventory_completed",
   ];
 
   const outcome = deriveConsentSurfaceInspectionOutcome(input);
 
   assert.equal(outcome.outcome, "no_surface_observed_complete_coverage");
   assert.equal(outcome.coverageStatus, "complete");
+});
+
+test("missing settled inventory keeps a negative observation indeterminate", () => {
+  const input = baseInput();
+  input.consentUiObservations![0]!.basis = ["insufficient_banner_keywords"];
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "indeterminate_limited_coverage");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.ok(outcome.limitationKeys.includes("consent_surface_inspection_settled_inventory_missing"));
+});
+
+test("inventory probe failure cannot establish that a consent surface is absent", () => {
+  const input = baseInput();
+  input.consentUiObservations![0]!.basis = [
+    "inventory:probe_failed",
+    "insufficient_banner_keywords",
+  ];
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "indeterminate_limited_coverage");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.ok(outcome.limitationKeys.includes("consent_surface_inspection_observation_incomplete"));
+});
+
+test("unavailable main-frame geometry cannot establish that a consent surface is absent", () => {
+  const input = baseInput();
+  input.consentUiObservations![0]!.basis = [
+    "geometry_capture_unavailable",
+    "settled_control_inventory_completed",
+  ];
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "indeterminate_limited_coverage");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.ok(outcome.limitationKeys.includes("consent_surface_inspection_observation_incomplete"));
 });
 
 test("canonical first-layer controls establish an actionable surface without CMP identity", () => {

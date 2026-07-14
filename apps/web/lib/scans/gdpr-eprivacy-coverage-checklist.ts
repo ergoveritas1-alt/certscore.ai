@@ -2029,7 +2029,7 @@ function specializeSessionReplayChecklistRow(input: {
       evidenceRefs: input.evidenceRefs,
       explanation: preConsentObserved
         ? "Session replay or behavioral analytics was observed before a recorded consent action. Review disclosure, masking, sensitive-page coverage, and refusal behavior as supporting subchecks."
-        : "CertScore observed session replay or behavioral analytics in a higher-risk context, such as sensitive-surface co-presence, disclosure mismatch, post-reject persistence, or retained payload exposure. Review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.",
+        : "CertScore.ai observed session replay or behavioral analytics in a higher-risk context, such as sensitive-surface co-presence, disclosure mismatch, post-reject persistence, or retained payload exposure. Review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.",
       label: input.definition.label,
       status: "Gap observed" as const
     };
@@ -2050,7 +2050,7 @@ function specializeSessionReplayChecklistRow(input: {
       : "not observed pre-consent in retained evidence";
     return {
       evidenceRefs: input.evidenceRefs,
-      explanation: `CertScore observed session replay or behavioral analytics vendors ${timingPhrase}${vendorPhrase ? `, including ${vendorPhrase}` : ""}.`,
+      explanation: `CertScore.ai observed session replay or behavioral analytics vendors ${timingPhrase}${vendorPhrase ? `, including ${vendorPhrase}` : ""}.`,
       label: input.definition.label,
       status: "Observed" as const
     };
@@ -2062,7 +2062,7 @@ function specializeSessionReplayChecklistRow(input: {
       : "not observed pre-consent in retained evidence";
     return {
       evidenceRefs: input.evidenceRefs,
-      explanation: `CertScore observed session replay or behavioral analytics vendors ${timingPhrase}${vendorPhrase ? `, including ${vendorPhrase}` : ""}. Because these tools can capture user interaction behavior, review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.`,
+      explanation: `CertScore.ai observed session replay or behavioral analytics vendors ${timingPhrase}${vendorPhrase ? `, including ${vendorPhrase}` : ""}. Because these tools can capture user interaction behavior, review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.`,
       label: input.definition.label,
       status: "Review signal" as const
     };
@@ -2213,7 +2213,7 @@ function specializeChecklistRow(input: {
       evidenceRefs: input.evidenceRefs,
       explanation:
         input.coverageOutcome?.limitation ??
-        "Footer privacy/ad-choice and vendor opt-out links were observed, but CertScore did not confirm a GDPR/ePrivacy cookie preference center or consent-withdrawal control.",
+        "Footer privacy/ad-choice and vendor opt-out links were observed, but CertScore.ai did not confirm a GDPR/ePrivacy cookie preference center or consent-withdrawal control.",
       label: input.definition.label,
       status: "Review signal" as const
     };
@@ -2477,7 +2477,7 @@ function makeSourceSignalGap(
   expected: unknown,
   actual: unknown,
   whyNeeded: string,
-  source: "scanner" | "CertScore" = "CertScore"
+  source: "scanner" | "CertScore.ai" = "CertScore.ai"
 ): GdprEprivacyCoverageSourceSignalGap {
   return { actual, expected, field, source, whyNeeded };
 }
@@ -2950,7 +2950,7 @@ function addDeducibilityDemotion(
           "CertScore.gdprEprivacyChecklist.evidenceDeducibility",
           "mutually consistent row status, assessment, findings, statusBasis, evidenceState, and retainedEvidence",
           reason,
-          "Required before CertScore can render this GDPR/ePrivacy checklist row as checked, observed, or gap-level evidence without overclaiming."
+          "Required before CertScore.ai can render this GDPR/ePrivacy checklist row as checked, observed, or gap-level evidence without overclaiming."
         )
       ],
       projectedFindings: [],
@@ -3023,7 +3023,7 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
     return addDeducibilityDemotion(
       item,
       "Review signal",
-      "Footer privacy/ad-choice and vendor opt-out links were observed, but CertScore did not confirm a GDPR/ePrivacy cookie preference center or consent-withdrawal control.",
+      "Footer privacy/ad-choice and vendor opt-out links were observed, but CertScore.ai did not confirm a GDPR/ePrivacy cookie preference center or consent-withdrawal control.",
       "privacy_ad_choice_only_controls_do_not_confirm_gdpr_cookie_consent_withdrawal",
       "observed"
     );
@@ -3074,10 +3074,10 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
       item.id === "post_reject_tracking_reduction"
         ? "Post-reject tracking could not be tested because no first-layer GDPR/ePrivacy consent banner and no valid reject action were confirmed. Footer privacy/ad-choice controls were observed, but they do not establish a reject state for comparison."
         : item.id === "accept_consent_control"
-          ? "Accept consent control availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. CertScore did not retain a place where an accept control could appear, so the missing control is treated as part of the missing or unconfirmed consent surface rather than as a standalone accept-control finding."
+          ? "Accept consent control availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. CertScore.ai did not retain a place where an accept control could appear, so the missing control is treated as part of the missing or unconfirmed consent surface rather than as a standalone accept-control finding."
         : item.id === "options_settings_preferences_control"
-          ? "Options/settings/preferences control availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. CertScore did not retain a place where an options/settings/preferences control could appear, so the missing control is treated as part of the missing or unconfirmed consent surface rather than as a standalone options-control finding."
-        : "Reject-path availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. CertScore did not retain a place where a reject option could appear, so the missing reject option is treated as part of the missing or unconfirmed consent surface rather than as a standalone reject-path finding.",
+          ? "Options/settings/preferences control availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. CertScore.ai did not retain a place where an options/settings/preferences control could appear, so the missing control is treated as part of the missing or unconfirmed consent surface rather than as a standalone options-control finding."
+        : "Reject-path availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. CertScore.ai did not retain a place where a reject option could appear, so the missing reject option is treated as part of the missing or unconfirmed consent surface rather than as a standalone reject-path finding.",
       "no_confirmed_first_layer_gdpr_eprivacy_consent_banner_or_reject_state",
       "not_testable"
     );
@@ -3121,7 +3121,7 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
         eligibleCount === 0 && (rawCount === 0 || rawCount === null) ? "Not observed" : "Review signal",
         eligibleCount === 0 && (rawCount === 0 || rawCount === null)
           ? "Sensitive-field correlation completed and did not retain eligible sensitive fields alongside 3rd party tracking in the tested context."
-          : "Sensitive-surface/tracking correlation requires review. Retained evidence indicates possible sensitive data context and 3rd party tracking, but CertScore did not surface direct same-context sensitive-field and tracking correlation evidence.",
+          : "Sensitive-surface/tracking correlation requires review. Retained evidence indicates possible sensitive data context and 3rd party tracking, but CertScore.ai did not surface direct same-context sensitive-field and tracking correlation evidence.",
         fallbackOnly
           ? "fallback_or_policy_only_sensitive_tracking_evidence"
           : "missing_direct_same_context_sensitive_tracking_or_payload_evidence",

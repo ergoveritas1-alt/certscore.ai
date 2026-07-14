@@ -104,7 +104,7 @@ const readingNotes = [
 const definitions = [
   {
     description:
-      "Pre-consent tracking means non-essential third-party tracking or identifier-bearing requests observed before a clear user consent action. CertScore uses observable public-web behavior, and consent state, geography, CMP behavior, and scan coverage can affect results.",
+      "Pre-consent tracking means non-essential third-party tracking or identifier-bearing requests observed before a clear user consent action. CertScore.ai uses observable public-web behavior, and consent state, geography, CMP behavior, and scan coverage can affect results.",
     title: "Pre-consent tracking"
   },
   {

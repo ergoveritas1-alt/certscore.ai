@@ -3,7 +3,7 @@ import React from "react";
 export type PrivacyLawApplicabilityKind = "ccpa_cpra" | "gdpr_eprivacy" | "cipa";
 
 const APPLICABILITY_ASSUMPTIONS_TOOLTIP =
-  "Applicability can depend on business facts or visitor geography CertScore has not verified.";
+  "Applicability can depend on business facts or visitor geography CertScore.ai has not verified.";
 
 function getApplicabilityChipLabel(kind: PrivacyLawApplicabilityKind) {
   switch (kind) {
@@ -23,7 +23,7 @@ function getApplicabilityChipTooltip(kind: PrivacyLawApplicabilityKind) {
     case "gdpr_eprivacy":
       return "Jurisdiction unverified. GDPR/ePrivacy can depend on EU/EEA presence, targeting, or monitoring.";
     case "cipa":
-      return "Conduct review. CertScore reports observed CIPA-style signals, not legal applicability.";
+      return "Conduct review. CertScore.ai reports observed CIPA-style signals, not legal applicability.";
   }
 }
 

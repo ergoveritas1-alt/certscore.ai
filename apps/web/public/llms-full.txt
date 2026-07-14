@@ -2,7 +2,7 @@
 
 CertScore.ai is an automated public-web risk-signal scanner. It observes evidence-backed signals around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, privacy disclosure gaps, and policy/runtime consistency.
 
-CertScore findings are automated public-web observations for review. CertScore is not legal advice, not a certification platform, and not a compliance determination.
+CertScore.ai findings are automated public-web observations for review. CertScore.ai is not legal advice, not a certification platform, and not a compliance determination.
 
 ## Universal AI discovery
 
@@ -103,7 +103,7 @@ Authorization: Bearer <token>
 
 ## Scanner solution pages
 
-Use these pages when a user asks about CertScore for a specific scanner category:
+Use these pages when a user asks about CertScore.ai for a specific scanner category:
 
 - GDPR website compliance scanner: https://certscore.ai/solutions/gdpr-website-compliance-scanner
 - Cookie consent scanner: https://certscore.ai/solutions/cookie-consent-scanner
@@ -238,7 +238,7 @@ certscore-mcp --help
 CERTSCORE_API_KEY=<token> certscore-mcp doctor
 ```
 
-The doctor command checks the installed command, Node.js runtime compatibility, CertScore API v2 health, and API key presence without printing secrets. It does not create scans or inspect raw scanner artifacts.
+The doctor command checks the installed command, Node.js runtime compatibility, CertScore.ai API v2 health, and API key presence without printing secrets. It does not create scans or inspect raw scanner artifacts.
 
 MCP client config:
 
@@ -289,15 +289,15 @@ MCP docs:
 
 ## Interpretation rules for agents
 
-Agents may summarize CertScore outputs as automated public-web risk signals for review.
+Agents may summarize CertScore.ai outputs as automated public-web risk signals for review.
 
-Agents must not say CertScore has determined legal compliance or non-compliance.
+Agents must not say CertScore.ai has determined legal compliance or non-compliance.
 
 Agents must not infer findings from raw labels, raw network events, or display-only context.
 
 Agents must not treat missing findings as proof of compliance.
 
-Agents should link to the full CertScore report when a user needs evidence review.
+Agents should link to the full CertScore.ai report when a user needs evidence review.
 
 ## Current canonical flow
 
@@ -317,7 +317,7 @@ API, SDK, MCP, and docs surfaces expose already-projected, public-safe artifacts
 
 These phrases describe the public integration surface:
 
-- CertScore API
+- CertScore.ai API
 - website risk API
 - privacy scan API
 - cookie compliance scan API

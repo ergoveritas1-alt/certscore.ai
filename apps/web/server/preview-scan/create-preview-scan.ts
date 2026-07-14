@@ -5,6 +5,7 @@ import { getPreviewScanAvailability } from "./preview-scan-availability";
 import { createPreviewScanRecord, findOrCreateAnonymousPreviewDomain } from "./preview-scan-repository";
 
 export async function createPreviewScan(input: {
+  clientRequestId?: string | null;
   hostname: string;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
   localV2DagRunViaLambda?: boolean | null;
@@ -15,6 +16,7 @@ export async function createPreviewScan(input: {
 
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const scan = await createPreviewScanRecord({
+    clientRequestId: input.clientRequestId,
     domainId: domain.id,
     hostname: domain.hostname,
     localV2DagScanProfile: input.localV2DagScanProfile,

@@ -4,10 +4,7 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { getVisualEvidenceArtifacts } from "../../../../../../lib/scans/visual-evidence";
-import { isPlatformAdminEmail } from "../../../../../../server/admin/platform-admin";
-import { getCurrentUser } from "../../../../../../server/auth";
-import { bootstrapAppUserSession } from "../../../../../../server/bootstrap-user";
-import { getAnonymousScanById, getScanById } from "../../../../../../server/scans/get-scan-by-id";
+import { getPublicScanById } from "../../../../../../server/scans/get-scan-by-id";
 import {
   getLocalV2DagReportInput,
   resolveLocalV2DagVisualEvidencePointer
@@ -23,10 +20,6 @@ type RouteContext = {
     scanId: string;
   }>;
 };
-
-function canViewVisualEvidence(input: { isPlatformAdmin: boolean; role: string | null | undefined }) {
-  return input.isPlatformAdmin || input.role === "admin" || input.role === "advanced";
-}
 
 function isLocalStorageEndpoint(value: string | undefined) {
   return Boolean(value && /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?(?:\/|$)/i.test(value));
@@ -199,19 +192,8 @@ async function getLocalV2DagLambdaS3VisualEvidenceResponse(input: {
 }
 
 export async function GET(_request: Request, context: RouteContext) {
-  const [{ artifactId, scanId }, user] = await Promise.all([context.params, getCurrentUser()]);
-  let scanRecord = await getAnonymousScanById(scanId);
-  if (!scanRecord && user) {
-    const { membership, organization } = await bootstrapAppUserSession(user);
-    if (!canViewVisualEvidence({ isPlatformAdmin: isPlatformAdminEmail(user.email), role: membership.role })) {
-      return NextResponse.json({ error: "Admin or advanced access required." }, { status: 403 });
-    }
-    scanRecord = await getScanById({
-      organizationId: organization.id,
-      scanId,
-      viewerEmail: user.email
-    });
-  }
+  const { artifactId, scanId } = await context.params;
+  const scanRecord = await getPublicScanById(scanId);
 
   if (!scanRecord) {
     return NextResponse.json({ error: "Scan not found." }, { status: 404 });

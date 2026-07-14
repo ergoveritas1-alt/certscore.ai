@@ -7,7 +7,7 @@ export const PULSE_FEEDBACK_EMAIL = "support@certscore.ai";
 export const PULSE_MAX_RECOMMENDED_AGE_HOURS = 168;
 
 export const PULSE_STANDARD_DISCLAIMER =
-  "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.";
+  "CertScore.ai outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.";
 
 export const PULSE_SHORT_DISCLAIMER =
   "Automated public-web observations for review. Not legal advice, certification, or a compliance determination.";
@@ -35,14 +35,14 @@ export const PULSE_CAPABILITIES = {
 export const PULSE_AGENT_DO_NOT_CALL_THIS = ["legal_advice", "certification", "compliance_determination"] as const;
 
 export const PULSE_PURPOSE_STATEMENT =
-  "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.";
+  "CertScore.ai Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.";
 
 export const PULSE_USAGE_GUIDANCE = {
   allowedSummary: "Automated scan surfaced review signals.",
   avoidClaims: [
-    "Do not say CertScore determined the site violates law.",
+    "Do not say CertScore.ai determined the site violates law.",
     "Do not say the site is non-compliant.",
-    "Do not say CertScore certified the site.",
+    "Do not say CertScore.ai certified the site.",
     "Do not treat absence of findings as proof of compliance.",
     "Do not ignore coverage limitations or scan freshness."
   ]

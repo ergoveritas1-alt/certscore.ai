@@ -197,16 +197,26 @@ test("classifies canonical accept, reject, options, and necessary-only controls 
       }
     }
 
-    const necessaryOnly = entry.consentControls.necessaryOnly[0];
-    assert.ok(necessaryOnly, `${entry.locale} necessary-only fixture`);
-    const withContext = classifyConsentControlLabel({
-      label: necessaryOnly,
-      contextText: entry.contextHints.join(" "),
-      localeHints: [entry.locale],
-    });
-    assert.equal(withContext.intent, "reject", `${entry.locale} ${necessaryOnly}`);
-    assert.equal(withContext.variant, "necessary_only", `${entry.locale} ${necessaryOnly}`);
+    for (const necessaryOnly of entry.consentControls.necessaryOnly) {
+      const withContext = classifyConsentControlLabel({
+        label: necessaryOnly,
+        contextText: entry.contextHints.join(" "),
+        localeHints: [entry.locale],
+      });
+      assert.equal(withContext.intent, "reject", `${entry.locale} ${necessaryOnly}`);
+      assert.equal(withContext.variant, "necessary_only", `${entry.locale} ${necessaryOnly}`);
+    }
   }
+});
+
+test("classifies the compact English essential-only refusal label", () => {
+  const classification = classifyConsentControlLabel({
+    label: "Essential only",
+    contextText: "We use cookies and similar technologies. Choose your cookie consent preferences.",
+  });
+  assert.equal(classification.intent, "reject");
+  assert.equal(classification.variant, "necessary_only");
+  assert.equal(classification.matchedTerm, "essential only");
 });
 
 test("uses canonical Dutch and Polish controls in the default production classifier", () => {

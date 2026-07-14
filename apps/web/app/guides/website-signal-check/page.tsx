@@ -44,7 +44,6 @@ export default function WebsiteLegalComplianceChecklistGuidePage() {
       ]}
       certScoreFlagExample="The scan could flag a mix of missing policy pages, weak consent controls, recurring accessibility issues, and tracker-related contradictions in one pass."
       relatedGuides={[
-        { href: "/guides/ada-website-compliance", label: "ADA accessibility guide" },
         { href: "/guides/website-privacy-policy-requirements", label: "Privacy policy requirements" },
         { href: "/guides/website-disclosure-requirements", label: "Website disclosure requirements" }
       ]}

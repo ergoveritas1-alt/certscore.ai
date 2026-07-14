@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ConsentUiObservation } from "@certscore/contracts";
-import { reconcileConsentUiRecapture } from "./scanners/pre-consent-runtime-scanner.js";
+import {
+  reconcileConsentUiRecapture,
+  shouldCaptureSettledPreConsentScreenshot,
+} from "./scanners/pre-consent-runtime-scanner.js";
 
 function observation(overrides: Partial<ConsentUiObservation> = {}): ConsentUiObservation {
   return {
@@ -61,4 +64,42 @@ test("a second incomplete recapture cannot erase the original capture limitation
   assert.equal(result.completedNegativeRetained, false);
   assert.equal(result.observation, current);
   assert.equal(result.observation.basis.includes("bounded_capture_timeout_or_failure"), true);
+});
+
+test("a failed inventory probe cannot replace an earlier incomplete capture as a completed negative", () => {
+  const current = observation({ basis: ["bounded_capture_timeout_or_failure"] });
+  const result = reconcileConsentUiRecapture({
+    current,
+    candidate: observation({ basis: ["inventory:probe_failed"] }),
+    strongerBasis: "recapture:controls",
+    completedWithoutControlsBasis: "recapture:completed_without_controls",
+  });
+
+  assert.equal(result.completedNegativeRetained, false);
+  assert.equal(result.observation, current);
+});
+
+test("settled screenshot replaces an early loading frame once substantive content appears", () => {
+  assert.equal(shouldCaptureSettledPreConsentScreenshot({
+    settledBodyText: "American Express ".repeat(50),
+  }), true);
+});
+
+test("settled screenshot replaces a sparse early shell after material page growth", () => {
+  assert.equal(shouldCaptureSettledPreConsentScreenshot({
+    settledBodyText: "Full rendered account, card, banking, travel, rewards, and privacy content. ".repeat(12),
+  }), true);
+});
+
+test("substantive pages retain a settled screenshot even when early DOM text looked representative", () => {
+  const representative = "Already rendered navigation, content, disclosures, and footer. ".repeat(14);
+  assert.equal(shouldCaptureSettledPreConsentScreenshot({
+    settledBodyText: `${representative}One additional sentence.`,
+  }), true);
+});
+
+test("settled screenshot is skipped for an insubstantial response shell", () => {
+  assert.equal(shouldCaptureSettledPreConsentScreenshot({
+    settledBodyText: "Temporary response shell",
+  }), false);
 });

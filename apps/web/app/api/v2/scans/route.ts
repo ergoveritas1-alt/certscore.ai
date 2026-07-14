@@ -28,7 +28,7 @@ function pulseRequestFromV2(request: Request, body: { url: string; freshness?: "
 
   const headers = new Headers(request.headers);
   headers.set("Accept", "application/json");
-  headers.set("X-CertScore-API-V2-Wrapper", "true");
+  headers.set("X-CertScore.ai-API-V2-Wrapper", "true");
 
   return new Request(pulseUrl, {
     headers,
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     return apiV2JsonResponse({
       body: buildApiV2ErrorFromPulse({
         body: pulseBody ?? {},
-        fallbackMessage: "CertScore API v2 scan creation failed.",
+        fallbackMessage: "CertScore.ai API v2 scan creation failed.",
         status: pulseResponse.status
       }),
       headers: retryAfter ? { "Retry-After": retryAfter } : undefined,
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[api-v2-create-scan] request failed", { requestId: id, error });
     return apiV2JsonResponse({
-      body: buildApiV2Error({ code: "internal_error", message: "CertScore API v2 is temporarily unavailable. Try again later." }),
+      body: buildApiV2Error({ code: "internal_error", message: "CertScore.ai API v2 is temporarily unavailable. Try again later." }),
       requestId: id,
       route: "api-v2-create-scan",
       status: 500

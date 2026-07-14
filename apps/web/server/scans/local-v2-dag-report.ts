@@ -210,6 +210,7 @@ function getObjectArray(value: unknown) {
 
 function isPreConsentScreenshotArtifact(screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number] | null | undefined) {
   return screenshot?.artifactId === "screenshot_pre_consent" ||
+    screenshot?.artifactId === "screenshot_pre_consent_settled" ||
     screenshot?.artifactId === "screenshot_pre_consent_geometry_proof" ||
     screenshot?.artifactId === "screenshot_pre_consent_full_page";
 }
@@ -218,10 +219,12 @@ function preConsentScreenshotRank(screenshot: NonNullable<CanonicalEvidenceBundl
   switch (screenshot.artifactId) {
     case "screenshot_pre_consent_geometry_proof":
       return 0;
-    case "screenshot_pre_consent_full_page":
+    case "screenshot_pre_consent_settled":
       return 1;
-    default:
+    case "screenshot_pre_consent_full_page":
       return 2;
+    default:
+      return 3;
   }
 }
 
@@ -229,6 +232,8 @@ function localV2VisualEvidenceArtifactId(screenshot: NonNullable<CanonicalEviden
   switch (screenshot.artifactId) {
     case "screenshot_pre_consent_geometry_proof":
       return "local_v2:screenshot_pre_consent_geometry_proof";
+    case "screenshot_pre_consent_settled":
+      return "local_v2:screenshot_pre_consent_settled";
     case "screenshot_pre_consent_full_page":
       return "local_v2:screenshot_pre_consent_full_page";
     default:
@@ -1096,6 +1101,7 @@ function getLocalV2DagAuxiliaryArtifact(
 
 const LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES = {
   "local_v2:screenshot_pre_consent": "screenshot-pre-consent.png",
+  "local_v2:screenshot_pre_consent_settled": "screenshot-pre-consent-settled.png",
   "local_v2:screenshot_pre_consent_full_page": "screenshot-pre-consent-full-page.png",
   "local_v2:screenshot_pre_consent_geometry_proof": "screenshot-pre-consent-geometry-proof.png"
 } as const;

@@ -72,7 +72,7 @@ export function getDomainBenchmarkEstimateOverride(domainHostname: string | null
     expectedOverallScore: 86,
     expectedThirdPartyRequests: 8,
     industry: "Compliance software / privacy and accessibility risk analytics",
-    rationale: "Matched first-party CertScore domain; use the product category instead of hostname-only credit-scoring inference."
+    rationale: "Matched first-party CertScore.ai domain; use the product category instead of hostname-only credit-scoring inference."
   };
 }
 

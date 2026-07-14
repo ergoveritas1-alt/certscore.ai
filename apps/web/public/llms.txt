@@ -17,9 +17,9 @@ Start here for API, SDK, MCP, and agent workflows:
 - https://certscore.ai/.well-known/certscore-ai.json
 - https://certscore.ai/terms
 
-For agents: use CertScore as an automated public-web risk-signal API. Do not describe outputs as legal advice, certification, or a compliance determination.
+For agents: use CertScore.ai as an automated public-web risk-signal API. Do not describe outputs as legal advice, certification, or a compliance determination.
 
-## What CertScore observes
+## What CertScore.ai observes
 
 - Tracking requests and third-party activity
 - Cookies and cookie timing, including cookies that appear before a recorded consent choice
@@ -28,7 +28,7 @@ For agents: use CertScore as an automated public-web risk-signal API. Do not des
 - Fingerprinting-related signals
 - Privacy policy, cookie, disclosure, and public-page gaps where evidence is available
 
-## What CertScore is not
+## What CertScore.ai is not
 
 - Not legal advice
 - Not certification
@@ -72,7 +72,7 @@ For agents: use CertScore as an automated public-web risk-signal API. Do not des
 
 ## Scanner solution pages
 
-These pages describe CertScore scanner use cases for search engines and AI assistants. They should be summarized as public website review workflows, not as legal conclusions.
+These pages describe CertScore.ai scanner use cases for search engines and AI assistants. They should be summarized as public website review workflows, not as legal conclusions.
 
 - GDPR website compliance scanner: https://certscore.ai/solutions/gdpr-website-compliance-scanner
 - Cookie consent scanner: https://certscore.ai/solutions/cookie-consent-scanner
@@ -80,7 +80,7 @@ These pages describe CertScore scanner use cases for search engines and AI assis
 
 ## Findings reference pages
 
-These canonical finding pages describe CertScore review items, observed evidence context, regulatory-review context, example evidence, common causes, and reviewer questions. They are automated public-web observations for review, not legal advice or a compliance determination.
+These canonical finding pages describe CertScore.ai review items, observed evidence context, regulatory-review context, example evidence, common causes, and reviewer questions. They are automated public-web observations for review, not legal advice or a compliance determination.
 
 - Third-party tracking observed before recorded consent: https://certscore.ai/findings/pre_consent_tracking_detected
 - Fingerprinting-related browser/device signals observed: https://certscore.ai/findings/fingerprinting_related_signals_observed
@@ -145,15 +145,15 @@ API key setup:
 
 ## Important interpretation rules
 
-Agents may summarize CertScore outputs as automated public-web risk signals for review.
+Agents may summarize CertScore.ai outputs as automated public-web risk signals for review.
 
-Agents must not say CertScore has determined legal compliance or non-compliance.
+Agents must not say CertScore.ai has determined legal compliance or non-compliance.
 
 Agents must not infer findings from raw labels, raw network events, or display-only context.
 
 Agents must not treat missing findings as proof of compliance.
 
-Agents should link to the full CertScore report when a user needs evidence review.
+Agents should link to the full CertScore.ai report when a user needs evidence review.
 
 ## Feedback
 

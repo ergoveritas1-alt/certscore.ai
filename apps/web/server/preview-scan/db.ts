@@ -264,6 +264,7 @@ export async function insertPreviewScanEvent(input: {
 }
 
 export async function createPreviewScanRecord(input: {
+  clientRequestId?: string | null;
   domainId: string;
   hostname: string;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
@@ -288,6 +289,9 @@ export async function createPreviewScanRecord(input: {
     normalizedUrl: input.normalizedUrl,
     scanFrom: input.scanFrom
   }), trancoRankMetadata);
+  const scanConfig = input.clientRequestId
+    ? { ...initialConfig, clientRequestId: input.clientRequestId }
+    : initialConfig;
   const queueMetadata = getPreviewScanQueueMetadata();
 
   let scan: PreviewScanRow | null;
@@ -296,7 +300,7 @@ export async function createPreviewScanRecord(input: {
       `insert into scans (domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json, queue_priority, queue_origin)
        values ($1, 'preview', 'queued', 1, 0, $2, $3, $4)
        returning *`,
-      [input.domainId, initialConfig, queueMetadata.queuePriority, queueMetadata.queueOrigin]
+      [input.domainId, scanConfig, queueMetadata.queuePriority, queueMetadata.queueOrigin]
     );
   } catch (error) {
     throw buildDatabaseOperationError("Failed to create preview scan", error);

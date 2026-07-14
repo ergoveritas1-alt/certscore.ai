@@ -66,7 +66,7 @@ export function ApiKeysCard({ apiKeys, referenceTime }: ApiKeysCardProps) {
       <form action={createAction} className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 lg:grid-cols-[1fr,12rem,auto]">
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-900">Key name</span>
-          <Input name="name" placeholder="Claude desktop MCP" maxLength={80} required />
+          <Input name="name" placeholder="Enter key name" maxLength={80} required />
         </label>
         <label className="space-y-2">
           <span className="text-sm font-medium text-slate-900">Expires in</span>

@@ -3,7 +3,7 @@ import { createPageMetadata } from "../../../lib/seo";
 import { CodeBlock, DeveloperShell, Section } from "../developer-pages";
 
 const description =
-  "Use the CertScore TypeScript SDK for scan, status, finding, and domain latest workflows with resource clients.";
+  "Use the CertScore.ai TypeScript SDK for scan, status, finding, and domain latest workflows with resource clients.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -12,7 +12,7 @@ export const metadata: Metadata = createPageMetadata({
     follow: true,
     index: true
   },
-  title: "CertScore TypeScript SDK"
+  title: "CertScore.ai TypeScript SDK"
 });
 
 export default function DeveloperSdkPage() {

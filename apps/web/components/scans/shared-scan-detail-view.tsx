@@ -2053,7 +2053,7 @@ function ReviewFindingLinks(input: { finding: UnifiedFindingDisplayPacket }) {
           className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-sky-800"
         >
           <span>↗</span>
-          <span>Learn how CertScore interprets this finding</span>
+          <span>Learn how CertScore.ai interprets this finding</span>
         </Link>
       ) : null}
       {!findingReferenceHref && fallbackNote ? (
@@ -3851,7 +3851,7 @@ export function deriveVisualAccessLimitationNotice(
       title: presentation.customerTitle,
       whatThisMeans: [
         limitationMeaning,
-        "CertScore withheld scores and substantive privacy or consent conclusions because the retained page was not representative."
+        "CertScore.ai withheld scores and substantive privacy or consent conclusions because the retained page was not representative."
       ]
     },
     finding: {
@@ -6742,7 +6742,7 @@ export async function SharedScanDetailView({
           code: "scanner_heartbeat_degraded",
           coverageLevel: "limited_none",
           message:
-            "This preview completed before the scanner captured any public pages, so CertScore withheld substantive privacy and consent conclusions.",
+            "This preview completed before the scanner captured any public pages, so CertScore.ai withheld substantive privacy and consent conclusions.",
           title: "Preview completed without verified site coverage"
         },
         review: null

@@ -27,7 +27,7 @@ const config: GrowthContentPageConfig = {
       ]
     },
     {
-      title: "What CertScore can surface",
+      title: "What CertScore.ai can surface",
       paragraphs: [
         "CertScore.ai can surface cookie counts, third-party domains, timing context, and related tracking or consent observations from public website scans.",
         "The report should be read as automated observations that may require human review, especially when browser restrictions, geography, or stored state affect cookie behavior."

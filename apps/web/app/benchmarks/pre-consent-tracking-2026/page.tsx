@@ -66,7 +66,7 @@ export default function PreConsentTrackingBenchmarkPage() {
           { href: "/guides/pre-consent-tracking", label: "pre-consent tracking guide" },
           { href: "/guides/detect-tracking-before-consent", label: "detect tracking before consent" },
           { href: "/guides/third-party-cookies-before-consent", label: "third-party cookies before consent" },
-          { href: "/methodology", label: "CertScore methodology" }
+          { href: "/methodology", label: "CertScore.ai methodology" }
         ]}
         schema={schema}
         sections={[
@@ -85,7 +85,7 @@ export default function PreConsentTrackingBenchmarkPage() {
             ]
           },
           {
-            title: "What CertScore observes",
+            title: "What CertScore.ai observes",
             paragraphs: [
               "CertScore.ai observes request timing, cookie timing, consent-surface signals, vendor-like hosts, and retained evidence from public website scans.",
               "Findings are automated risk signals for review and are not legal advice, certification, or compliance determinations."

@@ -17,7 +17,7 @@ function deriveDisplayName(email: string) {
   const localPart = email.split("@")[0]?.trim();
 
   if (!localPart) {
-    return "CertScore user";
+    return "CertScore.ai user";
   }
 
   return localPart

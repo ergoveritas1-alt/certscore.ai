@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveRuntimeCoverageSummary } from "./index";
+import { deriveRuntimeCoverageSummary, withLocalRegionalEgressLimitation } from "./index";
 
 const startedAt = "2026-01-01T00:00:00.000Z";
 
@@ -398,4 +398,137 @@ test("runtime coverage is not applicable when pre-consent runtime is out of prof
 
   assert.equal(summary.coverageStatus, "not_applicable");
   assert.deepEqual(summary.limitationKeys, ["pre_consent_runtime_not_in_profile"]);
+});
+
+test("runtime coverage records failed consent inventory and geometry capture", () => {
+  const summary = deriveRuntimeCoverageSummary({
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 1300,
+      likelyPresent: false,
+      basis: ["inventory:probe_failed", "geometry_capture_unavailable"],
+      layerInspected: "unknown",
+      visibleChoiceLabels: [],
+      acceptControlObserved: false,
+      rejectControlObserved: false,
+      managePreferencesControlObserved: false,
+      controls: [],
+      evidenceRefs: [],
+      confidence: 0.4,
+    }],
+    cookieEvents: [],
+    cookieSnapshots: [],
+    enabledModules: ["preConsentRuntimeScanner"],
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "completed",
+      startedAt,
+      completedAt: "2026-01-01T00:00:01.000Z",
+      durationMs: 1000,
+      evidenceRefs: [],
+      errors: [],
+    }],
+    networkEvents: [{
+      eventId: "net_1",
+      eventType: "network_request",
+      timestampMs: 100,
+      sourceScanner: "pre_consent_runtime",
+      consentStateAtTime: "pre_consent",
+      pagePhase: "initial_navigation",
+      url: "https://example.test/app.js",
+      hostname: "example.test",
+      firstParty: true,
+      thirdParty: false,
+      evidenceRefs: [],
+      confidence: 0.9,
+      directVsInferred: "direct",
+    }],
+    normalizedVendorObservations: [],
+    observedJourneys: [],
+  });
+
+  assert.equal(summary.coverageStatus, "limited_partial");
+  assert.deepEqual(summary.limitationKeys, [
+    "consent_control_inventory_probe_failed",
+    "consent_control_geometry_unavailable",
+  ]);
+});
+
+test("localhost Ireland localization remains runnable but records unverified egress", () => {
+  const summary = withLocalRegionalEgressLimitation({
+    coverageStatus: "usable",
+    limitationKeys: [],
+    fallbackModesUsed: [],
+    observationCounts: {
+      networkEvents: 2,
+      thirdPartyRequests: 1,
+      cookieEvents: 0,
+      cookiesBeforeConsent: 0,
+      normalizedVendors: 1,
+      observedJourneys: 1,
+    },
+    silentEmpty: false,
+    notes: [],
+  }, {
+    region: "local",
+    env: { CERTSCORE_CHROMIUM_LOCALE: "en-IE" },
+  });
+
+  assert.equal(summary.coverageStatus, "limited_partial");
+  assert.ok(summary.limitationKeys.includes("regional_egress_unverified_local"));
+  assert.match(summary.notes.join("\n"), /geographic egress was not verified/i);
+});
+
+test("configured proxy avoids the localhost regional-egress limitation", () => {
+  const summary = withLocalRegionalEgressLimitation({
+    coverageStatus: "usable",
+    limitationKeys: [],
+    fallbackModesUsed: [],
+    observationCounts: {
+      networkEvents: 2,
+      thirdPartyRequests: 1,
+      cookieEvents: 0,
+      cookiesBeforeConsent: 0,
+      normalizedVendors: 1,
+      observedJourneys: 1,
+    },
+    silentEmpty: false,
+    notes: [],
+  }, {
+    region: "local",
+    env: {
+      CERTSCORE_CHROMIUM_LOCALE: "en-IE",
+      CERTSCORE_CHROMIUM_PROXY_SERVER: "http://127.0.0.1:8888",
+    },
+  });
+
+  assert.equal(summary.coverageStatus, "usable");
+  assert.deepEqual(summary.limitationKeys, []);
+});
+
+test("AWS Lambda regional execution does not receive the localhost egress limitation", () => {
+  const summary = withLocalRegionalEgressLimitation({
+    coverageStatus: "usable",
+    limitationKeys: [],
+    fallbackModesUsed: [],
+    observationCounts: {
+      networkEvents: 2,
+      thirdPartyRequests: 1,
+      cookieEvents: 0,
+      cookiesBeforeConsent: 0,
+      normalizedVendors: 1,
+      observedJourneys: 1,
+    },
+    silentEmpty: false,
+    notes: [],
+  }, {
+    region: "local",
+    env: {
+      AWS_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-scanner-eu-west-1",
+      CERTSCORE_CHROMIUM_LOCALE: "en-IE",
+    },
+  });
+
+  assert.equal(summary.coverageStatus, "usable");
+  assert.deepEqual(summary.limitationKeys, []);
 });

@@ -134,7 +134,7 @@ async function main() {
   }
 
   if (!values.CONTACT_SALES_TO_EMAIL) {
-    info("contact sales email", "CONTACT_SALES_TO_EMAIL is unset; contact-sales requests will be sent to sales@certscore.ai.");
+    info("contact sales email", "CONTACT_SALES_TO_EMAIL is unset; contact-sales requests will be sent to support@certscore.ai.");
   }
 
   pass("amplify runtime env", "Critical web runtime variables are present after Amplify secrets merge.");

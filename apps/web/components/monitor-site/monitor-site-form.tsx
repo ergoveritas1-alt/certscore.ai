@@ -108,7 +108,7 @@ export function MonitorSiteForm({
           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400"
         />
         <p className="text-xs leading-5 text-slate-500">
-          Submitting this form creates a pending monitoring request. CertScore reviews requests before activation and follow-up.
+          Submitting this form creates a pending monitoring request. CertScore.ai reviews requests before activation and follow-up.
         </p>
       </div>
 

@@ -6,6 +6,7 @@ import {
   normalizeLocalV2DagScanProfile
 } from "../../../server/scans/local-v2-dag-scan-config";
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
+import { findScanByClientRequestId } from "../../../server/scans/client-request";
 import {
   restrictLocalV2RunViaLambdaForUser,
   restrictScanFromForUser
@@ -22,6 +23,18 @@ export async function POST(request: Request) {
           error: result.error.issues[0]?.message ?? "Invalid preview scan request."
         },
         { status: 400 }
+      );
+    }
+
+    const existingScan = await findScanByClientRequestId(typeof payload.requestId === "string" ? payload.requestId : null);
+    if (existingScan) {
+      return NextResponse.json(
+        {
+          previewUrl: `/scan/${existingScan.id}`,
+          scanId: existingScan.id,
+          statusUrl: `/api/preview-scan/${existingScan.id}`
+        },
+        { headers: { "Cache-Control": "no-store" }, status: 202 }
       );
     }
 
@@ -51,6 +64,7 @@ export async function POST(request: Request) {
     }
 
     const preview = await createPreviewScan({
+      clientRequestId: typeof payload.requestId === "string" ? payload.requestId : null,
       hostname: result.data.hostname,
       localV2DagScanProfile,
       localV2DagRunViaLambda,

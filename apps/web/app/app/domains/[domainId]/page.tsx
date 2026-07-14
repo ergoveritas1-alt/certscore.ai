@@ -347,7 +347,7 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
               ) : null}
             </div>
             <p className="text-xs leading-5 text-slate-500">
-              CertScore uses automated public-web observations as review signals. Monitor setup context is operational
+              CertScore.ai uses automated public-web observations as review signals. Monitor setup context is operational
               workflow information, not legal advice, certification, or a compliance determination.
             </p>
           </CardContent>

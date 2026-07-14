@@ -27,8 +27,6 @@ const footerSections = [
       { href: "/developers/mcp", label: "MCP docs" },
       { href: "/regulatory", label: "Regulatory pages" },
       { href: "/gdpr", label: "GDPR privacy scanner" },
-      { href: "/ftc", label: "FTC disclosure scanner" },
-      { href: "/accessibility", label: "ADA accessibility scanner" },
       { href: "/methodology", label: "Methodology" },
       { href: "/compare", label: "Compare" }
     ]

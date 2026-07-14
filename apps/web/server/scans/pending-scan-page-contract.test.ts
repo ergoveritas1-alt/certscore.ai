@@ -12,9 +12,10 @@ test("pending scan pages return a minimal projection before full report construc
     const source = await readFile(page, "utf8");
     const componentStart = source.indexOf("export default async function");
     const pendingBranch = source.indexOf("isPendingScanStatus(statusProjection.status)", componentStart);
-    const fullRecordLoad = source.indexOf("getScanById(", componentStart) >= 0
-      ? source.indexOf("getScanById(", componentStart)
-      : source.indexOf("getAnonymousScanById(", componentStart);
+    const fullRecordLoadCandidates = ["getScanById(", "getAnonymousScanById(", "getPublicScanById("]
+      .map((call) => source.indexOf(call, componentStart))
+      .filter((index) => index >= 0);
+    const fullRecordLoad = Math.min(...fullRecordLoadCandidates);
     const materializeReport = source.indexOf("materializeLocalV2DagScanDetail(", componentStart);
     const deriveFindings = source.indexOf("buildScanReportUnifiedFindings(", componentStart);
 
@@ -25,15 +26,13 @@ test("pending scan pages return a minimal projection before full report construc
   }
 });
 
-test("lightweight status API resolves access before selecting one status path", async () => {
+test("lightweight status API resolves public shared-link access before selecting status", async () => {
   const source = await readFile("apps/web/app/api/scan-status/[scanId]/route.ts", "utf8");
   const lightweightBranch = source.indexOf("if (!includeFindings)");
-  const anonymousFindingsLoad = source.indexOf("getAnonymousOpsScanStatus(", lightweightBranch);
-  const organizationFindingsLoad = source.indexOf("getOrganizationOpsScanStatus(", lightweightBranch);
+  const publicFindingsLoad = source.indexOf("getPublicOpsScanStatus(", lightweightBranch);
 
   assert.ok(lightweightBranch >= 0);
-  assert.ok(anonymousFindingsLoad > lightweightBranch);
-  assert.ok(organizationFindingsLoad > lightweightBranch);
-  assert.match(source, /getViewerAccessibleScanStatusProjection/);
+  assert.ok(publicFindingsLoad > lightweightBranch);
+  assert.match(source, /getPublicScanStatusProjection/);
   assert.doesNotMatch(source, /bootstrapAppUserSession/);
 });

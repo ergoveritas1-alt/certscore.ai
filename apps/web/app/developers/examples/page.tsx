@@ -3,7 +3,7 @@ import { createPageMetadata } from "../../../lib/seo";
 import { AgentQuickPath, CodeBlock, DeveloperShell, Section } from "../developer-pages";
 
 const description =
-  "Copy-paste examples for the CertScore API, TypeScript SDK, and MCP server across website risk API and AI agent workflows.";
+  "Copy-paste examples for the CertScore.ai API, TypeScript SDK, and MCP server across website risk API and AI agent workflows.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -12,7 +12,7 @@ export const metadata: Metadata = createPageMetadata({
     follow: true,
     index: true
   },
-  title: "CertScore API examples"
+  title: "CertScore.ai API examples"
 });
 
 export default function DeveloperExamplesPage() {
@@ -25,11 +25,11 @@ export default function DeveloperExamplesPage() {
           <div className="grid gap-5 lg:grid-cols-2">
             <div className="space-y-3">
               <h3 className="font-semibold text-slate-950">Prompt for coding agents</h3>
-              <CodeBlock>{`Use CertScore's public developer docs. Read /llms.txt, then /.well-known/certscore-ai.json, then /api/v2/openapi.json. Create a scan for the target domain, poll until complete, fetch findings and pre-consent cookies/trackers, and summarize only evidence-backed public-web observations. Do not provide legal advice or call the result a compliance determination.`}</CodeBlock>
+              <CodeBlock>{`Use CertScore.ai's public developer docs. Read /llms.txt, then /.well-known/certscore-ai.json, then /api/v2/openapi.json. Create a scan for the target domain, poll until complete, fetch findings and pre-consent cookies/trackers, and summarize only evidence-backed public-web observations. Do not provide legal advice or call the result a compliance determination.`}</CodeBlock>
             </div>
             <div className="space-y-3">
               <h3 className="font-semibold text-slate-950">Prompt for MCP agents</h3>
-              <CodeBlock>{`Use the CertScore MCP server to create or reuse a scan, check status, retrieve findings, export evidence-backed results, and explain findings with cited evidence. Treat CertScore output as review signals only.`}</CodeBlock>
+              <CodeBlock>{`Use the CertScore.ai MCP server to create or reuse a scan, check status, retrieve findings, export evidence-backed results, and explain findings with cited evidence. Treat CertScore.ai output as review signals only.`}</CodeBlock>
             </div>
           </div>
         </Section>
@@ -72,7 +72,7 @@ curl -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
             <CodeBlock>{`curl -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
   "https://certscore.ai/api/v2/domains/example.com/latest/pre-consent-cookies-trackers"`}</CodeBlock>
             <p className="max-w-3xl text-sm leading-7 text-slate-600">
-              CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.
+              CertScore.ai outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.
             </p>
           </div>
         </Section>
@@ -122,7 +122,7 @@ get_latest_domain_pre_consent_cookies_trackers({
         </Section>
 
         <Section id="evidence-boundaries" eyebrow="Boundaries" title="Evidence boundaries">
-          <CodeBlock>{`Use CertScore as an automated public-web risk-signal API.
+          <CodeBlock>{`Use CertScore.ai as an automated public-web risk-signal API.
 
 Discovery:
 - Read https://certscore.ai/llms.txt
@@ -133,12 +133,12 @@ Rules:
 - Treat results as evidence-backed review signals.
 - Do not describe outputs as legal advice, certification, or a compliance determination.
 - Do not infer findings from missing data, raw labels, raw network events, or display-only context.
-- Link to the CertScore report when the user needs evidence review.`}</CodeBlock>
+- Link to the CertScore.ai report when the user needs evidence review.`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Search use cases" title="Natural-language queries this page supports">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            CertScore API examples for website risk API workflows, privacy scan API reviews, cookie compliance scan API checks,
+            CertScore.ai API examples for website risk API workflows, privacy scan API reviews, cookie compliance scan API checks,
             Pre-consent Cookies & Trackers JSON retrieval, MCP server for website compliance review, automated public-web risk
             signals, and evidence-backed website scan API integrations.
           </p>

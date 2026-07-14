@@ -110,6 +110,15 @@ export async function getAnonymousScanStatusProjection(scanId: string) {
   ));
 }
 
+export async function getPublicScanStatusProjection(scanId: string) {
+  return project(await queryOne<ScanStatusProjectionRow>(
+    `${PROJECTION_SQL}
+      where s.id = $1`,
+    [scanId],
+    { readOnly: true },
+  ));
+}
+
 export async function getViewerAccessibleScanStatusProjection(input: {
   scanId: string;
   viewerEmail: string | null;

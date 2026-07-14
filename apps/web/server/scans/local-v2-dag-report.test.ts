@@ -2317,6 +2317,15 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
       schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
       screenshots: [
         {
+          artifactId: "screenshot_pre_consent_settled",
+          capturedAtMs: 1500,
+          captureMethod: "primary_viewport_fallback",
+          consentStateAtTime: "pre_consent",
+          pagePhase: "network_idle",
+          path: "/tmp/certscore-v2/visual-evidence-fixture/screenshot-pre-consent-settled.png",
+          url: "https://example.test/"
+        },
+        {
           artifactId: "screenshot_pre_consent_full_page",
           capturedAtMs: 1400,
           captureMethod: "primary_full_page",
@@ -2378,14 +2387,18 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
 
     const visualArtifacts = detail.runtimeArtifacts?.visual_evidence_artifacts as Array<Record<string, unknown>> | undefined;
     assert.equal(visualArtifacts?.[0]?.bucket, "ws01-scan-artifacts-199536052647-us-west-1");
-    assert.equal(visualArtifacts?.[0]?.id, "local_v2:screenshot_pre_consent_full_page");
-    assert.equal(visualArtifacts?.[0]?.capture_method, "primary_full_page");
+    assert.equal(visualArtifacts?.[0]?.id, "local_v2:screenshot_pre_consent_settled");
+    assert.equal(visualArtifacts?.[0]?.capture_method, "primary_viewport_fallback");
     assert.equal(
       visualArtifacts?.[0]?.key,
-      "v2-dag-lambda/local/visual-evidence-fixture/auxiliary/screenshot-pre-consent-full-page.jpg"
+      "v2-dag-lambda/local/visual-evidence-fixture/auxiliary/screenshot-pre-consent-settled.png"
     );
     assert.equal(
       visualArtifacts?.[1]?.key,
+      "v2-dag-lambda/local/visual-evidence-fixture/auxiliary/screenshot-pre-consent-full-page.jpg"
+    );
+    assert.equal(
+      visualArtifacts?.[2]?.key,
       "v2-dag-lambda/local/visual-evidence-fixture/auxiliary/screenshot-pre-consent.png"
     );
   } finally {

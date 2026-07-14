@@ -102,6 +102,18 @@ export function createScanStatusPoller(input: {
     }, delayMs);
   };
 
+  const handleVisibilityChange = () => {
+    if (input.isVisible() && input.isOnline()) {
+      queue(0);
+    }
+  };
+
+  const handleOnline = () => {
+    if (input.isVisible()) {
+      queue(0);
+    }
+  };
+
   const poll = async () => {
     if (stopped || terminal) return;
     if (inFlight) {
@@ -141,10 +153,22 @@ export function createScanStatusPoller(input: {
     start() {
       if (started || stopped) return;
       started = true;
+      if (typeof document !== "undefined") {
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+      }
+      if (typeof window !== "undefined") {
+        window.addEventListener("online", handleOnline);
+      }
       queue(SCAN_STATUS_POLL_INITIAL_MS);
     },
     stop() {
       stopped = true;
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", handleOnline);
+      }
       if (timer !== null) cancelTimer(timer);
       timer = null;
       abortController?.abort();

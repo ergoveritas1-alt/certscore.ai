@@ -1500,11 +1500,15 @@ export function mergeLocalV2DagLambdaShardBundles(input: {
 
 function selectDiagnosticScreenshot(screenshots: ScreenshotArtifact[]): ScreenshotArtifact[] {
   const deduped = dedupeByArtifactId(screenshots);
-  const baseline = deduped.find((screenshot) =>
-    screenshot.artifactId === "screenshot_pre_consent" ||
-    screenshot.artifactId === "screenshot_baseline_pre_consent_before" ||
-    /pre[_-]?consent|baseline/i.test(screenshot.artifactId)
-  );
+  const baseline = [
+    "screenshot_pre_consent_geometry_proof",
+    "screenshot_pre_consent_settled",
+    "screenshot_pre_consent_full_page",
+    "screenshot_pre_consent",
+    "screenshot_baseline_pre_consent_before",
+  ].flatMap((artifactId) =>
+    deduped.find((screenshot) => screenshot.artifactId === artifactId) ?? []
+  )[0] ?? deduped.find((screenshot) => /pre[_-]?consent|baseline/i.test(screenshot.artifactId));
   const selected = baseline ?? deduped[0];
   return selected ? [selected] : [];
 }

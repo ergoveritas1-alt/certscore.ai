@@ -81,7 +81,7 @@ export async function createIntegrationApiKeyAction(
   revalidatePath("/app/settings");
   return {
     error: null,
-    success: "API key created. Store it now; CertScore will not show it again.",
+    success: "API key created. Store it now; CertScore.ai will not show it again.",
     token: key.token,
     tokenPrefix: key.tokenPrefix
   };

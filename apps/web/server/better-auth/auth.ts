@@ -106,7 +106,7 @@ function createAuth() {
 
         const transporter = createGmailTransport(gmailConfig);
 
-        void transporter.sendMail({
+        await transporter.sendMail({
           from: `"CertScore.ai" <${gmailConfig.fromEmail}>`,
           subject: "Reset your CertScore.ai password",
           text: [
@@ -132,7 +132,7 @@ function createAuth() {
 
         const transporter = createGmailTransport(gmailConfig);
 
-        void transporter.sendMail({
+        await transporter.sendMail({
           from: `"CertScore.ai" <${gmailConfig.fromEmail}>`,
           subject: "Verify your CertScore.ai email",
           text: [

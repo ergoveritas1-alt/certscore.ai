@@ -18,7 +18,7 @@ const steps = [
   {
     title: "Start with the homepage, then expand where it matters",
     description:
-      "CertScore begins with the public-facing website and can extend into the pages and surfaces most relevant to consent, disclosures, accessibility, and user trust."
+      "CertScore.ai begins with the public-facing website and can extend into the pages and surfaces most relevant to consent, disclosures, accessibility, and user trust."
   },
   {
     title: "Collect runtime and disclosure evidence",
@@ -58,7 +58,7 @@ export default function HowItWorksPage() {
           <Badge tone="neutral">How it works</Badge>
           <h1 className="text-4xl font-semibold tracking-tight text-slate-950">From homepage scan to reviewable findings</h1>
           <p className="text-lg text-slate-600">
-            CertScore turns public website behavior and visible website surfaces into structured findings across privacy, consent, accessibility, disclosures, and observable contradictions.
+            CertScore.ai turns public website behavior and visible website surfaces into structured findings across privacy, consent, accessibility, disclosures, and observable contradictions.
           </p>
           <div className="max-w-[30rem] pt-2">
             <DomainScanForm buttonLabel="Scan a website" inputLabel="Website domain" mode="preview" />
@@ -106,7 +106,7 @@ export default function HowItWorksPage() {
             Privacy scanner vs cookie scanner
           </Link>
           <Link href="/methodology" className="hover:text-sky-800">
-            CertScore methodology
+            CertScore.ai methodology
           </Link>
         </div>
       </section>

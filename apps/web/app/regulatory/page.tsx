@@ -23,24 +23,6 @@ const regulatoryPages = [
       "Runtime consent, cookie, tracking, session replay, fingerprinting, and disclosure-alignment signals for GDPR/ePrivacy review."
   },
   {
-    href: "/ftc",
-    title: "FTC disclosure scanner",
-    description:
-      "Disclosure, endorsement, review, promotional-claim, subscription-friction, privacy-claim, and runtime behavior signals for FTC-oriented review."
-  },
-  {
-    href: "/accessibility",
-    title: "ADA accessibility scanner",
-    description:
-      "Public-page ADA and WCAG-oriented accessibility signals, including contrast, labels, image alternatives, heading structure, forms, and repeated component patterns."
-  },
-  {
-    href: "/guides/ada-website-compliance",
-    title: "ADA website accessibility guide",
-    description:
-      "Accessibility signal guidance for public website review, including homepage checks and WCAG-oriented triage."
-  },
-  {
     href: "/guides/cookie-consent-laws",
     title: "Cookie consent laws guide",
     description:
@@ -102,7 +84,7 @@ export default function RegulatoryIndexPage() {
             <Badge tone="neutral">Regulatory signals</Badge>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Public regulatory signal pages</h1>
             <p className="text-lg leading-8 text-slate-600">
-              CertScore pages translate public website observations into review queues for privacy, cookie, consent, accessibility, and disclosure work. They are evidence guides, not legal advice or compliance determinations.
+              CertScore.ai pages translate public website observations into review queues for privacy, cookie, consent, accessibility, and disclosure work. They are evidence guides, not legal advice or compliance determinations.
             </p>
           </div>
         </div>

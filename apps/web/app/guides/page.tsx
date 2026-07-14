@@ -139,24 +139,6 @@ const guides: GuideCard[] = [
     href: "/guides/cmp-verification"
   },
   {
-    title: "Accessibility homepage signals",
-    description: "Automated homepage accessibility signals for triage and review.",
-    category: "Accessibility",
-    href: "/guides/accessibility-homepage-signals"
-  },
-  {
-    title: "ADA website compliance",
-    description: "Educational accessibility guide for public website review signals.",
-    category: "Accessibility",
-    href: "/guides/ada-website-compliance"
-  },
-  {
-    title: "WCAG website checklist",
-    description: "A practical checklist for contrast, labels, alt text, structure, and keyboard access.",
-    category: "Accessibility",
-    href: "/guides/wcag-website-checklist"
-  },
-  {
     title: "Privacy policy requirements",
     description: "Review whether public privacy policy content covers expected topics.",
     category: "Policy & Disclosure",
@@ -176,7 +158,7 @@ const guides: GuideCard[] = [
   },
   {
     title: "Findings reference",
-    description: "Browse CertScore finding definitions and representative evidence.",
+    description: "Browse CertScore.ai finding definitions and representative evidence.",
     category: "Scanning Basics",
     href: "/findings"
   }

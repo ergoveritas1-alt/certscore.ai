@@ -13,7 +13,7 @@ import {
 } from "./developer-pages";
 
 const description =
-  "Discover the CertScore API, TypeScript SDK, and MCP server for evidence-backed website risk API workflows, privacy scan API use cases, cookie compliance scan API checks, and AI agent integrations.";
+  "Discover the CertScore.ai API, TypeScript SDK, and MCP server for evidence-backed website risk API workflows, privacy scan API use cases, cookie compliance scan API checks, and AI agent integrations.";
 
 const discoveryLinks = [
   ["API v2 OpenAPI", "/api/v2/openapi.json"],
@@ -30,12 +30,12 @@ export const metadata: Metadata = createPageMetadata({
     follow: true,
     index: true
   },
-  title: "CertScore API developer hub"
+  title: "CertScore.ai API developer hub"
 });
 
 export default function DevelopersPage() {
   return (
-    <DeveloperShell activePath="/developers" title="CertScore API" description={description}>
+    <DeveloperShell activePath="/developers" title="CertScore.ai API" description={description}>
       <div className="space-y-12">
         <AgentQuickPath />
 

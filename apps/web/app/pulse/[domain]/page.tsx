@@ -23,8 +23,8 @@ export async function generateMetadata({ params }: PulsePageProps): Promise<Meta
   const normalized = normalizePulseUrl(domain);
   const label = normalized.ok ? normalized.normalizedDomain : domain;
   return {
-    title: `CertScore Pulse for ${label}`,
-    description: `Agent-readable CertScore summary of automated public-web observations for ${label}.`,
+    title: `CertScore.ai Pulse for ${label}`,
+    description: `Agent-readable CertScore.ai summary of automated public-web observations for ${label}.`,
     robots: {
       follow: false,
       index: false
@@ -81,8 +81,8 @@ export default async function PulseDomainPage({ params }: PulsePageProps) {
       <SiteHeader />
       <section className="mx-auto max-w-5xl px-6 py-14">
         <div className="space-y-4">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">CertScore Pulse</p>
-          <h1 className="text-4xl font-semibold tracking-tight text-slate-950">CertScore Pulse for {pulse.domain}</h1>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">CertScore.ai Pulse</p>
+          <h1 className="text-4xl font-semibold tracking-tight text-slate-950">CertScore.ai Pulse for {pulse.domain}</h1>
           <p className="max-w-3xl text-base leading-7 text-slate-600">{pulse.summary.humanSummary}</p>
           <p className="max-w-3xl rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
             {PULSE_STANDARD_DISCLAIMER}

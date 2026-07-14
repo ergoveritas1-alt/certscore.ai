@@ -77,8 +77,8 @@ export default async function MonitorSiteSetupPage({ searchParams }: MonitorSite
         <Badge tone={isLinked ? "success" : "neutral"}>{isLinked ? "Pending setup" : "Monitor setup"}</Badge>
         <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Connect monitoring request</h1>
         <p className="max-w-3xl text-sm leading-7 text-slate-600">
-          Link this pending monitoring request to your CertScore workspace. This does not activate monitoring, schedule
-          recurring scans, or change existing scan results. CertScore will still confirm setup before monitoring becomes active.
+          Link this pending monitoring request to your CertScore.ai workspace. This does not activate monitoring, schedule
+          recurring scans, or change existing scan results. CertScore.ai will still confirm setup before monitoring becomes active.
         </p>
       </div>
 
@@ -155,7 +155,7 @@ export default async function MonitorSiteSetupPage({ searchParams }: MonitorSite
           ) : null}
 
           <p className="text-sm leading-7 text-slate-600">
-            CertScore uses automated public-web observations as review signals. Monitoring setup context is operational
+            CertScore.ai uses automated public-web observations as review signals. Monitoring setup context is operational
             workflow information, not legal advice, certification, or a compliance determination.
           </p>
         </CardContent>

@@ -16,9 +16,9 @@ type RouteContext = {
 
 function diagnosticHeaders(requestId: string, headers?: HeadersInit) {
   const nextHeaders = new Headers(headers);
-  nextHeaders.set("X-CertScore-Pulse", "v1");
-  nextHeaders.set("X-CertScore-Route", "pulse-status");
-  nextHeaders.set("X-CertScore-Request-Id", requestId);
+  nextHeaders.set("X-CertScore.ai-Pulse", "v1");
+  nextHeaders.set("X-CertScore.ai-Route", "pulse-status");
+  nextHeaders.set("X-CertScore.ai-Request-Id", requestId);
   return applyPulseCors(nextHeaders);
 }
 

@@ -19,7 +19,7 @@ export function PendingScanDetailView({
   return (
     <div className="space-y-8">
       <div>
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">CertScore scan</p>
+        <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">CertScore.ai scan</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
           Scan: {domainHostname?.trim() || "website"}
         </h1>

@@ -30,10 +30,10 @@ export function GET(request: Request) {
   return NextResponse.json(safeInfo, {
     headers: {
       "Cache-Control": "no-store",
-      "X-CertScore-Build-Sha": info.gitSha ?? "unknown",
-      "X-CertScore-Git-Ref": info.gitRef ?? "unknown",
-      "X-CertScore-Git-Sha": info.gitSha ?? "unknown",
-      "X-CertScore-Runtime-Target": info.runtimeTarget
+      "X-CertScore.ai-Build-Sha": info.gitSha ?? "unknown",
+      "X-CertScore.ai-Git-Ref": info.gitRef ?? "unknown",
+      "X-CertScore.ai-Git-Sha": info.gitSha ?? "unknown",
+      "X-CertScore.ai-Runtime-Target": info.runtimeTarget
     }
   });
 }

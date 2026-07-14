@@ -8,7 +8,7 @@ import { createPageMetadata } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Sample Website Risk Signal Report",
   description:
-    "Review a sample CertScore report showing automated public-web observations for consent behavior, third-party requests, cookies, disclosures, and accessibility signals.",
+    "Review a sample CertScore.ai report showing automated public-web observations for consent behavior, third-party requests, cookies, disclosures, and accessibility signals.",
   path: "/sample-report"
 });
 
@@ -65,7 +65,7 @@ export default function SampleReportPage() {
           <div className="space-y-5">
             <Badge tone="neutral">Sample report</Badge>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-              What a CertScore evidence report gives your team.
+              What a CertScore.ai evidence report gives your team.
             </h1>
             <p className="text-lg leading-8 text-slate-600">
               This sample shows the shape of a review packet: automated public-web observations, retained evidence, and clear next-step signals for privacy, product, agency, or security review.
@@ -88,7 +88,7 @@ export default function SampleReportPage() {
               />
             </div>
             <p className="text-sm leading-6 text-slate-500">
-              Sample content is illustrative. CertScore surfaces observations for review and does not provide legal advice, certification, or compliance determinations.
+              Sample content is illustrative. CertScore.ai surfaces observations for review and does not provide legal advice, certification, or compliance determinations.
             </p>
           </div>
 
@@ -113,7 +113,7 @@ export default function SampleReportPage() {
           <Badge tone="neutral">Evidence table</Badge>
           <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Signals a buyer can review without rerunning a manual audit.</h2>
           <p className="text-sm leading-6 text-slate-600">
-            CertScore reports are designed to make the observed browser behavior easy to triage, reproduce, and discuss with implementation owners.
+            CertScore.ai reports are designed to make the observed browser behavior easy to triage, reproduce, and discuss with implementation owners.
           </p>
         </div>
 

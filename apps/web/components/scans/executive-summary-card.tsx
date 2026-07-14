@@ -602,7 +602,7 @@ function buildCookieRetentionCardCopy(finding: CertScoreFinding): ExecutiveFindi
   const thresholdDays = longestDuration ? (longestDuration >= 365 ? 365 : 180) : null;
   const thresholdText =
     longestDuration && thresholdDays
-      ? ` Longest observed lifetime was about ${formatApproxDurationDays(longestDuration)}, exceeding CertScore's ${thresholdDays}-day cookie-retention review threshold by about ${Math.max(0, Math.round(longestDuration - thresholdDays))} days.`
+      ? ` Longest observed lifetime was about ${formatApproxDurationDays(longestDuration)}, exceeding CertScore.ai's ${thresholdDays}-day cookie-retention review threshold by about ${Math.max(0, Math.round(longestDuration - thresholdDays))} days.`
       : "";
   const vendors = getRepresentativeVendorNames(finding, 2);
   const domains = getRepresentativeDomainNames(finding, 2);
@@ -613,7 +613,7 @@ function buildCookieRetentionCardCopy(finding: CertScoreFinding): ExecutiveFindi
     evidenceBasis: [
       vendors.length > 0 ? `Representative vendors: ${formatInlineList(vendors)}.` : null,
       domains.length > 0 ? `Representative domains: ${formatInlineList(domains)}.` : null,
-      longestDuration && thresholdDays ? `Longest observed lifetime: about ${formatApproxDurationDays(longestDuration)}; CertScore threshold: ${thresholdDays} days.` : null,
+      longestDuration && thresholdDays ? `Longest observed lifetime: about ${formatApproxDurationDays(longestDuration)}; CertScore.ai threshold: ${thresholdDays} days.` : null,
       CERTSCORE_REVIEW_DISCLAIMER
     ].filter(Boolean).join(" "),
     reviewFocus: "Confirm each cookie's purpose, vendor role, consent state, retention disclosure, opt-out behavior, and whether the observed lifetime is intentionally configured.",
@@ -1132,7 +1132,7 @@ function compactObservedCountEvidence(evidence: Record<string, unknown> | null |
 }
 
 const COOKIE_CONTEXT_NOT_TOP_LEVEL_COPY =
-  "Cookie timing context was retained, but CertScore did not retain enough classified non-essential tracking/vendor evidence to promote this into a top-level pre-consent tracking finding.";
+  "Cookie timing context was retained, but CertScore.ai did not retain enough classified non-essential tracking/vendor evidence to promote this into a top-level pre-consent tracking finding.";
 
 function hasNonEmptyArrayEvidence(value: Record<string, unknown> | null | undefined, keys: string[]) {
   return keys.some((key) => {
@@ -2017,7 +2017,7 @@ export function deriveBenchmarkScoreExplanation(input: {
   const hasObservedTrackingVendorContext = (input.vendorNames ?? []).length > 0;
 
   if (input.cookieBannerPresent === false && hasObservedTrackingVendorContext && (hasPreConsentTrackingFinding || hasPreConsentStorageFinding)) {
-    return "First-layer reject availability and pre-consent third-party activity are the main review items. CertScore did not confirm a first-layer GDPR/ePrivacy cookie consent banner, while advertising/analytics storage and tracking were observed before any recorded consent choice. Footer privacy/ad-choice controls were observed, but they do not establish a GDPR/ePrivacy accept/reject consent surface.";
+    return "First-layer reject availability and pre-consent third-party activity are the main review items. CertScore.ai did not confirm a first-layer GDPR/ePrivacy cookie consent banner, while advertising/analytics storage and tracking were observed before any recorded consent choice. Footer privacy/ad-choice controls were observed, but they do not establish a GDPR/ePrivacy accept/reject consent surface.";
   }
   const drivers = [
     hasPreConsentTrackingFinding
@@ -2212,7 +2212,7 @@ function NotScoredSnapshotPane() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Report status</p>
         <p className="mt-2 text-sm font-semibold text-slate-950">Not scored</p>
         <p className="mt-1 text-sm leading-6 text-slate-600">
-          CertScore did not issue privacy, consent, accessibility, or regulatory scores from this run.
+          CertScore.ai did not issue privacy, consent, accessibility, or regulatory scores from this run.
         </p>
       </div>
     </div>
@@ -3560,7 +3560,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
               href={registryGuideHref}
               target="_blank"
               rel="noreferrer"
-              aria-label="Learn more about how CertScore interprets this finding"
+              aria-label="Learn more about how CertScore.ai interprets this finding"
               className="inline-flex text-sm font-medium text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
             >
               Learn more
@@ -4421,7 +4421,7 @@ export function ExecutiveSummaryCard(input: {
       ? "Observed footprint may be incomplete because site protections interrupted runtime collection."
       : null,
     input.externalCoverageContextAvailable
-      ? "External public scans may show broader page activity. This is supporting coverage context, not a CertScore-confirmed finding."
+      ? "External public scans may show broader page activity. This is supporting coverage context, not a CertScore.ai-confirmed finding."
       : null
   ]).join(" ");
   const pagesScanned = typeof input.pagesScanned === "number" ? input.pagesScanned : 0;
@@ -4543,7 +4543,7 @@ export function ExecutiveSummaryCard(input: {
                   </h2>
                   {isScanNotRepresentative ? (
                   <p className="max-w-3xl text-sm leading-6 text-slate-600">
-                    CertScore captured a maintenance, unavailable, blocked, placeholder, wrong-site, blank, or otherwise non-representative page instead of the normal public site. Scores, regulatory projections, and substantive findings are withheld for this scan.
+                    CertScore.ai captured a maintenance, unavailable, blocked, placeholder, wrong-site, blank, or otherwise non-representative page instead of the normal public site. Scores, regulatory projections, and substantive findings are withheld for this scan.
                   </p>
                   ) : null}
                 </div>

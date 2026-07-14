@@ -6,7 +6,7 @@ import { SiteHeader } from "../../components/layout/site-header";
 import { absoluteUrl, createBreadcrumbSchema, createPublicArticleSchema } from "../../lib/seo";
 
 export const developerSearchTopics = [
-  "CertScore API",
+  "CertScore.ai API",
   "website risk API",
   "privacy scan API",
   "cookie compliance scan API",
@@ -34,7 +34,7 @@ export const developerPages = [
   {
     href: "/developers/mcp",
     label: "MCP server",
-    description: "Connect agents to CertScore tools for public website risk-signal review."
+    description: "Connect agents to CertScore.ai tools for public website risk-signal review."
   },
   {
     href: "/developers/examples",
@@ -60,7 +60,7 @@ export const apiV2Routes = [
 
 export const mcpTools = [
   ["create_scan", "Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable."],
-  ["scan_site", "Start or reuse a CertScore public-web scan. Completed no-go scans return completed_limited status, structured reason-specific guidance, and timing when available."],
+  ["scan_site", "Start or reuse a CertScore.ai public-web scan. Completed no-go scans return completed_limited status, structured reason-specific guidance, and timing when available."],
   ["get_scan", "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available."],
   ["get_scan_status", "Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available."],
   ["get_report", "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet."],
@@ -90,7 +90,7 @@ export function DeveloperJsonLd({ path, title, description }: { path: string; ti
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
-      name: "CertScore API",
+      name: "CertScore.ai API",
       applicationCategory: "DeveloperApplication",
       operatingSystem: "Web",
       url: absoluteUrl("/developers"),
@@ -100,7 +100,7 @@ export function DeveloperJsonLd({ path, title, description }: { path: string; ti
     {
       "@context": "https://schema.org",
       "@type": "WebAPI",
-      name: "CertScore API v2",
+      name: "CertScore.ai API v2",
       url: absoluteUrl("/api/v2/openapi.json"),
       documentation: absoluteUrl("/developers/reference"),
       provider: {
@@ -151,7 +151,7 @@ export function DeveloperShell({
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950">{title}</h1>
             <p className="text-lg leading-8 text-slate-600">{description}</p>
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
-              CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a
+              CertScore.ai outputs are automated public-web observations for review. They are not legal advice, certification, or a
               compliance determination.
             </p>
           </div>

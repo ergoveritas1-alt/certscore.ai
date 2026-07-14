@@ -2,7 +2,7 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { buildScanReportUnifiedFindings } from "../../components/scans/shared-scan-detail-view";
-import { getAnonymousScanById, getScanById } from "./get-scan-by-id";
+import { getAnonymousScanById, getPublicScanById, getScanById } from "./get-scan-by-id";
 import { asAccessPostureClass, buildOpsInterruptionSummary } from "./ops-interruption-summary";
 import { OPS_SCAN_STATUS_FINDING_IDS } from "./ops-status-finding-ids";
 
@@ -92,7 +92,7 @@ function buildUnknownReportReadiness() {
   };
 }
 
-async function loadOpsScanStatusCore(input: { organizationId: string | null; scanId: string }) {
+async function loadOpsScanStatusCore(input: { organizationId: string | null; publicAccess?: boolean; scanId: string }) {
   const [scan, events, snapshot] = await Promise.all([
     queryOne<OpsScanStatusRow>(
       `select s.id,
@@ -115,8 +115,8 @@ async function loadOpsScanStatusCore(input: { organizationId: string | null; sca
          from scans s
          left join domains d on d.id = s.domain_id
         where s.id = $1
-          and s.organization_id is not distinct from $2::uuid`,
-      [input.scanId, input.organizationId],
+          and ${input.publicAccess ? "true" : "s.organization_id is not distinct from $2::uuid"}`,
+      input.publicAccess ? [input.scanId] : [input.scanId, input.organizationId],
       { readOnly: true }
     ),
     query<OpsScanEventRow>(
@@ -244,7 +244,7 @@ async function loadOpsScanStatusCore(input: { organizationId: string | null; sca
 }
 
 type OpsScanStatusCore = NonNullable<Awaited<ReturnType<typeof loadOpsScanStatusCore>>>;
-type OpsScanStatusScanRecord = NonNullable<Awaited<ReturnType<typeof getAnonymousScanById>>>;
+type OpsScanStatusScanRecord = NonNullable<Awaited<ReturnType<typeof getPublicScanById>>>;
 
 function buildOpsStatusWithoutFindings(core: OpsScanStatusCore) {
   const { scannerRuntime: _scannerRuntime, ...publicCore } = core;
@@ -308,6 +308,25 @@ export async function getAnonymousOpsScanStatus(input: { includeFindings?: boole
   }
 
   const scanRecord = await getAnonymousScanById(input.scanId);
+  return buildOpsStatusWithFindings(core, scanRecord);
+}
+
+export async function getPublicOpsScanStatus(input: { includeFindings?: boolean; scanId: string }) {
+  const core = await loadOpsScanStatusCore({
+    organizationId: null,
+    publicAccess: true,
+    scanId: input.scanId
+  });
+
+  if (!core) {
+    return null;
+  }
+
+  if (!input.includeFindings) {
+    return buildOpsStatusWithoutFindings(core);
+  }
+
+  const scanRecord = await getPublicScanById(input.scanId);
   return buildOpsStatusWithFindings(core, scanRecord);
 }
 

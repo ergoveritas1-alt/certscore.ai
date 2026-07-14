@@ -2772,7 +2772,7 @@ function PolicyExcerptModal({
               dangerouslySetInnerHTML={{ __html: highlightedPolicyHtml }}
             />
             <p className="mt-4 text-xs leading-5 text-slate-400">
-              CertScore can make mistakes. Verify findings before relying on them.
+              CertScore.ai can make mistakes. Verify findings before relying on them.
             </p>
           </div>
         </div>

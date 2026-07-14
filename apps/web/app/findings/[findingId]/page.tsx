@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: FindingDetailPageProps): Prom
   if (!finding) {
     return createPageMetadata({
       title: "Finding reference not found",
-      description: "The requested CertScore finding reference could not be found.",
+      description: "The requested CertScore.ai finding reference could not be found.",
       path: getFindingReferencePath(findingId),
       robots: {
         index: false,

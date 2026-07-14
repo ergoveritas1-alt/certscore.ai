@@ -11,9 +11,9 @@ export function GET(request: Request) {
     headers: {
       "Cache-Control": "no-store",
       "Content-Type": "application/json; charset=utf-8",
-      "X-CertScore-API-Version": CERTSCORE_API_V2_VERSION,
-      "X-CertScore-Route": "api-v2-openapi",
-      "X-CertScore-Request-Id": id,
+      "X-CertScore.ai-API-Version": CERTSCORE_API_V2_VERSION,
+      "X-CertScore.ai-Route": "api-v2-openapi",
+      "X-CertScore.ai-Request-Id": id,
       "X-Content-Type-Options": "nosniff"
     },
     status: 200

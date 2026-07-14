@@ -49,7 +49,7 @@ export default async function BillingSuccessPage({ searchParams }: BillingSucces
         </h1>
         <p className="text-sm leading-6 text-slate-600">
           {isActive
-            ? "Stripe has confirmed your subscription and CertScore has activated your paid plan."
+            ? "Stripe has confirmed your subscription and CertScore.ai has activated your paid plan."
             : "Stripe redirected you back successfully. Paid access is activated only after the signed Stripe webhook updates your account, which can take a moment."}
         </p>
         {sessionId && !sessionVerified ? (

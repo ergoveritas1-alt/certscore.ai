@@ -187,7 +187,7 @@ export function getCookieRetentionEvidence(rawEvidence: Record<string, unknown> 
     const vendor = getString(row, ["vendor", "vendorName", "vendor_name", "provider"]);
     const sourceRequestUrl = getString(row, ["sourceRequestUrl", "source_request_url", "requestUrl", "request_url", "responseUrl", "response_url"]);
     const thresholdBasis = getString(row, ["thresholdBasis", "threshold_basis", "basis"]) ??
-      (durationDays !== null ? `${Math.round(durationDays)} days observed against CertScore cookie-retention review thresholds.` : "");
+      (durationDays !== null ? `${Math.round(durationDays)} days observed against CertScore.ai cookie-retention review thresholds.` : "");
     const category = normalizeCategory(classification, name ?? "");
     const party = normalizeParty(getString(row, ["party", "firstPartyStatus", "first_party_status"]), getBoolean(row, ["thirdParty", "third_party"]));
 

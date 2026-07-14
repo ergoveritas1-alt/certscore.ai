@@ -132,8 +132,8 @@ export function buildFullScanUrlscanSupplementPayload(input: {
   const isOffDomainRedirect = evidenceRelation === "off_domain_redirect";
   const urlscanFinalHostname = input.urlscanFinalHostname ?? null;
   const liveCoverageDescription = pagesScanned > 0
-    ? "CertScore live coverage was incomplete"
-    : "CertScore was blocked before public-page verification";
+    ? "CertScore.ai live coverage was incomplete"
+    : "CertScore.ai was blocked before public-page verification";
 
   return {
     version: "preview-v1",
@@ -165,15 +165,15 @@ export function buildFullScanUrlscanSupplementPayload(input: {
     supplementalEvidence: fallbackEvidence,
     summaryBullets: [
       pagesScanned > 0
-        ? "CertScore retained limited-coverage context because the live browser pass completed with partial page coverage."
-        : "CertScore retained limited-coverage context because the live browser pass hit an access limitation.",
+        ? "CertScore.ai retained limited-coverage context because the live browser pass completed with partial page coverage."
+        : "CertScore.ai retained limited-coverage context because the live browser pass hit an access limitation.",
       isOffDomainRedirect && urlscanFinalHostname
         ? `Supplemental public runtime evidence showed the requested domain redirected to ${urlscanFinalHostname}.`
         : "Supplemental same-host public runtime evidence was retained to help explain what a public browser observed.",
-      "This indirect evidence is supplemental and is not treated as a verified CertScore finding."
+      "This indirect evidence is supplemental and is not treated as a verified CertScore.ai finding."
     ],
     sampleFindings: [],
-    disclaimer: "Supplemental public runtime evidence is indirect evidence and does not replace CertScore live verification."
+    disclaimer: "Supplemental public runtime evidence is indirect evidence and does not replace CertScore.ai live verification."
   };
 }
 

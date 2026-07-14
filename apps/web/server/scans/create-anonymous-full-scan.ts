@@ -48,6 +48,7 @@ type ScanQueueProvenance = {
 
 export async function createAnonymousFullScan(input: {
   bypassRecentScanReuse?: boolean;
+  clientRequestId?: string | null;
   coveragePlanCode?: PlanCode;
   hostname: string;
   localV2DagLambdaDebugOverrides?: import("./local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
@@ -168,7 +169,7 @@ export async function createAnonymousFullScan(input: {
     });
     return null;
   })]);
-  const scanConfig = buildQueuedFullScanConfig({
+  const baseScanConfig = buildQueuedFullScanConfig({
     hostname: input.hostname,
     localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     localV2DagScanProfile: input.localV2DagScanProfile,
@@ -181,6 +182,9 @@ export async function createAnonymousFullScan(input: {
     source: input.provenance?.source ?? "marketing-anonymous-full-scan",
     trancoRankMetadata
   });
+  const scanConfig = input.clientRequestId
+    ? { ...baseScanConfig, clientRequestId: input.clientRequestId }
+    : baseScanConfig;
   const localV2DagLambdaDispatch = summarizeLocalV2DagLambdaDispatchForEvent(scanConfig);
   const queueMetadata = getFullScanQueueMetadata({
     provenance: input.provenance,

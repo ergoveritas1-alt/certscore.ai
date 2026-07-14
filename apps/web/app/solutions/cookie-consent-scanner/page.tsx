@@ -10,7 +10,7 @@ const config: SolutionPageConfig = {
   description:
     "Review public websites for cookie consent timing, third-party cookies before consent, CMP behavior, and reject-path tracking signals. Evidence-backed observations for review.",
   intro:
-    "CertScore scans how public websites behave around cookie consent, including what loads before consent, what writes cookies or storage, and whether reject-style choices appear to reduce non-essential activity.",
+    "CertScore.ai scans how public websites behave around cookie consent, including what loads before consent, what writes cookies or storage, and whether reject-style choices appear to reduce non-essential activity.",
   path: "/solutions/cookie-consent-scanner",
   primarySignals: [
     "Cookie and storage timing",
@@ -23,12 +23,12 @@ const config: SolutionPageConfig = {
     {
       title: "Direct answer",
       body:
-        "A cookie consent scanner observes whether cookies, storage, and related tracking activity appear before or after a recorded consent state. CertScore surfaces evidence for review rather than declaring legal outcomes."
+        "A cookie consent scanner observes whether cookies, storage, and related tracking activity appear before or after a recorded consent state. CertScore.ai surfaces evidence for review rather than declaring legal outcomes."
     },
     {
-      title: "What CertScore checks",
+      title: "What CertScore.ai checks",
       body:
-        "CertScore reviews cookie timing, third-party domains, storage writes, consent surface presence, available choices, reject-path behavior, and retained runtime evidence that helps reviewers understand what happened in the browser."
+        "CertScore.ai reviews cookie timing, third-party domains, storage writes, consent surface presence, available choices, reject-path behavior, and retained runtime evidence that helps reviewers understand what happened in the browser."
     },
     {
       title: "When to run it",
@@ -53,14 +53,14 @@ const config: SolutionPageConfig = {
         "No. A scanner can provide useful evidence, but compliance depends on legal context, purposes, exemptions, disclosures, consent records, and implementation details."
     },
     {
-      question: "Does CertScore test reject behavior?",
+      question: "Does CertScore.ai test reject behavior?",
       answer:
-        "CertScore can surface reject-path review signals where the workflow has retained evidence. Findings remain automated review signals, not legal determinations."
+        "CertScore.ai can surface reject-path review signals where the workflow has retained evidence. Findings remain automated review signals, not legal determinations."
     }
   ],
   aiSummary: [
-    "CertScore provides cookie consent scanning for public websites by observing cookie, storage, request, CMP, and consent-timing behavior.",
-    "CertScore helps teams review consent implementation drift after CMP, tag-manager, and vendor changes."
+    "CertScore.ai provides cookie consent scanning for public websites by observing cookie, storage, request, CMP, and consent-timing behavior.",
+    "CertScore.ai helps teams review consent implementation drift after CMP, tag-manager, and vendor changes."
   ],
   relatedLinks: [
     { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement checker" },

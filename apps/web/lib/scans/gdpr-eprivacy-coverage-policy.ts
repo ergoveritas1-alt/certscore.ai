@@ -16,7 +16,7 @@ export type GdprEprivacyCoverageSourceSignalGap = {
   actual: unknown;
   expected: unknown;
   field: string;
-  source: "scanner" | "CertScore";
+  source: "scanner" | "CertScore.ai";
   whyNeeded: string;
 };
 
@@ -231,7 +231,7 @@ function sourceGap(
   expected: unknown,
   actual: unknown,
   whyNeeded: string,
-  source: "scanner" | "CertScore" = "scanner"
+  source: "scanner" | "CertScore.ai" = "scanner"
 ): GdprEprivacyCoverageSourceSignalGap {
   return { actual, expected, field, source, whyNeeded };
 }
@@ -1583,7 +1583,7 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
     return makeOutcome(
       "pre_consent_cookies_storage",
       "Observed",
-      "Cookie/storage inventory retained before-consent observations. CertScore reports this as an observed runtime signal; whether the storage is essential or creates a regulatory gap remains review context.",
+      "Cookie/storage inventory retained before-consent observations. CertScore.ai reports this as an observed runtime signal; whether the storage is essential or creates a regulatory gap remains review context.",
       [
         firstObservedMsRef,
         `Observed before-consent cookie/storage count: ${cookiesBeforeConsentCount}`,
@@ -1852,7 +1852,7 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
                 "eligible projected unified finding when retained pre-consent tracking evidence satisfies policy gates",
                 "missing",
                 "Required to classify retained pre-consent tracker observations as a canonical gap.",
-                "CertScore"
+                "CertScore.ai"
               )
             ],
         retainedEvidence: {
@@ -3127,7 +3127,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     return makeOutcome(
       "reject_all_path_availability",
       "Gap observed",
-      "A first-layer GDPR/ePrivacy cookie consent surface was retained with an accept option and non-essential cookie/purpose text, but no same-layer reject, decline, refuse, or continue-without-accepting option was retained. This is a first-layer availability signal only; CertScore did not run a consent flow.",
+      "A first-layer GDPR/ePrivacy cookie consent surface was retained with an accept option and non-essential cookie/purpose text, but no same-layer reject, decline, refuse, or continue-without-accepting option was retained. This is a first-layer availability signal only; CertScore.ai did not run a consent flow.",
       [
         "Evidence: retained first-layer consent controls",
         ...firstLayerChoiceEvidence.visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
@@ -3175,7 +3175,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
       return makeOutcome(
         "reject_all_path_availability",
         "Not confirmed",
-        "CertScore retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Reject-path availability cannot be assessed from tracking activity alone.",
+        "CertScore.ai retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Reject-path availability cannot be assessed from tracking activity alone.",
         [
           "Evidence: retained pre-consent cookie/tracking activity",
           "Evidence: no structured first-layer reject option retained",
@@ -3200,7 +3200,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     return makeOutcome(
       "reject_all_path_availability",
       "Not confirmed",
-      "A first-layer GDPR/ePrivacy cookie consent banner was not confirmed, so CertScore did not confirm an accept/reject consent surface for reject-path review. Footer privacy/ad-choice controls may still be relevant review context, but they do not establish a same-layer GDPR/ePrivacy reject path.",
+      "A first-layer GDPR/ePrivacy cookie consent banner was not confirmed, so CertScore.ai did not confirm an accept/reject consent surface for reject-path review. Footer privacy/ad-choice controls may still be relevant review context, but they do not establish a same-layer GDPR/ePrivacy reject path.",
       [
         "Evidence: consent surface demotion",
         "Reason: no_confirmed_first_layer_cookie_consent_banner"
@@ -3211,7 +3211,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
             "scanner.firstLayerCookieConsentBannerObserved",
             true,
             false,
-            "Required before CertScore can evaluate first-layer accept/reject availability."
+            "Required before CertScore.ai can evaluate first-layer accept/reject availability."
           )
         ],
         retainedEvidence: {
@@ -3325,7 +3325,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
             "greater than 0 or explicit complete-reject negative reason",
             rejectButtonCount,
             "Required to distinguish missing reject controls from incomplete reject-path testing.",
-            "CertScore"
+            "CertScore.ai"
           )
         ],
         retainedEvidence: {
@@ -3365,7 +3365,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
       return makeOutcome(
         "reject_all_path_availability",
         "Not confirmed",
-        "CertScore retained a consent/CMP runtime signal and pre-consent cookie or tracking activity, but no structured first-layer consent controls were confirmed. Reject-path availability cannot be assessed from CMP presence or tracking activity alone.",
+        "CertScore.ai retained a consent/CMP runtime signal and pre-consent cookie or tracking activity, but no structured first-layer consent controls were confirmed. Reject-path availability cannot be assessed from CMP presence or tracking activity alone.",
         [
           "Evidence: consent surface observed",
           "Evidence: retained pre-consent cookie/tracking activity",
@@ -3390,7 +3390,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     return makeOutcome(
       "reject_all_path_availability",
       "Not observed",
-      "A consent/CMP surface was observed, but the retained runtime evidence did not include a structured first-layer reject, decline, or equivalent refusal control. CertScore does not infer reject availability from screenshot pixels.",
+      "A consent/CMP surface was observed, but the retained runtime evidence did not include a structured first-layer reject, decline, or equivalent refusal control. CertScore.ai does not infer reject availability from screenshot pixels.",
       [
         "Evidence: consent surface observed",
         "Result: no structured first-layer reject/equivalent control retained"
@@ -3504,7 +3504,7 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
     return makeOutcome(
       "options_settings_preferences_control",
       preconsentCookieOrTrackingActivityObserved ? "Not confirmed" : "Not observed",
-      "CertScore retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Options/settings/preferences availability cannot be assessed from tracking activity alone.",
+      "CertScore.ai retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Options/settings/preferences availability cannot be assessed from tracking activity alone.",
       [
         "Evidence: retained pre-consent cookie/tracking activity",
         "Evidence: no structured first-layer options/settings/preferences control retained",
@@ -3530,7 +3530,7 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
     return makeOutcome(
       "options_settings_preferences_control",
       "Not confirmed",
-      "A first-layer GDPR/ePrivacy cookie consent banner was not confirmed, so CertScore did not confirm an options/settings/preferences control for cookie-consent choices.",
+      "A first-layer GDPR/ePrivacy cookie consent banner was not confirmed, so CertScore.ai did not confirm an options/settings/preferences control for cookie-consent choices.",
       [
         "Evidence: consent surface demotion",
         "Reason: no_confirmed_first_layer_cookie_consent_banner"
@@ -3541,7 +3541,7 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
             "scanner.firstLayerCookieConsentBannerObserved",
             true,
             evidence.firstLayerCookieConsentBannerObserved,
-            "Required before CertScore can evaluate first-layer options/settings/preferences control availability."
+            "Required before CertScore.ai can evaluate first-layer options/settings/preferences control availability."
           )
         ],
         retainedEvidence: {
@@ -3586,8 +3586,8 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
       "options_settings_preferences_control",
       preconsentCookieOrTrackingActivityObserved ? "Not confirmed" : "Not observed",
       preconsentCookieOrTrackingActivityObserved
-        ? "CertScore retained a consent/CMP runtime signal and pre-consent cookie or tracking activity, but no structured first-layer consent controls were confirmed. Options/settings/preferences availability cannot be assessed from CMP presence or tracking activity alone."
-        : "A consent/CMP surface was observed, but the retained runtime evidence did not include a structured first-layer options, settings, or preferences control. CertScore does not infer options availability from screenshot pixels.",
+        ? "CertScore.ai retained a consent/CMP runtime signal and pre-consent cookie or tracking activity, but no structured first-layer consent controls were confirmed. Options/settings/preferences availability cannot be assessed from CMP presence or tracking activity alone."
+        : "A consent/CMP surface was observed, but the retained runtime evidence did not include a structured first-layer options, settings, or preferences control. CertScore.ai does not infer options availability from screenshot pixels.",
       [
         "Evidence: consent surface observed",
         ...(preconsentCookieOrTrackingActivityObserved ? ["Evidence: retained pre-consent cookie/tracking activity"] : []),
@@ -3703,7 +3703,7 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
     return makeOutcome(
       "accept_consent_control",
       preconsentCookieOrTrackingActivityObserved ? "Not confirmed" : "Not observed",
-      "CertScore retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Accept-control availability cannot be assessed from tracking activity alone.",
+      "CertScore.ai retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Accept-control availability cannot be assessed from tracking activity alone.",
       [
         "Evidence: retained pre-consent cookie/tracking activity",
         "Evidence: no structured first-layer accept consent control retained",
@@ -3729,7 +3729,7 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
     return makeOutcome(
       "accept_consent_control",
       "Not confirmed",
-      "A first-layer GDPR/ePrivacy cookie consent banner was not confirmed, so CertScore did not confirm an accept consent control for cookie-consent choices.",
+      "A first-layer GDPR/ePrivacy cookie consent banner was not confirmed, so CertScore.ai did not confirm an accept consent control for cookie-consent choices.",
       [
         "Evidence: consent surface demotion",
         "Reason: no_confirmed_first_layer_cookie_consent_banner"
@@ -3740,7 +3740,7 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
             "scanner.firstLayerCookieConsentBannerObserved",
             true,
             evidence.firstLayerCookieConsentBannerObserved,
-            "Required before CertScore can evaluate first-layer accept-control availability."
+            "Required before CertScore.ai can evaluate first-layer accept-control availability."
           )
         ],
         retainedEvidence: {
@@ -3785,8 +3785,8 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
       "accept_consent_control",
       preconsentCookieOrTrackingActivityObserved ? "Not confirmed" : "Not observed",
       preconsentCookieOrTrackingActivityObserved
-        ? "CertScore retained a consent/CMP runtime signal and pre-consent cookie or tracking activity, but no structured first-layer consent controls were confirmed. Accept-control availability cannot be assessed from CMP presence or tracking activity alone."
-        : "A consent/CMP surface was observed, but the retained runtime evidence did not include a structured first-layer accept consent control. CertScore does not infer accept availability from screenshot pixels.",
+        ? "CertScore.ai retained a consent/CMP runtime signal and pre-consent cookie or tracking activity, but no structured first-layer consent controls were confirmed. Accept-control availability cannot be assessed from CMP presence or tracking activity alone."
+        : "A consent/CMP surface was observed, but the retained runtime evidence did not include a structured first-layer accept consent control. CertScore.ai does not infer accept availability from screenshot pixels.",
       [
         "Evidence: consent surface observed",
         ...(preconsentCookieOrTrackingActivityObserved ? ["Evidence: retained pre-consent cookie/tracking activity"] : []),
@@ -4018,8 +4018,8 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
       "consent_choice_quality",
       "Gap observed",
       noticeGateEvidence.privacyNoticeGateWithPrivacyChoicesObserved
-        ? "CertScore observed a first-layer privacy notice gate with visible actions for privacy choices and Continue. No same-layer reject, decline, reject-all, or granular cookie-category controls were visible in retained evidence."
-        : "CertScore observed a first-layer legal/privacy notice with a single Continue action. No same-layer reject, manage-preferences, or granular cookie-choice control was visible in retained evidence.",
+        ? "CertScore.ai observed a first-layer privacy notice gate with visible actions for privacy choices and Continue. No same-layer reject, decline, reject-all, or granular cookie-category controls were visible in retained evidence."
+        : "CertScore.ai observed a first-layer legal/privacy notice with a single Continue action. No same-layer reject, manage-preferences, or granular cookie-choice control was visible in retained evidence.",
       [
         "Evidence: first-layer legal/privacy notice gate",
         ...noticeGateEvidence.visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
@@ -4057,7 +4057,7 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
             "scanner.firstLayerCookieConsentBannerObserved",
             true,
             false,
-            "Required before CertScore can evaluate first-layer consent choice quality."
+            "Required before CertScore.ai can evaluate first-layer consent choice quality."
           )
         ],
         retainedEvidence
@@ -4077,7 +4077,7 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
             "scanner.firstLayerCookieConsentBannerObserved",
             true,
             evidence.firstLayerCookieConsentBannerObserved,
-            "Required before CertScore can evaluate first-layer consent choice quality."
+            "Required before CertScore.ai can evaluate first-layer consent choice quality."
           )
         ],
         retainedEvidence
@@ -4139,7 +4139,7 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
     return makeOutcome(
       "consent_choice_quality",
       "Not observed",
-      `No obvious cookie-banner dark-pattern signal was observed in retained first-layer consent controls.${visibleChoicePhrase} CertScore observed same-layer accept, reject/refusal, and settings/preferences controls; deeper preference-center default states and visual-parity review were not used as standalone dark-pattern findings.`,
+      `No obvious cookie-banner dark-pattern signal was observed in retained first-layer consent controls.${visibleChoicePhrase} CertScore.ai observed same-layer accept, reject/refusal, and settings/preferences controls; deeper preference-center default states and visual-parity review were not used as standalone dark-pattern findings.`,
       evidenceRefs,
       {
         retainedEvidence: {
@@ -4189,7 +4189,7 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
     return makeOutcome(
       "consent_choice_quality",
       "Review signal",
-      "Basic same-layer Accept and Decline controls were observed, but CertScore did not confirm granular cookie preferences, purpose/vendor choices, default toggle states, or a cookie preference center.",
+      "Basic same-layer Accept and Decline controls were observed, but CertScore.ai did not confirm granular cookie preferences, purpose/vendor choices, default toggle states, or a cookie preference center.",
       evidenceRefs,
       {
         missingOrIncompleteSourceSignals: [
@@ -4197,7 +4197,7 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
             "scanner.consentChoiceQuality.granularPreferenceEvidence",
             "granular cookie preferences, purpose/vendor choices, default toggle states, or cookie preference center",
             "missing",
-            "Required before CertScore can mark consent choice quality as checked."
+            "Required before CertScore.ai can mark consent choice quality as checked."
           )
         ],
         retainedEvidence: {
@@ -4219,7 +4219,7 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
           "scanner.consentChoiceQuality.completeQualityEvidence",
           "same-layer accept/reject plus granular preferences, default-state evidence, save choices, and visual parity",
           "partial",
-          "Required before CertScore can mark consent choice quality as checked."
+          "Required before CertScore.ai can mark consent choice quality as checked."
         )
       ],
       retainedEvidence: {
@@ -4436,7 +4436,7 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     return makeOutcome(
       "post_reject_tracking_reduction",
       "Not testable",
-      "Post-choice consent-flow automation is deferred from the current production core scanner. Retained reject-path or post-reject evidence may remain available for analyst review, but CertScore does not currently report a production gap or success conclusion for post-choice tracking reduction.",
+      "Post-choice consent-flow automation is deferred from the current production core scanner. Retained reject-path or post-reject evidence may remain available for analyst review, but CertScore.ai does not currently report a production gap or success conclusion for post-choice tracking reduction.",
       reductionEvidenceRefs,
       {
         retainedEvidence: {
@@ -4492,7 +4492,7 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
                 "scanner.firstLayerCookieConsentBannerObserved",
                 true,
                 false,
-                "Required before CertScore can establish a GDPR/ePrivacy reject state for post-choice tracking comparison."
+                "Required before CertScore.ai can establish a GDPR/ePrivacy reject state for post-choice tracking comparison."
               ),
               ...postRejectMissingSignals
             ]
@@ -4548,7 +4548,7 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
       hasConcretePostRejectPersistenceEvidence ? "Gap observed" : "Review signal",
       hasConcretePostRejectPersistenceEvidence
         ? "A reject action and post-reject comparison window were retained, and eligible non-essential tracking activity persisted after reject."
-        : "A reject action and post-reject comparison window were retained, and post-reject non-essential activity was observed, but CertScore did not retain enough canonical detail to project a post-reject persistence gap.",
+        : "A reject action and post-reject comparison window were retained, and post-reject non-essential activity was observed, but CertScore.ai did not retain enough canonical detail to project a post-reject persistence gap.",
       reductionEvidenceRefs,
       {
         missingOrIncompleteSourceSignals: hasConcretePostRejectPersistenceEvidence
@@ -4647,7 +4647,7 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
               "scan_runtime_artifacts.hybrid_runtime_evidence.consentControlLifecycleEvidence",
               "retained post-choice consent control lifecycle evidence",
               "missing",
-              "Required before CertScore can confirm whether a post-choice GDPR/ePrivacy consent withdrawal control was available."
+              "Required before CertScore.ai can confirm whether a post-choice GDPR/ePrivacy consent withdrawal control was available."
             )
           ],
           retainedEvidence: {
@@ -4797,7 +4797,7 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
       return makeOutcome(
       "preference_withdrawal_control",
       "Observed",
-      "CertScore observed a post-choice consent or preference control in the tested context.",
+      "CertScore.ai observed a post-choice consent or preference control in the tested context.",
       evidenceRefs,
       {
         retainedEvidence: lifecycleRetainedEvidence
@@ -4809,7 +4809,7 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
       return makeOutcome(
         "preference_withdrawal_control",
         "Review signal",
-        "Footer privacy/ad-choice and vendor opt-out links were observed, but CertScore did not confirm a GDPR/ePrivacy cookie preference center or consent-withdrawal control.",
+        "Footer privacy/ad-choice and vendor opt-out links were observed, but CertScore.ai did not confirm a GDPR/ePrivacy cookie preference center or consent-withdrawal control.",
         evidenceRefs,
         {
           missingOrIncompleteSourceSignals: [
@@ -4817,7 +4817,7 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
               "consentControlLifecycleEvidence.cookiePreferencesLinkObserved",
               true,
               getRawValue(lifecycle, ["cookiePreferencesLinkObserved", "cookie_preferences_link_observed"]) ?? false,
-              "Required before CertScore can treat post-choice GDPR/ePrivacy consent withdrawal as checked."
+              "Required before CertScore.ai can treat post-choice GDPR/ePrivacy consent withdrawal as checked."
             )
           ],
           retainedEvidence: {
@@ -4834,7 +4834,7 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
       "preference_withdrawal_control",
       lifecycleUsable ? "Not confirmed" : "Not testable",
       lifecycleUsable
-        ? "A first-layer GDPR/ePrivacy cookie consent surface was not confirmed in the retained scan context, so CertScore did not confirm whether a post-choice cookie preference or consent-withdrawal control was available."
+        ? "A first-layer GDPR/ePrivacy cookie consent surface was not confirmed in the retained scan context, so CertScore.ai did not confirm whether a post-choice cookie preference or consent-withdrawal control was available."
         : "Post-choice consent controls were not testable because no initial consent surface was observed in the retained scan context.",
       evidenceRefs,
       {
@@ -4845,7 +4845,7 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
                 "consentControlLifecycleEvidence.initialConsentLayerObserved",
                 true,
                 initialLayerObserved,
-                "Required before CertScore can evaluate whether post-choice consent controls were available."
+                "Required before CertScore.ai can evaluate whether post-choice consent controls were available."
               )
             ],
         retainedEvidence: lifecycleRetainedEvidence
@@ -4870,7 +4870,7 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
     return makeOutcome(
       "preference_withdrawal_control",
       "Not observed",
-      "CertScore did not retain a qualifying post-choice cookie preference or withdrawal control after the initial consent action.",
+      "CertScore.ai did not retain a qualifying post-choice cookie preference or withdrawal control after the initial consent action.",
       evidenceRefs,
       {
         retainedEvidence: lifecycleRetainedEvidence
@@ -4882,7 +4882,7 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
     return makeOutcome(
       "preference_withdrawal_control",
       "Gap observed",
-      "CertScore observed an initial consent surface, but did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control on the tested public pages. Review whether users can later change or withdraw consent through another path.",
+      "CertScore.ai observed an initial consent surface, but did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control on the tested public pages. Review whether users can later change or withdraw consent through another path.",
       evidenceRefs,
       {
         retainedEvidence: lifecycleRetainedEvidence
@@ -6502,7 +6502,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
             `row-specific ${config.label.toLowerCase()} evidence`,
             "not confidently extracted",
             "Required before treating topic-level policy evidence as observed or as a transparency gap.",
-            "CertScore"
+            "CertScore.ai"
           )
         ],
         retainedEvidence: {
@@ -6601,7 +6601,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
             "row-specific international transfer disclosure evidence",
             "not confidently extracted",
             "Required before treating a retained privacy-policy surface as observed or as an international-transfer transparency gap.",
-            "CertScore"
+            "CertScore.ai"
           )
         ],
         retainedEvidence: {
@@ -6631,7 +6631,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
             "row-specific recipient/vendor category disclosure evidence",
             "not confidently extracted",
             "Required before treating a retained privacy-policy surface as observed or as a recipient/vendor-category transparency gap.",
-            "CertScore"
+            "CertScore.ai"
           )
         ],
         retainedEvidence: {
@@ -6658,7 +6658,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
             "row-specific DPO or privacy contact point evidence",
             "not confidently extracted",
             "Required before treating controller/contact evidence as a DPO/privacy-contact disclosure.",
-            "CertScore"
+            "CertScore.ai"
           )
         ],
         retainedEvidence: {
@@ -6689,7 +6689,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
             `row-specific ${config.label.toLowerCase()} evidence`,
             "not confidently extracted",
             "Required before treating a mature retained privacy-policy surface as a transparency gap.",
-            "CertScore"
+            "CertScore.ai"
           )
         ],
         retainedEvidence: {
@@ -6809,7 +6809,7 @@ function policyTextExtractionLimitationMessage(summary: Record<string, unknown> 
   if (status === "low_quality_extracted_code_or_config" || looksLikeCodeOrConfigText(getPolicyDisclosureText(summary))) {
     return "A privacy-policy surface was found, but the retained text was low-quality or non-policy content, so row-specific disclosure extraction could not be completed.";
   }
-  return "A privacy-policy surface was found, but CertScore did not extract enough usable policy text to confirm this disclosure from retained evidence.";
+  return "A privacy-policy surface was found, but CertScore.ai did not extract enough usable policy text to confirm this disclosure from retained evidence.";
 }
 
 function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
@@ -6874,7 +6874,7 @@ function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
             "eligible projected unified finding when sensitive-field correlation satisfies policy gates",
             "missing",
             "Required to classify retained sensitive-field tracking correlation as a canonical review signal.",
-            "CertScore"
+            "CertScore.ai"
           )
         ],
         retainedEvidence: {
@@ -7043,7 +7043,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
             "sensitiveThirdPartyTrackingCorrelation.directSameContextRuntimeCorrelation",
             "direct or moderate same-context runtime correlation",
             "fallback_only_or_policy_text",
-            "Required before CertScore can project sensitive-surface tracking as a GDPR/ePrivacy gap."
+            "Required before CertScore.ai can project sensitive-surface tracking as a GDPR/ePrivacy gap."
           )
         ],
         reason:
@@ -7059,7 +7059,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
       evidenceRefs,
       missingOrIncompleteSourceSignals: [],
       reason:
-        "CertScore retained evidence of a sensitive or personal-data value associated with a 3rd party request in the tested context. Review whether this data flow is necessary, disclosed, consent-gated where required, and excluded from sensitive form interactions.",
+        "CertScore.ai retained evidence of a sensitive or personal-data value associated with a 3rd party request in the tested context. Review whether this data flow is necessary, disclosed, consent-gated where required, and excluded from sensitive form interactions.",
       retainedEvidence,
       status: "Gap observed" as const
     };
@@ -7081,7 +7081,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
       evidenceRefs,
       missingOrIncompleteSourceSignals: [],
       reason:
-        "CertScore observed a sensitive or high-risk collection surface in the same tested page or flow as 3rd party tracking or measurement scripts. Review whether the tracking is necessary, disclosed, consent-gated where required, and excluded from sensitive form interactions.",
+        "CertScore.ai observed a sensitive or high-risk collection surface in the same tested page or flow as 3rd party tracking or measurement scripts. Review whether the tracking is necessary, disclosed, consent-gated where required, and excluded from sensitive form interactions.",
       retainedEvidence,
       status: "Gap observed" as const
     };
@@ -7637,7 +7637,7 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
             "eligible projected unified finding when retained replay/fingerprinting evidence satisfies policy gates",
             "missing",
             "Required to classify retained replay or fingerprinting-like runtime evidence as a canonical review signal.",
-            "CertScore"
+            "CertScore.ai"
           )
         ],
         retainedEvidence: {
@@ -8037,7 +8037,7 @@ function deriveSessionReplayAfterRefusalOutcome(input: GdprEprivacyCoveragePolic
     return makeOutcome(
       "session_replay_after_refusal",
       "Not testable",
-      "Post-choice consent-flow automation is deferred from the current production core scanner. CertScore evaluates session replay and behavioral analytics through pre-consent, sensitive-surface, and disclosure-alignment evidence, not after-refusal persistence conclusions.",
+      "Post-choice consent-flow automation is deferred from the current production core scanner. CertScore.ai evaluates session replay and behavioral analytics through pre-consent, sensitive-surface, and disclosure-alignment evidence, not after-refusal persistence conclusions.",
       sessionReplayEvidenceRefs(sessionReplayEvidence, "Session replay post-choice comparison deferred"),
       {
         retainedEvidence: {
@@ -8092,7 +8092,7 @@ function deriveSessionReplayAfterRefusalOutcome(input: GdprEprivacyCoveragePolic
         missingOrIncompleteSourceSignals: [
           sessionReplayMissingEvidence(
             "postRejectTrackingReductionEvidence.rejectInteractionConfirmed",
-            "Required before CertScore can compare session replay behavior after refusal or opt-out.",
+            "Required before CertScore.ai can compare session replay behavior after refusal or opt-out.",
             rejectInteractionConfirmed
           )
         ],
@@ -8149,8 +8149,8 @@ function deriveCrossBorderOutcome(input: GdprEprivacyCoveragePolicyInput) {
                 "CertScore.unifiedFindings.crossBorderVendorDisclosureGap",
                 "eligible projected unified finding when retained transfer-relevant endpoint evidence intersects with vendor-disclosure mismatch evidence",
                 "missing",
-                "Required before CertScore can classify endpoint geography as a disclosure gap rather than a transfer-review signal.",
-                "CertScore"
+                "Required before CertScore.ai can classify endpoint geography as a disclosure gap rather than a transfer-review signal.",
+                "CertScore.ai"
               )
             ]
           : [],
@@ -8283,7 +8283,7 @@ function deriveAccessibilityConsentControlsOutcome(input: GdprEprivacyCoveragePo
     return makeOutcome(
       "accessibility_consent_controls",
       "Gap observed",
-      "CertScore retained basic automated accessibility evidence for consent or privacy controls, including button-name, link-name, color-contrast, ARIA, focus, or keyboard-related issues. Review whether users can perceive, understand, and operate the consent or privacy-choice controls, including with keyboard navigation and assistive technology.",
+      "CertScore.ai retained basic automated accessibility evidence for consent or privacy controls, including button-name, link-name, color-contrast, ARIA, focus, or keyboard-related issues. Review whether users can perceive, understand, and operate the consent or privacy-choice controls, including with keyboard navigation and assistive technology.",
       evaluation.evidenceRefs,
       {
         retainedEvidence: evaluation.retainedEvidence
@@ -8453,7 +8453,7 @@ function evaluateConsentControlAccessibility(input: {
               "accessibilityAuditRan",
               true,
               input.accessibilityAuditRan,
-              "Required before CertScore can evaluate consent/privacy-control accessibility evidence."
+              "Required before CertScore.ai can evaluate consent/privacy-control accessibility evidence."
             )
           : null,
         !controlObserved
@@ -8461,7 +8461,7 @@ function evaluateConsentControlAccessibility(input: {
               "consentPrivacyControlObserved",
               true,
               controlObserved,
-              "Required before CertScore can evaluate accessibility evidence for consent or privacy-choice controls."
+              "Required before CertScore.ai can evaluate accessibility evidence for consent or privacy-choice controls."
             )
           : null
       ].filter((value): value is GdprEprivacyCoverageSourceSignalGap => Boolean(value)),

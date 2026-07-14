@@ -387,7 +387,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     section: "Cookies & Storage",
     defaultSurfacePriority: 88,
     whyItMatters:
-      "Persistent cookies with retained runtime expiry evidence above CertScore review thresholds may warrant retention, minimization, consent, opt-out, and disclosure review; unclassified cookies require classification before stronger conclusions.",
+      "Persistent cookies with retained runtime expiry evidence above CertScore.ai review thresholds may warrant retention, minimization, consent, opt-out, and disclosure review; unclassified cookies require classification before stronger conclusions.",
     remediation:
       "Review cookie purposes and vendors, shorten unnecessary expiration periods, classify unknown cookies, and update cookie or privacy disclosures to explain retention periods or criteria."
   },
@@ -509,7 +509,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters:
       "Third-party technology capable of recording or receiving user interaction signals can create California litigation review risk, especially before clear consent, after rejection, or on sensitive surfaces.",
     remediation:
-      "Review interaction recording tools, consent timing, page-level exclusions, masking configuration, and public disclosures. CertScore does not make legal conclusions."
+      "Review interaction recording tools, consent timing, page-level exclusions, masking configuration, and public disclosures. CertScore.ai does not make legal conclusions."
   },
   cipa_sensitive_communication_interception_signal: {
     id: "cipa_sensitive_communication_interception_signal",
@@ -519,7 +519,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters:
       "Third-party receipt of interaction data during form, search, chat, or support flows can warrant California wiretapping/eavesdropping review without making a legal conclusion.",
     remediation:
-      "Review third-party scripts and endpoints active during communication flows, consent timing, disclosures, and data-minimization controls. CertScore does not make legal conclusions."
+      "Review third-party scripts and endpoints active during communication flows, consent timing, disclosures, and data-minimization controls. CertScore.ai does not make legal conclusions."
   },
   sensitive_data_collection_with_third_party_tracking_present: {
     id: "sensitive_data_collection_with_third_party_tracking_present",

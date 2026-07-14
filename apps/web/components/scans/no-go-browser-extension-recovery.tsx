@@ -13,7 +13,7 @@ export function NoGoBrowserExtensionRecovery({
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700">Alternate scan path</p>
           <h2 className="text-xl font-semibold tracking-tight text-slate-950">Try scanning from Chrome</h2>
           <p className="text-sm leading-6 text-slate-700">
-            CertScore&apos;s hosted scanner could not verify a representative public page. The site may respond differently in
+            CertScore.ai&apos;s hosted scanner could not verify a representative public page. The site may respond differently in
             a normal Chrome session, so you can try a reviewer-started scan with the CertScore.ai Chrome extension.
           </p>
           <p className="text-sm leading-6 text-slate-600">

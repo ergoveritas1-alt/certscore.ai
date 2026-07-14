@@ -72,6 +72,7 @@ const initialState: CreateFullScanActionState = {
 const LOCAL_INTERRUPTED_V2_DAG_CLEANUP_MS = 90_000;
 
 type QueueFullScanInput = {
+  clientRequestId?: string | null;
   domainContext?: {
     activeScanExists: boolean;
     domain: {
@@ -469,7 +470,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     });
     return null;
   })]);
-  const scanConfig = buildQueuedFullScanConfig({
+  const baseScanConfig = buildQueuedFullScanConfig({
     hostname: domainRecord.domain.hostname,
     localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     localV2DagScanProfile: input.localV2DagScanProfile,
@@ -482,6 +483,9 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     source: input.source ?? "manual-dashboard",
     trancoRankMetadata
   });
+  const scanConfig = input.clientRequestId
+    ? { ...baseScanConfig, clientRequestId: input.clientRequestId }
+    : baseScanConfig;
   const localV2DagLambdaDispatch = summarizeLocalV2DagLambdaDispatchForEvent(scanConfig);
   const queueMetadata = getFullScanQueueMetadata({
     provenance: input.provenance,

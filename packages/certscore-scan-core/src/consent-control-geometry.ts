@@ -299,16 +299,22 @@ export async function captureConsentControlGeometry(
   const cookieNamesPromise = page.context().cookies(page.url())
     .then((cookies) => cookies.map((cookie) => cookie.name))
     .catch(() => undefined);
-  const captures = (await Promise.all(frames.map(async (frame) => {
+  const captureResults = await Promise.all(frames.map(async (frame, frameIndex) => {
     try {
       const capture = frame.evaluate<RawGeometryCapture, typeof frameInput>(collectConsentGeometryInPage, frameInput);
-      return frameTimeoutMs
+      const result = frameTimeoutMs
         ? await promiseWithTimeout(capture, frameTimeoutMs)
         : await capture;
+      return result ? { capture: result, frameIndex } : undefined;
     } catch {
       return undefined;
     }
-  }))).filter((capture): capture is RawGeometryCapture => Boolean(capture));
+  }));
+  const successfulCaptures = captureResults.filter(
+    (result): result is { capture: RawGeometryCapture; frameIndex: number } => Boolean(result),
+  );
+  const mainFrameCapture = successfulCaptures.find((result) => result.frameIndex === 0)?.capture;
+  const captures = successfulCaptures.map((result) => result.capture);
   const raw = mergeRawGeometryCaptures(captures, page.url(), frameInput);
   const cookieNames = await cookieNamesPromise ?? raw.cookieNames;
   const cmp = buildCmpEvidence({ ...raw, cookieNames });
@@ -320,11 +326,23 @@ export async function captureConsentControlGeometry(
     buildCandidateEvidence(candidate, index, raw.pageUrl, options.screenshotArtifactRef, containers)
   );
   const summary = summarizeConsentControlGeometry(candidates, cmp);
+  const expectedPageUrl = page.url();
+  const mainFrameUnavailable = !mainFrameCapture ||
+    mainFrameCapture.pageUrl === "about:blank" ||
+    mainFrameCapture.viewport.width <= 0 ||
+    mainFrameCapture.viewport.height <= 0;
+  if (mainFrameUnavailable) {
+    summary.confidence = 0;
+    summary.limitations = [
+      "Main-frame consent geometry was unavailable; child-frame or blank-document geometry cannot establish control absence.",
+      ...summary.limitations,
+    ].slice(0, 12);
+  }
 
   return {
     artifactVersion: "consent_control_geometry.v1",
     sourceScanner: "consent_control_geometry_diagnostic",
-    pageUrl: raw.pageUrl,
+    pageUrl: raw.pageUrl === "about:blank" ? expectedPageUrl : raw.pageUrl,
     capturedAt: new Date().toISOString(),
     viewport: raw.viewport,
     screenshotArtifactRef: options.screenshotArtifactRef,

@@ -10,9 +10,9 @@ export function GET(request: Request) {
   const headers = applyPulseCors(new Headers({
     "Cache-Control": "no-store",
     "Content-Type": "application/json; charset=utf-8",
-    "X-CertScore-Pulse": "v1",
-    "X-CertScore-Route": "openapi-chatgpt",
-    "X-CertScore-Request-Id": id,
+    "X-CertScore.ai-Pulse": "v1",
+    "X-CertScore.ai-Route": "openapi-chatgpt",
+    "X-CertScore.ai-Request-Id": id,
     "X-Content-Type-Options": "nosniff"
   }), request);
 

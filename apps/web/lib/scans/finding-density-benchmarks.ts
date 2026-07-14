@@ -29,7 +29,7 @@ export const FINDING_DENSITY_BENCHMARK_SCOPE = {
 const DENSITY_SAMPLE_SIZE = FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox;
 const DENSITY_SOURCE_LABEL = FINDING_DENSITY_BENCHMARK_SCOPE.label;
 const DENSITY_TOOLTIP =
-  "Based on recent CertScore scan calibration batches across public websites. This is directional market context, not a compliance benchmark or legal conclusion.";
+  "Based on recent CertScore.ai scan calibration batches across public websites. This is directional market context, not a compliance benchmark or legal conclusion.";
 export const FINDING_DENSITY_CALIBRATION_NOTE =
   "Benchmark frequency is directional market context only. It is not a compliance benchmark, legal conclusion, or severity score. Rare findings may be top-ranked only when retained evidence is strong; common findings may remain medium when evidence is automated or context-dependent. Rarity is not severity, and prevalence is not compliance risk.";
 

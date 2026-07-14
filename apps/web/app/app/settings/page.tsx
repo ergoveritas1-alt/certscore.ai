@@ -102,7 +102,7 @@ export default async function SettingsPage() {
               <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Settings</h1>
               <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">{formatPlanLabel(organization.plan)}</span>
             </div>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Manage scan defaults, account access, and your organization’s CertScore capacity.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Manage scan defaults, account access, and your organization’s CertScore.ai capacity.</p>
             <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500">
               <span><strong className="font-semibold text-slate-700">Workspace</strong> {organization.name}</span>
               <span><strong className="font-semibold text-slate-700">Member since</strong> {formatDate(profile.created_at)}</span>
@@ -121,24 +121,6 @@ export default async function SettingsPage() {
           </div>
         </div>
       </section>
-
-      <div className={verificationStatus ? "grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]" : "min-w-0"}>
-        <Card className="min-w-0 border border-slate-200 bg-white shadow-sm">
-          <CardHeader className="pb-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-700">Scan defaults</p>
-            <CardTitle>Preferred scan location</CardTitle>
-            <p className="max-w-2xl text-sm leading-6 text-slate-600">Choose the region CertScore preselects when you start a scan. Your last successful choice becomes the new default.</p>
-          </CardHeader>
-          <CardContent><ScanLocationSettingsCard lastScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"} /></CardContent>
-        </Card>
-
-        {verificationStatus ? (
-          <Card className="border border-slate-200 bg-white shadow-sm">
-            <CardHeader className="pb-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Account access</p><CardTitle>Email</CardTitle></CardHeader>
-            <CardContent><EmailVerificationCard email={verificationStatus.email} isVerified={verificationIsVerified} verifiedAt={verificationStatus.verifiedAt} /></CardContent>
-          </Card>
-        ) : null}
-      </div>
 
       <Card className="border border-slate-200 bg-white shadow-sm">
         <CardHeader>
@@ -159,6 +141,24 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent><ApiKeysCard apiKeys={apiKeys} referenceTime={new Date().toISOString()} /></CardContent>
       </Card>
+
+      <div className={verificationStatus ? "grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]" : "min-w-0"}>
+        <Card className="min-w-0 border border-slate-200 bg-white shadow-sm">
+          <CardHeader className="pb-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-700">Scan defaults</p>
+            <CardTitle>Preferred scan location</CardTitle>
+            <p className="max-w-2xl text-sm leading-6 text-slate-600">Choose the region CertScore.ai preselects when you start a scan. Your last successful choice becomes the new default.</p>
+          </CardHeader>
+          <CardContent><ScanLocationSettingsCard lastScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"} /></CardContent>
+        </Card>
+
+        {verificationStatus ? (
+          <Card className="border border-slate-200 bg-white shadow-sm">
+            <CardHeader className="pb-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Account access</p><CardTitle>Email</CardTitle></CardHeader>
+            <CardContent><EmailVerificationCard email={verificationStatus.email} isVerified={verificationIsVerified} verifiedAt={verificationStatus.verifiedAt} /></CardContent>
+          </Card>
+        ) : null}
+      </div>
 
       {isPlatformAdmin ? (
         <section className="space-y-4 border-t border-slate-200 pt-6">

@@ -540,8 +540,7 @@ const PRIVACY_RELATED_READING = [
   { href: "/guides/pre-consent-tracking", label: "Tracking before consent" },
   { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement" },
   { href: "/guides/rtb-cookie-syncing", label: "Third-party cookies and RTB sync" },
-  { href: "/guides/session-replay-risk", label: "Session replay risk" },
-  { href: "/guides/wcag-website-checklist", label: "Accessibility signals" }
+  { href: "/guides/session-replay-risk", label: "Session replay risk" }
 ];
 
 const CONSENT_RELATED_READING = [
@@ -564,9 +563,7 @@ const FINGERPRINTING_RELATED_READING = [
   { href: "/guides/rtb-cookie-syncing", label: "Third-party cookies and RTB sync" }
 ];
 
-const ACCESSIBILITY_RELATED_READING = [
-  { href: "/guides/wcag-website-checklist", label: "Accessibility signals" }
-];
+const ACCESSIBILITY_RELATED_READING: typeof PRIVACY_RELATED_READING = [];
 
 function getRelatedReadingLinks(finding: FindingReferenceItem) {
   if (finding.category === "Accessibility") {

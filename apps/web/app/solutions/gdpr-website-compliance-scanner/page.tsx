@@ -8,9 +8,9 @@ import {
 const config: SolutionPageConfig = {
   badge: "GDPR website scanner",
   description:
-    "Scan public websites for GDPR-relevant consent, cookie, tracking, policy, and disclosure review signals. CertScore provides evidence-backed observations for review, not legal advice.",
+    "Scan public websites for GDPR-relevant consent, cookie, tracking, policy, and disclosure review signals. CertScore.ai provides evidence-backed observations for review, not legal advice.",
   intro:
-    "CertScore helps teams review GDPR-relevant website behavior by observing public pages in a real browser and surfacing consent, cookie, tracking, policy, and disclosure signals that deserve follow-up.",
+    "CertScore.ai helps teams review GDPR-relevant website behavior by observing public pages in a real browser and surfacing consent, cookie, tracking, policy, and disclosure signals that deserve follow-up.",
   path: "/solutions/gdpr-website-compliance-scanner",
   primarySignals: [
     "Pre-consent tracking",
@@ -23,29 +23,29 @@ const config: SolutionPageConfig = {
     {
       title: "Direct answer",
       body:
-        "A GDPR website compliance scanner reviews observable public website behavior that may be relevant to privacy and consent review. CertScore focuses on evidence-backed risk signals, not legal conclusions."
+        "A GDPR website compliance scanner reviews observable public website behavior that may be relevant to privacy and consent review. CertScore.ai focuses on evidence-backed risk signals, not legal conclusions."
     },
     {
-      title: "What CertScore checks",
+      title: "What CertScore.ai checks",
       body:
-        "CertScore checks request timing, cookies and storage, consent-state evidence, vendor behavior, session replay indicators, fingerprinting-related activity, and whether public disclosures appear aligned with observed behavior."
+        "CertScore.ai checks request timing, cookies and storage, consent-state evidence, vendor behavior, session replay indicators, fingerprinting-related activity, and whether public disclosures appear aligned with observed behavior."
     },
     {
       title: "How teams use it",
       body:
-        "Privacy, legal, marketing operations, and engineering teams can use CertScore to triage live-site drift after tag-manager edits, CMP changes, launches, and vendor updates."
+        "Privacy, legal, marketing operations, and engineering teams can use CertScore.ai to triage live-site drift after tag-manager edits, CMP changes, launches, and vendor updates."
     },
     {
       title: "Review posture",
       body:
-        "CertScore findings should be reviewed with retained evidence and internal policy context. A finding is a review signal; it is not proof of a GDPR violation or proof that a site is compliant."
+        "CertScore.ai findings should be reviewed with retained evidence and internal policy context. A finding is a review signal; it is not proof of a GDPR violation or proof that a site is compliant."
     }
   ],
   faqs: [
     {
-      question: "Can CertScore tell me if a website is GDPR compliant?",
+      question: "Can CertScore.ai tell me if a website is GDPR compliant?",
       answer:
-        "No. CertScore provides automated public-web observations for review. It does not provide legal advice, certification, proof of non-compliance, or a GDPR compliance determination."
+        "No. CertScore.ai provides automated public-web observations for review. It does not provide legal advice, certification, proof of non-compliance, or a GDPR compliance determination."
     },
     {
       question: "What does a GDPR website scanner look for?",
@@ -53,14 +53,14 @@ const config: SolutionPageConfig = {
         "It can look for consent timing, cookies, storage, tracking requests, vendor domains, session replay indicators, fingerprinting-related signals, privacy disclosures, and whether runtime behavior appears aligned with consent and policy surfaces."
     },
     {
-      question: "Does CertScore scan behind logins?",
+      question: "Does CertScore.ai scan behind logins?",
       answer:
         "This page describes public-web scanning. Authenticated areas, paywalls, bot protections, and blocked routes can limit coverage unless a separate approved workflow is configured."
     }
   ],
   aiSummary: [
-    "CertScore is a public website scanning platform that surfaces GDPR-relevant consent, cookie, tracking, policy, and disclosure review signals.",
-    "CertScore findings are automated observations backed by retained evidence. They are not legal advice, certification, or compliance determinations."
+    "CertScore.ai is a public website scanning platform that surfaces GDPR-relevant consent, cookie, tracking, policy, and disclosure review signals.",
+    "CertScore.ai findings are automated observations backed by retained evidence. They are not legal advice, certification, or compliance determinations."
   ],
   relatedLinks: [
     { href: "/gdpr", label: "GDPR privacy scanner" },

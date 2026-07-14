@@ -25,7 +25,7 @@ export function ContactSalesForm() {
 
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-700" htmlFor="contactSalesWorkEmail">
-            Work email
+            Email address
           </label>
           <Input id="contactSalesWorkEmail" name="workEmail" placeholder="name@company.com" type="email" />
         </div>
@@ -37,26 +37,21 @@ export function ContactSalesForm() {
           <Input id="contactSalesCompany" name="company" placeholder="Company name" type="text" />
         </div>
 
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-700" htmlFor="contactSalesWebsite">
-            Website
-          </label>
-          <Input id="contactSalesWebsite" name="website" placeholder="example.com" type="text" />
-        </div>
       </div>
 
       <div className="space-y-2">
         <label className="block text-sm font-medium text-slate-700" htmlFor="contactSalesMessage">
-          What would you like to discuss? <span className="text-slate-400">(optional)</span>
+          Message
         </label>
         <textarea
           id="contactSalesMessage"
           name="message"
-          placeholder="Add context about your team, monitoring needs, procurement questions, or anything else you want us to know."
+          placeholder="How can we help?"
+          required
           rows={6}
           className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400"
         />
-        <p className="text-xs text-slate-500">Work email plus website is enough for a follow-up.</p>
+        <p className="text-xs text-slate-500">Your message will be sent to support@certscore.ai.</p>
       </div>
 
       {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}

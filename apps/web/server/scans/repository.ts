@@ -525,6 +525,7 @@ function chunkValues<T>(values: T[], size: number) {
 export async function loadScanCoreRecord(input: {
   allowAnonymousFallback?: boolean;
   anonymousOnly?: boolean;
+  publicAccess?: boolean;
   organizationId: string | null;
   scanId: string;
   viewerEmail?: string | null;
@@ -588,6 +589,10 @@ export async function loadScanCoreRecord(input: {
 
   if (!scan && !input.anonymousOnly && allowAnonymousAccess) {
     scan = await loadScan(null);
+  }
+
+  if (!scan && input.publicAccess) {
+    scan = await loadScanWithoutOrganizationScope();
   }
 
   if (!scan && (await hasCrossWorkspaceReuseAccess())) {

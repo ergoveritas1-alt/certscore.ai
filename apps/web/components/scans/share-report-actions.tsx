@@ -528,7 +528,7 @@ export function AgentSummaryActions({ domainLabel, scanId }: ShareReportActionsP
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Agent summary</p>
             <p className="mt-1 text-sm leading-6 text-slate-600">
-              Share this scan through the CertScore Pulse API using this report's scan ID.
+              Share this scan through the CertScore.ai Pulse API using this report's scan ID.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

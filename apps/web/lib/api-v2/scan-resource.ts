@@ -927,9 +927,9 @@ export function apiV2JsonResponse(input: {
   const headers = new Headers(input.headers);
   headers.set("Cache-Control", headers.get("Cache-Control") ?? "no-store");
   headers.set("Content-Type", "application/json; charset=utf-8");
-  headers.set("X-CertScore-API-Version", CERTSCORE_API_V2_VERSION);
-  headers.set("X-CertScore-Route", input.route);
-  headers.set("X-CertScore-Request-Id", input.requestId);
+  headers.set("X-CertScore.ai-API-Version", CERTSCORE_API_V2_VERSION);
+  headers.set("X-CertScore.ai-Route", input.route);
+  headers.set("X-CertScore.ai-Request-Id", input.requestId);
   headers.set("X-Content-Type-Options", "nosniff");
 
   return new Response(JSON.stringify(input.body), {

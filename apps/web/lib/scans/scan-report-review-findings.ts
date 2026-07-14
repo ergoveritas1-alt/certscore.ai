@@ -1676,7 +1676,7 @@ export function buildSectionReviewIssues(input: {
       const initialCookieDomains = uniqueStrings(getRecordStringArray(input.runtimeArtifacts, "initial_cookie_domains"));
       issues.push({
         description:
-          `${initialNonEssentialCookieNames.length} non-essential cookie${initialNonEssentialCookieNames.length === 1 ? " was" : "s were"} retained in the initial runtime payload before CertScore had enough consent-timing evidence to promote a pre-consent tracking finding.`,
+          `${initialNonEssentialCookieNames.length} non-essential cookie${initialNonEssentialCookieNames.length === 1 ? " was" : "s were"} retained in the initial runtime payload before CertScore.ai had enough consent-timing evidence to promote a pre-consent tracking finding.`,
         evidence: initialNonEssentialCookieNames.slice(0, 6),
         fallbackEvidence: {
           initial_cookie_domains: initialCookieDomains,

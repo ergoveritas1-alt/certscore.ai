@@ -49,7 +49,7 @@ export default function MethodologyPage() {
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950">CertScore.ai methodology for structured findings.</h1>
             <p className="text-lg leading-8 text-slate-600">{INLINE_METHODOLOGY_SUMMARY}</p>
             <p className="text-sm leading-7 text-slate-500">
-              This page explains what CertScore tests, what “not detected” means, how evidence is retained, how confidence is assigned,
+              This page explains what CertScore.ai tests, what “not detected” means, how evidence is retained, how confidence is assigned,
               and why the product avoids certification or legal pass/fail language.
             </p>
           </div>

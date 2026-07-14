@@ -35,7 +35,7 @@ export function buildBillingAlertEmail(input: BillingAlertInput) {
     payment_failed: "Subscription payment failed",
     subscription_canceled: "Subscription canceled"
   };
-  const subject = `[CertScore Billing] ${subjectByKind[input.kind]}`;
+  const subject = `[CertScore.ai Billing] ${subjectByKind[input.kind]}`;
   const lines = [
     subjectByKind[input.kind],
     "",

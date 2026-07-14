@@ -48,6 +48,7 @@ function getLocalAwareScanThrottleMs(userEmail: string): number | undefined {
 export async function createOrQueueDomainScan(input: {
   allowExistingDomainRescan?: boolean;
   bypassRecentScanReuse?: boolean;
+  clientRequestId?: string | null;
   domain: string;
   localV2DagLambdaDebugOverrides?: import("../scans/local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
@@ -120,6 +121,7 @@ export async function createOrQueueDomainScan(input: {
   if (existingDomain && input.allowExistingDomainRescan) {
     const queueResult = await queueFullScanForDomain({
       domainId: existingDomain.id,
+      clientRequestId: input.clientRequestId,
       organizationId: dashboardContext.organization.id,
       planCode: dashboardContext.organization.plan,
       submittedByUserId: dashboardContext.user.id,
@@ -188,6 +190,7 @@ export async function createOrQueueDomainScan(input: {
       }
     },
     domainId: domain.id,
+    clientRequestId: input.clientRequestId,
     organizationId: dashboardContext.organization.id,
     planCode: dashboardContext.organization.plan,
     planLimitsOverride: planLimits,

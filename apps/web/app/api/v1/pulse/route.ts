@@ -70,9 +70,9 @@ function etagFor(scanId: string, detail: string, format: string) {
 
 function diagnosticHeaders(route: string, requestId: string, headers?: HeadersInit) {
   const nextHeaders = new Headers(headers);
-  nextHeaders.set("X-CertScore-Pulse", "v1");
-  nextHeaders.set("X-CertScore-Route", route);
-  nextHeaders.set("X-CertScore-Request-Id", requestId);
+  nextHeaders.set("X-CertScore.ai-Pulse", "v1");
+  nextHeaders.set("X-CertScore.ai-Route", route);
+  nextHeaders.set("X-CertScore.ai-Request-Id", requestId);
   return applyPulseCors(nextHeaders);
 }
 
@@ -366,7 +366,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   if (bearer.provided) {
     if (!bearer.token) {
       return pulseJson(
-        buildPulseError({ code: "unauthorized", message: "Use Authorization: Bearer <token> for CertScore integration API access.", detail, format }),
+        buildPulseError({ code: "unauthorized", message: "Use Authorization: Bearer <token> for CertScore.ai integration API access.", detail, format }),
         { headers: { "Cache-Control": "no-store" }, status: 401 },
         requestId,
         routeName
@@ -382,8 +382,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
           code: auth.reason === "missing_scope" ? "forbidden" : "unauthorized",
           message:
             auth.reason === "missing_scope"
-              ? "This CertScore API key does not include the required Pulse scope."
-              : "This CertScore API key is invalid, expired, or revoked.",
+              ? "This CertScore.ai API key does not include the required Pulse scope."
+              : "This CertScore.ai API key is invalid, expired, or revoked.",
           detail,
           format
         }),
@@ -397,7 +397,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       return pulseJson(
         buildPulseError({
           code: "rate_limited",
-          message: "This CertScore API key has reached its Pulse request limit. Try again after the retry window or manage your plan.",
+          message: "This CertScore.ai API key has reached its Pulse request limit. Try again after the retry window or manage your plan.",
           retryAfterSeconds: usageLimit.retryAfterSeconds,
           resolution: {
             label: "Manage plan",

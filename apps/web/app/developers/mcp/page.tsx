@@ -3,7 +3,7 @@ import { createPageMetadata } from "../../../lib/seo";
 import { CodeBlock, DeveloperShell, Section, mcpTools } from "../developer-pages";
 
 const description =
-  "Connect agents to the CertScore MCP server for website compliance review workflows using scan, status, finding, explanation, and latest-domain tools.";
+  "Connect agents to the CertScore.ai MCP server for website compliance review workflows using scan, status, finding, explanation, and latest-domain tools.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -12,7 +12,7 @@ export const metadata: Metadata = createPageMetadata({
     follow: true,
     index: true
   },
-  title: "CertScore MCP server"
+  title: "CertScore.ai MCP server"
 });
 
 export default function DeveloperMcpPage() {
@@ -79,7 +79,7 @@ brew install --cask certscore-mcp`}</CodeBlock>
 certscore-mcp --help
 CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            The doctor command checks the installed binary, Node.js runtime compatibility, the configured CertScore base URL, API v2
+            The doctor command checks the installed binary, Node.js runtime compatibility, the configured CertScore.ai base URL, API v2
             health, and API key presence without printing the token. It does not create scans or inspect raw scanner artifacts.
           </p>
         </Section>
@@ -172,7 +172,7 @@ sha256sum --check SHA256SUMS`}</CodeBlock>
 
         <Section eyebrow="Tools" title="Agent-facing tool surface">
           <p className="mb-4 max-w-3xl text-sm leading-7 text-slate-600">
-            Several tools return or reference Pulse, CertScore&apos;s compact public report projection for agents. See{" "}
+            Several tools return or reference Pulse, CertScore.ai&apos;s compact public report projection for agents. See{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="/developers/reference#what-is-pulse">
               What is Pulse?
             </a>{" "}
@@ -192,7 +192,7 @@ sha256sum --check SHA256SUMS`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             API v2 MCP tools return <code className="rounded bg-white px-1">startedAt</code>,{" "}
             <code className="rounded bg-white px-1">completedAt</code>, and{" "}
-            <code className="rounded bg-white px-1">scanTimeSeconds</code> when CertScore has enough timing evidence. Treat{" "}
+            <code className="rounded bg-white px-1">scanTimeSeconds</code> when CertScore.ai has enough timing evidence. Treat{" "}
             <code className="rounded bg-white px-1">scanTimeSeconds: null</code> as unavailable rather than zero.
           </p>
           <CodeBlock>{`const scan = await get_scan({ scanId });
@@ -244,7 +244,7 @@ get_latest_domain_pre_consent_cookies_trackers({
 })`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             MCP tools return compact public-safe JSON. They must not infer raw-signal findings or convert automated review signals into
-            legal conclusions. CertScore outputs are automated public-web observations for review. They are not legal advice,
+            legal conclusions. CertScore.ai outputs are automated public-web observations for review. They are not legal advice,
             certification, or a compliance determination. Group Cookies & Trackers rows by vendor, purpose, and host when the user wants
             a short review handoff.
           </p>

@@ -29,13 +29,13 @@ function getFindingPath(findingId: string) {
 }
 
 function getPageTitle(activeFinding?: FindingReferenceItem) {
-  return activeFinding ? `${activeFinding.title} finding reference` : "CertScore findings reference";
+  return activeFinding ? `${activeFinding.title} finding reference` : "CertScore.ai findings reference";
 }
 
 function getPageDescription(activeFinding?: FindingReferenceItem) {
   return activeFinding
-    ? `${activeFinding.observed} Review the evidence context, methodology, common causes, and reviewer questions for this CertScore finding.`
-    : "Review CertScore findings, evidence, signals, and observations surfaced from public-web runtime scans.";
+    ? `${activeFinding.observed} Review the evidence context, methodology, common causes, and reviewer questions for this CertScore.ai finding.`
+    : "Review CertScore.ai findings, evidence, signals, and observations surfaced from public-web runtime scans.";
 }
 
 function getPagePath(activeFinding?: FindingReferenceItem) {
@@ -44,9 +44,9 @@ function getPagePath(activeFinding?: FindingReferenceItem) {
 
 export function getReferenceNotes(activeFinding?: FindingReferenceItem) {
   const commonNotes = [
-    "CertScore uses findings, evidence, signals, and observations consistently: signals are raw runtime or page-surface events, evidence is retained support, observations are interpreted evidence context, and findings are promoted review items.",
+    "CertScore.ai uses findings, evidence, signals, and observations consistently: signals are raw runtime or page-surface events, evidence is retained support, observations are interpreted evidence context, and findings are promoted review items.",
     "Findings are runtime evidence and public-surface observations for review. Observed signals may surface possible concerns, but review is recommended before operational or legal reliance.",
-    "Finding reference content is reviewed periodically and updated when material guidance changes. CertScore monitors guidance families such as EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC privacy and dark-pattern materials, and relevant accessibility guidance where applicable."
+    "Finding reference content is reviewed periodically and updated when material guidance changes. CertScore.ai monitors guidance families such as EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC privacy and dark-pattern materials, and relevant accessibility guidance where applicable."
   ];
 
   if (activeFinding?.category === "Accessibility") {
@@ -105,7 +105,7 @@ function createFindingSchemas({
       title: pageTitle,
       description: activeFinding
         ? `A technical reference for the ${activeFinding.title} finding, including observed signals, retained evidence, methodology context, and review questions.`
-        : "A technical reference for CertScore findings, observed signals, retained evidence, and reviewer context.",
+        : "A technical reference for CertScore.ai findings, observed signals, retained evidence, and reviewer context.",
       path: pagePath,
       type: "TechArticle",
       about: activeFinding
@@ -127,15 +127,15 @@ function createFindingSchemas({
           ]
     }),
     createDefinedTermSetSchema({
-      title: "CertScore finding registry",
+      title: "CertScore.ai finding registry",
       description:
-        "Canonical CertScore finding terms for automated public-web observations, retained evidence, runtime signals, and review-oriented findings.",
+        "Canonical CertScore.ai finding terms for automated public-web observations, retained evidence, runtime signals, and review-oriented findings.",
       path: "/findings",
       terms: findingTermInputs
     }),
     createItemListSchema({
-      name: "CertScore finding registry index",
-      description: "Index of CertScore finding reference pages.",
+      name: "CertScore.ai finding registry index",
+      description: "Index of CertScore.ai finding reference pages.",
       path: "/findings",
       items: findings.map((finding) => ({
         path: getFindingPath(finding.id),
@@ -216,7 +216,7 @@ function FindingsRegistryDirectory({ findings }: { findings: FindingReferenceIte
           Finding reference directory
         </h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Browse every public CertScore finding reference page in the registry. Each page documents observed signals, evidence expectations,
+          Browse every public CertScore.ai finding reference page in the registry. Each page documents observed signals, evidence expectations,
           common causes, review questions, limitations, and related findings.
         </p>
       </div>
@@ -275,7 +275,7 @@ function RelatedFindingsSection({
           Related findings
         </h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Review adjacent CertScore finding references that commonly help explain the same evidence cluster, consent path, cookie behavior, or disclosure context.
+          Review adjacent CertScore.ai finding references that commonly help explain the same evidence cluster, consent path, cookie behavior, or disclosure context.
         </p>
       </div>
 
@@ -305,7 +305,7 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
   const certscoreGptUrl = getCertScoreGptUrl();
   const initialFindingId = activeFinding?.id ?? DEFAULT_FINDING_ID;
   const { pageDescription, pagePath, pageTitle } = getFindingReferencePageCopy(activeFinding);
-  const headingTitle = activeFinding?.title ?? "CertScore findings reference";
+  const headingTitle = activeFinding?.title ?? "CertScore.ai findings reference";
   const eyebrow = activeFinding ? "Finding reference" : "Technical reference";
   const schemas = createFindingSchemas({
     activeFinding,
@@ -346,7 +346,7 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
             <div className="border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
               <h2 className="text-sm font-semibold text-slate-950">How top findings are calibrated</h2>
               <p className="mt-2">
-                CertScore ranks findings using evidence strength, directness, corroboration, affected surface, and review relevance.
+                CertScore.ai ranks findings using evidence strength, directness, corroboration, affected surface, and review relevance.
                 Benchmark frequency is market context only. A rare finding is not automatically critical, and a common finding is not automatically low risk.
                 Findings remain automated public-web observations for review, not legal conclusions.
               </p>
@@ -377,12 +377,12 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
       {!activeFinding ? (
         <section className="mt-8 space-y-4 border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600 sm:p-6">
           <p>
-            CertScore's finding references are reviewed periodically and updated when material regulatory or accessibility guidance changes.
+            CertScore.ai's finding references are reviewed periodically and updated when material regulatory or accessibility guidance changes.
             Guidance families monitored include EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC
             privacy and dark-pattern materials, and accessibility guidance where applicable.
           </p>
           <div className="border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
-            <p>Want to test these findings on a public website? Use the CertScore GPT to scan a public website from ChatGPT.</p>
+            <p>Want to test these findings on a public website? Use the CertScore.ai GPT to scan a public website from ChatGPT.</p>
             <p className="mt-1 text-slate-600">
               Results are automated public-web observations for review, not legal advice or a compliance determination.
             </p>
@@ -395,7 +395,7 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
               rel="noopener noreferrer"
               target="_blank"
             >
-              Open CertScore GPT
+              Open CertScore.ai GPT
             </a>
           </div>
         </section>

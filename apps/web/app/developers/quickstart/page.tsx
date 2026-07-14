@@ -3,7 +3,7 @@ import { createPageMetadata } from "../../../lib/seo";
 import { AgentQuickPath, CodeBlock, DeveloperShell, Section } from "../developer-pages";
 
 const description =
-  "Start using the CertScore API v2 with curl: create a public website scan, poll status, list public-safe findings, and retrieve latest-domain scan resources.";
+  "Start using the CertScore.ai API v2 with curl: create a public website scan, poll status, list public-safe findings, and retrieve latest-domain scan resources.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -12,7 +12,7 @@ export const metadata: Metadata = createPageMetadata({
     follow: true,
     index: true
   },
-  title: "CertScore API quickstart"
+  title: "CertScore.ai API quickstart"
 });
 
 export default function DeveloperQuickstartPage() {
@@ -23,7 +23,7 @@ export default function DeveloperQuickstartPage() {
 
         <Section id="api-key-access" eyebrow="Access" title="Get a scoped API key">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            CertScore API, SDK, and MCP integrations use bearer API keys. Read-only report retrieval and MCP read tools can use a
+            CertScore.ai API, SDK, and MCP integrations use bearer API keys. Read-only report retrieval and MCP read tools can use a
             self-serve key after sign-in and email verification. Scan creation keys remain developer-preview and are issued by
             emailing{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">

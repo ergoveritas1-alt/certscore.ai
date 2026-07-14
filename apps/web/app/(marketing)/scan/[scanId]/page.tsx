@@ -19,14 +19,14 @@ import {
 } from "../../../../lib/scans/scan-auto-refresh";
 import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
 import { absoluteUrl } from "../../../../lib/seo";
-import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
+import { getPublicScanById } from "../../../../server/scans/get-scan-by-id";
 import {
   getLocalV2DagReportInput,
   materializeLocalV2DagScanDetail
 } from "../../../../server/scans/local-v2-dag-report";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import {
-  getAnonymousScanStatusProjection,
+  getPublicScanStatusProjection,
   isPendingScanStatus
 } from "../../../../server/scans/scan-status-projection";
 
@@ -48,7 +48,7 @@ function getPublicScanDomainLabel(domainHostname: string | null) {
 
 export async function generateMetadata({ params }: PublicScanDetailPageProps): Promise<Metadata> {
   const { scanId } = await params;
-  const scanRecord = await getAnonymousScanStatusProjection(scanId);
+  const scanRecord = await getPublicScanStatusProjection(scanId);
 
   if (!scanRecord) {
     return {
@@ -101,7 +101,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const { scanId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const recentScanReused = resolvedSearchParams.recentScanReused === "1";
-  const statusProjection = await getAnonymousScanStatusProjection(scanId);
+  const statusProjection = await getPublicScanStatusProjection(scanId);
   if (!statusProjection) {
     notFound();
   }
@@ -123,7 +123,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
       </main>
     );
   }
-  const scanRecord = await getAnonymousScanById(scanId);
+  const scanRecord = await getPublicScanById(scanId);
 
   if (!scanRecord) {
     notFound();

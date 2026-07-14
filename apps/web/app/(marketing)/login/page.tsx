@@ -39,15 +39,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <main className="min-h-screen bg-slate-50">
       <SiteHeader />
-      <section className="mx-auto flex max-w-xl px-6 py-20">
-        <Card className="relative w-full overflow-hidden border-slate-200 bg-white shadow-none">
-          <div aria-hidden="true" className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(15,139,215,0.18)_0%,rgba(103,199,240,0.3)_100%)]" />
-          <CardContent className="p-6 pb-0">
-            <LoginForm
-              allowCreateAccount={allowCreateAccount}
-              allowGoogle={allowGoogle}
-              footerMode="default"
-            />
+      <section className="mx-auto flex max-w-xl px-6 py-12 sm:py-16">
+        <Card className="relative overflow-hidden border-slate-200 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.1)]">
+          <div aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#0284c7_0%,#38bdf8_55%,#79be34_100%)]" />
+          <CardContent className="p-6 pb-0 sm:p-8 sm:pb-0">
+            <LoginForm allowCreateAccount={allowCreateAccount} allowGoogle={allowGoogle} footerMode="default" />
           </CardContent>
         </Card>
       </section>

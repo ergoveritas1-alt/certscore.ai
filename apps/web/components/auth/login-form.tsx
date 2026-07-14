@@ -35,7 +35,7 @@ function getInitialFlowError(initialError: string | null) {
   }
 
   if (initialError === "access_denied" || initialError === "account_access_limited") {
-    return "CertScore account access is temporarily limited. Contact support if you need access.";
+    return "CertScore.ai account access is temporarily limited. Contact support if you need access.";
   }
 
   if (
@@ -98,7 +98,9 @@ export function LoginForm(input?: {
       ? "Email verified."
       : initialMessage === "password_reset"
         ? "Password updated. Sign in with your new password."
-        : null
+        : initialMessage === "signed_out"
+          ? "You’ve been signed out."
+          : null
   );
   const [flowError, setFlowError] = useState<string | null>(getInitialFlowError(initialError));
   const [showPassword, setShowPassword] = useState(false);
@@ -162,10 +164,8 @@ export function LoginForm(input?: {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(180deg,rgba(239,246,255,0.98)_0%,rgba(224,242,254,0.96)_100%)] text-[22px] font-semibold text-sky-700 ring-1 ring-sky-200 shadow-[0_12px_30px_rgba(56,189,248,0.14)]">
-            →
-          </span>
+        <div className="min-w-0">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-700">Account access</h2>
         </div>
 
         {allowCreateAccount ? (
@@ -197,6 +197,17 @@ export function LoginForm(input?: {
           </div>
         ) : null}
       </div>
+
+      {status ? (
+        <p role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {status}
+        </p>
+      ) : null}
+      {flowError ? (
+        <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {flowError}
+        </p>
+      ) : null}
 
       {input?.allowedEmail ? (
         <p className="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-slate-600">
@@ -293,6 +304,9 @@ export function LoginForm(input?: {
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
+            {isCreatePasswordStep ? (
+              <p className="text-xs font-normal text-slate-500">Use at least 8 characters.</p>
+            ) : null}
             {!isCreateAccount ? (
               <Link
                 className="absolute right-0 top-0 text-xs font-medium text-sky-700 transition hover:text-sky-800"
@@ -305,7 +319,17 @@ export function LoginForm(input?: {
         ) : null}
 
         {clientEmailError ? <p className="text-sm text-red-600">{clientEmailError}</p> : null}
-        {actionState.accountRecovery ? <p className="text-sm text-sky-700">{actionState.accountRecovery.hint}</p> : null}
+        {actionState.accountRecovery ? (
+          <div className="space-y-2 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
+            <p className="text-sm text-sky-800">{actionState.accountRecovery.hint}</p>
+            <Link
+              className="inline-flex text-sm font-semibold text-sky-800 underline decoration-sky-300 underline-offset-2 transition hover:text-sky-950"
+              href={`/reset-password?email=${encodeURIComponent(actionState.accountRecovery.email)}`}
+            >
+              Reset password
+            </Link>
+          </div>
+        ) : null}
         {fieldErrors.email ? <p className="text-sm text-red-600">{fieldErrors.email}</p> : null}
         {fieldErrors.password ? <p className="text-sm text-red-600">{fieldErrors.password}</p> : null}
 
@@ -317,21 +341,47 @@ export function LoginForm(input?: {
               email.trim().length === 0 ||
               ((!isCreateAccount || isCreatePasswordStep) && password.length === 0)
             }
+            aria-busy={isSubmitting}
             type="submit"
             variant="secondary"
           >
-            {isCreateAccount ? (isCreatePasswordStep ? "Create account" : "Continue") : "Sign in"}
+            {isSubmitting
+              ? isCreateAccount
+                ? "Creating your account…"
+                : "Signing you in…"
+              : isCreateAccount
+                ? isCreatePasswordStep
+                  ? "Start 7-day trial"
+                  : "Continue"
+                : "Sign in"}
           </Button>
         </div>
 
+        {isSubmitting ? (
+          <p aria-live="polite" className="text-center text-xs text-slate-500">
+            Just a moment — we’re opening your CertScore.ai workspace.
+          </p>
+        ) : null}
+
         {allowCreateAccount && isCreateAccount ? (
           <p className="text-xs leading-5 text-slate-500">
-            New accounts start with a one-week trial before choosing a monthly plan.
+            New accounts include a 7-day trial before choosing a monthly plan.
           </p>
         ) : null}
       </form>
 
-      {actionError ? <p className="text-sm text-red-600">{actionError}</p> : null}
+      {actionError && !actionState.accountRecovery ? <p className="text-sm text-red-600">{actionError}</p> : null}
+      {!isCreateAccount && actionError === "Invalid email or password." ? (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
+          <p className="text-sm text-sky-800">Having trouble signing in?</p>
+          <Link
+            className="mt-1 inline-flex text-sm font-semibold text-sky-800 underline decoration-sky-300 underline-offset-2 transition hover:text-sky-950"
+            href={email.trim().length > 0 ? `/reset-password?email=${encodeURIComponent(email.trim())}` : "/reset-password"}
+          >
+            Use password reset
+          </Link>
+        </div>
+      ) : null}
 
       {allowCreateAccount && input?.footerMode !== "hidden" ? (
         <div className="-mx-6 -mb-6 rounded-b-[24px] border-t border-slate-200/80 bg-[linear-gradient(180deg,#fbfdff_0%,#f7f9fc_100%)] px-6 py-3 text-center">
@@ -347,9 +397,6 @@ export function LoginForm(input?: {
           </p>
         </div>
       ) : null}
-
-      {status ? <p className="text-sm text-emerald-700">{status}</p> : null}
-      {flowError ? <p className="text-sm text-red-600">{flowError}</p> : null}
     </div>
   );
 }

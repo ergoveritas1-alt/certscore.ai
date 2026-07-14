@@ -571,7 +571,7 @@ export function deriveExecutiveNarrativePresentation(input: {
       limitedCoverage: false,
       summaryLabel: "Scan quality note:",
       summaryMessage:
-        "CertScore captured a maintenance, unavailable, blocked, placeholder, wrong-site, blank, or otherwise non-representative page instead of the normal public site. Because the observed page was not representative, this scan does not issue scores, regulatory projections, or substantive findings."
+        "CertScore.ai captured a maintenance, unavailable, blocked, placeholder, wrong-site, blank, or otherwise non-representative page instead of the normal public site. Because the observed page was not representative, this scan does not issue scores, regulatory projections, or substantive findings."
     };
   }
 
@@ -583,7 +583,7 @@ export function deriveExecutiveNarrativePresentation(input: {
       limitedCoverage: true,
       summaryLabel: "Coverage note:",
       summaryMessage:
-        "CertScore did not confirm a headline homepage issue from retained evidence. Observed vendor and request counts may be incomplete. Review retained evidence and consider external corroboration before treating this scan as clean."
+        "CertScore.ai did not confirm a headline homepage issue from retained evidence. Observed vendor and request counts may be incomplete. Review retained evidence and consider external corroboration before treating this scan as clean."
     };
   }
 

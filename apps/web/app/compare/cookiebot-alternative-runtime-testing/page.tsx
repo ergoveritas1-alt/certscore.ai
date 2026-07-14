@@ -34,7 +34,7 @@ const config: GrowthContentPageConfig = {
       ]
     },
     {
-      title: "What to review in CertScore",
+      title: "What to review in CertScore.ai",
       paragraphs: [
         "Review pre-consent tracking signals, third-party cookie timing, vendor domains, and whether reject interactions appear to reduce non-essential tracking.",
         "Use the retained evidence as a practical checklist for engineering, marketing operations, and privacy review."

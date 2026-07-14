@@ -26,7 +26,7 @@ export type FindingRegulatoryContext = {
 export const FINDING_REGULATORY_CONTEXT_VERSION = "2026-05-17";
 
 export const FINDING_REGULATORY_CONTEXT_GLOBAL_CAUTION =
-  "Regulatory applicability depends on jurisdiction, entity type, service category, user region, configuration, exemptions, and manual review. CertScore observations are automated public-web signals for review, not legal conclusions.";
+  "Regulatory applicability depends on jurisdiction, entity type, service category, user region, configuration, exemptions, and manual review. CertScore.ai observations are automated public-web signals for review, not legal conclusions.";
 
 const ACCESSIBILITY_LEGAL_VERSION_CAUTION =
   "WCAG references are technical review references. Legal obligations and incorporated versions may vary by jurisdiction and organization type, including WCAG 2.0, 2.1, 2.2, EN 301 549, ADA Title II, Section 508, EU Web Accessibility Directive / European Accessibility Act, and UK public-sector accessibility rules. This finding does not determine legal status or WCAG conformance.";
@@ -157,7 +157,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "pre_consent_non_essential_tracking_review",
       label: "Consent timing: tracking before recorded choice",
       displayCopy:
-        "Runtime evidence showed a classified non-essential tracking, analytics, advertising, cross-site measurement, or storage signal before CertScore observed a consent action or a prior consent state associated with that purpose. This may be relevant to consent timing, cookie/tracker, storage, transparency, and user-choice review depending on jurisdiction, purpose, configuration, and exemptions."
+        "Runtime evidence showed a classified non-essential tracking, analytics, advertising, cross-site measurement, or storage signal before CertScore.ai observed a consent action or a prior consent state associated with that purpose. This may be relevant to consent timing, cookie/tracker, storage, transparency, and user-choice review depending on jurisdiction, purpose, configuration, and exemptions."
     },
     technicalStandards: [
       {
@@ -1131,7 +1131,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       id: "cookie_retention_lifetime_review",
       label: "Cookie retention and minimization review",
       displayCopy:
-        "Retained runtime cookie evidence showed persistent tracking, advertising, analytics, identity, or unclassified cookies with expiry or duration evidence meeting CertScore retention review thresholds: 365 days or longer for main review, or 180-364 days for source-attributed or multiple tracking-cookie review context. This may be relevant to retention, minimization, consent, opt-out, and disclosure review depending on purpose, configuration, user region, and manual review."
+        "Retained runtime cookie evidence showed persistent tracking, advertising, analytics, identity, or unclassified cookies with expiry or duration evidence meeting CertScore.ai retention review thresholds: 365 days or longer for main review, or 180-364 days for source-attributed or multiple tracking-cookie review context. This may be relevant to retention, minimization, consent, opt-out, and disclosure review depending on purpose, configuration, user region, and manual review."
     },
     technicalStandards: [
       {
@@ -1174,7 +1174,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
       }
     ],
     displayCaution:
-      "This finding does not determine legal status, consent validity, sale/share status, GDPR compliance, or cookie-law compliance. The 365-day threshold is a CertScore product review threshold, not a statutory threshold, and GDPR does not set a universal numeric cookie-lifetime threshold. Review retained cookie name, domain, page attribution, classification, duration, threshold basis, vendor/source context, consent state, opt-out behavior, retention disclosure, and minimization."
+      "This finding does not determine legal status, consent validity, sale/share status, GDPR compliance, or cookie-law compliance. The 365-day threshold is a CertScore.ai product review threshold, not a statutory threshold, and GDPR does not set a universal numeric cookie-lifetime threshold. Review retained cookie name, domain, page attribution, classification, duration, threshold basis, vendor/source context, consent state, opt-out behavior, retention disclosure, and minimization."
   },
   probable_fingerprinting: {
     findingId: "probable_fingerprinting",

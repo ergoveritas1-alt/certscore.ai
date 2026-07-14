@@ -1,12 +1,12 @@
-# CertScore Pulse beta agent guide
+# CertScore.ai Pulse beta agent guide
 
 Last updated: 2026-05-19
 
-CertScore Pulse provides automated public-web observations for review. Outputs are not legal advice, certification, or a compliance determination.
+CertScore.ai Pulse provides automated public-web observations for review. Outputs are not legal advice, certification, or a compliance determination.
 
 This is beta software. The current Pulse API beta version is 0.5.3.
 
-CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.
+CertScore.ai Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.
 
 Basic HTTP agent quick start:
 1. If you do not support OpenAPI actions, call:
@@ -44,10 +44,10 @@ OpenAPI / GPT Action beta quick start:
    scanFrom: eu_ie
    wait: 35
 3. Use detail=tiny for quick checks.
-4. Public GPT Action beta access uses latest-mode summaries. Use Evidence JSON or the linked CertScore report when users need more support.
+4. Public GPT Action beta access uses latest-mode summaries. Use Evidence JSON or the linked CertScore.ai report when users need more support.
 5. If API fetch fails before headers/body/status are visible, call checkPulseConnectivity once.
 6. If checkPulseConnectivity succeeds, treat the scan failure as a transient client/action transport error and retry or use the markdown endpoint.
-7. If checkPulseConnectivity also fails without CertScore diagnostic headers, do not infer CertScore returned an error. Report it as a client/network fetch limitation and read /api-pulse/agent and /api-pulse-agent-guide.txt.
+7. If checkPulseConnectivity also fails without CertScore.ai diagnostic headers, do not infer CertScore.ai returned an error. Report it as a client/network fetch limitation and read /api-pulse/agent and /api-pulse-agent-guide.txt.
 
 GPT Action beta endpoint:
 https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=35
@@ -80,7 +80,7 @@ CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke
 
 MCP preview key generation:
 pnpm db:migrate
-pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"
+pnpm mcp:certscore:generate-key -- --name "CertScore.ai MCP preview"
 
 External API/MCP key access:
 Read-only + MCP keys are self-serve for signed-in verified users through POST https://certscore.ai/api/v2/keys/request.
@@ -134,19 +134,19 @@ https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=tiny
 Status endpoint:
 https://certscore.ai/api/v1/pulse/status/<jobId>
 
-Expected diagnostic headers on CertScore-generated Pulse support responses:
+Expected diagnostic headers on CertScore.ai-generated Pulse support responses:
 - x-certscore-pulse: v1
 - x-certscore-route: pulse-self-test | pulse-health | openapi | openapi-chatgpt | discovery | pulse | pulse-status
 - x-certscore-route also uses pulse-gpt for GPT Action beta requests.
 - x-certscore-request-id: <request id>
 
 Agent fetch limitations:
-Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-* diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test, /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore diagnostic headers, report it as a client/network fetch limitation rather than a CertScore API result.
+Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-* diagnostic headers, do not conclude CertScore.ai Pulse is unavailable. First try /api/v1/pulse-self-test, /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore.ai diagnostic headers, report it as a client/network fetch limitation rather than a CertScore.ai API result.
 
 Troubleshooting fetch failures:
 1. Fetch https://certscore.ai/api/v1/pulse-self-test first.
 2. Fetch https://certscore.ai/api/v1/pulse-health if you need a smaller health-only check.
-3. If your client cannot retrieve status, content type, or the x-certscore-* headers, do not infer that CertScore returned an application error.
+3. If your client cannot retrieve status, content type, or the x-certscore-* headers, do not infer that CertScore.ai returned an application error.
 4. If you receive a response with x-certscore-pulse: v1, use x-certscore-route and x-certscore-request-id when reporting the behavior.
 5. If JSON retrieval is unreliable in your environment, use the markdown endpoint or the browser-readable fallback page.
 

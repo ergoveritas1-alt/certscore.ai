@@ -81,7 +81,7 @@ const SAMPLE_TOP_FINDING_CALIBRATION: Record<string, Record<string, string[]>> =
   },
   long_lived_cookie_retention_review: {
     minimumToSurface: ["Runtime cookie name/domain/page/classification plus retained expiry, Max-Age, or computed duration."],
-    highConfidenceRequires: ["Known tracking, advertising, marketing, or identity classification.", "365-day CertScore review threshold met.", "Vendor or source URL context."],
+    highConfidenceRequires: ["Known tracking, advertising, marketing, or identity classification.", "365-day CertScore.ai review threshold met.", "Vendor or source URL context."],
     criticalOrTopRankingRequires: ["Long-lived adtech/marketing/identity cookie evidence.", "Multiple long-lived adtech cookies.", "730-day severe review threshold."],
     demoteOrSuppressWhen: ["Policy text only.", "Cookie count only.", "Missing duration/page attribution.", "Essential/session cookies only.", "Same cookie evidence already supports a stronger consent-timing finding."]
   },
@@ -320,7 +320,7 @@ function buildCategoryEvidenceBlocks(findingId: string, payload: Record<string, 
           classification: "advertising_marketing",
           vendor: "Meta",
           durationDays: 540,
-          thresholdBasis: "duration_days >= 365 CertScore product review threshold",
+          thresholdBasis: "duration_days >= 365 CertScore.ai product review threshold",
           valueRetained: false
         }
       ],
@@ -1173,10 +1173,10 @@ const illustrativeThirdPartyCookiePreConsent = {
   evidenceConfidence: "review_signal",
   directVsInferred: "direct_observation",
   observed:
-    "Retained runtime evidence showed a third-party cookie or storage artifact observed before CertScore recorded a consent action or a prior consent state associated with that purpose.",
+    "Retained runtime evidence showed a third-party cookie or storage artifact observed before CertScore.ai recorded a consent action or a prior consent state associated with that purpose.",
   evidence: {
     summary:
-      "Retained runtime evidence showed a third-party cookie or storage artifact observed before CertScore recorded a consent action or a prior consent state associated with that purpose.",
+      "Retained runtime evidence showed a third-party cookie or storage artifact observed before CertScore.ai recorded a consent action or a prior consent state associated with that purpose.",
     examples: [
       {
         title: "Third-party cookie timing example",
@@ -1211,10 +1211,10 @@ const illustrativeLongLivedCookieRetentionReview = {
   evidenceConfidence: "strong",
   directVsInferred: "direct_observation",
   observed:
-    "Retained runtime cookie evidence showed persistent tracking or unclassified cookies whose observed expiry or computed duration met CertScore retention review thresholds: 365 days or longer for main review, or 180-364 days for source-attributed or multiple tracking-cookie review context.",
+    "Retained runtime cookie evidence showed persistent tracking or unclassified cookies whose observed expiry or computed duration met CertScore.ai retention review thresholds: 365 days or longer for main review, or 180-364 days for source-attributed or multiple tracking-cookie review context.",
   evidence: {
     summary:
-      "Retained runtime cookie evidence showed persistent tracking or unclassified cookies whose observed expiry or computed duration met CertScore retention review thresholds: 365 days or longer for main review, or 180-364 days for source-attributed or multiple tracking-cookie review context.",
+      "Retained runtime cookie evidence showed persistent tracking or unclassified cookies whose observed expiry or computed duration met CertScore.ai retention review thresholds: 365 days or longer for main review, or 180-364 days for source-attributed or multiple tracking-cookie review context.",
     examples: [
       {
         title: "Long-lived runtime cookie evidence",
@@ -1229,7 +1229,7 @@ const illustrativeLongLivedCookieRetentionReview = {
           "vendor=Meta",
           "source_request_url=https://connect.example/fbevents.js [query_redacted=true]",
           "duration_days=540",
-          "threshold_basis=duration_days >= 365 CertScore product review threshold",
+          "threshold_basis=duration_days >= 365 CertScore.ai product review threshold",
           "review_caveat=manual review should confirm purpose, vendor ownership, consent state, opt-out behavior, retention disclosure, and minimization"
         ]
       },
@@ -1244,13 +1244,13 @@ const illustrativeLongLivedCookieRetentionReview = {
           "value_retained=false",
           "classification=unknown_unclassified",
           "duration_days=399",
-          "threshold_basis=duration_days >= 365 CertScore product review threshold",
+          "threshold_basis=duration_days >= 365 CertScore.ai product review threshold",
           "classification_review_needed=true"
         ]
       }
     ],
     automationLimits: [
-      "Automated public-web observations do not determine legal status, consent validity, necessity, or compliance status. The 365-day threshold is a CertScore product review threshold, not a statutory threshold.",
+      "Automated public-web observations do not determine legal status, consent validity, necessity, or compliance status. The 365-day threshold is a CertScore.ai product review threshold, not a statutory threshold.",
       "Manual review is needed to confirm cookie purpose, vendor ownership, classification, consent state, opt-out behavior, retention disclosures, and remediation quality."
     ],
     cookie_samples: [
@@ -1260,7 +1260,7 @@ const illustrativeLongLivedCookieRetentionReview = {
     request_samples: ["https://connect.example/fbevents.js [query_redacted=true]"],
     runtime_anchors: [
       "privacy.cookie_retention_lifetime_review_signal",
-      "cookie_retention_001 duration_days=540 threshold_basis=CertScore product review threshold"
+      "cookie_retention_001 duration_days=540 threshold_basis=CertScore.ai product review threshold"
     ]
   }
 } satisfies Record<string, unknown>;

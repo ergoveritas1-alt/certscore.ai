@@ -67,7 +67,7 @@ const SCAN_QUALITY_OBSERVED_COPY: Record<string, string> = {
   scan_quality_visual_artifact_missing:
     "The scanner did not retain usable screenshot evidence for the initial public-page view. Treat this as a scan-quality limitation, not as a substantive privacy, consent, or accessibility finding.",
   scan_quality_visual_no_go:
-    "The captured screenshot showed a challenge, access block, unavailable page, blank page, wrong site, soft-404, or parked placeholder instead of the normal public site. CertScore withholds scores and substantive projections until a representative public page is verified.",
+    "The captured screenshot showed a challenge, access block, unavailable page, blank page, wrong site, soft-404, or parked placeholder instead of the normal public site. CertScore.ai withholds scores and substantive projections until a representative public page is verified.",
   scan_quality_visual_degraded:
     "Nano reviewed the captured screenshot and classified the visible page as degraded but still usable. Findings may remain useful, but the report should be read with the captured-page condition in mind."
 };
@@ -164,34 +164,34 @@ export function getPublicReportConfidenceDefinition(input: {
   const referenceId = getPublicReportFindingReferenceId(input.findingId) ?? input.findingId;
 
   if (SCAN_QUALITY_FINDING_IDS.has(referenceId)) {
-    return "Review evidence means CertScore retained a screenshot-based scan-quality assessment for the captured page state. This limits how the scan should be interpreted; it does not by itself determine whether the real public site has a privacy, consent, accessibility, or disclosure issue.";
+    return "Review evidence means CertScore.ai retained a screenshot-based scan-quality assessment for the captured page state. This limits how the scan should be interpreted; it does not by itself determine whether the real public site has a privacy, consent, accessibility, or disclosure issue.";
   }
 
   if (ACCESSIBILITY_FINDING_IDS.has(referenceId) || /accessibility/i.test(input.section ?? "")) {
-    return "Review evidence means CertScore retained representative automated accessibility evidence such as rule ID, affected selector, page context, impact label, and reviewer context. Manual accessibility review is still needed before drawing operational or legal conclusions.";
+    return "Review evidence means CertScore.ai retained representative automated accessibility evidence such as rule ID, affected selector, page context, impact label, and reviewer context. Manual accessibility review is still needed before drawing operational or legal conclusions.";
   }
 
   if (CPRA_PRIVACY_CHOICE_FINDING_IDS.has(referenceId)) {
-    return "Review evidence means CertScore retained public-surface and runtime context for privacy-choice review, without determining CPRA applicability, sale/share status, opt-out sufficiency, GPC handling, or compliance status.";
+    return "Review evidence means CertScore.ai retained public-surface and runtime context for privacy-choice review, without determining CPRA applicability, sale/share status, opt-out sufficiency, GPC handling, or compliance status.";
   }
 
   if (SESSION_REPLAY_FINDING_IDS.has(referenceId)) {
-    return "Review evidence means CertScore retained runtime or page-surface evidence for replay, behavior analytics, or sensitive-surface context, without determining keystroke capture, screenshot capture, sensitive-value capture, or recording retention.";
+    return "Review evidence means CertScore.ai retained runtime or page-surface evidence for replay, behavior analytics, or sensitive-surface context, without determining keystroke capture, screenshot capture, sensitive-value capture, or recording retention.";
   }
 
   if (FINGERPRINTING_FINDING_IDS.has(referenceId)) {
-    return "Review evidence means CertScore retained browser or device signal context for manual review, without determining personal identity, identity resolution, persistent fingerprint creation, user singling-out, or a complete identity graph.";
+    return "Review evidence means CertScore.ai retained browser or device signal context for manual review, without determining personal identity, identity resolution, persistent fingerprint creation, user singling-out, or a complete identity graph.";
   }
 
   if (CONSENT_UI_FINDING_IDS.has(referenceId)) {
-    return "Review evidence means CertScore retained consent-surface observations such as visible controls, labels, path depth, overlays, or interaction-state context for manual review.";
+    return "Review evidence means CertScore.ai retained consent-surface observations such as visible controls, labels, path depth, overlays, or interaction-state context for manual review.";
   }
 
   if (input.confidence === "strong" || input.confidence === "high") {
-    return "Strong evidence means CertScore retained direct runtime evidence such as timing, classified request or storage artifacts, vendor/category context, and coverage signals. Manual review is still needed for purpose, consent state, exemptions, and configuration.";
+    return "Strong evidence means CertScore.ai retained direct runtime evidence such as timing, classified request or storage artifacts, vendor/category context, and coverage signals. Manual review is still needed for purpose, consent state, exemptions, and configuration.";
   }
 
-  return "Review evidence means CertScore retained runtime evidence such as timing, classified request or storage artifacts, vendor/category context, and coverage signals. Manual review is still needed for purpose, consent state, exemptions, and configuration.";
+  return "Review evidence means CertScore.ai retained runtime evidence such as timing, classified request or storage artifacts, vendor/category context, and coverage signals. Manual review is still needed for purpose, consent state, exemptions, and configuration.";
 }
 
 function normalizeCriticality(value: string | null | undefined): PublicReportCriticality {

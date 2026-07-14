@@ -16,7 +16,7 @@ const config: GrowthContentPageConfig = {
     { href: "/compare/cmp-vs-runtime-consent-scanner", label: "CMP vs runtime scanner" },
     { href: "/guides/cmp-verification", label: "CMP verification" },
     { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement checker" },
-    { href: "/methodology", label: "CertScore methodology" }
+    { href: "/methodology", label: "CertScore.ai methodology" }
   ],
   sections: [
     {

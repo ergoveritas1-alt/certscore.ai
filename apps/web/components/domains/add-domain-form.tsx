@@ -8,6 +8,7 @@ import { createDomainAction, type CreateDomainActionState } from "../../server/d
 import { ScanFromSelect, type ScanFrom, type ServerScanFrom } from "../scans/scan-from-select";
 import {
   ScanSubmitProgressBar,
+  ScanActivityIndicator,
   normalizeLocalV2ScanProfile,
   useScanProgressClock,
   type LocalV2ScanProfile
@@ -127,7 +128,7 @@ export function AddDomainForm({
         <div className="relative">
           <Input
             autoComplete="url"
-            className="h-14 rounded-[1.75rem] border-slate-300 pr-52 text-xl shadow-none placeholder:text-slate-400 focus:border-slate-300 focus:ring-slate-200"
+            className="h-16 rounded-[16px] border-[3px] border-sky-400 bg-white pl-6 pr-48 text-lg font-semibold text-slate-950 shadow-[0_0_0_1px_rgba(255,255,255,0.9),0_16px_42px_rgba(14,165,233,0.16)] placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-400/30"
             id="domain"
             name="domain"
             onChange={(event) => setDomain(event.target.value)}
@@ -136,7 +137,7 @@ export function AddDomainForm({
             type="text"
             value={domain}
           />
-          <div className="absolute right-[10.6rem] top-1/2 -translate-y-1/2">
+          <div className="absolute right-[9.75rem] top-1/2 -translate-y-1/2 scale-110">
             <ScanFromSelect
               allowRestrictedScanOptions={allowRestrictedScanOptions}
               freshRescanValue={freshRescan}
@@ -151,21 +152,20 @@ export function AddDomainForm({
             />
           </div>
           <Button
-            aria-label="Start scanning"
-            className="absolute right-2.5 top-1/2 h-10 -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] px-4 text-sm font-medium text-white shadow-[0_10px_24px_rgba(15,139,215,0.16)] hover:brightness-[1.04]"
+            aria-label="Scan now"
+            className="absolute right-1.5 top-1/2 h-12 w-[126px] -translate-y-1/2 rounded-[13px] border border-emerald-300/70 bg-[linear-gradient(135deg,#45c957_0%,#56bd58_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(34,197,94,0.22)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-emerald-300/40"
             disabled={isPending}
             type="submit"
           >
-            {isPending ? "Starting..." : "Start scanning"}
+            {isPending ? (
+              <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
+                <ScanActivityIndicator />
+                <span>Scanning…</span>
+              </span>
+            ) : "Scan now"}
           </Button>
         </div>
       </div>
-
-      {planCode === "free" ? (
-        <p className="text-xs text-slate-500">
-          Trial accounts include a limited page-scan allowance for evaluating the workflow.
-        </p>
-      ) : null}
 
       {isPending ? (
         <ScanSubmitProgressBar

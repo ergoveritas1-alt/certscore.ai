@@ -103,12 +103,12 @@ export default async function AuthorizePage({ searchParams }: AuthorizePageProps
       <section className="mx-auto max-w-xl px-6 py-20">
         <Card className="border-slate-200 bg-white shadow-none">
           <CardHeader>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">CertScore MCP</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">CertScore.ai MCP</p>
             <CardTitle>Connect {client.clientName}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <p className="text-sm leading-7 text-slate-600">
-              This app is requesting access to CertScore MCP tools for {organization.name}. CertScore MCP returns public-web
+              This app is requesting access to CertScore.ai MCP tools for {organization.name}. CertScore.ai MCP returns public-web
               risk signals for review and does not provide legal advice or compliance certification.
             </p>
             <div className="rounded border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">

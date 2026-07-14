@@ -25,26 +25,6 @@ function SignalsIcon(props: NavIconProps) {
   );
 }
 
-function ScansIcon(props: NavIconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
-      <circle cx="11" cy="11" r="6.5" />
-      <path d="m20 20-3.8-3.8" />
-      <path d="M11 8v3.2l2.2 1.3" />
-    </svg>
-  );
-}
-
-function BrowserExtensionIcon(props: NavIconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
-      <rect x="3.5" y="5" width="17" height="14" rx="3" />
-      <path d="M3.5 9.5h17" />
-      <path d="M8 14h3.5M15.5 12.5v3M14 14h3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function ChangesIcon(props: NavIconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
@@ -119,8 +99,6 @@ function CloseIcon(props: NavIconProps) {
 const navItems = [
   { href: "/app", label: "Overview", icon: OverviewIcon },
   { href: "/app/signals", label: "Scan view", icon: SignalsIcon },
-  { href: "/app/scans", label: "Scan History", icon: ScansIcon },
-  { href: "/app/browser-scans/setup", label: "Chrome extension", icon: BrowserExtensionIcon },
   { href: "/app/settings", label: "Settings", icon: SettingsIcon },
   { href: "/app/modify-plan", label: "Modify plan", icon: PlanIcon }
 ] as const;
@@ -173,9 +151,8 @@ export function AppShell({
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const isAdminPath = pathname === "/app/admin" || pathname.startsWith("/app/admin/");
   const scopedNavItems = [
-    ...navItems.filter((item) => !(isAdminPath && item.href === "/app/scans")),
+    ...navItems,
     ...(isPlatformAdmin ? [{ href: "/app/admin", label: "Admin", icon: ShieldIcon }] : [])
   ];
 

@@ -37,7 +37,7 @@ export default function WhatIsCertScorePage() {
         schema={schema}
         sections={[
           {
-            title: "What CertScore scans",
+            title: "What CertScore.ai scans",
             paragraphs: [
               "CertScore.ai reviews public website behavior, including pre-consent tracking requests, cookie and storage timing, public consent and policy surfaces, accessibility signals, session recording indicators, fingerprinting-related telemetry, and disclosure consistency signals.",
               "The product focuses on observable evidence from public website scans and presents findings as review prompts for teams that manage websites, vendors, consent tools, and user-facing disclosures."

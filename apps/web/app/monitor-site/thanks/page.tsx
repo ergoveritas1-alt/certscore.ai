@@ -42,7 +42,7 @@ export default async function MonitorSiteThanksPage({ searchParams }: MonitorSit
               We received your monitoring request and added it to the pending monitoring review queue. Monitoring is not active until setup is confirmed with you.
             </p>
             <p className="text-sm leading-7 text-slate-600">
-              CertScore uses automated public-web observations as review signals. This is not legal advice and should be reviewed with the underlying evidence.
+              CertScore.ai uses automated public-web observations as review signals. This is not legal advice and should be reviewed with the underlying evidence.
             </p>
             <div className="flex flex-wrap gap-3">
               {statusToken ? (

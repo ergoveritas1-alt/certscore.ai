@@ -52,7 +52,7 @@ export async function GET(request: Request, context: RouteContext) {
   } catch (error) {
     console.error("[api-v2-scan-status] request failed", { requestId: id, error });
     return apiV2JsonResponse({
-      body: buildApiV2Error({ code: "internal_error", message: "CertScore API v2 is temporarily unavailable. Try again later." }),
+      body: buildApiV2Error({ code: "internal_error", message: "CertScore.ai API v2 is temporarily unavailable. Try again later." }),
       requestId: id,
       route: "api-v2-scan-status",
       status: 500

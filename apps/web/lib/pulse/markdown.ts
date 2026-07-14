@@ -174,7 +174,7 @@ function gptFooter(pulse: PulseMarkdownInput) {
   return [
     "---",
     "",
-    "View this scan on CertScore: " + line(links.fullReportUrl),
+    "View this scan on CertScore.ai: " + line(links.fullReportUrl),
     "Explore finding definitions: " + CANONICAL_FINDINGS_REFERENCE_URL,
     "Run another scan: https://certscore.ai"
   ].join("\n");
@@ -229,7 +229,7 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
   const completionSummary = line(pulse.summary?.completionSummary ?? executive.completionSummary);
   const surfacedResults = compactSurfacedResults(pulse);
   const markdown = [
-    "# CertScore Pulse",
+    "# CertScore.ai Pulse",
     "",
     PULSE_PURPOSE_STATEMENT,
     "",

@@ -26,10 +26,10 @@ export const aiGuideContent = {
       "Pre-consent tracking means classified tracking requests or non-essential cookies appear before a recorded consent choice. CertScore.ai treats this as an automated risk signal that should be reviewed against the underlying request, cookie, and consent evidence.",
     sections: [
       {
-        title: "What CertScore observes",
+        title: "What CertScore.ai observes",
         paragraphs: [
           "CertScore.ai reviews the initial page-load window, consent surface signals, classified tracking requests, and cookie timing. The scan looks for activity that appears before a clear consent interaction has been recorded.",
-          "In recent CertScore benchmark scans, this signal appeared in roughly one in five scanned sites. That context is directional, not a legal conclusion about any specific website."
+          "In recent CertScore.ai benchmark scans, this signal appeared in roughly one in five scanned sites. That context is directional, not a legal conclusion about any specific website."
         ]
       },
       {
@@ -51,7 +51,7 @@ export const aiGuideContent = {
       "Third-party cookies before consent are cookies associated with outside domains that appear before a recorded consent choice. CertScore.ai surfaces this as an automated finding when retained evidence suggests cookie timing should be reviewed.",
     sections: [
       {
-        title: "What CertScore observes",
+        title: "What CertScore.ai observes",
         paragraphs: [
           "CertScore.ai reviews cookie names, cookie domains, request hosts, vendor classification, and consent timing from public website scans.",
           "The goal is to help teams identify whether advertising, analytics, identity, or other vendor cookies appear earlier than intended."
@@ -76,7 +76,7 @@ export const aiGuideContent = {
       "RTB cookie syncing is an adtech behavior where advertising or identity systems appear to share or match identifiers across domains. To review it, inspect the request and vendor evidence, the timing of the activity, and whether the behavior appears before or after a recorded consent choice. CertScore.ai automates this review by observing public website requests, vendor context, cookie or identifier-related telemetry, and supporting evidence. The result is a higher-signal business review cue, not a legal conclusion.",
     sections: [
       {
-        title: "What CertScore observes",
+        title: "What CertScore.ai observes",
         paragraphs: [
           "CertScore.ai reviews observed request hosts, URL patterns, vendor categories, redirect-like behavior, and known advertising or identity endpoints.",
           "The scan does not claim to know every downstream use of an identifier. It surfaces evidence that a team should review with its advertising, consent, and vendor-management owners."
@@ -116,31 +116,6 @@ export const aiGuideContent = {
       }
     ]
   },
-  accessibilityHomepageSignals: {
-    badge: "Accessibility guide",
-    title: "Accessibility homepage signals: what automated scans can surface",
-    description:
-      "Learn how CertScore.ai reviews automated homepage accessibility signals without implying a full WCAG audit.",
-    path: "/guides/accessibility-homepage-signals",
-    intro:
-      "Automated homepage accessibility signals are review cues from the scanned public page, such as visual contrast, semantic labeling, text alternatives, and keyboard navigation indicators. They are not a full WCAG audit.",
-    sections: [
-      {
-        title: "What CertScore observes",
-        paragraphs: [
-          "CertScore.ai can surface automated signals related to color contrast, form labels, image text alternatives, document structure, focus behavior, and keyboard-oriented navigation.",
-          "These observations help prioritize review, especially when the same pattern appears across important public pages."
-        ]
-      },
-      {
-        title: "What automated scans cannot prove",
-        paragraphs: [
-          "Automated accessibility checks do not evaluate every user journey, assistive technology experience, content update, or design intent.",
-          "Teams should use these findings as triage signals, then review affected components and flows with manual testing where risk or user impact is meaningful."
-        ]
-      }
-    ]
-  },
   checkWebsiteTrackingBeforeConsent: {
     badge: "How-to guide",
     title: "How to check if a website tracks users before consent",
@@ -151,7 +126,7 @@ export const aiGuideContent = {
       "To check whether a website tracks users before consent, scan the page before making any consent choice and inspect whether classified tracking requests or non-essential cookies appear before the consent event. CertScore.ai automates this review by observing public website behavior around tracking requests, cookies, consent flows, and related evidence. The result is an automated risk signal that helps teams review timing, vendors, and consent configuration without treating the scan as a legal determination.",
     sections: [
       {
-        title: "What CertScore observes",
+        title: "What CertScore.ai observes",
         paragraphs: [
           "CertScore.ai looks at public page behavior, tracking request timing, cookie activity, consent-surface signals, and retained evidence that helps explain why the signal appeared.",
           "The scan is designed for repeatable triage, so teams can see whether a live website behaves as expected after tag, banner, or vendor changes."
@@ -176,7 +151,7 @@ export const aiGuideContent = {
       "To check whether third-party cookies are set before consent, review cookies created before any recorded consent choice and identify which are associated with third-party services or non-essential purposes. CertScore.ai automates this by observing cookie timing, request context, and vendor evidence during public website scans. The output is a reviewable signal that helps teams compare live behavior with consent-platform and tag-manager configuration.",
     sections: [
       {
-        title: "What CertScore observes",
+        title: "What CertScore.ai observes",
         paragraphs: [
           "CertScore.ai reviews cookie domains, names, vendor-like hosts, and consent timing to surface cookies that may deserve closer review.",
           "The result is a business-facing review signal, not a conclusion about whether a cookie is allowed or prohibited."
@@ -240,7 +215,7 @@ export const aiGuideContent = {
         ]
       },
       {
-        title: "What CertScore observes",
+        title: "What CertScore.ai observes",
         paragraphs: [
           "CertScore.ai observes request timing, cookie timing, vendor-like hosts, consent UI signals, and whether activity appears before a recorded choice.",
           "The scan focuses on public website evidence and does not expose proprietary probe definitions or private evaluation fixtures."
@@ -286,7 +261,7 @@ export const aiGuideContent = {
         ]
       },
       {
-        title: "What CertScore observes",
+        title: "What CertScore.ai observes",
         paragraphs: [
           "CertScore.ai observes consent controls, request timing, cookie activity, and tracker-like vendor activity before and after a recorded reject interaction.",
           "The scan summarizes reviewable behavior while avoiding legal pass/fail language."
@@ -332,7 +307,7 @@ export const aiGuideContent = {
         ]
       },
       {
-        title: "What CertScore observes",
+        title: "What CertScore.ai observes",
         paragraphs: [
           "CertScore.ai observes consent surfaces, tracking requests, cookie timing, session replay indicators, fingerprinting-related signals, accessibility issues, and privacy disclosure gaps where evidence is available.",
           "Findings are automated risk signals for review, not compliance determinations."
@@ -378,7 +353,7 @@ export const aiGuideContent = {
         ]
       },
       {
-        title: "What CertScore observes",
+        title: "What CertScore.ai observes",
         paragraphs: [
           "CertScore.ai observes tracking requests, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility issues, and privacy disclosure gaps.",
           "It presents findings as evidence-backed signals for review."

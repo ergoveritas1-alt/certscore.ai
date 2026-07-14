@@ -6,9 +6,9 @@ import { PULSE_PURPOSE_STATEMENT, PULSE_STANDARD_DISCLAIMER } from "../../../lib
 import { createPageMetadata } from "../../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
-  title: "CertScore Pulse API Beta Agent Fallback",
+  title: "CertScore.ai Pulse API Beta Agent Fallback",
   description:
-    "Plain, browser-readable CertScore Pulse API beta fallback instructions for agents whose fetch tools cannot retrieve JSON endpoints.",
+    "Plain, browser-readable CertScore.ai Pulse API beta fallback instructions for agents whose fetch tools cannot retrieve JSON endpoints.",
   path: "/api-pulse/agent",
   robots: {
     follow: true,
@@ -52,7 +52,7 @@ export default function PulseAgentFallbackPage() {
     <main className="min-h-screen bg-white">
       <SiteHeader />
       <section className="mx-auto max-w-4xl px-6 py-14">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">CertScore Pulse API beta</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">CertScore.ai Pulse API beta</p>
         <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950">Agent-readable beta fallback</h1>
         <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
           This page is a plain browser-readable fallback for agents or review tools whose JSON fetch layer cannot retrieve API
@@ -99,7 +99,7 @@ export default function PulseAgentFallbackPage() {
               If you receive HTTP 202, read the returned <code className="rounded bg-white px-1">statusUrl</code> or poll{" "}
               <code className="rounded bg-white px-1">/api/v1/pulse/status/&lt;jobId&gt;</code>.
             </li>
-            <li>If API fetch fails before headers, body, or status are visible, do not infer CertScore returned an error.</li>
+            <li>If API fetch fails before headers, body, or status are visible, do not infer CertScore.ai returned an error.</li>
           </ol>
           <h3 className="mt-5 font-semibold text-slate-950">Recommended calls</h3>
           <div className="mt-3 divide-y divide-sky-100 rounded-lg border border-sky-100 bg-white">
@@ -137,7 +137,7 @@ export default function PulseAgentFallbackPage() {
               Use <code className="rounded bg-white px-1">detail=tiny</code> for quick checks.
             </li>
             <li>
-              Public GPT Action beta access uses latest-mode summaries. Use Evidence JSON or link users to the CertScore report when
+              Public GPT Action beta access uses latest-mode summaries. Use Evidence JSON or link users to the CertScore.ai report when
               they need more support.
             </li>
           </ol>
@@ -146,16 +146,16 @@ export default function PulseAgentFallbackPage() {
         <section className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-950">
           <h2 className="font-semibold">How to interpret fetch failures</h2>
           <p className="mt-2">
-            A successful CertScore Pulse response includes the diagnostic headers below. If a checker reports an internal fetch error
-            and cannot show these headers, it did not successfully evaluate the CertScore application response.
+            A successful CertScore.ai Pulse response includes the diagnostic headers below. If a checker reports an internal fetch error
+            and cannot show these headers, it did not successfully evaluate the CertScore.ai application response.
           </p>
           <p className="mt-2">
             Agent fetch limitations: Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS,
             proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-*
-            diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test,
+            diagnostic headers, do not conclude CertScore.ai Pulse is unavailable. First try /api/v1/pulse-self-test,
             /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and
-            /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore diagnostic headers, report it as a
-            client/network fetch limitation rather than a CertScore API result.
+            /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore.ai diagnostic headers, report it as a
+            client/network fetch limitation rather than a CertScore.ai API result.
           </p>
           <ul className="mt-3 list-disc space-y-1 pl-5">
             {expectedHeaders.map((header) => (
@@ -200,7 +200,7 @@ export default function PulseAgentFallbackPage() {
         <section className="mt-10 rounded-lg border border-slate-200 p-4">
           <h2 className="text-xl font-semibold text-slate-950">Fallback workflow</h2>
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-7 text-slate-700">
-            <li>Open the health canary first and confirm the CertScore diagnostic headers.</li>
+            <li>Open the health canary first and confirm the CertScore.ai diagnostic headers.</li>
             <li>If the health canary is unavailable only inside one tool, treat that as a tool fetch/DNS failure.</li>
             <li>Use the Pulse markdown endpoint when a tool prefers readable text over JSON.</li>
             <li>Use the ChatGPT Action beta schema when configuring a Custom GPT beta action.</li>

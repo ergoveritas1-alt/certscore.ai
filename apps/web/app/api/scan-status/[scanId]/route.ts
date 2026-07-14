@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "../../../../server/auth";
 import {
-  getAnonymousOpsScanStatus,
-  getOrganizationOpsScanStatus
+  getPublicOpsScanStatus
 } from "../../../../server/scans/ops-status";
 import {
   buildLightweightScanStatusResponse,
-  getViewerAccessibleScanStatusProjection
+  getPublicScanStatusProjection
 } from "../../../../server/scans/scan-status-projection";
 
 export const dynamic = "force-dynamic";
@@ -35,12 +33,7 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
     );
   }
 
-  const user = await getCurrentUser();
-  const projection = await getViewerAccessibleScanStatusProjection({
-    scanId,
-    viewerEmail: user?.email ?? null,
-    viewerUserId: user?.id ?? null
-  });
+  const projection = await getPublicScanStatusProjection(scanId);
   if (!projection) {
     return NextResponse.json(
       { code: "scan_not_found", error: "Scan not found." },
@@ -59,14 +52,7 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
     });
   }
 
-  const status = projection.organizationId === null
-    ? await getAnonymousOpsScanStatus({ includeFindings: true, scanId })
-    : await getOrganizationOpsScanStatus({
-        includeFindings: true,
-        organizationId: projection.organizationId,
-        scanId,
-        viewerEmail: user?.email ?? null
-      });
+  const status = await getPublicOpsScanStatus({ includeFindings: true, scanId });
 
   if (!status) {
     return NextResponse.json(

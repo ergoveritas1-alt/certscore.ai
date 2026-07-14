@@ -513,7 +513,10 @@ test("sharded bundle merge preserves existing consent comparisons without synthe
 test("sharded bundle merge retains exactly one diagnostic screenshot", () => {
   const merged = mergeLocalV2DagLambdaShardBundles({
     base: canonicalBundleFixture("scan-local-1", {
-      screenshots: [screenshotArtifact("screenshot_pre_consent", "scan-local-1/screenshot-pre-consent.png")]
+      screenshots: [
+        screenshotArtifact("screenshot_pre_consent", "scan-local-1/screenshot-pre-consent.png"),
+        screenshotArtifact("screenshot_pre_consent_settled", "scan-local-1/screenshot-pre-consent-settled.png")
+      ]
     }),
     scanId: "scan-local-1",
     workerBundles: [
@@ -527,7 +530,7 @@ test("sharded bundle merge retains exactly one diagnostic screenshot", () => {
   });
 
   assert.equal(merged.screenshots.length, 1);
-  assert.equal(merged.screenshots[0]?.artifactId, "screenshot_pre_consent");
+  assert.equal(merged.screenshots[0]?.artifactId, "screenshot_pre_consent_settled");
 });
 
 test("artifact uploader returns durable metadata for all v2 JSON artifacts", async () => {

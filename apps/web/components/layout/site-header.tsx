@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import CertScoreLogo from "../brand/CertScoreLogo";
 import { PendingButtonLink } from "../ui/pending-link";
 
@@ -17,8 +20,6 @@ const resourceLinks = [
   { href: "/solutions/cookie-consent-scanner", label: "Cookie consent scanner" },
   { href: "/solutions/privacy-policy-risk-scanner", label: "Privacy policy risk scanner" },
   { href: "/gdpr", label: "GDPR privacy" },
-  { href: "/ftc", label: "FTC disclosure" },
-  { href: "/accessibility", label: "ADA accessibility" },
   { href: "/guides", label: "Guides" },
   { href: "/benchmarks", label: "Benchmarks" },
   { href: "/findings", label: "Findings" },
@@ -29,26 +30,41 @@ const resourceLinks = [
 ];
 
 export function SiteHeader() {
+  const pathname = usePathname();
+
+  function isActive(href: string) {
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
+  function linkClass(href: string) {
+    return isActive(href)
+      ? "rounded-lg bg-sky-50 px-2 py-1.5 text-sm font-semibold text-sky-800 ring-1 ring-inset ring-sky-200"
+      : "rounded-lg px-2 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-ink";
+  }
+
+  const resourcesActive = resourceLinks.some((link) => isActive(link.href));
+
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+    <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/90 shadow-[0_1px_10px_rgba(15,23,42,0.04)] backdrop-blur">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
         <div className="min-w-0 flex items-center overflow-visible">
-          <CertScoreLogo compact showText className="shrink-0" />
+          <CertScoreLogo compact showText size="small" className="shrink-0" />
         </div>
 
-        <nav className="hidden items-center gap-3 md:flex">
+        <nav className="hidden items-center gap-1.5 md:flex">
           {navLinks.slice(0, 3).map((link) => (
-            <Link key={link.href} href={link.href} className="text-sm text-slate-600 hover:text-ink">
+            <Link key={link.href} href={link.href} aria-current={isActive(link.href) ? "page" : undefined} className={linkClass(link.href)}>
               {link.label}
             </Link>
           ))}
           <details className="group relative">
             <summary
               aria-label="Resources navigation"
-              className="flex cursor-pointer list-none items-center gap-1 rounded-md px-1 py-1 text-sm text-slate-600 hover:text-ink focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 [&::-webkit-details-marker]:hidden"
+              aria-current={resourcesActive ? "page" : undefined}
+              className={`flex cursor-pointer list-none items-center gap-0.5 rounded-lg px-2 py-1.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 [&::-webkit-details-marker]:hidden ${resourcesActive ? "bg-sky-50 font-semibold text-sky-800 ring-1 ring-inset ring-sky-200" : "text-slate-600 hover:bg-slate-50 hover:text-ink"}`}
             >
               <span>Resources</span>
-              <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4 transition group-open:rotate-180">
+              <svg viewBox="0 0 20 20" aria-hidden="true" className="-ml-0.5 h-4 w-4 transition group-open:rotate-180">
                 <path d="M5.5 7.5 10 12l4.5-4.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </summary>
@@ -58,7 +74,8 @@ export function SiteHeader() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+                    aria-current={isActive(link.href) ? "page" : undefined}
+                    className={`px-3 py-2 text-sm font-medium ${isActive(link.href) ? "bg-sky-50 text-sky-800" : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"}`}
                   >
                     {link.label}
                   </Link>
@@ -70,9 +87,10 @@ export function SiteHeader() {
             <Link
               key={link.href}
               href={link.href}
+              aria-current={isActive(link.href) ? "page" : undefined}
               className={link.label === "Contact"
-                ? "rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100 hover:text-sky-800"
-                : "text-sm text-slate-600 hover:text-ink"}
+                ? `rounded-xl border px-3 py-2 text-sm font-semibold transition ${isActive(link.href) ? "border-sky-300 bg-sky-100 text-sky-800 ring-2 ring-sky-100" : "border-sky-200 bg-sky-50 text-sky-700 hover:border-sky-300 hover:bg-sky-100 hover:text-sky-800"}`
+                : linkClass(link.href)}
             >
               {link.label}
             </Link>
@@ -88,7 +106,15 @@ export function SiteHeader() {
           />
         </nav>
 
-        <details className="relative md:hidden">
+        <div className="flex items-center gap-2 md:hidden">
+          <Link
+            href="/contact"
+            aria-current={isActive("/contact") ? "page" : undefined}
+            className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+          >
+            Contact
+          </Link>
+          <details className="relative">
           <summary
             aria-label="Open navigation menu"
             className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-950 [&::-webkit-details-marker]:hidden"
@@ -105,7 +131,8 @@ export function SiteHeader() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="rounded-2xl px-4 py-3 text-base font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+                  aria-current={isActive(link.href) ? "page" : undefined}
+                  className={`rounded-2xl px-4 py-3 text-base font-medium transition ${isActive(link.href) ? "bg-sky-50 text-sky-800" : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"}`}
                 >
                   {link.label}
                 </Link>
@@ -117,7 +144,8 @@ export function SiteHeader() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="rounded-2xl px-6 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
+                  aria-current={isActive(link.href) ? "page" : undefined}
+                  className={`rounded-2xl px-6 py-2 text-sm font-medium transition ${isActive(link.href) ? "bg-sky-50 text-sky-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}
                 >
                   {link.label}
                 </Link>
@@ -126,7 +154,8 @@ export function SiteHeader() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="rounded-2xl px-4 py-3 text-base font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+                  aria-current={isActive(link.href) ? "page" : undefined}
+                  className={`rounded-2xl px-4 py-3 text-base font-medium transition ${link.label === "Contact" ? "bg-sky-50 font-semibold text-sky-800" : isActive(link.href) ? "bg-sky-50 text-sky-800" : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"}`}
                 >
                   {link.label}
                 </Link>
@@ -146,7 +175,8 @@ export function SiteHeader() {
               </div>
             </nav>
           </div>
-        </details>
+          </details>
+        </div>
       </div>
     </header>
   );

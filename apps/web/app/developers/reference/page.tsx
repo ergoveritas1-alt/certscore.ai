@@ -3,7 +3,7 @@ import { createPageMetadata } from "../../../lib/seo";
 import { CodeBlock, DeveloperShell, Section, apiV2Routes } from "../developer-pages";
 
 const description =
-  "Reference for the CertScore API v2 resource model, OpenAPI contract, status lifecycle, public-safe evidence summaries, errors, throttling, and legal posture.";
+  "Reference for the CertScore.ai API v2 resource model, OpenAPI contract, status lifecycle, public-safe evidence summaries, errors, throttling, and legal posture.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -12,7 +12,7 @@ export const metadata: Metadata = createPageMetadata({
     follow: true,
     index: true
   },
-  title: "CertScore API reference"
+  title: "CertScore.ai API reference"
 });
 
 export default function DeveloperReferencePage() {
@@ -52,7 +52,7 @@ export default function DeveloperReferencePage() {
 
         <Section id="what-is-pulse" eyebrow="Projection" title="What is Pulse?">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Pulse is CertScore&apos;s compact public projection for agents and developer workflows. It packages the scan summary,
+            Pulse is CertScore.ai&apos;s compact public projection for agents and developer workflows. It packages the scan summary,
             top findings, evidence highlights, caveats, links, and disclaimer text derived from the same already-projected public scan
             resources and findings. API v2 exposes the scan resource as the durable object, while the Pulse wrapper is useful when an
             agent needs the report-style projection in one response. Response types such as{" "}
@@ -242,7 +242,7 @@ Retry-After: 60
   "type": "certscore_api_error",
   "error": {
     "code": "internal_error",
-    "message": "CertScore API v2 is temporarily unavailable."
+    "message": "CertScore.ai API v2 is temporarily unavailable."
   }
 }`}</CodeBlock>
           </div>

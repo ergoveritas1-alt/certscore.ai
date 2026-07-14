@@ -2613,7 +2613,7 @@ function buildCookieRetentionReviewEvidenceDetails(packet: UnifiedFindingDisplay
       observed: true,
       reviewThresholdDays: COOKIE_RETENTION_THRESHOLDS.mainReviewDays,
       thresholdBasis:
-        "365 days is a CertScore product review threshold for automated public-web observations, not a statutory cookie-lifetime limit.",
+        "365 days is a CertScore.ai product review threshold for automated public-web observations, not a statutory cookie-lifetime limit.",
       retainedRuntimeCookies: review.evidence.slice(0, 12),
       longestObservedCookie: longestCookie ?? null
     },
@@ -4814,7 +4814,7 @@ function buildExecutiveShortSummary(
       : unknownCount > 0
         ? `${unknownCount} persistent unclassified cookie${unknownCount === 1 ? "" : "s"}`
         : `${count} persistent cookie${count === 1 ? "" : "s"}`;
-    return `CertScore observed ${subject} with retained expiry evidence above the ${COOKIE_RETENTION_THRESHOLDS.mainReviewDays}-day review threshold. Review whether these lifetimes match stated retention, minimization, consent, opt-out, and disclosure practices.${longestText}`;
+    return `CertScore.ai observed ${subject} with retained expiry evidence above the ${COOKIE_RETENTION_THRESHOLDS.mainReviewDays}-day review threshold. Review whether these lifetimes match stated retention, minimization, consent, opt-out, and disclosure practices.${longestText}`;
   }
 
   if (findingId === "consent_dark_patterns_detected") {
@@ -4822,12 +4822,12 @@ function buildExecutiveShortSummary(
       consentControlLifecycleEvidence: getFirstEntityJsonObject(packet, "consentControlLifecycleEvidence")
     });
     if (lifecycleEvidence) {
-      return "CertScore observed consent or tracking context and did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control in retained public-page evidence.";
+      return "CertScore.ai observed consent or tracking context and did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control in retained public-page evidence.";
     }
   }
 
   if (findingId === "consent_preference_reopen_control_not_observed") {
-    return "CertScore observed consent or tracking-related context on the scanned page but did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control in retained public-page evidence. Manual review should confirm whether users can revisit, change, or withdraw cookie/privacy choices through an accessible control, footer link, CMP widget, or privacy-choice page.";
+    return "CertScore.ai observed consent or tracking-related context on the scanned page but did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control in retained public-page evidence. Manual review should confirm whether users can revisit, change, or withdraw cookie/privacy choices through an accessible control, footer link, CMP widget, or privacy-choice page.";
   }
 
   if (findingId === "reject_option_missing_or_hidden") {
@@ -4936,7 +4936,7 @@ function buildExecutiveShortSummary(
   if (findingId === "policy_behavior_contradiction_detected") {
     const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
     if (evidenceDetails?.policyRuntimeAlignmentReview) {
-      return "CertScore observed substantial third-party advertising/tracking activity and retained public disclosure context covering cookies, vendors, advertisers, analytics, or targeted advertising. Manual review should confirm whether the full cookie, CMP, vendor, and privacy disclosures adequately cover the observed runtime vendor ecosystem.";
+      return "CertScore.ai observed substantial third-party advertising/tracking activity and retained public disclosure context covering cookies, vendors, advertisers, analytics, or targeted advertising. Manual review should confirm whether the full cookie, CMP, vendor, and privacy disclosures adequately cover the observed runtime vendor ecosystem.";
     }
     const conflict = evidenceDetails?.policyRuntimeConflict;
     const runtimeEvent = conflict ? getPolicyRuntimeRepresentativeEvent(conflict) : null;

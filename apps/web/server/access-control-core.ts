@@ -66,7 +66,7 @@ export function isAllowedAuthEmail(email: string | null | undefined, env: Access
 }
 
 export function getAuthAccessDeniedMessage() {
-  return "CertScore account access is temporarily limited. Contact support if you need access.";
+  return "CertScore.ai account access is temporarily limited. Contact support if you need access.";
 }
 
 export function getAccountCreationPausedMessage() {

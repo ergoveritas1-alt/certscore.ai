@@ -96,7 +96,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-[1.9rem] font-semibold tracking-tight">{firstName ? `Welcome back, ${firstName}` : "Your website risk overview"}</h1>
+        <h1 className="text-[1.9rem] font-semibold tracking-tight">Overview</h1>
         <p className="mt-1 text-sm text-slate-500">Scan a website, review what needs attention, and track meaningful changes over time.</p>
       </div>
 
@@ -114,11 +114,11 @@ export default async function DashboardPage() {
               recentReusableScans={recentReusableScans}
             />
             <Link
-              className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 transition hover:border-emerald-300 hover:bg-emerald-100"
+              className="mt-3 inline-flex items-center gap-2 px-1 py-1 text-xs font-medium text-slate-500 transition hover:text-slate-900"
               href="/app/browser-scans/setup"
             >
               <span><strong>Scan from Chrome.</strong> Install the public CertScore.ai Browser Evidence extension.</span>
-              <span aria-hidden="true" className="shrink-0 text-emerald-700">→</span>
+              <span aria-hidden="true" className="text-slate-400">→</span>
             </Link>
           </CardContent>
         </Card>

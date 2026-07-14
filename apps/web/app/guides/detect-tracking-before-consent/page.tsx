@@ -27,7 +27,7 @@ export default function DetectTrackingBeforeConsentGuidePage() {
         { href: "/guides/pre-consent-tracking", label: "pre-consent tracking" },
         { href: "/guides/website-consent-audit", label: "website consent audit" },
         { href: "/benchmarks/pre-consent-tracking-2026", label: "pre-consent tracking benchmark" },
-        { href: "/methodology", label: "CertScore methodology" }
+        { href: "/methodology", label: "CertScore.ai methodology" }
       ]}
       schema={buildArticleSchema(guide)}
       sections={guide.sections}

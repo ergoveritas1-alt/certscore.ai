@@ -469,7 +469,7 @@ export function resolveV2ScanCoreCliCommand(cwd: string) {
   const match = candidates.find((candidate) => existsSync(candidate.entrypoint));
   if (!match) {
     const searchedFrom = packageRoot ?? cwd;
-    throw new Error(`Unable to locate CertScore v2 scan CLI from ${searchedFrom}. Expected packages/certscore-scan-core/dist/cli/scan.js or src/cli/scan.ts.`);
+    throw new Error(`Unable to locate CertScore.ai v2 scan CLI from ${searchedFrom}. Expected packages/certscore-scan-core/dist/cli/scan.js or src/cli/scan.ts.`);
   }
   return match;
 }

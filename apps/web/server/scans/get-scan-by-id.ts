@@ -680,6 +680,7 @@ async function loadScanDetailRecord(input: {
   scanId: string;
   allowAnonymousFallback?: boolean;
   anonymousOnly?: boolean;
+  publicAccess?: boolean;
   includeUrlscanSupplement?: boolean;
   viewerEmail?: string | null;
 }) {
@@ -1511,6 +1512,15 @@ export async function getAnonymousScanById(scanId: string) {
     organizationId: null,
     scanId,
     viewerEmail: null
+  });
+}
+
+export async function getPublicScanById(scanId: string) {
+  return loadScanDetailRecord({
+    includeUrlscanSupplement: false,
+    organizationId: null,
+    publicAccess: true,
+    scanId
   });
 }
 

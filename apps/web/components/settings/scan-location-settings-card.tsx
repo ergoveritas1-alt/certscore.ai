@@ -60,8 +60,14 @@ export function ScanLocationSettingsCard({
             </label>
           ))}
         </div>
-        <Button className="shrink-0 lg:self-stretch" type="submit" disabled={isPending}>
-          {isPending ? "Saving..." : "Save location"}
+        <Button
+          className="shrink-0 self-center border-0 bg-transparent px-2 text-xs font-medium text-slate-500 shadow-none ring-0 hover:bg-slate-100 hover:text-slate-900"
+          disabled={isPending}
+          size="sm"
+          type="submit"
+          variant="secondary"
+        >
+          {isPending ? "Saving..." : "Save"}
         </Button>
       </div>
 

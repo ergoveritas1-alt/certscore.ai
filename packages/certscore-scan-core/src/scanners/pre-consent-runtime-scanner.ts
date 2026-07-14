@@ -582,7 +582,18 @@ export async function preConsentRuntimeScanner(
       } else {
         consentObservation = annotateConsentUiObservation(
           consentObservation,
-          "recapture:post_settle_no_first_layer_controls",
+          recapturedConsentObservation.basis.includes("inventory:probe_failed")
+            ? "inventory:probe_failed"
+            : "recapture:post_settle_no_first_layer_controls",
+        );
+      }
+      if (
+        !recapturedConsentObservation.basis.includes("inventory:probe_failed") &&
+        !recapturedConsentObservation.basis.includes("bounded_capture_timeout_or_failure")
+      ) {
+        consentObservation = annotateConsentUiObservation(
+          consentObservation,
+          "settled_control_inventory_completed",
         );
       }
       retainedConsentUiObservation = consentObservation;
@@ -612,7 +623,64 @@ export async function preConsentRuntimeScanner(
       if (recaptureResolution.strongerEvidenceRetained) {
         domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
       }
+      if (
+        !recapturedConsentObservation.basis.includes("inventory:probe_failed") &&
+        !recapturedConsentObservation.basis.includes("bounded_capture_timeout_or_failure")
+      ) {
+        consentObservation = annotateConsentUiObservation(
+          consentObservation,
+          "settled_control_inventory_completed",
+        );
+      }
       retainedConsentUiObservation = consentObservation;
+    }
+
+    if (
+      earlyScreenshotCaptured &&
+      shouldCaptureSettledPreConsentScreenshot({
+        settledBodyText: domText,
+      })
+    ) {
+      const settledScreenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-settled.png");
+      const settledCapture = await recordTiming(
+        timingBreakdown,
+        "settled screenshot recapture",
+        "Targeted viewport recapture after the early DOMContentLoaded frame remained sparse while the settled DOM became substantive.",
+        () => capturePreConsentScreenshot(page, settledScreenshotPath, {
+          captureMode: "viewport_first",
+          screenshotErrors,
+          timeoutMs: Math.min(input.screenshotTimeoutMs ?? 5_000, fastWait ? 2_000 : 3_000),
+        }),
+      );
+      if (settledCapture.status === "available") {
+        const settledScreenshot: ScreenshotArtifact = {
+          artifactId: "screenshot_pre_consent_settled",
+          capturedAtMs: elapsed(input.scanStartedAtMs),
+          captureMethod: settledCapture.captureMethod,
+          path: settledScreenshotPath,
+          url: page.url(),
+          pagePhase: "network_idle",
+          consentStateAtTime: "pre_consent",
+        };
+        screenshots.unshift(settledScreenshot);
+        const settledVisualCapture = visualCaptureFromScreenshotSummary(
+          settledCapture,
+          settledScreenshotPath,
+          settledScreenshot.artifactId,
+        );
+        visualCapture = {
+          ...settledVisualCapture,
+          artifactRefs: uniqueEvidenceRefs([
+            ...settledVisualCapture.artifactRefs,
+            ...visualCapture.artifactRefs,
+          ]),
+          notes: unique([
+            ...settledVisualCapture.notes,
+            ...visualCapture.notes,
+            "Settled pre-consent viewport recaptured because the early frame was not representative of the rendered page.",
+          ]),
+        };
+      }
     }
 
     for (const script of scripts) {
@@ -1011,6 +1079,17 @@ export async function preConsentRuntimeScanner(
           screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
           timeoutMs: input.waitMode === "fast" ? 3_000 : 5_000,
         });
+        const geometryCaptureUnavailable = geometry.summary.confidence === 0 ||
+          geometry.viewport.width <= 0 ||
+          geometry.viewport.height <= 0 ||
+          geometry.pageUrl === "about:blank";
+        if (geometryCaptureUnavailable) {
+          consentObservation = annotateConsentUiObservation(
+            consentObservation,
+            "geometry_capture_unavailable",
+          );
+          retainedConsentUiObservation = consentObservation;
+        }
         if (
           !supplementalScreenshotAttempted &&
           (input.screenshotCaptureMode ?? "full_page_first") === "viewport_first" &&
@@ -1240,7 +1319,7 @@ export async function preConsentRuntimeScanner(
     const parentCancellation = abortReason(parentSignal);
     if (parentCancellation) throw parentCancellation;
     const softDeadlineCancellation = abortReason(softDeadlineSignal);
-    const moduleBudgetEnded = softDeadlineCancellation !== undefined;
+    const moduleBudgetEnded = softDeadlineCancellation !== null;
     const errorMessage = moduleBudgetEnded
       ? (softDeadlineCancellation instanceof Error
           ? softDeadlineCancellation.message
@@ -1617,7 +1696,8 @@ function emptyConsentUiObservation(scanStartedAtMs: number): ConsentUiObservatio
 }
 
 function isIncompleteConsentUiCapture(observation: ConsentUiObservation): boolean {
-  return observation.basis.includes("bounded_capture_timeout_or_failure");
+  return observation.basis.includes("bounded_capture_timeout_or_failure") ||
+    observation.basis.includes("inventory:probe_failed");
 }
 
 export function reconcileConsentUiRecapture(input: {
@@ -2809,11 +2889,14 @@ async function readConsentUiObservation(
 ): Promise<ConsentUiObservation> {
   const text = await page.evaluate(() => (document.body?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 12_000)).catch(() => "");
   const allowFullDocumentCmpControls = options.allowFullDocumentCmpControls === true;
-  await page.evaluate(CONSENT_INVENTORY_PROBE_SCRIPT).catch(() => undefined);
+  const inventoryProbeInstallSucceeded = await page.evaluate(CONSENT_INVENTORY_PROBE_SCRIPT)
+    .then(() => true)
+    .catch(() => false);
   const inventory = await page.evaluate<{
     controls: ConsentUiInventoryControl[];
     diagnostics?: ConsentInventoryProbeDiagnostics;
     frameInaccessibleCount: number;
+    probeSucceeded: boolean;
   }, {
     allowFullDocumentCmpControls: boolean;
     canonicalConsentInventoryLabels: string[];
@@ -2836,6 +2919,7 @@ async function readConsentUiObservation(
         input.canonicalConsentContextHints,
       ),
       frameInaccessibleCount: 0,
+      probeSucceeded: true,
     };
   }, {
     allowFullDocumentCmpControls,
@@ -2845,8 +2929,9 @@ async function readConsentUiObservation(
     controls: ConsentUiInventoryControl[];
     diagnostics?: ConsentInventoryProbeDiagnostics;
     frameInaccessibleCount: number;
+    probeSucceeded: boolean;
   } => {
-    return { controls: [], diagnostics: undefined, frameInaccessibleCount: 0 };
+    return { controls: [], diagnostics: undefined, frameInaccessibleCount: 0, probeSucceeded: false };
   });
   const frameInventory = inventory.controls.some((control) => control.inventorySource === "same_origin_frame")
     ? { controls: [], frameInaccessibleCount: 0, textExcerpts: [] }
@@ -2898,6 +2983,9 @@ async function readConsentUiObservation(
   const rejectedReasons = new Set<NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["rejectionReasons"][number]>();
   if (frameInaccessibleCount > 0) {
     rejectedReasons.add("frame_inaccessible");
+  }
+  if (!inventoryProbeInstallSucceeded || !inventory.probeSucceeded) {
+    rejectedReasons.add("inventory_probe_failed");
   }
   const hasActionableClassifiedControl = classifiedControls.some((control) =>
     control.actionType === "accept_all" || control.actionType === "reject_all"
@@ -2997,6 +3085,7 @@ async function readConsentUiObservation(
       ...(retainedInventorySources.has("same_origin_frame") ? ["inventory:same_origin_frame_controls"] : []),
       ...(retainedInventorySources.has("accessibility_tree") ? ["inventory:accessibility_tree_controls"] : []),
       ...(retainedRootSources.has("shadow_root") ? ["inventory:open_shadow_root_controls"] : []),
+      ...(!inventoryProbeInstallSucceeded || !inventory.probeSucceeded ? ["inventory:probe_failed"] : []),
     ],
     inventoryDiagnostics: diagnostics,
   });
@@ -4163,7 +4252,9 @@ function shouldRecaptureTextBackedConsentUiAfterSettle(
   if (isTerminalVisualErrorShellText(domText || observation.textExcerpt || "")) {
     return false;
   }
-  return hasTextBackedConsentSurface(observation) || likelyLateFirstLayerConsentSurfaceText(domText);
+  return observation.controls.length === 0 ||
+    hasTextBackedConsentSurface(observation) ||
+    likelyLateFirstLayerConsentSurfaceText(domText);
 }
 
 function likelyLateFirstLayerConsentSurfaceText(text: string): boolean {
@@ -5678,6 +5769,13 @@ function shouldCapturePreConsentScreenshot(input: {
   return input.consentObservation.likelyPresent || input.cmpRuntimeObservations.length > 0;
 }
 
+export function shouldCaptureSettledPreConsentScreenshot(input: {
+  settledBodyText: string;
+}) {
+  const settledText = input.settledBodyText.replace(/\s+/g, " ").trim();
+  return settledText.length >= 240;
+}
+
 function shouldCaptureSupplementalFullPageScreenshot(input: {
   cmpRuntimeObservations: CmpRuntimeObservation[];
   consentObservation: ConsentUiObservation;
@@ -5923,7 +6021,9 @@ function visualCaptureFromScreenshotSummary(
       artifactId,
       artifactType: "screenshot",
       path: screenshotPath,
-      label: "Pre-consent screenshot",
+      label: artifactId === "screenshot_pre_consent_settled"
+        ? "Settled pre-consent screenshot"
+        : "Pre-consent screenshot",
       sensitivity: "safe",
       redactionStatus: "not_needed",
       relatedEventIds: [],
@@ -5935,6 +6035,7 @@ function visualCaptureFromScreenshotSummary(
 function preferredPreConsentScreenshotRef(screenshots: ScreenshotArtifact[]): string | undefined {
   return (
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof")?.path ??
+    screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_settled")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent")?.path ??
     screenshots[0]?.path

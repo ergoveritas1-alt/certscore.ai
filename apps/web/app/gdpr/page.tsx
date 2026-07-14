@@ -12,7 +12,7 @@ const pageDescription =
   "Evidence-based GDPR review signals for public websites. Detect pre-consent tracking, third-party cookies before consent, consent UX issues, session replay signals, fingerprinting-related activity, and policy/runtime gaps. Automated observations for review, not legal advice.";
 const pagePath = "/gdpr";
 const disclaimer =
-  "CertScore findings are automated public-web observations for review, not legal advice, certification, or a compliance determination.";
+  "CertScore.ai findings are automated public-web observations for review, not legal advice, certification, or a compliance determination.";
 
 export const metadata: Metadata = {
   ...createPageMetadata({
@@ -100,7 +100,7 @@ const runtimeCards = [
   {
     title: "Before consent",
     body:
-      "CertScore records whether non-essential requests, cookies, storage, or identifier-bearing activity appear before a recorded consent choice."
+      "CertScore.ai records whether non-essential requests, cookies, storage, or identifier-bearing activity appear before a recorded consent choice."
   },
   {
     title: "After reject",
@@ -209,7 +209,7 @@ const methodologySteps = [
 ];
 
 const guardrails = [
-  "CertScore does not infer pre-consent tracking from CMP script presence, tag-manager presence, vendor names, cookie names, or policy text alone.",
+  "CertScore.ai does not infer pre-consent tracking from CMP script presence, tag-manager presence, vendor names, cookie names, or policy text alone.",
   "Findings require retained runtime anchors.",
   "\"Not detected\" means not observed in scan scope, not proof of absence.",
   "Region, prior consent, A/B tests, CMP configuration, bot protections, and blocked scans can affect results."
@@ -219,27 +219,27 @@ const faqs = [
   {
     question: "What is a GDPR website privacy scanner?",
     answer:
-      "A GDPR website privacy scanner reviews public website behavior that may be relevant to privacy and data-protection review. CertScore focuses on automated public-web observations for review, including consent timing, cookies, tracking, replay, fingerprinting-related activity, and disclosures."
+      "A GDPR website privacy scanner reviews public website behavior that may be relevant to privacy and data-protection review. CertScore.ai focuses on automated public-web observations for review, including consent timing, cookies, tracking, replay, fingerprinting-related activity, and disclosures."
   },
   {
     question: "What is pre-consent tracking?",
     answer:
-      "Pre-consent tracking means classified non-essential request, cookie, storage, analytics, advertising, replay, measurement, or identifier-bearing activity observed before CertScore records a consent choice or prior consent state for that purpose."
+      "Pre-consent tracking means classified non-essential request, cookie, storage, analytics, advertising, replay, measurement, or identifier-bearing activity observed before CertScore.ai records a consent choice or prior consent state for that purpose."
   },
   {
     question: "Does GDPR require cookie consent?",
     answer:
-      "Cookie and device-access review often involves both GDPR and ePrivacy context. Some storage or access may require consent unless an exception applies. CertScore surfaces runtime evidence for review and does not decide which legal basis or exception applies."
+      "Cookie and device-access review often involves both GDPR and ePrivacy context. Some storage or access may require consent unless an exception applies. CertScore.ai surfaces runtime evidence for review and does not decide which legal basis or exception applies."
   },
   {
-    question: "Can CertScore tell me if my website is GDPR compliant?",
+    question: "Can CertScore.ai tell me if my website is GDPR compliant?",
     answer:
-      "No. CertScore provides automated public-web observations for review. It does not provide legal advice, certification, proof of non-compliance, or a GDPR compliance determination."
+      "No. CertScore.ai provides automated public-web observations for review. It does not provide legal advice, certification, proof of non-compliance, or a GDPR compliance determination."
   },
   {
-    question: "How does CertScore detect tracking before consent?",
+    question: "How does CertScore.ai detect tracking before consent?",
     answer:
-      "CertScore records a clean browser sequence with page start, consent-surface observations, consent state, network requests, cookies, storage, vendors, and timing. A finding requires retained runtime anchors; it is not inferred from a banner, CMP, tag manager, vendor name, cookie name, or policy text alone."
+      "CertScore.ai records a clean browser sequence with page start, consent-surface observations, consent state, network requests, cookies, storage, vendors, and timing. A finding requires retained runtime anchors; it is not inferred from a banner, CMP, tag manager, vendor name, cookie name, or policy text alone."
   },
   {
     question: "What is the difference between a CMP scan and runtime consent evidence?",
@@ -252,7 +252,7 @@ const faqs = [
       "Start with the retained evidence, consent state, timing, vendor purpose, affected page, and whether the observed behavior matches intended CMP, tag-manager, and disclosure configuration. Then route the item to privacy, legal, engineering, or vendor owners as needed."
   },
   {
-    question: "Does CertScore scan behind logins?",
+    question: "Does CertScore.ai scan behind logins?",
     answer:
       "This page describes public-web scanning. Protected routes, authenticated-only areas, paywalls, bot protections, and blocked scans can limit coverage unless a separate approved workflow is configured."
   },
@@ -356,7 +356,7 @@ export default function GdprPage() {
                 GDPR website privacy signals from real browser behavior
               </h1>
               <p className="text-lg leading-8 text-slate-600">
-                CertScore scans public websites for GDPR-relevant consent, cookie, tracking, and data-protection review signals - including pre-consent tracking, third-party cookie activity before consent, consent UX friction, session replay signals, fingerprinting-related activity, and policy/runtime gaps.
+                CertScore.ai scans public websites for GDPR-relevant consent, cookie, tracking, and data-protection review signals - including pre-consent tracking, third-party cookie activity before consent, consent UX friction, session replay signals, fingerprinting-related activity, and policy/runtime gaps.
               </p>
             </div>
             <CtaButtons location="gdpr_hero" />
@@ -393,7 +393,7 @@ export default function GdprPage() {
         <div className="border border-slate-200 bg-white p-5 text-base leading-7 text-slate-700">
           <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Direct answer</h2>
           <p className="mt-3">
-            CertScore provides GDPR website privacy scanning that surfaces automated public-web observations about consent timing, cookies, tracking, and privacy disclosures. It does not provide legal advice, certification, or a GDPR compliance determination.
+            CertScore.ai provides GDPR website privacy scanning that surfaces automated public-web observations about consent timing, cookies, tracking, and privacy disclosures. It does not provide legal advice, certification, or a GDPR compliance determination.
           </p>
         </div>
       </section>
@@ -403,7 +403,7 @@ export default function GdprPage() {
           <Badge tone="neutral">Runtime evidence</Badge>
           <h2 className="text-3xl font-semibold tracking-tight text-slate-950">A cookie banner is not the same as consent enforcement</h2>
           <p className="text-base leading-7 text-slate-600">
-            CMPs and privacy policies are only part of GDPR/ePrivacy review. Reviewers need evidence of what loads, writes cookies or storage, transmits identifiers, or continues after reject. CertScore compares live browser behavior with consent controls, cookies, trackers, and disclosures.
+            CMPs and privacy policies are only part of GDPR/ePrivacy review. Reviewers need evidence of what loads, writes cookies or storage, transmits identifiers, or continues after reject. CertScore.ai compares live browser behavior with consent controls, cookies, trackers, and disclosures.
           </p>
         </div>
         <div className="mt-8 grid gap-5 md:grid-cols-3">
@@ -426,7 +426,7 @@ export default function GdprPage() {
               GDPR/ePrivacy signals observed in recent production scans
             </h2>
             <p className="text-base leading-7 text-slate-600">
-              Across recent CertScore production scan batches covering public websites, the most common GDPR/ePrivacy-relevant review signal was tracking before a recorded consent choice. These are automated public-web observations for review, not legal conclusions, certification, or compliance determinations.
+              Across recent CertScore.ai production scan batches covering public websites, the most common GDPR/ePrivacy-relevant review signal was tracking before a recorded consent choice. These are automated public-web observations for review, not legal conclusions, certification, or compliance determinations.
             </p>
           </div>
           <div className="mt-8 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
@@ -477,7 +477,7 @@ export default function GdprPage() {
         <div className="max-w-3xl space-y-3">
           <Badge tone="neutral">Finding registry examples</Badge>
           <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
-            GDPR-relevant examples from the CertScore findings registry
+            GDPR-relevant examples from the CertScore.ai findings registry
           </h2>
           <p className="text-base leading-7 text-slate-600">
             These are GDPR/ePrivacy-relevant examples from the 23-finding registry. They are review signals backed by retained evidence, not a statement that every registry item is a GDPR finding.
@@ -498,7 +498,7 @@ export default function GdprPage() {
                       </CardHeader>
                       <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
                         <p>
-                          <span className="font-semibold text-slate-800">What CertScore observes: </span>
+                          <span className="font-semibold text-slate-800">What CertScore.ai observes: </span>
                           {finding?.observed ?? "Runtime evidence that may be relevant to privacy review."}
                         </p>
                         <p>

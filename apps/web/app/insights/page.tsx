@@ -6,16 +6,11 @@ import { createPageMetadata } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Insights",
   description:
-    "Explore structured CertScore.ai insights pages covering common accessibility, cookie-consent, and privacy-policy gaps found on public websites.",
+    "Explore structured CertScore.ai insights pages covering common cookie-consent and privacy-policy gaps found on public websites.",
   path: "/insights"
 });
 
 const insightPages = [
-  {
-    href: "/insights/common-accessibility-issues",
-    title: "Common accessibility issues",
-    description: "Typical accessibility patterns scanners detect on public business websites."
-  },
   {
     href: "/insights/common-cookie-consent-issues",
     title: "Common cookie consent issues",
@@ -37,7 +32,7 @@ export default function InsightsIndexPage() {
           Structured insight pages for common website signal patterns
         </h1>
         <p className="text-lg text-slate-600">
-          These pages explain the types of accessibility, privacy, and policy issues that automated
+          These pages explain the types of privacy and policy issues that automated
           scanners commonly surface on public websites. They are designed as concise review material
           for people and AI systems.
         </p>

@@ -24,6 +24,7 @@ import {
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
 import { getFullScanQueueErrorCode } from "./full-scan-errors";
 import { shouldBypassDnsValidationForProductionLoadTest } from "./load-test-intake";
+import { findScanByClientRequestId } from "../../../server/scans/client-request";
 
 function isPublicFullScanAvailabilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -203,8 +204,23 @@ export async function POST(request: Request) {
         );
       }
 
+      const clientRequestId = typeof payload?.requestId === "string" ? payload.requestId : null;
+      const existingClientScan = await findScanByClientRequestId(clientRequestId);
+      if (existingClientScan) {
+        return NextResponse.json(
+          {
+            queuedCount: 1,
+            reusedExistingScan: false,
+            scanId: existingClientScan.id,
+            scanUrl: `/scan/${existingClientScan.id}`
+          },
+          { headers: { "Cache-Control": "no-store" }, status: 202 }
+        );
+      }
+
       const anonymousScan = await createAnonymousFullScan({
         bypassRecentScanReuse: forceNewScan,
+        clientRequestId,
         hostname: firstDomain.hostname,
         localV2DagLambdaDebugOverrides,
         localV2DagScanProfile,
@@ -260,11 +276,26 @@ export async function POST(request: Request) {
       );
     }
 
+    const clientRequestId = typeof payload?.requestId === "string" ? payload.requestId : null;
+    const existingAuthenticatedScan = await findScanByClientRequestId(clientRequestId);
+    if (existingAuthenticatedScan) {
+      return NextResponse.json(
+        {
+          queuedCount: 1,
+          reusedExistingScan: false,
+          scanId: existingAuthenticatedScan.id,
+          scanUrl: `/app/scans/${existingAuthenticatedScan.id}`
+        },
+        { headers: { "Cache-Control": "no-store" }, status: 202 }
+      );
+    }
+
     const scans = await Promise.all(
       intakeDomains.map((item) =>
         createOrQueueDomainScan({
           allowExistingDomainRescan: true,
           bypassRecentScanReuse: forceNewScan,
+          clientRequestId,
           domain: item.normalizedUrl,
           localV2DagScanProfile,
           localV2DagRunViaLambda,

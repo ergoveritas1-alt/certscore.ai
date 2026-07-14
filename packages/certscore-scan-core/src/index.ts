@@ -38,7 +38,7 @@ import { getScanProfile } from "./profiles.js";
 import { consentFlowRuntimeScannerPlaceholder, policySurfaceScannerPlaceholder } from "./scanners/placeholders.js";
 import { detectConsentUi, preConsentRuntimeScanner, type PreConsentRuntimeScannerResult } from "./scanners/pre-consent-runtime-scanner.js";
 import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
-import { chromiumContextOptions, chromiumLaunchOptions } from "./playwright-runtime.js";
+import { chromiumContextOptions, chromiumLaunchOptions, chromiumProxyOptions } from "./playwright-runtime.js";
 import { throwIfAborted } from "./abort.js";
 
 type ConsentFlowRuntimeScanner = typeof import("./scanners/consent-flow-runtime-scanner.js").consentFlowRuntimeScanner;
@@ -615,7 +615,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     journeySummary,
     notes: [],
   };
-  const baseRuntimeCoverage = deriveRuntimeCoverageSummary({
+  const baseRuntimeCoverage = withLocalRegionalEgressLimitation(deriveRuntimeCoverageSummary({
     cookieEvents,
     cookieSnapshots,
     enabledModules: scanProfile.enabledModules,
@@ -628,6 +628,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     ...(consentFlowResult?.consentUiObservations ?? []),
   ],
   cmpRuntimeObservations: preConsentResult.cmpRuntimeObservations,
+  }), {
+    env: process.env,
+    region: input.region ?? "local",
   });
   const scanNoGoEvidence = earlyScanNoGoEvidence ?? buildScanNoGoAssessment({
     consentUiObservations: [
@@ -1209,6 +1212,14 @@ export function deriveRuntimeCoverageSummary(input: {
     limitationKeys.push("consent_ui_capture_timed_out");
     notes.push("The bounded pre-interaction consent-surface inventory did not complete, so absence of a consent surface is not established for this run.");
   }
+  if (consentInventoryProbeFailed(input)) {
+    limitationKeys.push("consent_control_inventory_probe_failed");
+    notes.push("The deterministic consent-control inventory probe was unavailable, so absence of first-layer controls is not established for this run.");
+  }
+  if (consentGeometryCaptureUnavailable(input)) {
+    limitationKeys.push("consent_control_geometry_unavailable");
+    notes.push("Main-frame consent-control geometry was unavailable; blank or child-frame geometry was not used to establish control absence.");
+  }
   if (cmpRuntimeObservedWithoutActionableConsentSurface(input)) {
     limitationKeys.push("cmp_runtime_without_actionable_surface");
     notes.push("CMP runtime evidence was observed, but no actionable consent surface or first-layer controls were retained in bounded capture.");
@@ -1235,11 +1246,63 @@ export function deriveRuntimeCoverageSummary(input: {
   };
 }
 
+export function withLocalRegionalEgressLimitation(
+  coverage: RuntimeCoverageSummary,
+  input: { env?: NodeJS.ProcessEnv; region: string },
+): RuntimeCoverageSummary {
+  const env = input.env ?? process.env;
+  const requestedLocale = (
+    env.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE ??
+    env.CERTSCORE_CHROMIUM_LOCALE ??
+    ""
+  ).trim();
+  const regionalLocaleRequested = /^(?:en-IE|de-DE)(?:$|[-_])/i.test(requestedLocale);
+  const runningInAwsLambda = Boolean(env.AWS_LAMBDA_FUNCTION_NAME?.trim()) ||
+    /^AWS_Lambda_/i.test(env.AWS_EXECUTION_ENV?.trim() ?? "");
+  if (
+    input.region !== "local" ||
+    runningInAwsLambda ||
+    !regionalLocaleRequested ||
+    chromiumProxyOptions(env)
+  ) {
+    return coverage;
+  }
+
+  return {
+    ...coverage,
+    coverageStatus: coverage.coverageStatus === "usable" ? "limited_partial" : coverage.coverageStatus,
+    limitationKeys: uniqueStrings([
+      ...coverage.limitationKeys,
+      "regional_egress_unverified_local",
+    ]),
+    notes: uniqueStrings([
+      ...coverage.notes,
+      `The localhost scan requested ${requestedLocale} browser localization without a configured regional proxy; locale and timezone were retained, but geographic egress was not verified.`,
+    ]),
+  };
+}
+
 function consentUiCaptureIncomplete(input: {
   consentUiObservations?: ConsentUiObservation[];
 }) {
   return (input.consentUiObservations ?? []).some((observation) =>
     observation.basis.includes("bounded_capture_timeout_or_failure")
+  );
+}
+
+function consentInventoryProbeFailed(input: {
+  consentUiObservations?: ConsentUiObservation[];
+}) {
+  return (input.consentUiObservations ?? []).some((observation) =>
+    observation.basis.includes("inventory:probe_failed")
+  );
+}
+
+function consentGeometryCaptureUnavailable(input: {
+  consentUiObservations?: ConsentUiObservation[];
+}) {
+  return (input.consentUiObservations ?? []).some((observation) =>
+    observation.basis.includes("geometry_capture_unavailable")
   );
 }
 

@@ -53,7 +53,7 @@ export default function WebsiteConsentAuditToolsPage() {
           { href: "/guides/website-consent-audit-checklist", label: "website consent audit checklist" },
           { href: "/guides/reject-consent-tracking-test", label: "reject consent tracking test" },
           { href: "/guides/detect-tracking-before-consent", label: "detect tracking before consent" },
-          { href: "/pricing", label: "CertScore pricing" }
+          { href: "/pricing", label: "CertScore.ai pricing" }
         ]}
         schema={schema}
         sections={[
@@ -72,7 +72,7 @@ export default function WebsiteConsentAuditToolsPage() {
             ]
           },
           {
-            title: "What CertScore observes",
+            title: "What CertScore.ai observes",
             paragraphs: [
               "CertScore.ai observes tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility issues, and privacy disclosure gaps.",
               "The output is structured for review by website, privacy, marketing operations, and engineering teams."

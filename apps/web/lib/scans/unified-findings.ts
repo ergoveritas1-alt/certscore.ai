@@ -4699,7 +4699,7 @@ function selectObservedValue(packet: UnifiedFindingPacket) {
     const hostText = hosts[0] ?? "a transfer-relevant third-party endpoint";
     const vendorText = vendors[0] ?? "the associated runtime vendor";
     const regionText = regions[0] ? `, and retained inferred region context ${regions[0]}` : "";
-    return `CertScore observed ${hostText}, associated with ${vendorText}${regionText}. Reviewed public privacy/cookie disclosure surfaces did not clearly match ${vendorText} by name or known domain alias. Review whether the vendor and related international processing are disclosed under another name, covered by broader provider language, or should be added to the site's disclosures.`;
+    return `CertScore.ai observed ${hostText}, associated with ${vendorText}${regionText}. Reviewed public privacy/cookie disclosure surfaces did not clearly match ${vendorText} by name or known domain alias. Review whether the vendor and related international processing are disclosed under another name, covered by broader provider language, or should be added to the site's disclosures.`;
   }
 
   if (packet.unifiedFindingId === "sensitive_data_collection_with_third_party_tracking_present") {

@@ -78,7 +78,7 @@ function hashToken(value: string) {
 export function getMcpJwtSecret() {
   const secret = process.env.CERTSCORE_OAUTH_JWT_SECRET?.trim() || process.env.JWT_SIGNING_KEY?.trim();
   if (!secret) {
-    throw new Error("CERTSCORE_OAUTH_JWT_SECRET or JWT_SIGNING_KEY is required for CertScore MCP OAuth tokens.");
+    throw new Error("CERTSCORE_OAUTH_JWT_SECRET or JWT_SIGNING_KEY is required for CertScore.ai MCP OAuth tokens.");
   }
   return secret;
 }

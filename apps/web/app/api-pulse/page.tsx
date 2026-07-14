@@ -15,9 +15,9 @@ import {
 import { createPageMetadata } from "../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
-  title: "CertScore Pulse API Beta",
+  title: "CertScore.ai Pulse API Beta",
   description:
-    "Agent-readable beta instructions for using the CertScore Pulse API to retrieve evidence-backed public-web scan summaries for URLs.",
+    "Agent-readable beta instructions for using the CertScore.ai Pulse API to retrieve evidence-backed public-web scan summaries for URLs.",
   path: "/api-pulse",
   robots: {
     follow: true,
@@ -111,7 +111,7 @@ const detailLevels = [
 
 const mcpTools = [
   ["create_scan", "Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable."],
-  ["scan_site", "Start or reuse a CertScore public-web scan. Completed no-go scans return completed_limited status, structured reason-specific guidance, and timing when available."],
+  ["scan_site", "Start or reuse a CertScore.ai public-web scan. Completed no-go scans return completed_limited status, structured reason-specific guidance, and timing when available."],
   ["get_scan", "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available."],
   ["get_scan_status", "Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available."],
   ["get_report", "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet."],
@@ -406,7 +406,7 @@ const responseExamples = [
       meta: exampleMeta,
       error: {
         code: "rate_limited",
-        message: "This CertScore API key has reached its Pulse request limit. Try again after the retry window or manage your plan.",
+        message: "This CertScore.ai API key has reached its Pulse request limit. Try again after the retry window or manage your plan.",
         retryAfterSeconds: 240
       },
       resolution: {
@@ -447,7 +447,7 @@ const responseExamples = [
     title: "Markdown response",
     language: "markdown",
     value:
-      "# CertScore Pulse\n\n| Field | Value |\n|---|---|\n| Domain | kbdlab.io |\n| Score | 72/100 |\n| Risk level | Review recommended |\n| High-priority findings | 1 |\n| Total observations | 3 |\n| Scan completed | 2026-05-18T23:15:31Z |\n| Coverage status | Partial |\n\n## Summary\n\nAutomated scan surfaced consent-timing and third-party collection review signals.\n\n## Highest-priority findings\n\n1. Tracking started before consent\n\n## Privacy and consent signals\n\n- Tracker footprint: 7 third-party domains observed; 2 classified tracker vendors identified.\n\n## Cookie and third-party request activity\n\n- Vendor mix: cdn infra 1 · session replay 1\n\n## Accessibility signals\n\n- Accessibility-related findings: 0\n\n## Disclosure and trust signals\n\n- Policy surfaces: 2 policy URLs covered.\n\n## Coverage and limitations\n\nCoverage was limited; absence of findings should not be interpreted as absence of risk.\n\n## Links\n\nFull report: https://certscore.ai/scan/scan_abc123\n\n## Disclaimer\n\n" +
+      "# CertScore.ai Pulse\n\n| Field | Value |\n|---|---|\n| Domain | kbdlab.io |\n| Score | 72/100 |\n| Risk level | Review recommended |\n| High-priority findings | 1 |\n| Total observations | 3 |\n| Scan completed | 2026-05-18T23:15:31Z |\n| Coverage status | Partial |\n\n## Summary\n\nAutomated scan surfaced consent-timing and third-party collection review signals.\n\n## Highest-priority findings\n\n1. Tracking started before consent\n\n## Privacy and consent signals\n\n- Tracker footprint: 7 third-party domains observed; 2 classified tracker vendors identified.\n\n## Cookie and third-party request activity\n\n- Vendor mix: cdn infra 1 · session replay 1\n\n## Accessibility signals\n\n- Accessibility-related findings: 0\n\n## Disclosure and trust signals\n\n- Policy surfaces: 2 policy URLs covered.\n\n## Coverage and limitations\n\nCoverage was limited; absence of findings should not be interpreted as absence of risk.\n\n## Links\n\nFull report: https://certscore.ai/scan/scan_abc123\n\n## Disclaimer\n\n" +
       PULSE_STANDARD_DISCLAIMER
   }
 ] as const;
@@ -474,9 +474,9 @@ export default function ApiPulsePage() {
         <div className="mx-auto max-w-5xl px-6 py-16">
           <div className="max-w-3xl space-y-4">
             <Badge tone="neutral">Agent API beta</Badge>
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">CertScore Pulse API beta</h1>
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">CertScore.ai Pulse API beta</h1>
             <p className="text-lg leading-8 text-slate-600">
-              Retrieve a quick, evidence-backed CertScore summary for a public URL. Pulse API beta is designed for AI agents, developer tools,
+              Retrieve a quick, evidence-backed CertScore.ai summary for a public URL. Pulse API beta is designed for AI agents, developer tools,
               CLIs, and humans that need a compact scan summary with links to the durable full report.
             </p>
             <p className="text-sm leading-6 text-slate-600">{PULSE_PURPOSE_STATEMENT}</p>
@@ -494,9 +494,9 @@ export default function ApiPulsePage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-7 text-slate-700">
             <div className="rounded-lg border border-sky-200 bg-white p-4">
-              <h2 className="text-base font-semibold text-slate-950">Try CertScore GPT beta</h2>
+              <h2 className="text-base font-semibold text-slate-950">Try CertScore.ai GPT beta</h2>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                Paste a public website URL and get a CertScore Pulse summary inside ChatGPT. Automated observations for review, not legal advice or a compliance determination.
+                Paste a public website URL and get a CertScore.ai Pulse summary inside ChatGPT. Automated observations for review, not legal advice or a compliance determination.
               </p>
               <a
                 className="mt-3 inline-flex w-fit rounded-full border border-sky-300 bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700"
@@ -507,11 +507,11 @@ export default function ApiPulsePage() {
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                Open CertScore GPT beta
+                Open CertScore.ai GPT beta
               </a>
             </div>
             <p>
-              If you are an agent with OpenAPI actions or HTTP tools, start here before trying ad hoc fetches. CertScore Pulse works
+              If you are an agent with OpenAPI actions or HTTP tools, start here before trying ad hoc fetches. CertScore.ai Pulse works
               best when agents call Summary JSON or markdown for user-facing summaries and reserve Evidence JSON for evidence-heavy review.
             </p>
             <CodeBlock>{`Basic HTTP agent quick start:
@@ -543,14 +543,14 @@ Summary JSON is best for concise agent output. Markdown is best for conversation
    scanFrom: eu_ie
    wait: 35
 3. Use detail=tiny for quick checks.
-4. Public GPT Action beta access uses latest-mode summaries. Use Evidence JSON or the linked CertScore report when users need more support.
+4. Public GPT Action beta access uses latest-mode summaries. Use Evidence JSON or the linked CertScore.ai report when users need more support.
 5. If API fetch fails before headers/body/status are visible, call checkPulseConnectivity once.
 6. If checkPulseConnectivity succeeds, treat the scan failure as a transient client/action transport error and retry or use the markdown endpoint.
-7. If checkPulseConnectivity also fails without CertScore diagnostic headers, do not infer CertScore returned an error. Report it as a client/network fetch limitation and read /api-pulse/agent and /api-pulse-agent-guide.txt.`}</CodeBlock>
+7. If checkPulseConnectivity also fails without CertScore.ai diagnostic headers, do not infer CertScore.ai returned an error. Report it as a client/network fetch limitation and read /api-pulse/agent and /api-pulse-agent-guide.txt.`}</CodeBlock>
             <p>
               Agent fetch limitations: Some agent environments may fail before receiving an HTTP response because of DNS, sandbox,
               TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or
-              x-certscore-* diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test,
+              x-certscore-* diagnostic headers, do not conclude CertScore.ai Pulse is unavailable. First try /api/v1/pulse-self-test,
               /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json.
             </p>
             <div className="flex flex-wrap gap-3">
@@ -575,7 +575,7 @@ Summary JSON is best for concise agent output. Markdown is best for conversation
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                Open CertScore GPT beta
+                Open CertScore.ai GPT beta
               </a>
               <Link
                 className="inline-flex w-fit rounded-full border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
@@ -605,7 +605,7 @@ Summary JSON is best for concise agent output. Markdown is best for conversation
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-7 text-slate-700">
             <p>
-              Pulse v1 remains the compatibility entry point. For the resource-oriented CertScore API v2, TypeScript SDK, MCP server,
+              Pulse v1 remains the compatibility entry point. For the resource-oriented CertScore.ai API v2, TypeScript SDK, MCP server,
               examples, and machine-readable discovery links, use the developer hub. For structured Pre-consent Cookies & Trackers
               table data, use API v2 instead of parsing Pulse prose or report HTML.
             </p>
@@ -644,7 +644,7 @@ Summary JSON is best for concise agent output. Markdown is best for conversation
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-7 text-slate-700">
             <p>
-              CertScore MCP is a developer-preview stdio server for teams that want to run Pulse checks inside AI development,
+              CertScore.ai MCP is a developer-preview stdio server for teams that want to run Pulse checks inside AI development,
               security, and ops workflows. It uses the same evidence-backed Pulse surface: automated public-web observations for
               review, with stable scan and finding IDs.
             </p>
@@ -672,14 +672,14 @@ CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke
 
 Generate preview key:
 pnpm db:migrate
-pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"`}</CodeBlock>
+pnpm mcp:certscore:generate-key -- --name "CertScore.ai MCP preview"`}</CodeBlock>
             <CodeBlock>{`Example MCP client config:
 {
   "mcpServers": {
     "certscore": {
       "command": "pnpm",
       "args": ["mcp:certscore"],
-      "cwd": "/path/to/CertScore",
+      "cwd": "/path/to/CertScore.ai",
       "env": {
         "CERTSCORE_API_KEY": "YOUR_TOKEN",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -692,7 +692,7 @@ pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"`}</CodeBlock>
               stable scan with `get_scan`, then use `list_findings` or `explain_finding` for review and ticketing.
             </p>
             <p>
-              Preview keys are scoped to `pulse:read`, `pulse:scan`, and `mcp`; CertScore validates bearer tokens before request
+              Preview keys are scoped to `pulse:read`, `pulse:scan`, and `mcp`; CertScore.ai validates bearer tokens before request
               attribution and rate-limit policy, without changing evidence, concern, finding, or projection logic.
             </p>
             <p>
@@ -702,7 +702,7 @@ pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"`}</CodeBlock>
             <div className="flex flex-wrap gap-3">
               <a
                 className="inline-flex w-fit rounded-full border border-violet-300 bg-white px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100"
-                href={`mailto:${PULSE_FEEDBACK_EMAIL}?subject=CertScore%20MCP%20preview`}
+                href={`mailto:${PULSE_FEEDBACK_EMAIL}?subject=CertScore.ai%20MCP%20preview`}
               >
                 Request MCP preview
               </a>
@@ -816,7 +816,7 @@ pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"`}</CodeBlock>
               `wait` accepts 0 to 80 seconds and may return a completed Pulse if the scan finishes during that window.
             </p>
             <p>
-              Pending HTTP 202 responses include `Retry-After` when CertScore can recommend a polling delay. Throttled HTTP 429
+              Pending HTTP 202 responses include `Retry-After` when CertScore.ai can recommend a polling delay. Throttled HTTP 429
               responses include `Retry-After` when retry timing is known.
             </p>
             <p>
@@ -839,7 +839,7 @@ Public-safe phase message:
             </CardHeader>
             <CardContent className="space-y-3 text-sm leading-7 text-slate-600">
               <p>
-                `freshness=latest` returns the latest eligible completed Pulse when it was completed in the prior 24 hours. If no completed eligible scan exists within that UTC-normalized window, CertScore
+                `freshness=latest` returns the latest eligible completed Pulse when it was completed in the prior 24 hours. If no completed eligible scan exists within that UTC-normalized window, CertScore.ai
                 may queue a new scan.
               </p>
               <p>
@@ -847,7 +847,7 @@ Public-safe phase message:
                 Pulse scan per normalized domain every one minute under the 1-minute normalized-domain throttle.
               </p>
               <p>
-                If refresh is throttled but a completed scan exists, CertScore may return the latest completed Pulse with
+                If refresh is throttled but a completed scan exists, CertScore.ai may return the latest completed Pulse with
                 `refresh.requested=true`, `refresh.performed=false`, `refresh.reason="domain_throttle"`, and `refresh.retryAfterSeconds`.
                 If no completed scan exists and scan creation is throttled, the API returns HTTP 429 with `Retry-After`, `error.code="pulse_throttled"`, and support contact guidance at support@certscore.ai.
               </p>
@@ -884,7 +884,7 @@ https://certscore.ai/api/v1/pulse?scanId=<scanId>&format=markdown`}</CodeBlock>
               Standard markdown starts with a compact summary table and stable headings so agents can parse it reliably without large JSON
               blocks.
             </p>
-            <CodeBlock>{`# CertScore Pulse
+            <CodeBlock>{`# CertScore.ai Pulse
 
 | Field | Value |
 |---|---|
@@ -918,7 +918,7 @@ https://certscore.ai/api/v1/pulse?scanId=<scanId>&format=markdown`}</CodeBlock>
               <a className="font-semibold text-sky-700" href={`mailto:${PULSE_FEEDBACK_EMAIL}`}>
                 {PULSE_FEEDBACK_EMAIL}
               </a>
-              . Feedback is private and used to improve CertScore Pulse. No star ratings are used.
+              . Feedback is private and used to improve CertScore.ai Pulse. No star ratings are used.
             </p>
             <p>
               Supported ratings: `useful`, `not_useful`, `unclear`, `incorrect`, `too_limited`. Helpful reasons include incorrect finding,
@@ -955,7 +955,7 @@ Content-Type: application/json
             <p>
               For finding definitions, evidence standards, and reviewer questions, use the{" "}
               <Link href="/findings" className="font-semibold text-sky-700">
-                CertScore findings reference
+                CertScore.ai findings reference
               </Link>
               .
             </p>
