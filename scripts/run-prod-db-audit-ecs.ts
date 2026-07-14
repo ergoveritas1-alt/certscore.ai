@@ -5,10 +5,9 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_CONTAINER_COMMAND = [
-  "pnpm",
-  "--filter",
-  "@website-signal-risk-scanner/validation-worker",
-  "ops:prod-db-audit"
+  "node",
+  "--enable-source-maps",
+  "./apps/validation-worker/dist/apps/validation-worker/scripts/prod-db-audit.js"
 ];
 
 type AwsVpcConfiguration = {

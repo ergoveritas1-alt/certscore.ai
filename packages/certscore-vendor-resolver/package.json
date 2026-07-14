@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "High-confidence CertScore v2 vendor and product resolver.",
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
