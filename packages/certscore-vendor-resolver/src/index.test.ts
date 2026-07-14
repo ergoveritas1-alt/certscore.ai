@@ -176,6 +176,84 @@ test("keeps the Wave 8 batch path-specific on known vendor hosts", () => {
   );
 });
 
+test("resolves the Wave 9 production-evidence batch with product-specific paths", () => {
+  const observations = resolveVendorObservations([
+    request("https://maps.googleapis.com/maps-api-v3/api/js/65/3b/map.js", "maps.googleapis.com"),
+    request("https://cdn.datatables.net/responsive/2.3.0/js/dataTables.responsive.min.js", "cdn.datatables.net"),
+    request("https://digicert.my.salesforce-scrt.com/embeddedservice/v1/embedded-service-config?orgId=00D", "digicert.my.salesforce-scrt.com"),
+    request("https://cdn.prod.website-files.com/65b90d1af46270f1b1f04719/css/certscore.webflow.css", "cdn.prod.website-files.com"),
+    request("https://widget.trustpilot.com/bootstrap/v5/tp.widget.bootstrap.min.js", "widget.trustpilot.com"),
+    request("https://a.quora.com/qevents.js", "a.quora.com"),
+    request("https://nexus.ensighten.com/symantec/avg/Bootstrap.js", "nexus.ensighten.com"),
+    request("https://static.trafficjunky.com/invocation/idsync/production/idsync.min.js", "static.trafficjunky.com"),
+    request("https://ads.blogherads.com/static/blogherads.js", "ads.blogherads.com"),
+    request("https://cse.google.com/cse/cse.js", "cse.google.com"),
+    request("https://f.vimeocdn.com/p/4.46.51/js/player.module.js", "f.vimeocdn.com"),
+    request("https://api.userway.org/api/v1/tunings/9ikoIUc0o1", "api.userway.org"),
+    request("https://js.hsforms.net/forms/embed/v2.js", "js.hsforms.net"),
+    request("https://s7d2.scene7.com/is/image/Caterpillar/CM20240618-abfa9-78951", "s7d2.scene7.com"),
+    request("https://geo.captcha-delivery.com/captcha", "geo.captcha-delivery.com"),
+  ]);
+
+  assertResolved(observations, "Google", "Google Maps JavaScript API", "infrastructure");
+  assertResolved(observations, "DataTables", "DataTables CDN", "infrastructure");
+  assertResolved(observations, "Salesforce", "Salesforce Messaging for In-App and Web", "customer_support");
+  assertResolved(observations, "Webflow", "Webflow Hosted Assets", "infrastructure");
+  assertResolved(observations, "Trustpilot", "Trustpilot TrustBox", "infrastructure");
+  assertResolved(observations, "Quora", "Quora Pixel", "advertising");
+  assertResolved(observations, "Ensighten", "Ensighten Manage", "tag_management");
+  assertResolved(observations, "TrafficJunky", "TrafficJunky Advertising", "advertising");
+  assertResolved(observations, "SHE Media", "BlogHer Ads", "advertising");
+  assertResolved(observations, "Google", "Google Programmable Search Engine", "infrastructure");
+  assertResolved(observations, "Vimeo", "Vimeo Embedded Player", "infrastructure");
+  assertResolved(observations, "UserWay", "UserWay Accessibility Widget", "infrastructure");
+  assertResolved(observations, "HubSpot", "HubSpot Forms", "analytics");
+  assertResolved(observations, "Adobe", "Adobe Dynamic Media / Scene7", "infrastructure");
+  assertResolved(observations, "DataDome", "DataDome Challenge", "security");
+});
+
+test("rejects Wave 9 lookalikes and unrelated paths on vendor-controlled hosts", () => {
+  const observations = resolveVendorObservations([
+    request("https://maps.googleapis.com/ordinary.js", "maps.googleapis.com"),
+    request("https://cdn.datatables.net/ordinary.js", "cdn.datatables.net"),
+    request("https://digicert.my.salesforce-scrt.com/ordinary.json", "digicert.my.salesforce-scrt.com"),
+    request("https://cdn.prod.website-files.com/ordinary.js", "cdn.prod.website-files.com"),
+    request("https://widget.trustpilot.com/ordinary.js", "widget.trustpilot.com"),
+    request("https://a.quora.com/ordinary.js", "a.quora.com"),
+    request("https://nexus.ensighten.com/ordinary.js", "nexus.ensighten.com"),
+    request("https://static.trafficjunky.com/ordinary.js", "static.trafficjunky.com"),
+    request("https://ads.blogherads.com/ordinary.js", "ads.blogherads.com"),
+    request("https://cse.google.com/ordinary.js", "cse.google.com"),
+    request("https://f.vimeocdn.com/ordinary.js", "f.vimeocdn.com"),
+    request("https://api.userway.org/ordinary.json", "api.userway.org"),
+    request("https://js.hsforms.net/ordinary.js", "js.hsforms.net"),
+    request("https://s7d2.scene7.com/ordinary/image.jpg", "s7d2.scene7.com"),
+    request("https://geo.captcha-delivery.com/ordinary", "geo.captcha-delivery.com"),
+    request("https://maps.googleapis.example/maps-api-v3/api/js/65/3b/map.js", "maps.googleapis.example"),
+    request("https://widget.trustpilot.example/bootstrap/v5/tp.widget.bootstrap.min.js", "widget.trustpilot.example"),
+    request("https://a.quora.example/qevents.js", "a.quora.example"),
+  ]);
+
+  const wave9Products = new Set([
+    "Google Maps JavaScript API",
+    "DataTables CDN",
+    "Salesforce Messaging for In-App and Web",
+    "Webflow Hosted Assets",
+    "Trustpilot TrustBox",
+    "Quora Pixel",
+    "Ensighten Manage",
+    "TrafficJunky Advertising",
+    "BlogHer Ads",
+    "Google Programmable Search Engine",
+    "Vimeo Embedded Player",
+    "UserWay Accessibility Widget",
+    "HubSpot Forms",
+    "Adobe Dynamic Media / Scene7",
+    "DataDome Challenge",
+  ]);
+  assert.equal(observations.some((item) => wave9Products.has(item.product ?? "")), false);
+});
+
 test("resolves canonical product labels and apex vendor host labels conservatively", () => {
   assert.deepEqual(
     [
