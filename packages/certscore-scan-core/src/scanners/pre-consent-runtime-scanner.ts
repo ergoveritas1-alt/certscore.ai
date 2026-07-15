@@ -380,6 +380,28 @@ export async function preConsentRuntimeScanner(
 
   const screenshots: ScreenshotArtifact[] = [];
   const screenshotErrors: string[] = [];
+  let recoveryAttemptCount = 0;
+  let recoveryDurationMs = 0;
+  const recoveryModes = new Set<string>();
+  const noteRecovery = (mode: string) => {
+    recoveryAttemptCount += 1;
+    recoveryModes.add(mode);
+  };
+  const measureRecovery = async <T>(mode: string, operation: () => Promise<T>): Promise<T> => {
+    noteRecovery(mode);
+    const startedAtMs = Date.now();
+    try {
+      return await operation();
+    } finally {
+      recoveryDurationMs += Date.now() - startedAtMs;
+    }
+  };
+  const recoveryDiagnostics = (): NonNullable<ScanModuleRun["recoveryDiagnostics"]> => ({
+    attempted: recoveryAttemptCount > 0,
+    attemptCount: recoveryAttemptCount,
+    modes: Array.from(recoveryModes).slice(0, 12),
+    durationMs: recoveryDurationMs,
+  });
   let earlyScreenshotCaptured = false;
   let supplementalScreenshotAttempted = false;
   let consentGeometryDiagnosticWritten = false;
@@ -419,6 +441,7 @@ export async function preConsentRuntimeScanner(
         completedAt: new Date().toISOString(),
         durationMs: Date.now() - moduleStartedAtMs,
         timingBreakdown: [...timingBreakdown],
+        recoveryDiagnostics: recoveryDiagnostics(),
         evidenceRefs: [],
         errors: [...runtimeErrors, errorMessage, ...screenshotErrors],
       },
@@ -461,14 +484,21 @@ export async function preConsentRuntimeScanner(
           navigationNotes.push(
             `Entry navigation transport recovery attempt ${index}/${candidates.length - 1}: ${candidateUrl}`,
           );
-          await page.goto("about:blank", { waitUntil: "load", timeout: 1_000 }).catch(() => undefined);
+          await measureRecovery("transport_alternate_reset", () =>
+            page.goto("about:blank", { waitUntil: "load", timeout: 1_000 }).catch(() => null),
+          );
           await page.waitForTimeout(50);
         }
         try {
-          const response = await page.goto(candidateUrl, {
-            waitUntil: "domcontentloaded",
-            timeout: Math.max(1_000, Math.min(index === 0 ? 15_000 : 7_500, input.internalBudgetMs - (Date.now() - navigationStartedAtMs))),
-          });
+          const response = index === 0
+            ? await page.goto(candidateUrl, {
+              waitUntil: "domcontentloaded",
+              timeout: Math.max(1_000, Math.min(15_000, input.internalBudgetMs - (Date.now() - navigationStartedAtMs))),
+            })
+            : await measureRecovery("transport_alternate_navigation", () => page.goto(candidateUrl, {
+              waitUntil: "domcontentloaded",
+              timeout: Math.max(1_000, Math.min(7_500, input.internalBudgetMs - (Date.now() - navigationStartedAtMs))),
+            }));
           effectiveNavigationUrl = page.url() === "about:blank" ? candidateUrl : page.url();
           if (index > 0) {
             navigationNotes.push(`Entry navigation recovered through ${candidateUrl}`);
@@ -478,6 +508,7 @@ export async function preConsentRuntimeScanner(
           const currentPageUrl = page.url();
           const errorMessage = error instanceof Error ? error.message : String(error);
           if (/timeout/i.test(errorMessage) && currentPageUrl !== "about:blank") {
+            noteRecovery("committed_navigation_timeout");
             effectiveNavigationUrl = currentPageUrl;
             navigationNotes.push(
               "Entry navigation committed a document but did not reach DOMContentLoaded within the bounded wait; retained the current page for evidence capture.",
@@ -494,10 +525,12 @@ export async function preConsentRuntimeScanner(
       const initialStatus = navigationResponse.status();
       const retryAfterMs = boundedRetryAfterMs(await navigationResponse.headerValue("retry-after").catch(() => null));
       navigationNotes.push(`Main document returned transient HTTP ${initialStatus}; performed one bounded retry after ${retryAfterMs}ms.`);
-      if (retryAfterMs > 0) await page.waitForTimeout(Math.min(retryAfterMs, remainingModuleBudgetMs() - 1_000));
-      navigationResponse = await page.goto(effectiveNavigationUrl, {
-        waitUntil: "commit",
-        timeout: Math.max(1_000, Math.min(7_500, remainingModuleBudgetMs())),
+      navigationResponse = await measureRecovery("transient_status_retry", async () => {
+        if (retryAfterMs > 0) await page.waitForTimeout(Math.min(retryAfterMs, remainingModuleBudgetMs() - 1_000));
+        return page.goto(effectiveNavigationUrl, {
+          waitUntil: "commit",
+          timeout: Math.max(1_000, Math.min(7_500, remainingModuleBudgetMs())),
+        });
       });
       await page.waitForLoadState("domcontentloaded", { timeout: Math.min(2_000, remainingModuleBudgetMs()) }).catch(() => undefined);
       effectiveNavigationUrl = page.url() === "about:blank" ? effectiveNavigationUrl : page.url();
@@ -508,10 +541,10 @@ export async function preConsentRuntimeScanner(
       const alternateHostUrl = alternateWwwNavigationUrl(effectiveNavigationUrl);
       if (alternateHostUrl) {
         navigationNotes.push(`Main document returned HTTP ${navigationResponse.status()}; tried the bounded apex/www alternative: ${alternateHostUrl}`);
-        const alternateResponse = await page.goto(alternateHostUrl, {
+        const alternateResponse = await measureRecovery("not_found_alternate_host", () => page.goto(alternateHostUrl, {
           waitUntil: "commit",
           timeout: Math.max(1_000, Math.min(7_500, remainingModuleBudgetMs())),
-        }).catch(() => null);
+        }).catch(() => null));
         if (alternateResponse && ![404, 410].includes(alternateResponse.status())) {
           navigationResponse = alternateResponse;
           effectiveNavigationUrl = page.url() === "about:blank" ? alternateHostUrl : page.url();
@@ -1252,12 +1285,12 @@ export async function preConsentRuntimeScanner(
       /^(?:loading(?:\.{0,3})?|please wait|establishing (?:a )?secure connection(?:\.{0,3})?|initializing(?:\.{0,3})?)$/i.test(initialNoGoCandidateText)
     ) {
       const confirmationWaitMs = fastWait ? 750 : 1_250;
-      await recordTiming(
+      await measureRecovery("sparse_page_confirmation", () => recordTiming(
         timingBreakdown,
         "no-go candidate confirmation wait",
         "Short, read-only second-look window for initially blank or loading pages.",
         () => page.waitForTimeout(confirmationWaitMs).catch(() => undefined),
-      );
+      ));
       const confirmedDomText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
       if (confirmedDomText.trim().length > domText.trim().length) {
         domText = confirmedDomText;
@@ -1268,7 +1301,7 @@ export async function preConsentRuntimeScanner(
         (confirmedNoGoCandidateText.length <= 60 || /^(?:loading|please wait|establishing|initializing)/i.test(confirmedNoGoCandidateText))
       ) {
         const confirmationPath = input.artifactWriter.artifactPath("screenshot-pre-consent-no-go-confirmation.png");
-        const confirmationCapture = await recordTiming(
+        const confirmationCapture = await measureRecovery("sparse_page_confirmation_screenshot", () => recordTiming(
           timingBreakdown,
           "no-go candidate confirmation screenshot",
           "Confirmation screenshot retained after the bounded second-look window.",
@@ -1277,7 +1310,7 @@ export async function preConsentRuntimeScanner(
             screenshotErrors,
             timeoutMs: Math.min(input.screenshotTimeoutMs ?? 5_000, 3_000),
           }),
-        );
+        ));
         screenshots.push({
           artifactId: "screenshot_pre_consent_no_go_confirmation",
           capturedAtMs: elapsed(input.scanStartedAtMs),
@@ -1373,6 +1406,7 @@ export async function preConsentRuntimeScanner(
         completedAt: new Date().toISOString(),
         durationMs: Date.now() - moduleStartedAtMs,
         timingBreakdown,
+        recoveryDiagnostics: recoveryDiagnostics(),
         evidenceRefs: [],
         errors: [...runtimeErrors, ...screenshotErrors],
       },
@@ -1428,13 +1462,13 @@ export async function preConsentRuntimeScanner(
       };
     }
     if (!moduleBudgetEnded && (input.screenshotMode ?? "always") !== "never" && screenshots.length === 0 && failureReason === "page_closed") {
-      const retryCapture = await retryPreConsentScreenshotInFreshContext({
+      const retryCapture = await measureRecovery("fresh_context_screenshot_retry", () => retryPreConsentScreenshotInFreshContext({
         browser,
         input,
         navigationUrl: effectiveNavigationUrl,
         screenshotErrors,
         timingBreakdown,
-      }).catch((retryError) => {
+      })).catch((retryError) => {
         const retryMessage = errorMessageFromUnknown(retryError);
         runtimeErrors.push(`Fresh-context screenshot retry failed: ${retryMessage}`);
         return null;
@@ -1473,6 +1507,7 @@ export async function preConsentRuntimeScanner(
         completedAt: new Date().toISOString(),
         durationMs: Date.now() - moduleStartedAtMs,
         timingBreakdown,
+        recoveryDiagnostics: recoveryDiagnostics(),
         evidenceRefs: [],
         errors: [...runtimeErrors, errorMessage, ...screenshotErrors],
       },
@@ -3145,11 +3180,11 @@ async function readConsentUiObservation(
     retainedControlCount: enrichedControls.length,
     inventorySources: consentInventoryDiagnosticSources(retainedInventorySources, retainedRootSources),
     candidateLabels: unique([
-      ...(probeDiagnostics?.candidateLabels ?? []),
-      ...combinedControls.map((control) => control.label).filter(Boolean),
+      ...safeStringArray(probeDiagnostics?.candidateLabels, 24),
+      ...combinedControls.map((control) => control.label).filter((label): label is string => typeof label === "string" && Boolean(label)),
     ]).slice(0, 24),
     rejectionReasons: uniqueRejectionReasons([
-      ...(probeDiagnostics?.rejectionReasons ?? []),
+      ...safeConsentInventoryRejectionReasons(probeDiagnostics?.rejectionReasons),
       ...rejectedReasons,
     ]),
     timingMarkers: [],
@@ -3191,6 +3226,33 @@ type ConsentInventoryProbeDiagnostics = Pick<
   NonNullable<ConsentUiObservation["inventoryDiagnostics"]>,
   "candidateContainerCount" | "candidateControlCount" | "candidateLabels" | "rejectionReasons"
 >;
+
+const CONSENT_INVENTORY_REJECTION_REASONS = new Set([
+  "hidden",
+  "outside_eligible_surface",
+  "no_consent_context",
+  "footer_nav_page_chrome",
+  "classifier_other_unknown",
+  "composite_control_container",
+  "generic_container_fewer_than_two_classified_controls",
+  "frame_inaccessible",
+  "inventory_probe_failed",
+  "timing_expired_before_controls_surfaced",
+]);
+
+function safeConsentInventoryRejectionReasons(input: unknown): NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["rejectionReasons"] {
+  return (Array.isArray(input) ? input : []).filter(
+    (value): value is string => typeof value === "string" && CONSENT_INVENTORY_REJECTION_REASONS.has(value),
+  ) as NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["rejectionReasons"];
+}
+
+function safeStringArray(input: unknown, maxLength: number): string[] {
+  return (Array.isArray(input) ? input : [])
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, maxLength);
+}
 
 function isStaticTextConsentInventoryControl(control: ConsentUiInventoryControl): boolean {
   const tagName = control.tagName?.toLowerCase();
@@ -3370,8 +3432,8 @@ async function readConsentDefaultToggleEvidence(page: Page): Promise<ConsentDefa
       }))
     )
   );
-  const defaultTogglePurposeLabels = unique(perFrame.flatMap((row) => row.defaultTogglePurposeLabels ?? [])).slice(0, 12);
-  const precheckedOptionalPurposeLabels = unique(perFrame.flatMap((row) => row.precheckedOptionalPurposeLabels ?? [])).slice(0, 10);
+  const defaultTogglePurposeLabels = unique(perFrame.flatMap((row) => safeStringArray(row.defaultTogglePurposeLabels, 12))).slice(0, 12);
+  const precheckedOptionalPurposeLabels = unique(perFrame.flatMap((row) => safeStringArray(row.precheckedOptionalPurposeLabels, 10))).slice(0, 10);
   return {
     defaultTogglePurposeLabels,
     defaultToggleStatesObserved: defaultTogglePurposeLabels.length > 0 ? true : null,

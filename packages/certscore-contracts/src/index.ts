@@ -143,6 +143,12 @@ export const scanModuleRunSchema = z.object({
     durationMs: z.number().int().nonnegative(),
     detail: z.string().max(240).optional(),
   })).max(40).optional(),
+  recoveryDiagnostics: z.object({
+    attempted: z.boolean(),
+    attemptCount: z.number().int().nonnegative(),
+    modes: z.array(z.string().min(1).max(80)).max(12).default([]),
+    durationMs: z.number().int().nonnegative(),
+  }).optional(),
   evidenceRefs: z.array(evidenceRefSchema).default([]),
   errors: z.array(z.string()).default([]),
 });
