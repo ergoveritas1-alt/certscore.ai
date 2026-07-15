@@ -14,13 +14,15 @@ export type AdminPulseRequestStatus =
   | "completed_limited"
   | "failed"
   | "expired"
-  | "rate_limited";
+  | "rate_limited"
+  | "no_go";
 
 export type AdminPulseRequestListItem = {
   accessPostureClass: string | null;
   apiRoute: AdminApiRoute;
   blockedFlag: boolean | null;
   captchaFlag: boolean | null;
+  noGoFlag: boolean;
   cmpVendorName: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -178,6 +180,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     completedAt: timestampString(row.completed_at) ?? timestampString(row.scan_completed_at),
     blockedFlag: typeof row.blocked_flag === "boolean" ? row.blocked_flag : null,
     captchaFlag: typeof row.captcha_flag === "boolean" ? row.captcha_flag : null,
+    noGoFlag: row.no_go_flag === true || responseSummary.resultDisposition === "no_go" || row.access_posture_class === "early_loss" || row.blocked_flag === true || row.captcha_flag === true,
     cmpVendorName: typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null,
     createdAt: timestampString(row.created_at) ?? String(row.created_at),
     detail: getRequestContextString(requestContext, "detail"),
@@ -215,7 +218,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
     requestedByAnonymous: typeof requestedBy.anonymous === "boolean" ? requestedBy.anonymous : null,
     requesterName: typeof row.requester_name === "string" ? row.requester_name : null,
-    sourceIp: getRequestContextString(requestContext, "sourceIp"),
+    sourceIp: getRequestContextString(requestContext, "sourceIp") ?? getRequestContextString(requestContext, "originIp"),
     sourceIpHash: getRequestContextString(requestContext, "ipHash"),
     status:
       ["completed", "completed_limited", "failed"].includes(String(row.scan_status)) &&
@@ -340,7 +343,7 @@ export async function listAdminPulseRequests(input: {
             ss.access_posture_class,
             ss.blocked_flag,
             ss.captcha_flag,
-            ss.site_language_primary,
+            coalesce(ss.site_language_primary, (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1)) as site_language_primary,
             ss.admin_industry_label,
             s.scan_config_json,
             coalesce(pf.feedback_count, 0)::int as feedback_count,
@@ -365,7 +368,7 @@ export async function listAdminPulseRequests(input: {
           from pulse_artifact_downloads
          where pulse_request_id = pr.public_id
        ) pad on true
-      where ($1::text is null or pr.status = $1)
+      where ($1::text is null or ($1 = 'no_go' and (coalesce(ss.blocked_flag, false) or coalesce(ss.captcha_flag, false) or ss.access_posture_class = 'early_loss' or pr.response_summary ->> 'resultDisposition' = 'no_go')) or ($1 <> 'no_go' and pr.status = $1))
         and (
           $2::text is null
           or pr.public_id ilike '%' || $2 || '%'
@@ -435,7 +438,7 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               ss.access_posture_class,
               ss.blocked_flag,
               ss.captcha_flag,
-              ss.site_language_primary,
+              coalesce(ss.site_language_primary, (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1)) as site_language_primary,
               ss.admin_industry_label,
               s.scan_config_json,
               coalesce(pf.feedback_count, 0)::int as feedback_count,
@@ -579,7 +582,7 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             ss.top_finding_count::int as top_finding_count,
             ss.privacy_policy_present,
             ss.cmp_vendor_name,
-            ss.site_language_primary,
+            coalesce(ss.site_language_primary, (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1)) as site_language_primary,
             ss.admin_industry_label,
             coalesce(pf.feedback_count, 0)::int as feedback_count,
             coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,

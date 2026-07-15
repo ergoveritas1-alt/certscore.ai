@@ -2,8 +2,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-s
 import Link from "next/link";
 import { OverviewScanHistoryCard } from "../../../../components/dashboard/overview-scan-history-card";
 import { AddDomainForm } from "../../../../components/domains/add-domain-form";
-import { getAdminScanThrottleMs } from "../../../../lib/scan-access";
-import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
 import { listOrganizationChanges } from "../../../../server/changes/list-organization-changes";
 import { getOrganizationDomains } from "../../../../server/domains/get-organization-domains";
@@ -11,8 +9,7 @@ import { getOrganizationScans } from "../../../../server/scans/get-organization-
 import { getOrganizationSignalOverview } from "../../../../server/signals/get-organization-signal-overview";
 
 export default async function AdminFintechPage() {
-  const { organization, user } = await getDashboardContext();
-  const adminRescanCooldownMs = isPlatformAdminEmail(user.email) ? getAdminScanThrottleMs() : undefined;
+  const { organization } = await getDashboardContext();
   const [domains, recentScans, recentChanges, signalOverview] = await Promise.all([
     getOrganizationDomains(organization.id),
     getOrganizationScans(organization.id),
@@ -86,7 +83,7 @@ export default async function AdminFintechPage() {
         </CardContent>
       </Card>
 
-      <OverviewScanHistoryCard allowRestrictedScanOptions planCode={organization.plan} rescanCooldownMs={adminRescanCooldownMs} scans={fintechScans} />
+      <OverviewScanHistoryCard scans={fintechScans} />
     </div>
   );
 }

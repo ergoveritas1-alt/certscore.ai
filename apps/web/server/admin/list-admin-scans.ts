@@ -25,6 +25,7 @@ export type AdminScanListItem = {
   activityId: string;
   blockedFlag: boolean | null;
   captchaFlag: boolean | null;
+  noGoFlag: boolean;
   certscoreOverall: number | null;
   cmpVendorName: string | null;
   completedAt: string | null;
@@ -90,9 +91,11 @@ export type BlockedRunTelemetry = {
   successRateByEgress: Array<{ egress: string; successRate: number; total: number }>;
 };
 
-export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanListItem[]> {
+export type AdminScanListStatus = "any" | "no_go" | "failed" | "running" | "queued" | "limited" | "completed";
+
+export async function listAdminScans(limit = 50, offset = 0, filters?: { query?: string | null; status?: AdminScanListStatus }): Promise<AdminScanListItem[]> {
   await requirePlatformAdminContext();
-  const activityWindowLimit = Math.max(limit + offset, limit);
+  const activityWindowLimit = filters?.query || (filters?.status && filters.status !== "any") ? 1000 : Math.max(limit + offset, limit);
   const [scanPageData, scanRequestRows] = await Promise.all([
     loadAdminScanListPageData(activityWindowLimit, 0),
     loadAdminScanRequestRows(activityWindowLimit)
@@ -199,7 +202,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       certscoreOverall: snapshot?.certscore_overall ?? null,
       cmpVendorName: snapshot?.cmp_vendor_name ?? null,
       privacyPolicyPresent: snapshot?.privacy_policy_present ?? null,
-      primaryLanguage: snapshot?.site_language_primary ?? null,
+      primaryLanguage: snapshot?.site_language_primary ?? scan.page_language ?? null,
       industry: snapshot?.admin_industry_label ?? null,
       homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
       robotsFetchHttpStatus: snapshot?.robots_fetch_http_status ?? null,
@@ -210,7 +213,8 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       stopTier: normalizedAccessPosture.stopTier,
       recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses,
       interruptionLabel: accessPosture.label,
-      interruptionReason: accessPosture.reason
+      interruptionReason: accessPosture.reason,
+      noGoFlag: snapshot?.scan_outcome === "no_go" || normalizedAccessPosture.accessPostureClass === "early_loss" || Boolean(snapshot?.blocked_flag) || Boolean(snapshot?.captcha_flag)
     };
   });
 
@@ -222,8 +226,20 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       return mapScanRequestRow(request, linkedScanId ? scansById.get(linkedScanId) ?? null : null);
     });
 
+  const query = filters?.query?.trim().toLowerCase() ?? null;
+  const status = filters?.status ?? "any";
   return [...scanItems, ...requestItems]
     .sort((left, right) => new Date(right.activityAt).getTime() - new Date(left.activityAt).getTime())
+    .filter((scan) => {
+      const haystack = [scan.domainHostname, scan.requestedUrl, scan.requesterName, scan.requesterIp, scan.scanId, scan.requestPublicId].filter(Boolean).join(" ").toLowerCase();
+      if (query && !haystack.includes(query)) return false;
+      if (status === "no_go") return scan.noGoFlag;
+      if (status === "failed") return scan.status === "failed";
+      if (status === "running" || status === "queued") return scan.status === status;
+      if (status === "limited") return scan.accessPostureClass === "degraded_but_useful" || scan.accessPostureClass === "robots_limited";
+      if (status === "completed") return scan.rowKind === "scan" && scan.status === "completed" && !scan.noGoFlag && scan.accessPostureClass !== "degraded_but_useful" && scan.accessPostureClass !== "robots_limited";
+      return true;
+    })
     .slice(offset, offset + limit);
 }
 
@@ -248,6 +264,7 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     activityId: `request:${request.public_id}`,
     blockedFlag: null,
     captchaFlag: null,
+    noGoFlag: linkedScan?.noGoFlag ?? false,
     certscoreOverall: linkedScan?.certscoreOverall ?? null,
     cmpVendorName: linkedScan?.cmpVendorName ?? null,
     completedAt: request.reused_completed_at,
@@ -308,13 +325,15 @@ function getRequesterIpFromRequest(request: ScanRequestRow | null) {
   return (
     (provenance ? getStringMetadataValue(provenance.originIp) : null) ??
     (requestContext ? getStringMetadataValue(requestContext.originIp) : null) ??
+    (requestContext ? getStringMetadataValue(requestContext.sourceIp) : null) ??
+    (requestContext ? getStringMetadataValue(requestContext.ipHash) : null) ??
     (requestedBy ? getStringMetadataValue(requestedBy.ipHash) : null)
   );
 }
 
 function getRequesterIpFromContext(value: unknown) {
   const context = getNestedMetadataObject(value);
-  return context ? getStringMetadataValue(context.ipHash) ?? getStringMetadataValue(context.sourceIp) : null;
+  return context ? getStringMetadataValue(context.originIp) ?? getStringMetadataValue(context.sourceIp) ?? getStringMetadataValue(context.ipHash) : null;
 }
 
 function getStringMetadataValue(value: unknown) {

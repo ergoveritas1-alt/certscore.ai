@@ -14,6 +14,7 @@ export type AdminScanQueryRow = {
   organization_id: string | null;
   pages_requested?: number;
   pages_scanned: number;
+  page_language?: string | null;
   scan_config_json?: Record<string, unknown> | null;
   scan_type: string;
   started_at: string | null;
@@ -341,7 +342,13 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
   verdictByFindingId: Map<string, AdminValidationVerdictRow>;
 }> {
   const scansResult = await query<AdminScanQueryRow>(
-    `select id, organization_id, domain_id, scan_type, status, created_at, started_at, completed_at, pages_scanned, scan_config_json
+    `select id, organization_id, domain_id, scan_type, status, created_at, started_at, completed_at, pages_scanned, scan_config_json,
+            (select sp.page_language
+               from scan_pages sp
+              where sp.scan_id = scans.id
+                and nullif(trim(sp.page_language), '') is not null
+              order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc
+              limit 1) as page_language
        from scans
       order by coalesce(completed_at, started_at, created_at) desc, created_at desc
       limit $1 offset $2`,

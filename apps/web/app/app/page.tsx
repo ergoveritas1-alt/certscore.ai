@@ -2,8 +2,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-s
 import Link from "next/link";
 import { OverviewScanHistoryCard } from "../../components/dashboard/overview-scan-history-card";
 import { AddDomainForm } from "../../components/domains/add-domain-form";
-import { getAdminScanThrottleMs } from "../../lib/scan-access";
-import { isPlatformAdminEmail } from "../../server/admin/platform-admin";
 import { getDashboardContext } from "../../server/auth";
 import { getDashboardScanUsage } from "../../server/dashboard/get-dashboard-scan-usage";
 import {
@@ -46,7 +44,6 @@ function isCompletedWithin24Hours(completedAt: string | null) {
 
 export default async function DashboardPage() {
   const { membership, organization, profile, user } = await withServerTiming("app.dashboard.context", () => getDashboardContext());
-  const adminRescanCooldownMs = isPlatformAdminEmail(user.email) ? getAdminScanThrottleMs() : undefined;
   const allowRestrictedScanOptions = canUseRestrictedScanOptions({
     membershipRole: membership.role,
     userEmail: user.email
@@ -104,7 +101,6 @@ export default async function DashboardPage() {
         <Card className="border-sky-100 bg-[linear-gradient(145deg,#ffffff_0%,#f5fbff_100%)] shadow-sm">
           <CardHeader className="pb-2 pt-5">
             <CardTitle>Scan a site</CardTitle>
-            <p className="text-sm text-slate-500">Enter a public website to start a new scan or open an eligible recent result.</p>
           </CardHeader>
           <CardContent className="pb-5 pt-0">
             <AddDomainForm
@@ -145,10 +141,6 @@ export default async function DashboardPage() {
       </div>
 
       <OverviewScanHistoryCard
-        defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
-        allowRestrictedScanOptions={allowRestrictedScanOptions}
-        planCode={organization.plan}
-        rescanCooldownMs={adminRescanCooldownMs}
         scans={recentScans}
       />
     </div>

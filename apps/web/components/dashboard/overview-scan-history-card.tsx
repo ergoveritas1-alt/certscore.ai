@@ -1,14 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { PlanCode } from "@website-signal-risk-scanner/shared/types/entities";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import { getScanThrottleCopy } from "../../lib/scan-access";
-import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import type { OrganizationScanListItem } from "../../server/scans/get-organization-scans";
 import { getScanFromMarkerInput, ScanFromMarker } from "../scans/scan-from-icons";
-import { RescanDomainForm } from "../scans/rescan-domain-form";
-import type { ServerScanFrom } from "../scans/scan-from-select";
 import { PendingButtonLink } from "../ui/pending-link";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
@@ -26,7 +21,8 @@ function formatDuration(scan: Pick<OrganizationScanListItem, "completedAt" | "cr
   const end = scan.completedAt ? Date.parse(scan.completedAt) : Number.NaN;
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "—";
   const seconds = (end - start) / 1000;
-  return seconds >= 60 ? `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s` : `${seconds.toFixed(1)}s`;
+  const rounded = Math.round(seconds * 10) / 10;
+  return rounded >= 60 ? `${Math.floor(rounded / 60)}m ${Math.round(rounded % 60)}s` : `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}s`;
 }
 
 function freshnessLabel(value: boolean | null) {
@@ -42,10 +38,6 @@ function statusIndicator(scan: OrganizationScanListItem) {
   return { className: "bg-emerald-500", label: "Completed" };
 }
 
-function formatCooldown(nextAllowedAt: string | null) {
-  return nextAllowedAt ? getScanThrottleCopy(formatDateTime(nextAllowedAt)) : getScanThrottleCopy();
-}
-
 function ViewIcon() {
   return <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" /><circle cx="12" cy="12" r="3" /></svg>;
 }
@@ -55,14 +47,10 @@ function HistoryIcon() {
 }
 
 type OverviewScanHistoryCardProps = {
-  allowRestrictedScanOptions?: boolean;
-  defaultScanFrom?: ServerScanFrom;
-  planCode: PlanCode;
-  rescanCooldownMs?: number;
   scans: OrganizationScanListItem[];
 };
 
-export function OverviewScanHistoryCard({ allowRestrictedScanOptions = false, defaultScanFrom = "eu_ie", planCode, rescanCooldownMs, scans }: OverviewScanHistoryCardProps) {
+export function OverviewScanHistoryCard({ scans }: OverviewScanHistoryCardProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const groups = useMemo(() => scans.reduce<Array<{ domainId: string | null; hostname: string | null; key: string; scans: OrganizationScanListItem[] }>>((result, scan) => {
@@ -105,12 +93,11 @@ export function OverviewScanHistoryCard({ allowRestrictedScanOptions = false, de
                   if (!latest) return null;
                   const status = statusIndicator(latest);
                   const marker = getScanFromMarkerInput(latest.scanFromValue);
-                  const availability = group.domainId ? getRescanAvailability({ activeScanExists: latest.domainActiveScanExists, lastScannedAt: latest.domainLastScannedAt, planCode, rescanCooldownMs }) : null;
                   const earlier = group.scans.slice(1, 11);
                   return <tr className="h-[56px] hover:bg-slate-50/70" key={group.key}>
                     <td className="px-2.5 py-1.5 text-center" title={status.label}><span aria-label={status.label} className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /></td>
                     <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-900">{group.hostname ?? "Unknown website"}</p><p className="text-[10px] text-slate-400">{group.scans.length} scan{group.scans.length === 1 ? "" : "s"}</p></td>
-                    <td className="px-2.5 py-1.5 font-semibold text-slate-900">{latest.certscoreOverall !== null ? `${latest.certscoreOverall}/100` : "—"}</td>
+                    <td className="px-2.5 py-1.5 font-semibold text-slate-900">{latest.certscoreOverall !== null ? <><span>{latest.certscoreOverall}</span><span className="text-[11px] font-normal text-slate-400">/100</span></> : "—"}</td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{latest.topFindingCount ?? "—"}</td>
                     <td className="px-2.5 py-1.5"><p>Privacy {latest.privacyPolicyPresent === true ? "✓" : latest.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={latest.cmpVendorName ?? undefined}>CMP {latest.cmpVendorName ?? "—"}</p></td>
                     <td className="px-2.5 py-1.5 font-medium">{formatDuration(latest)}</td>
@@ -119,8 +106,7 @@ export function OverviewScanHistoryCard({ allowRestrictedScanOptions = false, de
                     <td className="px-2.5 py-1.5 text-[11px] text-slate-600">{formatDateTime(latest.completedAt ?? latest.createdAt)}</td>
                     <td className="px-2.5 py-1.5"><div className="flex items-center gap-1">
                       <PendingButtonLink ariaLabel="View latest scan" className="h-8 w-8 rounded-full border border-slate-300 bg-white p-0" href={`/app/scans/${latest.id}`} idleContent={<ViewIcon />} pendingContent="…" size="sm" title="View latest scan" variant="secondary" />
-                      <details className="relative"><summary aria-label="Earlier scans" className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full border border-slate-300 bg-white [&::-webkit-details-marker]:hidden"><HistoryIcon /></summary><div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl"><p className="px-2 py-1 text-xs font-semibold text-slate-900">Earlier scans</p>{earlier.length ? earlier.map((scan) => <a className="block rounded-lg px-2 py-1.5 text-xs hover:bg-slate-50" href={`/app/scans/${scan.id}`} key={scan.id}>{formatDateTime(scan.completedAt ?? scan.createdAt)} · {scan.certscoreOverall ?? "—"}/100</a>) : <p className="px-2 py-2 text-xs text-slate-500">No earlier scans.</p>}</div></details>
-                      {group.domainId && availability ? <RescanDomainForm allowRestrictedScanOptions={allowRestrictedScanOptions} compact cooldownMessage={availability.allowed ? null : availability.reason ?? formatCooldown(availability.nextAllowedAt)} defaultScanFrom={defaultScanFrom} disabled={!availability.allowed} domainId={group.domainId} showLabel /> : null}
+                      {earlier.length > 0 ? <details className="relative"><summary aria-label="Earlier scans" className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full border border-slate-300 bg-white [&::-webkit-details-marker]:hidden"><HistoryIcon /></summary><div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl"><p className="px-2 py-1 text-xs font-semibold text-slate-900">Earlier scans</p>{earlier.map((scan) => <a className="block rounded-lg px-2 py-1.5 text-xs hover:bg-slate-50" href={`/app/scans/${scan.id}`} key={scan.id}>{formatDateTime(scan.completedAt ?? scan.createdAt)} · {scan.certscoreOverall ?? "—"}<span className="text-slate-400">/100</span></a>)}</div></details> : null}
                     </div></td>
                   </tr>;
                 })}

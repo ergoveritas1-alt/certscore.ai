@@ -61,7 +61,7 @@ function ActionButton({
   }
 
   return (
-    <div className="group relative inline-flex">
+    <div className="group/action relative inline-flex">
       <Link
         aria-label={label}
         className={`inline-flex items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-slate-400 hover:text-slate-950 ${compact ? "h-8 w-8 [&_svg]:h-4 [&_svg]:w-4" : "h-10 w-10"}`}
@@ -71,7 +71,7 @@ function ActionButton({
       >
         {children}
       </Link>
-      <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover:block">
+      <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover/action:block">
         {label}
       </div>
     </div>

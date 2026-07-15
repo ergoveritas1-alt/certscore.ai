@@ -16,13 +16,14 @@ import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidenc
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
-import { getScanById } from "../../../../server/scans/get-scan-by-id";
+import { getPublicScanById, getScanById } from "../../../../server/scans/get-scan-by-id";
 import {
   getLocalV2DagReportInput,
   materializeLocalV2DagScanDetail
 } from "../../../../server/scans/local-v2-dag-report";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import {
+  getPublicScanStatusProjection,
   getOrganizationScanStatusProjection,
   isPendingScanStatus
 } from "../../../../server/scans/scan-status-projection";
@@ -52,8 +53,9 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   ]);
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const recentScanReused = resolvedSearchParams.recentScanReused === "1";
+  const isPlatformAdmin = isPlatformAdminEmail(user.email);
   const statusProjection = await withServerTiming("app.scan_detail.status_projection", () =>
-    getOrganizationScanStatusProjection({ organizationId: organization.id, scanId })
+    isPlatformAdmin ? getPublicScanStatusProjection(scanId) : getOrganizationScanStatusProjection({ organizationId: organization.id, scanId })
   );
   if (!statusProjection) {
     notFound();
@@ -75,11 +77,9 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   }
   let [scanRecord, organizationSettings] = await Promise.all([
     withServerTiming("app.scan_detail.record", () =>
-      getScanById({
-        organizationId: organization.id,
-        scanId,
-        viewerEmail: user.email
-      })
+      isPlatformAdmin
+        ? getPublicScanById(scanId)
+        : getScanById({ organizationId: organization.id, scanId, viewerEmail: user.email })
     ),
     getOrganizationSettings(organization.id)
   ]);
@@ -115,7 +115,6 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   });
 
   const scanDomainLabel = displayScanRecord.scan.domainHostname?.trim() || "Scanned website";
-  const isPlatformAdmin = isPlatformAdminEmail(user.email);
   const canUseAdvancedReportActions = isPlatformAdmin || membership.role === "admin" || membership.role === "advanced";
   const allowRestrictedScanOptions = canUseRestrictedScanOptions({
     membershipRole: membership.role,

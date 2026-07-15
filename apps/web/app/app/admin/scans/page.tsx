@@ -3,7 +3,7 @@ import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/s
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
-import { getAdminScanOverviewMetrics, listAdminScans, type AdminScanListItem } from "../../../../server/admin/list-admin-scans";
+import { getAdminScanOverviewMetrics, listAdminScans, type AdminScanListItem, type AdminScanListStatus } from "../../../../server/admin/list-admin-scans";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
@@ -12,8 +12,13 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type AdminScansPageProps = {
-  searchParams?: Promise<{ page?: string; perPage?: string }>;
+  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string }>;
 };
+
+const statuses = ["any", "no_go", "failed", "running", "queued", "limited", "completed"] as const;
+function normalizeStatus(value: string | undefined): AdminScanListStatus {
+  return statuses.includes(value as AdminScanListStatus) ? value as AdminScanListStatus : "any";
+}
 
 function getScanFreshnessBadge(scan: Pick<AdminScanListItem, "freshRescanRequested" | "requestResolutionMode" | "rowKind">) {
   if (scan.requestResolutionMode === "reused_existing_scan") {
@@ -69,10 +74,15 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const currentPage = normalizePage(resolvedSearchParams.page);
   const pageSize = normalizePageSize(resolvedSearchParams.perPage);
+  const activeQuery = resolvedSearchParams.q?.trim().slice(0, 160) ?? "";
+  const activeStatus = normalizeStatus(resolvedSearchParams.status);
+  const hasFilters = Boolean(activeQuery) || activeStatus !== "any";
   const scanMetrics = await withServerTiming("app.admin.scans.metrics", () => getAdminScanOverviewMetrics());
-  const totalPages = Math.max(1, Math.ceil(scanMetrics.totalScans / pageSize));
+  const filteredScans = await withServerTiming("app.admin.scans.list", () => listAdminScans(hasFilters ? 1000 : pageSize, hasFilters ? 0 : (currentPage - 1) * pageSize, { query: activeQuery || null, status: activeStatus }));
+  const totalCount = hasFilters ? filteredScans.length : scanMetrics.totalScans;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const normalizedPage = Math.min(currentPage, totalPages);
-  const scans = await withServerTiming("app.admin.scans.list", () => listAdminScans(pageSize, (normalizedPage - 1) * pageSize));
+  const scans = hasFilters ? filteredScans.slice((normalizedPage - 1) * pageSize, normalizedPage * pageSize) : filteredScans;
   const hasActiveScans = scans.some((scan) => scan.status === "queued" || scan.status === "running");
 
   return (
@@ -90,19 +100,24 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
       </CardHeader>
       <CardContent className="min-w-0 space-y-3 pt-0">
         <AdminScansAutoRefresh hasActiveScans={hasActiveScans} />
+        <form className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2" method="get">
+          <input aria-label="Search scans" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Domain, scan, requester, IP" />
+          <select aria-label="Filter scans by status" className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeStatus} name="status">{statuses.map((status) => <option key={status} value={status}>{status === "any" ? "Any status" : status.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select>
+          <button className="h-10 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white" type="submit">Filter</button>
+        </form>
         <PaginationControls
           basePath="/app/admin/scans"
           itemLabel="scan activity items"
           page={normalizedPage}
           pageCount={totalPages}
           pageSize={pageSize}
-          totalCount={scanMetrics.totalScans}
+          totalCount={totalCount}
           visibleCount={scans.length}
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
           <table className="min-w-[1535px] table-fixed text-left text-xs">
             <colgroup>
-              <col style={{ width: "40px" }} /><col style={{ width: "165px" }} /><col style={{ width: "140px" }} />
+              <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "170px" }} />
               <col style={{ width: "150px" }} /><col style={{ width: "70px" }} /><col style={{ width: "60px" }} />
               <col style={{ width: "210px" }} /><col style={{ width: "110px" }} /><col style={{ width: "80px" }} />
               <col style={{ width: "65px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} />
@@ -133,9 +148,9 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                 const scanFromMarker = getScanFromMarkerInput(scan.scanFromValue);
                 return (
                   <tr key={scan.activityId} className="group h-[52px] hover:bg-slate-50/70">
-                    <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 text-center group-hover:bg-slate-50" title={status.label}><span aria-label={status.label} className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /></td>
+                    <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50" title={status.label}><span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /><span className={status.label === "No-go" ? "text-rose-700" : "text-slate-700"}>{status.label}</span></span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={scan.requesterName ?? provenance.label}>{scan.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={scan.requesterIp ?? "Not recorded"}>{scan.requesterIp ?? "IP not recorded"}</p></td>
-                    <td className="px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}</td>
+                    <td className="whitespace-nowrap px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}</td>
                     <td className="px-2.5 py-1.5">
                       <div className="flex min-w-0 items-center gap-1.5">
                         <p className="min-w-0 flex-1 truncate font-semibold text-slate-900" title={scan.domainHostname ?? scan.requestedUrl ?? "Unknown target"}>{scan.domainHostname ?? scan.requestedUrl ?? "Unknown target"}</p>
