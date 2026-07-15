@@ -467,6 +467,18 @@ test("get_scan_status supports API v2 scanId status with timing fields", async (
         completedAt: "2026-07-08T12:00:34.000Z",
         scanTimeSeconds: 34
       }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        domain: "example.com",
+        status: "completed",
+        startedAt: "2026-07-08T12:00:00.000Z",
+        completedAt: "2026-07-08T12:00:34.000Z",
+        scanTimeSeconds: 34
+      }
     }
   ]);
   try {
@@ -483,6 +495,57 @@ test("get_scan_status supports API v2 scanId status with timing fields", async (
       assert.equal(result.completedAt, "2026-07-08T12:00:34.000Z");
       assert.equal(result.scanTimeSeconds, 34);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status/);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("get_scan_status hydrates terminal API v2 status with completed-limited no-go details", async () => {
+  const mock = installFetch([
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan_job",
+        jobId: "scan_123",
+        scanId: "scan_123",
+        domain: "example.com",
+        status: "completed",
+        phase: "completed"
+      }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan",
+        scanId: "scan_123",
+        domain: "example.com",
+        status: "completed_limited",
+        resultDisposition: "no_go",
+        noGo: {
+          reasonCode: "parked_or_placeholder",
+          title: "The domain shows a placeholder page",
+          explanation: "The retained page was a placeholder.",
+          summary: "A placeholder page was observed.",
+          limitationKind: "target_site_state",
+          recommendedNextAction: "Publish the intended site.",
+          retryLikelyToHelp: false
+        },
+        startedAt: "2026-07-15T20:32:53.182Z",
+        completedAt: "2026-07-15T20:32:56.188Z",
+        scanTimeSeconds: 3
+      }
+    }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const result = parseToolJson(await client.callTool({ name: "get_scan_status", arguments: { scanId: "scan_123" } }));
+      assert.equal(result.status, "completed_limited");
+      assert.equal(result.resultDisposition, "no_go");
+      assert.equal((result.noGo as Record<string, unknown>).reasonCode, "parked_or_placeholder");
+      assert.equal(result.scanTimeSeconds, 3);
+      assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/scan_123\/status$/);
+      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123$/);
     });
   } finally {
     mock.restore();

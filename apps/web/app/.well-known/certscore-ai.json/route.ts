@@ -90,7 +90,7 @@ const discoveryDocument = {
     distribution: "homebrew",
     binary: "certscore-mcp",
     packageStatus: "homebrew_developer_preview",
-    currentVersion: "0.2.9",
+    currentVersion: "0.2.10",
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
     install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
@@ -107,7 +107,7 @@ const discoveryDocument = {
       protectedResourceMetadata: "https://mcp.certscore.ai/.well-known/oauth-protected-resource",
       authorizationServerMetadata: "https://certscore.ai/.well-known/oauth-authorization-server",
       authentication: "OAuth 2.0 authorization code with PKCE",
-      currentVersion: "0.2.9"
+      currentVersion: "0.2.10"
     },
     anonymous: {
       transport: "streamable_http",

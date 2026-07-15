@@ -136,7 +136,27 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     async ({ jobId, scanId }: GetScanStatusInput) => {
       try {
         if (scanId) {
-          return toToolResult(await client.scans.status(scanId));
+          const status = await client.scans.status(scanId);
+          if (status.status === "completed" || status.status === "completed_limited") {
+            try {
+              const scan = await client.scans.get(scanId);
+              return toToolResult({
+                ...status,
+                type: "certscore_scan_job",
+                status: scan.status,
+                domain: scan.domain,
+                resultDisposition: scan.resultDisposition,
+                noGo: scan.noGo,
+                startedAt: scan.startedAt,
+                completedAt: scan.completedAt,
+                scanTimeSeconds: scan.scanTimeSeconds
+              });
+            } catch {
+              // Preserve the API status response if the terminal scan resource is
+              // briefly unavailable during eventual-consistency windows.
+            }
+          }
+          return toToolResult(status);
         }
         if (!jobId) {
           return toToolResult({

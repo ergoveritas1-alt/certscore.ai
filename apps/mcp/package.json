@@ -1,6 +1,6 @@
 {
   "name": "@certscore/mcp-http",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "private": true,
   "description": "Remote Streamable HTTP MCP service for CertScore.",
   "type": "module",

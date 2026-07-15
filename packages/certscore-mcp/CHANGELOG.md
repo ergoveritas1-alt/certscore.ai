@@ -1,5 +1,9 @@
 # certscore-mcp
 
+## 0.2.10
+
+- Hydrate terminal API v2 MCP status responses with the canonical scan resource so completed-limited no-go status and reason are available in one call.
+
 ## 0.2.9
 
 - Add an unauthenticated hosted Streamable HTTP endpoint at `/mcp/anonymous` for low-volume agent discovery without account or OAuth setup.

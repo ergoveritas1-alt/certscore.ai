@@ -2,7 +2,7 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: public developer preview. Version 0.2.9 is prepared as a Homebrew/npm stdio server and hosted Streamable HTTP service. Local WC01 development uses `pnpm mcp:certscore`.
+Status: public developer preview. Version 0.2.10 is prepared as a Homebrew/npm stdio server and hosted Streamable HTTP service. Local WC01 development uses `pnpm mcp:certscore`.
 
 Public docs:
 
