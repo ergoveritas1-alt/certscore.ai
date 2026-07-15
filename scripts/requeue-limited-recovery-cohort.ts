@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-type CohortRole = "fully_recovered" | "limited_partial" | "contract_fix";
+type CohortRole = "fully_recovered" | "limited_partial" | "contract_fix" | "regression_retry";
 
 type Target = {
   domain: string;
@@ -87,11 +87,17 @@ function parseArgs(argv: string[]) {
   let output = DEFAULT_OUTPUT;
   let execute = false;
   let resume = false;
+  let targetDomains: string[] | null = null;
+  let scanFrom = "eu_ie";
   for (const arg of argv) {
     if (arg === "--execute") {
       execute = true;
     } else if (arg === "--resume") {
       resume = true;
+    } else if (arg.startsWith("--targets=")) {
+      targetDomains = arg.slice("--targets=".length).split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+    } else if (arg.startsWith("--scan-from=")) {
+      scanFrom = arg.slice("--scan-from=".length).trim();
     } else if (arg.startsWith("--base-url=")) {
       baseUrl = arg.slice("--base-url=".length).replace(/\/$/, "");
     } else if (arg.startsWith("--output=")) {
@@ -100,7 +106,7 @@ function parseArgs(argv: string[]) {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
-  return { baseUrl, execute, output, resume };
+  return { baseUrl, execute, output, resume, scanFrom, targetDomains };
 }
 
 async function fetchJson(url: string) {
@@ -150,13 +156,14 @@ function resultUrlFrom(baseUrl: string, body: Record<string, unknown>) {
   return typeof body.resultUrl === "string" ? new URL(body.resultUrl, baseUrl).toString() : null;
 }
 
-async function queueTarget(baseUrl: string, target: Target): Promise<ScanRecord> {
+async function queueTarget(baseUrl: string, target: Target, scanFrom: string): Promise<ScanRecord> {
   const requestedAt = new Date().toISOString();
   const url = new URL("/api/v1/pulse", baseUrl);
   url.searchParams.set("url", `https://${target.domain}/`);
   url.searchParams.set("forceNewScan", "true");
   url.searchParams.set("wait", "0");
   url.searchParams.set("detail", "summary");
+  url.searchParams.set("scanFrom", scanFrom);
 
   for (let attempt = 0; attempt <= MAX_CREATE_RETRIES; attempt += 1) {
     try {
@@ -265,10 +272,14 @@ async function writeOutput(outputPath: string, payload: unknown) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const targets: Target[] = args.targetDomains
+    ? args.targetDomains.map((domain) => ({ domain, role: "regression_retry" as const }))
+    : TARGETS;
   const manifest = {
-    cohort: "limited-recovery-production-20260715",
-    targetCount: TARGETS.length,
-    targets: TARGETS,
+    cohort: args.targetDomains ? "limited-recovery-regression-retry-20260715" : "limited-recovery-production-20260715",
+    targetCount: targets.length,
+    targets,
+    scanFrom: args.scanFrom,
   };
   if (!args.execute) {
     console.log(JSON.stringify({ ...manifest, mode: "dry_run", executeHint: "Pass --execute to queue fresh production scans." }, null, 2));
@@ -280,13 +291,13 @@ async function main() {
   if (args.resume) {
     const saved = JSON.parse(await readFile(outputPath, "utf8")) as { records?: ScanRecord[] };
     records = Array.isArray(saved.records) ? saved.records : [];
-    if (records.length !== TARGETS.length) {
-      throw new Error(`Resume manifest has ${records.length} records; expected ${TARGETS.length}.`);
+    if (records.length !== targets.length) {
+      throw new Error(`Resume manifest has ${records.length} records; expected ${targets.length}.`);
     }
   } else {
     await writeOutput(outputPath, { ...manifest, baseUrl: args.baseUrl, phase: "queueing", records });
-    for (const target of TARGETS) {
-      const record = await queueTarget(args.baseUrl, target);
+    for (const target of targets) {
+      const record = await queueTarget(args.baseUrl, target, args.scanFrom);
       records.push(record);
       console.log(`${target.domain}: ${record.httpStatus ?? "error"} ${record.status ?? record.error ?? "unknown"} ${record.scanId ?? record.jobId ?? ""}`);
       await writeOutput(outputPath, { ...manifest, baseUrl: args.baseUrl, phase: "queueing", records });
