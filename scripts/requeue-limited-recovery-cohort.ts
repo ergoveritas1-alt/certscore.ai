@@ -18,6 +18,12 @@ type ScanRecord = {
   requestedAt: string;
   responseStatus?: string | null;
   resultUrl?: string | null;
+  limitedCoverage?: boolean | null;
+  noGoReason?: string | null;
+  resultDisposition?: string | null;
+  riskLevel?: string | null;
+  scanStatus?: string | null;
+  score?: number | null;
   scanId?: string | null;
   status?: string | null;
   statusUrl?: string | null;
@@ -189,8 +195,42 @@ async function queueTarget(baseUrl: string, target: Target): Promise<ScanRecord>
   throw new Error(`Unreachable queue state for ${target.domain}`);
 }
 
+async function enrichResult(record: ScanRecord) {
+  if (!record.resultUrl) return record;
+  try {
+    const result = await fetchJson(record.resultUrl);
+    const summary = typeof result.body.summary === "object" && result.body.summary !== null
+      ? result.body.summary as Record<string, unknown>
+      : null;
+    const machineSummary = typeof summary?.machineSummary === "object" && summary.machineSummary !== null
+      ? summary.machineSummary as Record<string, unknown>
+      : null;
+    const coverage = typeof result.body.coverage === "object" && result.body.coverage !== null
+      ? result.body.coverage as Record<string, unknown>
+      : null;
+    const noGo = typeof result.body.noGo === "object" && result.body.noGo !== null
+      ? result.body.noGo as Record<string, unknown>
+      : null;
+    return {
+      ...record,
+      coverageStatus: typeof coverage?.status === "string" ? coverage.status : record.coverageStatus,
+      limitedCoverage: typeof machineSummary?.limitedCoverage === "boolean" ? machineSummary.limitedCoverage : record.limitedCoverage,
+      noGoReason: typeof noGo?.reasonCode === "string" ? noGo.reasonCode : record.noGoReason,
+      resultDisposition: typeof result.body.resultDisposition === "string" ? result.body.resultDisposition : record.resultDisposition,
+      riskLevel: typeof summary?.riskLevel === "string" ? summary.riskLevel : record.riskLevel,
+      scanStatus: typeof result.body.scanStatus === "string" ? result.body.scanStatus : record.scanStatus,
+      score: typeof summary?.score === "number" ? summary.score : record.score,
+    };
+  } catch (error) {
+    return { ...record, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 async function pollTarget(record: ScanRecord) {
   if (!record.statusUrl || !record.jobId) return record;
+  if (["completed", "completed_limited", "failed", "error"].includes(record.status ?? "") && record.resultUrl) {
+    return enrichResult(record);
+  }
   const deadline = Date.now() + MAX_POLL_SECONDS * 1_000;
   let current = record;
   while (Date.now() < deadline) {
@@ -208,7 +248,9 @@ async function pollTarget(record: ScanRecord) {
         scanId: scanIdFrom(body) ?? current.scanId,
         status,
       };
-      if (status === "completed" || status === "completed_limited" || status === "failed" || status === "error") return current;
+      if (status === "completed" || status === "completed_limited" || status === "failed" || status === "error") {
+        return enrichResult(current);
+      }
     } catch (error) {
       current = { ...current, error: error instanceof Error ? error.message : String(error) };
     }
