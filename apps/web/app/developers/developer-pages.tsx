@@ -45,6 +45,7 @@ export const developerPages = [
 
 export const apiV2Routes = [
   ["POST", "/api/v2/keys/request", "Issue a self-serve read-only + MCP key for a signed-in verified user."],
+  ["GET", "/api/v2/auth/check", "Validate a bearer credential and return its granted scopes without creating a scan."],
   ["POST", "/api/v2/scans", "Create or reuse a public scan; authentication is optional for 10 new anonymous scans per requester IP per UTC day."],
   ["GET", "/api/v2/scans/{scanId}", "Retrieve the public-safe scan resource."],
   ["GET", "/api/v2/scans/{scanId}/diagnostics", "Retrieve bounded scan timing and collection diagnostics."],
