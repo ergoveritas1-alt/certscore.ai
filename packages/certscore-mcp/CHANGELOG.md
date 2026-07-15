@@ -3,6 +3,8 @@
 ## 0.2.8
 
 - Rebuild the distributed MCP binary against the SDK client-attribution header so stdio scan requests persist as MCP activity instead of generic Pulse activity.
+- Add `certscore-mcp doctor --check-auth` and a side-effect-free API credential check endpoint.
+- Keep `create_scan` as a compatibility alias while directing new integrations to `scan_site`.
 
 ## 0.2.7
 

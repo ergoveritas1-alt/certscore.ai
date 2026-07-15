@@ -35,6 +35,13 @@ export default function DeveloperExamplesPage() {
         </Section>
 
         <Section id="complete-curl-workflow" eyebrow="Curl" title="Scan and retrieve findings">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            For a no-account evaluation, omit the bearer header from scan creation. The anonymous path allows 10 new scans per requester
+            IP per UTC day; recent-result reuse does not consume that quota.
+          </p>
+          <CodeBlock>{`curl -X POST https://certscore.ai/api/v2/scans \\
+  -H "Content-Type: application/json" \\
+  -d '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}'`}</CodeBlock>
           <CodeBlock>{`SCAN=$(curl -s -X POST https://certscore.ai/api/v2/scans \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY" \\

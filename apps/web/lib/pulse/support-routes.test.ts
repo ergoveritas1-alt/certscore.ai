@@ -546,6 +546,11 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.developerDocs.mcpAgentWorkflow, "https://certscore.ai/developers/examples#mcp-agent-workflow");
   assert.equal(aiDiscovery.developerDocs.evidenceBoundaries, "https://certscore.ai/developers/examples#evidence-boundaries");
   assert.equal(aiDiscovery.api.docs, "https://certscore.ai/developers/reference");
+  assert.equal(aiDiscovery.api.v2AuthCheck, "https://certscore.ai/api/v2/auth/check");
+  assert.equal(aiDiscovery.api.anonymousAgentScan.authentication, "none");
+  assert.equal(aiDiscovery.api.anonymousAgentScan.dailyNewScanLimit, 10);
+  assert.equal(aiDiscovery.api.anonymousAgentScan.limitKey, "requester_ip_utc_day");
+  assert.equal(aiDiscovery.api.anonymousAgentScan.recentReuseDoesNotConsumeQuota, true);
   assert.equal(aiDiscovery.sdk.docs, "https://certscore.ai/developers/sdk");
   assert.equal(aiDiscovery.sdk.distribution, "npm");
   assert.equal(aiDiscovery.sdk.status, "published");
@@ -554,9 +559,9 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.distribution, "homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
-  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.7");
+  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.8");
   assert.equal(aiDiscovery.mcp.hosted.endpoint, "https://mcp.certscore.ai/mcp");
-  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.7");
+  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.8");
   assert.match(aiDiscovery.mcp.hosted.authentication, /PKCE/);
   assert.equal(
     aiDiscovery.mcp.install,
@@ -579,9 +584,11 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.deepEqual(aiDiscovery.mcp.verify, [
     "certscore-mcp --version",
     "certscore-mcp --help",
-    "CERTSCORE_API_KEY=<token> certscore-mcp doctor"
+    "CERTSCORE_API_KEY=<token> certscore-mcp doctor",
+    "CERTSCORE_API_KEY=<token> certscore-mcp doctor --check-auth"
   ]);
   assert.equal(aiDiscovery.authentication.docs, "https://certscore.ai/developers/quickstart");
+  assert.match(aiDiscovery.authentication.summary, /without an account or credential/);
   assert.equal(aiDiscovery.authentication.accessStatus, "read_only_self_serve_scan_create_request");
   assert.equal(aiDiscovery.authentication.requestEmail, "support@certscore.ai");
   assert.match(aiDiscovery.authentication.requestInstructions, /organization/);

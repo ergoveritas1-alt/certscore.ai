@@ -54,8 +54,20 @@ const discoveryDocument = {
   api: {
     v2Health: "https://certscore.ai/api/v2/health",
     v2Openapi: "https://certscore.ai/api/v2/openapi.json",
+    v2AuthCheck: "https://certscore.ai/api/v2/auth/check",
     v2RequestReadOnlyKey: "https://certscore.ai/api/v2/keys/request",
     v2CreateScan: "https://certscore.ai/api/v2/scans",
+    anonymousAgentScan: {
+      method: "POST",
+      route: "https://certscore.ai/api/v2/scans",
+      authentication: "none",
+      dailyNewScanLimit: 10,
+      limitKey: "requester_ip_utc_day",
+      recentReuseDoesNotConsumeQuota: true,
+      statusRoute: "https://certscore.ai/api/v2/scans/{scanId}/status",
+      findingsRoute: "https://certscore.ai/api/v2/scans/{scanId}/findings",
+      intendedUse: "Low-volume agent discovery, evaluation, and public-web review workflows."
+    },
     v2Scan: "https://certscore.ai/api/v2/scans/{scanId}",
     v2ScanStatus: "https://certscore.ai/api/v2/scans/{scanId}/status",
     v2ScanFindings: "https://certscore.ai/api/v2/scans/{scanId}/findings",
@@ -78,11 +90,16 @@ const discoveryDocument = {
     distribution: "homebrew",
     binary: "certscore-mcp",
     packageStatus: "homebrew_developer_preview",
-    currentVersion: "0.2.7",
+    currentVersion: "0.2.8",
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
     install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
-    verify: ["certscore-mcp --version", "certscore-mcp --help", "CERTSCORE_API_KEY=<token> certscore-mcp doctor"],
+    verify: [
+      "certscore-mcp --version",
+      "certscore-mcp --help",
+      "CERTSCORE_API_KEY=<token> certscore-mcp doctor",
+      "CERTSCORE_API_KEY=<token> certscore-mcp doctor --check-auth"
+    ],
     transport: "stdio",
     hosted: {
       transport: "streamable_http",
@@ -90,7 +107,7 @@ const discoveryDocument = {
       protectedResourceMetadata: "https://mcp.certscore.ai/.well-known/oauth-protected-resource",
       authorizationServerMetadata: "https://certscore.ai/.well-known/oauth-authorization-server",
       authentication: "OAuth 2.0 authorization code with PKCE",
-      currentVersion: "0.2.7"
+      currentVersion: "0.2.8"
     },
     currentTools: [
       "scan_site",
@@ -149,7 +166,7 @@ const discoveryDocument = {
   responseFormats: ["application/json", "text/markdown"],
   authentication: {
     summary:
-      "Bearer API keys are supported for scoped API, SDK, and MCP integrations. Read-only + MCP keys are self-serve for signed-in verified users; scan:create remains support-gated.",
+      "Low-volume agents can create scans without an account or credential at 10 new scans per requester IP per UTC day. Bearer API keys are supported for scoped API, SDK, and MCP integrations. Read-only + MCP keys are self-serve for signed-in verified users; scan:create remains support-gated.",
     accessStatus: "read_only_self_serve_scan_create_request",
     selfServeReadOnly: {
       route: "https://certscore.ai/api/v2/keys/request",

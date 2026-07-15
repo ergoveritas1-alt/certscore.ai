@@ -194,7 +194,9 @@ Current scopes:
 - scan:create
 - mcp`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Scoped integrations use bearer API keys. Read-only + MCP keys are self-serve for signed-in verified users through{" "}
+            Authentication is optional for low-volume scan creation: unauthenticated <code className="rounded bg-white px-1">POST /api/v2/scans</code>
+            permits up to 10 new scans per requester IP per UTC day, and eligible recent-result reuse is free. Scoped integrations use bearer
+            API keys. Read-only + MCP keys are self-serve for signed-in verified users through{" "}
             <code className="rounded bg-white px-1">POST /api/v2/keys/request</code>. Scan creation keys remain developer-preview;
             request those at{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">

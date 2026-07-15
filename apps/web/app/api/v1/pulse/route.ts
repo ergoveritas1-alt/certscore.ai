@@ -36,6 +36,7 @@ import { getPublicScanRecord, type PublicScanRecord } from "../../../../server/s
 import {
   getRecentScanReuseEligibility
 } from "../../../../server/scans/recent-scan-reuse";
+import { isAnonymousScanQuotaError } from "../../../../server/pulse/anonymous-scan-quota";
 import {
   claimPulseDomainScanCreation,
   createPulseRequest,
@@ -931,6 +932,28 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       routeName
     );
   } catch (error) {
+    if (isAnonymousScanQuotaError(error)) {
+      return pulseJson(
+        buildPulseError({
+          code: "rate_limited",
+          message: error.message,
+          retryAfterSeconds: error.retryAfterSeconds,
+          url: rawUrl,
+          detail,
+          format
+        }),
+        {
+          headers: {
+            "Cache-Control": "no-store",
+            "Retry-After": String(error.retryAfterSeconds)
+          },
+          status: 429
+        },
+        requestId,
+        routeName
+      );
+    }
+
     console.error("[pulse] request failed", { requestId, error });
     if (gptAction) {
       logPulseGptActionEvent("pulse_gpt_action_error", {

@@ -52,6 +52,17 @@ curl -X POST https://certscore.ai/api/v2/keys/request \\
           </p>
         </Section>
 
+        <Section id="no-account-scan" eyebrow="No account" title="Run a low-volume scan without signup">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            For discovery and evaluation, an agent can create a scan without an account or bearer token. New anonymous scans are limited
+            to 10 per requester IP per UTC day; an eligible recent-result reuse does not consume the quota. Poll the returned status
+            resource and then retrieve findings. Use a scoped key or hosted OAuth for repeated or higher-volume workflows.
+          </p>
+          <CodeBlock>{`curl -X POST https://certscore.ai/api/v2/scans \\
+  -H "Content-Type: application/json" \\
+  -d '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}'`}</CodeBlock>
+        </Section>
+
         <Section eyebrow="Health" title="Check the public API surface">
           <CodeBlock>{`curl https://certscore.ai/api/v2/health
 curl https://certscore.ai/api/v2/openapi.json`}</CodeBlock>

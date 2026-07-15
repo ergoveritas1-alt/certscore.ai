@@ -124,9 +124,22 @@ Stdio API keys use `pulse:read` and `mcp`; creating scans additionally requires 
 certscore-mcp --version
 certscore-mcp --help
 CERTSCORE_API_KEY=... certscore-mcp doctor
+CERTSCORE_API_KEY=... certscore-mcp doctor --check-auth
 ```
 
-The doctor command checks binary startup, version output, Node.js runtime compatibility, the configured CertScore base URL, API v2 health, and API key presence. It does not print secrets, create scans, or inspect raw scanner artifacts. There is no dedicated public auth-check endpoint; verify credentials with a real MCP tool call such as `scan_site` after the client is connected.
+The doctor command checks binary startup, version output, Node.js runtime compatibility, the configured CertScore base URL, API v2 health, and API key presence. Add `--check-auth` to validate the credential against `/api/v2/auth/check` without creating a scan. It does not print secrets or inspect raw scanner artifacts.
+
+## No-account agent scan path
+
+Agents that cannot create an account or configure OAuth can use the public API v2 scan path without an `Authorization` header:
+
+```bash
+curl -X POST https://certscore.ai/api/v2/scans \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}'
+```
+
+New anonymous scans are limited to 10 per requester IP per UTC day. Reusing an eligible recent result does not consume the quota. Poll the returned status resource, then retrieve findings or evidence. Use OAuth or a scoped API key for repeated or higher-volume workflows.
 
 ## MCP Client Examples
 

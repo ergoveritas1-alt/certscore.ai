@@ -9,6 +9,13 @@ import {
 } from "../../lib/pulse/constants";
 import type { PulseRequestContext } from "../../lib/pulse/types";
 import { ensurePulseTables } from "./schema";
+import {
+  ANONYMOUS_SCAN_DAILY_LIMIT,
+  anonymousScanQuotaKey,
+  decideAnonymousScanQuota,
+  retryAfterNextUtcDay,
+  type AnonymousScanQuotaDecision
+} from "./anonymous-scan-quota";
 
 type PulseRequestRow = {
   public_id: string;
@@ -405,6 +412,35 @@ export async function claimPulseDomainScanCreation(input: { normalizedDomain: st
   );
 
   return { allowed: true as const, retryAfterSeconds: 0 };
+}
+
+export async function claimAnonymousScanDailyQuota(input: {
+  ipHash: string | null | undefined;
+}): Promise<AnonymousScanQuotaDecision> {
+  await ensurePulseTables();
+  const requesterKey = anonymousScanQuotaKey(input.ipHash);
+  const claimed = await queryOne<{ scan_count: number | string }>(
+    `insert into anonymous_scan_daily_quotas (requester_key, window_date, scan_count, last_scan_at, updated_at)
+     values ($1, timezone('utc', now())::date, 1, now(), now())
+     on conflict (requester_key, window_date)
+     do update set
+       scan_count = anonymous_scan_daily_quotas.scan_count + 1,
+       last_scan_at = now(),
+       updated_at = now()
+     where anonymous_scan_daily_quotas.scan_count < $2
+     returning scan_count`,
+    [requesterKey, ANONYMOUS_SCAN_DAILY_LIMIT]
+  );
+
+  if (claimed) {
+    return decideAnonymousScanQuota({ currentCount: Number(claimed.scan_count) - 1 });
+  }
+
+  return {
+    allowed: false,
+    remaining: 0,
+    retryAfterSeconds: retryAfterNextUtcDay()
+  };
 }
 
 export async function getPulseFeedbackCount(input: { pulseRequestId: string; ipHash: string | null }) {

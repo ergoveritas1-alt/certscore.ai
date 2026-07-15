@@ -131,7 +131,14 @@ Recommended flow:
    https://certscore.ai/api/v2/scans/{scanId}/pre-consent-cookies-trackers
    https://certscore.ai/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers
 
-API keys use `Authorization: Bearer <token>`. Current integration scopes are `scan:read`, `scan:create`, and `mcp`.
+No-account agent scan path:
+- POST https://certscore.ai/api/v2/scans without Authorization for low-volume discovery or evaluation.
+- New anonymous scans are limited to 10 per requester IP per UTC day.
+- Reusing an eligible recent result does not consume the anonymous quota.
+- Poll https://certscore.ai/api/v2/scans/{scanId}/status, then retrieve findings or evidence.
+- Use OAuth or a scoped API key for repeated or higher-volume workflows.
+
+API keys use `Authorization: Bearer <token>`. Authentication is optional for the low-volume anonymous scan path. Current integration scopes are `scan:read`, `scan:create`, and `mcp`.
 
 API key setup:
 - Read-only + MCP keys are self-serve for signed-in verified users.

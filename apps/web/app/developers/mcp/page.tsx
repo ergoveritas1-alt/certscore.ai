@@ -32,6 +32,22 @@ export default function DeveloperMcpPage() {
           </p>
         </Section>
 
+        <Section eyebrow="No-account agent path" title="Run up to 10 scans per day without signup">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            If an agent cannot create an account or configure OAuth, use the public API v2 scan path instead. Send a JSON POST to{" "}
+            <code className="rounded bg-white px-1">/api/v2/scans</code> without an Authorization header, then poll the returned
+            status resource and retrieve findings or evidence. New anonymous scans are limited to 10 per requester IP per UTC day;
+            recent-result reuse does not consume the quota.
+          </p>
+          <CodeBlock>{`curl -X POST https://certscore.ai/api/v2/scans \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}'`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            This account-free path is intended for discovery, evaluation, and low-volume agent workflows. Use the hosted OAuth MCP or
+            a scoped API key for higher-volume use.
+          </p>
+        </Section>
+
         <Section eyebrow="Hosted MCP" title="Connect with OAuth and Streamable HTTP">
           <CodeBlock>{`MCP endpoint:
 https://mcp.certscore.ai/mcp
@@ -77,10 +93,12 @@ brew install --cask certscore-mcp`}</CodeBlock>
         <Section eyebrow="Verify install" title="Run the doctor check">
           <CodeBlock>{`certscore-mcp --version
 certscore-mcp --help
-CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
+CERTSCORE_API_KEY=<token> certscore-mcp doctor
+CERTSCORE_API_KEY=<token> certscore-mcp doctor --check-auth`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             The doctor command checks the installed binary, Node.js runtime compatibility, the configured CertScore.ai base URL, API v2
-            health, and API key presence without printing the token. It does not create scans or inspect raw scanner artifacts.
+            health, and API key presence without printing the token. Add <code className="rounded bg-white px-1">--check-auth</code> to
+            validate the credential against the API without creating a scan or inspecting raw scanner artifacts.
           </p>
         </Section>
 
@@ -128,8 +146,9 @@ sha256sum --check SHA256SUMS`}</CodeBlock>
         <Section eyebrow="Troubleshooting" title="Common install checks">
           <ul className="max-w-3xl list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
             <li>If the command is not found, reinstall the cask or check that Homebrew&apos;s bin directory is on PATH.</li>
-            <li>If the API key is missing, set CERTSCORE_API_KEY in the MCP client environment and rerun doctor.</li>
-            <li>If a token is rejected by a tool call, rotate the key or request a scoped API/MCP key from support@certscore.ai.</li>
+            <li>If Node.js is not found, make sure the MCP client inherits a PATH containing Node.js and Homebrew&apos;s bin directory.</li>
+            <li>If the API key is missing, set CERTSCORE_API_KEY in the MCP client environment and rerun doctor --check-auth.</li>
+            <li>If a token is rejected, run doctor --check-auth before rotating the key or requesting a scoped API/MCP key from support@certscore.ai.</li>
             <li>If API health is unreachable, check CERTSCORE_BASE_URL and verify that https://certscore.ai/api/v2/health loads.</li>
             <li>If Homebrew uses stale metadata, run brew update and reinstall the cask.</li>
             <li>If an old release is cached, run brew reinstall --cask certscore-mcp after updating the tap.</li>
@@ -253,8 +272,8 @@ get_latest_domain_pre_consent_cookies_trackers({
         <Section eyebrow="Deprecation" title="create_scan removal">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             <code className="rounded bg-white px-1">create_scan</code> is a deprecated compatibility alias. It will be removed in{" "}
-            <code className="rounded bg-white px-1">0.2.0</code>. Use <code className="rounded bg-white px-1">scan_site</code> for
-            scan creation.
+            a future breaking release after the <code className="rounded bg-white px-1">0.2.x</code> line. Use{" "}
+            <code className="rounded bg-white px-1">scan_site</code> for new scan creation.
           </p>
         </Section>
       </div>

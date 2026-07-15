@@ -88,7 +88,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
       try {
         if (!createScanDeprecationWarningPrinted) {
           createScanDeprecationWarningPrinted = true;
-          console.error("[certscore-mcp] create_scan is deprecated and will be removed in 0.2.0. Use scan_site.");
+          console.error("[certscore-mcp] create_scan is deprecated in the 0.2.x line. Use scan_site for new integrations.");
         }
         return toToolResult(await createPulseScanTool(input));
       } catch (error) {

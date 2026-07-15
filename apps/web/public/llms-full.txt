@@ -38,6 +38,23 @@ These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, G
 7. Retrieve findings and pre-consent cookies/trackers.
 8. Treat outputs as automated public-web observations for review, not legal advice, certification, or a compliance determination.
 
+## No-account agent scan path
+
+Agents that cannot create an account or configure OAuth can create low-volume scans without an API key:
+
+```http
+POST https://certscore.ai/api/v2/scans
+Content-Type: application/json
+
+{
+  "url": "https://example.com",
+  "freshness": "latest",
+  "scanFrom": "eu_ie"
+}
+```
+
+New anonymous scans are limited to 10 per requester IP per UTC day. Reusing an eligible recent result does not consume the quota. Poll the returned status URL, then retrieve findings or evidence. Use OAuth or a scoped API key for repeated or higher-volume workflows.
+
 ## Public API quick start
 
 Connectivity:
@@ -176,7 +193,7 @@ Current integration scopes:
 - `scan:create`
 - `mcp`
 
-API key setup and onboarding:
+API key setup and onboarding (optional for the low-volume anonymous scan path):
 
 - https://certscore.ai/developers/quickstart
 - Read-only + MCP keys are self-serve for signed-in verified users.
@@ -237,9 +254,10 @@ Verify install:
 certscore-mcp --version
 certscore-mcp --help
 CERTSCORE_API_KEY=<token> certscore-mcp doctor
+CERTSCORE_API_KEY=<token> certscore-mcp doctor --check-auth
 ```
 
-The doctor command checks the installed command, Node.js runtime compatibility, CertScore.ai API v2 health, and API key presence without printing secrets. It does not create scans or inspect raw scanner artifacts.
+The doctor command checks the installed command, Node.js runtime compatibility, CertScore.ai API v2 health, and API key presence without printing secrets. Add `--check-auth` to validate the credential without creating a scan. It does not inspect raw scanner artifacts.
 
 MCP client config:
 

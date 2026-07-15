@@ -45,7 +45,7 @@ export const developerPages = [
 
 export const apiV2Routes = [
   ["POST", "/api/v2/keys/request", "Issue a self-serve read-only + MCP key for a signed-in verified user."],
-  ["POST", "/api/v2/scans", "Create or reuse a public scan through the resource API."],
+  ["POST", "/api/v2/scans", "Create or reuse a public scan; authentication is optional for 10 new anonymous scans per requester IP per UTC day."],
   ["GET", "/api/v2/scans/{scanId}", "Retrieve the public-safe scan resource."],
   ["GET", "/api/v2/scans/{scanId}/diagnostics", "Retrieve bounded scan timing and collection diagnostics."],
   ["GET", "/api/v2/scans/{scanId}/status", "Check scan or job status without inferring from partial evidence."],
@@ -207,7 +207,7 @@ export function AgentQuickPath() {
           <li>Read /.well-known/certscore-ai.json.</li>
           <li>Fetch /api/v2/openapi.json.</li>
           <li>Check /api/v2/health before creating scan requests.</li>
-          <li>Create or reuse a scan with POST /api/v2/scans.</li>
+          <li>Create or reuse a scan with POST /api/v2/scans; authentication is optional for up to 10 new scans per requester IP per UTC day.</li>
           <li>Poll status and honor Retry-After.</li>
           <li>Retrieve findings and pre-consent cookies/trackers.</li>
           <li>Treat outputs as automated public-web observations for review, not legal advice, certification, or a compliance determination.</li>

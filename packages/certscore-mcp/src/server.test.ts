@@ -269,8 +269,32 @@ test("doctor reports present API key without leaking the secret", async () => {
   const output = result.lines.join("\n");
   assert.equal(result.exitCode, 0);
   assert.match(output, /CERTSCORE_API_KEY is present/);
-  assert.match(output, /No dedicated auth-check endpoint is exposed/);
+  assert.match(output, /doctor --check-auth/);
   assert.doesNotMatch(output, new RegExp(secret));
+});
+
+test("doctor can validate a credential without creating a scan", async () => {
+  const requests: Array<{ url: string; authorization?: string }> = [];
+  const result = await getCertScoreMcpDoctorReport({
+    checkAuth: true,
+    env: {
+      CERTSCORE_API_KEY: "cs_test_super_secret_value",
+      CERTSCORE_BASE_URL: "https://certscore.ai"
+    },
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ url: String(input), authorization: new Headers(init?.headers).get("authorization") ?? undefined });
+      return jsonResponse(200, { authenticated: true });
+    }) as typeof fetch,
+    nodeVersion: "22.12.0"
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.lines.join("\n"), /API key authenticated/);
+  assert.deepEqual(requests.at(-1), {
+    url: "https://certscore.ai/api/v2/auth/check",
+    authorization: "Bearer cs_test_super_secret_value"
+  });
+  assert.doesNotMatch(result.lines.join("\n"), /cs_test_super_secret_value/);
 });
 
 test("doctor fails for unreachable API health", async () => {
@@ -355,7 +379,7 @@ test("create_scan returns async status and scan handles", async () => {
         arguments: { url: "https://example.com", detail: "standard" }
       });
     });
-    assert.deepEqual(warnings, ["[certscore-mcp] create_scan is deprecated and will be removed in 0.2.0. Use scan_site."]);
+    assert.deepEqual(warnings, ["[certscore-mcp] create_scan is deprecated in the 0.2.x line. Use scan_site for new integrations."]);
     assert.equal(mock.requestHeaders[0]?.get("x-certscore-client"), "mcp");
   } finally {
     console.error = previousConsoleError;

@@ -34,6 +34,8 @@ import { dispatchLocalV2DagSimulatedLambdaScan } from "./local-v2-dag-lambda-sim
 import { resolveRecentScanReuseDecision, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
 import { lookupTrancoRankMetadata } from "./tranco-rank-metadata";
+import { AnonymousScanQuotaError } from "../pulse/anonymous-scan-quota";
+import { claimAnonymousScanDailyQuota } from "../pulse/repository";
 
 type ScanQueueProvenance = {
   githubActor?: string | null;
@@ -50,6 +52,7 @@ export async function createAnonymousFullScan(input: {
   bypassRecentScanReuse?: boolean;
   clientRequestId?: string | null;
   coveragePlanCode?: PlanCode;
+  countAnonymousQuota?: boolean;
   hostname: string;
   localV2DagLambdaDebugOverrides?: import("./local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
@@ -147,6 +150,31 @@ export async function createAnonymousFullScan(input: {
     }).catch((error) => logScanRequestFailure("anonymous_queue_unavailable", error));
 
     throw new Error(fullScanQueueAvailability.reason ?? "Full scan queue is unavailable.");
+  }
+
+  if (input.countAnonymousQuota !== false) {
+    const quota = await claimAnonymousScanDailyQuota({ ipHash: input.provenance?.originIp });
+    if (!quota.allowed) {
+      await recordScanRequest({
+        normalizedDomain: input.hostname,
+        normalizedUrl: input.normalizedUrl,
+        organizationId: null,
+        requestChannel: input.provenance?.source ?? "anonymous-full-scan",
+        requestedBy: { anonymous: true },
+        requestedUrl: input.normalizedUrl,
+        requestContext: {
+          coveragePlanCode,
+          provenance: input.provenance ?? null,
+          scanFrom
+        },
+        errorCode: "anonymous_scan_daily_limit",
+        errorMessage: "Anonymous scan daily limit reached.",
+        resolutionMode: "rate_limited",
+        status: "rejected"
+      }).catch((error) => logScanRequestFailure("anonymous_daily_quota", error));
+
+      throw new AnonymousScanQuotaError(quota.retryAfterSeconds);
+    }
   }
 
   const [priorScanAcceleration, trancoRankMetadata] = await Promise.all([loadPriorScanAccelerationCandidate({

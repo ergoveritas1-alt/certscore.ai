@@ -282,6 +282,39 @@ export function buildCertScoreApiV2OpenApiDocument() {
           }
         }
       },
+      "/api/v2/auth/check": {
+        get: {
+          operationId: "checkIntegrationCredential",
+          tags: ["Auth"],
+          summary: "Check a bearer credential without creating a scan.",
+          description:
+            "Validates the bearer credential and returns its granted scopes. This endpoint is side-effect free and does not expose report data.",
+          responses: {
+            "200": {
+              description: "Credential is valid.",
+              headers: diagnosticHeaders,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["type", "authenticated", "scopes"],
+                    properties: {
+                      type: { type: "string", enum: ["certscore_auth_check"] },
+                      authenticated: { type: "boolean", const: true },
+                      scopes: { type: "array", items: { type: "string" } },
+                      expiresAt: { type: ["string", "null"], format: "date-time" },
+                      disclaimer: { type: "string" }
+                    }
+                  }
+                }
+              }
+            },
+            "401": { description: "Credential missing or invalid.", headers: diagnosticHeaders, content: errorContent },
+            "403": { description: "Credential is missing a required scope.", headers: diagnosticHeaders, content: errorContent },
+            "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
+          }
+        }
+      },
       "/api/v2/scans": {
         post: {
           operationId: "createScan",
@@ -289,7 +322,9 @@ export function buildCertScoreApiV2OpenApiDocument() {
           summary: "Create or reuse a CertScore public-web scan.",
           description:
             "Submit a public URL for CertScore automated public-web observations. The response may be a queued job or an already completed scan reference. " +
-            "This v2 route reuses the existing Pulse scan creation, reuse, validation, and throttling path, then returns v2 Scan or ScanJob resources.",
+            "This v2 route reuses the existing Pulse scan creation, reuse, validation, and throttling path, then returns v2 Scan or ScanJob resources. " +
+            "Bearer authentication is optional for a reduced-friction anonymous path: unauthenticated new scans are limited to 10 per requester IP per UTC day, while recent-result reuse does not consume the quota.",
+          security: [{}, { bearerAuth: [] }],
           requestBody: {
             required: true,
             content: {
@@ -316,7 +351,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
               content: { "application/json": { schema: { $ref: "#/components/schemas/ScanJob" }, examples: { pending: { value: scanJobExample } } } }
             },
             "400": { description: "Invalid request.", headers: diagnosticHeaders, content: errorContent },
-            "401": { description: "Missing or invalid API key.", headers: diagnosticHeaders, content: errorContent },
+            "401": { description: "Bearer credential is invalid when Authorization is supplied.", headers: diagnosticHeaders, content: errorContent },
             "403": { description: "API key is missing the required scope.", headers: diagnosticHeaders, content: errorContent },
             "429": { description: "Rate limited.", headers: { ...diagnosticHeaders, ...retryAfterHeader }, content: errorContent },
             "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }

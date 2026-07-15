@@ -25,6 +25,7 @@ import { createPreviewScan } from "../../../server/preview-scan/create-preview-s
 import { getFullScanQueueErrorCode } from "./full-scan-errors";
 import { shouldBypassDnsValidationForProductionLoadTest } from "./load-test-intake";
 import { findScanByClientRequestId } from "../../../server/scans/client-request";
+import { isAnonymousScanQuotaError } from "../../../server/pulse/anonymous-scan-quota";
 
 function isPublicFullScanAvailabilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -333,6 +334,23 @@ export async function POST(request: Request) {
       }
     );
   } catch (error) {
+    if (isAnonymousScanQuotaError(error)) {
+      return NextResponse.json(
+        {
+          code: error.code,
+          error: error.message,
+          retryAfterSeconds: error.retryAfterSeconds
+        },
+        {
+          headers: {
+            "Cache-Control": "no-store",
+            "Retry-After": String(error.retryAfterSeconds)
+          },
+          status: 429
+        }
+      );
+    }
+
     if (isBetterAuthConfigurationError(error) || isPublicFullScanAvailabilityError(error)) {
       console.error("[full-scan] public full scan unavailable during request", {
         error: error instanceof Error ? error.message : String(error)

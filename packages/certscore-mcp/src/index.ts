@@ -13,6 +13,7 @@ const MIN_NODE_MAJOR = 20;
 const MAX_NODE_MAJOR_EXCLUSIVE = 25;
 
 export interface CertScoreMcpDoctorOptions {
+  checkAuth?: boolean;
   env?: Record<string, string | undefined>;
   fetch?: typeof fetch;
   nodeVersion?: string;
@@ -44,12 +45,13 @@ async function main() {
       "",
       "Usage:",
       "  certscore-mcp",
-      "  certscore-mcp doctor"
+      "  certscore-mcp doctor",
+      "  certscore-mcp doctor --check-auth"
     ].join("\n"));
     return;
   }
   if (process.argv.includes("doctor")) {
-    const result = await getCertScoreMcpDoctorReport();
+    const result = await getCertScoreMcpDoctorReport({ checkAuth: process.argv.includes("--check-auth") });
     console.log(result.lines.join("\n"));
     process.exitCode = result.exitCode;
     return;
@@ -112,10 +114,41 @@ export async function getCertScoreMcpDoctorReport(options: CertScoreMcpDoctorOpt
 
   if (env.CERTSCORE_API_KEY?.trim()) {
     lines.push("[ok] CERTSCORE_API_KEY is present");
-    lines.push("[info] No dedicated auth-check endpoint is exposed; verify credentials with a real MCP tool call such as scan_site.");
+    if (options.checkAuth) {
+      if (!healthUrl) {
+        lines.push("[error] Cannot check credentials until CERTSCORE_BASE_URL is valid");
+        exitCode = 1;
+      } else {
+        const authUrl = new URL("/api/v2/auth/check", healthUrl.origin);
+        try {
+          const response = await fetchImpl(authUrl, {
+            headers: {
+              accept: "application/json",
+              authorization: `Bearer ${env.CERTSCORE_API_KEY.trim()}`
+            },
+            signal: AbortSignal.timeout(10_000)
+          });
+          if (response.ok) {
+            lines.push(`[ok] API key authenticated at ${authUrl.href}`);
+          } else {
+            lines.push(`[error] API key rejected with HTTP ${response.status} at ${authUrl.href}`);
+            exitCode = 1;
+          }
+        } catch (error) {
+          const message = error instanceof Error && error.message ? error.message : "request failed";
+          lines.push(`[error] API key check failed at ${authUrl.href}: ${message}`);
+          exitCode = 1;
+        }
+      }
+    } else {
+      lines.push("[info] Run certscore-mcp doctor --check-auth to verify the credential without creating a scan.");
+    }
   } else {
     lines.push("[warn] CERTSCORE_API_KEY is not set");
-    lines.push("[info] Set CERTSCORE_API_KEY before connecting an MCP client or calling authenticated tools.");
+    lines.push(options.checkAuth ? "[error] --check-auth requires CERTSCORE_API_KEY." : "[info] Set CERTSCORE_API_KEY before connecting an MCP client or calling authenticated tools.");
+    if (options.checkAuth) {
+      exitCode = 1;
+    }
   }
 
   lines.push("CertScore outputs are automated public-web observations for review, not legal advice, certification, or a compliance determination.");
