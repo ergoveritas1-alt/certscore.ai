@@ -46,8 +46,9 @@ type Comparison = {
   productionRiskLevel: string | null;
 };
 
-const ROOT = path.resolve("artifacts/limited-recovery-production-20260715");
-const REQUEUE_PATH = path.join(ROOT, "requeue.json");
+const requeueArgument = process.argv.find((argument) => argument.startsWith("--requeue="))?.slice("--requeue=".length);
+const REQUEUE_PATH = path.resolve(requeueArgument ?? "artifacts/limited-recovery-production-20260715/requeue.json");
+const ROOT = path.dirname(REQUEUE_PATH);
 const OUTPUT_PATH = path.join(ROOT, "comparison.json");
 const MARKDOWN_PATH = path.join(ROOT, "comparison.md");
 
@@ -60,9 +61,9 @@ function localOutcome(row: LocalResult | undefined) {
   return row.runtime?.coverageStatus ?? "unknown";
 }
 
-function productionOutcome(row: ProductionRecord) {
+function productionOutcome(row: ProductionRecord, detail: Record<string, unknown>) {
   if (row.status === "failed") return "failed";
-  if (row.resultDisposition === "no_go") return "no_go";
+  if (row.resultDisposition === "no_go" || detail.resultDisposition === "no_go") return "no_go";
   return "evidence_limited";
 }
 
@@ -140,7 +141,7 @@ async function main() {
     return {
       domain: row.domain,
       localOutcome: localOutcome(local),
-      productionOutcome: productionOutcome(row),
+      productionOutcome: productionOutcome(row, detail),
       localCoverageStatus: local?.runtime?.coverageStatus ?? null,
       productionCoverageStatus: stringAt(coverage, "status") ?? row.coverageStatus ?? null,
       localDurationMs: local?.durationMs ?? null,
