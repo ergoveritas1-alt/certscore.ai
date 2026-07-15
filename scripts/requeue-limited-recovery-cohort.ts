@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 type CohortRole = "fully_recovered" | "limited_partial" | "contract_fix";
@@ -17,6 +17,7 @@ type ScanRecord = {
   jobId?: string | null;
   requestedAt: string;
   responseStatus?: string | null;
+  resultUrl?: string | null;
   scanId?: string | null;
   status?: string | null;
   statusUrl?: string | null;
@@ -79,9 +80,12 @@ function parseArgs(argv: string[]) {
   let baseUrl = DEFAULT_BASE_URL;
   let output = DEFAULT_OUTPUT;
   let execute = false;
+  let resume = false;
   for (const arg of argv) {
     if (arg === "--execute") {
       execute = true;
+    } else if (arg === "--resume") {
+      resume = true;
     } else if (arg.startsWith("--base-url=")) {
       baseUrl = arg.slice("--base-url=".length).replace(/\/$/, "");
     } else if (arg.startsWith("--output=")) {
@@ -90,7 +94,7 @@ function parseArgs(argv: string[]) {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
-  return { baseUrl, execute, output };
+  return { baseUrl, execute, output, resume };
 }
 
 async function fetchJson(url: string) {
@@ -136,6 +140,10 @@ function statusUrlFrom(baseUrl: string, body: Record<string, unknown>) {
       : null;
 }
 
+function resultUrlFrom(baseUrl: string, body: Record<string, unknown>) {
+  return typeof body.resultUrl === "string" ? new URL(body.resultUrl, baseUrl).toString() : null;
+}
+
 async function queueTarget(baseUrl: string, target: Target): Promise<ScanRecord> {
   const requestedAt = new Date().toISOString();
   const url = new URL("/api/v1/pulse", baseUrl);
@@ -154,6 +162,7 @@ async function queueTarget(baseUrl: string, target: Target): Promise<ScanRecord>
         jobId: jobIdFrom(body),
         requestedAt,
         responseStatus: status,
+        resultUrl: resultUrlFrom(baseUrl, body),
         scanId: scanIdFrom(body),
         status,
         statusUrl: statusUrlFrom(baseUrl, body),
@@ -195,10 +204,11 @@ async function pollTarget(record: ScanRecord) {
         completedAt: typeof body.completedAt === "string" ? body.completedAt : current.completedAt,
         coverageStatus: typeof body.coverageStatus === "string" ? body.coverageStatus : current.coverageStatus,
         httpStatus: response.status,
+        resultUrl: resultUrlFrom(record.statusUrl, body) ?? current.resultUrl,
         scanId: scanIdFrom(body) ?? current.scanId,
         status,
       };
-      if (status === "completed" || status === "failed" || status === "error") return current;
+      if (status === "completed" || status === "completed_limited" || status === "failed" || status === "error") return current;
     } catch (error) {
       current = { ...current, error: error instanceof Error ? error.message : String(error) };
     }
@@ -224,13 +234,21 @@ async function main() {
   }
 
   const outputPath = path.resolve(args.output);
-  const records: ScanRecord[] = [];
-  await writeOutput(outputPath, { ...manifest, baseUrl: args.baseUrl, phase: "queueing", records });
-  for (const target of TARGETS) {
-    const record = await queueTarget(args.baseUrl, target);
-    records.push(record);
-    console.log(`${target.domain}: ${record.httpStatus ?? "error"} ${record.status ?? record.error ?? "unknown"} ${record.scanId ?? record.jobId ?? ""}`);
+  let records: ScanRecord[] = [];
+  if (args.resume) {
+    const saved = JSON.parse(await readFile(outputPath, "utf8")) as { records?: ScanRecord[] };
+    records = Array.isArray(saved.records) ? saved.records : [];
+    if (records.length !== TARGETS.length) {
+      throw new Error(`Resume manifest has ${records.length} records; expected ${TARGETS.length}.`);
+    }
+  } else {
     await writeOutput(outputPath, { ...manifest, baseUrl: args.baseUrl, phase: "queueing", records });
+    for (const target of TARGETS) {
+      const record = await queueTarget(args.baseUrl, target);
+      records.push(record);
+      console.log(`${target.domain}: ${record.httpStatus ?? "error"} ${record.status ?? record.error ?? "unknown"} ${record.scanId ?? record.jobId ?? ""}`);
+      await writeOutput(outputPath, { ...manifest, baseUrl: args.baseUrl, phase: "queueing", records });
+    }
   }
 
   const pending = records.filter((record) => record.statusUrl && record.jobId);
