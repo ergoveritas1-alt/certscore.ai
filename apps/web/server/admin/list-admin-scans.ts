@@ -93,9 +93,14 @@ export type BlockedRunTelemetry = {
 
 export type AdminScanListStatus = "any" | "no_go" | "failed" | "running" | "queued" | "limited" | "completed";
 
+const ADMIN_FILTER_ACTIVITY_WINDOW_LIMIT = 25_000;
+
 export async function listAdminScans(limit = 50, offset = 0, filters?: { query?: string | null; status?: AdminScanListStatus }): Promise<AdminScanListItem[]> {
   await requirePlatformAdminContext();
-  const activityWindowLimit = filters?.query || (filters?.status && filters.status !== "any") ? 1000 : Math.max(limit + offset, limit);
+  const hasFilters = Boolean(filters?.query?.trim()) || Boolean(filters?.status && filters.status !== "any");
+  const activityWindowLimit = hasFilters
+    ? Math.max(ADMIN_FILTER_ACTIVITY_WINDOW_LIMIT, limit + offset)
+    : Math.max(limit + offset, limit);
   const [scanPageData, scanRequestRows] = await Promise.all([
     loadAdminScanListPageData(activityWindowLimit, 0),
     loadAdminScanRequestRows(activityWindowLimit)

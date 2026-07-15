@@ -72,13 +72,14 @@ export function PaginationControls({
   const resolvedHasNext = typeof hasNext === "boolean" ? hasNext : normalizedPageCount !== null ? page < normalizedPageCount : visibleCount >= pageSize;
   const pageStart = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
   const pageEnd = totalCount === undefined ? (visibleCount === 0 ? 0 : pageStart + visibleCount - 1) : Math.min(pageStart + visibleCount - 1, totalCount);
+  const countLabel = totalCount === 0 ? `Showing 0 ${itemLabel}` : `Showing ${pageStart}-${pageEnd} of ${totalCount} ${itemLabel}`;
 
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
       <p>
         {totalCount === undefined
           ? `Showing ${visibleCount} ${itemLabel} on page ${page}`
-          : `Showing ${pageStart}-${pageEnd} of ${totalCount} ${itemLabel}`}
+          : countLabel}
         {normalizedPageCount !== null ? ` · Page ${page} of ${Math.max(1, normalizedPageCount)}` : ` · Page ${page}`}
       </p>
       <div className="flex flex-wrap items-center gap-2">

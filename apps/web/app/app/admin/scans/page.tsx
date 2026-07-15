@@ -78,7 +78,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
   const activeStatus = normalizeStatus(resolvedSearchParams.status);
   const hasFilters = Boolean(activeQuery) || activeStatus !== "any";
   const scanMetrics = await withServerTiming("app.admin.scans.metrics", () => getAdminScanOverviewMetrics());
-  const filteredScans = await withServerTiming("app.admin.scans.list", () => listAdminScans(hasFilters ? 1000 : pageSize, hasFilters ? 0 : (currentPage - 1) * pageSize, { query: activeQuery || null, status: activeStatus }));
+  const filteredScans = await withServerTiming("app.admin.scans.list", () => listAdminScans(hasFilters ? 25_000 : pageSize, hasFilters ? 0 : (currentPage - 1) * pageSize, { query: activeQuery || null, status: activeStatus }));
   const totalCount = hasFilters ? filteredScans.length : scanMetrics.totalScans;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const normalizedPage = Math.min(currentPage, totalPages);
