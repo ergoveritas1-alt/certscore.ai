@@ -36,6 +36,10 @@ export interface CertScoreClientOptions {
   apiKey?: string;
   baseUrl?: string;
   clientName?: "mcp" | "sdk";
+  /** Internal gateway context used to preserve anonymous requester quotas. */
+  forwardedClientIp?: string | null;
+  /** Internal gateway secret used to authenticate the forwarded anonymous requester identity. */
+  anonymousRequesterSecret?: string | null;
   timeout?: number;
 }
 

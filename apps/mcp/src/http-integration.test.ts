@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
+import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:net";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -36,14 +37,39 @@ async function waitForHealth(url: string, child: ChildProcess) {
 
 test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and sessions", async () => {
   const port = await unusedPort();
+  const apiPort = await unusedPort();
   const origin = `http://127.0.0.1:${port}`;
+  const apiOrigin = `http://127.0.0.1:${apiPort}`;
   const secret = "mcp-http-integration-secret-long-enough";
+  let forwardedClientIp: string | undefined;
+  let apiAuthorization: string | undefined;
+  const apiServer = createHttpServer((request, response) => {
+    if (request.method === "POST" && request.url === "/api/v2/scans") {
+      forwardedClientIp = request.headers["x-forwarded-for"]?.toString();
+      apiAuthorization = request.headers.authorization;
+      response.writeHead(202, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        type: "certscore_scan_job",
+        jobId: "anonymous-mcp-job",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        domain: "example.com",
+        status: "queued"
+      }));
+      return;
+    }
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: "not_found" }));
+  });
+  await new Promise<void>((resolve, reject) => {
+    apiServer.once("error", reject);
+    apiServer.listen(apiPort, "127.0.0.1", resolve);
+  });
   const child = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
     cwd: new URL("..", import.meta.url),
     env: {
       ...process.env,
       PORT: String(port),
-      CERTSCORE_BASE_URL: "https://certscore.ai",
+      CERTSCORE_BASE_URL: apiOrigin,
       CERTSCORE_OAUTH_JWT_SECRET: secret,
       MCP_PUBLIC_URL: origin,
       OAUTH_ISSUER: "https://certscore.ai",
@@ -57,6 +83,8 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
 
   try {
     await waitForHealth(origin, child);
+    const health = await fetch(`${origin}/healthz`).then((response) => response.json());
+    assert.equal(health.anonymousEndpoint, `${origin}/mcp/anonymous`);
     const metadata = await fetch(`${origin}/.well-known/oauth-protected-resource`).then((response) => response.json());
     assert.deepEqual(metadata.authorization_servers, ["https://certscore.ai"]);
 
@@ -99,6 +127,20 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.ok(tools.tools.some((tool) => tool.name === "scan_site"));
     await client.close();
 
+    const anonymousTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/anonymous`), {
+      requestInit: { headers: { "x-forwarded-for": "203.0.113.44" } }
+    });
+    const anonymousClient = new Client({ name: "certscore-anonymous-http-integration", version: "0.1.0" });
+    await anonymousClient.connect(anonymousTransport);
+    const anonymousTools = await anonymousClient.listTools();
+    assert.ok(anonymousTools.tools.some((tool) => tool.name === "scan_site"));
+    const created = await anonymousClient.callTool({ name: "scan_site", arguments: { url: "https://example.com" } });
+    assert.equal(created.isError, undefined);
+    assert.match(JSON.stringify(created), /anonymous-mcp-job/);
+    assert.equal(forwardedClientIp, "203.0.113.44");
+    assert.equal(apiAuthorization, undefined);
+    await anonymousClient.close();
+
     const invalidSession = await fetch(`${origin}/mcp`, {
       method: "POST",
       headers: {
@@ -113,6 +155,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     throw new Error(`${error instanceof Error ? error.message : String(error)}\n${diagnostics}`);
   } finally {
     child.kill("SIGTERM");
+    apiServer.close();
     await new Promise<void>((resolve) => {
       if (child.exitCode !== null) return resolve();
       child.once("exit", () => resolve());

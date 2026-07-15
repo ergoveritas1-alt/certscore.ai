@@ -559,10 +559,15 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.distribution, "homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
-  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.8");
+  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.9");
   assert.equal(aiDiscovery.mcp.hosted.endpoint, "https://mcp.certscore.ai/mcp");
-  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.8");
+  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.9");
   assert.match(aiDiscovery.mcp.hosted.authentication, /PKCE/);
+  assert.equal(aiDiscovery.mcp.anonymous.endpoint, "https://mcp.certscore.ai/mcp/anonymous");
+  assert.equal(aiDiscovery.mcp.anonymous.authentication, "none");
+  assert.equal(aiDiscovery.mcp.anonymous.dailyNewScanLimit, 10);
+  assert.equal(aiDiscovery.mcp.anonymous.limitKey, "requester_ip_utc_day");
+  assert.equal(aiDiscovery.mcp.anonymous.recentReuseDoesNotConsumeQuota, true);
   assert.equal(
     aiDiscovery.mcp.install,
     "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp"

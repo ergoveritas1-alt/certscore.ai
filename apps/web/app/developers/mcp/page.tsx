@@ -32,6 +32,21 @@ export default function DeveloperMcpPage() {
           </p>
         </Section>
 
+        <Section eyebrow="No-account MCP" title="Connect without signup or OAuth">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Agents that cannot create an account or complete OAuth can use the unauthenticated Streamable HTTP MCP endpoint at
+            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">https://mcp.certscore.ai/mcp/anonymous</code>. It exposes the
+            public-safe scan, status, findings, evidence, and latest-domain tools. New scans are limited to 10 per requester IP per UTC
+            day; reusing an eligible recent result does not consume the quota.
+          </p>
+          <CodeBlock>{`Unauthenticated MCP endpoint:
+https://mcp.certscore.ai/mcp/anonymous`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Use the hosted OAuth endpoint or a scoped API key for higher-volume workflows. The unauthenticated endpoint intentionally has
+            no account, token, or OAuth setup step.
+          </p>
+        </Section>
+
         <Section eyebrow="No-account agent path" title="Run up to 10 scans per day without signup">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             If an agent cannot create an account or configure OAuth, use the public API v2 scan path instead. Send a JSON POST to{" "}

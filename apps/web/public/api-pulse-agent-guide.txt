@@ -58,6 +58,12 @@ https://certscore.ai/api-pulse
 MCP developer-preview stdio server:
 https://certscore.ai/api-pulse#mcp
 
+Unauthenticated hosted MCP for low-volume agent discovery:
+https://mcp.certscore.ai/mcp/anonymous
+
+The anonymous hosted MCP endpoint requires no account, API key, or OAuth setup. It supports up to 10 new scans per requester IP per UTC
+day; reusing an eligible recent result does not consume the quota. Use OAuth or a scoped API key for higher-volume MCP workflows.
+
 Homebrew install on macOS:
 brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
 brew install --cask certscore-mcp

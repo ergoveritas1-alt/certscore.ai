@@ -112,6 +112,7 @@ async function checkLive(mcpPublicUrl: string, oauthIssuer: string, requireScanC
   const authServerUrl = `${origin(oauthIssuer)}/.well-known/oauth-authorization-server`;
   const healthUrl = `${origin(mcpPublicUrl)}/healthz`;
   const mcpUrl = `${origin(mcpPublicUrl)}/mcp`;
+  const anonymousMcpUrl = `${origin(mcpPublicUrl)}/mcp/anonymous`;
 
   try {
     const { response, body } = await fetchJson(healthUrl);
@@ -199,6 +200,40 @@ async function checkLive(mcpPublicUrl: string, oauthIssuer: string, requireScanC
     results.push(response.headers.get("cache-control")?.includes("no-store") ? ok("/mcp 401 no-store") : fail("/mcp 401 no-store"));
   } catch (error) {
     results.push(fail("unauthenticated /mcp returns 401", error instanceof Error ? error.message : String(error)));
+  }
+
+  try {
+    const response = await fetch(anonymousMcpUrl, {
+      method: "POST",
+      headers: {
+        Accept: "application/json, text/event-stream",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "certscore-mcp-anonymous-readiness", version: "0.1.0" }
+        }
+      }),
+      signal: AbortSignal.timeout(15_000)
+    });
+    const sessionId = response.headers.get("mcp-session-id");
+    results.push(response.ok ? ok("unauthenticated /mcp/anonymous initializes") : fail("unauthenticated /mcp/anonymous initializes", `${response.status}`));
+    results.push(!response.headers.get("www-authenticate") ? ok("/mcp/anonymous has no OAuth challenge") : fail("/mcp/anonymous has no OAuth challenge"));
+    results.push(sessionId ? ok("/mcp/anonymous returns a session") : fail("/mcp/anonymous returns a session"));
+    if (sessionId) {
+      await fetch(anonymousMcpUrl, {
+        method: "DELETE",
+        headers: { "Mcp-Session-Id": sessionId },
+        signal: AbortSignal.timeout(15_000)
+      }).catch(() => undefined);
+    }
+  } catch (error) {
+    results.push(fail("unauthenticated /mcp/anonymous initializes", error instanceof Error ? error.message : String(error)));
   }
 
   return results;

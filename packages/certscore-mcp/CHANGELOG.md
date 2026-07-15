@@ -1,5 +1,12 @@
 # certscore-mcp
 
+## 0.2.9
+
+- Add an unauthenticated hosted Streamable HTTP endpoint at `/mcp/anonymous` for low-volume agent discovery without account or OAuth setup.
+- Preserve the existing 10-new-scans-per-requester-IP-per-UTC-day anonymous quota through the MCP gateway.
+- Authenticate the forwarded requester identity so anonymous MCP quota accounting remains per agent rather than per gateway.
+- Keep the OAuth-protected `/mcp` endpoint and authenticated tool behavior unchanged.
+
 ## 0.2.8
 
 - Rebuild the distributed MCP binary against the SDK client-attribution header so stdio scan requests persist as MCP activity instead of generic Pulse activity.

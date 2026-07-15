@@ -7,6 +7,8 @@ import { boundEvidencePacket, exportFindings, limitPreConsentRows, normalizeDeta
 export interface CertScoreMcpOptions {
   apiKey?: string;
   baseUrl?: string;
+  forwardedClientIp?: string | null;
+  anonymousRequesterSecret?: string | null;
   timeout?: number;
 }
 
@@ -50,6 +52,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     apiKey: options.apiKey,
     baseUrl: options.baseUrl,
     clientName: "mcp",
+    forwardedClientIp: options.forwardedClientIp,
+    anonymousRequesterSecret: options.anonymousRequesterSecret,
     timeout: options.timeout
   });
 

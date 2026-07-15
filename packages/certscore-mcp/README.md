@@ -2,7 +2,7 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: public developer preview. Version 0.2.8 is prepared as a Homebrew/npm stdio server and hosted OAuth-protected Streamable HTTP service. Local WC01 development uses `pnpm mcp:certscore`.
+Status: public developer preview. Version 0.2.9 is prepared as a Homebrew/npm stdio server and hosted Streamable HTTP service. Local WC01 development uses `pnpm mcp:certscore`.
 
 Public docs:
 
@@ -58,6 +58,15 @@ https://certscore.ai/.well-known/oauth-authorization-server
 ```
 
 The hosted service uses OAuth authorization code with PKCE. Default read access requests `scan:read mcp`; support-gated scan creation additionally requests `scan:create`. The same tool implementation and output contracts power stdio and hosted transports.
+
+For low-volume agent discovery without account or OAuth setup, use the unauthenticated endpoint:
+
+```text
+https://mcp.certscore.ai/mcp/anonymous
+```
+
+It exposes the same public-safe tool surface and preserves the existing limit of 10 new scans per requester IP per UTC day. Reusing an
+eligible recent result does not consume the quota. Use the OAuth endpoint or a scoped API key for higher-volume workflows.
 
 ## Configuration
 

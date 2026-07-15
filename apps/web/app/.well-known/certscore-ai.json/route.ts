@@ -90,7 +90,7 @@ const discoveryDocument = {
     distribution: "homebrew",
     binary: "certscore-mcp",
     packageStatus: "homebrew_developer_preview",
-    currentVersion: "0.2.8",
+    currentVersion: "0.2.9",
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
     install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
@@ -107,7 +107,16 @@ const discoveryDocument = {
       protectedResourceMetadata: "https://mcp.certscore.ai/.well-known/oauth-protected-resource",
       authorizationServerMetadata: "https://certscore.ai/.well-known/oauth-authorization-server",
       authentication: "OAuth 2.0 authorization code with PKCE",
-      currentVersion: "0.2.8"
+      currentVersion: "0.2.9"
+    },
+    anonymous: {
+      transport: "streamable_http",
+      endpoint: "https://mcp.certscore.ai/mcp/anonymous",
+      authentication: "none",
+      dailyNewScanLimit: 10,
+      limitKey: "requester_ip_utc_day",
+      recentReuseDoesNotConsumeQuota: true,
+      intendedUse: "Low-volume agent discovery, evaluation, and public-web review workflows without account or OAuth setup."
     },
     currentTools: [
       "scan_site",

@@ -306,6 +306,16 @@ MCP docs:
 - https://certscore.ai/developers/mcp
 - https://certscore.ai/.well-known/certscore-ai.json
 
+Unauthenticated hosted MCP:
+
+```text
+https://mcp.certscore.ai/mcp/anonymous
+```
+
+The anonymous hosted MCP endpoint requires no account, API key, or OAuth setup. It exposes public-safe scan, status, findings, evidence,
+and latest-domain tools. New scans are limited to 10 per requester IP per UTC day, and eligible recent-result reuse does not consume the
+quota. Use the OAuth-protected hosted endpoint or a scoped API key for higher-volume workflows.
+
 ## Interpretation rules for agents
 
 Agents may summarize CertScore.ai outputs as automated public-web risk signals for review.

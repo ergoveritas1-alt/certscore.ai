@@ -115,6 +115,16 @@ function bearerToken(req: IncomingMessage) {
   return match?.[1]?.trim() || null;
 }
 
+function firstHeaderValue(value: string | string[] | undefined) {
+  return value?.toString().split(",")[0]?.trim() || null;
+}
+
+function requesterIp(req: IncomingMessage) {
+  return firstHeaderValue(req.headers["cf-connecting-ip"])
+    ?? firstHeaderValue(req.headers["x-forwarded-for"])
+    ?? firstHeaderValue(req.headers["x-real-ip"]);
+}
+
 function authenticate(req: IncomingMessage) {
   const token = bearerToken(req);
   if (!token) {
@@ -136,13 +146,22 @@ function isInitialize(body: unknown) {
   return Boolean(body && typeof body === "object" && !Array.isArray(body) && (body as Record<string, unknown>).method === "initialize");
 }
 
-async function handleMcp(req: IncomingMessage, res: ServerResponse) {
+async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: boolean) {
   if (!hostAllowed(req) || !requestOriginAllowed(req)) {
     return json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
   }
-  const auth = authenticate(req);
-  if (!auth.ok) {
-    return unauthorized(res, req, auth.reason === "missing" ? "missing_token" : "invalid_token");
+  const clientIp = anonymous ? requesterIp(req) : null;
+  let token: string | undefined;
+  let tokenHash: string;
+  if (anonymous) {
+    tokenHash = sessions.hashToken(`anonymous:${clientIp ?? "unknown-requester"}`);
+  } else {
+    const auth = authenticate(req);
+    if (!auth.ok) {
+      return unauthorized(res, req, auth.reason === "missing" ? "missing_token" : "invalid_token");
+    }
+    token = auth.token;
+    tokenHash = auth.tokenHash;
   }
   const sessionId = req.headers["mcp-session-id"]?.toString();
   let parsedBody: unknown;
@@ -160,8 +179,10 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
       sessionIdGenerator: () => randomUUID()
     });
     const server = createCertScoreMcpServer({
-      apiKey: auth.token,
+      apiKey: token,
+      anonymousRequesterSecret: anonymous ? env.jwtSecret : undefined,
       baseUrl: env.CERTSCORE_BASE_URL,
+      forwardedClientIp: clientIp,
       timeout: env.CERTSCORE_REQUEST_TIMEOUT_MS
     });
     transport.onclose = () => {
@@ -179,7 +200,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
     if (transport.sessionId) {
       const sessionResult = sessions.set(transport.sessionId, {
         server,
-        tokenHash: auth.tokenHash,
+        tokenHash,
         transport
       });
       if (sessionResult.evicted > 0) {
@@ -194,7 +215,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
       await server.close().catch((error) => console.error("[mcp-http] failed initialize server close failed", { error }));
       await transport.close().catch((error) => console.error("[mcp-http] failed initialize transport close failed", { error }));
     }
-    console.log(JSON.stringify({ event: "mcp_http.initialize", source: "mcp-http", sessionId: transport.sessionId ?? null }));
+    console.log(JSON.stringify({ event: "mcp_http.initialize", anonymous, source: "mcp-http", sessionId: transport.sessionId ?? null }));
     return;
   }
 
@@ -202,7 +223,10 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
     console.warn(JSON.stringify({ event: "mcp_http.invalid_session", source: "mcp-http", sessionProvided: Boolean(sessionId) }));
     return json(res, sessionId ? 404 : 400, { error: "invalid_session", error_description: "MCP session is missing or expired." }, corsHeaders(req));
   }
-  if (session.tokenHash !== auth.tokenHash) {
+  if (session.tokenHash !== tokenHash) {
+    if (anonymous) {
+      return json(res, 401, { error: "session_requester_mismatch", error_description: "The MCP session belongs to a different anonymous requester." }, corsHeaders(req));
+    }
     return unauthorized(res, req, "session_token_mismatch", "Bearer token does not match this MCP session.");
   }
   res.setHeader("Cache-Control", "no-store");
@@ -214,7 +238,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
   if (req.method === "DELETE" && sessionId) {
     sessions.delete(sessionId);
   }
-  console.log(JSON.stringify({ event: "mcp_http.request", method: req.method, source: "mcp-http", sessionId }));
+  console.log(JSON.stringify({ anonymous, event: "mcp_http.request", method: req.method, source: "mcp-http", sessionId }));
 }
 
 const server = createServer(async (req, res) => {
@@ -226,6 +250,7 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname === "/healthz" && req.method === "GET") {
     return json(res, 200, {
+      anonymousEndpoint: `${env.MCP_PUBLIC_URL}/mcp/anonymous`,
       type: "certscore_mcp_http_health",
       status: "ok",
       version: CERTSCORE_MCP_VERSION,
@@ -236,8 +261,8 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/.well-known/oauth-protected-resource" && req.method === "GET") {
     return json(res, 200, publicMetadata(), corsHeaders(req));
   }
-  if (url.pathname === "/mcp" && (req.method === "GET" || req.method === "POST" || req.method === "DELETE")) {
-    return handleMcp(req, res).catch((error) => {
+  if ((url.pathname === "/mcp" || url.pathname === "/mcp/anonymous") && (req.method === "GET" || req.method === "POST" || req.method === "DELETE")) {
+    return handleMcp(req, res, url.pathname === "/mcp/anonymous").catch((error) => {
       console.error("[mcp-http] request failed", { error });
       if (!res.headersSent) {
         json(res, 500, { error: "internal_error", error_description: "MCP endpoint is temporarily unavailable." }, corsHeaders(req));

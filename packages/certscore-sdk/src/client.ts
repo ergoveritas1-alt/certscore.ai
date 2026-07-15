@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { CertScoreApiError, InvalidUrlError, CertScoreScanFailedError, ThrottledError } from "./errors.js";
 import { adaptivePollIntervalMs, parseRetryAfter, retryDelayMs, sleep, SUCCESS_STATUSES, throwForTerminalStatus, throwTimeout } from "./poll.js";
 import type {
@@ -111,6 +112,8 @@ export class CertScoreClient {
   private readonly apiKey?: string;
   private readonly baseUrl: string;
   private readonly clientName: "mcp" | "sdk";
+  private readonly forwardedClientIp?: string;
+  private readonly anonymousRequesterSecret?: string;
   private readonly timeout: number;
   public readonly scans: ScanResourceClient;
   public readonly findings: FindingResourceClient;
@@ -122,6 +125,8 @@ export class CertScoreClient {
     this.apiKey = options.apiKey;
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
     this.clientName = options.clientName ?? "sdk";
+    this.forwardedClientIp = options.forwardedClientIp?.trim() || undefined;
+    this.anonymousRequesterSecret = options.anonymousRequesterSecret?.trim() || undefined;
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
     this.scans = {
       create: (url, scanOptions) => this.createScanResource(url, scanOptions),
@@ -618,6 +623,17 @@ export class CertScoreClient {
     }
     if (this.apiKey) {
       headers.Authorization = `Bearer ${this.apiKey}`;
+    }
+    if (this.forwardedClientIp && !this.apiKey) {
+      headers["X-Forwarded-For"] = this.forwardedClientIp;
+      if (this.anonymousRequesterSecret) {
+        const timestamp = String(Math.floor(Date.now() / 1000));
+        const message = `${timestamp}.${this.forwardedClientIp}`;
+        const proof = createHmac("sha256", this.anonymousRequesterSecret).update(message).digest("base64url");
+        headers["X-CertScore-Anonymous-Requester-IP"] = this.forwardedClientIp;
+        headers["X-CertScore-Anonymous-Requester-Timestamp"] = timestamp;
+        headers["X-CertScore-Anonymous-Requester-Proof"] = proof;
+      }
     }
     return headers;
   }
