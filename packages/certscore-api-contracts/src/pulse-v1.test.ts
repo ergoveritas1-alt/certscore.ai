@@ -309,11 +309,13 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
 
   assert.equal(document.info.version, "0.1.3");
   assert.ok(document.paths["/api/v2/keys/request"]);
+  assert.ok(document.paths["/api/v2/auth/check"]);
   assert.ok(document.paths["/api/v2/scans"]);
   assert.ok(document.paths["/api/v2/scans/{scanId}/findings/{findingId}"]);
   assert.ok(document.paths["/api/v2/domains/{domain}/latest"]);
   assert.ok(document.paths["/api/v2/scans/{scanId}/pulse"]);
   assert.deepEqual(operations.sort(), [
+    "checkIntegrationCredential",
     "createScan",
     "getApiV2Health",
     "getLatestDomainPreConsentCookiesTrackers",
