@@ -3,7 +3,7 @@ import { applyPulseCors, pulseOptionsResponse } from "../../../../../../lib/puls
 import { buildPulseError } from "../../../../../../lib/pulse/error";
 import { logPulseGptActionEvent } from "../../../../../../lib/pulse/gpt-action-analytics";
 import { buildPulseStatus } from "../../../../../../lib/pulse/status";
-import { getAnonymousScanById } from "../../../../../../server/scans/get-scan-by-id";
+import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
 import { getPulseRequestByJobId, updatePulseRequestLifecycle } from "../../../../../../server/pulse/repository";
 import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 import { queueAlternateRegionRecovery } from "../../../../../../server/pulse/queue-alternate-region-recovery";
@@ -78,7 +78,7 @@ export async function GET(request: Request, context: RouteContext) {
       ? pulseRequest.request_context.recovery as Record<string, unknown>
       : null;
     if (pulseRequest.scan_id) {
-      const scanRecord = await getAnonymousScanById(pulseRequest.scan_id).catch(() => null);
+      const scanRecord = await getPublicScanRecord(pulseRequest.scan_id, { logPrefix: "[pulse-status]" }).catch(() => null);
       if (scanRecord?.scan.status === "completed") {
         noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
         const fallback = await queueAlternateRegionRecovery({
