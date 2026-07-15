@@ -142,6 +142,8 @@ export type StaticFixturePage =
   | "security-kasada-challenge"
   | "security-polish-temporary-interstitial"
   | "no-go-blank-page"
+  | "no-go-cloudflare-dns-error"
+  | "no-go-confirmed-sparse-shell"
   | "no-go-configuration-error"
   | "no-go-loading-stalled"
   | "no-go-minimal-not-found"
@@ -304,6 +306,8 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "security-kasada-challenge": "security-kasada-challenge",
   "security-polish-temporary-interstitial": "security-polish-temporary-interstitial",
   "no-go-blank-page": "no-go-blank-page",
+  "no-go-cloudflare-dns-error": "no-go-cloudflare-dns-error",
+  "no-go-confirmed-sparse-shell": "no-go-confirmed-sparse-shell",
   "no-go-configuration-error": "no-go-configuration-error",
   "no-go-loading-stalled": "no-go-loading-stalled",
   "no-go-minimal-not-found": "no-go-minimal-not-found",
@@ -882,6 +886,12 @@ function cookieForCase(caseName: StaticFixturePage): string | undefined {
 function pageHtml(caseName: StaticFixturePage): string {
   if (caseName === "no-go-blank-page") {
     return "<!doctype html><html><head><title></title></head><body></body></html>";
+  }
+  if (caseName === "no-go-cloudflare-dns-error") {
+    return `<main><h1>Error 1001</h1><h2>DNS resolution error</h2><p>Cloudflare is currently unable to resolve your requested domain.</p></main>`;
+  }
+  if (caseName === "no-go-confirmed-sparse-shell") {
+    return `<main>Do Not Sell or Share My Personal Information</main>`;
   }
   if (caseName === "no-go-loading-stalled") {
     return "<!doctype html><html><head><title>Loading</title></head><body>Loading...</body></html>";

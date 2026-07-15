@@ -40,7 +40,7 @@ import { detectConsentUi, preConsentRuntimeScanner, type PreConsentRuntimeScanne
 import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
 import { chromiumContextOptions, chromiumLaunchOptions, chromiumProxyOptions } from "./playwright-runtime.js";
 import { throwIfAborted } from "./abort.js";
-import { httpTransportFallbackUrl, isNavigationTransportFailure } from "./transport-fallback.js";
+import { isNavigationTransportFailure, navigationTransportRecoveryUrls } from "./transport-fallback.js";
 
 type ConsentFlowRuntimeScanner = typeof import("./scanners/consent-flow-runtime-scanner.js").consentFlowRuntimeScanner;
 type ConsentFlowRuntimeInput = Parameters<ConsentFlowRuntimeScanner>[0];
@@ -315,9 +315,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     const screenshotFallback = await capturePreConsentScreenshotOnlyFallback({
       artifactWriter,
       normalizedUrl,
-      navigationUrl: (preConsentResult.moduleRun.errors ?? []).some(isNavigationTransportFailure)
-        ? httpTransportFallbackUrl(normalizedUrl) ?? normalizedUrl
-        : normalizedUrl,
+      navigationUrls: (preConsentResult.moduleRun.errors ?? []).some(isNavigationTransportFailure)
+        ? [normalizedUrl, ...navigationTransportRecoveryUrls(normalizedUrl)]
+        : [normalizedUrl],
       scanStartedAtMs: startedAtMs,
       fallbackDeadlineMs: input.preConsentVisualFallbackDeadlineMs,
       screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
@@ -667,7 +667,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         ...baseRuntimeCoverage.notes,
         scanNoGoEvidence.primaryReasonCode === "navigation_transport_failure"
           ? "Initial navigation failed before public-page evidence could be retained, so runtime evidence should be treated as not testable for this run."
-          : "Initial-load evidence shows a bot/security challenge or access-block page, so runtime evidence should be treated as not reportable.",
+          : "Initial-load evidence shows a terminal no-go page instead of the normal public site, so runtime evidence should be treated as not reportable.",
       ]),
     }
     : scanNoGoEvidence
@@ -1356,7 +1356,7 @@ const SCAN_NO_GO_LOADING_PATTERN =
   /^[^\p{L}\p{N}]{0,4}(?:loading|please wait|establishing (?:a )?secure connection|initializing)\b[\s\S]{0,120}$/iu;
 const SCAN_NO_GO_TLS_PATTERN = /invalid ssl certificate|certificate (?:is )?(?:invalid|expired)|privacy error|your connection is not private/i;
 const SCAN_NO_GO_CONFIGURATION_ERROR_PATTERN =
-  /\{\s*"(?:detail|error)"\s*:\s*"(?:wrong domain parts[^\"]*|invalid (?:domain|host)[^\"]*|domain (?:is )?not configured[^\"]*)"|"error_code"\s*:\s*"[^"]+"[^}]{0,160}"error_msg"\s*:\s*"[^"]*(?:unavailable|configuration|invalid domain)/i;
+  /\{\s*"(?:detail|error)"\s*:\s*"(?:wrong domain parts[^\"]*|invalid (?:domain|host)[^\"]*|domain (?:is )?not configured[^\"]*)"|"error_code"\s*:\s*"[^"]+"[^}]{0,160}"error_msg"\s*:\s*"[^"]*(?:unavailable|configuration|invalid domain)|\berror 1001\b[\s\S]{0,240}\bdns resolution error\b|cloudflare is currently unable to resolve your requested domain/i;
 const SCAN_NO_GO_UNSUPPORTED_REGION_PATTERN =
   /visiting from the(?:\s|\|)+(?:eu|european union)[\s\S]{0,280}(?:ignore|block|deny)[^.]{0,100}(?:traffic|users?|access)|(?:site|service|content) (?:is )?not available in your (?:country|region)/i;
 const SCAN_NO_GO_SITE_NOT_READY_PATTERN =
@@ -1434,22 +1434,28 @@ function buildScanNoGoAssessment(input: {
     };
   }
 
+  const domTextCandidates = uniqueStrings(
+    input.domSnapshots
+      .map((snapshot) => boundedScanNoGoText(snapshot.textExcerpt))
+      .filter((text): text is string => Boolean(text)),
+  );
   const textCandidates = uniqueStrings([
-    ...input.domSnapshots.map((snapshot) => boundedScanNoGoText(snapshot.textExcerpt)),
+    ...domTextCandidates,
     ...input.consentUiObservations.map((observation) => boundedScanNoGoText(observation.textExcerpt)),
   ].filter((text): text is string => Boolean(text)));
   const longestText = [...textCandidates].sort((left, right) => right.length - left.length)[0] ?? "";
+  const longestDomText = [...domTextCandidates].sort((left, right) => right.length - left.length)[0] ?? "";
   const mainDocumentStatus = getMainDocumentStatus(input.networkEvents, input.networkResponseEvents);
   const successfulFirstPartyResponses = input.networkResponseEvents.filter((event) =>
     event.firstParty === true && (event.status ?? 0) >= 200 && (event.status ?? 0) < 400
   ).length;
-  const substantiveWordCount = longestText.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
+  const substantiveDomWordCount = longestDomText.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
   const textPageState = classifyScanNoGoText(longestText);
   const positiveSiteSignals = uniqueStrings([
     mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400
       ? "main_document_success"
       : null,
-    !textPageState && longestText.length >= 180 && substantiveWordCount >= 24
+    !textPageState && longestDomText.length >= 180 && substantiveDomWordCount >= 24
       ? "substantive_dom_text_observed"
       : null,
     input.policySurfaceObservations.length > 0 ? "policy_surface_observed" : null,
@@ -1467,9 +1473,7 @@ function buildScanNoGoAssessment(input: {
     networkChallengeEvidence &&
     (textPageState?.reasonCode === "captcha_or_challenge" ||
       (httpPageState?.reasonCode === "access_denied_or_forbidden_page" &&
-        ["network_datadome_challenge", "network_kasada_challenge"].includes(
-          networkChallengeEvidence.corroboratorCode,
-        )))
+        !strongPositiveSiteEvidence))
       ? {
           confidence: 0.95,
           evidenceText: textPageState?.evidenceText ?? networkChallengeEvidence.evidenceText,
@@ -1479,7 +1483,17 @@ function buildScanNoGoAssessment(input: {
         }
       : null;
   const pageState = challengePageState ?? httpPageState ?? textPageState;
-  const nearlyEmptyPage = longestText.length <= 40 && substantiveWordCount <= 6;
+  const nearlyEmptyPage = longestDomText.length <= 40 && substantiveDomWordCount <= 6;
+  const sparseSecondLookRetained = input.screenshots.some((artifact) =>
+    artifact.artifactId === "screenshot_pre_consent_no_go_confirmation"
+  );
+  const temporallyConfirmedSparsePage =
+    mainDocumentStatus !== null &&
+    mainDocumentStatus >= 200 &&
+    mainDocumentStatus < 400 &&
+    longestDomText.length <= 60 &&
+    substantiveDomWordCount <= 10 &&
+    sparseSecondLookRetained;
   const sparseSuccessfulPage =
     mainDocumentStatus !== null &&
     mainDocumentStatus >= 200 &&
@@ -1488,12 +1502,14 @@ function buildScanNoGoAssessment(input: {
     input.networkEvents.length <= 4 &&
     successfulFirstPartyResponses <= 2 &&
     input.policySurfaceObservations.length === 0;
-  if (!pageState && !networkChallengeEvidence && !sparseSuccessfulPage) {
+  if (!pageState && !networkChallengeEvidence && !sparseSuccessfulPage && !temporallyConfirmedSparsePage) {
     return null;
   }
 
   const retainedEvidenceText = pageState?.evidenceText ??
-    (sparseSuccessfulPage ? "The settled page retained almost no visible text or supporting first-party content." : null) ??
+    (sparseSuccessfulPage || temporallyConfirmedSparsePage
+      ? "The settled page remained sparse after a bounded second-look capture."
+      : null) ??
     networkChallengeEvidence?.evidenceText ??
     "Potential security challenge evidence observed.";
   const securityChallengeRequestObserved = Boolean(networkChallengeEvidence);
@@ -1501,18 +1517,22 @@ function buildScanNoGoAssessment(input: {
     .filter((artifact) => artifact.consentStateAtTime === "pre_consent")
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs)[0] ?? null;
   const primaryReasonCode = pageState?.reasonCode ??
-    (sparseSuccessfulPage ? "blank_or_unusable_page" : "potential_security_challenge");
+    (sparseSuccessfulPage || temporallyConfirmedSparsePage ? "blank_or_unusable_page" : "potential_security_challenge");
   const visualPageState: VisualAccessReview["page_state"] = pageState?.visualPageState ??
-    (sparseSuccessfulPage ? "blank_or_unusable" : "degraded_but_useful");
+    (sparseSuccessfulPage || temporallyConfirmedSparsePage ? "blank_or_unusable" : "degraded_but_useful");
   const blockedMainDocument = mainDocumentStatus !== null && [401, 403, 407, 429, 451, 500, 502, 503, 504].includes(mainDocumentStatus);
-  const explicitTerminalPage = Boolean(pageState) || sparseSuccessfulPage;
-  const contradictedByNormalSite = strongPositiveSiteEvidence && !blockedMainDocument && !pageState?.hardTerminal;
+  const explicitTerminalPage = Boolean(pageState) || sparseSuccessfulPage || temporallyConfirmedSparsePage;
+  const contradictedByNormalSite =
+    strongPositiveSiteEvidence &&
+    !blockedMainDocument &&
+    !pageState?.hardTerminal &&
+    !temporallyConfirmedSparsePage;
   const decision: ScanNoGoAssessment["decision"] =
     explicitTerminalPage && !contradictedByNormalSite
       ? "no_go"
       : "continue_with_diagnostics";
   const confidence = decision === "no_go"
-    ? pageState?.confidence ?? (sparseSuccessfulPage ? 0.91 : 0.9)
+    ? pageState?.confidence ?? (sparseSuccessfulPage || temporallyConfirmedSparsePage ? 0.91 : 0.9)
     : 0.72;
   const evidenceRefs = [
     "scan_runtime_artifacts.scan_no_go_assessment",
@@ -1544,7 +1564,8 @@ function buildScanNoGoAssessment(input: {
       securityChallengeRequestObserved ? "network_security_challenge_request_observed" : null,
       networkChallengeEvidence?.corroboratorCode ?? null,
       pageState ? "terminal_page_text_or_status_observed" : null,
-      sparseSuccessfulPage ? "settled_page_nearly_empty" : null,
+      sparseSuccessfulPage || temporallyConfirmedSparsePage ? "settled_page_nearly_empty" : null,
+      temporallyConfirmedSparsePage ? "bounded_second_look_remained_sparse" : null,
       screenshot ? "retained_visual_artifact_available" : null,
     ].filter((value): value is string => Boolean(value)),
     contradictorCodes: decision === "continue_with_diagnostics" ? positiveSiteSignals : [],
@@ -1553,8 +1574,8 @@ function buildScanNoGoAssessment(input: {
       documentStatusBlocked: blockedMainDocument,
       expectedOriginReached: mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400,
       mainDocumentStatus,
-      substantiveDomTextObserved: longestText.length >= 180 && substantiveWordCount >= 24,
-      substantiveWordCount,
+      substantiveDomTextObserved: longestDomText.length >= 180 && substantiveDomWordCount >= 24,
+      substantiveWordCount: substantiveDomWordCount,
       successfulFirstPartyResponses,
       retainedVisualArtifactAvailable: Boolean(screenshot),
       securityChallengeRequestObserved,
@@ -1780,6 +1801,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
   artifactWriter: ArtifactWriter;
   fallbackDeadlineMs?: number;
   navigationUrl?: string;
+  navigationUrls?: string[];
   normalizedUrl: string;
   scanStartedAtMs: number;
   screenshotTimeoutMs?: number;
@@ -1818,10 +1840,26 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
     const context = await browser.newContext(chromiumContextOptions());
     try {
       const page = await context.newPage();
-      await page.goto(input.navigationUrl ?? input.normalizedUrl, {
-        waitUntil: "commit",
-        timeout: timeoutForStep(Math.max(2_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 15_000))),
-      });
+      const navigationUrls = input.navigationUrls?.length
+        ? input.navigationUrls
+        : [input.navigationUrl ?? input.normalizedUrl];
+      let navigationError: unknown;
+      let navigationRecovered = false;
+      for (const [index, navigationUrl] of navigationUrls.entries()) {
+        try {
+          await page.goto(navigationUrl, {
+            waitUntil: "commit",
+            timeout: timeoutForStep(Math.max(2_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 15_000))),
+          });
+          navigationRecovered = index > 0;
+          navigationError = undefined;
+          break;
+        } catch (error) {
+          navigationError = error;
+          if (!isNavigationTransportFailure(error)) throw error;
+        }
+      }
+      if (navigationError) throw navigationError;
       const domContentLoadedTimeoutMs = optionalTimeoutForStep(1_500);
       if (domContentLoadedTimeoutMs !== null) {
         await page.waitForLoadState("domcontentloaded", { timeout: domContentLoadedTimeoutMs }).catch(() => undefined);
@@ -1881,6 +1919,9 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
             relatedEventIds: [],
           }],
           notes: [
+            ...(navigationRecovered
+              ? [`Independent visual fallback recovered through bounded navigation alternative ${page.url()}.`]
+              : []),
             consentUiObservation
               ? "Screenshot and bounded consent-surface evidence retained by an independent visual fallback after the primary runtime page/context closed."
               : "Screenshot retained by an independent screenshot-only fallback after the primary runtime page/context closed.",

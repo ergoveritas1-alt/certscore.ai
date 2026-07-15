@@ -46,7 +46,13 @@ import {
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
-import { httpTransportFallbackUrl, isNavigationTransportFailure } from "../transport-fallback.js";
+import {
+  alternateWwwNavigationUrl,
+  boundedRetryAfterMs,
+  isNavigationTransportFailure,
+  isTransientMainDocumentStatus,
+  navigationTransportRecoveryUrls,
+} from "../transport-fallback.js";
 
 const SOURCE_SCANNER = "pre_consent_runtime";
 const SCENARIO = "fresh_pre_consent";
@@ -378,6 +384,7 @@ export async function preConsentRuntimeScanner(
   let supplementalScreenshotAttempted = false;
   let consentGeometryDiagnosticWritten = false;
   let initialNavigationHttpStatus: number | undefined;
+  let effectiveNavigationUrl = input.normalizedUrl;
   const fallbackConsentUiObservations: ConsentUiObservation[] = [];
   const fallbackDomSnapshots: DomSnapshotArtifact[] = [];
   let retainedCookieSnapshot: CookieSnapshot | undefined;
@@ -445,34 +452,76 @@ export async function preConsentRuntimeScanner(
   const scanPromise = (async (): Promise<PreConsentRuntimeScannerResult> => {
   try {
     const navigationStartedAtMs = Date.now();
-    const navigationResponse = await recordTiming(timingBreakdown, "page navigation", "Initial navigation until DOMContentLoaded.", async () => {
-      try {
-        return await page.goto(input.normalizedUrl, {
-          waitUntil: "domcontentloaded",
-          timeout: Math.min(input.internalBudgetMs, 15_000),
-        });
-      } catch (error) {
-        const currentPageUrl = page.url();
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (/timeout/i.test(errorMessage) && currentPageUrl !== "about:blank") {
+    let navigationResponse = await recordTiming(timingBreakdown, "page navigation", "Initial navigation with bounded same-site transport recovery until DOMContentLoaded.", async () => {
+      const candidates = [input.normalizedUrl, ...navigationTransportRecoveryUrls(input.normalizedUrl)];
+      let lastError: unknown;
+      for (const [index, candidateUrl] of candidates.entries()) {
+        if (index > 0) {
+          if (!isNavigationTransportFailure(lastError)) throw lastError;
           navigationNotes.push(
-            "Initial navigation committed a document but did not reach DOMContentLoaded within the bounded wait; retained the current page for evidence capture.",
+            `Entry navigation transport recovery attempt ${index}/${candidates.length - 1}: ${candidateUrl}`,
           );
-          return null;
+          await page.goto("about:blank", { waitUntil: "load", timeout: 1_000 }).catch(() => undefined);
+          await page.waitForTimeout(50);
         }
-        const fallbackUrl = httpTransportFallbackUrl(input.normalizedUrl);
-        if (!fallbackUrl || !isNavigationTransportFailure(error)) throw error;
-        navigationNotes.push(
-          `HTTPS entry navigation failed at the transport layer; retried the equivalent HTTP entry URL: ${fallbackUrl}`,
-        );
-        await page.goto("about:blank", { waitUntil: "load", timeout: 1_000 }).catch(() => undefined);
-        await page.waitForTimeout(50);
-        return page.goto(fallbackUrl, {
-          waitUntil: "domcontentloaded",
-          timeout: Math.max(1_000, Math.min(10_000, input.internalBudgetMs - (Date.now() - navigationStartedAtMs))),
-        });
+        try {
+          const response = await page.goto(candidateUrl, {
+            waitUntil: "domcontentloaded",
+            timeout: Math.max(1_000, Math.min(index === 0 ? 15_000 : 7_500, input.internalBudgetMs - (Date.now() - navigationStartedAtMs))),
+          });
+          effectiveNavigationUrl = page.url() === "about:blank" ? candidateUrl : page.url();
+          if (index > 0) {
+            navigationNotes.push(`Entry navigation recovered through ${candidateUrl}`);
+          }
+          return response;
+        } catch (error) {
+          const currentPageUrl = page.url();
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (/timeout/i.test(errorMessage) && currentPageUrl !== "about:blank") {
+            effectiveNavigationUrl = currentPageUrl;
+            navigationNotes.push(
+              "Entry navigation committed a document but did not reach DOMContentLoaded within the bounded wait; retained the current page for evidence capture.",
+            );
+            return null;
+          }
+          lastError = error;
+        }
       }
+      throw lastError;
     });
+
+    if (navigationResponse && isTransientMainDocumentStatus(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {
+      const initialStatus = navigationResponse.status();
+      const retryAfterMs = boundedRetryAfterMs(await navigationResponse.headerValue("retry-after").catch(() => null));
+      navigationNotes.push(`Main document returned transient HTTP ${initialStatus}; performed one bounded retry after ${retryAfterMs}ms.`);
+      if (retryAfterMs > 0) await page.waitForTimeout(Math.min(retryAfterMs, remainingModuleBudgetMs() - 1_000));
+      navigationResponse = await page.goto(effectiveNavigationUrl, {
+        waitUntil: "commit",
+        timeout: Math.max(1_000, Math.min(7_500, remainingModuleBudgetMs())),
+      });
+      await page.waitForLoadState("domcontentloaded", { timeout: Math.min(2_000, remainingModuleBudgetMs()) }).catch(() => undefined);
+      effectiveNavigationUrl = page.url() === "about:blank" ? effectiveNavigationUrl : page.url();
+      navigationNotes.push(`Transient response retry completed with HTTP ${navigationResponse?.status() ?? "unknown"}.`);
+    }
+
+    if (navigationResponse && [404, 410].includes(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {
+      const alternateHostUrl = alternateWwwNavigationUrl(effectiveNavigationUrl);
+      if (alternateHostUrl) {
+        navigationNotes.push(`Main document returned HTTP ${navigationResponse.status()}; tried the bounded apex/www alternative: ${alternateHostUrl}`);
+        const alternateResponse = await page.goto(alternateHostUrl, {
+          waitUntil: "commit",
+          timeout: Math.max(1_000, Math.min(7_500, remainingModuleBudgetMs())),
+        }).catch(() => null);
+        if (alternateResponse && ![404, 410].includes(alternateResponse.status())) {
+          navigationResponse = alternateResponse;
+          effectiveNavigationUrl = page.url() === "about:blank" ? alternateHostUrl : page.url();
+          await page.waitForLoadState("domcontentloaded", { timeout: Math.min(2_000, remainingModuleBudgetMs()) }).catch(() => undefined);
+          navigationNotes.push(`Apex/www recovery completed with HTTP ${alternateResponse.status()}.`);
+        } else {
+          navigationNotes.push(`Apex/www recovery did not improve the terminal response.`);
+        }
+      }
+    }
     initialNavigationHttpStatus = navigationResponse?.status();
     const fastWait = input.waitMode === "fast";
     const networkIdleTimeoutMs = fastWait ? 1_500 : 5_000;
@@ -1382,6 +1431,7 @@ export async function preConsentRuntimeScanner(
       const retryCapture = await retryPreConsentScreenshotInFreshContext({
         browser,
         input,
+        navigationUrl: effectiveNavigationUrl,
         screenshotErrors,
         timingBreakdown,
       }).catch((retryError) => {
@@ -6355,6 +6405,7 @@ async function writeConsentGeometryNoGoArtifact(
 async function retryPreConsentScreenshotInFreshContext(input: {
   browser: Browser;
   input: PreConsentRuntimeScannerInput;
+  navigationUrl: string;
   screenshotErrors: string[];
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
 }): Promise<{
@@ -6391,10 +6442,12 @@ async function retryPreConsentScreenshotInFreshContext(input: {
           });
         }
         const retryPage = await retryContext.newPage();
-        await retryPage.goto(input.input.normalizedUrl, {
-          waitUntil: "domcontentloaded",
+        await retryPage.goto(input.navigationUrl, {
+          waitUntil: "commit",
           timeout: Math.min(input.input.internalBudgetMs, input.input.screenshotTimeoutMs ?? 15_000),
         });
+        await retryPage.waitForLoadState("domcontentloaded", { timeout: 1_500 }).catch(() => undefined);
+        await retryPage.waitForLoadState("networkidle", { timeout: 1_000 }).catch(() => undefined);
         const capture = await capturePreConsentScreenshot(
           retryPage,
           screenshotPath,

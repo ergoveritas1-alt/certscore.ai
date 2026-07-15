@@ -322,7 +322,9 @@ async function summarizeCompletedRun(input: {
   const bundlePath = path.join(calibrationDir, "CanonicalEvidenceBundle.json");
   const reviewPath = path.join(calibrationDir, "ReviewResult.json");
   const bundle = await readJson<Record<string, unknown>>(bundlePath);
-  const review = await readJson<Record<string, unknown>>(reviewPath);
+  const review = existsSync(reviewPath)
+    ? await readJson<Record<string, unknown>>(reviewPath)
+    : {};
   const moduleRuns = summarizeModuleRuns(bundle);
   const eligibleFindingKeys = summarizeEligibleFindingKeys(review);
   const candidateCounts = summarizeReviewCandidateCounts(review);
@@ -1014,6 +1016,13 @@ function asBoolean(value: unknown) {
 
 function detectNoGoCandidateReasons(bundle: Record<string, unknown>, calibrationDir?: string) {
   const reasons = new Set<string>();
+  const scanNoGoAssessment = asRecord(bundle.scanNoGoAssessment ?? bundle.scan_no_go_assessment);
+  const explicitScanNoGo = asString(scanNoGoAssessment.decision) === "no_go";
+  if (explicitScanNoGo) {
+    for (const reasonCode of asStringArray(scanNoGoAssessment.reasonCodes)) {
+      reasons.add(`scan_no_go:${reasonCode}`);
+    }
+  }
   const moduleRuns = coalesceArray(bundle.modulesRun, asRecord(bundle.metadata).moduleRuns).map(asRecord);
   const policyRun = moduleRuns.find((moduleRun) => asString(moduleRun.moduleName) === "policySurfaceScanner");
   const policyErrors = asStringArray(policyRun?.errors);
@@ -1106,6 +1115,7 @@ function detectNoGoCandidateReasons(bundle: Record<string, unknown>, calibration
     vendorObservations.length === 0;
 
   if (
+    !explicitScanNoGo &&
     !hasDirectBlockEvidence &&
     !hasEmptyForbiddenShell &&
     !hasEmptyCloudflareChallengeShell &&

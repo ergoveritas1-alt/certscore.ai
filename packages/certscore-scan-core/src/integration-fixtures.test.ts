@@ -2046,6 +2046,8 @@ test("scan-core classifies deterministic non-security no-go pages", async () => 
     ["no-go-site-not-ready", "site_not_ready", "parked_or_placeholder"],
     ["no-go-loading-stalled", "loading_or_stalled", "blank_or_unusable"],
     ["no-go-blank-page", "blank_or_unusable_page", "blank_or_unusable"],
+    ["no-go-cloudflare-dns-error", "configuration_error", "visual_error_shell"],
+    ["no-go-confirmed-sparse-shell", "blank_or_unusable_page", "blank_or_unusable"],
   ] as const;
   try {
     for (const [page, reasonCode, pageState] of cases) {
