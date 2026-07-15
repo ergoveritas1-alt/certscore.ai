@@ -143,6 +143,7 @@ export type StaticFixturePage =
   | "security-polish-temporary-interstitial"
   | "no-go-blank-page"
   | "no-go-cloudflare-dns-error"
+  | "no-go-branded-technical-error"
   | "no-go-confirmed-sparse-shell"
   | "no-go-configuration-error"
   | "no-go-loading-stalled"
@@ -307,6 +308,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "security-polish-temporary-interstitial": "security-polish-temporary-interstitial",
   "no-go-blank-page": "no-go-blank-page",
   "no-go-cloudflare-dns-error": "no-go-cloudflare-dns-error",
+  "no-go-branded-technical-error": "no-go-branded-technical-error",
   "no-go-confirmed-sparse-shell": "no-go-confirmed-sparse-shell",
   "no-go-configuration-error": "no-go-configuration-error",
   "no-go-loading-stalled": "no-go-loading-stalled",
@@ -889,6 +891,9 @@ function pageHtml(caseName: StaticFixturePage): string {
   }
   if (caseName === "no-go-cloudflare-dns-error") {
     return `<main><h1>Error 1001</h1><h2>DNS resolution error</h2><p>Cloudflare is currently unable to resolve your requested domain.</p></main>`;
+  }
+  if (caseName === "no-go-branded-technical-error") {
+    return `<main><h1>Sorry, we're unable to complete your request</h1><p>We cannot complete your request due to a technical difficulty.</p><p>Error Ref: fixture-123</p></main>`;
   }
   if (caseName === "no-go-confirmed-sparse-shell") {
     return `<main>Do Not Sell or Share My Personal Information</main>`;

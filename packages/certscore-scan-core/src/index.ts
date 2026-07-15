@@ -1356,7 +1356,7 @@ const SCAN_NO_GO_LOADING_PATTERN =
   /^[^\p{L}\p{N}]{0,4}(?:loading|please wait|establishing (?:a )?secure connection|initializing)\b[\s\S]{0,120}$/iu;
 const SCAN_NO_GO_TLS_PATTERN = /invalid ssl certificate|certificate (?:is )?(?:invalid|expired)|privacy error|your connection is not private/i;
 const SCAN_NO_GO_CONFIGURATION_ERROR_PATTERN =
-  /\{\s*"(?:detail|error)"\s*:\s*"(?:wrong domain parts[^\"]*|invalid (?:domain|host)[^\"]*|domain (?:is )?not configured[^\"]*)"|"error_code"\s*:\s*"[^"]+"[^}]{0,160}"error_msg"\s*:\s*"[^"]*(?:unavailable|configuration|invalid domain)|\berror 1001\b[\s\S]{0,240}\bdns resolution error\b|cloudflare is currently unable to resolve your requested domain/i;
+  /\{\s*"(?:detail|error)"\s*:\s*"(?:wrong domain parts[^\"]*|invalid (?:domain|host)[^\"]*|domain (?:is )?not configured[^\"]*)"|"error_code"\s*:\s*"[^"]+"[^}]{0,160}"error_msg"\s*:\s*"[^"]*(?:unavailable|configuration|invalid domain)|\berror 1001\b[\s\S]{0,240}\bdns resolution error\b|cloudflare is currently unable to resolve your requested domain|unable to complete your request[\s\S]{0,240}(?:technical difficulty|error ref)/i;
 const SCAN_NO_GO_UNSUPPORTED_REGION_PATTERN =
   /visiting from the(?:\s|\|)+(?:eu|european union)[\s\S]{0,280}(?:ignore|block|deny)[^.]{0,100}(?:traffic|users?|access)|(?:site|service|content) (?:is )?not available in your (?:country|region)/i;
 const SCAN_NO_GO_SITE_NOT_READY_PATTERN =
@@ -1487,10 +1487,11 @@ function buildScanNoGoAssessment(input: {
   const sparseSecondLookRetained = input.screenshots.some((artifact) =>
     artifact.artifactId === "screenshot_pre_consent_no_go_confirmation"
   );
+  const committedVisualPageRetained = input.screenshots.some((artifact) =>
+    /^https?:\/\//i.test(artifact.url)
+  );
   const temporallyConfirmedSparsePage =
-    mainDocumentStatus !== null &&
-    mainDocumentStatus >= 200 &&
-    mainDocumentStatus < 400 &&
+    ((mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400) || committedVisualPageRetained) &&
     longestDomText.length <= 60 &&
     substantiveDomWordCount <= 10 &&
     sparseSecondLookRetained;
