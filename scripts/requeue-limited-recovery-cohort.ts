@@ -81,6 +81,10 @@ const MAX_CREATE_RETRIES = 2;
 const MAX_POLL_SECONDS = 20 * 60;
 const POLL_INTERVAL_MS = 10_000;
 const POLL_CONCURRENCY = 4;
+const DETERMINISTIC_NO_GO_REASONS = new Set([
+  "access_denied_or_forbidden_page",
+  "captcha_or_challenge",
+]);
 
 function parseArgs(argv: string[]) {
   let baseUrl = DEFAULT_BASE_URL;
@@ -88,6 +92,10 @@ function parseArgs(argv: string[]) {
   let execute = false;
   let resume = false;
   let targetDomains: string[] | null = null;
+  let priorRequeue: string | null = null;
+  let allowDeterministicRetry = false;
+  let allowRepeatRecovery = false;
+  let recoveryAttempt = 1;
   let scanFrom = "eu_ie";
   for (const arg of argv) {
     if (arg === "--execute") {
@@ -96,6 +104,15 @@ function parseArgs(argv: string[]) {
       resume = true;
     } else if (arg.startsWith("--targets=")) {
       targetDomains = arg.slice("--targets=".length).split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+    } else if (arg.startsWith("--prior-requeue=")) {
+      priorRequeue = arg.slice("--prior-requeue=".length);
+    } else if (arg === "--allow-deterministic-retry") {
+      allowDeterministicRetry = true;
+    } else if (arg === "--allow-repeat-recovery") {
+      allowRepeatRecovery = true;
+    } else if (arg.startsWith("--recovery-attempt=")) {
+      recoveryAttempt = Number(arg.slice("--recovery-attempt=".length));
+      if (!Number.isInteger(recoveryAttempt) || recoveryAttempt < 1) throw new Error("--recovery-attempt must be a positive integer.");
     } else if (arg.startsWith("--scan-from=")) {
       scanFrom = arg.slice("--scan-from=".length).trim();
     } else if (arg.startsWith("--base-url=")) {
@@ -106,7 +123,7 @@ function parseArgs(argv: string[]) {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
-  return { baseUrl, execute, output, resume, scanFrom, targetDomains };
+  return { allowDeterministicRetry, allowRepeatRecovery, baseUrl, execute, output, priorRequeue, recoveryAttempt, resume, scanFrom, targetDomains };
 }
 
 async function fetchJson(url: string) {
@@ -277,6 +294,14 @@ async function main() {
     : TARGETS;
   const manifest = {
     cohort: args.targetDomains ? "limited-recovery-regression-retry-20260715" : "limited-recovery-production-20260715",
+    retryPolicy: {
+      maxRecoveryAttempts: 1,
+      recoveryAttempt: args.recoveryAttempt,
+      deterministicNoGoReasons: Array.from(DETERMINISTIC_NO_GO_REASONS),
+      allowDeterministicRetry: args.allowDeterministicRetry,
+      allowRepeatRecovery: args.allowRepeatRecovery,
+      priorRequeue: args.priorRequeue,
+    },
     targetCount: targets.length,
     targets,
     scanFrom: args.scanFrom,
@@ -288,6 +313,22 @@ async function main() {
 
   const outputPath = path.resolve(args.output);
   let records: ScanRecord[] = [];
+  const priorRecords = new Map<string, ScanRecord>();
+  const budgetExhaustedDomains = new Set<string>();
+  if (args.priorRequeue) {
+    const prior = JSON.parse(await readFile(path.resolve(args.priorRequeue), "utf8")) as { cohort?: string; recoveryAttempt?: number; records?: ScanRecord[] };
+    const priorRecoveryAttempt = typeof prior.recoveryAttempt === "number"
+      ? prior.recoveryAttempt
+      : prior.cohort?.includes("regression-retry")
+        ? 1
+        : 0;
+    for (const record of prior.records ?? []) priorRecords.set(record.domain, record);
+    if (!args.allowRepeatRecovery && priorRecoveryAttempt >= 1) {
+      for (const target of targets) {
+        if (priorRecords.has(target.domain)) budgetExhaustedDomains.add(target.domain);
+      }
+    }
+  }
   if (args.resume) {
     const saved = JSON.parse(await readFile(outputPath, "utf8")) as { records?: ScanRecord[] };
     records = Array.isArray(saved.records) ? saved.records : [];
@@ -297,6 +338,31 @@ async function main() {
   } else {
     await writeOutput(outputPath, { ...manifest, baseUrl: args.baseUrl, phase: "queueing", records });
     for (const target of targets) {
+      const prior = priorRecords.get(target.domain);
+      if (budgetExhaustedDomains.has(target.domain)) {
+        const record: ScanRecord = {
+          domain: target.domain,
+          error: "retry_guard: recovery attempt budget exhausted; requires explicit override",
+          requestedAt: new Date().toISOString(),
+          status: "skipped",
+        };
+        records.push(record);
+        console.log(`${target.domain}: skipped ${record.error}`);
+        await writeOutput(outputPath, { ...manifest, baseUrl: args.baseUrl, phase: "queueing", records });
+        continue;
+      }
+      if (!args.allowDeterministicRetry && prior?.resultDisposition === "no_go" && prior.noGoReason && DETERMINISTIC_NO_GO_REASONS.has(prior.noGoReason)) {
+        const record: ScanRecord = {
+          domain: target.domain,
+          error: `retry_guard: prior ${prior.noGoReason} requires a new execution path`,
+          requestedAt: new Date().toISOString(),
+          status: "skipped",
+        };
+        records.push(record);
+        console.log(`${target.domain}: skipped ${record.error}`);
+        await writeOutput(outputPath, { ...manifest, baseUrl: args.baseUrl, phase: "queueing", records });
+        continue;
+      }
       const record = await queueTarget(args.baseUrl, target, args.scanFrom);
       records.push(record);
       console.log(`${target.domain}: ${record.httpStatus ?? "error"} ${record.status ?? record.error ?? "unknown"} ${record.scanId ?? record.jobId ?? ""}`);
