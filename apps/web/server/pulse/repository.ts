@@ -23,6 +23,7 @@ type PulseRequestRow = {
   result_pulse_url: string | null;
   result_report_url: string | null;
   resolution_mode: string | null;
+  request_context: Record<string, unknown>;
   retry_after_seconds: number | null;
   error_code: string | null;
   error_message: string | null;
@@ -232,6 +233,7 @@ export async function updatePulseRequestQueued(input: {
   scanId: string | null;
   resultPulseUrl: string | null;
   resultReportUrl: string | null;
+  resolutionMode?: string | null;
 }) {
   await ensurePulseTables();
   await query(
@@ -240,9 +242,76 @@ export async function updatePulseRequestQueued(input: {
             phase = 'queued',
             scan_id = $2,
             result_pulse_url = $3,
-            result_report_url = $4
+            result_report_url = $4,
+            resolution_mode = coalesce($5, resolution_mode)
       where public_id = $1`,
-    [input.pulseRequestId, input.scanId, input.resultPulseUrl, input.resultReportUrl]
+    [input.pulseRequestId, input.scanId, input.resultPulseUrl, input.resultReportUrl, input.resolutionMode ?? null]
+  );
+}
+
+export async function claimPulseAlternateRegionFallback(input: {
+  fallbackScanFrom: string;
+  noGoReason: string;
+  primaryScanFrom: string;
+  primaryScanId: string;
+  pulseRequestId: string;
+}) {
+  await ensurePulseTables();
+  const result = await query<{ public_id: string }>(
+    `update pulse_requests
+        set status = 'queued',
+            phase = 'queued',
+            resolution_mode = 'alternate_region_fallback_claimed',
+            request_context = request_context || jsonb_build_object('recovery', $3::jsonb)
+      where public_id = $1
+        and scan_id = $2
+        and status in ('queued', 'running', 'completed', 'completed_limited')
+        and coalesce(request_context->'recovery'->>'alternateRegionAttempted', 'false') <> 'true'
+      returning public_id`,
+    [
+      input.pulseRequestId,
+      input.primaryScanId,
+      {
+        alternateRegionAttempted: true,
+        fallbackScanFrom: input.fallbackScanFrom,
+        noGoReason: input.noGoReason,
+        primaryScanFrom: input.primaryScanFrom,
+        primaryScanId: input.primaryScanId,
+        claimedAt: new Date().toISOString()
+      }
+    ]
+  );
+  return result.rowCount === 1;
+}
+
+export async function markPulseAlternateRegionFallbackFailed(input: {
+  errorMessage: string;
+  primaryScanId: string;
+  pulseRequestId: string;
+  resultPulseUrl: string | null;
+  resultReportUrl: string | null;
+}) {
+  await ensurePulseTables();
+  await query(
+    `update pulse_requests
+        set status = 'completed_limited',
+            phase = 'completed',
+            scan_id = $2,
+            result_pulse_url = $3,
+            result_report_url = $4,
+            resolution_mode = 'alternate_region_fallback_failed',
+            error_code = 'alternate_region_fallback_failed',
+            error_message = $5,
+            completed_at = coalesce(completed_at, now()),
+            elapsed_seconds = greatest(0, extract(epoch from (coalesce(completed_at, now()) - requested_at))::int)
+      where public_id = $1`,
+    [
+      input.pulseRequestId,
+      input.primaryScanId,
+      input.resultPulseUrl,
+      input.resultReportUrl,
+      input.errorMessage.slice(0, 1_000)
+    ]
   );
 }
 
@@ -250,6 +319,7 @@ export async function updatePulseRequestLifecycle(input: {
   completedAt?: string | null;
   phase: string;
   pulseRequestId: string;
+  resolutionMode?: string | null;
   status: string;
 }) {
   await ensurePulseTables();
@@ -265,9 +335,10 @@ export async function updatePulseRequestLifecycle(input: {
             elapsed_seconds = case
               when $4::boolean then greatest(0, extract(epoch from (coalesce($5::timestamptz, now()) - requested_at))::int)
               else elapsed_seconds
-            end
+            end,
+            resolution_mode = coalesce($6, resolution_mode)
       where public_id = $1`,
-    [input.pulseRequestId, input.status, input.phase, terminal, input.completedAt ?? null]
+    [input.pulseRequestId, input.status, input.phase, terminal, input.completedAt ?? null, input.resolutionMode ?? null]
   );
 }
 
@@ -296,7 +367,7 @@ export async function getPulseRequestByJobId(jobId: string) {
   await ensurePulseTables();
   return queryOne<PulseRequestRow>(
     `select public_id, job_id, requested_url, normalized_url, normalized_domain, request_channel, status, phase,
-            scan_id, result_pulse_url, result_report_url, resolution_mode,
+            scan_id, result_pulse_url, result_report_url, resolution_mode, request_context,
             retry_after_seconds, error_code, error_message, requested_at, created_at, updated_at, completed_at
        from pulse_requests
       where job_id = $1 or public_id = $1

@@ -193,6 +193,17 @@ export const pulseStatusSchema = z
     resultUrl: z.string().nullable().optional(),
     reportUrl: z.string().nullable().optional(),
     retryAfterSeconds: z.number().int().nullable().optional(),
+    recovery: z
+      .object({
+        alternateRegionAttempted: z.literal(true),
+        fallbackScanFrom: z.string(),
+        noGoReason: z.string(),
+        primaryScanFrom: z.string(),
+        primaryScanId: z.string(),
+        claimedAt: z.string()
+      })
+      .passthrough()
+      .optional(),
     capabilities: pulseCapabilitiesSchema.optional(),
     agentInterpretation: pulseAgentInterpretationSchema.optional(),
     disclaimer: z.string().optional()

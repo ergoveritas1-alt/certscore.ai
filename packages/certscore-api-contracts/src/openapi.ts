@@ -296,6 +296,11 @@ export function buildPulseV1OpenApiDocument() {
             resultUrl: { type: ["string", "null"] },
             reportUrl: { type: ["string", "null"] },
             retryAfterSeconds: { type: ["integer", "null"] },
+            recovery: {
+              type: "object",
+              additionalProperties: true,
+              description: "Bounded alternate-region recovery metadata when an initial EU-IE access denial is retried once from EU-DE."
+            },
             capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
             agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
             disclaimer: { type: "string" }

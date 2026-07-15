@@ -237,6 +237,11 @@ export function buildPulseChatGptOpenApiDocument() {
             status: { type: "string" },
             jobId: { type: "string" },
             statusUrl: { type: "string" },
+            recovery: {
+              type: "object",
+              additionalProperties: true,
+              description: "Bounded alternate-region recovery metadata when an initial EU-IE access denial is retried once from EU-DE."
+            },
             capabilities: { $ref: "#/components/schemas/PulseCapabilities" },
             agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
             feedback: { $ref: "#/components/schemas/PulseFeedback" },

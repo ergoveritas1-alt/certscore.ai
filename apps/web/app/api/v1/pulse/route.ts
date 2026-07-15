@@ -23,6 +23,7 @@ import {
 } from "../../../../lib/pulse/request";
 import { buildPulseStatus } from "../../../../lib/pulse/status";
 import { PULSE_MIN_REUSABLE_PAGES_REQUESTED, PULSE_SCAN_COVERAGE_PLAN_CODE } from "../../../../lib/pulse/scan-coverage";
+import { queueAlternateRegionRecovery } from "../../../../server/pulse/queue-alternate-region-recovery";
 import {
   checkIntegrationApiKeyUsageLimit,
   parseBearerToken,
@@ -504,16 +505,47 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       if (!pulseRequest) {
         return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found.", detail, format }), { status: 404 }, requestId, routeName);
       }
+      let recoveryContext = pulseRequest.request_context?.recovery && typeof pulseRequest.request_context.recovery === "object"
+        ? pulseRequest.request_context.recovery as Record<string, unknown>
+        : null;
+      let fallbackQueued = false;
       if (pulseRequest.scan_id) {
         const scanRecord = await loadPulseScanRecord(pulseRequest.scan_id);
-        if (scanRecord?.scan.status === "completed" && assessPulseScanRecordQuality(scanRecord).usable) {
+        if (scanRecord?.scan.status === "completed") {
+          const fallback = await queueAlternateRegionRecovery({
+            normalizedUrl: pulseRequest.normalized_url ?? pulseRequest.requested_url ?? `https://${pulseRequest.normalized_domain}/`,
+            primaryScanRecord: scanRecord,
+            provenance: {
+              host: typeof pulseRequest.request_context?.host === "string" ? pulseRequest.request_context.host : null,
+              originIp: typeof pulseRequest.request_context?.ipHash === "string" ? pulseRequest.request_context.ipHash : null,
+              source: typeof pulseRequest.request_context?.source === "string" ? pulseRequest.request_context.source : "pulse_api",
+              userAgent: typeof pulseRequest.request_context?.userAgent === "string" ? pulseRequest.request_context.userAgent : null
+            },
+            pulseRequestId: pulseRequest.public_id,
+            requestContext: pulseRequest.request_context
+          });
+          if (fallback.queued && fallback.scanId && fallback.context) {
+            fallbackQueued = true;
+            pulseRequest.scan_id = fallback.scanId;
+            pulseRequest.result_pulse_url = pulseAbsoluteUrl(`/api/v1/pulse?scanId=${fallback.scanId}`);
+            pulseRequest.result_report_url = pulseAbsoluteUrl(`/scan/${fallback.scanId}`);
+            pulseRequest.resolution_mode = "alternate_region_fallback_queued";
+            pulseRequest.status = "queued";
+            pulseRequest.phase = "queued";
+            pulseRequest.completed_at = null;
+            recoveryContext = fallback.context;
+          }
+        }
+        if (!fallbackQueued && scanRecord?.scan.status === "completed" && assessPulseScanRecordQuality(scanRecord).usable) {
           return buildAndLogCompletedPulse({
             detail,
             format,
             freshness,
             pulseRequestId: pulseRequest.public_id,
             requestedUrl: pulseRequest.requested_url,
-            resolutionMode: pulseRequest.resolution_mode ?? "reused_existing_scan",
+            resolutionMode: pulseRequest.resolution_mode === "alternate_region_fallback_queued"
+              ? "alternate_region_fallback_completed"
+              : pulseRequest.resolution_mode ?? "reused_existing_scan",
             scanRecord,
             waitSeconds,
             requestId,
@@ -533,7 +565,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         scanId: pulseRequest.scan_id,
         resultUrl: pulseRequest.result_pulse_url,
         reportUrl: pulseRequest.result_report_url,
-        retryAfterSeconds: pulseRequest.retry_after_seconds
+        retryAfterSeconds: pulseRequest.retry_after_seconds,
+        recovery: recoveryContext
       });
       const responseStatus = pulseRequest.status === "completed" ? 200 : pulseRequest.status === "rate_limited" ? 429 : 202;
       return pulseJson(
@@ -825,6 +858,41 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     if (waitSeconds > 0) {
       const completed = await waitForCompletedScan(queued.scan.id, waitSeconds);
       if (completed) {
+        const fallback = await queueAlternateRegionRecovery({
+          normalizedUrl: normalized.normalizedUrl,
+          primaryScanRecord: completed,
+          provenance: {
+            host: request.headers.get("host"),
+            originIp: requester.ipHash,
+            source: gptAction ? "gpt_action" : "pulse_api",
+            userAgent: requester.userAgent
+          },
+          pulseRequestId: publicId,
+          requestContext: contextBase
+        });
+        if (fallback.queued && fallback.scanId && fallback.context) {
+          const fallbackStatus = buildPulseStatus({
+            jobId: createdJobId,
+            domain: normalized.normalizedDomain,
+            status: "queued",
+            phase: "queued",
+            createdAt: new Date().toISOString(),
+            scanId: fallback.scanId,
+            resultUrl: pulseAbsoluteUrl(`/api/v1/pulse?scanId=${fallback.scanId}`),
+            reportUrl: pulseAbsoluteUrl(`/scan/${fallback.scanId}`),
+            recovery: fallback.context
+          });
+          return pulseJson(
+            {
+              ...fallbackStatus,
+              statusUrl: pulseAbsoluteUrl(`/api/v1/pulse/status/${createdJobId}`),
+              nextCheckUrl: pulseAbsoluteUrl(`/api/v1/pulse?jobId=${createdJobId}`)
+            },
+            { headers: { "Cache-Control": "no-store", "Retry-After": String(retryAfterForStatus(fallbackStatus)) }, status: 202 },
+            requestId,
+            routeName
+          );
+        }
         return buildAndLogCompletedPulse({
           detail,
           format,

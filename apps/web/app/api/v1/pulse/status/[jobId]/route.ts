@@ -6,6 +6,7 @@ import { buildPulseStatus } from "../../../../../../lib/pulse/status";
 import { getAnonymousScanById } from "../../../../../../server/scans/get-scan-by-id";
 import { getPulseRequestByJobId, updatePulseRequestLifecycle } from "../../../../../../server/pulse/repository";
 import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
+import { queueAlternateRegionRecovery } from "../../../../../../server/pulse/queue-alternate-region-recovery";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -73,14 +74,42 @@ export async function GET(request: Request, context: RouteContext) {
     let status = pulseRequest.status;
     let completedAt = pulseRequest.completed_at;
     let noGoProjection: ReturnType<typeof projectExternalScanNoGo> = null;
+    let recoveryContext = pulseRequest.request_context?.recovery && typeof pulseRequest.request_context.recovery === "object"
+      ? pulseRequest.request_context.recovery as Record<string, unknown>
+      : null;
     if (pulseRequest.scan_id) {
       const scanRecord = await getAnonymousScanById(pulseRequest.scan_id).catch(() => null);
       if (scanRecord?.scan.status === "completed") {
         noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
-        status = scanRecord.accessPostureSummary.interruptionReason || scanRecord.scan.pagesScanned < scanRecord.scan.pagesRequested
-          ? "completed_limited"
-          : "completed";
-        completedAt = scanRecord.scan.completedAt;
+        const fallback = await queueAlternateRegionRecovery({
+          normalizedUrl: pulseRequest.normalized_url ?? pulseRequest.requested_url ?? `https://${pulseRequest.normalized_domain}/`,
+          primaryScanRecord: scanRecord,
+          provenance: {
+            host: typeof pulseRequest.request_context?.host === "string" ? pulseRequest.request_context.host : null,
+            originIp: typeof pulseRequest.request_context?.ipHash === "string" ? pulseRequest.request_context.ipHash : null,
+            source: typeof pulseRequest.request_context?.source === "string" ? pulseRequest.request_context.source : "pulse_api",
+            userAgent: typeof pulseRequest.request_context?.userAgent === "string" ? pulseRequest.request_context.userAgent : null
+          },
+          pulseRequestId: pulseRequest.public_id,
+          requestContext: pulseRequest.request_context
+        });
+        if (fallback.queued && fallback.scanId && fallback.context) {
+          status = "queued";
+          completedAt = null;
+          noGoProjection = null;
+          recoveryContext = fallback.context;
+          pulseRequest.scan_id = fallback.scanId;
+          pulseRequest.result_pulse_url = new URL(`/api/v1/pulse?scanId=${fallback.scanId}`, request.url).toString();
+          pulseRequest.result_report_url = new URL(`/scan/${fallback.scanId}`, request.url).toString();
+          pulseRequest.resolution_mode = "alternate_region_fallback_queued";
+          pulseRequest.status = "queued";
+          pulseRequest.phase = "queued";
+        } else {
+          status = scanRecord.accessPostureSummary.interruptionReason || scanRecord.scan.pagesScanned < scanRecord.scan.pagesRequested
+            ? "completed_limited"
+            : "completed";
+          completedAt = scanRecord.scan.completedAt;
+        }
       } else if (scanRecord?.scan.status === "running") {
         status = "running";
       } else if (scanRecord?.scan.status === "failed") {
@@ -98,6 +127,9 @@ export async function GET(request: Request, context: RouteContext) {
         completedAt,
         phase,
         pulseRequestId: pulseRequest.public_id,
+        resolutionMode: pulseRequest.resolution_mode === "alternate_region_fallback_queued" && (status === "completed" || status === "completed_limited")
+          ? "alternate_region_fallback_completed"
+          : null,
         status
       });
     }
@@ -114,7 +146,8 @@ export async function GET(request: Request, context: RouteContext) {
       resultUrl: pulseRequest.result_pulse_url,
       reportUrl: pulseRequest.result_report_url,
       retryAfterSeconds: pulseRequest.retry_after_seconds,
-      noGoProjection
+      noGoProjection,
+      recovery: recoveryContext
     });
 
     const headers: Record<string, string> = {

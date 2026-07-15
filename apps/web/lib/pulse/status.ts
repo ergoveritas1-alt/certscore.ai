@@ -27,6 +27,7 @@ type PulseStatusInput = {
   message?: string | null;
   retryAfterSeconds?: number | null;
   noGoProjection?: ExternalScanNoGoProjection | null;
+  recovery?: Record<string, unknown> | null;
 };
 
 function elapsedSeconds(createdAt: string, completedAt?: string | null) {
@@ -110,6 +111,7 @@ export function buildPulseStatus(input: PulseStatusInput) {
     domain: input.domain,
     status: effectiveStatus,
     ...(input.noGoProjection ?? {}),
+    ...(input.recovery ? { recovery: input.recovery } : {}),
     phase,
     message: input.noGoProjection
       ? `The scan completed with limited coverage. ${input.noGoProjection.noGo.summary}`
