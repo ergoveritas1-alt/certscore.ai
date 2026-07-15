@@ -25,13 +25,16 @@ export default function DeveloperSdkPage() {
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://www.npmjs.com/package/@certscore/sdk">
               @certscore/sdk
             </a>
-            . Use version <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">0.2.4</code> or newer for typed completed-limited no-go results and API v2 scan timing fields. Source and examples live in{" "}
+            . Use version <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">0.2.5</code> or newer for typed completed-limited no-go results, API v2 scan timing fields, and client attribution headers. Source and examples live in{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk">
               packages/certscore-sdk
             </a>
             .
           </p>
           <CodeBlock>{`npm install @certscore/sdk`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            SDK requests identify themselves with <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">X-CertScore-Client: sdk</code> by default. The optional <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">clientName</code> setting is reserved for trusted integrations that share the SDK runtime with MCP.
+          </p>
         </Section>
 
         <Section eyebrow="Completed with limited coverage" title="Handle no-go results as usable outcomes">

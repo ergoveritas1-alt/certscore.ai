@@ -196,12 +196,13 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Status: source preview. Public package distribution is not enabled yet; use the REST API directly for production integrations.
+Status: published. Install `@certscore/sdk@0.2.5` or newer for typed completed-limited no-go results, API v2 scan timing fields, and client attribution headers.
 
 Docs:
 
 - https://certscore.ai/developers/sdk
 - https://certscore.ai/developers/quickstart
+- https://www.npmjs.com/package/@certscore/sdk
 
 Basic use:
 

@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## 0.2.5
+
+- Send an `X-CertScore-Client` header on API requests for clearer SDK/MCP attribution.
+- Add the optional `clientName` client setting for integrations that share the SDK runtime with MCP.
+
 ## 0.2.4
 
 - Expose typed `resultDisposition` and `noGo` details for completed-limited no-go scans across scan, job, and Pulse resources.

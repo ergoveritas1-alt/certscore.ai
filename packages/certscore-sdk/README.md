@@ -6,11 +6,13 @@ CertScore outputs are automated public-web observations for review. They are not
 
 ## Status
 
-The SDK is published as `@certscore/sdk` on npm. Use version `0.2.4` or newer for typed completed-limited no-go results and API v2 scan timing fields.
+The SDK is published as `@certscore/sdk` on npm. Use version `0.2.5` or newer for typed completed-limited no-go results, API v2 scan timing fields, and client attribution headers. See the [npm package](https://www.npmjs.com/package/@certscore/sdk) and [SDK source](https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk).
 
 ```bash
 npm install @certscore/sdk
 ```
+
+By default the SDK identifies its requests with `X-CertScore-Client: sdk`. The optional `clientName` setting is intended for trusted integrations that share the SDK runtime with MCP; regular SDK consumers should keep the default.
 
 Completed no-go scans resolve normally with `status: "completed_limited"`, `resultDisposition: "no_go"`, and a typed `noGo` object. The object carries a stable reason, customer-safe explanation, target-site or scanner-limitation attribution through `limitationKind`, retry guidance, and a bounded `evidenceExcerpt` when available.
 

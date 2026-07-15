@@ -29,11 +29,11 @@ function textResponse(status: number, body: string, headers: Record<string, stri
 
 function installFetch(responses: MockResponse[]) {
   const calls: string[] = [];
-  const callDetails: Array<{ body?: BodyInit | null; method?: string }> = [];
+  const callDetails: Array<{ body?: BodyInit | null; headers?: HeadersInit; method?: string }> = [];
   const previous = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push(String(input));
-    callDetails.push({ body: init?.body, method: init?.method });
+    callDetails.push({ body: init?.body, headers: init?.headers, method: init?.method });
     const next = responses.shift();
     if (!next) {
       throw new Error("Unexpected fetch call");
@@ -76,6 +76,18 @@ test("scan returns immediate 200 JSON", async () => {
     const result = await client.scan("https://example.com");
     assert.equal(result.scanId, "scan_123");
     assert.match(mock.calls[0] ?? "", /wait=60/);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("SDK identifies requests with the configured client name", async () => {
+  const mock = installFetch([{ status: 200, body: pulse }]);
+  try {
+    const client = new CertScoreClient({ clientName: "sdk" });
+    await client.scan("https://example.com");
+    const headers = new Headers(mock.callDetails[0]?.headers);
+    assert.equal(headers.get("X-CertScore-Client"), "sdk");
   } finally {
     mock.restore();
   }

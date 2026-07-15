@@ -71,8 +71,8 @@ const discoveryDocument = {
     distribution: "npm",
     status: "published",
     package: "@certscore/sdk",
-    currentVersion: "0.2.4",
-    install: "npm install @certscore/sdk@0.2.4"
+    currentVersion: "0.2.5",
+    install: "npm install @certscore/sdk@0.2.5"
   },
   mcp: {
     distribution: "homebrew",
