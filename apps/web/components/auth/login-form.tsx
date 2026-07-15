@@ -92,6 +92,7 @@ export function LoginForm(input?: {
   const [createStep, setCreateStep] = useState<1 | 2>(1);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   const [clientEmailError, setClientEmailError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(
     initialMessage === "email_verified"
@@ -132,6 +133,7 @@ export function LoginForm(input?: {
     setFlowError(null);
     setStatus(null);
     setPassword("");
+    setSubmittedEmail(null);
     setShowPassword(false);
 
     if (nextMode === "create_account") {
@@ -141,6 +143,7 @@ export function LoginForm(input?: {
 
   async function handleCreateContinue(event: React.FormEvent<HTMLFormElement>) {
     if (mode !== "create_account" || createStep !== 1) {
+      setSubmittedEmail(email.trim().toLowerCase());
       return;
     }
 
@@ -160,6 +163,9 @@ export function LoginForm(input?: {
   const isCreateAccount = mode === "create_account";
   const isCreatePasswordStep = isCreateAccount && createStep === 2;
   const isSubmitting = isPending;
+  const actionMatchesCurrentEmail = submittedEmail === email.trim().toLowerCase();
+  const currentAccountRecovery = actionMatchesCurrentEmail ? actionState.accountRecovery : null;
+  const currentActionError = actionMatchesCurrentEmail ? actionError : null;
 
   return (
     <div className="space-y-5">
@@ -253,6 +259,7 @@ export function LoginForm(input?: {
                 onClick={() => {
                   setCreateStep(1);
                   setPassword("");
+                  setSubmittedEmail(null);
                 }}
                 className="text-xs font-medium text-sky-700 transition hover:text-sky-800"
               >
@@ -272,6 +279,7 @@ export function LoginForm(input?: {
               onChange={(event) => {
                 setEmail(event.target.value);
                 setClientEmailError(null);
+                setSubmittedEmail(null);
               }}
               placeholder="name@example.com"
               type="email"
@@ -319,12 +327,12 @@ export function LoginForm(input?: {
         ) : null}
 
         {clientEmailError ? <p className="text-sm text-red-600">{clientEmailError}</p> : null}
-        {actionState.accountRecovery ? (
+        {currentAccountRecovery ? (
           <div className="space-y-2 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
-            <p className="text-sm text-sky-800">{actionState.accountRecovery.hint}</p>
+            <p className="text-sm text-sky-800">{currentAccountRecovery.hint}</p>
             <Link
               className="inline-flex text-sm font-semibold text-sky-800 underline decoration-sky-300 underline-offset-2 transition hover:text-sky-950"
-              href={`/reset-password?email=${encodeURIComponent(actionState.accountRecovery.email)}`}
+              href={`/reset-password?email=${encodeURIComponent(currentAccountRecovery.email)}`}
             >
               Reset password
             </Link>
@@ -370,8 +378,8 @@ export function LoginForm(input?: {
         ) : null}
       </form>
 
-      {actionError && !actionState.accountRecovery ? <p className="text-sm text-red-600">{actionError}</p> : null}
-      {!isCreateAccount && actionError === "Invalid email or password." ? (
+      {currentActionError && !currentAccountRecovery ? <p className="text-sm text-red-600">{currentActionError}</p> : null}
+      {!isCreateAccount && currentActionError === "Invalid email or password." ? (
         <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
           <p className="text-sm text-sky-800">Having trouble signing in?</p>
           <Link
