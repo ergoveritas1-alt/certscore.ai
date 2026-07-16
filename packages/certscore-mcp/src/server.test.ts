@@ -160,6 +160,7 @@ test("CertScore MCP server exposes the scoped v1 tool surface", async () => {
         "get_pre_consent_cookies_trackers",
         "get_report",
         "get_scan",
+        "get_scan_bundle",
         "get_scan_status",
         "list_findings",
         "scan_site"
@@ -202,6 +203,7 @@ test("README documents current MCP tool surface and public docs", () => {
     "get_scan_status",
     "get_report",
     "get_evidence",
+    "get_scan_bundle",
     "export_findings",
     "list_findings",
     "get_pre_consent_cookies_trackers",
@@ -518,6 +520,18 @@ test("get_scan_status supports API v2 scanId status with timing fields", async (
         completedAt: "2026-07-08T12:00:34.000Z",
         scanTimeSeconds: 34
       }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        domain: "example.com",
+        status: "completed",
+        startedAt: "2026-07-08T12:00:00.000Z",
+        completedAt: "2026-07-08T12:00:34.000Z",
+        scanTimeSeconds: 34
+      }
     }
   ]);
   try {
@@ -533,8 +547,9 @@ test("get_scan_status supports API v2 scanId status with timing fields", async (
       assert.equal(result.startedAt, "2026-07-08T12:00:00.000Z");
       assert.equal(result.completedAt, "2026-07-08T12:00:34.000Z");
       assert.equal(result.scanTimeSeconds, 34);
-      assert.equal(mock.calls.length, 1);
+      assert.equal(mock.calls.length, 2);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status/);
+      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123$/);
     });
   } finally {
     mock.restore();
@@ -619,6 +634,39 @@ test("get_evidence retrieves the bounded Evidence JSON artifact", async () => {
       assert.equal(evidence.type, "certscore_pulse_evidence");
       assert.match(mock.calls[0] ?? "", /scanId=scan_123/);
       assert.match(mock.calls[0] ?? "", /detail=evidence/);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("get_scan_bundle returns the compact full review in one MCP call", async () => {
+  const scan = {
+    type: "certscore_scan",
+    scanId: "scan_123",
+    domain: "example.com",
+    status: "completed",
+    score: 72,
+    coverage: { status: "partial" },
+    links: { self: "https://certscore.ai/api/v2/scans/scan_123" },
+    disclaimer: "Automated public-web observations for review."
+  };
+  const mock = installFetch([
+    { status: 200, body: scan },
+    { status: 200, body: { ...pulse, type: "certscore_pulse_summary", executiveSummary: { issuesToReview: 1 }, counts: { totalAutomatedFindingCount: 1 } } },
+    { status: 200, body: { ...pulse, type: "certscore_pulse_evidence", evidenceSafetyNotes: ["Public-safe evidence only."], projectedFindings: pulse.findings } },
+    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } },
+    { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: "scan_123", domain: "example.com", summary: { rowCount: 1, trackerCount: 1, cookieCount: 0, requestCount: 1 }, rows: [preConsentRow("row_1")] } }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const bundle = parseToolJson(await client.callTool({ name: "get_scan_bundle", arguments: { scanId: "scan_123" } }));
+      assert.equal(bundle.type, "certscore_scan_bundle");
+      assert.equal(bundle.scanId, "scan_123");
+      assert.equal(bundle.status, "completed");
+      assert.equal((bundle.findings as unknown[]).length, 1);
+      assert.equal(((bundle.preConsentCookiesTrackers as Record<string, unknown>).rows as unknown[]).length, 1);
+      assert.equal(mock.calls.length, 5);
     });
   } finally {
     mock.restore();

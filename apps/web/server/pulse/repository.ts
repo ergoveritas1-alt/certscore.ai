@@ -443,6 +443,32 @@ export async function claimAnonymousScanDailyQuota(input: {
   };
 }
 
+export async function getAnonymousScanDailyQuotaState(input: {
+  ipHash: string | null | undefined;
+  now?: Date;
+}) {
+  await ensurePulseTables();
+  const requesterKey = anonymousScanQuotaKey(input.ipHash);
+  const row = await queryOne<{ scan_count: number | string }>(
+    `select scan_count
+       from anonymous_scan_daily_quotas
+      where requester_key = $1
+        and window_date = timezone('utc', now())::date`,
+    [requesterKey],
+    { readOnly: true }
+  );
+  const used = Math.max(0, Math.min(ANONYMOUS_SCAN_DAILY_LIMIT, Number(row?.scan_count ?? 0)));
+  const now = input.now ?? new Date();
+  const resetAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString();
+
+  return {
+    limit: ANONYMOUS_SCAN_DAILY_LIMIT,
+    remaining: Math.max(0, ANONYMOUS_SCAN_DAILY_LIMIT - used),
+    resetAt,
+    used
+  };
+}
+
 export async function getPulseFeedbackCount(input: { pulseRequestId: string; ipHash: string | null }) {
   await ensurePulseTables();
   const result = await queryOne<{ count: number }>(

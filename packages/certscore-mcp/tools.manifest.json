@@ -5,7 +5,7 @@
   },
   {
     "name": "scan_site",
-    "description": "Recommended one-call scan workflow. Starts or reuses a public-web scan and waits up to 45 seconds for the completed scan resource by default. If it is still running, returns the job for get_scan_status polling. Use list_findings next for structured findings; fetch report, evidence, or cookie inventory only when the task needs them. Completed no-go scans return completed_limited status and reason-specific guidance."
+    "description": "Recommended first call. Starts or reuses a public-web scan, reports freshness and anonymous quota decisions, and waits up to 45 seconds by default. If still running, use get_scan_status; otherwise use get_scan_bundle. Completed no-go scans retain completed_limited status and reason-specific guidance."
   },
   {
     "name": "get_scan",
@@ -22,6 +22,10 @@
   {
     "name": "get_evidence",
     "description": "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values."
+  },
+  {
+    "name": "get_scan_bundle",
+    "description": "Recommended second call after scan_site. Returns the canonical scan state, compact report summary, findings, bounded evidence summary, and pre-consent inventory in one agent-friendly response."
   },
   {
     "name": "export_findings",

@@ -82,6 +82,7 @@ test("MCP contracts expose the current scoped tool surface", () => {
       "get_pre_consent_cookies_trackers",
       "get_report",
       "get_scan",
+      "get_scan_bundle",
       "get_scan_status",
       "list_findings",
       "scan_site"
@@ -89,6 +90,7 @@ test("MCP contracts expose the current scoped tool surface", () => {
   );
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "create_scan")?.inputSchema.url);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_evidence")?.inputSchema.scanId);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_scan_bundle")?.inputSchema.scanId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "explain_finding")?.inputSchema.findingId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_latest_domain_scan")?.inputSchema.domain);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema.waitForCompletion);
@@ -207,7 +209,16 @@ test("API v2 draft schemas accept resource-oriented public-safe shapes", () => {
     domain: "example.com",
     status: "completed",
     score: 88,
-    riskLevel: "monitor"
+    riskLevel: "monitor",
+    executionMode: "reused_scan",
+    reused: true,
+    reusedScanAgeSeconds: 90,
+    freshnessDecision: "reused_existing_scan",
+    quotaConsumed: false,
+    anonymousQuotaLimit: 10,
+    anonymousQuotaRemaining: 8,
+    anonymousQuotaResetAt: "2026-07-16T00:00:00.000Z",
+    recommendedNextTool: "get_scan_bundle"
   });
   const evidence = apiV2EvidenceSummarySchema.parse({
     basis: "runtime_observation",
@@ -252,6 +263,9 @@ test("API v2 draft schemas accept resource-oriented public-safe shapes", () => {
 
   assert.equal(createRequest.url, "https://example.com");
   assert.equal(scan.score, 88);
+  assert.equal(scan.reused, true);
+  assert.equal(scan.anonymousQuotaRemaining, 8);
+  assert.equal(scan.recommendedNextTool, "get_scan_bundle");
   assert.equal(findingList.findings[0]?.evidence.examples?.[0]?.urlHost, "analytics.example.test");
   assert.equal(findingList.findings[0]?.evidence.examples?.[0]?.resolvedEndpointVendor, "Canonical Analytics");
   assert.deepEqual(findingList.findings[0]?.evidence.projectionWarnings, ["canonical_endpoint_vendor_replaced_raw_vendor"]);
@@ -311,7 +325,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.3");
+  assert.equal(document.info.version, "0.1.4");
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/auth/check"]);
   assert.ok(document.paths["/api/v2/scans"]);

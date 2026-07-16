@@ -175,7 +175,7 @@ function npxPackagesFromDocs(paths: string[]) {
 }
 
 async function main() {
-  assert.equal(manifest.length, 12, "CertScore MCP manifest should expose exactly 12 tools");
+  assert.equal(manifest.length, 13, "CertScore MCP manifest should expose exactly 13 tools");
   const cask = parseCertScoreMcpCask();
   const discoveryVersion = extractQuotedStringAfterMarker(discoveryRoutePath, "currentVersion:", "mcp: {");
 

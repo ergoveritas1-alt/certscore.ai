@@ -95,7 +95,19 @@ export interface ApiV2Links {
   [key: string]: string | undefined;
 }
 
-export interface ScanResource {
+export interface ScanCreationMetadata {
+  executionMode?: "new_scan" | "reused_scan";
+  reused?: boolean;
+  reusedScanAgeSeconds?: number | null;
+  freshnessDecision?: string;
+  quotaConsumed?: boolean;
+  anonymousQuotaLimit?: number | null;
+  anonymousQuotaRemaining?: number | null;
+  anonymousQuotaResetAt?: string | null;
+  recommendedNextTool?: "get_scan_status" | "get_scan_bundle";
+}
+
+export interface ScanResource extends ScanCreationMetadata {
   type: "certscore_scan";
   scanId: string;
   domain: string;
@@ -121,7 +133,7 @@ export interface ScanResource {
   [key: string]: unknown;
 }
 
-export interface ScanJob {
+export interface ScanJob extends ScanCreationMetadata {
   type: "certscore_scan_job";
   jobId: string;
   scanId?: string | null;

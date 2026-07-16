@@ -3,7 +3,7 @@ import { pulseResponseSchema } from "./pulse-v1.js";
 import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.3";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.4";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.";
@@ -18,6 +18,18 @@ export const apiV2PreConsentInventoryKindSchema = z.enum(["cookie", "tracker", "
 export const apiV2PreConsentInventoryPhaseSchema = z.literal("pre_consent");
 export const apiV2PreConsentInventoryPrioritySchema = z.enum(["high", "medium", "review_needed", "contextual", "unknown"]);
 export const apiV2PreConsentInventoryConfidenceSchema = z.enum(["high", "medium", "low", "unknown"]);
+
+const apiV2ScanCreationMetadataShape = {
+  executionMode: z.enum(["new_scan", "reused_scan"]).optional(),
+  reused: z.boolean().optional(),
+  reusedScanAgeSeconds: z.number().int().min(0).nullable().optional(),
+  freshnessDecision: z.string().optional(),
+  quotaConsumed: z.boolean().optional(),
+  anonymousQuotaLimit: z.number().int().min(0).nullable().optional(),
+  anonymousQuotaRemaining: z.number().int().min(0).nullable().optional(),
+  anonymousQuotaResetAt: z.string().nullable().optional(),
+  recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).optional()
+} as const;
 
 export const apiV2LinksSchema = z
   .object({
@@ -42,7 +54,8 @@ export const apiV2ErrorSchema = z
       })
       .passthrough(),
     links: apiV2LinksSchema.optional(),
-    disclaimer: z.string().optional()
+    disclaimer: z.string().optional(),
+    ...apiV2ScanCreationMetadataShape
   })
   .passthrough();
 
@@ -73,7 +86,8 @@ export const apiV2ScanJobSchema = z
     lastUpdatedAt: z.string().optional(),
     retryAfterSeconds: z.number().int().nullable().optional(),
     links: apiV2LinksSchema.optional(),
-    disclaimer: z.string().optional()
+    disclaimer: z.string().optional(),
+    ...apiV2ScanCreationMetadataShape
   })
   .passthrough();
 

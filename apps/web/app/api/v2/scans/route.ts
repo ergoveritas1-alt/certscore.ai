@@ -8,6 +8,8 @@ import {
   buildApiV2ScanResource
 } from "../../../../lib/api-v2/scan-resource";
 import { getPublicScanRecord } from "../../../../server/scans/get-public-scan-record";
+import { getPulseRequesterContext } from "../../../../lib/pulse/request";
+import { getAnonymousScanDailyQuotaState } from "../../../../server/pulse/repository";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -44,6 +46,51 @@ async function parseJson(request: Request) {
   }
 }
 
+function pulseResolutionMode(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const request = (value as { request?: unknown }).request;
+  if (!request || typeof request !== "object" || Array.isArray(request)) {
+    return null;
+  }
+  return typeof (request as { resolutionMode?: unknown }).resolutionMode === "string"
+    ? (request as { resolutionMode: string }).resolutionMode
+    : null;
+}
+
+function scanAgeSeconds(completedAt: string | null | undefined) {
+  const completedAtMs = Date.parse(completedAt ?? "");
+  return Number.isFinite(completedAtMs) ? Math.max(0, Math.round((Date.now() - completedAtMs) / 1000)) : null;
+}
+
+function freshnessMetadata(input: {
+  anonymousQuota: { limit: number; remaining: number; resetAt: string } | null;
+  completedAt?: string | null;
+  freshness: "latest" | "refresh";
+  resolutionMode: string | null;
+  terminal: boolean;
+}) {
+  const reused = input.resolutionMode === "reused_existing_scan" || input.resolutionMode === "returned_stale_while_refreshing";
+  return {
+    executionMode: reused ? "reused_scan" : "new_scan",
+    reused,
+    reusedScanAgeSeconds: reused ? scanAgeSeconds(input.completedAt) : null,
+    freshnessDecision: reused
+      ? input.resolutionMode
+      : input.freshness === "refresh"
+        ? "refresh_requested_new_scan"
+        : input.terminal
+          ? "new_scan_completed"
+          : "no_eligible_recent_scan_queued",
+    quotaConsumed: Boolean(input.anonymousQuota) && !reused,
+    anonymousQuotaLimit: input.anonymousQuota?.limit ?? null,
+    anonymousQuotaRemaining: input.anonymousQuota?.remaining ?? null,
+    anonymousQuotaResetAt: input.anonymousQuota?.resetAt ?? null,
+    recommendedNextTool: input.terminal ? "get_scan_bundle" : "get_scan_status"
+  };
+}
+
 export async function POST(request: Request) {
   const id = requestId(request);
   const parsed = apiV2CreateScanRequestSchema.safeParse(await parseJson(request));
@@ -58,9 +105,13 @@ export async function POST(request: Request) {
   }
 
   try {
+    const anonymousRequester = request.headers.get("authorization") ? null : getPulseRequesterContext(request);
     const pulseResponse = await pulseGET(pulseRequestFromV2(request, parsed.data));
     const retryAfter = pulseResponse.headers.get("Retry-After") ?? undefined;
     const pulseBody = await pulseResponse.json().catch(() => null);
+    const anonymousQuota = anonymousRequester
+      ? await getAnonymousScanDailyQuotaState({ ipHash: anonymousRequester.ipHash })
+      : null;
 
     if (pulseResponse.status === 200) {
       const pulse = pulseResponseSchema.parse(pulseBody);
@@ -74,8 +125,19 @@ export async function POST(request: Request) {
           status: 500
         });
       }
+      const scan = buildApiV2ScanResource(scanRecord);
+      const resolutionMode = pulseResolutionMode(pulseBody);
       return apiV2JsonResponse({
-        body: buildApiV2ScanResource(scanRecord),
+        body: {
+          ...scan,
+          ...freshnessMetadata({
+            anonymousQuota,
+            completedAt: scan.completedAt,
+            freshness: parsed.data.freshness ?? "latest",
+            resolutionMode,
+            terminal: true
+          })
+        },
         requestId: id,
         route: "api-v2-create-scan",
         status: 200
@@ -88,7 +150,15 @@ export async function POST(request: Request) {
         ? undefined
         : String(scanJob.retryAfterSeconds);
       return apiV2JsonResponse({
-        body: scanJob,
+        body: {
+          ...scanJob,
+          ...freshnessMetadata({
+            anonymousQuota,
+            freshness: parsed.data.freshness ?? "latest",
+            resolutionMode: "queued_new_scan",
+            terminal: false
+          })
+        },
         headers: scanRetryAfter ? { "Retry-After": scanRetryAfter } : undefined,
         requestId: id,
         route: "api-v2-create-scan",
@@ -97,11 +167,20 @@ export async function POST(request: Request) {
     }
 
     return apiV2JsonResponse({
-      body: buildApiV2ErrorFromPulse({
-        body: pulseBody ?? {},
-        fallbackMessage: "CertScore.ai API v2 scan creation failed.",
-        status: pulseResponse.status
-      }),
+      body: {
+        ...buildApiV2ErrorFromPulse({
+          body: pulseBody ?? {},
+          fallbackMessage: "CertScore.ai API v2 scan creation failed.",
+          status: pulseResponse.status
+        }),
+        reused: false,
+        reusedScanAgeSeconds: null,
+        freshnessDecision: "request_rejected",
+        quotaConsumed: false,
+        anonymousQuotaLimit: anonymousQuota?.limit ?? null,
+        anonymousQuotaRemaining: anonymousQuota?.remaining ?? null,
+        anonymousQuotaResetAt: anonymousQuota?.resetAt ?? null
+      },
       headers: retryAfter ? { "Retry-After": retryAfter } : undefined,
       requestId: id,
       route: "api-v2-create-scan",

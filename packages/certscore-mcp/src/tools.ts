@@ -1,5 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { CertScoreError, type JobStatus, type PulseDetail, type PulseFormat, type PulseResult, type TopFinding } from "@certscore/sdk";
+import { CertScoreError, type FindingList, type JobStatus, type PreConsentCookiesTrackers, type PulseDetail, type PulseFormat, type PulseResult, type ScanResource, type TopFinding } from "@certscore/sdk";
 
 const MAX_ERROR_RESPONSE_BODY_CHARS = 2_000;
 export const MAX_EVIDENCE_PACKET_CHARS = 250_000;
@@ -329,6 +329,83 @@ export function limitPreConsentRows<T extends Record<string, unknown>>(
       truncated
     }
   } as T;
+}
+
+export function buildScanBundle(input: {
+  evidence: PulseResult;
+  findings: FindingList;
+  maxFindings?: number;
+  maxPreConsentRows?: number;
+  preConsentCookiesTrackers: PreConsentCookiesTrackers;
+  report: PulseResult;
+  scan: ScanResource;
+}) {
+  const maxFindings = Math.min(50, Math.max(1, input.maxFindings ?? 20));
+  const maxPreConsentRows = Math.min(50, Math.max(1, input.maxPreConsentRows ?? 20));
+  const evidence = input.evidence as Record<string, unknown>;
+  const report = input.report as Record<string, unknown>;
+  const findings = Array.isArray(input.findings.findings) ? input.findings.findings.slice(0, maxFindings) : [];
+  const preConsentRows = Array.isArray(input.preConsentCookiesTrackers.rows)
+    ? input.preConsentCookiesTrackers.rows.slice(0, maxPreConsentRows)
+    : [];
+  const links = {
+    ...(input.scan.links ?? {}),
+    ...(report.links && typeof report.links === "object" && !Array.isArray(report.links) ? report.links : {})
+  };
+
+  return {
+    type: "certscore_scan_bundle",
+    scanId: input.scan.scanId,
+    status: input.scan.status,
+    resultDisposition: input.scan.resultDisposition ?? null,
+    noGo: input.scan.noGo ?? null,
+    scan: input.scan,
+    summary: {
+      summary: report.summary ?? null,
+      executiveSummary: report.executiveSummary ?? null,
+      counts: report.counts ?? null,
+      coverage: report.coverage ?? input.scan.coverage ?? null,
+      agentInterpretation: report.agentInterpretation ?? null
+    },
+    findings,
+    findingsMetadata: {
+      shown: findings.length,
+      total: Array.isArray(input.findings.findings) ? input.findings.findings.length : 0,
+      truncated: Array.isArray(input.findings.findings) && input.findings.findings.length > findings.length
+    },
+    evidenceSummary: {
+      evidenceSafetyNotes: evidence.evidenceSafetyNotes ?? null,
+      projectionDiagnostics: evidence.projectionDiagnostics ?? null,
+      projectedFindings: compactEvidenceValue(evidence.projectedFindings ?? [], {
+        arrayItems: maxFindings,
+        depth: 5,
+        objectKeys: 40,
+        stringChars: 1_000
+      }),
+      coverageDiagnostics: compactEvidenceValue(evidence.coverageDiagnostics ?? null, {
+        arrayItems: 20,
+        depth: 5,
+        objectKeys: 40,
+        stringChars: 1_000
+      }),
+      policySurfaceCoverage: compactEvidenceValue(evidence.policySurfaceCoverage ?? null, {
+        arrayItems: 20,
+        depth: 5,
+        objectKeys: 40,
+        stringChars: 1_000
+      })
+    },
+    preConsentCookiesTrackers: {
+      summary: input.preConsentCookiesTrackers.summary,
+      rows: preConsentRows,
+      shown: preConsentRows.length,
+      total: Array.isArray(input.preConsentCookiesTrackers.rows) ? input.preConsentCookiesTrackers.rows.length : 0,
+      truncated: Array.isArray(input.preConsentCookiesTrackers.rows) && input.preConsentCookiesTrackers.rows.length > preConsentRows.length
+    },
+    links,
+    recommendedNextTool: findings.length > 0 ? "explain_finding" : null,
+    disclaimer: input.scan.disclaimer ?? input.report.disclaimer ?? null
+  };
 }
 
 export function explainFinding(report: PulseResult, findingId: string) {

@@ -277,17 +277,27 @@ MCP client config:
 
 Current tools:
 
-- `scan_site` (recommended one-call workflow; waits up to 45 seconds by default)
-- `create_scan`
+- `scan_site` (recommended first call; reports reuse and anonymous quota state and waits up to 45 seconds by default)
+- `create_scan` (deprecated compatibility alias)
 - `get_scan`
 - `get_scan_status`
 - `get_report`
+- `get_scan_bundle` (recommended second call for a compact complete review)
 - `export_findings`
 - `list_findings`
 - `get_pre_consent_cookies_trackers`
 - `explain_finding`
 - `get_latest_domain_scan`
 - `get_latest_domain_pre_consent_cookies_trackers`
+
+Default unauthenticated MCP workflow:
+
+1. Call `scan_site` with `freshness: "latest"`.
+2. Call `get_scan_status` only when the first call returns a non-terminal job.
+3. Call `get_scan_bundle` for the normal compact review handoff.
+4. Use dedicated report, evidence, finding, or inventory tools only when a task requires a deeper view.
+
+`scan_site` states whether a recent scan was reused, the freshness decision, whether anonymous quota was consumed, remaining daily quota, the UTC reset time, and the recommended next tool. Eligible scan reuse does not consume the 10-new-scans-per-requester-IP-per-UTC-day anonymous allowance.
 
 Local command:
 

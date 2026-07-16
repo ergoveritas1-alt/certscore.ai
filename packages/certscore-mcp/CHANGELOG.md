@@ -1,5 +1,12 @@
 # certscore-mcp
 
+## 0.2.11
+
+- Add `get_scan_bundle` as the compact second call after `scan_site`, retrieving the canonical scan, report summary, projected findings, bounded evidence, and pre-consent inventory in parallel.
+- Report scan reuse, freshness decisions, anonymous quota consumption and remaining allowance, UTC reset time, and the recommended next tool from `scan_site`.
+- Normalize terminal status to the canonical `completed` or `completed_limited` scan resource and direct agents to the bundle.
+- Mark `create_scan` as a deprecated compatibility alias in the public tool surface and document the two-call default workflow.
+
 ## 0.2.10
 
 - Hydrate terminal API v2 MCP status responses with the canonical scan resource so completed-limited no-go status and reason are available in one call.

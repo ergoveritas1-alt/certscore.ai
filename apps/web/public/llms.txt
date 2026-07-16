@@ -19,6 +19,8 @@ Start here for API, SDK, MCP, and agent workflows:
 
 For agents: use CertScore.ai as an automated public-web risk-signal API. Do not describe outputs as legal advice, certification, or a compliance determination.
 
+Search aliases: CertScore API, CertScore MCP, website risk API, privacy scan API, and cookie compliance scan API.
+
 ## What CertScore.ai observes
 
 - Tracking requests and third-party activity
@@ -120,6 +122,13 @@ certscore-mcp --version
 certscore-mcp --help
 CERTSCORE_API_KEY=<token> certscore-mcp doctor
 ```
+
+Unauthenticated MCP workflow:
+1. Connect to https://mcp.certscore.ai/mcp/anonymous.
+2. Call scan_site with freshness latest; it waits up to 45 seconds and reports reuse plus anonymous quota state.
+3. Call get_scan_status only if scan_site returns a non-terminal job.
+4. Call get_scan_bundle for the normal compact review.
+5. Use dedicated report, evidence, findings, or pre-consent tools only when needed.
 
 Recommended flow:
 1. Check https://certscore.ai/api/v2/health.

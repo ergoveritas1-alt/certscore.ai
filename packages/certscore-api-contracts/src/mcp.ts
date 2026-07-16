@@ -53,6 +53,12 @@ export const mcpGetEvidenceInputSchema = {
   scanId: z.string().min(1).describe("Stable CertScore scan ID.")
 } as const;
 
+export const mcpGetScanBundleInputSchema = {
+  scanId: z.string().min(1).describe("Stable CertScore scan ID."),
+  maxFindings: z.number().int().min(1).max(50).optional().describe("Maximum compact findings to return. Defaults to 20."),
+  maxPreConsentRows: z.number().int().min(1).max(50).optional().describe("Maximum pre-consent inventory rows to return. Defaults to 20.")
+} as const;
+
 export const mcpExportFindingsInputSchema = {
   scanId: z.string().min(1).describe("Stable CertScore scan ID.")
 } as const;
@@ -171,6 +177,24 @@ export const mcpReportOutputSchema = z
   })
   .passthrough();
 
+export const mcpScanBundleOutputSchema = z
+  .object({
+    type: z.literal("certscore_scan_bundle"),
+    scanId: z.string(),
+    status: apiV2ScanStatusSchema,
+    resultDisposition: scanResultDispositionSchema.nullable().optional(),
+    noGo: scanNoGoResultSchema.nullable().optional(),
+    scan: apiV2ScanResourceSchema,
+    summary: z.unknown().nullable(),
+    findings: z.array(z.unknown()),
+    evidenceSummary: z.unknown().nullable(),
+    preConsentCookiesTrackers: z.unknown().nullable(),
+    links: z.record(z.string()).optional(),
+    recommendedNextTool: z.string().nullable(),
+    disclaimer: z.string().nullable()
+  })
+  .passthrough();
+
 export const mcpFindingsExportOutputSchema = z
   .object({
     type: z.literal("certscore_mcp_findings_export"),
@@ -223,7 +247,7 @@ export const mcpPreConsentCookiesTrackersOutputSchema = apiV2PreConsentCookiesTr
 export const certScoreMcpToolContracts = [
   {
     name: "create_scan",
-    title: "Create CertScore Pulse scan",
+    title: "Deprecated — Create CertScore Pulse scan",
     description:
       "Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable.",
     inputSchema: mcpCreateScanInputSchema,
@@ -233,7 +257,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "scan_site",
     title: "Scan site",
-    description: "Recommended one-call scan workflow. Starts or reuses a public-web scan and waits up to 45 seconds for the completed scan resource by default. If it is still running, returns the job for get_scan_status polling. Use list_findings next for structured findings; fetch report, evidence, or cookie inventory only when the task needs them. Completed no-go scans return completed_limited status and reason-specific guidance.",
+    description: "Recommended first call. Starts or reuses a public-web scan, reports freshness and anonymous quota decisions, and waits up to 45 seconds by default. If still running, use get_scan_status; otherwise use get_scan_bundle. Completed no-go scans retain completed_limited status and reason-specific guidance.",
     inputSchema: mcpScanSiteInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
     annotations: scanCreationAnnotations
@@ -268,6 +292,14 @@ export const certScoreMcpToolContracts = [
     description: "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.",
     inputSchema: mcpGetEvidenceInputSchema,
     outputSchema: pulseResponseSchema,
+    annotations: readOnlyOpenWorldAnnotations
+  },
+  {
+    name: "get_scan_bundle",
+    title: "Get compact CertScore scan bundle",
+    description: "Recommended second call after scan_site. Returns the canonical scan state, compact report summary, findings, bounded evidence summary, and pre-consent inventory in one agent-friendly response.",
+    inputSchema: mcpGetScanBundleInputSchema,
+    outputSchema: mcpScanBundleOutputSchema,
     annotations: readOnlyOpenWorldAnnotations
   },
   {

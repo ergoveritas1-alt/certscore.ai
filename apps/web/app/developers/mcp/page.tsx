@@ -262,10 +262,25 @@ const status = await get_scan_status({ scanId });
         <Section eyebrow="Workflow" title="Recommended agent sequence">
           <CodeBlock>{`1. scan_site with a public URL; it waits up to 45 seconds by default.
 2. get_scan_status only when scan_site returns a non-terminal job.
-3. list_findings for compact structured review.
-4. get_report, get_evidence, or cookie inventory only when that specific view is needed.
+3. get_scan_bundle for canonical status, findings, bounded evidence, and pre-consent inventory.
+4. get_report, get_evidence, list_findings, or cookie inventory only when a dedicated view is needed.
 5. explain_finding for evidence summaries and caveats.
 6. get_latest_domain_scan or get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            <code className="rounded bg-white px-1">scan_site</code> reports whether it reused a result, the freshness decision,
+            whether anonymous quota was consumed, the remaining daily allowance, its UTC reset time, and the recommended next tool.
+          </p>
+          <CodeBlock>{`{
+  "executionMode": "reused_scan",
+  "reused": true,
+  "reusedScanAgeSeconds": 90,
+  "freshnessDecision": "reused_existing_scan",
+  "quotaConsumed": false,
+  "anonymousQuotaLimit": 10,
+  "anonymousQuotaRemaining": 7,
+  "anonymousQuotaResetAt": "2026-07-16T00:00:00.000Z",
+  "recommendedNextTool": "get_scan_bundle"
+}`}</CodeBlock>
           <CodeBlock>{`get_pre_consent_cookies_trackers({
   scanId: "00000000-0000-4000-8000-000000000123"
 })

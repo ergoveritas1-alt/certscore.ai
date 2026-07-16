@@ -579,6 +579,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
     "get_scan_status",
     "get_report",
     "get_evidence",
+    "get_scan_bundle",
     "export_findings",
     "list_findings",
     "get_pre_consent_cookies_trackers",

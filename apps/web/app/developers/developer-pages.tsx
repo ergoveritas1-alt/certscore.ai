@@ -61,11 +61,12 @@ export const apiV2Routes = [
 
 export const mcpTools = [
   ["create_scan", "Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable."],
-  ["scan_site", "Recommended one-call scan workflow. Starts or reuses a public-web scan and waits up to 45 seconds for the completed scan resource by default. If it is still running, returns the job for get_scan_status polling. Use list_findings next for structured findings; fetch report, evidence, or cookie inventory only when the task needs them. Completed no-go scans return completed_limited status and reason-specific guidance."],
+  ["scan_site", "Recommended first call. Starts or reuses a public-web scan, reports freshness and anonymous quota decisions, and waits up to 45 seconds by default. If still running, use get_scan_status; otherwise use get_scan_bundle. Completed no-go scans retain completed_limited status and reason-specific guidance."],
   ["get_scan", "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available."],
   ["get_scan_status", "Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available."],
   ["get_report", "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet."],
   ["get_evidence", "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values."],
+  ["get_scan_bundle", "Recommended second call after scan_site. Returns the canonical scan state, compact report summary, findings, bounded evidence summary, and pre-consent inventory in one agent-friendly response."],
   ["export_findings", "Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows."],
   ["list_findings", "List API v2 public-safe findings already projected for a scan."],
   ["get_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan."],

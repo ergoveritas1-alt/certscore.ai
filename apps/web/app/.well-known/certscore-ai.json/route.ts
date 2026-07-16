@@ -1,6 +1,6 @@
 const discoveryDocument = {
   name: "CertScore AI and API discovery",
-  version: "2026-07-10",
+  version: "2026-07-15",
   type: "certscore_ai_discovery",
   description:
     "Vendor-neutral discovery document for CertScore public API, SDK, MCP, OpenAPI, and agent-readable documentation.",
@@ -125,6 +125,7 @@ const discoveryDocument = {
       "get_scan_status",
       "get_report",
       "get_evidence",
+      "get_scan_bundle",
       "export_findings",
       "list_findings",
       "get_pre_consent_cookies_trackers",

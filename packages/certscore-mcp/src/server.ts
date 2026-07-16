@@ -2,7 +2,7 @@ import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
 import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
-import { boundEvidencePacket, exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, scanIdFromStatus, toToolError, toToolResult } from "./tools.js";
+import { boundEvidencePacket, buildScanBundle, exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, scanIdFromStatus, toToolError, toToolResult } from "./tools.js";
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
@@ -26,6 +26,7 @@ type GetScanStatusInput = { jobId?: string; scanId?: string };
 type GetScanInput = { scanId: string };
 type GetReportInput = { scanId: string; detail?: "tiny" | "quick" | "standard" | "full" | "summary" | "evidence"; format?: "json" | "markdown" };
 type GetEvidenceInput = { scanId: string };
+type GetScanBundleInput = { scanId: string; maxFindings?: number; maxPreConsentRows?: number };
 type ExportFindingsInput = { scanId: string };
 type ListFindingsInput = { limit?: number; offset?: number; scanId: string };
 type GetPreConsentCookiesTrackersInput = { maxRows?: number; scanId: string };
@@ -35,6 +36,19 @@ type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?:
 
 let createScanDeprecationWarningPrinted = false;
 const DEFAULT_MCP_SCAN_WAIT_MS = 45_000;
+
+function scanCreationMetadata(value: Record<string, unknown>) {
+  return {
+    executionMode: value.executionMode,
+    reused: value.reused,
+    reusedScanAgeSeconds: value.reusedScanAgeSeconds,
+    freshnessDecision: value.freshnessDecision,
+    quotaConsumed: value.quotaConsumed,
+    anonymousQuotaLimit: value.anonymousQuotaLimit,
+    anonymousQuotaRemaining: value.anonymousQuotaRemaining,
+    anonymousQuotaResetAt: value.anonymousQuotaResetAt
+  };
+}
 
 function toolContract(name: CertScoreMcpToolName): any {
   const contract = certScoreMcpToolContracts.find((candidate) => candidate.name === name);
@@ -117,16 +131,25 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           return toToolResult(created);
         }
         try {
-          return toToolResult(await client.scans.wait(created, {
+          const completed = await client.scans.wait(created, {
             maxWaitMs: Math.min(input.maxWaitSeconds ? input.maxWaitSeconds * 1_000 : DEFAULT_MCP_SCAN_WAIT_MS, DEFAULT_MCP_SCAN_WAIT_MS)
-          }));
+          });
+          return toToolResult({
+            ...completed,
+            ...scanCreationMetadata(created as unknown as Record<string, unknown>),
+            recommendedNextTool: "get_scan_bundle"
+          });
         } catch (error) {
           if (!(error instanceof CertScoreTimeoutError)) {
             throw error;
           }
           const scanId = created.scanId ?? created.scan_id;
           if (scanId) {
-            return toToolResult(await client.scans.status(scanId));
+            return toToolResult({
+              ...(await client.scans.status(scanId)),
+              ...scanCreationMetadata(created as unknown as Record<string, unknown>),
+              recommendedNextTool: "get_scan_status"
+            });
           }
           return toToolResult(created);
         }
@@ -155,9 +178,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
       try {
         if (scanId) {
           const status = await client.scans.status(scanId);
-          const needsTerminalHydration = status.status === "completed_limited"
-            ? !status.noGo || !status.resultDisposition || status.scanTimeSeconds == null
-            : status.status === "completed" && status.scanTimeSeconds == null;
+          const needsTerminalHydration = status.status === "completed" || status.status === "completed_limited";
           if (needsTerminalHydration) {
             try {
               const scan = await client.scans.get(scanId);
@@ -170,7 +191,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
                 noGo: scan.noGo,
                 startedAt: scan.startedAt,
                 completedAt: scan.completedAt,
-                scanTimeSeconds: scan.scanTimeSeconds
+                scanTimeSeconds: scan.scanTimeSeconds,
+                recommendedNextTool: "get_scan_bundle"
               });
             } catch {
               // Preserve the API status response if the terminal scan resource is
@@ -227,6 +249,33 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     async ({ scanId }: GetEvidenceInput) => {
       try {
         return toToolResult(boundEvidencePacket(await client.getScan(scanId, { detail: "evidence", format: "json" })));
+      } catch (error) {
+        return toToolError(error);
+      }
+    }
+  );
+
+  registerTool(
+    "get_scan_bundle",
+    toolContract("get_scan_bundle"),
+    async ({ scanId, maxFindings, maxPreConsentRows }: GetScanBundleInput) => {
+      try {
+        const [scan, report, evidence, findings, preConsentCookiesTrackers] = await Promise.all([
+          client.scans.get(scanId),
+          client.getScan(scanId, { detail: "summary", format: "json" }),
+          client.getScan(scanId, { detail: "evidence", format: "json" }),
+          client.findings.list(scanId),
+          client.scans.preConsentCookiesTrackers(scanId)
+        ]);
+        return toToolResult(buildScanBundle({
+          evidence,
+          findings,
+          maxFindings,
+          maxPreConsentRows,
+          preConsentCookiesTrackers,
+          report,
+          scan
+        }));
       } catch (error) {
         return toToolError(error);
       }

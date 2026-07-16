@@ -2,7 +2,7 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: public developer preview. Version 0.2.10 is prepared as a Homebrew/npm stdio server and hosted Streamable HTTP service. Local WC01 development uses `pnpm mcp:certscore`.
+Status: public developer preview. Version 0.2.11 is prepared for the hosted Streamable HTTP service and the next deterministic Homebrew release. Local WC01 development uses `pnpm mcp:certscore`.
 
 Public docs:
 
@@ -14,11 +14,12 @@ Public docs:
 ## Tools
 
 - `create_scan` - Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable.
-- `scan_site` - Recommended one-call scan workflow. Starts or reuses a public-web scan and waits up to 45 seconds for the completed scan resource by default. If it is still running, returns the job for get_scan_status polling. Use list_findings next for structured findings; fetch report, evidence, or cookie inventory only when the task needs them. Completed no-go scans return completed_limited status and reason-specific guidance.
+- `scan_site` - Recommended first call. Starts or reuses a public-web scan, reports freshness and anonymous quota decisions, and waits up to 45 seconds by default. If still running, use get_scan_status; otherwise use get_scan_bundle. Completed no-go scans retain completed_limited status and reason-specific guidance.
 - `get_scan` - Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available.
 - `get_scan_status` - Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available.
 - `get_report` - Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet.
 - `get_evidence` - Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.
+- `get_scan_bundle` - Recommended second call after scan_site. Returns the canonical scan state, compact report summary, findings, bounded evidence summary, and pre-consent inventory in one agent-friendly response.
 - `export_findings` - Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows.
 - `list_findings` - List API v2 public-safe findings already projected for a scan.
 - `get_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.
@@ -222,10 +223,14 @@ Local repo config for contributors:
 
 1. Call `scan_site` with a public URL. It normally returns the completed scan resource in the same tool call.
 2. Only if it returns a non-terminal job, call `get_scan_status` using the stable `scanId` until completion.
-3. Call `list_findings` for the structured findings needed by most review workflows.
-4. Do not fetch every other resource automatically. Call `get_report`, `get_evidence`, or `get_pre_consent_cookies_trackers` only when the task needs that view.
+3. Call `get_scan_bundle` for the normal compact review handoff.
+4. Call `get_report`, `get_evidence`, `list_findings`, or `get_pre_consent_cookies_trackers` only when the task needs a dedicated view.
 5. Call `explain_finding` when a reviewer needs evidence and caveats for a specific finding.
 6. Call `get_latest_domain_scan` or `get_latest_domain_pre_consent_cookies_trackers` when the user asks for latest eligible public data for a domain.
+
+`scan_site` reports whether the result was reused, why the freshness decision was made, whether anonymous quota was consumed, the remaining daily allowance, the UTC reset time, and the recommended next tool.
+
+With `freshness: "latest"`, CertScore reuses an eligible scan completed within the last 24 hours for the same normalized target and scan region. A reusable result must have completed usable page coverage and must not be an early-loss, no-page, or otherwise non-reusable limited result. Reuse does not consume anonymous quota. `freshnessDecision` states whether a recent result was reused or a new scan was queued; `reusedScanAgeSeconds` reports the reused result's age.
 
 ```json
 {
