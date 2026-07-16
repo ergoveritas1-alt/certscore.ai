@@ -66,6 +66,10 @@ export default function McpLightPage() {
             {clients.map(([name, instruction]) => <article className="rounded-lg border border-slate-200 bg-white p-5" key={name}><h3 className="font-semibold text-slate-950">{name}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{instruction}</p></article>)}
           </div>
           <CodeBlock>{`Transport: Streamable HTTP\nURL: ${endpoint}\nAuthentication: None`}</CodeBlock>
+          <p className="mt-4 text-sm text-slate-600">
+            Prefer a managed directory connection? Find CertScore.ai on{" "}
+            <a className="font-semibold text-sky-700 hover:text-sky-800" href="https://smithery.ai/server/ben-qe1c/certscore-ai" rel="noreferrer" target="_blank">Smithery</a>.
+          </p>
         </section>
 
         <section>
