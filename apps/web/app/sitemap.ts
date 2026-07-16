@@ -28,6 +28,7 @@ const staticPaths = [
   "/developers/reference",
   "/developers/sdk",
   "/developers/mcp",
+  "/mcp/light",
   "/developers/examples",
   "/llms.txt",
   "/llms-full.txt",

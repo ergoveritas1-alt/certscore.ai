@@ -37,6 +37,11 @@ export const developerPages = [
     description: "Connect agents to CertScore.ai tools for public website risk-signal review."
   },
   {
+    href: "/mcp/light",
+    label: "Light MCP",
+    description: "Start no-account website scans from any remote MCP client."
+  },
+  {
     href: "/developers/examples",
     label: "Examples",
     description: "Copyable curl, SDK, and agent workflows for common integration paths."

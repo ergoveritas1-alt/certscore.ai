@@ -11,6 +11,7 @@ export type PricingCtaType = "free_scan" | "sample_report" | "one_time_review" |
 export type LeadFormType = "contact_sales" | "monitor_request" | "demo_request";
 export type ScanSource = "homepage" | "header" | "dashboard" | "unknown";
 export type ScanTargetType = "domain" | "url" | "unknown";
+export type McpLightAction = "copy" | "scan" | "connect" | "support";
 
 export type CertScoreDataLayerEvent =
   | { event: "pricing_viewed"; page_path: "/pricing" }
@@ -25,7 +26,8 @@ export type CertScoreDataLayerEvent =
   | { event: "gpt_cta_clicked"; location: GptCtaLocation; destination: "certscore_gpt"; url: string }
   | { event: "lead_form_submit_attempted"; form_type: LeadFormType }
   | { event: "scan_started"; scan_source: ScanSource; scan_target_type: ScanTargetType; scan_status: "queued" }
-  | { event: "scan_completed"; scan_source: Extract<ScanSource, "homepage" | "dashboard" | "unknown">; scan_status: "completed" };
+  | { event: "scan_completed"; scan_source: Extract<ScanSource, "homepage" | "dashboard" | "unknown">; scan_status: "completed" }
+  | { event: "mcp_light_action"; action: McpLightAction; target: string };
 
 type CertScoreDataLayerNavigationEvent = CertScoreDataLayerEvent & {
   eventCallback?: () => void;

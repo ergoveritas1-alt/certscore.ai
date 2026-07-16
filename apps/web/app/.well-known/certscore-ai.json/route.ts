@@ -110,7 +110,8 @@ const discoveryDocument = {
       currentVersion: "0.2.12"
     },
     light: {
-      name: "CertScore Light",
+      name: "CertScore.ai — Light mode",
+      landingPage: "https://certscore.ai/mcp/light",
       transport: "streamable_http",
       endpoint: "https://mcp.certscore.ai/mcp/light",
       authentication: "none",
