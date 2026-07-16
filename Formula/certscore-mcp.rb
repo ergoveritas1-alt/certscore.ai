@@ -1,9 +1,9 @@
 class CertscoreMcp < Formula
   desc "CertScore MCP stdio server for public website risk-signal workflows"
   homepage "https://certscore.ai/developers/mcp"
-  url "https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v0.2.10/certscore-mcp-v0.2.10.tar.gz"
-  sha256 "1953ab80de5a54450b9a52959988effc4c2549e87bea46640fd5f58fca1fcd8b"
-  version "0.2.10"
+  url "https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v0.2.11/certscore-mcp-v0.2.11.tar.gz"
+  sha256 "801b8a1c80834714251c57b346876b0a5498bbc64662f51e9ae4876e31250cc3"
+  version "0.2.11"
   license "UNLICENSED"
 
   depends_on "node@22"
