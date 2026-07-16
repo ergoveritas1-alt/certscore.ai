@@ -294,6 +294,54 @@ function getHybridRuntimeEvidence(runtimeArtifacts: Record<string, unknown> | nu
   return getObject(runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]);
 }
 
+function getConsentSurfaceInspection(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  return (
+    getObject(runtimeArtifacts, ["consentSurfaceInspection", "consent_surface_inspection"]) ??
+    getObject(getHybridRuntimeEvidence(runtimeArtifacts), ["consentSurfaceInspection", "consent_surface_inspection"])
+  );
+}
+
+function makeIncompleteConsentSurfaceInspectionOutcome(
+  input: GdprEprivacyCoveragePolicyInput,
+  rowId: string,
+  controlLabel: string,
+) {
+  const inspection = getConsentSurfaceInspection(input.runtimeArtifacts);
+  if (!inspection) {
+    return null;
+  }
+  const inspectionCompleted = getBoolean(inspection, ["inspectionCompleted", "inspection_completed"]);
+  const coverageStatus = getString(inspection, ["coverageStatus", "coverage_status"]);
+  const explicitlyIncomplete =
+    inspectionCompleted === false ||
+    coverageStatus === "partial" ||
+    coverageStatus === "limited" ||
+    coverageStatus === "incomplete";
+  if (!explicitlyIncomplete) {
+    return null;
+  }
+
+  return makeOutcome(
+    rowId,
+    "Not testable",
+    `The pre-interaction consent-surface inspection did not complete, so ${controlLabel} availability cannot be determined from the retained evidence.`,
+    ["Evidence limitation: incomplete pre-interaction consent-surface inspection"],
+    {
+      missingOrIncompleteSourceSignals: [
+        sourceGap(
+          "runtimeArtifacts.consentSurfaceInspection.inspectionCompleted",
+          true,
+          inspectionCompleted ?? coverageStatus ?? "missing",
+          `A completed typed control inventory is required before CertScore.ai can assess ${controlLabel} availability.`,
+        ),
+      ],
+      retainedEvidence: {
+        consentSurfaceInspection: inspection,
+      },
+    },
+  );
+}
+
 function getHybridStorageSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   return getObject(getHybridRuntimeEvidence(runtimeArtifacts), ["storageSummary", "storage_summary"]);
 }
@@ -3120,6 +3168,17 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     firstLayerChoiceEvidence.cookieNoticeTextObserved &&
     firstLayerChoiceEvidence.acceptControlObserved &&
     !firstLayerChoiceEvidence.rejectControlObserved;
+
+  if (!rejectPathAvailable) {
+    const incompleteInspectionOutcome = makeIncompleteConsentSurfaceInspectionOutcome(
+      input,
+      "reject_all_path_availability",
+      "reject or equivalent refusal control",
+    );
+    if (incompleteInspectionOutcome) {
+      return incompleteInspectionOutcome;
+    }
+  }
   
   if (noticeGateEvidence.gateObserved) {
     return makeOutcome(
@@ -3463,6 +3522,34 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
     evidence.layerInspected ? `Layer inspected: ${evidence.layerInspected}` : null
   ].filter((value): value is string => Boolean(value));
 
+  if (evidence.optionsControlObserved) {
+    return makeOutcome(
+      "options_settings_preferences_control",
+      "Observed",
+      "A structured options, settings, or preferences control was observed on the retained first-layer consent surface.",
+      evidenceRefs,
+      {
+        retainedEvidence: {
+          firstLayerCookieConsentBannerObserved: evidence.firstLayerCookieConsentBannerObserved,
+          layerInspected: evidence.layerInspected,
+          optionsControlObserved: true,
+          optionsControls: evidence.optionsControls,
+          structuredControlInventoryRetained: evidence.structuredControlInventoryRetained,
+          visibleOptionsLabels: compactArray(evidence.visibleOptionsLabels, 5)
+        }
+      }
+    );
+  }
+
+  const incompleteInspectionOutcome = makeIncompleteConsentSurfaceInspectionOutcome(
+    input,
+    "options_settings_preferences_control",
+    "options, settings, or preferences control",
+  );
+  if (incompleteInspectionOutcome) {
+    return incompleteInspectionOutcome;
+  }
+
   if (noticeGateEvidence.gateObserved) {
     return makeOutcome(
       "options_settings_preferences_control",
@@ -3480,25 +3567,6 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
           optionsControlObserved: false,
           privacyNoticeGateWithPrivacyChoicesObserved: noticeGateEvidence.privacyNoticeGateWithPrivacyChoicesObserved,
           visibleChoiceLabels: noticeGateEvidence.visibleChoiceLabels
-        }
-      }
-    );
-  }
-
-  if (evidence.optionsControlObserved) {
-    return makeOutcome(
-      "options_settings_preferences_control",
-      "Observed",
-      "A structured options, settings, or preferences control was observed on the retained first-layer consent surface.",
-      evidenceRefs,
-      {
-        retainedEvidence: {
-          firstLayerCookieConsentBannerObserved: evidence.firstLayerCookieConsentBannerObserved,
-          layerInspected: evidence.layerInspected,
-          optionsControlObserved: true,
-          optionsControls: evidence.optionsControls,
-          structuredControlInventoryRetained: evidence.structuredControlInventoryRetained,
-          visibleOptionsLabels: compactArray(evidence.visibleOptionsLabels, 5)
         }
       }
     );
@@ -3662,6 +3730,34 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
     evidence.layerInspected ? `Layer inspected: ${evidence.layerInspected}` : null
   ].filter((value): value is string => Boolean(value));
 
+  if (evidence.acceptControlObserved) {
+    return makeOutcome(
+      "accept_consent_control",
+      "Observed",
+      "A structured accept, accept-all, or allow-all consent control was observed on the retained first-layer consent surface.",
+      evidenceRefs,
+      {
+        retainedEvidence: {
+          acceptControlObserved: true,
+          acceptControls: evidence.acceptControls,
+          firstLayerCookieConsentBannerObserved: evidence.firstLayerCookieConsentBannerObserved,
+          layerInspected: evidence.layerInspected,
+          structuredControlInventoryRetained: evidence.structuredControlInventoryRetained,
+          visibleAcceptLabels: compactArray(evidence.visibleAcceptLabels, 5)
+        }
+      }
+    );
+  }
+
+  const incompleteInspectionOutcome = makeIncompleteConsentSurfaceInspectionOutcome(
+    input,
+    "accept_consent_control",
+    "accept consent control",
+  );
+  if (incompleteInspectionOutcome) {
+    return incompleteInspectionOutcome;
+  }
+
   if (noticeGateEvidence.gateObserved) {
     return makeOutcome(
       "accept_consent_control",
@@ -3679,25 +3775,6 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
           legalPrivacyNoticeGateObserved: true,
           privacyNoticeGateWithPrivacyChoicesObserved: noticeGateEvidence.privacyNoticeGateWithPrivacyChoicesObserved,
           visibleChoiceLabels: noticeGateEvidence.visibleChoiceLabels
-        }
-      }
-    );
-  }
-
-  if (evidence.acceptControlObserved) {
-    return makeOutcome(
-      "accept_consent_control",
-      "Observed",
-      "A structured accept, accept-all, or allow-all consent control was observed on the retained first-layer consent surface.",
-      evidenceRefs,
-      {
-        retainedEvidence: {
-          acceptControlObserved: true,
-          acceptControls: evidence.acceptControls,
-          firstLayerCookieConsentBannerObserved: evidence.firstLayerCookieConsentBannerObserved,
-          layerInspected: evidence.layerInspected,
-          structuredControlInventoryRetained: evidence.structuredControlInventoryRetained,
-          visibleAcceptLabels: compactArray(evidence.visibleAcceptLabels, 5)
         }
       }
     );
@@ -5273,6 +5350,43 @@ function getPolicyTextExtractionHealth(summary: Record<string, unknown> | null |
   };
 }
 
+function getPrivacyPolicyEvaluationState(summary: Record<string, unknown> | null | undefined) {
+  return getString(summary, ["privacyPolicyEvaluationState", "privacy_policy_evaluation_state"]);
+}
+
+function privacyPolicyDiscoveryLimitation(
+  summary: Record<string, unknown> | null | undefined,
+  disclosureLabel: string,
+) {
+  const state = getPrivacyPolicyEvaluationState(summary);
+  if (state === "discovered_skipped_budget") {
+    return {
+      explanation: `A privacy-policy surface was discovered, but it was not fetched before the scan budget ended, so ${disclosureLabel.toLowerCase()} could not be evaluated.`,
+      evidence: "Evidence limitation: privacy policy discovered but skipped because the scan budget ended",
+      observed: "discovered_skipped_budget",
+    };
+  }
+  if (state === "discovered_fetch_failed") {
+    return {
+      explanation: `A privacy-policy surface was discovered, but the fetch failed, so ${disclosureLabel.toLowerCase()} could not be evaluated.`,
+      evidence: "Evidence limitation: privacy policy discovered but fetch failed",
+      observed: "discovered_fetch_failed",
+    };
+  }
+  if (state === "discovered_not_evaluated") {
+    return {
+      explanation: `A privacy-policy surface was discovered, but usable policy text was not evaluated, so ${disclosureLabel.toLowerCase()} could not be determined.`,
+      evidence: "Evidence limitation: privacy policy discovered but not evaluated",
+      observed: "discovered_not_evaluated",
+    };
+  }
+  return {
+    explanation: `No privacy-policy surface was discovered or retained, so ${disclosureLabel.toLowerCase()} could not be evaluated.`,
+    evidence: "Missing evidence: privacy policy surface",
+    observed: "not_discovered",
+  };
+}
+
 function policyTextExtractionStatus(summary: Record<string, unknown> | null | undefined) {
   return getString(getPolicyTextExtractionHealth(summary), ["policyTextExtractionStatus", "policy_text_extraction_status"]);
 }
@@ -6547,21 +6661,25 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   }
 
   if (!privacyPolicyPresent) {
+    const discoveryLimitation = privacyPolicyDiscoveryLimitation(summary, config.label);
     return makeOutcome(
       config.rowId,
       "Not testable",
-      `No privacy-policy surface was retained, so ${config.label.toLowerCase()} could not be evaluated.`,
-      ["Missing evidence: privacy policy surface"],
+      discoveryLimitation.explanation,
+      [discoveryLimitation.evidence],
       {
         missingOrIncompleteSourceSignals: [
           sourceGap(
             "scanner.policySurfaceObservations.privacy_policy",
             "reachable retained privacy policy surface",
-            "missing",
+            discoveryLimitation.observed,
             `Required to evaluate ${config.label.toLowerCase()}.`
           )
         ],
-        retainedEvidence: { policySurfaceSummary: summary }
+        retainedEvidence: {
+          policySurfaceSummary: summary,
+          privacyPolicyEvaluationState: getPrivacyPolicyEvaluationState(summary),
+        }
       }
     );
   }
@@ -6759,11 +6877,12 @@ function derivePolicyTextExtractionOutcome(input: GdprEprivacyCoveragePolicyInpu
   const health = getPolicyTextExtractionHealth(summary);
   const status = getString(health, ["policyTextExtractionStatus", "policy_text_extraction_status"]);
   if (!privacyPolicyPresent) {
+    const discoveryLimitation = privacyPolicyDiscoveryLimitation(summary, "Policy text extraction");
     return makeOutcome(
       "policy_text_extraction",
       "Not testable",
-      "No privacy-policy surface was retained, so policy text extraction could not be evaluated.",
-      ["Missing evidence: privacy policy surface"],
+      discoveryLimitation.explanation,
+      [discoveryLimitation.evidence],
       { retainedEvidence: { policyTextExtractionHealth: health, policySurfaceSummary: summary } }
     );
   }

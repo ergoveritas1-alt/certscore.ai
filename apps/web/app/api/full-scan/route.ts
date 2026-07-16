@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createHash } from "node:crypto";
 import {
   createDomainRequestSchema,
   normalizeScanFrom,
@@ -26,6 +25,7 @@ import { getFullScanQueueErrorCode } from "./full-scan-errors";
 import { shouldBypassDnsValidationForProductionLoadTest } from "./load-test-intake";
 import { findScanByClientRequestId } from "../../../server/scans/client-request";
 import { isAnonymousScanQuotaError } from "../../../server/pulse/anonymous-scan-quota";
+import { getScanRequesterIpContext } from "../../../server/scans/requester-ip-context";
 
 function isPublicFullScanAvailabilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -33,31 +33,27 @@ function isPublicFullScanAvailabilityError(error: unknown) {
   return /DATABASE_URL|Invalid environment configuration|Scanner health check failed|residential geo scanner configuration/i.test(message);
 }
 
-function getFirstHeaderValue(value: string | null) {
-  return value?.split(",")[0]?.trim() || null;
-}
-
-function getScanRequestProvenance(request: Request) {
+function getScanRequestContext(request: Request) {
   const headers = request.headers;
   const source = headers.get("x-certscore-scan-source")?.trim() || "api-full-scan";
-  const originIp =
-    getFirstHeaderValue(headers.get("cf-connecting-ip")) ??
-    getFirstHeaderValue(headers.get("x-forwarded-for")) ??
-    getFirstHeaderValue(headers.get("x-real-ip"));
+  const requesterIpContext = getScanRequesterIpContext(headers);
   const githubRunId = headers.get("x-github-run-id")?.trim() || null;
   const githubWorkflow = headers.get("x-github-workflow")?.trim() || null;
   const githubActor = headers.get("x-github-actor")?.trim() || null;
   const githubSha = headers.get("x-github-sha")?.trim() || null;
 
   return {
-    githubActor,
-    githubRunId,
-    githubSha,
-    githubWorkflow,
-    host: headers.get("host")?.trim() || null,
-    originIp: originIp ? createHash("sha256").update(originIp).digest("hex") : null,
-    source,
-    userAgent: headers.get("user-agent")?.slice(0, 240) || null
+    provenance: {
+      githubActor,
+      githubRunId,
+      githubSha,
+      githubWorkflow,
+      host: headers.get("host")?.trim() || null,
+      originIp: requesterIpContext.ipHash,
+      source,
+      userAgent: headers.get("user-agent")?.slice(0, 240) || null
+    },
+    requesterIpContext
   };
 }
 
@@ -127,7 +123,7 @@ export async function POST(request: Request) {
     const localV2DagLambdaDebugOverrides = parseLocalV2DagLambdaDebugOverrides(
       payload?.localV2DagLambdaDebugOverrides ?? payload?.v2LambdaDebugOverrides
     );
-    const provenance = getScanRequestProvenance(request);
+    const { provenance, requesterIpContext } = getScanRequestContext(request);
     const rawDomain = typeof payload?.domain === "string" ? payload.domain : "";
     const parsedBatch = parseDomainBatchInput(rawDomain);
 
@@ -228,6 +224,7 @@ export async function POST(request: Request) {
         localV2DagRunViaLambda: publicLocalV2DagRunViaLambda,
         normalizedUrl: firstDomain.normalizedUrl,
         provenance,
+        requesterIpContext,
         scanFrom: publicScanFrom
       }).catch(async (error) => {
         const message = error instanceof Error ? error.message : String(error);
@@ -301,6 +298,7 @@ export async function POST(request: Request) {
           localV2DagScanProfile,
           localV2DagRunViaLambda,
           provenance,
+          requesterIpContext,
           scanFrom
         })
       )

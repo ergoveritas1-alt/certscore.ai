@@ -154,10 +154,6 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
     "regulatory_gap__gdpr_eprivacy__accept_consent_control",
     "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control",
     "regulatory_gap__gdpr_eprivacy__cookie_notice_policy_availability",
-    "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
-    "regulatory_gap__gdpr_eprivacy__advertising_retargeting_vendor_signal_observed",
-    "regulatory_gap__gdpr_eprivacy__analytics_vendor_observed",
-    "regulatory_gap__gdpr_eprivacy__retargeting_behavioral_advertising_signal_observed",
     "regulatory_gap__gdpr_eprivacy__retention_disclosure",
     "regulatory_gap__gdpr_eprivacy__preference_withdrawal_control"
   ]);
@@ -169,16 +165,16 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
       "potential_gap",
       "potential_gap",
       "potential_gap",
-      "potential_concern",
-      "potential_concern",
-      "potential_concern",
-      "potential_concern",
       "partial_rating",
       "partial_rating"
     ]
   );
+  assert.equal(findings[0]?.label, "Pre-consent tracking, storage, and embedded services");
+  assert.equal(
+    Array.isArray(findings[0]?.evidenceDetails?.policyEvidenceDetails?.groupedRuntimeSignals),
+    true,
+  );
   assert.equal(findings.at(-1)?.label, "Preference withdrawal control");
-  assert.equal(findings[0]?.label, "Pre-consent third-party tracking");
   assert.deepEqual(findings.slice(1, 4).map((finding) => finding.label), [
     "Reject option",
     "Accept consent control",

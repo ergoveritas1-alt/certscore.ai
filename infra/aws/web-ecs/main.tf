@@ -187,6 +187,9 @@ resource "aws_lb" "web" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = local.public_subnets
   idle_timeout       = 600
+  # Request attribution trusts the ALB-observed peer at the right edge of XFF.
+  # Pin append mode so caller-supplied values cannot replace that peer address.
+  xff_header_processing_mode = "append"
 
   tags = merge(local.common_tags, { Name = "${local.prefix}-alb" })
 }

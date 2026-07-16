@@ -15,6 +15,7 @@ export type StaticFixturePage =
   | "consent-banner-failed-click"
   | "consent-banner-stateful-click"
   | "consent-cmp-cookie-persists"
+  | "consent-cmp-network-late-controls"
   | "consent-cmp-script-offscreen-context-controls"
   | "consent-cmp-script-offscreen-footer-settings"
   | "consent-cmp-script-late-settings"
@@ -73,6 +74,7 @@ export type StaticFixturePage =
   | "policy-broken-link"
   | "policy-browser-hydrated-document"
   | "policy-canonical-near-privacy-center"
+  | "policy-redirected-privacy-center"
   | "policy-localized-canonical-shell"
   | "policy-client-challenge"
   | "policy-french-captcha-challenge"
@@ -180,6 +182,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-banner-failed-click": "consent-failed-click",
   "consent-banner-stateful-click": "consent-stateful-click",
   "consent-cmp-cookie-persists": "consent-cmp-cookie-persists",
+  "consent-cmp-network-late-controls": "consent-cmp-network-late-controls",
   "consent-cmp-script-offscreen-context-controls": "consent-cmp-script-offscreen-context-controls",
   "consent-cmp-script-offscreen-footer-settings": "consent-cmp-script-offscreen-footer-settings",
   "consent-cmp-script-late-settings": "consent-cmp-script-late-settings",
@@ -238,6 +241,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-broken-link": "policy-broken-link",
   "policy-browser-hydrated-document": "policy-browser-hydrated-document",
   "policy-canonical-near-privacy-center": "policy-canonical-near-privacy-center",
+  "policy-redirected-privacy-center": "policy-redirected-privacy-center",
   "policy-localized-canonical-shell": "policy-localized-canonical-shell",
   "policy-client-challenge": "policy-client-challenge",
   "policy-french-captcha-challenge": "policy-french-captcha-challenge",
@@ -653,6 +657,50 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
   if (url.pathname === "/intl/en/policies/privacy-url-stub/") {
     response.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
     response.end(`http://${request.headers.host}/policies/canonical-privacy`);
+    return;
+  }
+
+  if (url.pathname === "/redirected-privacy") {
+    response.writeHead(302, { Location: "/policycenter/b2c/" });
+    response.end();
+    return;
+  }
+
+  if (url.pathname === "/policycenter/b2c/") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><html><head><title>Privacy Center</title></head><body>
+      <main>
+        <h1>Privacy Center</h1>
+        <p>Choose the privacy notice that applies to you.</p>
+        <p><a href="/policycenter/b2c/en-us">General Privacy Policy</a></p>
+        <p><a href="/policycenter/b2c/children">Children's Privacy Policy</a></p>
+      </main>
+    </body></html>`);
+    return;
+  }
+
+  if (url.pathname === "/policycenter/b2c/en-us") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><html><head><title>General Privacy Policy</title></head><body>
+      <main>
+        <h1>General Privacy Policy</h1>
+        <p>The controller for this service can be contacted at privacy@example.test.</p>
+        <p>We process personal data to provide services, personalize content, measure performance, improve security, and operate customer support.</p>
+        <p>We rely on consent, contract, legal obligation, and legitimate interests as legal bases for processing.</p>
+        <p>Recipients include processors, service providers, analytics providers, advertising partners, and affiliates.</p>
+        <p>We retain personal data only as long as necessary for the purposes described or as required by law.</p>
+        <p>You may exercise rights to access, rectification, erasure, restriction, portability, and objection.</p>
+        <p>We may transfer personal data outside the European Economic Area using adequacy decisions or standard contractual clauses.</p>
+        <p>Our data protection officer can be reached through the privacy office, and you may complain to a supervisory authority.</p>
+        <p>This general notice also describes account preferences, communications, website diagnostics, categories of personal data, sources, safeguards, and privacy choices for adult users of the service.</p>
+      </main>
+    </body></html>`);
+    return;
+  }
+
+  if (url.pathname === "/policycenter/b2c/children") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end("<!doctype html><html><body><h1>Children's Privacy Policy</h1></body></html>");
     return;
   }
 
@@ -1172,6 +1220,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     rejectSubscribe: caseName === "consent-reject-subscribe",
     requiredOnly: caseName === "consent-required-only",
     cmpCookie: caseName === "consent-cmp-cookie-persists",
+    cmpNetworkLateControls: caseName === "consent-cmp-network-late-controls",
     denyNonEssential: caseName === "consent-deny-non-essential",
     analyticsCategoryControls: caseName === "consent-analytics-category-controls",
     analyticsCookie: caseName === "consent-analytics-cookie-persists",
@@ -1183,6 +1232,23 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     leanGuardedImageCookie: caseName === "consent-lean-guarded-image-cookie",
     navigationTimeout: caseName === "consent-navigation-timeout",
   };
+  if (options.cmpNetworkLateControls) {
+    return `
+      <section>
+        <h1>News fixture</h1>
+        <p>A substantive page whose CMP is initially visible only through a canonical network request.</p>
+      </section>
+      <img alt="" src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js?fixture=network-only">
+      <div id="late-cmp-root"></div>
+      <script>
+        setTimeout(() => {
+          const target = document.getElementById("late-cmp-root");
+          if (!target) return;
+          target.innerHTML = '<div id="onetrust-banner-sdk" role="dialog" aria-label="Cookie consent"><p>We and our partners use cookies for analytics and advertising.</p><button type="button">Accept All</button><button type="button">Show Purposes</button></div>';
+        }, 6000);
+      </script>
+    `;
+  }
   if (options.lateFirstLayerControls) {
     return `
       <section>
@@ -1657,6 +1723,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-broken-link": `<a href="/policies/missing-privacy">Privacy Policy</a>`,
     "policy-browser-hydrated-document": `<a href="/browser-hydrated-policy/privacy">Datenschutzhinweis</a>`,
     "policy-canonical-near-privacy-center": `<a href="/privacy-center-shell">Privacy Policy</a>`,
+    "policy-redirected-privacy-center": `<a href="/redirected-privacy">Privacy Policy</a>`,
     "policy-localized-canonical-shell": `<a href="/datenschutz-shell">Datenschutzhinweis</a>`,
     "policy-cookie-link": `<a href="/policies/cookies">Cookie Policy</a>`,
     "policy-do-not-sell-link": `<a href="/do-not-sell-or-share">Do Not Sell or Share My Personal Information</a>`,

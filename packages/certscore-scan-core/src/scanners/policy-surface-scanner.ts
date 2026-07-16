@@ -955,7 +955,8 @@ async function fetchPolicyCandidateGroup(input: {
   policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
   prefetchedOnly?: boolean;
 }): Promise<{ observations: PolicySurfaceObservation[]; artifactRefs: ArtifactRef[]; secondaryCandidates: PolicySurfaceCandidate[] }> {
-  const toFetch = input.rankedCandidates.slice(0, candidateGroupFetchLimit(input.rankedCandidates));
+  const toFetch = prioritizePolicyCandidateEvaluation(input.rankedCandidates)
+    .slice(0, candidateGroupFetchLimit(input.rankedCandidates));
   const policyResults = await recordPolicyTiming(
     input.timingBreakdown,
     `${input.labelPrefix} fetch group`,
@@ -980,6 +981,18 @@ async function fetchPolicyCandidateGroup(input: {
     observations: policyResults.map((result) => result.observation),
     secondaryCandidates: policyResults.flatMap((result) => result.secondaryCandidates),
   };
+}
+
+function prioritizePolicyCandidateEvaluation(
+  rankedCandidates: PolicySurfaceCandidate[],
+): PolicySurfaceCandidate[] {
+  return rankedCandidates
+    .map((candidate, originalIndex) => ({ candidate, originalIndex }))
+    .sort((left, right) =>
+      surfacePriority(left.candidate.deterministicSurfaceType) - surfacePriority(right.candidate.deterministicSurfaceType) ||
+      left.originalIndex - right.originalIndex
+    )
+    .map(({ candidate }) => candidate);
 }
 
 async function processPolicyCandidateBeforeDeadline(
@@ -1105,7 +1118,16 @@ async function processPolicyCandidate({
     };
   }
 
-  let effectiveCandidate = candidate;
+  const fetchedFinalUrl = successfulPolicyFetchFinalUrl(fetched, candidate.normalizedUrl);
+  let effectiveCandidate = fetchedFinalUrl === candidate.normalizedUrl
+    ? candidate
+    : {
+        ...candidate,
+        url: fetchedFinalUrl,
+        normalizedUrl: fetchedFinalUrl,
+        sameOrigin: sameOrigin(input.normalizedUrl, fetchedFinalUrl),
+        fetchable: true,
+      };
   let fetchedHtml = fetched.text;
   const secondaryCandidateHtmlInputs = [fetchedHtml];
   let title = titleFromHtml(fetchedHtml);
@@ -1122,7 +1144,7 @@ async function processPolicyCandidate({
       `Resolve bounded direct, OneTrust, and canonical document text for ${candidate.deterministicSurfaceType}.`,
       () => resolvePolicyVisibleText({
         html: fetched.text,
-        baseUrl: candidate.normalizedUrl,
+        baseUrl: effectiveCandidate.normalizedUrl,
         surfaceType: candidate.deterministicSurfaceType,
         timeoutMs: Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
       }),
@@ -1134,7 +1156,7 @@ async function processPolicyCandidate({
       `policy url-stub follow ${candidateIndex + 1}`,
       `Follow ${candidate.deterministicSurfaceType} candidate when fetched policy body only points to a canonical policy URL.`,
       () => resolveUrlOnlyPolicyStub({
-        currentUrl: candidate.normalizedUrl,
+        currentUrl: effectiveCandidate.normalizedUrl,
         visibleText,
         surfaceType: candidate.deterministicSurfaceType,
         timeoutMs: remainingPolicyFetchMs(input, moduleStartedAtMs),
@@ -1993,6 +2015,7 @@ async function extractRenderedCandidates(
       window.scrollTo(0, document.body.scrollHeight);
     }).catch(() => undefined);
     await page.waitForTimeout(Math.min(300, Math.max(150, remainingMs(input, moduleStartedAtMs))));
+    const renderedBaseUrl = /^https?:\/\//i.test(page.url()) ? page.url() : input.normalizedUrl;
     const visibleText = await page.evaluate((maxChars) => {
       const text = document.body?.innerText ?? "";
       if (text.length <= maxChars) return text;
@@ -2090,7 +2113,7 @@ async function extractRenderedCandidates(
     }, MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS).catch(() => "");
     const renderedHtmlCandidates = renderedPolicyRegionHtml
       ? extractCandidates(
-        input.normalizedUrl,
+        renderedBaseUrl,
         renderedPolicyRegionHtml,
         htmlToVisibleText(renderedPolicyRegionHtml),
       )
@@ -2141,7 +2164,7 @@ async function extractRenderedCandidates(
     return dedupeCandidates([
       ...renderedHtmlCandidates,
       ...retainedRawCandidates.flatMap((candidate, index): PolicySurfaceCandidate[] => {
-      const normalizedUrl = candidate.href ? normalizeUrl(candidate.href, input.normalizedUrl) : input.normalizedUrl;
+      const normalizedUrl = candidate.href ? normalizeUrl(candidate.href, renderedBaseUrl) : renderedBaseUrl;
       const surroundingTextExcerpt = surroundingText(visibleText, candidate.text);
       const deterministic = classifySurface({
         linkText: candidate.text,
@@ -2152,18 +2175,18 @@ async function extractRenderedCandidates(
         return [];
       }
       if (isExternalUrlOnlyPolicyCandidate(
-        input.normalizedUrl,
+        renderedBaseUrl,
         normalizedUrl,
         candidate.text,
         deterministic.surfaceType,
       )) {
         return [];
       }
-      if (isExternalPoweredByAttributionLink(input.normalizedUrl, normalizedUrl, candidate.text)) {
+      if (isExternalPoweredByAttributionLink(renderedBaseUrl, normalizedUrl, candidate.text)) {
         return [];
       }
       const fetchable = Boolean(candidate.href) && isFetchablePolicyCandidateForPolicySurface({
-        baseUrl: input.normalizedUrl,
+        baseUrl: renderedBaseUrl,
         href: candidate.href ?? "",
         normalizedUrl,
         surfaceType: deterministic.surfaceType,
@@ -2176,13 +2199,13 @@ async function extractRenderedCandidates(
       const observationOnly = !fetchable || isObservationOnlyPreferenceControl(deterministic.surfaceType, candidate.text);
       return [{
         candidateId: `policy_rendered_candidate_${index}`,
-        url: candidate.href ?? input.normalizedUrl,
+        url: candidate.href ?? renderedBaseUrl,
         normalizedUrl,
         linkText: candidate.text || normalizedUrl,
         selector: candidate.selector,
         surroundingTextExcerpt,
         domLocation: candidate.domLocation,
-        sameOrigin: sameOrigin(input.normalizedUrl, normalizedUrl),
+        sameOrigin: sameOrigin(renderedBaseUrl, normalizedUrl),
         fetchable,
         clickable: candidate.clickable,
         mayLeadToConsentControls: isPreferenceControlSurface(deterministic.surfaceType, candidate.text),
@@ -3859,6 +3882,15 @@ type FetchTextResult = {
   status?: number;
   text: string;
 };
+
+function successfulPolicyFetchFinalUrl(result: FetchTextResult, fallbackUrl: string): string {
+  const finalUrl = [...(result.attempts ?? [])]
+    .reverse()
+    .find((attempt) => attempt.outcome === "fetched")
+    ?.finalUrl;
+  return finalUrl && /^https?:\/\//i.test(finalUrl) ? finalUrl : fallbackUrl;
+}
+
 type PdfParseConstructor = new (input: { data: Uint8Array }) => {
   destroy(): Promise<void>;
   getText(input: {

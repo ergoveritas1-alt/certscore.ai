@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { getQueueAvailability } from "../../lib/env";
 import { getAdminScanThrottleMs } from "../../lib/scan-access";
 import { normalizeScanFrom } from "@website-signal-risk-scanner/shared";
@@ -16,6 +17,7 @@ import {
   restrictLocalV2RunViaLambdaForUser,
   restrictScanFromForUser
 } from "./restricted-scan-options";
+import { getScanRequesterIpContext } from "./requester-ip-context";
 
 const initialState: CreateFullScanActionState = {
   error: null
@@ -34,6 +36,7 @@ export async function rescanDomainAction(
   }
 
   const dashboardContext = await getDashboardContext();
+  const requesterIpContext = getScanRequesterIpContext(await headers());
   const domainId = String(formData.get("domainId") ?? "").trim();
   const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
   const allowRestrictedScanOptions = canUseRestrictedScanOptions({
@@ -64,6 +67,7 @@ export async function rescanDomainAction(
     enforceMonthlyUsageLimit: true,
     localV2DagScanProfile,
     localV2DagRunViaLambda,
+    requesterIpContext,
     scanFrom,
     scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
     source: "manual-rescan"

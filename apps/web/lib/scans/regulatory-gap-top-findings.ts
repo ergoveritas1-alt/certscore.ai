@@ -57,9 +57,66 @@ const POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS = new Set([
 ]);
 
 export function buildRegulatoryGapTopFindings(input: RegulatoryGapTopFindingInput): CertScoreFinding[] {
-  return [
+  return clusterRelatedRuntimeTopFindings([
     ...findingsForArea(input.gdprEprivacyArea, GDPR_CONFIG)
-  ];
+  ]);
+}
+
+const PRECONSENT_RUNTIME_CLUSTER_ROW_IDS = new Set([
+  "pre_consent_cookies_storage",
+  "pre_consent_third_party_tracking",
+  "advertising_retargeting_vendor_signal_observed",
+  "retargeting_behavioral_advertising_signal_observed",
+  "analytics_vendor_observed",
+  "embedded_content_pre_consent",
+]);
+
+function regulatoryRowId(finding: CertScoreFinding) {
+  const rowId = finding.evidenceDetails?.policyEvidenceDetails?.rowId;
+  return typeof rowId === "string" ? rowId : null;
+}
+
+function clusterRelatedRuntimeTopFindings(findings: CertScoreFinding[]) {
+  const clustered = findings.filter((finding) => {
+    const rowId = regulatoryRowId(finding);
+    return rowId ? PRECONSENT_RUNTIME_CLUSTER_ROW_IDS.has(rowId) : false;
+  });
+  if (clustered.length < 2) {
+    return findings;
+  }
+
+  const primary = clustered.find((finding) => regulatoryRowId(finding) === "pre_consent_third_party_tracking") ??
+    clustered.find((finding) => regulatoryRowId(finding) === "pre_consent_cookies_storage") ??
+    clustered[0];
+  if (!primary) {
+    return findings;
+  }
+  const supporting = clustered.filter((finding) => finding !== primary);
+  const supportingRows = supporting.map((finding) => ({
+    id: regulatoryRowId(finding),
+    label: finding.label,
+    shortSummary: finding.shortSummary,
+  }));
+  const groupedPrimary: CertScoreFinding = {
+    ...primary,
+    label: "Pre-consent tracking, storage, and embedded services",
+    shortSummary: primary.shortSummary,
+    evidencePreview: [
+      ...primary.evidencePreview,
+      ...supporting.map((finding) => `Supporting signal: ${finding.label}`),
+    ].slice(0, 8),
+    evidenceRefs: [...new Set(clustered.flatMap((finding) => finding.evidenceRefs))],
+    evidenceDetails: {
+      ...primary.evidenceDetails,
+      policyEvidenceDetails: {
+        ...primary.evidenceDetails?.policyEvidenceDetails,
+        groupedRuntimeSignals: supportingRows,
+      },
+    },
+  };
+  const clusteredIds = new Set(clustered.map((finding) => finding.id));
+  return findings.map((finding) => finding === primary ? groupedPrimary : finding)
+    .filter((finding) => !clusteredIds.has(finding.id) || finding.id === primary.id);
 }
 
 function findingsForArea(

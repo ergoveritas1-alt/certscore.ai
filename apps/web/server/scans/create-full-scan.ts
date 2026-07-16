@@ -60,6 +60,12 @@ import { resolveRecentScanReuseDecision, RECENT_SCAN_REUSE_WINDOW_HOURS } from "
 import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
 import { lookupTrancoRankMetadata } from "./tranco-rank-metadata";
 import { upsertOrganizationSettings } from "../settings/repository";
+import { headers } from "next/headers";
+import {
+  getScanRequesterIpContext,
+  normalizeScanRequesterIpContext,
+  type ScanRequesterIpContext
+} from "./requester-ip-context";
 
 export type CreateFullScanActionState = {
   error: string | null;
@@ -105,6 +111,7 @@ type QueueFullScanInput = {
     source?: string | null;
     userAgent?: string | null;
   };
+  requesterIpContext?: ScanRequesterIpContext | null;
   scanFrom?: ScanFrom;
   scanThrottleMs?: number;
   source?: string;
@@ -200,6 +207,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
 
   const pagesRequested = domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan;
   const bypassRecentScanReuse = Boolean(input.bypassRecentScanReuse);
+  const requesterIpContext = normalizeScanRequesterIpContext(input.requesterIpContext);
 
   const logRequest = (details: {
     errorCode?: string | null;
@@ -228,8 +236,10 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         bypassRecentScanReuse,
         enforceCooldown: Boolean(input.enforceCooldown),
         enforceMonthlyUsageLimit: Boolean(input.enforceMonthlyUsageLimit),
+        ipHash: requesterIpContext.ipHash,
         planCode: input.planCode,
         provenance: input.provenance ?? null,
+        sourceIp: requesterIpContext.sourceIp,
         localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
         scanType: input.scanType ?? "full",
         scanFrom,
@@ -727,6 +737,7 @@ export async function createFullScanAction(
 ): Promise<CreateFullScanActionState> {
   const [{ getDashboardContext }, { redirect }] = await Promise.all([import("../auth"), import("next/navigation")]);
   const dashboardContext = await getDashboardContext();
+  const requesterIpContext = getScanRequesterIpContext(await headers());
   const domainId = String(formData.get("domainId") ?? "").trim();
   const forceNewScan = formData.get("forceNewScan") === "true";
   const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
@@ -766,6 +777,7 @@ export async function createFullScanAction(
     enforceMonthlyUsageLimit: true,
     localV2DagScanProfile,
     localV2DagRunViaLambda,
+    requesterIpContext,
     scanFrom,
     scanThrottleMs: getManualDashboardScanThrottleMs(dashboardContext.user.email),
     source: "manual-dashboard"

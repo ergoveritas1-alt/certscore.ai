@@ -28,6 +28,59 @@ async function loadLocalV2DagReport() {
   return import("./local-v2-dag-report");
 }
 
+test("getLocalV2PrimaryLanguage ranks declared, retained text, and URL evidence", async () => {
+  const { getLocalV2PrimaryLanguage } = await loadLocalV2DagReport();
+  assert.equal(getLocalV2PrimaryLanguage({
+    url: "https://example.com",
+    normalizedUrl: "https://example.com/",
+    domSnapshots: [{ documentLanguage: "fr-FR", textExcerpt: "Welcome to our site." }]
+  } as unknown as CanonicalEvidenceBundle), "fr");
+  assert.equal(getLocalV2PrimaryLanguage({
+    url: "https://example.com/de/produkte",
+    normalizedUrl: "https://example.com/de/produkte",
+    domSnapshots: [{ textExcerpt: "Die Webseite bietet Informationen für unsere Kunden." }]
+  } as unknown as CanonicalEvidenceBundle), "de");
+});
+
+test("getLocalV2FinalDocumentUrl prefers retained final-page evidence after a cross-domain redirect", async () => {
+  const { getLocalV2FinalDocumentUrl, isThirdPartyRuntimeEventForDocument } = await loadLocalV2DagReport();
+  assert.equal(getLocalV2FinalDocumentUrl({
+    url: "https://requested.example/",
+    normalizedUrl: "https://requested.example/",
+    domSnapshots: [{ capturedAtMs: 20, url: "https://www.final-brand.example/home" }],
+    screenshots: [{ capturedAtMs: 10, url: "https://requested.example/" }],
+    transportSecurityObservations: [{ finalUrl: "https://requested.example/" }],
+  } as unknown as CanonicalEvidenceBundle), "https://www.final-brand.example/home");
+  assert.equal(isThirdPartyRuntimeEventForDocument({
+    hostname: "www.final-brand.example",
+    thirdParty: true,
+  }, "https://www.final-brand.example/home"), false);
+  assert.equal(isThirdPartyRuntimeEventForDocument({
+    hostname: "analytics.vendor.test",
+    thirdParty: true,
+  }, "https://www.final-brand.example/home"), true);
+});
+
+test("policy summary distinguishes discovered-but-budget-skipped privacy notices from absent notices", async () => {
+  const { summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const discoveredSurface = {
+    observationId: "privacy-discovered",
+    surfaceType: "privacy_policy",
+    normalizedUrl: "https://example.test/privacy",
+    url: "/privacy",
+    status: "skipped_budget",
+    confidence: 0.9,
+  } as CanonicalEvidenceBundle["policySurfaceObservations"][number];
+  const summary = summarizePolicySurfaces([], "example.test", {
+    discoveredPolicySurfaces: [discoveredSurface],
+  });
+
+  assert.equal(summary.privacyPolicyPresent, false);
+  assert.equal(summary.privacyPolicyDiscovered, true);
+  assert.equal(summary.privacyPolicyEvaluationState, "discovered_skipped_budget");
+  assert.deepEqual(summary.discoveredPrivacyPolicyUrls, ["https://example.test/privacy"]);
+});
+
 test("buildLocalV2NoGoSnapshotFields preserves every canonical no-go reason classification", async () => {
   const { buildLocalV2NoGoSnapshotFields } = await loadLocalV2DagReport();
   for (const reasonCode of SCAN_NO_GO_REASON_CODES) {
@@ -3553,7 +3606,7 @@ test("materializeLocalV2DagScanDetail treats retained bot verification DOM as sc
   }
 });
 
-test("materializeLocalV2DagScanDetail keeps missing reject unconfirmed when runtime activity was retained", async () => {
+test("materializeLocalV2DagScanDetail withholds missing controls and score when consent coverage is incomplete", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
   const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/missing-reject-"));
@@ -3684,6 +3737,9 @@ test("materializeLocalV2DagScanDetail keeps missing reject unconfirmed when runt
 
     assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, true);
     assert.equal(detail.runtimeArtifacts?.consent_surface_observed, true);
+    assert.equal(detail.runtimeArtifacts?.critical_coverage_complete, false);
+    assert.equal(detail.snapshot?.certscore_overall, null);
+    assert.equal(detail.snapshot?.score_confidence, "withheld_incomplete_critical_coverage");
     assert.equal(
       detail.runtimeArtifacts?.consent_preconsent_violation_count,
       0,
@@ -3708,10 +3764,9 @@ test("materializeLocalV2DagScanDetail keeps missing reject unconfirmed when runt
 
     assert.equal(rejectPathArtifact?.firstLayerCookieConsentBannerObserved, false);
     assert.equal(rejectPathArtifact?.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
-    assert.equal(rejectPath?.status, "Not confirmed");
-    assert.equal(rejectPath?.assessmentStatus, "review_signal");
-    assert.notEqual(rejectPath?.evidenceState, "not_testable");
-    assert.match(rejectPath?.limitation ?? "", /not confirmed|tracking activity alone|cookie consent banner/i);
+    assert.equal(rejectPath?.status, "Not testable");
+    assert.equal(rejectPath?.evidenceState, "not_testable");
+    assert.match(rejectPath?.limitation ?? "", /inspection did not complete/i);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

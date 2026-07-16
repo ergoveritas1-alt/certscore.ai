@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   SCAN_NO_GO_REASON_CODES,
   SCAN_NO_GO_REASON_PRESENTATIONS,
+  SCAN_NO_GO_SNAPSHOT_OUTCOMES,
+  isScanNoGoSnapshotOutcome,
   resolveScanNoGoPresentation,
   projectExternalScanNoGo,
 } from "./scan-no-go-reasons";
@@ -21,6 +23,16 @@ test("every canonical scan no-go reason has complete customer and snapshot prese
     assert.ok(presentation.snapshotStopReasonDetail.length > 20, code);
     assert.ok(!presentation.customerTitle.includes("_"), code);
   }
+});
+
+test("canonical no-go detection covers every persisted reason-specific outcome", () => {
+  for (const presentation of Object.values(SCAN_NO_GO_REASON_PRESENTATIONS)) {
+    assert.ok(SCAN_NO_GO_SNAPSHOT_OUTCOMES.includes(presentation.snapshotScanOutcome));
+    assert.equal(isScanNoGoSnapshotOutcome(presentation.snapshotScanOutcome), true);
+  }
+  assert.equal(isScanNoGoSnapshotOutcome("no_go"), true);
+  assert.equal(isScanNoGoSnapshotOutcome("completed_successfully"), false);
+  assert.equal(isScanNoGoSnapshotOutcome(null), false);
 });
 
 test("projects a public-safe structured no-go result without diagnostic codes", () => {

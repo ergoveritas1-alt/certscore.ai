@@ -44,6 +44,10 @@ export function createPulsePublicId(prefix = "pulse_req") {
   return `${prefix}_${randomUUID()}`;
 }
 
+export function pulseJobIdForPublicId(publicId: string) {
+  return `pulse_job_${publicId.replace(/^pulse_req_/, "")}`;
+}
+
 export async function findLatestCompletedAnonymousScanForDomain(
   normalizedDomain: string,
   input?: { maxAgeHours?: number; minPagesRequested?: number; scanFrom?: ScanFrom }
@@ -95,7 +99,7 @@ export async function createPulseRequest(input: {
 }) {
   await ensurePulseTables();
   const publicId = createPulsePublicId();
-  const jobId = `pulse_job_${publicId.replace(/^pulse_req_/, "")}`;
+  const jobId = pulseJobIdForPublicId(publicId);
   await query(
     `insert into pulse_requests (
        public_id, job_id, requested_url, normalized_url, normalized_domain,
@@ -121,6 +125,7 @@ export async function createPulseRequest(input: {
         sourceIp: input.context.sourceIp,
         userAgent: input.context.userAgent,
         referer: input.context.referer,
+        requestId: input.context.requestId ?? null,
         format: input.context.format,
         detail: input.context.detail,
         freshness: input.context.freshness,
@@ -182,7 +187,7 @@ export async function updatePulseRequestCompleted(input: {
         set status = 'completed',
             phase = 'completed',
             scan_id = $2,
-            result_pulse_url = $3,
+            result_pulse_url = coalesce(result_pulse_url, $3),
             result_report_url = $4,
             response_summary = $5,
             resolution_mode = case

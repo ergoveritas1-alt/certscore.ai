@@ -2349,6 +2349,25 @@ test("policySurfaceScanner prefers a canonical policy document linked from a pri
   }, { enableNanoPolicyAssist: true });
 });
 
+test("policySurfaceScanner resolves canonical policy links against a redirected privacy-center URL", async () => {
+  await withPolicyScan("policy-redirected-privacy-center", async ({ result, baseUrl }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.normalizedUrl, `${baseUrl}/policycenter/b2c/`);
+    assert.match(privacy?.textExcerpt ?? "", /standard contractual clauses/i);
+    assert.doesNotMatch(privacy?.textExcerpt ?? "", /Children's Privacy Policy/i);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "controller_contact" &&
+      signal.status === "observed"
+    ), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "legal_basis" &&
+      signal.status === "observed"
+    ), true);
+  }, { enableNanoPolicyAssist: true });
+});
+
 interface ScanContext {
   result: Awaited<ReturnType<typeof policySurfaceScanner>>;
   baseUrl: string;

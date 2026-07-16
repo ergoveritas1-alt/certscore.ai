@@ -6,6 +6,7 @@ import { readFileSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { getDomain as getTldtsDomain } from "tldts";
 import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   classifyConsentControlLabel,
@@ -24,6 +25,7 @@ import {
   type GdprTransparencyProductionEvidenceProfile
 } from "../../lib/scans/gdpr-transparency-production-profile";
 import { isPromotionGradePreconsentRequestRow } from "../../lib/scans/preconsent-public-evidence";
+import { guessPrimaryLanguage } from "../../lib/scans/primary-language";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import {
   LOCAL_V2_DAG_LAMBDA_AWS_REGION,
@@ -46,20 +48,39 @@ function getString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function getLocalV2PrimaryLanguage(bundle: CanonicalEvidenceBundle) {
-  for (const observation of bundle.consentUiObservations ?? []) {
-    for (const control of observation.controls ?? []) {
-      const locale = getString((control as { matchedLocale?: unknown }).matchedLocale);
-      if (locale) return locale;
-    }
-  }
-  for (const surface of bundle.policySurfaceObservations ?? []) {
-    for (const candidate of surface.gdprTransparencyTopicCandidates ?? []) {
-      const locale = getString((candidate as { matchedLocale?: unknown }).matchedLocale);
-      if (locale) return locale;
-    }
-  }
-  return null;
+export function getLocalV2PrimaryLanguage(bundle: CanonicalEvidenceBundle) {
+  const consentObservations = bundle.consentUiObservations ?? [];
+  const policySurfaces = bundle.policySurfaceObservations ?? [];
+  return guessPrimaryLanguage({
+    declaredLanguages: (bundle.domSnapshots ?? []).map((snapshot) => snapshot.documentLanguage),
+    matchedLocales: [
+      ...consentObservations.flatMap((observation) =>
+        (observation.controls ?? []).map((control) => control.matchedLocale)
+      ),
+      ...policySurfaces.flatMap((surface) =>
+        (surface.gdprTransparencyTopicCandidates ?? []).map((candidate) => candidate.matchedLocale)
+      ),
+      ...policySurfaces.flatMap((surface) =>
+        (surface.article13DisclosureSignals ?? []).map((signal) => signal.matchedLocale)
+      )
+    ],
+    textSamples: [
+      ...(bundle.domSnapshots ?? []).map((snapshot) => snapshot.textExcerpt),
+      ...consentObservations.map((observation) => observation.textExcerpt),
+      ...policySurfaces.flatMap((surface) => [
+        surface.title,
+        surface.linkText,
+        surface.surroundingTextExcerpt,
+        surface.textExcerpt
+      ])
+    ],
+    urls: [
+      bundle.url,
+      bundle.normalizedUrl,
+      ...(bundle.domSnapshots ?? []).map((snapshot) => snapshot.url),
+      ...policySurfaces.flatMap((surface) => [surface.url, surface.normalizedUrl])
+    ]
+  });
 }
 
 type LocalV2DagLambdaPollResult = {
@@ -358,8 +379,7 @@ function registrableDomain(hostname: string | null | undefined) {
   if (!hostname) {
     return null;
   }
-  const parts = hostname.split(".").filter(Boolean);
-  return parts.length <= 2 ? hostname : parts.slice(-2).join(".");
+  return getTldtsDomain(hostname, { allowPrivateDomains: true }) ?? hostname;
 }
 
 function sameSite(hostname: string | null | undefined, rootDomain: string | null | undefined) {
@@ -478,6 +498,39 @@ function safeLocalV2DocumentUrl(...values: Array<string | null | undefined>) {
     }
   }
   return null;
+}
+
+export function getLocalV2FinalDocumentUrl(bundle: CanonicalEvidenceBundle) {
+  const latestDomUrl = [...(bundle.domSnapshots ?? [])]
+    .sort((left, right) => right.capturedAtMs - left.capturedAtMs)
+    .map((snapshot) => firstString(snapshot.url))
+    .find(Boolean);
+  const latestScreenshotUrl = [...(bundle.screenshots ?? [])]
+    .sort((left, right) => right.capturedAtMs - left.capturedAtMs)
+    .map((screenshot) => firstString(screenshot.url))
+    .find(Boolean);
+  const transportFinalUrl = (bundle.transportSecurityObservations ?? [])
+    .map((observation) => firstString(observation.finalUrl))
+    .find(Boolean);
+  return safeLocalV2DocumentUrl(
+    latestDomUrl,
+    latestScreenshotUrl,
+    transportFinalUrl,
+    bundle.normalizedUrl,
+    bundle.url,
+  );
+}
+
+export function isThirdPartyRuntimeEventForDocument(
+  event: Record<string, unknown>,
+  documentUrl: string | null | undefined,
+) {
+  const documentRootDomain = registrableDomain(hostnameFromUrl(documentUrl));
+  const eventHostname = firstString(event.hostname) ?? hostnameFromUrl(firstString(event.url, event.requestUrl));
+  if (eventHostname && documentRootDomain) {
+    return !sameSite(eventHostname, documentRootDomain);
+  }
+  return event.thirdParty === true || event.isThirdParty === true;
 }
 
 function purposeToCategory(value: string | null | undefined) {
@@ -1698,6 +1751,7 @@ export function summarizePolicySurfaces(
   policySurfaces: ReturnType<typeof dedupePolicySurfaces>,
   rootDomain: string | null,
   options: {
+    discoveredPolicySurfaces?: readonly LocalV2PolicySurface[];
     gdprTransparencyEvidenceProfile?: GdprTransparencyProductionEvidenceProfile | string | null;
   } = {}
 ) {
@@ -1707,6 +1761,8 @@ export function summarizePolicySurfaces(
   const gdprTransparencyProductionEvidenceEnabled =
     gdprTransparencyProductionEvidenceProfileEnabled(gdprTransparencyEvidenceProfile);
   const privacySurfaces = policySurfaces.filter((row) => row.surface.surfaceType === "privacy_policy");
+  const discoveredPrivacySurfaces = (options.discoveredPolicySurfaces ?? [])
+    .filter((surface) => surface.surfaceType === "privacy_policy");
   const article13Surfaces = selectArticle13PrivacySurfaces(
     privacySurfaces.filter((row) =>
       !isGenericThirdPartyPrivacySurface(row, rootDomain) &&
@@ -1821,6 +1877,23 @@ export function summarizePolicySurfaces(
   const mentionedControls = uniqueStrings(policySurfaces.flatMap((row) => row.surface.mentionedControls ?? []));
   const processingErrorObserved = /processing error|privacy center.*error/i.test(text);
   const policyTextExtractionHealth = buildPolicyTextExtractionHealth(article13Surfaces, text, processingErrorObserved);
+  const discoveredPrivacyPolicyUrls = uniqueStrings(discoveredPrivacySurfaces
+    .map((surface) => firstString(surface.normalizedUrl, surface.url))
+    .filter(Boolean));
+  const discoveredPrivacyPolicyStatuses = uniqueStrings(discoveredPrivacySurfaces
+    .map((surface) => firstString(surface.status))
+    .filter(Boolean));
+  const privacyPolicyEvaluationState = article13Surfaces.length > 0
+    ? policyTextExtractionHealth.policyTextExtractionStatus === "ok"
+      ? "fetched_usable"
+      : "fetched_insufficient"
+    : discoveredPrivacySurfaces.some((surface) => surface.status === "skipped_budget")
+      ? "discovered_skipped_budget"
+      : discoveredPrivacySurfaces.some((surface) => surface.status === "failed")
+        ? "discovered_fetch_failed"
+        : discoveredPrivacySurfaces.length > 0
+          ? "discovered_not_evaluated"
+          : "not_discovered";
   const retainedPolicySections = article13Surfaces.flatMap((row) =>
     (row.surface.retainedPolicySections ?? []).map((section) => ({
       charEnd: section.charEnd,
@@ -1884,6 +1957,10 @@ export function summarizePolicySurfaces(
     policyTextExtractionHealth,
     policy_text_extraction_health: policyTextExtractionHealth,
     privacyPolicyPresent: article13Surfaces.length > 0,
+    privacyPolicyDiscovered: discoveredPrivacySurfaces.length > 0 || article13Surfaces.length > 0,
+    privacyPolicyEvaluationState,
+    discoveredPrivacyPolicyStatuses,
+    discoveredPrivacyPolicyUrls,
     privacyPolicyTextCharacterCount: text.length,
     privacyPolicyUrls: uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
     processingErrorObserved,
@@ -2362,10 +2439,7 @@ function summarizeFirstLayerConsentChoices(
   const defaultToggleEvidence = summarizeConsentDefaultToggleEvidence(observation);
   const geometryChoices = summarizeGeometryFirstLayerConsentChoices(geometryEvidence);
   const controls = (observation?.controls ?? []).filter((control) => control.visible !== false);
-  const visibleChoiceLabels = uniqueStrings([
-    ...(observation?.visibleChoiceLabels ?? []),
-    ...controls.map((control) => control.label)
-  ]).slice(0, 12);
+  const visibleChoiceLabels = uniqueStrings(controls.map((control) => control.label)).slice(0, 12);
   const acceptLabels = uniqueStrings(controls
     .filter((control) => control.actionType === "accept_all")
     .map((control) => control.label));
@@ -2386,7 +2460,7 @@ function summarizeFirstLayerConsentChoices(
   }
 
   const canonicalChoices = {
-    acceptControlObserved: observation.acceptControlObserved === true || acceptLabels.length > 0,
+    acceptControlObserved: acceptLabels.length > 0,
     acceptLabels,
     actionableControlInventoryRetained: controls.length > 0 || visibleChoiceLabels.length > 0,
     capturedBeforeInteraction: true,
@@ -2404,9 +2478,9 @@ function summarizeFirstLayerConsentChoices(
     })),
     ...defaultToggleEvidence,
     layerInspected: observation.layerInspected ?? (visibleChoiceLabels.length > 0 ? "first_layer" : "unknown"),
-    managePreferencesControlObserved: observation.managePreferencesControlObserved === true || preferenceLabels.length > 0,
+    managePreferencesControlObserved: preferenceLabels.length > 0,
     preferenceLabels,
-    rejectControlObserved: observation.rejectControlObserved === true || rejectLabels.length > 0,
+    rejectControlObserved: rejectLabels.length > 0,
     rejectLabels,
     textSnippet: boundedTextExcerpt(observation.textExcerpt),
     visibleChoiceLabels
@@ -2457,18 +2531,6 @@ function hasRetainedFirstLayerConsentControlInventory(choices: ReturnType<typeof
       choices.rejectControlObserved === true ||
       choices.managePreferencesControlObserved === true ||
       choices.visibleChoiceLabels.length > 0
-    )
-  );
-}
-
-function hasCanonicalActionableConsentChoice(choices: ReturnType<typeof summarizeFirstLayerConsentChoices>) {
-  return Boolean(
-    choices &&
-    choices.layerInspected === "first_layer" &&
-    (
-      choices.acceptControlObserved === true ||
-      choices.rejectControlObserved === true ||
-      choices.managePreferencesControlObserved === true
     )
   );
 }
@@ -2713,18 +2775,23 @@ function buildMaterializedLocalV2Detail(
   } = {}
 ): ScanDetailResponse {
   const requestedHost = scanRecord.scan.domainHostname ?? hostnameFromUrl(bundle.normalizedUrl ?? bundle.url);
+  const finalDocumentUrl = getLocalV2FinalDocumentUrl(bundle);
   const canonicalDocumentUrl = safeLocalV2DocumentUrl(
+    finalDocumentUrl,
     bundle.normalizedUrl,
     bundle.url,
     requestedHost ? `https://${requestedHost}/` : null
   );
-  const rootDomain = registrableDomain(requestedHost);
+  const documentHost = hostnameFromUrl(canonicalDocumentUrl) ?? requestedHost;
+  const rootDomain = registrableDomain(documentHost);
   const networkEvents = bundle.networkEvents ?? [];
-  const nonChallengeNetworkEvents = networkEvents.filter((event) => !isLocalV2SecurityChallengeRequest(event));
+  const networkResponseEvents = bundle.networkResponseEvents ?? [];
   const cookieEvents = bundle.cookieEvents ?? [];
   const allVendorRows = buildVendorEvidence(bundle);
   const vendorRows = allVendorRows.filter((vendor) => vendor.vendorCategory !== "cmp");
-  const thirdPartyRequests = networkEvents.filter((event) => event.thirdParty === true || event.isThirdParty === true);
+  const thirdPartyRequests = networkEvents.filter((event) =>
+    isThirdPartyRuntimeEventForDocument(event, canonicalDocumentUrl)
+  );
   const thirdPartyDomains = uniqueStrings(thirdPartyRequests.map((event) => event.hostname ?? hostnameFromUrl(event.url)));
   const preconsentRequests = thirdPartyRequests.filter((event) => event.consentStateAtTime === "pre_consent");
   const preconsentRequestUrls = uniqueStrings(preconsentRequests.map((event) => requestUrl(event)));
@@ -2743,7 +2810,6 @@ function buildMaterializedLocalV2Detail(
   ).concat(geometryCmpName));
   const firstLayerConsentChoices = summarizeFirstLayerConsentChoices(bundle, options.consentControlGeometryEvidence);
   const firstLayerConsentControlInventoryRetained = hasRetainedFirstLayerConsentControlInventory(firstLayerConsentChoices);
-  const consentActionableChoiceObserved = hasCanonicalActionableConsentChoice(firstLayerConsentChoices);
   const retainedConsentSurfaceObservations = (bundle.consentUiObservations ?? []).filter(
     (observation) => observation.likelyPresent
   );
@@ -2775,12 +2841,30 @@ function buildMaterializedLocalV2Detail(
     !preConsentRuntimeFailed &&
     preConsentRuntimeReliable &&
     (runtimeCoverageStatus === "usable" || meaningfulRuntimeSignalsRetained);
+  const successfulResponseObserved = networkResponseEvents.some((event) =>
+    typeof event.status === "number" && event.status >= 200 && event.status < 400
+  );
+  const substantiveDomObserved = (bundle.domSnapshots ?? []).some((snapshot) =>
+    (getString(snapshot.textExcerpt)?.replace(/\s+/g, " ").trim().length ?? 0) >= 80
+  );
+  const meaningfulDocumentEvidenceObserved = successfulResponseObserved || substantiveDomObserved;
+  const runtimeActivityObserved =
+    meaningfulDocumentEvidenceObserved ||
+    preconsentCookies.length > 0 ||
+    vendorRows.length > 0 ||
+    thirdPartyRequests.length > 0 ||
+    cookieEvents.length > 0;
+  const lowRuntimeActivity =
+    !meaningfulDocumentEvidenceObserved &&
+    thirdPartyRequests.length === 0 &&
+    vendorRows.length === 0 &&
+    cookieEvents.every((event) => event.thirdParty !== true && event.cookieParty !== "third_party");
   const localV2NoGo = buildLocalV2ScanNoGoAssessment({
     bundle,
     consentSurfaceLikelyPresent,
     localOutDir: options.localOutDir,
-    runtimeActivityObserved: preconsentCookies.length > 0 || vendorRows.length > 0 || nonChallengeNetworkEvents.length > 3 || cookieEvents.length > 0,
-    lowRuntimeActivity: nonChallengeNetworkEvents.length <= 3 && thirdPartyRequests.length === 0 && vendorRows.length === 0
+    runtimeActivityObserved,
+    lowRuntimeActivity,
   });
   const visualCaptureUnavailable = !localV2NoGo &&
     (visualCapture.status === "failed" || visualCapture.status === "unavailable") &&
@@ -2846,6 +2930,7 @@ function buildMaterializedLocalV2Detail(
     options.gdprTransparencyEvidenceProfile
   );
   const policySurfaceSummary = summarizePolicySurfaces(policySurfaces, rootDomain, {
+    discoveredPolicySurfaces: bundle.policySurfaceObservations ?? [],
     gdprTransparencyEvidenceProfile
   });
   const collectionSurfaceSummary = summarizeCollectionSurfaces(bundle);
@@ -2916,6 +3001,16 @@ function buildMaterializedLocalV2Detail(
     .filter((surface) => surface.surfaceType === "privacy_policy");
   const consentCoverageComplete = consentSurfaceInspection.inspectionCompleted === true &&
     consentSurfaceInspection.coverageStatus === "complete";
+  const assessedConsentSurfaceObserved = consentSurfaceInspection.consentSurfaceObserved === true
+    ? true
+    : consentCoverageComplete
+      ? false
+      : null;
+  const assessedConsentActionableChoiceObserved = consentSurfaceInspection.actionableControlObserved === true
+    ? true
+    : consentCoverageComplete
+      ? false
+      : null;
   const transportCoverageComplete = transportSecuritySummary.evidenceRetained === true &&
     transportSecuritySummary.pageHttpsObserved !== null &&
     transportSecuritySummary.httpProbeAttempted === true &&
@@ -2962,15 +3057,15 @@ function buildMaterializedLocalV2Detail(
   }));
   const hybridRuntimeEvidence = {
     consentSummary: {
-      bannerPresent: consentSurfaceLikelyPresent,
+      bannerPresent: assessedConsentSurfaceObserved,
       firstVisibleMs: firstNumber(cmp?.observedAtMs, firstConsentSurfaceVisibleMs),
       cmpFrameworkSignalObserved: Boolean(cmpVendorName),
       cmpRuntimeSignalLabels: cmpSignalLabels,
-      cookieNoticeObserved: consentSurfaceLikelyPresent,
+      cookieNoticeObserved: assessedConsentSurfaceObserved,
       requestsBeforeAnyConsentAction: preconsentRequests.length > 0
     },
     consentSurfaceInspection,
-    cookieNoticeObserved: consentSurfaceLikelyPresent,
+    cookieNoticeObserved: assessedConsentSurfaceObserved,
     cmpFrameworkSignalObserved: Boolean(cmpVendorName),
     cmpRuntimeSignalLabels: cmpSignalLabels,
     ...(consentRuntimeEvidenceReportable ? {
@@ -2979,8 +3074,11 @@ function buildMaterializedLocalV2Detail(
     } : {}),
     cookieWriteObservations,
     networkSummary: {
-      preConsentRequestCount: preconsentRequests.length,
-      preConsentThirdPartyRequestCount: preconsentRequests.length,
+      metricBasis: "retained_unique_request_events",
+      observedRawRequestEventCount: runtimeObservationCounts?.networkEvents ?? null,
+      preConsentRequestCount: networkEvents.filter((event) => event.consentStateAtTime === "pre_consent").length,
+      preConsentThirdPartyRequestCount: countCanonicalNetworkEvents(preconsentRequests),
+      retainedRequestEventCount: networkEvents.length,
       thirdPartyDomainCount: thirdPartyDomains.length,
       thirdPartyRequestCount,
       totalRequestCount: networkEvents.length
@@ -3025,8 +3123,10 @@ function buildMaterializedLocalV2Detail(
     sessionReplayEvidenceSummary,
     session_replay_evidence_summary: sessionReplayEvidenceSummary,
     storageSummary: {
+      metricBasis: "unique_cookie_domain_path_name_identity",
       cookiesBeforeConsentCount,
       cookiesSeenCount: cookieIdentityCount,
+      retainedCookieEventCount: cookieEvents.length,
       thirdPartyCookieBeforeConsentCount: uniqueStrings(preconsentCookies
         .filter((event) => event.cookieParty === "third_party" || event.thirdParty === true)
         .map((event) => cookieIdentity(event))).length
@@ -3035,6 +3135,7 @@ function buildMaterializedLocalV2Detail(
       firstCmpVisibleMs: cmp?.observedAtMs ?? null,
       firstConsentSurfaceVisibleMs,
       firstNonEssentialRequestMs: firstPromotionGradePreconsentRequestMs(requestPurposeRows),
+      firstThirdPartyRequestMs: firstNumber(...thirdPartyRequests.map((event) => event.timestampMs)),
       firstRequestMs: firstNumber(...networkEvents.map((event) => event.timestampMs)),
       firstTrackingCookieSetMs: firstNumber(...preconsentCookies.map((event) => event.timestampMs)),
       timelineConfidence: "direct_v2_runtime"
@@ -3077,14 +3178,14 @@ function buildMaterializedLocalV2Detail(
     collection_surface_summary: collectionSurfaceSummary,
     transportSecuritySummary,
     transport_security_summary: transportSecuritySummary,
-    consentActionableChoiceObserved: consentRuntimeEvidenceReportable ? consentActionableChoiceObserved : null,
-    consentSurfaceObserved: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
+    consentActionableChoiceObserved: consentRuntimeEvidenceReportable ? assessedConsentActionableChoiceObserved : null,
+    consentSurfaceObserved: consentRuntimeEvidenceReportable ? assessedConsentSurfaceObserved : null,
     consentSurfaceInspection,
-    consent_actionable_choice_observed: consentRuntimeEvidenceReportable ? consentActionableChoiceObserved : null,
-    consent_surface_observed: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
+    consent_actionable_choice_observed: consentRuntimeEvidenceReportable ? assessedConsentActionableChoiceObserved : null,
+    consent_surface_observed: consentRuntimeEvidenceReportable ? assessedConsentSurfaceObserved : null,
     consent_surface_inspection: consentSurfaceInspection,
-    cookieNoticeObserved: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
-    cookie_notice_observed: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
+    cookieNoticeObserved: consentRuntimeEvidenceReportable ? assessedConsentSurfaceObserved : null,
+    cookie_notice_observed: consentRuntimeEvidenceReportable ? assessedConsentSurfaceObserved : null,
     ...(cookieSurface ? { cookiePolicyPresent: true, cookie_policy_present: true } : {}),
     ...(consentRuntimeEvidenceReportable && cmpVendorName ? {
       cmpFrameworkSignalObserved: true,
@@ -3240,7 +3341,7 @@ function buildMaterializedLocalV2Detail(
     certscore_overall: localV2NoGo ? null : score,
     consent_maturity_score: localV2NoGo || score === null ? null : Math.max(0, score - 5),
     consent_score: localV2NoGo || score === null ? null : Math.max(0, score - 10),
-    cookie_banner_present: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
+    cookie_banner_present: consentRuntimeEvidenceReportable ? assessedConsentSurfaceObserved : null,
     cookie_count_total: runtimeEvidenceReportable ? cookieIdentityCount : 0,
     cookies_before_consent_count: runtimeEvidenceReportable ? cookiesBeforeConsentCount : 0,
     data_collection_risk_score: runtimeEvidenceReportable ? Math.min(100, Math.max(20, thirdPartyRequestCount)) : null,
@@ -3256,7 +3357,7 @@ function buildMaterializedLocalV2Detail(
     preconsent_tracking_detected: runtimeEvidenceReportable ? hasPromotionGradePreconsentTracking : false,
     privacy_policy_present: Boolean(privacySurface),
     privacy_score: localV2NoGo ? null : score,
-    score_confidence: score === null ? "withheld_incomplete_runtime_coverage" : "supported_by_retained_runtime_evidence",
+    score_confidence: scoreConfidence,
     site_language_primary: getLocalV2PrimaryLanguage(bundle),
     registered_domain: rootDomain,
     runtime_counts_retained: effectiveRuntimeCountsRetained,

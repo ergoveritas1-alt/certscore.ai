@@ -4,8 +4,10 @@ import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/s
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
-import { getAdminPulseOverviewCounts, listAdminPulseRequests, type AdminPulseRequestStatus } from "../../../../server/admin/list-pulse-requests";
+import { getAdminAuthenticatedScanHref } from "../../../../server/admin/admin-scan-links";
+import { countAdminPulseRequests, getAdminPulseOverviewCounts, listAdminPulseRequests, type AdminPulseRequestStatus } from "../../../../server/admin/list-pulse-requests";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
+import { AdminNavigationProvider, AdminReportLink } from "../scans/admin-scan-actions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,7 +15,7 @@ export const revalidate = 0;
 const statuses = ["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited", "no_go"] as const;
 
 type AdminPulsePageProps = {
-  searchParams?: Promise<{ email?: string; page?: string; perPage?: string; q?: string; status?: string }>;
+  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string }>;
 };
 
 function normalizeStatus(value: string | undefined): AdminPulseRequestStatus | null {
@@ -62,9 +64,12 @@ function accessLabel(request: {
   accessPostureClass: string | null;
   blockedFlag: boolean | null;
   captchaFlag: boolean | null;
+  noGoFlag: boolean;
+  noGoReason: string | null;
 }) {
   if (request.captchaFlag) return "CAPTCHA";
   if (request.blockedFlag || request.accessPostureClass === "early_loss") return "Blocked";
+  if (request.noGoFlag) return request.noGoReason ?? "No-go";
   if (request.accessPostureClass === "robots_limited") return "Robots-limited";
   if (request.accessPostureClass === "degraded_but_useful") return "Limited";
   return request.accessPostureClass ? "Clear" : "—";
@@ -74,21 +79,23 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const resolved = searchParams ? await searchParams : {};
   const activeStatus = normalizeStatus(resolved.status);
   const activeQuery = normalizeQuery(resolved.q);
-  const activeEmail = normalizeQuery(resolved.email);
   const pageSize = normalizePageSize(resolved.perPage);
   const page = normalizePage(resolved.page);
-  const [counts, requests] = await withServerTiming("app.admin.api_activity", () => Promise.all([
+  const [counts, filteredTotal, requests] = await withServerTiming("app.admin.api_activity", () => Promise.all([
     getAdminPulseOverviewCounts(),
-    listAdminPulseRequests({ email: activeEmail, limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus })
+    countAdminPulseRequests({ query: activeQuery, status: activeStatus }),
+    listAdminPulseRequests({ limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus })
   ]));
+  const pageCount = Math.max(1, Math.ceil(filteredTotal / pageSize));
 
   return (
+    <AdminNavigationProvider>
     <Card className="border-slate-200 bg-white">
       <CardHeader className="pb-2">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-1">
             <CardTitle>API Activity</CardTitle>
-            <p className="text-sm text-slate-500">Programmatic requests across Pulse, MCP, SDK, and other integrations.</p>
+            <p className="text-sm text-slate-500">Logical programmatic requests across Pulse, MCP, SDK, and other integrations. Caller IP is the client or server that reached CertScore—not the scanned site. SDK/MCP result-fetch follow-ups are grouped with their initiating request.</p>
           </div>
           <p className="text-sm text-slate-500">
             {counts.total} requests · {counts.completed} completed · {counts.queuedOrRunning} active · {counts.rateLimited} rate limited
@@ -97,23 +104,23 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
       </CardHeader>
       <CardContent className="space-y-3 pt-0">
         <form action="/app/admin/pulse" className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-2">
-          <input className="min-h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs" defaultValue={activeQuery ?? ""} name="q" placeholder="Domain, job, request, scan" />
-          <input aria-label="Filter API activity by user email" className="min-h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs" defaultValue={activeEmail ?? ""} name="email" placeholder="User email" />
-          <select className="min-h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs" defaultValue={activeStatus ?? ""} name="status">
+          <input aria-label="Filter by domain, scan ID, email, requester, or IP" className="min-h-8 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs" defaultValue={activeQuery ?? ""} name="q" placeholder="Domain, scan_id, email, requester, IP" />
+          <select aria-label="Filter API activity by status" className="min-h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs" defaultValue={activeStatus ?? ""} name="status">
             <option value="">Any status</option>
             {statuses.map((status) => <option key={status} value={status}>{formatLabel(status)}</option>)}
           </select>
           <Button size="sm" type="submit" variant="secondary">Filter</Button>
-          {activeEmail || activeQuery || activeStatus ? <Link className="inline-flex min-h-8 items-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700" href="/app/admin/pulse">Clear</Link> : null}
+          {activeQuery || activeStatus ? <Link className="inline-flex min-h-8 items-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700" href="/app/admin/pulse">Clear</Link> : null}
         </form>
 
         <PaginationControls
           basePath="/app/admin/pulse"
-          hasNext={requests.length >= pageSize}
           itemLabel="API requests"
           page={page}
+          pageCount={pageCount}
           pageSize={pageSize}
-          searchParams={{ email: activeEmail, q: activeQuery, status: activeStatus }}
+          searchParams={{ q: activeQuery, status: activeStatus }}
+          totalCount={filteredTotal}
           visibleCount={requests.length}
         />
 
@@ -131,7 +138,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
               <tr>
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Route" },
-                  { label: "Requester / IP" }, { label: "Requested" }, { label: "Site" },
+                  { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Site" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
                   { label: "Time" }, { label: "From" }, { label: "Freshness" }, { label: "Language" },
                   { label: "Industry" }, { label: "Mode" }, { label: "Usage" },
@@ -149,25 +156,27 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                 });
                 const status = statusIndicator(request);
                 const marker = getScanFromMarkerInput(request.scanFromValue);
+                const scanReportHref = getAdminAuthenticatedScanHref(request.scanId);
+                const openHref = scanReportHref || `/app/admin/pulse/${request.publicId}`;
                 return (
                   <tr className="group h-[52px] hover:bg-slate-50/70" key={request.publicId}>
                     <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50" title={status.label}><span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /><span className={status.label === "No-go" ? "text-rose-700" : "text-slate-700"}>{status.label}</span></span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${routeClass(request.apiRoute)}`}>{request.apiRoute}</span></td>
-                    <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={request.requesterName ?? provenance.label}>{request.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={sourceIpLabel(request)}>{sourceIpLabel(request)}</p></td>
+                    <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={request.requesterName ?? provenance.label}>{request.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${sourceIpLabel(request)} · ${request.sourceIpSource.replaceAll("_", " ")}`}>{sourceIpLabel(request)}</p></td>
                     <td className="whitespace-nowrap px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(request.requestedAt)}</td>
                     <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-900" title={request.normalizedDomain ?? undefined}>{request.normalizedDomain ?? "Unknown"}</p><p className="truncate font-mono text-[10px] text-slate-400" title={request.publicId}>{request.publicId}</p></td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.score !== null ? <><span>{request.score}</span><span className="text-[11px] font-normal text-slate-400">/100</span></> : "—"}</td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.topFindingCount ?? "—"}</td>
                     <td className="px-2.5 py-1.5"><p className="whitespace-nowrap">Privacy {request.privacyPolicyPresent === true ? "✓" : request.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={request.cmpVendorName ?? undefined}>CMP {request.cmpVendorName ?? "—"}</p></td>
-                    <td className="px-2.5 py-1.5 font-medium text-slate-700">{accessLabel(request)}</td>
+                    <td className="truncate px-2.5 py-1.5 font-medium text-slate-700" title={request.noGoReason ?? undefined}>{accessLabel(request)}</td>
                     <td className="px-2.5 py-1.5 font-medium text-slate-800">{request.elapsedSeconds !== null ? `${Number.isInteger(Math.round(request.elapsedSeconds * 10) / 10) ? Math.round(request.elapsedSeconds * 10) / 10 : (Math.round(request.elapsedSeconds * 10) / 10).toFixed(1)}s` : "—"}</td>
                     <td className="px-2.5 py-1.5" title={request.scanFromLabel}><span aria-label={request.scanFromLabel} className="inline-flex"><ScanFromMarker flag={"flag" in marker ? marker.flag : undefined} icon={"icon" in marker ? marker.icon : undefined} selected /></span></td>
                     <td className="px-2.5 py-1.5"><span className="inline-flex rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200">{freshnessLabel(request.freshness, request.freshRescanRequested)}</span></td>
-                    <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700">{request.primaryLanguage ?? "—"}</td>
+                    <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700" title={request.primaryLanguage ? `${request.primaryLanguageConfidence ?? "unknown"} confidence · ${(request.primaryLanguageSource ?? "unknown").replaceAll("_", " ")}` : "No reliable retained language evidence"}>{request.primaryLanguage ?? "—"}</td>
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={request.industry ?? undefined}>{request.industry ?? "—"}</td>
                     <td className="px-2.5 py-1.5"><p className="font-medium text-slate-800">{formatLabel(request.detail)}</p><p className="text-[10px] text-slate-500">{formatLabel(request.format)}</p></td>
                     <td className="px-2.5 py-1.5"><p>{request.feedbackCount} feedback</p><p className="text-[10px] text-slate-500">JSON {request.summaryJsonDownloads + request.evidenceJsonDownloads}</p></td>
-                    <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 text-center group-hover:bg-slate-50"><Link aria-label={`Open API request ${request.publicId}`} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white font-semibold text-sky-700" href={`/app/admin/pulse/${request.publicId}`}>→</Link></td>
+                    <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 text-center group-hover:bg-slate-50"><AdminReportLink ariaLabel={scanReportHref ? `Open scan report ${request.scanId}` : `Open API request ${request.publicId}`} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white font-semibold text-sky-700" href={openHref}>→</AdminReportLink></td>
                   </tr>
                 );
               })}
@@ -176,5 +185,6 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
         </div>
       </CardContent>
     </Card>
+    </AdminNavigationProvider>
   );
 }

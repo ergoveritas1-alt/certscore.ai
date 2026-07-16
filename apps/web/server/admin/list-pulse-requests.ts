@@ -1,9 +1,16 @@
 "use server";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
-import { formatScanFromLabel, normalizeScanFrom } from "@website-signal-risk-scanner/shared";
+import {
+  formatScanFromLabel,
+  normalizeScanFrom,
+  SCAN_NO_GO_SNAPSHOT_OUTCOMES
+} from "@website-signal-risk-scanner/shared";
 import { classifyAdminApiRoute, type AdminApiRoute } from "../../lib/admin/api-route";
+import { requesterIpAttributionFromContext, type RequesterIpAttributionSource } from "../../lib/admin/requester-ip-attribution";
+import { inferPrimaryLanguage, type PrimaryLanguageConfidence, type PrimaryLanguageSource } from "../../lib/scans/primary-language";
 import { ensurePulseTables } from "../pulse/schema";
+import { adminNoGoSql, projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminPulseRequestStatus =
@@ -23,6 +30,8 @@ export type AdminPulseRequestListItem = {
   blockedFlag: boolean | null;
   captchaFlag: boolean | null;
   noGoFlag: boolean;
+  noGoReason: string | null;
+  noGoSource: AdminNoGoProjection["source"];
   cmpVendorName: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -39,6 +48,8 @@ export type AdminPulseRequestListItem = {
   requestedAt: string;
   requestedUrl: string | null;
   primaryLanguage: string | null;
+  primaryLanguageConfidence: PrimaryLanguageConfidence | null;
+  primaryLanguageSource: PrimaryLanguageSource | null;
   privacyPolicyPresent: boolean | null;
   resolutionMode: string | null;
   resultPulseUrl: string | null;
@@ -52,6 +63,7 @@ export type AdminPulseRequestListItem = {
   requesterName: string | null;
   sourceIp: string | null;
   sourceIpHash: string | null;
+  sourceIpSource: RequesterIpAttributionSource;
   status: string;
   snapshotFindingCount: number | null;
   snapshotTotalSignals: number | null;
@@ -117,6 +129,54 @@ export type AdminPulseOverviewCounts = {
   total: number;
 };
 
+const LOGICAL_PULSE_ACTIVITY_PREDICATE = `not (
+  pr.request_context ->> 'mode' = 'scanId'
+  and coalesce(pr.request_context ->> 'source', pr.request_channel) in ('sdk', 'mcp')
+  and exists (
+    select 1
+      from pulse_requests parent
+     where parent.scan_id = pr.scan_id
+       and parent.public_id <> pr.public_id
+       and parent.request_context ->> 'mode' = 'url'
+       and parent.request_channel = pr.request_channel
+       and parent.requested_by = pr.requested_by
+       and coalesce(parent.request_context ->> 'detail', '') = coalesce(pr.request_context ->> 'detail', '')
+       and coalesce(parent.request_context ->> 'format', '') = coalesce(pr.request_context ->> 'format', '')
+       and parent.requested_at between pr.requested_at - interval '20 minutes' and pr.requested_at
+  )
+)`;
+
+const PULSE_NO_GO_SQL = adminNoGoSql({
+  accessPosture: "ss.access_posture_class",
+  blockedFlag: "ss.blocked_flag",
+  captchaFlag: "ss.captcha_flag",
+  responseSummary: "pr.response_summary",
+  runtimeArtifacts: "sra",
+  snapshotOutcome: "ss.scan_outcome"
+});
+
+const PULSE_ACTIVITY_FILTER_SQL = `
+  where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
+    and ($1::text is null or ($1 = 'no_go' and ${PULSE_NO_GO_SQL}) or ($1 <> 'no_go' and pr.status = $1))
+    and (
+      $2::text is null
+      or pr.public_id ilike '%' || $2 || '%'
+      or pr.job_id ilike '%' || $2 || '%'
+      or coalesce(pr.request_context ->> 'requestId', '') ilike '%' || $2 || '%'
+      or pr.normalized_domain ilike '%' || $2 || '%'
+      or pr.requested_url ilike '%' || $2 || '%'
+      or pr.scan_id::text ilike '%' || $2 || '%'
+      or coalesce(app_user.email, auth_user.email, api_key.created_by, '') ilike '%' || $2 || '%'
+      or coalesce(pr.request_channel, '') ilike '%' || $2 || '%'
+      or pr.requested_by::text ilike '%' || $2 || '%'
+      or coalesce(pr.request_context ->> 'sourceIp', '') ilike '%' || $2 || '%'
+      or coalesce(pr.request_context ->> 'originIp', '') ilike '%' || $2 || '%'
+      or coalesce(pr.request_context ->> 'ipHash', '') ilike '%' || $2 || '%'
+      or coalesce(pr.request_context -> 'provenance' ->> 'sourceIp', '') ilike '%' || $2 || '%'
+      or coalesce(pr.request_context -> 'provenance' ->> 'originIp', '') ilike '%' || $2 || '%'
+      or coalesce(pr.request_context -> 'provenance' ->> 'ipHash', '') ilike '%' || $2 || '%'
+    )`;
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
@@ -171,6 +231,25 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     typeof responseSummary.score === "number"
       ? responseSummary.score
       : typeof row.snapshot_score === "number" ? row.snapshot_score : null;
+  const primaryLanguage = inferPrimaryLanguage({
+    declaredLanguages: [typeof row.page_language === "string" ? row.page_language : null],
+    matchedLocales: [typeof row.site_language_primary === "string" ? row.site_language_primary : null],
+    urls: [
+      typeof row.normalized_domain === "string" ? row.normalized_domain : null,
+      typeof row.scan_domain_hostname === "string" ? row.scan_domain_hostname : null,
+      typeof row.requested_url === "string" ? row.requested_url : null
+    ]
+  });
+  const requesterIpAttribution = requesterIpAttributionFromContext(requestContext);
+  const noGo = projectAdminNoGo({
+    accessPostureClass: typeof row.access_posture_class === "string" ? row.access_posture_class : null,
+    blockedFlag: typeof row.blocked_flag === "boolean" ? row.blocked_flag : null,
+    captchaFlag: typeof row.captcha_flag === "boolean" ? row.captcha_flag : null,
+    responseDisposition: typeof responseSummary.resultDisposition === "string" ? responseSummary.resultDisposition : null,
+    runtimeAssessment: asRecord(row.scan_no_go_assessment),
+    snapshotOutcome: typeof row.scan_outcome === "string" ? row.scan_outcome : null,
+    visualAccessReview: asRecord(row.visual_access_review)
+  });
   return {
     accessPostureClass: typeof row.access_posture_class === "string" ? row.access_posture_class : null,
     apiRoute: classifyAdminApiRoute({
@@ -180,7 +259,9 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     completedAt: timestampString(row.completed_at) ?? timestampString(row.scan_completed_at),
     blockedFlag: typeof row.blocked_flag === "boolean" ? row.blocked_flag : null,
     captchaFlag: typeof row.captcha_flag === "boolean" ? row.captcha_flag : null,
-    noGoFlag: row.no_go_flag === true || responseSummary.resultDisposition === "no_go" || row.access_posture_class === "early_loss" || row.blocked_flag === true || row.captcha_flag === true,
+    noGoFlag: noGo.isNoGo,
+    noGoReason: noGo.reason,
+    noGoSource: noGo.source,
     cmpVendorName: typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null,
     createdAt: timestampString(row.created_at) ?? String(row.created_at),
     detail: getRequestContextString(requestContext, "detail"),
@@ -205,7 +286,9 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     publicId: String(row.public_id),
     requestedAt: timestampString(row.requested_at) ?? String(row.requested_at),
     requestedUrl: typeof row.requested_url === "string" ? row.requested_url : null,
-    primaryLanguage: typeof row.site_language_primary === "string" ? row.site_language_primary : null,
+    primaryLanguage: primaryLanguage?.locale ?? null,
+    primaryLanguageConfidence: primaryLanguage?.confidence ?? null,
+    primaryLanguageSource: primaryLanguage?.source ?? null,
     privacyPolicyPresent:
       typeof row.privacy_policy_present === "boolean" ? row.privacy_policy_present : null,
     resolutionMode: typeof row.resolution_mode === "string" ? row.resolution_mode : null,
@@ -218,8 +301,9 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
     requestedByAnonymous: typeof requestedBy.anonymous === "boolean" ? requestedBy.anonymous : null,
     requesterName: typeof row.requester_name === "string" ? row.requester_name : null,
-    sourceIp: getRequestContextString(requestContext, "sourceIp") ?? getRequestContextString(requestContext, "originIp"),
-    sourceIpHash: getRequestContextString(requestContext, "ipHash"),
+    sourceIp: requesterIpAttribution.sourceIp,
+    sourceIpHash: requesterIpAttribution.ipHash,
+    sourceIpSource: requesterIpAttribution.source,
     status:
       ["completed", "completed_limited", "failed"].includes(String(row.scan_status)) &&
       ["queued", "running", "finalizing"].includes(String(row.status))
@@ -272,7 +356,10 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
     summary_json_downloads: number;
     total: number;
   }>(
-    `select
+    `with logical_pulse_requests as (
+       select pr.* from pulse_requests pr where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
+     )
+     select
        count(*)::int as total,
        count(*) filter (where status in ('completed', 'completed_limited'))::int as completed,
        count(*) filter (where status in ('queued', 'running', 'finalizing'))::int as queued_or_running,
@@ -280,7 +367,7 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
        (select count(*)::int from pulse_feedback)::int as feedback,
        (select count(*)::int from pulse_artifact_downloads where artifact_type = 'summary_json')::int as summary_json_downloads,
        (select count(*)::int from pulse_artifact_downloads where artifact_type = 'evidence_json')::int as evidence_json_downloads
-     from pulse_requests`,
+     from logical_pulse_requests`,
     [],
     { readOnly: true }
   );
@@ -297,7 +384,6 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
 }
 
 export async function listAdminPulseRequests(input: {
-  email?: string | null;
   limit?: number;
   offset?: number;
   query?: string | null;
@@ -308,7 +394,6 @@ export async function listAdminPulseRequests(input: {
   const limit = Math.max(1, Math.min(100, input.limit ?? 20));
   const offset = Math.max(0, input.offset ?? 0);
   const search = input.query?.trim() || null;
-  const email = input.email?.trim().slice(0, 160) || null;
   const rows = await query<Record<string, unknown>>(
     `select pr.public_id,
             pr.job_id,
@@ -345,7 +430,11 @@ export async function listAdminPulseRequests(input: {
             ss.access_posture_class,
             ss.blocked_flag,
             ss.captcha_flag,
-            coalesce(ss.site_language_primary, (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1)) as site_language_primary,
+            ss.scan_outcome,
+            sra.scan_no_go_assessment,
+            sra.visual_access_review,
+            ss.site_language_primary,
+            (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1) as page_language,
             ss.admin_industry_label,
             s.scan_config_json,
             coalesce(pf.feedback_count, 0)::int as feedback_count,
@@ -353,6 +442,7 @@ export async function listAdminPulseRequests(input: {
             coalesce(pad.evidence_json_downloads, 0)::int as evidence_json_downloads
        from pulse_requests pr
        left join scan_snapshots ss on ss.scan_id = pr.scan_id
+       left join scan_runtime_artifacts sra on sra.scan_id = pr.scan_id
        left join scans s on s.id = pr.scan_id
        left join domains domain on domain.id = s.domain_id
        left join users app_user on app_user.id::text = pr.requested_by ->> 'userId'
@@ -370,23 +460,35 @@ export async function listAdminPulseRequests(input: {
           from pulse_artifact_downloads
          where pulse_request_id = pr.public_id
        ) pad on true
-      where ($1::text is null or ($1 = 'no_go' and (coalesce(ss.blocked_flag, false) or coalesce(ss.captcha_flag, false) or ss.access_posture_class = 'early_loss' or pr.response_summary ->> 'resultDisposition' = 'no_go')) or ($1 <> 'no_go' and pr.status = $1))
-        and (
-          $2::text is null
-          or pr.public_id ilike '%' || $2 || '%'
-          or pr.job_id ilike '%' || $2 || '%'
-          or pr.normalized_domain ilike '%' || $2 || '%'
-          or pr.requested_url ilike '%' || $2 || '%'
-          or pr.scan_id::text ilike '%' || $2 || '%'
-        )
-        and ($3::text is null or lower(coalesce(app_user.email, auth_user.email, api_key.created_by, '')) like '%' || lower($3) || '%')
+      ${PULSE_ACTIVITY_FILTER_SQL}
       order by pr.requested_at desc
-      limit $4 offset $5`,
-    [input.status ?? null, search, email, limit, offset],
+      limit $3 offset $4`,
+    [input.status ?? null, search, limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES],
     { readOnly: true }
   );
 
   return rows.rows.map((row) => mapPulseRequestRow(row));
+}
+
+export async function countAdminPulseRequests(input: {
+  query?: string | null;
+  status?: AdminPulseRequestStatus | null;
+} = {}): Promise<number> {
+  await requirePlatformAdminContext();
+  await ensurePulseTables();
+  const result = await queryOne<{ total_count: number }>(
+    `select count(*)::int as total_count, max($3::int) as requested_limit, max($4::int) as requested_offset
+       from pulse_requests pr
+       left join scan_snapshots ss on ss.scan_id = pr.scan_id
+       left join scan_runtime_artifacts sra on sra.scan_id = pr.scan_id
+       left join users app_user on app_user.id::text = pr.requested_by ->> 'userId'
+       left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
+       left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
+       ${PULSE_ACTIVITY_FILTER_SQL}`,
+    [input.status ?? null, input.query?.trim() || null, 0, 0, SCAN_NO_GO_SNAPSHOT_OUTCOMES],
+    { readOnly: true }
+  );
+  return result?.total_count ?? 0;
 }
 
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {
@@ -441,7 +543,11 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               ss.access_posture_class,
               ss.blocked_flag,
               ss.captcha_flag,
-              coalesce(ss.site_language_primary, (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1)) as site_language_primary,
+              ss.scan_outcome,
+              sra.scan_no_go_assessment,
+              sra.visual_access_review,
+              ss.site_language_primary,
+              (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1) as page_language,
               ss.admin_industry_label,
               s.scan_config_json,
               coalesce(pf.feedback_count, 0)::int as feedback_count,
@@ -451,6 +557,7 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
          left join scans s on s.id = pr.scan_id
          left join domains domain on domain.id = s.domain_id
          left join scan_snapshots ss on ss.scan_id = pr.scan_id
+         left join scan_runtime_artifacts sra on sra.scan_id = pr.scan_id
          left join users app_user on app_user.id::text = pr.requested_by ->> 'userId'
          left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
          left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
@@ -585,7 +692,14 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             ss.top_finding_count::int as top_finding_count,
             ss.privacy_policy_present,
             ss.cmp_vendor_name,
-            coalesce(ss.site_language_primary, (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1)) as site_language_primary,
+            ss.access_posture_class,
+            ss.blocked_flag,
+            ss.captcha_flag,
+            ss.scan_outcome,
+            sra.scan_no_go_assessment,
+            sra.visual_access_review,
+            ss.site_language_primary,
+            (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1) as page_language,
             ss.admin_industry_label,
             coalesce(pf.feedback_count, 0)::int as feedback_count,
             coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,
@@ -593,6 +707,7 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
        from pulse_requests pr
        left join scans s on s.id = pr.scan_id
        left join scan_snapshots ss on ss.scan_id = pr.scan_id
+       left join scan_runtime_artifacts sra on sra.scan_id = pr.scan_id
        left join lateral (
          select count(*)::int as feedback_count
            from pulse_feedback

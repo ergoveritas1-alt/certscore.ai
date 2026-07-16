@@ -3,13 +3,73 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 type AdminScanActionsProps = {
   compact?: boolean;
   scanId: string;
   scanViewHref: string;
 };
+
+type AdminNavigationState = {
+  href: string;
+  label: string;
+} | null;
+
+type AdminNavigationContextValue = {
+  beginNavigation: (href: string, label: string) => boolean;
+  openingHref: string | null;
+};
+
+const AdminNavigationContext = createContext<AdminNavigationContextValue | null>(null);
+
+function useAdminNavigation() {
+  const value = useContext(AdminNavigationContext);
+  if (!value) throw new Error("Admin navigation actions must be rendered inside AdminNavigationProvider.");
+  return value;
+}
+
+export function AdminNavigationProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const [navigation, setNavigation] = useState<AdminNavigationState>(null);
+
+  useEffect(() => {
+    setNavigation(null);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!navigation) return;
+    const timeoutId = window.setTimeout(() => setNavigation(null), 10_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [navigation]);
+
+  function beginNavigation(href: string, label: string) {
+    if (navigation) return false;
+    setNavigation({ href, label });
+    return true;
+  }
+
+  const overlay = navigation && typeof document !== "undefined"
+    ? createPortal(
+      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/45 backdrop-blur-sm" role="status" aria-live="polite">
+        <div className="rounded-2xl border border-white/20 bg-white px-6 py-5 text-center shadow-2xl">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900" aria-hidden="true" />
+          <p className="text-sm font-medium text-slate-900">{navigation.label}</p>
+          <p className="mt-1 text-xs text-slate-500">This will clear automatically if navigation cannot complete.</p>
+        </div>
+      </div>,
+      document.body
+    )
+    : null;
+
+  return (
+    <AdminNavigationContext.Provider value={{ beginNavigation, openingHref: navigation?.href ?? null }}>
+      {children}
+      {overlay}
+    </AdminNavigationContext.Provider>
+  );
+}
 
 function SimpleScanIcon() {
   return (
@@ -36,15 +96,16 @@ function ActionButton({
   children,
   href,
   label,
-  onNavigate,
   compact = false
 }: {
   children: ReactNode;
   href: string;
   label: string;
-  onNavigate: () => void;
   compact?: boolean;
 }) {
+  const { beginNavigation, openingHref } = useAdminNavigation();
+  const navigationPending = openingHref !== null;
+
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     if (
       event.defaultPrevented ||
@@ -56,15 +117,17 @@ function ActionButton({
     ) {
       return;
     }
-
-    onNavigate();
+    if (!beginNavigation(href, label === "Inspect snapshot" ? "Opening snapshot..." : "Opening scan report...")) {
+      event.preventDefault();
+    }
   }
 
   return (
     <div className="group/action relative inline-flex">
       <Link
         aria-label={label}
-        className={`inline-flex items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-slate-400 hover:text-slate-950 ${compact ? "h-8 w-8 [&_svg]:h-4 [&_svg]:w-4" : "h-10 w-10"}`}
+        aria-disabled={navigationPending}
+        className={`inline-flex items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-slate-400 hover:text-slate-950 ${navigationPending ? "cursor-wait opacity-60" : ""} ${compact ? "h-8 w-8 [&_svg]:h-4 [&_svg]:w-4" : "h-10 w-10"}`}
         href={href}
         onClick={handleClick}
         title={label}
@@ -79,45 +142,55 @@ function ActionButton({
 }
 
 export function AdminScanActions({ compact = false, scanId, scanViewHref }: AdminScanActionsProps) {
-  const pathname = usePathname();
-  const [openingLabel, setOpeningLabel] = useState<string | null>(null);
+  return (
+    <div className={`flex items-center ${compact ? "gap-1" : "gap-2"}`}>
+      <ActionButton compact={compact} href={scanViewHref} label="Open scan report">
+        <SimpleScanIcon />
+      </ActionButton>
+      <ActionButton compact={compact} href={`/app/admin/scans/${scanId}`} label="Inspect snapshot">
+        <SnapshotInspectIcon />
+      </ActionButton>
+    </div>
+  );
+}
 
-  useEffect(() => {
-    setOpeningLabel(null);
-  }, [pathname]);
-
-  useEffect(() => {
-    if (!openingLabel) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setOpeningLabel(null);
-    }, 10_000);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [openingLabel]);
+export function AdminReportLink({
+  ariaLabel,
+  children,
+  className,
+  href
+}: {
+  ariaLabel: string;
+  children: ReactNode;
+  className: string;
+  href: string;
+}) {
+  const { beginNavigation, openingHref } = useAdminNavigation();
+  const navigationPending = openingHref !== null;
 
   return (
-    <>
-      <div className={`flex items-center ${compact ? "gap-1" : "gap-2"}`}>
-        <ActionButton compact={compact} href={scanViewHref} label="Open simple scan view" onNavigate={() => setOpeningLabel("Opening scan view...")}>
-          <SimpleScanIcon />
-        </ActionButton>
-        <ActionButton compact={compact} href={`/app/admin/scans/${scanId}`} label="Inspect snapshot" onNavigate={() => setOpeningLabel("Opening snapshot...")}>
-          <SnapshotInspectIcon />
-        </ActionButton>
-      </div>
-      {openingLabel ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 backdrop-blur-sm" role="status" aria-live="polite">
-          <div className="rounded-2xl border border-white/20 bg-white px-6 py-5 text-center shadow-2xl">
-            <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900" />
-            <p className="text-sm font-medium text-slate-900">{openingLabel}</p>
-          </div>
-        </div>
-      ) : null}
-    </>
+    <Link
+      aria-disabled={navigationPending}
+      aria-label={ariaLabel}
+      className={`${className} ${navigationPending ? "cursor-wait opacity-60" : ""}`}
+      href={href}
+      onClick={(event) => {
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        ) {
+          return;
+        }
+        if (!beginNavigation(href, href.startsWith("/app/scans/") ? "Opening scan report..." : "Opening API request...")) {
+          event.preventDefault();
+        }
+      }}
+    >
+      {children}
+    </Link>
   );
 }

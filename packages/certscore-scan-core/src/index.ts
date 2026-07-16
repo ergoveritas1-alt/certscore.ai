@@ -36,7 +36,12 @@ import {
 import { createOpenAiNanoPolicyAssistProviderFromEnv } from "./nano-policy-assist-provider.js";
 import { getScanProfile } from "./profiles.js";
 import { consentFlowRuntimeScannerPlaceholder, policySurfaceScannerPlaceholder } from "./scanners/placeholders.js";
-import { detectConsentUi, preConsentRuntimeScanner, type PreConsentRuntimeScannerResult } from "./scanners/pre-consent-runtime-scanner.js";
+import {
+  detectConsentUi,
+  preConsentRuntimeScanner,
+  readDeclaredDocumentLanguage,
+  type PreConsentRuntimeScannerResult,
+} from "./scanners/pre-consent-runtime-scanner.js";
 import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
 import { chromiumContextOptions, chromiumLaunchOptions, chromiumProxyOptions } from "./playwright-runtime.js";
 import { throwIfAborted } from "./abort.js";
@@ -1884,6 +1889,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
           domText.slice(0, 100_000),
         )
         : undefined;
+      const documentLanguage = await readDeclaredDocumentLanguage(page);
       const consentUiTimeoutMs = optionalTimeoutForStep(1_500);
       const consentUiObservation = consentUiTimeoutMs === null
         ? undefined
@@ -1935,6 +1941,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
             capturedAtMs: Date.now() - input.scanStartedAtMs,
             path: domPath,
             url: page.url(),
+            ...(documentLanguage ? { documentLanguage } : {}),
             textExcerpt: domText.slice(0, 2_000),
             pagePhase: "dom_content_loaded",
             consentStateAtTime: "pre_consent",

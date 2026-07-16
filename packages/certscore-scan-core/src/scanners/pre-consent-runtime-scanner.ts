@@ -122,6 +122,129 @@ export interface FixtureRouteFulfiller {
   setCookieHeaders?: string[];
 }
 
+export async function readDeclaredDocumentLanguage(page: Page): Promise<string | null> {
+  return await page.evaluate(() => {
+    const htmlLanguage = document.documentElement.lang.trim();
+    if (htmlLanguage) return htmlLanguage.slice(0, 35);
+
+    const contentLanguage = document
+      .querySelector('meta[http-equiv="content-language" i]')
+      ?.getAttribute("content")
+      ?.split(",")[0]
+      ?.trim();
+    if (contentLanguage) return contentLanguage.slice(0, 35);
+
+    const openGraphLocale = document
+      .querySelector('meta[property="og:locale" i]')
+      ?.getAttribute("content")
+      ?.trim()
+      .replaceAll("_", "-");
+    return openGraphLocale ? openGraphLocale.slice(0, 35) : null;
+  }).catch(() => null);
+}
+
+export function applyFinalDocumentPartyClassification(input: {
+  finalDocumentUrl: string | null | undefined;
+  networkEvents: NetworkEvent[];
+  networkResponseEvents: NetworkResponseEvent[];
+  cookieEvents: CookieEvent[];
+  scriptEvents: ScriptEvent[];
+  iframeEvents: IframeEvent[];
+}): { firstPartyDomain: string | null; firstPartyHostname: string | null } {
+  const firstPartyHostname = getHostname(input.finalDocumentUrl);
+  const firstPartyDomain = getRegistrableDomain(firstPartyHostname);
+  if (!firstPartyHostname || !firstPartyDomain) {
+    return { firstPartyDomain: null, firstPartyHostname: null };
+  }
+
+  for (const event of input.networkEvents) {
+    const hostname = event.hostname ?? getHostname(event.requestUrl ?? event.url);
+    const registrableDomain = getRegistrableDomain(hostname) ?? undefined;
+    const party = classifyHostnameParty(hostname, firstPartyHostname);
+    const collectionEndpoint = {
+      observed: event.collectionEndpointObserved === true,
+      category: event.endpointCategory,
+    };
+    const endpointAttribution = classifyEndpointAttribution({
+      url: event.requestUrl ?? event.url ?? "",
+      hostname: hostname ?? undefined,
+      registrableDomain,
+      firstPartyDomain,
+      resourceType: event.resourceType,
+      collectionEndpoint,
+    });
+    const endpointGeography = resolveEndpointGeography({
+      collectionEndpointObserved: collectionEndpoint.observed,
+      hostname: hostname ?? undefined,
+      thirdParty: party === "third_party",
+    });
+    event.hostname = hostname ?? undefined;
+    event.registrableDomain = registrableDomain;
+    event.firstParty = party === "first_party";
+    event.thirdParty = party === "third_party";
+    event.isThirdParty = party === "third_party";
+    event.attributionStatus = endpointAttribution.status;
+    event.attributionReason = endpointAttribution.reason;
+    event.resolverBasis = endpointAttribution.basis;
+    event.endpointSubtype = endpointAttribution.subtype;
+    event.endpointGeographyStatus = endpointGeography?.status;
+    event.endpointGeographyRegion = endpointGeography?.region;
+    event.endpointGeographyProvider = endpointGeography?.provider;
+    event.endpointGeographyLocationLabel = endpointGeography?.locationLabel;
+    event.endpointGeographyJurisdiction = endpointGeography?.jurisdiction;
+    event.endpointGeographyPrecision = endpointGeography?.precision;
+    event.endpointGeographyBasis = endpointGeography?.basis;
+  }
+
+  for (const event of input.networkResponseEvents) {
+    const hostname = event.hostname ?? getHostname(event.responseUrl ?? event.url);
+    const party = classifyHostnameParty(hostname, firstPartyHostname);
+    event.hostname = hostname ?? undefined;
+    event.registrableDomain = getRegistrableDomain(hostname) ?? undefined;
+    event.firstParty = party === "first_party";
+    event.thirdParty = party === "third_party";
+    event.setCookieMetadata = event.setCookieMetadata.map((cookie) => {
+      const cookieParty = classifyCookieParty(cookie.domain ?? hostname, firstPartyHostname);
+      return {
+        ...cookie,
+        firstParty: cookieParty === "first_party",
+        thirdParty: cookieParty === "third_party",
+      };
+    });
+  }
+
+  for (const event of input.cookieEvents) {
+    const hostname = getHostname(event.cookieDomain ?? event.hostname);
+    const party = classifyCookieParty(event.cookieDomain ?? hostname, firstPartyHostname);
+    event.hostname = hostname ?? undefined;
+    event.registrableDomain = getRegistrableDomain(hostname) ?? undefined;
+    event.firstParty = party === "first_party";
+    event.thirdParty = party === "third_party";
+    event.cookieParty = party;
+    event.cookieClassificationBasis = unique([
+      ...event.cookieClassificationBasis.filter((basis) =>
+        basis !== "first_party" && basis !== "third_party" && basis !== "unknown"
+      ),
+      party,
+      "final_document_party",
+    ]);
+  }
+
+  for (const event of [...input.scriptEvents, ...input.iframeEvents]) {
+    const evidenceUrl = event.eventType === "script"
+      ? event.scriptUrl ?? event.url
+      : event.frameUrl ?? event.url;
+    const hostname = event.hostname ?? getHostname(evidenceUrl);
+    const party = classifyHostnameParty(hostname, firstPartyHostname);
+    event.hostname = hostname ?? undefined;
+    event.registrableDomain = getRegistrableDomain(hostname) ?? undefined;
+    event.firstParty = party === "first_party";
+    event.thirdParty = party === "third_party";
+  }
+
+  return { firstPartyDomain, firstPartyHostname };
+}
+
 export interface PreConsentRuntimeScannerResult {
   moduleRun: ScanModuleRun;
   runtimeTimeline: RuntimeEvidenceEvent[];
@@ -160,8 +283,8 @@ export async function preConsentRuntimeScanner(
   const moduleStartedAt = new Date(moduleStartedAtMs).toISOString();
   const remainingModuleBudgetMs = () => Math.max(0, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
   const timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
-  const firstPartyHostname = getHostname(input.normalizedUrl) ?? undefined;
-  const firstPartyDomain = getRegistrableDomainFromUrl(input.normalizedUrl) ?? undefined;
+  let firstPartyHostname = getHostname(input.normalizedUrl) ?? undefined;
+  let firstPartyDomain = getRegistrableDomainFromUrl(input.normalizedUrl) ?? undefined;
   const networkEvents: NetworkEvent[] = [];
   const networkResponseEvents: NetworkResponseEvent[] = [];
   const cookieEvents: CookieEvent[] = [];
@@ -418,6 +541,14 @@ export async function preConsentRuntimeScanner(
   let retainedTransportSecurityArtifactRef: ArtifactRef | undefined;
 
   const buildSoftDeadlineResult = (): PreConsentRuntimeScannerResult => {
+    applyFinalDocumentPartyClassification({
+      finalDocumentUrl: safePageUrl(page, effectiveNavigationUrl),
+      networkEvents,
+      networkResponseEvents,
+      cookieEvents,
+      scriptEvents,
+      iframeEvents,
+    });
     const deadlineReason = abortReason(softDeadlineSignal);
     const errorMessage = deadlineReason instanceof Error
       ? deadlineReason.message
@@ -562,6 +693,16 @@ export async function preConsentRuntimeScanner(
       }
     }
     initialNavigationHttpStatus = navigationResponse?.status();
+    const finalDocumentParty = applyFinalDocumentPartyClassification({
+      finalDocumentUrl: effectiveNavigationUrl,
+      networkEvents,
+      networkResponseEvents,
+      cookieEvents,
+      scriptEvents,
+      iframeEvents,
+    });
+    firstPartyHostname = finalDocumentParty.firstPartyHostname ?? firstPartyHostname;
+    firstPartyDomain = finalDocumentParty.firstPartyDomain ?? firstPartyDomain;
     const earlyTransportNetworkProbes = await transportNetworkProbesPromise;
     timingBreakdown.push({
       label: "transport security network probes",
@@ -984,7 +1125,7 @@ export async function preConsentRuntimeScanner(
     retainedConsentUiObservation = consentObservation;
     if (shouldRecaptureConsentUiAfterCmpRuntime(consentObservation, domText, cmpRuntimeObservations)) {
       const highConfidenceCmpRuntimeEvidence =
-        hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations);
+        hasHighConfidenceDirectCmpRuntimeEvidence(cmpRuntimeObservations);
       const weakCmpRecaptureWaitMs = fastWait ? 2_250 : 2_750;
       const requestedRecaptureTimeoutMs = fastWait ? 2_500 : 3_000;
       const recaptureTimeoutMs = Math.min(requestedRecaptureTimeoutMs, remainingModuleBudgetMs());
@@ -1086,6 +1227,71 @@ export async function preConsentRuntimeScanner(
           recapturedConsentObservation,
           recaptureBasis,
         );
+        if (
+          hasActionableConsentChoiceControl(consentObservation) &&
+          (input.screenshotMode ?? "always") !== "never" &&
+          remainingModuleBudgetMs() >= 1_500
+        ) {
+          const synchronizedScreenshotPath = input.artifactWriter.artifactPath(
+            "screenshot-pre-consent-cmp-controls.png",
+          );
+          const synchronizedCapture = await recordTiming(
+            timingBreakdown,
+            "synchronized CMP control screenshot",
+            "Viewport capture immediately after typed CMP controls were retained, preserving visual and structured evidence from the same DOM state.",
+            () => capturePreConsentScreenshot(page, synchronizedScreenshotPath, {
+              captureMode: "viewport_first",
+              screenshotErrors,
+              timeoutMs: Math.min(1_500, remainingModuleBudgetMs()),
+            }),
+          );
+          if (synchronizedCapture.status === "available") {
+            const synchronizedScreenshot: ScreenshotArtifact = {
+              artifactId: "screenshot_pre_consent_cmp_controls",
+              capturedAtMs: elapsed(input.scanStartedAtMs),
+              captureMethod: synchronizedCapture.captureMethod,
+              path: synchronizedScreenshotPath,
+              url: page.url(),
+              pagePhase: "network_idle",
+              consentStateAtTime: "pre_consent",
+            };
+            screenshots.unshift(synchronizedScreenshot);
+            const synchronizedVisualCapture = visualCaptureFromScreenshotSummary(
+              synchronizedCapture,
+              synchronizedScreenshotPath,
+              synchronizedScreenshot.artifactId,
+            );
+            visualCapture = {
+              ...synchronizedVisualCapture,
+              artifactRefs: uniqueEvidenceRefs([
+                ...synchronizedVisualCapture.artifactRefs,
+                ...visualCapture.artifactRefs,
+              ]),
+              notes: unique([
+                ...synchronizedVisualCapture.notes,
+                ...visualCapture.notes,
+                "Typed CMP controls and visual evidence were retained from the same pre-consent DOM state.",
+              ]),
+            };
+            if (remainingModuleBudgetMs() >= 250) {
+              const synchronizedObservation = await recordBoundedTiming(
+                timingBreakdown,
+                "synchronized CMP control inventory",
+                "Immediate typed control inventory against the exact DOM retained in the synchronized CMP screenshot.",
+                Math.min(750, remainingModuleBudgetMs()),
+                () => detectConsentUi(page, input.scanStartedAtMs, 0, {
+                  allowFullDocumentCmpControls: true,
+                }),
+                () => consentObservation,
+              );
+              consentObservation = mergeConsentUiObservations(
+                consentObservation,
+                synchronizedObservation,
+                "recapture:synchronized_cmp_screenshot_controls",
+              );
+            }
+          }
+        }
         domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
       } else {
         consentObservation = mergeConsentUiObservations(
@@ -1395,11 +1601,13 @@ export async function preConsentRuntimeScanner(
         domText.slice(0, 100_000),
       ),
     );
+    const documentLanguage = await readDeclaredDocumentLanguage(page);
     const domSnapshot: DomSnapshotArtifact = {
       artifactId: "dom_text_pre_consent",
       capturedAtMs: elapsed(input.scanStartedAtMs),
       path: domPath,
       url: page.url(),
+      ...(documentLanguage ? { documentLanguage } : {}),
       textExcerpt: domText.slice(0, 2_000),
       pagePhase: "network_idle",
       consentStateAtTime: "pre_consent",
@@ -1468,6 +1676,14 @@ export async function preConsentRuntimeScanner(
         notes: unique([...visualCapture.notes, ...navigationNotes]),
       };
     }
+    applyFinalDocumentPartyClassification({
+      finalDocumentUrl: page.url() === "about:blank" ? effectiveNavigationUrl : page.url(),
+      networkEvents,
+      networkResponseEvents,
+      cookieEvents,
+      scriptEvents,
+      iframeEvents,
+    });
     return {
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
@@ -1567,6 +1783,14 @@ export async function preConsentRuntimeScanner(
       retainedConsentUiObservations.length > 0 ||
       retainedCollectionSurfaceObservations.length > 0 ||
       retainedCmpRuntimeObservations.length > 0;
+    applyFinalDocumentPartyClassification({
+      finalDocumentUrl: safePageUrl(page, effectiveNavigationUrl),
+      networkEvents,
+      networkResponseEvents,
+      cookieEvents,
+      scriptEvents,
+      iframeEvents,
+    });
     return {
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
@@ -4421,7 +4645,7 @@ function shouldRecaptureConsentUiAfterCmpRuntime(
   if (hasStrongTextBackedFirstLayerConsentSurface(observation)) {
     return true;
   }
-  if (hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations)) {
+  if (hasHighConfidenceDirectCmpRuntimeEvidence(cmpRuntimeObservations)) {
     return true;
   }
   return observation.controls.length === 0 &&
@@ -4432,7 +4656,7 @@ function shouldRecaptureConsentUiAfterSupplementalScreenshot(
   observation: ConsentUiObservation,
   cmpRuntimeObservations: CmpRuntimeObservation[],
 ): boolean {
-  if (hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations)) {
+  if (hasHighConfidenceDirectCmpRuntimeEvidence(cmpRuntimeObservations)) {
     return true;
   }
   if (hasSufficientFirstLayerConsentControls(observation)) {
@@ -4442,17 +4666,19 @@ function shouldRecaptureConsentUiAfterSupplementalScreenshot(
     likelyFirstLayerConsentBannerHintText(observation.textExcerpt ?? "");
 }
 
-function hasHighConfidenceInteractiveCmpRuntimeEvidence(
+function hasHighConfidenceDirectCmpRuntimeEvidence(
   cmpRuntimeObservations: CmpRuntimeObservation[],
 ): boolean {
   return cmpRuntimeObservations.some((observation) =>
     observation.confidence >= 0.9 &&
+    observation.directVsInferred === "direct" &&
     observation.signals.some((signal) =>
       signal.confidence >= 0.85 &&
       (
         signal.signalType === "script_url" ||
         signal.signalType === "global" ||
-        signal.signalType === "dom_selector"
+        signal.signalType === "dom_selector" ||
+        signal.signalType === "network_request"
       )
     )
   );
@@ -5126,7 +5352,7 @@ async function probeHttpRedirect(
   }
 }
 
-async function probeStrictTls(
+export async function probeStrictTls(
   normalizedUrl: string,
   signal?: AbortSignal,
   deadlineAtMs = Date.now() + 5_000,
@@ -5171,7 +5397,7 @@ async function probeStrictTls(
     });
     abortListener = () => {
       socket.destroy(abortReason(signal) ?? new Error("strict TLS probe aborted"));
-      settle({ attempted: true, inputUrl: sanitizeTransportUrl(inputUrl), validCertificate: false, errorCategory: "timeout", errorMessage: "strict TLS probe aborted" });
+      settle({ attempted: true, inputUrl: sanitizeTransportUrl(inputUrl), errorCategory: "timeout", errorMessage: "strict TLS probe aborted" });
     };
     signal?.addEventListener("abort", abortListener, { once: true });
     const timeout = setTimeout(() => {
@@ -5179,17 +5405,17 @@ async function probeStrictTls(
       settle({
         attempted: true,
         inputUrl: sanitizeTransportUrl(inputUrl),
-        validCertificate: false,
         errorCategory: "timeout",
         errorMessage: "strict TLS probe timed out",
       });
     }, Math.max(1, Math.min(5_000, deadlineAtMs - Date.now())));
     socket.on("error", (error) => {
+      const errorCategory = classifyTransportProbeError(error);
       settle({
         attempted: true,
         inputUrl: sanitizeTransportUrl(inputUrl),
-        validCertificate: false,
-        errorCategory: classifyTransportProbeError(error),
+        ...(errorCategory === "tls_or_certificate_failure" ? { validCertificate: false } : {}),
+        errorCategory,
         errorMessage: boundedProbeError(error),
       });
     });
@@ -6292,6 +6518,7 @@ function visualCaptureFromScreenshotSummary(
 function preferredPreConsentScreenshotRef(screenshots: ScreenshotArtifact[]): string | undefined {
   return (
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof")?.path ??
+    screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_cmp_controls")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_settled")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent")?.path ??
@@ -6647,6 +6874,7 @@ async function retryPreConsentScreenshotInFreshContext(input: {
             domText.slice(0, 100_000),
           )
           : undefined;
+        const documentLanguage = await readDeclaredDocumentLanguage(retryPage);
         const consentUiObservation = await detectConsentUi(
           retryPage,
           input.input.scanStartedAtMs,
@@ -6681,6 +6909,7 @@ async function retryPreConsentScreenshotInFreshContext(input: {
               capturedAtMs: elapsed(input.input.scanStartedAtMs),
               path: domPath,
               url: retryPage.url(),
+              ...(documentLanguage ? { documentLanguage } : {}),
               textExcerpt: domText.slice(0, 2_000),
               pagePhase: "dom_content_loaded",
               consentStateAtTime: "pre_consent",

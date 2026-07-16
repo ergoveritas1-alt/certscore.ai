@@ -1,5 +1,10 @@
 # AWS Web ECS/Fargate Scaffold
 
+The public application load balancer explicitly uses `append` handling for
+`X-Forwarded-For`. The web runtime therefore treats the rightmost valid entry
+as the caller observed by the ALB. Keep this setting aligned with
+`apps/web/lib/request-source-ip.ts` and its spoofing-chain tests.
+
 This directory is the infrastructure entry point for the public web ECS/Fargate cutover path documented in [docs/aws-web-ecs-cutover-plan.md](/Users/benmasek/WC01/docs/aws-web-ecs-cutover-plan.md).
 
 It now contains a deployable baseline stack, but it still needs real account inputs before apply.

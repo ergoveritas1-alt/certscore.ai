@@ -90,7 +90,7 @@ export function buildPulseStatus(input: PulseStatusInput) {
   const phaseIndex = Math.max(0, PULSE_STATUS_STEPS.indexOf(phase as (typeof PULSE_STATUS_STEPS)[number]));
   const completedSteps = PULSE_STATUS_STEPS.slice(0, phaseIndex).filter((step) => step !== "completed");
   const remainingSteps = PULSE_STATUS_STEPS.slice(phaseIndex + 1);
-  const resultUrl = input.resultUrl ?? (input.scanId ? absoluteUrl(`/api/v1/pulse?scanId=${input.scanId}`) : null);
+  const resultUrl = input.resultUrl ?? absoluteUrl(`/api/v1/pulse?jobId=${input.jobId}`);
   const reportUrl = input.reportUrl ?? (input.scanId ? absoluteUrl(`/scan/${input.scanId}`) : null);
 
   return {

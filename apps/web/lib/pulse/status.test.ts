@@ -14,7 +14,7 @@ test("Pulse status includes durable scan id aliases for later full report retrie
 
   assert.equal(status.scanId, "scan_abc123");
   assert.equal(status.scan_id, "scan_abc123");
-  assert.match(status.resultUrl ?? "", /scanId=scan_abc123/);
+  assert.match(status.resultUrl ?? "", /jobId=pulse_job_123/);
   assert.match(status.reportUrl ?? "", /\/scan\/scan_abc123/);
 });
 

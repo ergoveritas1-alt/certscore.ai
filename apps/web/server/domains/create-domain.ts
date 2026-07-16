@@ -1,6 +1,5 @@
 "use server";
 
-import { createHash } from "node:crypto";
 import { createDomainRequestSchema, normalizeScanFrom, parseDomainBatchInput, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -26,6 +25,7 @@ import {
   restrictLocalV2RunViaLambdaForUser,
   restrictScanFromForUser
 } from "../scans/restricted-scan-options";
+import { getScanRequesterIpContext, type ScanRequesterIpContext } from "../scans/requester-ip-context";
 
 export type CreateDomainActionState = {
   error: string | null;
@@ -63,6 +63,7 @@ export async function createOrQueueDomainScan(input: {
     source?: string | null;
     userAgent?: string | null;
   };
+  requesterIpContext?: ScanRequesterIpContext | null;
   scanFrom?: ScanFrom;
 }) {
   const dashboardContext = await getDashboardContext();
@@ -128,6 +129,7 @@ export async function createOrQueueDomainScan(input: {
       enforceCooldown: true,
       enforceMonthlyUsageLimit: true,
       provenance: input.provenance,
+      requesterIpContext: input.requesterIpContext,
       bypassRecentScanReuse: input.bypassRecentScanReuse,
       localV2DagScanProfile: input.localV2DagScanProfile,
       localV2DagRunViaLambda,
@@ -201,6 +203,7 @@ export async function createOrQueueDomainScan(input: {
     localV2DagScanProfile: input.localV2DagScanProfile,
     localV2DagRunViaLambda,
     provenance: input.provenance,
+    requesterIpContext: input.requesterIpContext,
     scanFrom: defaultScanFrom,
     scanThrottleMs: getLocalAwareScanThrottleMs(dashboardContext.user.email),
     source: "new-domain-overview"
@@ -224,14 +227,10 @@ export async function createDomainAction(
   const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom);
   const parsedBatch = parseDomainBatchInput(domainInput);
   const requestHeaders = await headers();
-  const originIp =
-    requestHeaders.get("cf-connecting-ip")?.split(",").at(0)?.trim() ??
-    requestHeaders.get("x-forwarded-for")?.split(",").at(0)?.trim() ??
-    requestHeaders.get("x-real-ip")?.trim() ??
-    null;
+  const requesterIpContext = getScanRequesterIpContext(requestHeaders);
   const provenance = {
     host: requestHeaders.get("host"),
-    originIp: originIp ? createHash("sha256").update(originIp).digest("hex") : null,
+    originIp: requesterIpContext.ipHash,
     userAgent: requestHeaders.get("user-agent")
   };
 
@@ -253,6 +252,7 @@ export async function createDomainAction(
         localV2DagScanProfile,
         localV2DagRunViaLambda,
         provenance,
+        requesterIpContext,
         scanFrom
       })
     )

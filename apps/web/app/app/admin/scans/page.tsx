@@ -4,16 +4,16 @@ import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/s
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
-import { getAdminScanOverviewMetrics, listAdminScans, type AdminScanListItem, type AdminScanListStatus } from "../../../../server/admin/list-admin-scans";
+import { getAdminScanOverviewMetrics, listAdminScansPage, type AdminScanListItem, type AdminScanListStatus } from "../../../../server/admin/list-admin-scans";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
-import { AdminScanActions } from "./admin-scan-actions";
+import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type AdminScansPageProps = {
-  searchParams?: Promise<{ email?: string; page?: string; perPage?: string; q?: string; status?: string }>;
+  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string }>;
 };
 
 const statuses = ["any", "no_go", "failed", "running", "queued", "limited", "completed"] as const;
@@ -35,7 +35,7 @@ function getScanFreshnessBadge(scan: Pick<AdminScanListItem, "freshRescanRequest
 }
 
 function getOperationalStatus(scan: AdminScanListItem) {
-  if (scan.accessPostureClass === "early_loss" || scan.blockedFlag || scan.captchaFlag) {
+  if (scan.noGoFlag || scan.accessPostureClass === "early_loss" || scan.blockedFlag || scan.captchaFlag) {
     return { className: "bg-rose-500", label: "No-go" };
   }
   if (scan.status === "failed") {
@@ -66,9 +66,16 @@ function formatAdminScanDuration(scan: Pick<AdminScanListItem, "completedAt" | "
 function getAccessLabel(scan: AdminScanListItem) {
   if (scan.captchaFlag) return "CAPTCHA";
   if (scan.blockedFlag || scan.accessPostureClass === "early_loss") return scan.homepageFetchHttpStatus ? `Blocked · ${scan.homepageFetchHttpStatus}` : "Blocked";
+  if (scan.noGoFlag) return scan.interruptionLabel ?? scan.noGoReason ?? "No-go";
   if (scan.accessPostureClass === "robots_limited") return "Robots-limited";
   if (scan.accessPostureClass === "degraded_but_useful") return "Limited";
   return scan.rowKind === "scan" ? "Clear" : "—";
+}
+
+function requesterIpLabel(scan: Pick<AdminScanListItem, "requesterIp" | "requesterIpHash">) {
+  if (scan.requesterIp) return scan.requesterIp;
+  if (scan.requesterIpHash) return `Hash ${scan.requesterIpHash.slice(0, 12)}`;
+  return "IP not recorded";
 }
 
 export default async function AdminScansPage({ searchParams }: AdminScansPageProps) {
@@ -76,24 +83,24 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
   const currentPage = normalizePage(resolvedSearchParams.page);
   const pageSize = normalizePageSize(resolvedSearchParams.perPage);
   const activeQuery = resolvedSearchParams.q?.trim().slice(0, 160) ?? "";
-  const activeEmail = resolvedSearchParams.email?.trim().slice(0, 160) ?? "";
   const activeStatus = normalizeStatus(resolvedSearchParams.status);
-  const hasFilters = Boolean(activeQuery) || Boolean(activeEmail) || activeStatus !== "any";
+  const hasFilters = Boolean(activeQuery) || activeStatus !== "any";
   const scanMetrics = await withServerTiming("app.admin.scans.metrics", () => getAdminScanOverviewMetrics());
-  const filteredScans = await withServerTiming("app.admin.scans.list", () => listAdminScans(hasFilters ? 25_000 : pageSize, hasFilters ? 0 : (currentPage - 1) * pageSize, { email: activeEmail || null, query: activeQuery || null, status: activeStatus }));
-  const totalCount = hasFilters ? filteredScans.length : scanMetrics.totalScans;
+  const scanPage = await withServerTiming("app.admin.scans.list", () => listAdminScansPage(pageSize, (currentPage - 1) * pageSize, { query: activeQuery || null, status: activeStatus }));
+  const totalCount = scanPage.totalCount;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const normalizedPage = Math.min(currentPage, totalPages);
-  const scans = hasFilters ? filteredScans.slice((normalizedPage - 1) * pageSize, normalizedPage * pageSize) : filteredScans;
+  const scans = scanPage.items;
   const hasActiveScans = scans.some((scan) => scan.status === "queued" || scan.status === "running");
 
   return (
+    <AdminNavigationProvider>
     <Card className="min-w-0 overflow-hidden border-slate-200 bg-white">
       <CardHeader className="pb-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-1">
             <CardTitle>Scan Admin</CardTitle>
-            <p className="text-sm text-slate-500">Compact operational view of newest scan activity.</p>
+            <p className="text-sm text-slate-500">Compact operational view of newest scan activity. Caller IP is the public address that reached CertScore, not the scanned site.</p>
           </div>
           <p className="text-sm text-slate-500">
             {scanMetrics.totalPhysicalScans} runs · {scanMetrics.totalScanRequests} requests
@@ -103,8 +110,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
       <CardContent className="min-w-0 space-y-3 pt-0">
         <AdminScansAutoRefresh hasActiveScans={hasActiveScans} />
         <form className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2" method="get">
-          <input aria-label="Search scans" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Domain, scan, requester, IP" />
-          <input aria-label="Filter scans by user email" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeEmail} name="email" placeholder="User email" />
+          <input aria-label="Filter by domain, scan ID, email, requester, or IP" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Domain, scan_id, email, requester, IP" />
           <select aria-label="Filter scans by status" className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeStatus} name="status">{statuses.map((status) => <option key={status} value={status}>{status === "any" ? "Any status" : status.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select>
           <button className="h-10 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white" type="submit">Filter</button>
           {hasFilters ? <Link className="inline-flex h-10 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700" href="/app/admin/scans">Clear</Link> : null}
@@ -117,7 +123,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
           pageSize={pageSize}
           totalCount={totalCount}
           visibleCount={scans.length}
-          searchParams={{ email: activeEmail, q: activeQuery, status: activeStatus }}
+          searchParams={{ q: activeQuery, status: activeStatus }}
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
           <table className="min-w-[1535px] table-fixed text-left text-xs">
@@ -132,7 +138,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
               <tr>
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" },
-                  { label: "Requester / IP" }, { label: "Requested" }, { label: "Site" },
+                  { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Site" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
                   { label: "Time" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }
@@ -144,7 +150,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                 const provenance = classifyAdminRequestProvenance({
                   organizationName: scan.organizationName,
                   requestChannel: scan.requestChannel,
-                  requesterIp: scan.requesterIp,
+                  requesterIp: scan.requesterIp ?? scan.requesterIpHash,
                   source: scan.source
                 });
                 const status = getOperationalStatus(scan);
@@ -154,7 +160,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                 return (
                   <tr key={scan.activityId} className="group h-[52px] hover:bg-slate-50/70">
                     <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50" title={status.label}><span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /><span className={status.label === "No-go" ? "text-rose-700" : "text-slate-700"}>{status.label}</span></span></td>
-                    <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={scan.requesterName ?? provenance.label}>{scan.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={scan.requesterIp ?? "Not recorded"}>{scan.requesterIp ?? "IP not recorded"}</p></td>
+                    <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={scan.requesterName ?? provenance.label}>{scan.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${requesterIpLabel(scan)} · ${scan.requesterIpSource.replaceAll("_", " ")}`}>{requesterIpLabel(scan)}</p></td>
                     <td className="whitespace-nowrap px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}</td>
                     <td className="px-2.5 py-1.5">
                       <div className="flex min-w-0 items-center gap-1.5">
@@ -170,7 +176,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                     <td className={`px-2.5 py-1.5 font-medium ${duration && (duration.includes("m") || Number.parseFloat(duration) > 60) ? "text-amber-700" : "text-slate-800"}`}>{duration ?? (scan.status === "running" ? "Running" : "—")}</td>
                     <td className="px-2.5 py-1.5" title={scan.scanFromLabel}><span aria-label={scan.scanFromLabel} className="inline-flex"><ScanFromMarker flag={"flag" in scanFromMarker ? scanFromMarker.flag : undefined} icon={"icon" in scanFromMarker ? scanFromMarker.icon : undefined} selected /></span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${freshness.className}`}>{freshness.label}</span></td>
-                    <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700">{scan.primaryLanguage ?? "—"}</td>
+                    <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700" title={scan.primaryLanguage ? `${scan.primaryLanguageConfidence ?? "unknown"} confidence · ${(scan.primaryLanguageSource ?? "unknown").replaceAll("_", " ")}` : "No reliable retained language evidence"}>{scan.primaryLanguage ?? "—"}</td>
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.industry ?? undefined}>{scan.industry ?? "—"}</td>
                     <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 group-hover:bg-slate-50">{scan.linkedScanId && scan.scanViewHref ? <AdminScanActions compact scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} /> : <span className="text-slate-400">—</span>}</td>
                   </tr>
@@ -181,5 +187,6 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
         </div>
       </CardContent>
     </Card>
+    </AdminNavigationProvider>
   );
 }

@@ -1282,6 +1282,53 @@ test("pre-consent runtime scanner recaptures late settings controls from high-co
   }
 });
 
+test("pre-consent runtime scanner recaptures late controls from direct CMP network evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-cmp-network-late-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-cmp-network-late-controls"),
+      path.join(tempRoot, "consent-cmp-network-late-controls"),
+      "fast",
+      "selective",
+      undefined,
+      25_000,
+    );
+    const observation = bundle.consentUiObservations[0];
+    const cmpRecaptureTiming = bundle.modulesRun[0]?.timingBreakdown?.find((entry) =>
+      entry.label === "page evidence: consent UI CMP recapture"
+    );
+
+    assert.equal(
+      bundle.cmpRuntimeObservations.some((cmp) =>
+        cmp.confidence >= 0.9 &&
+        cmp.directVsInferred === "direct" &&
+        cmp.signals.some((signal) => signal.signalType === "network_request")
+      ),
+      true,
+      "fixture should retain direct canonical CMP network evidence",
+    );
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.basis.includes("recapture:post_cmp_first_layer_choice_controls"),
+      true,
+      "network-only CMP evidence should trigger the adaptive late-control inventory",
+    );
+    assert.equal(Boolean(cmpRecaptureTiming), true);
+    assert.equal(
+      bundle.screenshots.some((screenshot) =>
+        screenshot.artifactId === "screenshot_pre_consent_cmp_controls"
+      ),
+      true,
+      "typed controls should retain a synchronized visual artifact when budget remains",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner keeps high-confidence CMP recapture open long enough for very late settings controls", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-cmp-script-very-late-settings-"));

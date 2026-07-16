@@ -28,6 +28,46 @@ test("pre-consent inventory keeps purpose separate, removes requests, and places
   assert.doesNotMatch(source, /"Requests"/);
 });
 
+test("getRecordOptionalBoolean preserves explicit incomplete coverage without penalizing legacy snapshots", async () => {
+  const sharedScanDetailViewModule = await import("./shared-scan-detail-view");
+  const getRecordOptionalBoolean = (
+    sharedScanDetailViewModule as unknown as {
+      getRecordOptionalBoolean: (record: unknown, key: string) => boolean | null;
+    }
+  ).getRecordOptionalBoolean;
+
+  assert.equal(getRecordOptionalBoolean({ critical_coverage_complete: false }, "critical_coverage_complete"), false);
+  assert.equal(getRecordOptionalBoolean({ critical_coverage_complete: true }, "critical_coverage_complete"), true);
+  assert.equal(getRecordOptionalBoolean({}, "critical_coverage_complete"), null);
+});
+
+test("buildExecutiveTimelineEvents never labels a generic first-party request as a 3P request", async () => {
+  const { buildExecutiveTimelineEvents } = await import("./shared-scan-detail-view");
+  const firstPartyOnly = buildExecutiveTimelineEvents({
+    hybridRuntimeEvidence: {
+      timelineMarkers: { firstRequestMs: 530 },
+      requestObservations: [{
+        domain: "worldnic.example",
+        thirdParty: false,
+        timestampMs: 530,
+      }],
+    },
+  });
+  assert.equal(firstPartyOnly.some((event) => event.label === "3P request"), false);
+
+  const withThirdParty = buildExecutiveTimelineEvents({
+    hybridRuntimeEvidence: {
+      timelineMarkers: { firstThirdPartyRequestMs: 820 },
+      requestObservations: [{
+        domain: "analytics.vendor.test",
+        thirdParty: true,
+        timestampMs: 820,
+      }],
+    },
+  });
+  assert.equal(withThirdParty.find((event) => event.label === "3P request")?.atMs, 820);
+});
+
 async function loadBuildScanReportUnifiedFindings() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule = (

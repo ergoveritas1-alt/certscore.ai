@@ -413,6 +413,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     detail,
     freshness,
     forceNewScan,
+    requestId,
     scanFrom,
     waitSeconds,
     channel: apiKeyContext.channel ?? (gptAction ? "gpt_action" : integrationChannel ?? "pulse_api"),
@@ -853,6 +854,10 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         userAgent: requester.userAgent,
         originIp: requester.ipHash
       },
+      requesterIpContext: {
+        ipHash: requester.ipHash,
+        sourceIp: requester.sourceIp
+      },
       localV2DagRunViaLambda: true,
       scanFrom
     });
@@ -890,7 +895,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     await updatePulseRequestQueued({
       pulseRequestId: publicId,
       scanId: queued.scan.id,
-      resultPulseUrl: pulseAbsoluteUrl(`/api/v1/pulse?scanId=${queued.scan.id}`),
+      resultPulseUrl: pulseAbsoluteUrl(`/api/v1/pulse?jobId=${createdJobId}`),
       resultReportUrl: pulseAbsoluteUrl(`/scan/${queued.scan.id}`)
     });
     if (gptAction) {
@@ -931,7 +936,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
             phase: "queued",
             createdAt: new Date().toISOString(),
             scanId: fallback.scanId,
-            resultUrl: pulseAbsoluteUrl(`/api/v1/pulse?scanId=${fallback.scanId}`),
+            resultUrl: pulseAbsoluteUrl(`/api/v1/pulse?jobId=${createdJobId}`),
             reportUrl: pulseAbsoluteUrl(`/scan/${fallback.scanId}`),
             recovery: fallback.context
           });
@@ -969,7 +974,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       phase: "queued",
       createdAt: new Date().toISOString(),
       scanId: queued.scan.id,
-      resultUrl: pulseAbsoluteUrl(`/api/v1/pulse?scanId=${queued.scan.id}`),
+      resultUrl: pulseAbsoluteUrl(`/api/v1/pulse?jobId=${createdJobId}`),
       reportUrl: pulseAbsoluteUrl(`/scan/${queued.scan.id}`)
     });
     return pulseJson(

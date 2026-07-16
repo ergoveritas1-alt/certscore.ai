@@ -22,6 +22,92 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   assert.doesNotMatch(source, /getAnonymousScanById/);
 });
 
+test("API activity groups SDK and MCP result retrieval under the initiating logical request", async () => {
+  const listSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
+  const statusSource = await readFile("apps/web/lib/pulse/status.ts", "utf8");
+  const repositorySource = await readFile("apps/web/server/pulse/repository.ts", "utf8");
+
+  assert.match(listSource, /LOGICAL_PULSE_ACTIVITY_PREDICATE/);
+  assert.match(listSource, /request_context ->> 'mode' = 'scanId'/);
+  assert.match(listSource, /in \('sdk', 'mcp'\)/);
+  assert.match(statusSource, /\/api\/v1\/pulse\?jobId=/);
+  assert.match(repositorySource, /result_pulse_url = coalesce\(result_pulse_url, \$3\)/);
+});
+
+test("admin activity consumes the canonical reason-specific no-go outcome registry", async () => {
+  const scansSource = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
+  const pulseSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+  const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+
+  assert.match(scansSource, /projectAdminNoGo/);
+  assert.match(scansSource, /runtimeAssessment: runtimeArtifact\?\.scan_no_go_assessment/);
+  assert.match(pulseSource, /SCAN_NO_GO_SNAPSHOT_OUTCOMES/);
+  assert.match(pulseSource, /PULSE_NO_GO_SQL/);
+  assert.match(repositorySource, /scan_no_go_assessment/);
+  assert.match(repositorySource, /visual_access_review/);
+  assert.match(scansPage, /scan\.noGoFlag/);
+});
+
+test("Admin Scans filters and counts the complete retained activity set in SQL", async () => {
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+
+  assert.match(repositorySource, /loadAdminScanActivityPageRefs/);
+  assert.match(repositorySource, /select count\(\*\)::int as total_count/);
+  assert.match(repositorySource, /from scan_activity/);
+  assert.doesNotMatch(listSource, /ADMIN_FILTER_ACTIVITY_WINDOW_LIMIT/);
+  assert.doesNotMatch(pageSource, /25_000/);
+  assert.match(pageSource, /scanPage\.totalCount/);
+});
+
+test("admin activity pages use one search prompt across domain, scan, email, requester, and IP", async () => {
+  const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+  const scanList = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
+  const pulseList = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
+
+  for (const page of [scansPage, pulsePage]) {
+    assert.match(page, /placeholder="Domain, scan_id, email, requester, IP"/);
+    assert.match(page, /name="q"/);
+    assert.doesNotMatch(page, /name="email"/);
+  }
+  assert.match(scanList, /loadAdminScanActivityPageRefs/);
+  assert.match(await readFile("apps/web/server/admin/repository.ts", "utf8"), /coalesce\(au\.email, bau\.email/);
+  assert.match(pulseList, /coalesce\(app_user\.email, auth_user\.email, api_key\.created_by, ''\) ilike/);
+  assert.match(pulseList, /pr\.requested_by::text ilike/);
+  assert.match(pulseList, /request_context ->> 'sourceIp'/);
+  assert.match(pulseList, /request_context ->> 'originIp'/);
+  assert.match(pulseList, /request_context ->> 'ipHash'/);
+  assert.match(pulseList, /request_context -> 'provenance' ->> 'originIp'/);
+});
+
+test("admin activity pages share one page-level navigation overlay and API report links", async () => {
+  const actions = await readFile("apps/web/app/app/admin/scans/admin-scan-actions.tsx", "utf8");
+  const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+
+  assert.match(actions, /createPortal/);
+  assert.match(actions, /AdminNavigationProvider/);
+  assert.match(actions, /if \(navigation\) return false/);
+  assert.match(scansPage, /<AdminNavigationProvider>/);
+  assert.match(pulsePage, /<AdminNavigationProvider>/);
+  assert.match(pulsePage, /<AdminReportLink/);
+  assert.match(pulsePage, /getAdminAuthenticatedScanHref\(request\.scanId\)/);
+});
+
+test("language cells expose evidence source and confidence without generic English fallback", async () => {
+  const languageSource = await readFile("apps/web/lib/scans/primary-language.ts", "utf8");
+  const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+
+  assert.doesNotMatch(languageSource, /GENERIC_ENGLISH_TLDS/);
+  assert.match(languageSource, /inferPrimaryLanguage/);
+  assert.match(scansPage, /primaryLanguageConfidence/);
+  assert.match(pulsePage, /primaryLanguageSource/);
+});
+
 test("Admin Scans reads persisted summaries without report materialization in the list request", async () => {
   const source = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
   assert.doesNotMatch(source, /materializeAdminScanSummar/);
@@ -65,15 +151,20 @@ test("admin scan rows attribute Pulse, SDK, and MCP scans to their API-key owner
   assert.match(repository, /coalesce\(app_user\.email, auth_user\.email, api_key\.created_by\) as requester_name/);
   assert.match(repository, /resolution_mode in \('created_new_scan', 'queued_new_scan'\)/);
   assert.match(listSource, /pulseAttribution\?\.requester_name/);
-  assert.match(listSource, /getRequesterIpFromContext\(pulseAttribution\?\.request_context/);
+  assert.match(listSource, /requesterIpAttributionFromContext\(pulseAttribution\?\.request_context/);
+  assert.match(repository, /pulse_attribution\.request_context as pulse_request_context/);
+  assert.match(repository, /abs\(extract\(epoch from \(pr\.requested_at - sr\.requested_at\)\)\) <= 30/);
 });
 
-test("authenticated dashboard scans retain a hashed requester IP", async () => {
-  const source = await readFile("apps/web/server/domains/create-domain.ts", "utf8");
+test("authenticated dashboard scans retain internal requester IP attribution and hash-only scanner provenance", async () => {
+  const createDomainSource = await readFile("apps/web/server/domains/create-domain.ts", "utf8");
+  const createFullScanSource = await readFile("apps/web/server/scans/create-full-scan.ts", "utf8");
 
-  assert.match(source, /await headers\(\)/);
-  assert.match(source, /createHash\("sha256"\)\.update\(originIp\)\.digest\("hex"\)/);
-  assert.match(source, /provenance,/);
+  assert.match(createDomainSource, /const requesterIpContext = getScanRequesterIpContext\(requestHeaders\)/);
+  assert.match(createDomainSource, /originIp: requesterIpContext\.ipHash/);
+  assert.match(createDomainSource, /requesterIpContext,/);
+  assert.match(createFullScanSource, /sourceIp: requesterIpContext\.sourceIp/);
+  assert.match(createFullScanSource, /ipHash: requesterIpContext\.ipHash/);
 });
 
 test("scan request timestamptz defaults preserve the actual request instant", async () => {

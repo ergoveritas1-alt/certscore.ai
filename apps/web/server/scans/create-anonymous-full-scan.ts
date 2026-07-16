@@ -36,6 +36,10 @@ import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
 import { lookupTrancoRankMetadata } from "./tranco-rank-metadata";
 import { AnonymousScanQuotaError } from "../pulse/anonymous-scan-quota";
 import { claimAnonymousScanDailyQuota } from "../pulse/repository";
+import {
+  normalizeScanRequesterIpContext,
+  type ScanRequesterIpContext
+} from "./requester-ip-context";
 
 type ScanQueueProvenance = {
   githubActor?: string | null;
@@ -60,6 +64,7 @@ export async function createAnonymousFullScan(input: {
   minimumReusablePagesRequested?: number;
   normalizedUrl: string;
   provenance?: ScanQueueProvenance;
+  requesterIpContext?: ScanRequesterIpContext | null;
   scanFrom?: ScanFrom;
 }) {
   const scanFrom = normalizeScanFrom(input.scanFrom);
@@ -72,6 +77,7 @@ export async function createAnonymousFullScan(input: {
       : pagesRequested;
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const bypassRecentScanReuse = Boolean(input.bypassRecentScanReuse);
+  const requesterIpContext = normalizeScanRequesterIpContext(input.requesterIpContext);
 
   const reuseDecision = await resolveRecentScanReuseDecision({
       forceNewScan: bypassRecentScanReuse,
@@ -102,10 +108,12 @@ export async function createAnonymousFullScan(input: {
         requestContext: {
           bypassRecentScanReuse,
           coveragePlanCode,
+          ipHash: requesterIpContext.ipHash,
           localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
           minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
           provenance: input.provenance ?? null,
-          scanFrom
+          scanFrom,
+          sourceIp: requesterIpContext.sourceIp
         },
         resolutionMode: "reused_existing_scan",
         reusedCompletedAt: recentScan.completedAt,
@@ -138,10 +146,12 @@ export async function createAnonymousFullScan(input: {
       requestContext: {
         bypassRecentScanReuse,
         coveragePlanCode,
+        ipHash: requesterIpContext.ipHash,
         localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
         minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
         provenance: input.provenance ?? null,
-        scanFrom
+        scanFrom,
+        sourceIp: requesterIpContext.sourceIp
       },
       errorCode: "queue_unavailable",
       errorMessage: fullScanQueueAvailability.reason ?? "Full scan queue is unavailable.",
@@ -153,7 +163,9 @@ export async function createAnonymousFullScan(input: {
   }
 
   if (input.countAnonymousQuota !== false) {
-    const quota = await claimAnonymousScanDailyQuota({ ipHash: input.provenance?.originIp });
+    const quota = await claimAnonymousScanDailyQuota({
+      ipHash: requesterIpContext.ipHash ?? input.provenance?.originIp
+    });
     if (!quota.allowed) {
       await recordScanRequest({
         normalizedDomain: input.hostname,
@@ -164,8 +176,10 @@ export async function createAnonymousFullScan(input: {
         requestedUrl: input.normalizedUrl,
         requestContext: {
           coveragePlanCode,
+          ipHash: requesterIpContext.ipHash,
           provenance: input.provenance ?? null,
-          scanFrom
+          scanFrom,
+          sourceIp: requesterIpContext.sourceIp
         },
         errorCode: "anonymous_scan_daily_limit",
         errorMessage: "Anonymous scan daily limit reached.",
@@ -241,13 +255,15 @@ export async function createAnonymousFullScan(input: {
     requestContext: {
       bypassRecentScanReuse,
       coveragePlanCode,
+      ipHash: requesterIpContext.ipHash,
       localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
       minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
       pagesRequested,
       provenance: input.provenance ?? null,
       queueOrigin: queueMetadata.queueOrigin,
       queuePriority: queueMetadata.queuePriority,
-      scanFrom
+      scanFrom,
+      sourceIp: requesterIpContext.sourceIp
     },
     resolutionMode: "queued_new_scan",
     scanId: scan.id,

@@ -4,6 +4,7 @@ import { createAnonymousFullScan } from "../scans/create-anonymous-full-scan";
 import {
   claimPulseAlternateRegionFallback,
   markPulseAlternateRegionFallbackFailed,
+  pulseJobIdForPublicId,
   updatePulseRequestQueued
 } from "./repository";
 import {
@@ -87,6 +88,10 @@ export async function queueAlternateRegionRecovery(input: {
       minimumReusablePagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
       normalizedUrl: input.normalizedUrl,
       provenance: input.provenance,
+      requesterIpContext: {
+        ipHash: typeof input.requestContext?.ipHash === "string" ? input.requestContext.ipHash : null,
+        sourceIp: typeof input.requestContext?.sourceIp === "string" ? input.requestContext.sourceIp : null
+      },
       localV2DagRunViaLambda: true,
       scanFrom: plan.to
     });
@@ -94,7 +99,7 @@ export async function queueAlternateRegionRecovery(input: {
     await updatePulseRequestQueued({
       pulseRequestId: input.pulseRequestId,
       scanId,
-      resultPulseUrl: absoluteUrl(`/api/v1/pulse?scanId=${scanId}`),
+      resultPulseUrl: absoluteUrl(`/api/v1/pulse?jobId=${pulseJobIdForPublicId(input.pulseRequestId)}`),
       resultReportUrl: absoluteUrl(`/scan/${scanId}`),
       resolutionMode: "alternate_region_fallback_queued"
     });

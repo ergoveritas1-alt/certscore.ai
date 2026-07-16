@@ -8,7 +8,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createArtifactWriter } from "./artifact-writer.js";
-import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
+import {
+  preConsentRuntimeScanner,
+  probeStrictTls,
+} from "./scanners/pre-consent-runtime-scanner.js";
+
+test("strict TLS probe keeps timeouts and network failures unknown instead of invalid", async () => {
+  const result = await probeStrictTls("https://192.0.2.1/", undefined, Date.now() + 10);
+
+  assert.equal(result.attempted, true);
+  assert.notEqual(result.errorCategory, "tls_or_certificate_failure");
+  assert.equal(result.validCertificate, undefined);
+});
 
 test("pre-consent scanner uses strict TLS probe and records transport-security evidence", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-transport-security-"));

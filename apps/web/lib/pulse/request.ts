@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { createDomainRequestSchema } from "@website-signal-risk-scanner/shared";
+import { getTrustedRequestSourceIp, normalizeRequestSourceIp } from "../request-source-ip";
 import type { PulseDetail, PulseFormat, PulseFreshnessMode } from "./types";
 
 export function parsePulseFormat(value: string | null): PulseFormat {
@@ -73,15 +74,13 @@ function verifiedAnonymousMcpRequesterIp(headers: Headers) {
   if (expectedBuffer.length !== proofBuffer.length || !timingSafeEqual(expectedBuffer, proofBuffer)) {
     return null;
   }
-  return ip;
+  return normalizeRequestSourceIp(ip);
 }
 
 export function getPulseRequesterContext(request: Request) {
   const headers = request.headers;
   const ip = verifiedAnonymousMcpRequesterIp(headers) ??
-    getFirstHeaderValue(headers.get("cf-connecting-ip")) ??
-    getFirstHeaderValue(headers.get("x-forwarded-for")) ??
-    getFirstHeaderValue(headers.get("x-real-ip"));
+    getTrustedRequestSourceIp(headers);
 
   return {
     ipHash: ip ? createHash("sha256").update(ip).digest("hex") : null,

@@ -1,12 +1,25 @@
 "use server";
 
-import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
+import {
+  type AccessPostureClass,
+  type RecoverableFindingClass,
+  type ScanExecutionTier
+} from "@website-signal-risk-scanner/shared";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
+import { inferPrimaryLanguage, type PrimaryLanguageConfidence, type PrimaryLanguageSource } from "../../lib/scans/primary-language";
+import {
+  mergeRequesterIpAttributions,
+  requesterIpAttributionFromContext,
+  requesterIpAttributionFromEvents,
+  requesterIpAttributionFromRequest,
+  type RequesterIpAttributionSource
+} from "../../lib/admin/requester-ip-attribution";
 import { deriveDisplayCreatedAt } from "../scans/display-state";
 import {
   loadAdminScanOverviewCounts,
+  loadAdminScanActivityPageRefs,
   loadAdminScanListPageData,
   loadAdminPulseScanAttributionRows,
   loadAdminScanRequestRows,
@@ -15,6 +28,7 @@ import {
   type AdminScanDiagnosticEventRow as ScanDiagnosticEventRow,
   type AdminScanRequestRow as ScanRequestRow
 } from "./repository";
+import { projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
 import { requirePlatformAdminContext } from "./platform-admin";
 
@@ -26,6 +40,8 @@ export type AdminScanListItem = {
   blockedFlag: boolean | null;
   captchaFlag: boolean | null;
   noGoFlag: boolean;
+  noGoReason: string | null;
+  noGoSource: AdminNoGoProjection["source"];
   certscoreOverall: number | null;
   cmpVendorName: string | null;
   completedAt: string | null;
@@ -46,10 +62,14 @@ export type AdminScanListItem = {
   pagesScanned: number;
   privacyPolicyPresent: boolean | null;
   primaryLanguage: string | null;
+  primaryLanguageConfidence: PrimaryLanguageConfidence | null;
+  primaryLanguageSource: PrimaryLanguageSource | null;
   recoverableFindingClasses: RecoverableFindingClass[];
   robotsFetchHttpStatus: number | null;
   scanId: string;
   requesterIp: string | null;
+  requesterIpHash: string | null;
+  requesterIpSource: RequesterIpAttributionSource;
   requesterEmail: string | null;
   requesterName: string | null;
   requestPublicId: string | null;
@@ -94,27 +114,38 @@ export type BlockedRunTelemetry = {
 
 export type AdminScanListStatus = "any" | "no_go" | "failed" | "running" | "queued" | "limited" | "completed";
 
-const ADMIN_FILTER_ACTIVITY_WINDOW_LIMIT = 25_000;
-
 export async function listAdminScans(limit = 50, offset = 0, filters?: { email?: string | null; query?: string | null; status?: AdminScanListStatus }): Promise<AdminScanListItem[]> {
+  return (await listAdminScansPage(limit, offset, filters)).items;
+}
+
+export async function listAdminScansPage(
+  limit = 50,
+  offset = 0,
+  filters?: { email?: string | null; query?: string | null; status?: AdminScanListStatus }
+): Promise<{ items: AdminScanListItem[]; totalCount: number }> {
   await requirePlatformAdminContext();
   const requesterEmail = filters?.email?.trim().slice(0, 160) || null;
-  const hasFilters = Boolean(requesterEmail) || Boolean(filters?.query?.trim()) || Boolean(filters?.status && filters.status !== "any");
-  const activityWindowLimit = hasFilters
-    ? Math.max(ADMIN_FILTER_ACTIVITY_WINDOW_LIMIT, limit + offset)
-    : Math.max(limit + offset, limit);
+  const page = await loadAdminScanActivityPageRefs(limit, offset, {
+    query: filters?.query ?? requesterEmail,
+    status: filters?.status
+  });
+  const selectedScanIds = [...new Set(page.rows.flatMap((row) => row.scan_id ? [row.scan_id] : []))];
+  const selectedRequestIds = page.rows.flatMap((row) => row.request_public_id ? [row.request_public_id] : []);
   const [scanPageData, scanRequestRows] = await Promise.all([
-    loadAdminScanListPageData(activityWindowLimit, 0, requesterEmail),
-    loadAdminScanRequestRows(activityWindowLimit, requesterEmail)
+    loadAdminScanListPageData(Math.max(selectedScanIds.length, 1), 0, null, selectedScanIds),
+    selectedScanIds.length || selectedRequestIds.length
+      ? loadAdminScanRequestRows(100_000, null, { publicIds: selectedRequestIds, scanIds: selectedScanIds })
+      : Promise.resolve([])
   ]);
   const {
     diagnosticEvents,
     domains,
     organizations,
     resolvedSnapshots,
+    runtimeArtifacts,
     scanRows
   } = scanPageData;
-  const pulseAttributionRows = await loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id), requesterEmail);
+  const pulseAttributionRows = await loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id), null);
   const pulseAttributionMap = new Map(pulseAttributionRows.map((row) => [row.scan_id, row] as const));
 
   const domainMap = new Map(domains.flatMap((domain) => (domain.id ? [[domain.id, domain] as const] : [])));
@@ -122,6 +153,7 @@ export async function listAdminScans(limit = 50, offset = 0, filters?: { email?:
   const snapshotMap = new Map(
     resolvedSnapshots.flatMap((snapshot) => (snapshot.scan_id ? [[snapshot.scan_id, snapshot] as const] : []))
   );
+  const runtimeArtifactMap = new Map(runtimeArtifacts.map((artifact) => [artifact.scan_id, artifact] as const));
   const diagnosticEventMap = new Map<string, ScanDiagnosticEventRow[]>();
   for (const diagnosticEvent of diagnosticEvents) {
     const existing = diagnosticEventMap.get(diagnosticEvent.scan_id) ?? [];
@@ -139,6 +171,7 @@ export async function listAdminScans(limit = 50, offset = 0, filters?: { email?:
 
   const scanItems: AdminScanListItem[] = scanRows.map((scan) => {
     const snapshot = snapshotMap.get(scan.id) ?? null;
+    const runtimeArtifact = runtimeArtifactMap.get(scan.id) ?? null;
     const linkedRequest = requestByLinkedScanId.get(scan.id) ?? null;
     const pulseAttribution = pulseAttributionMap.get(scan.id) ?? null;
     const normalizedAccessPosture = normalizeAccessPostureSummary({
@@ -165,6 +198,28 @@ export async function listAdminScans(limit = 50, offset = 0, filters?: { email?:
       createdAt: scan.created_at,
       startedAt: null
     });
+    const requesterIpAttribution = mergeRequesterIpAttributions(
+      requesterIpAttributionFromRequest(linkedRequest),
+      requesterIpAttributionFromContext(pulseAttribution?.request_context ?? null, "pulse_context"),
+      requesterIpAttributionFromEvents(diagnosticEventMap.get(scan.id) ?? [])
+    );
+    const primaryLanguage = inferPrimaryLanguage({
+      declaredLanguages: [scan.page_language],
+      matchedLocales: [snapshot?.site_language_primary],
+      urls: [
+        scan.domain_id ? domainMap.get(scan.domain_id)?.hostname : null,
+        linkedRequest?.requested_url,
+        pulseAttribution?.normalized_url
+      ]
+    });
+    const noGo = projectAdminNoGo({
+      accessPostureClass: normalizedAccessPosture.accessPostureClass,
+      blockedFlag: snapshot?.blocked_flag,
+      captchaFlag: snapshot?.captcha_flag,
+      runtimeAssessment: runtimeArtifact?.scan_no_go_assessment,
+      snapshotOutcome: snapshot?.scan_outcome,
+      visualAccessReview: runtimeArtifact?.visual_access_review
+    });
 
     return {
       activityAt: displayCreatedAt,
@@ -184,10 +239,9 @@ export async function listAdminScans(limit = 50, offset = 0, filters?: { email?:
       domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
       organizationId: scan.organization_id,
-      requesterIp:
-        getRequesterIpFromRequest(linkedRequest) ??
-        getRequesterIpFromContext(pulseAttribution?.request_context ?? null) ??
-        selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
+      requesterIp: requesterIpAttribution.sourceIp,
+      requesterIpHash: requesterIpAttribution.ipHash,
+      requesterIpSource: requesterIpAttribution.source,
       requesterEmail: linkedRequest?.requester_email ?? pulseAttribution?.requester_email ?? null,
       requesterName: linkedRequest?.requester_name ?? pulseAttribution?.requester_name ?? null,
       scanViewHref: getAdminAuthenticatedScanHref(scan.id),
@@ -210,7 +264,9 @@ export async function listAdminScans(limit = 50, offset = 0, filters?: { email?:
       certscoreOverall: snapshot?.certscore_overall ?? null,
       cmpVendorName: snapshot?.cmp_vendor_name ?? null,
       privacyPolicyPresent: snapshot?.privacy_policy_present ?? null,
-      primaryLanguage: snapshot?.site_language_primary ?? scan.page_language ?? null,
+      primaryLanguage: primaryLanguage?.locale ?? null,
+      primaryLanguageConfidence: primaryLanguage?.confidence ?? null,
+      primaryLanguageSource: primaryLanguage?.source ?? null,
       industry: snapshot?.admin_industry_label ?? null,
       homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
       robotsFetchHttpStatus: snapshot?.robots_fetch_http_status ?? null,
@@ -222,7 +278,9 @@ export async function listAdminScans(limit = 50, offset = 0, filters?: { email?:
       recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses,
       interruptionLabel: accessPosture.label,
       interruptionReason: accessPosture.reason,
-      noGoFlag: snapshot?.scan_outcome === "no_go" || normalizedAccessPosture.accessPostureClass === "early_loss" || Boolean(snapshot?.blocked_flag) || Boolean(snapshot?.captcha_flag)
+      noGoFlag: noGo.isNoGo,
+      noGoReason: noGo.reason,
+      noGoSource: noGo.source
     };
   });
 
@@ -234,21 +292,15 @@ export async function listAdminScans(limit = 50, offset = 0, filters?: { email?:
       return mapScanRequestRow(request, linkedScanId ? scansById.get(linkedScanId) ?? null : null);
     });
 
-  const query = filters?.query?.trim().toLowerCase() ?? null;
-  const status = filters?.status ?? "any";
-  return [...scanItems, ...requestItems]
-    .sort((left, right) => new Date(right.activityAt).getTime() - new Date(left.activityAt).getTime())
-    .filter((scan) => {
-      const haystack = [scan.domainHostname, scan.requestedUrl, scan.requesterName, scan.requesterIp, scan.scanId, scan.requestPublicId].filter(Boolean).join(" ").toLowerCase();
-      if (query && !haystack.includes(query)) return false;
-      if (status === "no_go") return scan.noGoFlag;
-      if (status === "failed") return scan.status === "failed";
-      if (status === "running" || status === "queued") return scan.status === status;
-      if (status === "limited") return scan.accessPostureClass === "degraded_but_useful" || scan.accessPostureClass === "robots_limited";
-      if (status === "completed") return scan.rowKind === "scan" && scan.status === "completed" && !scan.noGoFlag && scan.accessPostureClass !== "degraded_but_useful" && scan.accessPostureClass !== "robots_limited";
-      return true;
-    })
-    .slice(offset, offset + limit);
+  const scanItemMap = new Map(scanItems.map((item) => [item.scanId, item] as const));
+  const requestItemMap = new Map(requestItems.map((item) => [item.requestPublicId, item] as const));
+  const items = page.rows.flatMap((row) => {
+    const item = row.row_kind === "scan"
+      ? (row.scan_id ? scanItemMap.get(row.scan_id) : null)
+      : (row.request_public_id ? requestItemMap.get(row.request_public_id) : null);
+    return item ? [item] : [];
+  });
+  return { items, totalCount: page.totalCount };
 }
 
 export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMetrics> {
@@ -263,7 +315,14 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
   const requestContext = getNestedMetadataObject(request.request_context);
   const scanConfig = getNestedMetadataObject(request.scan_config_json);
   const scanFromDisplay = getScanFromDisplay(requestContext ?? scanConfig);
-  const requesterIp = getRequesterIpFromRequest(request);
+  const requesterIpAttribution = requesterIpAttributionFromRequest(request);
+  const primaryLanguage = linkedScan?.primaryLanguage
+    ? {
+        confidence: linkedScan.primaryLanguageConfidence,
+        locale: linkedScan.primaryLanguage,
+        source: linkedScan.primaryLanguageSource
+      }
+    : inferPrimaryLanguage({ urls: [request.scan_domain_hostname, request.normalized_domain, request.requested_url] });
 
   return {
     accessPostureClass: null,
@@ -273,6 +332,8 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     blockedFlag: null,
     captchaFlag: null,
     noGoFlag: linkedScan?.noGoFlag ?? false,
+    noGoReason: linkedScan?.noGoReason ?? null,
+    noGoSource: linkedScan?.noGoSource ?? null,
     certscoreOverall: linkedScan?.certscoreOverall ?? null,
     cmpVendorName: linkedScan?.cmpVendorName ?? null,
     completedAt: request.reused_completed_at,
@@ -292,14 +353,18 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     organizationId: request.organization_id ?? request.scan_organization_id,
     pagesScanned: 0,
     privacyPolicyPresent: linkedScan?.privacyPolicyPresent ?? null,
-    primaryLanguage: linkedScan?.primaryLanguage ?? null,
+    primaryLanguage: primaryLanguage?.locale ?? null,
+    primaryLanguageConfidence: primaryLanguage?.confidence ?? null,
+    primaryLanguageSource: primaryLanguage?.source ?? null,
     recoverableFindingClasses: [],
     requestChannel: request.request_channel,
     requestPublicId: request.public_id,
     requestedAt: request.requested_at,
     requestResolutionMode: request.resolution_mode,
     requestedUrl: request.requested_url,
-    requesterIp,
+    requesterIp: requesterIpAttribution.sourceIp,
+    requesterIpHash: requesterIpAttribution.ipHash,
+    requesterIpSource: requesterIpAttribution.source,
     requesterEmail: request.requester_email,
     requesterName: request.requester_name,
     reusedCompletedAt: request.reused_completed_at,
@@ -322,32 +387,6 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
 
 function getLinkedScanIdForRequest(request: ScanRequestRow) {
   return request.fulfilled_by_scan_id ?? request.scan_id ?? null;
-}
-
-function getRequesterIpFromRequest(request: ScanRequestRow | null) {
-  if (!request) {
-    return null;
-  }
-  const requestContext = getNestedMetadataObject(request.request_context);
-  const requestedBy = getNestedMetadataObject(request.requested_by);
-  const provenance = requestContext ? getNestedMetadataObject(requestContext.provenance) : null;
-  return (
-    (provenance ? getStringMetadataValue(provenance.originIp) : null) ??
-    (requestContext ? getStringMetadataValue(requestContext.originIp) : null) ??
-    (requestContext ? getStringMetadataValue(requestContext.sourceIp) : null) ??
-    (requestContext ? getStringMetadataValue(requestContext.ipHash) : null) ??
-    (requestedBy ? getStringMetadataValue(requestedBy.ipHash) : null)
-  );
-}
-
-function getRequesterIpFromContext(value: unknown) {
-  const context = getNestedMetadataObject(value);
-  return context ? getStringMetadataValue(context.originIp) ?? getStringMetadataValue(context.sourceIp) ?? getStringMetadataValue(context.ipHash) : null;
-}
-
-function getStringMetadataValue(value: unknown) {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized.length > 0 ? normalized : null;
 }
 
 function getBooleanMetadataValue(value: unknown) {
@@ -373,28 +412,6 @@ function getFreshRescanRequested(requestContext: unknown) {
 
 function getNestedMetadataObject(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
-function selectRequesterIp(events: ScanDiagnosticEventRow[]) {
-  for (const event of events) {
-    const metadata = event.metadata_json;
-    if (!metadata) {
-      continue;
-    }
-
-    const directOriginIp = getStringMetadataValue(metadata.originIp);
-    if (directOriginIp) {
-      return directOriginIp;
-    }
-
-    const provenance = getNestedMetadataObject(metadata.provenance);
-    const provenanceOriginIp = provenance ? getStringMetadataValue(provenance.originIp) : null;
-    if (provenanceOriginIp) {
-      return provenanceOriginIp;
-    }
-  }
-
-  return null;
 }
 
 function incrementCount(map: Map<string, number>, key: string) {

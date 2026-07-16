@@ -1,10 +1,11 @@
 "use server";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
-import { SCAN_FROM_VALUES, formatScanFromLabel } from "@website-signal-risk-scanner/shared";
+import { SCAN_FROM_VALUES, SCAN_NO_GO_SNAPSHOT_OUTCOMES, formatScanFromLabel } from "@website-signal-risk-scanner/shared";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { ensureMonitorSiteRequestsTable } from "../monitor-site/monitor-site-request";
 import { ensureScanRequestLogTable } from "../scans/scan-request-log";
+import { adminNoGoSql } from "./admin-no-go";
 
 export type AdminScanQueryRow = {
   completed_at: string | null;
@@ -31,6 +32,7 @@ export type AdminScanRequestRow = {
   normalized_domain: string | null;
   normalized_url: string | null;
   public_id: string;
+  pulse_request_context: Record<string, unknown> | null;
   request_channel: string | null;
   requester_name: string | null;
   requester_email: string | null;
@@ -106,8 +108,158 @@ export type AdminScanSnapshotRow = {
 
 export type AdminRuntimeArtifactRow = {
   scan_id: string;
+  scan_no_go_assessment?: Record<string, unknown> | null;
+  visual_access_review?: Record<string, unknown> | null;
   [key: string]: unknown;
 };
+
+export type AdminScanActivityPageRef = {
+  activity_at: string;
+  activity_id: string;
+  request_public_id: string | null;
+  row_kind: "request" | "scan";
+  scan_id: string | null;
+};
+
+export type AdminScanActivityFilters = {
+  query?: string | null;
+  status?: "any" | "no_go" | "failed" | "running" | "queued" | "limited" | "completed";
+};
+
+const SCAN_ACTIVITY_NO_GO_SQL = adminNoGoSql({
+  accessPosture: "ss.access_posture_class",
+  blockedFlag: "ss.blocked_flag",
+  captchaFlag: "ss.captcha_flag",
+  runtimeArtifacts: "sra",
+  snapshotOutcome: "ss.scan_outcome"
+});
+
+function adminScanActivityBaseSql() {
+  return `with scan_activity as (
+    select
+      'scan'::text as row_kind,
+      ('scan:' || s.id::text) as activity_id,
+      s.id as scan_id,
+      null::text as request_public_id,
+      coalesce(s.completed_at, s.started_at, s.created_at) as activity_at,
+      s.status,
+      ss.access_posture_class,
+      ${SCAN_ACTIVITY_NO_GO_SQL} as no_go_flag
+    from public.scans s
+    left join public.domains d on d.id = s.domain_id
+    left join public.scan_snapshots ss on ss.scan_id = s.id
+    left join public.scan_runtime_artifacts sra on sra.scan_id = s.id
+    where (
+      $1::text is null
+      or s.id::text ilike '%' || $1 || '%'
+      or coalesce(d.hostname, '') ilike '%' || $1 || '%'
+      or coalesce(s.scan_type, '') ilike '%' || $1 || '%'
+      or exists (
+        select 1
+        from public.scan_requests srq
+        left join public.users au on au.id::text = srq.requested_by ->> 'userId'
+        left join public.better_auth_users bau on bau.id = srq.requested_by ->> 'userId'
+        where coalesce(srq.fulfilled_by_scan_id, srq.scan_id) = s.id
+          and concat_ws(' ', srq.public_id, srq.requested_url, srq.normalized_domain,
+                coalesce(au.email, bau.email, ''), srq.request_channel,
+                srq.requested_by::text, srq.request_context::text) ilike '%' || $1 || '%'
+      )
+      or exists (
+        select 1
+        from public.pulse_requests prq
+        left join public.integration_api_keys aik on aik.public_id = prq.requested_by ->> 'apiKeyId'
+        left join public.users pau on pau.id::text = coalesce(prq.requested_by ->> 'userId', aik.owner_user_id::text)
+        left join public.better_auth_users pbau on pbau.id = prq.requested_by ->> 'userId'
+        where prq.scan_id = s.id
+          and concat_ws(' ', prq.public_id, prq.job_id, prq.requested_url, prq.normalized_domain,
+                coalesce(pau.email, pbau.email, aik.created_by, ''), prq.request_channel,
+                prq.requested_by::text, prq.request_context::text) ilike '%' || $1 || '%'
+      )
+    )
+
+    union all
+
+    select
+      'request'::text as row_kind,
+      ('request:' || sr.public_id) as activity_id,
+      coalesce(sr.fulfilled_by_scan_id, sr.scan_id) as scan_id,
+      sr.public_id as request_public_id,
+      sr.requested_at as activity_at,
+      sr.status,
+      ss.access_posture_class,
+      case when coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is null then false else ${SCAN_ACTIVITY_NO_GO_SQL} end as no_go_flag
+    from public.scan_requests sr
+    left join public.scans s on s.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+    left join public.domains d on d.id = s.domain_id
+    left join public.scan_snapshots ss on ss.scan_id = s.id
+    left join public.scan_runtime_artifacts sra on sra.scan_id = s.id
+    left join public.organizations org on org.id = sr.organization_id
+    left join public.users au on au.id::text = sr.requested_by ->> 'userId'
+    left join public.better_auth_users bau on bau.id = sr.requested_by ->> 'userId'
+    where (coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is null or sr.resolution_mode = 'reused_existing_scan')
+      and (
+        $1::text is null
+        or concat_ws(' ', sr.public_id, sr.requested_url, sr.normalized_domain, d.hostname,
+              coalesce(au.email, bau.email, ''), org.name, sr.request_channel,
+              sr.requested_by::text, sr.request_context::text,
+              coalesce(sr.fulfilled_by_scan_id, sr.scan_id)::text) ilike '%' || $1 || '%'
+        or exists (
+          select 1
+          from public.pulse_requests prq
+          left join public.integration_api_keys aik on aik.public_id = prq.requested_by ->> 'apiKeyId'
+          left join public.users pau on pau.id::text = coalesce(prq.requested_by ->> 'userId', aik.owner_user_id::text)
+          left join public.better_auth_users pbau on pbau.id = prq.requested_by ->> 'userId'
+          where prq.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+            and concat_ws(' ', prq.public_id, prq.job_id, prq.requested_url, prq.normalized_domain,
+                  coalesce(pau.email, pbau.email, aik.created_by, ''), prq.request_channel,
+                  prq.requested_by::text, prq.request_context::text) ilike '%' || $1 || '%'
+        )
+      )
+  ), filtered_activity as (
+    select *
+    from scan_activity
+    where $2::text is null
+       or $2 = 'any'
+       or ($2 = 'no_go' and no_go_flag)
+       or ($2 = 'failed' and status = 'failed')
+       or ($2 = 'running' and status = 'running')
+       or ($2 = 'queued' and status = 'queued')
+       or ($2 = 'limited' and access_posture_class in ('degraded_but_useful', 'robots_limited'))
+       or ($2 = 'completed' and row_kind = 'scan' and status = 'completed' and not no_go_flag
+           and coalesce(access_posture_class, '') not in ('degraded_but_useful', 'robots_limited'))
+  )`;
+}
+
+export async function loadAdminScanActivityPageRefs(
+  limit: number,
+  offset: number,
+  filters: AdminScanActivityFilters = {}
+): Promise<{ rows: AdminScanActivityPageRef[]; totalCount: number }> {
+  await ensureScanRequestLogTable();
+  const queryText = filters.query?.trim().slice(0, 160) || null;
+  const status = filters.status && filters.status !== "any" ? filters.status : null;
+  const params = [queryText, status, limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES];
+  const baseSql = adminScanActivityBaseSql();
+  const [pageResult, countResult] = await Promise.all([
+    query<AdminScanActivityPageRef>(
+      `${baseSql}
+       select row_kind, activity_id, scan_id::text as scan_id, request_public_id, activity_at
+       from filtered_activity
+       order by activity_at desc, activity_id desc
+       limit $3 offset $4`,
+      params,
+      { readOnly: true }
+    ),
+    queryOne<{ total_count: number }>(
+      `${baseSql}
+       select count(*)::int as total_count, max($3::int) as requested_limit, max($4::int) as requested_offset
+       from filtered_activity`,
+      params,
+      { readOnly: true }
+    )
+  ]);
+  return { rows: pageResult.rows, totalCount: countResult?.total_count ?? 0 };
+}
 
 export type AdminValidationRunSummaryRow = {
   created_at: string;
@@ -331,7 +483,7 @@ export type AdminBlockedRunTelemetryRow = {
   scan_timestamp?: string | null;
 };
 
-export async function loadAdminScanListPageData(limit: number, offset = 0, requesterEmail: string | null = null): Promise<{
+export async function loadAdminScanListPageData(limit: number, offset = 0, requesterEmail: string | null = null, selectedScanIds: string[] | null = null): Promise<{
   diagnosticEvents: AdminScanDiagnosticEventRow[];
   domains: AdminScanDomainRow[];
   organizations: AdminScanOrganizationRow[];
@@ -352,7 +504,8 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
               order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc
               limit 1) as page_language
        from scans
-      where ($3::text is null or exists (
+      where ($4::uuid[] is null or scans.id = any($4::uuid[]))
+        and ($3::text is null or exists (
               select 1
                 from public.scan_requests sr
                 left join public.users request_app_user on request_app_user.id::text = sr.requested_by ->> 'userId'
@@ -370,7 +523,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
             ))
       order by coalesce(completed_at, started_at, created_at) desc, created_at desc
       limit $1 offset $2`,
-    [limit, offset, requesterEmail],
+    [limit, offset, requesterEmail, selectedScanIds],
     { readOnly: true }
   );
 
@@ -416,7 +569,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
     return new Map(result.rows.flatMap((row) => row.top_finding_count === null ? [] : [[row.scan_id, row.top_finding_count] as const]));
   };
 
-  const [domainsResult, organizationsResult, snapshotsResult, diagnosticEventsResult, topFindingCounts] = await Promise.all([
+  const [domainsResult, organizationsResult, snapshotsResult, diagnosticEventsResult, runtimeArtifactsResult, topFindingCounts] = await Promise.all([
     domainIds.length
       ? query<AdminScanDomainRow>(
           `select id, hostname
@@ -475,6 +628,15 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
           { readOnly: true }
         )
       : Promise.resolve({ rows: [] as AdminScanDiagnosticEventRow[] }),
+    scanIds.length
+      ? query<AdminRuntimeArtifactRow>(
+          `select scan_id, scan_no_go_assessment, visual_access_review
+             from scan_runtime_artifacts
+            where scan_id = any($1::uuid[])`,
+          [scanIds],
+          { readOnly: true }
+        )
+      : Promise.resolve({ rows: [] as AdminRuntimeArtifactRow[] }),
     loadTopFindingCounts()
   ]);
 
@@ -487,7 +649,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
       ...snapshot,
       top_finding_count: snapshot.top_finding_count ?? (snapshot.scan_id ? topFindingCounts.get(snapshot.scan_id) ?? null : null)
     })),
-    runtimeArtifacts: [],
+    runtimeArtifacts: runtimeArtifactsResult.rows,
     scanRows,
     validationFindingRows: [],
     validationRuns: [],
@@ -495,7 +657,11 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
   };
 }
 
-export async function loadAdminScanRequestRows(limit: number, requesterEmail: string | null = null): Promise<AdminScanRequestRow[]> {
+export async function loadAdminScanRequestRows(
+  limit: number,
+  requesterEmail: string | null = null,
+  selection?: { publicIds?: string[]; scanIds?: string[] }
+): Promise<AdminScanRequestRow[]> {
   await ensureScanRequestLogTable();
   const result = await query<AdminScanRequestRow>(
     `select sr.public_id,
@@ -510,6 +676,7 @@ export async function loadAdminScanRequestRows(limit: number, requesterEmail: st
             org.name as organization_name,
             sr.requested_by,
             sr.request_context,
+            pulse_attribution.request_context as pulse_request_context,
             sr.status,
             sr.resolution_mode,
             sr.scan_id,
@@ -531,10 +698,24 @@ export async function loadAdminScanRequestRows(limit: number, requesterEmail: st
        left join public.organizations org on org.id = sr.organization_id
        left join public.users app_user on app_user.id::text = sr.requested_by ->> 'userId'
        left join public.better_auth_users auth_user on auth_user.id = sr.requested_by ->> 'userId'
+       left join lateral (
+         select pr.request_context
+           from public.pulse_requests pr
+          where pr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+            and pr.normalized_domain = sr.normalized_domain
+            and abs(extract(epoch from (pr.requested_at - sr.requested_at))) <= 30
+          order by abs(extract(epoch from (pr.requested_at - sr.requested_at))) asc
+          limit 1
+       ) pulse_attribution on true
       where ($2::text is null or lower(coalesce(app_user.email, auth_user.email, '')) like '%' || lower($2) || '%')
+        and (
+          ($3::uuid[] is null and $4::text[] is null)
+          or coalesce(sr.fulfilled_by_scan_id, sr.scan_id) = any(coalesce($3::uuid[], '{}'::uuid[]))
+          or sr.public_id = any(coalesce($4::text[], '{}'::text[]))
+        )
       order by sr.requested_at desc
       limit $1`,
-    [limit, requesterEmail],
+    [limit, requesterEmail, selection?.scanIds?.length ? selection.scanIds : null, selection?.publicIds?.length ? selection.publicIds : null],
     { readOnly: true }
   );
 

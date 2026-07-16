@@ -310,6 +310,16 @@ export const SCAN_NO_GO_REASON_PRESENTATIONS: Record<ScanNoGoReasonCode, ScanNoG
   },
 };
 
+/** Canonical persisted scan outcomes that represent a terminal no-go result. */
+export const SCAN_NO_GO_SNAPSHOT_OUTCOMES = Array.from(new Set([
+  "no_go",
+  ...Object.values(SCAN_NO_GO_REASON_PRESENTATIONS).map((presentation) => presentation.snapshotScanOutcome),
+]));
+
+export function isScanNoGoSnapshotOutcome(value: string | null | undefined) {
+  return Boolean(value && SCAN_NO_GO_SNAPSHOT_OUTCOMES.includes(value));
+}
+
 const LEGACY_SCAN_NO_GO_REASON_ALIASES: Record<string, ScanNoGoReasonCode> = {
   access_blocked: "access_denied_or_forbidden_page",
   blank_page_no_visible_content: "blank_or_unusable_page",

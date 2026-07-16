@@ -865,6 +865,15 @@ function getRecordBoolean(record: unknown, key: string) {
   return (record as Record<string, unknown>)[key] === true;
 }
 
+export function getRecordOptionalBoolean(record: unknown, key: string) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) {
+    return null;
+  }
+
+  const value = (record as Record<string, unknown>)[key];
+  return typeof value === "boolean" ? value : null;
+}
+
 function getRecordNumber(record: unknown, key: string) {
   if (!record || typeof record !== "object" || Array.isArray(record)) {
     return null;
@@ -1060,7 +1069,16 @@ function firstTimelineRow(rows: Record<string, unknown>[], predicate: (row: Reco
     .sort((left, right) => left.atMs - right.atMs)[0]?.row ?? null;
 }
 
-function buildExecutiveTimelineEvents(
+function isTypedThirdPartyTimelineRow(row: Record<string, unknown>) {
+  return row.thirdParty === true ||
+    row.third_party === true ||
+    row.isThirdParty === true ||
+    row.is_third_party === true ||
+    row.firstPartyOrThirdParty === "third_party" ||
+    row.first_party_or_third_party === "third_party";
+}
+
+export function buildExecutiveTimelineEvents(
   runtimeArtifacts: Record<string, unknown> | null | undefined
 ): ExecutiveTimelineEvent[] {
   const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
@@ -1089,7 +1107,7 @@ function buildExecutiveTimelineEvents(
     ...getRecordObjectArray(hybrid, "storage_observations")
   ];
   const consentSummary = getRecord(hybrid.consentSummary) ?? getRecord(hybrid.consent_summary);
-  const firstRequestRow = firstTimelineRow(requestRows, () => true);
+  const firstRequestRow = firstTimelineRow(requestRows, isTypedThirdPartyTimelineRow);
   const firstCookieRow = firstTimelineRow(cookieRows, () => true);
   const firstAdRow = firstTimelineRow(requestRows, (row) => /advertising|adtech|retargeting|marketing/i.test(String(row.category ?? row.vendorCategory ?? row.vendor_category ?? row.classification ?? "")));
   const firstAnalyticsRow = firstTimelineRow(requestRows, (row) => /analytics|measurement/i.test(String(row.category ?? row.vendorCategory ?? row.vendor_category ?? "")));
@@ -1118,15 +1136,14 @@ function buildExecutiveTimelineEvents(
     vendorLabel: getTimelineVendorLabel(consentSummary)
   });
   pushEvent({
-    atMs:
-      firstTimelineMs(
-        timelineMarkers?.firstNonEssentialRequestMs,
-        timelineMarkers?.first_non_essential_request_ms,
-        timelineMarkers?.firstThirdPartyRequestMs,
-        timelineMarkers?.first_third_party_request_ms,
-        timelineMarkers?.firstRequestMs,
-        timelineMarkers?.first_request_ms
-      ) ?? -1,
+    atMs: firstRequestRow
+      ? firstTimelineMs(
+          timelineMarkers?.firstNonEssentialRequestMs,
+          timelineMarkers?.first_non_essential_request_ms,
+          timelineMarkers?.firstThirdPartyRequestMs,
+          timelineMarkers?.first_third_party_request_ms
+        ) ?? -1
+      : -1,
     label: "3P request",
     tone: "amber",
     vendorLabel: getTimelineVendorLabel(firstRequestRow)
@@ -7032,7 +7049,11 @@ export async function SharedScanDetailView({
   const browserCoverageSufficient =
     scanRecord.scan.scanType !== "browser_extension" ||
     (scanRecord.snapshot?.privacy_policy_present === true && scanRecord.snapshot?.https_enforced === true);
-  const executiveDisplayedScore = browserCoverageSufficient
+  const criticalCoverageComplete = getRecordOptionalBoolean(
+    scanRecord.snapshot,
+    "critical_coverage_complete",
+  );
+  const executiveDisplayedScore = browserCoverageSufficient && criticalCoverageComplete !== false
     ? gdprEprivacyCoverageScore.score ?? legacyExecutiveDisplayedScore
     : null;
   const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({

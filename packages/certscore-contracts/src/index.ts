@@ -1188,6 +1188,7 @@ export const domSnapshotArtifactSchema = z.object({
   capturedAtMs: z.number().int().nonnegative(),
   path: z.string(),
   url: z.string(),
+  documentLanguage: z.string().max(35).optional(),
   textExcerpt: z.string().optional(),
   pagePhase: pagePhaseSchema,
   consentStateAtTime: consentStateSchema,

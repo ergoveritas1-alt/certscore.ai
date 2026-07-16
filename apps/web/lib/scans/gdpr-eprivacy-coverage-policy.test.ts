@@ -106,6 +106,39 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks policy-dependent rows not t
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes reports discovered budget-skipped privacy policy truthfully", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        discoveredPrivacyPolicyStatuses: ["skipped_budget"],
+        discoveredPrivacyPolicyUrls: ["https://example.test/privacy"],
+        privacyPolicyDiscovered: true,
+        privacyPolicyEvaluationState: "discovered_skipped_budget",
+        privacyPolicyPresent: false,
+      },
+    },
+    snapshot: {
+      privacy_policy_present: false,
+    },
+  });
+
+  assert.equal(outcomes.controller_contact_disclosure?.status, "Not testable");
+  assert.match(
+    outcomes.controller_contact_disclosure?.criticalEvidence.statusBasis ?? "",
+    /discovered, but it was not fetched before the scan budget ended/i,
+  );
+  assert.doesNotMatch(
+    outcomes.controller_contact_disclosure?.criticalEvidence.statusBasis ?? "",
+    /No privacy-policy surface was retained/i,
+  );
+  assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
+  assert.match(
+    outcomes.policy_text_extraction?.criticalEvidence.statusBasis ?? "",
+    /discovered, but it was not fetched before the scan budget ended/i,
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps legacy_only GDPR Transparency concerns silent", () => {
   const baseline = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -2006,6 +2039,100 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats complete no-surface inspec
     outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceObserved,
     false
   );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not turn an incomplete consent inventory into missing-control findings", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      cmpFrameworkSignalObserved: true,
+      consentSurfaceInspection: {
+        coverageStatus: "partial",
+        inspectedPreInteraction: true,
+        inspectionCompleted: false,
+        outcome: "inspection_incomplete",
+        limitationKeys: ["consent_ui_capture_timeout"]
+      },
+      consentSurfaceObserved: true,
+      hybridRuntimeEvidence: {
+        firstLayerConsentChoices: {
+          acceptControlObserved: false,
+          actionableControlInventoryRetained: false,
+          controls: [],
+          managePreferencesControlObserved: false,
+          rejectControlObserved: false,
+          visibleChoiceLabels: []
+        },
+        networkSummary: {
+          preConsentThirdPartyRequestCount: 12
+        }
+      }
+    },
+    snapshot: {
+      cmp_vendor_name: "OneTrust",
+      third_party_request_count: 12
+    }
+  });
+
+  for (const rowId of [
+    "accept_consent_control",
+    "options_settings_preferences_control",
+    "reject_all_path_availability"
+  ]) {
+    assert.equal(outcomes[rowId]?.status, "Not testable", rowId);
+    assert.match(outcomes[rowId]?.limitation ?? "", /inspection did not complete/i, rowId);
+    assert.equal(
+      outcomes[rowId]?.criticalEvidence.missingOrIncompleteSourceSignals[0]?.field,
+      "runtimeArtifacts.consentSurfaceInspection.inspectionCompleted",
+      rowId
+    );
+  }
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes preserves positive controls despite partial consent coverage", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentSurfaceInspection: {
+        coverageStatus: "partial",
+        inspectedPreInteraction: true,
+        inspectionCompleted: false,
+        outcome: "inspection_incomplete"
+      },
+      hybridRuntimeEvidence: {
+        firstLayerConsentChoices: {
+          acceptControlObserved: true,
+          actionableControlInventoryRetained: true,
+          controls: [
+            { actionType: "accept_all", label: "Accept All", matchedTerm: "accept all" },
+            { actionType: "manage_preferences", label: "Show Purposes", matchedTerm: "show purposes" }
+          ],
+          layerInspected: "first_layer",
+          managePreferencesControlObserved: true,
+          rejectControlObserved: false,
+          visibleChoiceLabels: ["Accept All", "Show Purposes"]
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: true,
+        firstLayerConsentChoices: {
+          controls: [
+            { actionType: "accept_all", label: "Accept All", matchedTerm: "accept all" },
+            { actionType: "manage_preferences", label: "Show Purposes", matchedTerm: "show purposes" }
+          ],
+          layerInspected: "first_layer",
+          visibleChoiceLabels: ["Accept All", "Show Purposes"]
+        }
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true
+    }
+  });
+
+  assert.equal(outcomes.accept_consent_control?.status, "Observed");
+  assert.equal(outcomes.options_settings_preferences_control?.status, "Observed");
+  assert.equal(outcomes.reject_all_path_availability?.status, "Not testable");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes confirms simple cookie notices despite stale unknown-purpose demotion", () => {

@@ -28,6 +28,7 @@ export type PulseRequestContext = {
   mode: "url" | "scanId" | "jobId";
   quotaClass?: "scan_create" | null;
   referer: string | null;
+  requestId?: string | null;
   sourceIp: string | null;
   source?: "pulse_api" | "gpt_action" | string | null;
   userAgent: string | null;
