@@ -28,6 +28,7 @@ import {
   checkIntegrationApiKeyUsageLimit,
   parseBearerToken,
   validateCertScoreBearerToken,
+  type IntegrationApiKeyRecord,
   type IntegrationApiKeyScope
 } from "../../../../server/integrations/api-keys";
 import { checkDomainDns } from "../../../../server/domains/domain-dns";
@@ -45,6 +46,7 @@ import {
   getPulseRequestByJobId,
   recordPulseArtifactDownload,
   updatePulseRequestCompleted,
+  updatePulseRequestFailed,
   updatePulseRequestQueued,
   updatePulseRequestRateLimited
 } from "../../../../server/pulse/repository";
@@ -365,6 +367,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
             ? "other_api"
             : null;
   let apiKeyContext: { apiKeyId?: string | null; accountId?: string | null; userId?: string | null; channel?: string; source?: string } = {};
+  let apiKeyUsageKey: Pick<IntegrationApiKeyRecord, "organizationId" | "publicId" | "hourlyLimit" | "dailyLimit"> | null = null;
   if (bearer.provided) {
     if (!bearer.token) {
       return pulseJson(
@@ -394,25 +397,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         routeName
       );
     }
-    const usageLimit = await checkIntegrationApiKeyUsageLimit({ key: auth.key });
-    if (!usageLimit.allowed) {
-      return pulseJson(
-        buildPulseError({
-          code: "rate_limited",
-          message: "This CertScore.ai API key has reached its Pulse request limit. Try again after the retry window or manage your plan.",
-          retryAfterSeconds: usageLimit.retryAfterSeconds,
-          resolution: {
-            label: "Manage plan",
-            url: "https://certscore.ai/app/modify-plan"
-          },
-          detail,
-          format
-        }),
-        { headers: { "Cache-Control": "no-store", "Retry-After": String(usageLimit.retryAfterSeconds) }, status: 429 },
-        requestId,
-        routeName
-      );
-    }
+    apiKeyUsageKey = auth.key;
     apiKeyContext = {
       accountId: auth.key.organizationId,
       apiKeyId: auth.key.publicId,
@@ -434,6 +419,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     source: apiKeyContext.source ?? (gptAction ? "gpt_action" : integrationChannel ?? "pulse_api")
   };
   const startedAt = Date.now();
+  let activePulseRequestId: string | null = null;
 
   try {
     if (gptAction && requestedFreshness === "refresh") {
@@ -671,14 +657,6 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       }
     }
 
-    const { publicId, jobId: createdJobId } = await createPulseRequest({
-      context: { ...contextBase, mode: "url" },
-      normalizedDomain: normalized.normalizedDomain,
-      normalizedUrl: normalized.normalizedUrl,
-      requestedUrl: rawUrl,
-      resolutionMode: "created_new_scan",
-      status: "queued"
-    });
     const recentEligibility = forceNewScan
       ? null
       : await getRecentScanReuseEligibility({
@@ -703,6 +681,15 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         : null;
 
     if (recentScanRecord) {
+      const { publicId } = await createPulseRequest({
+        context: { ...contextBase, mode: "url" },
+        normalizedDomain: normalized.normalizedDomain,
+        normalizedUrl: normalized.normalizedUrl,
+        requestedUrl: rawUrl,
+        resolutionMode: "reused_existing_scan",
+        scanId: recentScanRecord.scan.id,
+        status: "completed"
+      });
       return buildAndLogCompletedPulse({
         detail,
         format,
@@ -717,6 +704,82 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         routeOptions: { gptAction, routeName }
       });
     }
+
+    const dnsStatus = await checkDomainDns(normalized.normalizedDomain);
+    if (!dnsStatus.exists) {
+      console.warn("[pulse] domain DNS preflight rejected", {
+        domain: normalized.normalizedDomain,
+        requestId,
+        retryable: dnsStatus.retryable
+      });
+      if (gptAction) {
+        logPulseGptActionEvent("pulse_gpt_action_error", {
+          detail,
+          domain: normalized.normalizedDomain,
+          elapsedMs: Date.now() - startedAt,
+          errorCode: dnsStatus.retryable ? "internal_error" : "invalid_url",
+          format,
+          requestId,
+          route: "/api/v1/pulse/gpt",
+          statusCode: dnsStatus.retryable ? 503 : 400,
+          wait: waitSeconds
+        });
+      }
+      return pulseJson(
+        buildPulseError({
+          code: dnsStatus.retryable ? "internal_error" : "invalid_url",
+          message: dnsStatus.reason,
+          retryAfterSeconds: dnsStatus.retryable ? 60 : null,
+          url: rawUrl,
+          detail,
+          format
+        }),
+        dnsStatus.retryable
+          ? { headers: { "Cache-Control": "no-store", "Retry-After": "60" }, status: 503 }
+          : { headers: { "Cache-Control": "no-store" }, status: 400 },
+        requestId,
+        routeName
+      );
+    }
+
+    if (apiKeyUsageKey) {
+      const usageLimit = await checkIntegrationApiKeyUsageLimit({ key: apiKeyUsageKey });
+      if (!usageLimit.allowed) {
+        console.warn("[pulse] integration API scan-create quota rejected", {
+          apiKeyId: apiKeyUsageKey.publicId,
+          domain: normalized.normalizedDomain,
+          reason: usageLimit.reason,
+          requestId,
+          usage: usageLimit.usage
+        });
+        return pulseJson(
+          buildPulseError({
+            code: "rate_limited",
+            message: "This CertScore.ai API key has reached its new-scan limit. Recent-result reuse and result retrieval remain available. Try again after the retry window or manage your plan.",
+            retryAfterSeconds: usageLimit.retryAfterSeconds,
+            resolution: {
+              label: "Manage plan",
+              url: "https://certscore.ai/app/modify-plan"
+            },
+            detail,
+            format
+          }),
+          { headers: { "Cache-Control": "no-store", "Retry-After": String(usageLimit.retryAfterSeconds) }, status: 429 },
+          requestId,
+          routeName
+        );
+      }
+    }
+
+    const { publicId, jobId: createdJobId } = await createPulseRequest({
+      context: { ...contextBase, mode: "url", quotaClass: "scan_create" },
+      normalizedDomain: normalized.normalizedDomain,
+      normalizedUrl: normalized.normalizedUrl,
+      requestedUrl: rawUrl,
+      resolutionMode: "created_new_scan",
+      status: "queued"
+    });
+    activePulseRequestId = publicId;
 
     const throttle = await claimPulseDomainScanCreation({
       normalizedDomain: normalized.normalizedDomain,
@@ -777,24 +840,6 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       );
     }
 
-    const dnsStatus = await checkDomainDns(normalized.normalizedDomain);
-    if (!dnsStatus.exists) {
-      if (gptAction) {
-        logPulseGptActionEvent("pulse_gpt_action_error", {
-          detail,
-          domain: normalized.normalizedDomain,
-          elapsedMs: Date.now() - startedAt,
-          errorCode: "invalid_url",
-          format,
-          requestId,
-          route: "/api/v1/pulse/gpt",
-          statusCode: 400,
-          wait: waitSeconds
-        });
-      }
-      return pulseJson(buildPulseError({ code: "invalid_url", message: dnsStatus.reason, url: rawUrl, detail, format }), { status: 400 }, requestId, routeName);
-    }
-
     const queued = await createAnonymousFullScan({
       bypassRecentScanReuse: forceNewScan,
       coveragePlanCode: PULSE_SCAN_COVERAGE_PLAN_CODE,
@@ -828,6 +873,12 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
           routeOptions: { gptAction, routeName }
         });
       }
+      await updatePulseRequestFailed({
+        errorCode: "scan_unavailable",
+        errorMessage: "The reused scan did not contain enough retained public evidence for a reliable Pulse summary.",
+        pulseRequestId: publicId,
+        resolutionMode: "reused_scan_unavailable"
+      });
       return pulseUnavailableResponse({
         detail,
         format,
@@ -934,6 +985,13 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     );
   } catch (error) {
     if (isAnonymousScanQuotaError(error)) {
+      if (activePulseRequestId) {
+        await updatePulseRequestRateLimited({
+          pulseRequestId: activePulseRequestId,
+          retryAfterSeconds: error.retryAfterSeconds,
+          throttleReason: "anonymous_daily_scan_limit"
+        }).catch((updateError) => console.error("[pulse] anonymous quota lifecycle update failed", { requestId, updateError }));
+      }
       return pulseJson(
         buildPulseError({
           code: "rate_limited",
@@ -956,6 +1014,13 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     }
 
     console.error("[pulse] request failed", { requestId, error });
+    if (activePulseRequestId) {
+      await updatePulseRequestFailed({
+        errorCode: "scan_creation_failed",
+        errorMessage: error instanceof Error ? error.message : String(error),
+        pulseRequestId: activePulseRequestId
+      }).catch((updateError) => console.error("[pulse] failure lifecycle update failed", { requestId, updateError }));
+    }
     if (gptAction) {
       logPulseGptActionEvent("pulse_gpt_action_error", {
         detail,

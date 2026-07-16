@@ -2,30 +2,39 @@ export type DomainDnsStatus =
   | {
       exists: true;
       reason: null;
+      retryable: false;
     }
   | {
       exists: false;
       reason: string;
+      retryable: boolean;
     };
 
 export type DnsResolver = (hostname: string) => Promise<unknown[]>;
 export type DnsLookupResolver = (hostname: string) => Promise<unknown>;
 
-const NO_RECORD_CODES = new Set(["ENODATA", "ENOTFOUND", "ESERVFAIL", "ETIMEOUT"]);
+const NO_RECORD_CODES = new Set(["ENODATA", "ENOTFOUND"]);
+const TRANSIENT_DNS_CODES = new Set(["EAI_AGAIN", "ECONNREFUSED", "ESERVFAIL", "ETIMEOUT"]);
 
 function getDnsErrorCode(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error ? String(error.code) : null;
 }
 
-async function hasDnsRecords(hostname: string, resolver: DnsResolver) {
+type DnsResolution = "found" | "not_found" | "unavailable";
+
+async function resolveDnsRecords(hostname: string, resolver: DnsResolver): Promise<DnsResolution> {
   try {
     const records = await resolver(hostname);
-    return Array.isArray(records) && records.length > 0;
+    return Array.isArray(records) && records.length > 0 ? "found" : "not_found";
   } catch (error) {
     const code = getDnsErrorCode(error);
 
     if (code && NO_RECORD_CODES.has(code)) {
-      return false;
+      return "not_found";
+    }
+
+    if (code && TRANSIENT_DNS_CODES.has(code)) {
+      return "unavailable";
     }
 
     throw error;
@@ -39,21 +48,40 @@ export async function checkDomainDnsWithResolvers(
   const normalizedHostname = hostname.trim().toLowerCase();
 
   try {
-    const [hasIpv4, hasIpv6] = await Promise.all([
-      hasDnsRecords(normalizedHostname, resolvers.resolve4),
-      hasDnsRecords(normalizedHostname, resolvers.resolve6)
+    const [ipv4, ipv6] = await Promise.all([
+      resolveDnsRecords(normalizedHostname, resolvers.resolve4),
+      resolveDnsRecords(normalizedHostname, resolvers.resolve6)
     ]);
 
-    if (hasIpv4 || hasIpv6 || (resolvers.lookup ? await hasLookupRecord(normalizedHostname, resolvers.lookup) : false)) {
+    if (ipv4 === "found" || ipv6 === "found") {
       return {
         exists: true,
-        reason: null
+        reason: null,
+        retryable: false
+      };
+    }
+
+    const lookup = resolvers.lookup ? await resolveLookupRecord(normalizedHostname, resolvers.lookup) : "not_found";
+    if (lookup === "found") {
+      return {
+        exists: true,
+        reason: null,
+        retryable: false
+      };
+    }
+
+    if (ipv4 === "unavailable" || ipv6 === "unavailable" || lookup === "unavailable") {
+      return {
+        exists: false,
+        reason: "We could not verify that domain right now. Try again in a minute.",
+        retryable: true
       };
     }
 
     return {
       exists: false,
-      reason: "We could not find DNS records for that domain. Check the spelling and try again."
+      reason: "We could not find DNS records for that domain. Check the spelling and try again.",
+      retryable: false
     };
   } catch (error) {
     console.error("[domain-dns] DNS validation failed", {
@@ -63,20 +91,25 @@ export async function checkDomainDnsWithResolvers(
 
     return {
       exists: false,
-      reason: "We could not verify that domain right now. Try again in a minute."
+      reason: "We could not verify that domain right now. Try again in a minute.",
+      retryable: true
     };
   }
 }
 
-async function hasLookupRecord(hostname: string, resolver: DnsLookupResolver) {
+async function resolveLookupRecord(hostname: string, resolver: DnsLookupResolver): Promise<DnsResolution> {
   try {
     const record = await resolver(hostname);
-    return Array.isArray(record) ? record.length > 0 : Boolean(record);
+    return (Array.isArray(record) ? record.length > 0 : Boolean(record)) ? "found" : "not_found";
   } catch (error) {
     const code = getDnsErrorCode(error);
 
     if (code && NO_RECORD_CODES.has(code)) {
-      return false;
+      return "not_found";
+    }
+
+    if (code && TRANSIENT_DNS_CODES.has(code)) {
+      return "unavailable";
     }
 
     throw error;

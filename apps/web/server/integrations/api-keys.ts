@@ -352,20 +352,24 @@ export async function checkIntegrationApiKeyUsageLimit(input: {
     `select
        count(*) filter (
          where requested_by->>'apiKeyId' = $1
+           and request_context->>'quotaClass' = 'scan_create'
            and requested_at > timezone('utc', now()) - interval '1 hour'
        )::int as key_hourly_count,
        count(*) filter (
          where requested_by->>'apiKeyId' = $1
+           and request_context->>'quotaClass' = 'scan_create'
            and requested_at > timezone('utc', now()) - interval '1 day'
        )::int as key_daily_count,
        count(*) filter (
          where $2::text is not null
            and requested_by->>'accountId' = $2
+           and request_context->>'quotaClass' = 'scan_create'
            and requested_at > timezone('utc', now()) - interval '1 hour'
        )::int as organization_hourly_count,
        count(*) filter (
          where $2::text is not null
            and requested_by->>'accountId' = $2
+           and request_context->>'quotaClass' = 'scan_create'
            and requested_at > timezone('utc', now()) - interval '1 day'
        )::int as organization_daily_count
        from pulse_requests

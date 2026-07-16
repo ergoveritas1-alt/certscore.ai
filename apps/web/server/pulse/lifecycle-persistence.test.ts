@@ -52,3 +52,35 @@ test("authenticated Pulse API keys bypass the anonymous scan quota", async () =>
 
   assert.match(routeSource, /countAnonymousQuota: !apiKeyContext\.apiKeyId/);
 });
+
+test("Pulse validates DNS before creating a queued request or claiming the domain throttle", async () => {
+  const routeSource = await readFile("apps/web/app/api/v1/pulse/route.ts", "utf8");
+  const dnsIndex = routeSource.lastIndexOf("const dnsStatus = await checkDomainDns");
+  const createIndex = routeSource.lastIndexOf("const { publicId, jobId: createdJobId } = await createPulseRequest");
+  const throttleIndex = routeSource.lastIndexOf("const throttle = await claimPulseDomainScanCreation");
+
+  assert.ok(dnsIndex > 0);
+  assert.ok(createIndex > dnsIndex);
+  assert.ok(throttleIndex > createIndex);
+  assert.match(routeSource, /dnsStatus\.retryable \? 503 : 400/);
+});
+
+test("Pulse integration quota counts scan creation but not polling or recent-result reuse", async () => {
+  const routeSource = await readFile("apps/web/app/api/v1/pulse/route.ts", "utf8");
+  const apiKeySource = await readFile("apps/web/server/integrations/api-keys.ts", "utf8");
+
+  assert.match(routeSource, /mode: "url", quotaClass: "scan_create"/);
+  assert.match(apiKeySource, /request_context->>'quotaClass' = 'scan_create'/);
+  assert.ok(routeSource.indexOf("if (scanId)") < routeSource.indexOf("const usageLimit = await checkIntegrationApiKeyUsageLimit"));
+  assert.ok(routeSource.indexOf("if (jobId)") < routeSource.indexOf("const usageLimit = await checkIntegrationApiKeyUsageLimit"));
+});
+
+test("Pulse terminalizes scan-creation exceptions and anonymous quota failures", async () => {
+  const routeSource = await readFile("apps/web/app/api/v1/pulse/route.ts", "utf8");
+  const repositorySource = await readFile("apps/web/server/pulse/repository.ts", "utf8");
+
+  assert.match(routeSource, /updatePulseRequestFailed/);
+  assert.match(routeSource, /anonymous_daily_scan_limit/);
+  assert.match(repositorySource, /error_code = \$2/);
+  assert.match(repositorySource, /status = 'failed'/);
+});

@@ -127,6 +127,7 @@ export async function createPulseRequest(input: {
         forceNewScan: input.context.forceNewScan ?? false,
         waitSeconds: input.context.waitSeconds,
         mode: input.context.mode,
+        quotaClass: input.context.quotaClass ?? null,
         source: input.context.source ?? input.context.channel ?? "pulse_api",
         channel: input.context.channel ?? input.context.source ?? "pulse_api"
       },
@@ -352,6 +353,7 @@ export async function updatePulseRequestLifecycle(input: {
 export async function updatePulseRequestRateLimited(input: {
   pulseRequestId: string;
   retryAfterSeconds: number;
+  throttleReason?: string;
   scanId?: string | null;
 }) {
   await ensurePulseTables();
@@ -360,13 +362,34 @@ export async function updatePulseRequestRateLimited(input: {
         set status = 'rate_limited',
             phase = 'rate_limited',
             resolution_mode = 'rate_limited',
-            throttle_reason = 'domain_1_minute_scan_limit',
+            throttle_reason = $4,
             retry_after_seconds = $2,
             scan_id = coalesce($3, scan_id),
             completed_at = coalesce(completed_at, now()),
             elapsed_seconds = greatest(0, extract(epoch from (now() - requested_at))::int)
       where public_id = $1`,
-    [input.pulseRequestId, input.retryAfterSeconds, input.scanId ?? null]
+    [input.pulseRequestId, input.retryAfterSeconds, input.scanId ?? null, input.throttleReason ?? "domain_1_minute_scan_limit"]
+  );
+}
+
+export async function updatePulseRequestFailed(input: {
+  errorCode: string;
+  errorMessage: string;
+  pulseRequestId: string;
+  resolutionMode?: string;
+}) {
+  await ensurePulseTables();
+  await query(
+    `update pulse_requests
+        set status = 'failed',
+            phase = 'failed',
+            resolution_mode = coalesce($4, 'failed_before_scan_creation'),
+            error_code = $2,
+            error_message = $3,
+            completed_at = coalesce(completed_at, now()),
+            elapsed_seconds = greatest(0, extract(epoch from (now() - requested_at))::int)
+      where public_id = $1`,
+    [input.pulseRequestId, input.errorCode, input.errorMessage.slice(0, 1_000), input.resolutionMode ?? null]
   );
 }
 
@@ -421,7 +444,7 @@ export async function claimAnonymousScanDailyQuota(input: {
   const requesterKey = anonymousScanQuotaKey(input.ipHash);
   const claimed = await queryOne<{ scan_count: number | string }>(
     `insert into anonymous_scan_daily_quotas (requester_key, window_date, scan_count, last_scan_at, updated_at)
-     values ($1, timezone('utc', now())::date, 1, now(), now())
+     values ($1, (now() at time zone 'utc')::date, 1, now(), now())
      on conflict (requester_key, window_date)
      do update set
        scan_count = anonymous_scan_daily_quotas.scan_count + 1,
@@ -453,7 +476,7 @@ export async function getAnonymousScanDailyQuotaState(input: {
     `select scan_count
        from anonymous_scan_daily_quotas
       where requester_key = $1
-        and window_date = timezone('utc', now())::date`,
+        and window_date = (now() at time zone 'utc')::date`,
     [requesterKey],
     { readOnly: true }
   );
