@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/scans/scan-from-icons";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type AdminScansPageProps = {
-  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string }>;
+  searchParams?: Promise<{ email?: string; page?: string; perPage?: string; q?: string; status?: string }>;
 };
 
 const statuses = ["any", "no_go", "failed", "running", "queued", "limited", "completed"] as const;
@@ -75,10 +76,11 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
   const currentPage = normalizePage(resolvedSearchParams.page);
   const pageSize = normalizePageSize(resolvedSearchParams.perPage);
   const activeQuery = resolvedSearchParams.q?.trim().slice(0, 160) ?? "";
+  const activeEmail = resolvedSearchParams.email?.trim().slice(0, 160) ?? "";
   const activeStatus = normalizeStatus(resolvedSearchParams.status);
-  const hasFilters = Boolean(activeQuery) || activeStatus !== "any";
+  const hasFilters = Boolean(activeQuery) || Boolean(activeEmail) || activeStatus !== "any";
   const scanMetrics = await withServerTiming("app.admin.scans.metrics", () => getAdminScanOverviewMetrics());
-  const filteredScans = await withServerTiming("app.admin.scans.list", () => listAdminScans(hasFilters ? 25_000 : pageSize, hasFilters ? 0 : (currentPage - 1) * pageSize, { query: activeQuery || null, status: activeStatus }));
+  const filteredScans = await withServerTiming("app.admin.scans.list", () => listAdminScans(hasFilters ? 25_000 : pageSize, hasFilters ? 0 : (currentPage - 1) * pageSize, { email: activeEmail || null, query: activeQuery || null, status: activeStatus }));
   const totalCount = hasFilters ? filteredScans.length : scanMetrics.totalScans;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const normalizedPage = Math.min(currentPage, totalPages);
@@ -102,8 +104,10 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
         <AdminScansAutoRefresh hasActiveScans={hasActiveScans} />
         <form className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2" method="get">
           <input aria-label="Search scans" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Domain, scan, requester, IP" />
+          <input aria-label="Filter scans by user email" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeEmail} name="email" placeholder="User email" />
           <select aria-label="Filter scans by status" className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeStatus} name="status">{statuses.map((status) => <option key={status} value={status}>{status === "any" ? "Any status" : status.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</select>
           <button className="h-10 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white" type="submit">Filter</button>
+          {hasFilters ? <Link className="inline-flex h-10 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700" href="/app/admin/scans">Clear</Link> : null}
         </form>
         <PaginationControls
           basePath="/app/admin/scans"
@@ -113,6 +117,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
           pageSize={pageSize}
           totalCount={totalCount}
           visibleCount={scans.length}
+          searchParams={{ email: activeEmail, q: activeQuery, status: activeStatus }}
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
           <table className="min-w-[1535px] table-fixed text-left text-xs">

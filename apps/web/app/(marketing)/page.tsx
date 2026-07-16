@@ -165,7 +165,7 @@ export default async function MarketingHomePage() {
           <Image alt="" className="object-cover object-[62%_center]" fill priority sizes="100vw" src="/marketing/hero/futuristic-tech-shield-and-network-fast.jpg" />
         </div>
         <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(1,10,27,0.06)_0%,rgba(1,10,27,0.02)_48%,rgba(1,10,27,0.12)_100%)]" aria-hidden="true" />
-        <div className="relative -top-5 mx-auto grid min-h-[595px] max-w-[1360px] gap-12 px-6 py-14 sm:py-20 lg:grid-cols-[0.98fr_1.02fr] lg:items-center lg:px-12 lg:py-16">
+        <div className="relative -top-5 mx-auto grid min-h-[595px] max-w-6xl gap-12 px-6 py-14 sm:py-20 lg:grid-cols-[minmax(0,650px)_minmax(0,1fr)] lg:items-center lg:gap-8 lg:py-16">
           <div className="relative z-20 max-w-[680px] space-y-8 lg:-translate-y-1">
             <h1 className="text-[2rem] font-bold leading-[1.08] tracking-[-0.035em] text-white sm:text-5xl lg:text-[3.5rem]">
               <span className="block whitespace-nowrap">See what websites <span className="text-[#178cff]">reveal</span></span>
@@ -228,7 +228,7 @@ export default async function MarketingHomePage() {
             </div>
           </div>
 
-          <div className="relative z-10 flex items-center justify-center lg:-mr-8 lg:-translate-y-3 lg:justify-end" aria-hidden="true">
+          <div className="relative z-10 flex items-center justify-center lg:-mr-24 lg:-translate-y-3 lg:justify-end" aria-hidden="true">
             <Image alt="" className="h-auto w-full max-w-[476px] -translate-x-[15px] blur-[0.85px] opacity-[0.51] mix-blend-screen drop-shadow-[0_32px_45px_rgba(0,0,0,0.35)]" height={1190} sizes="(min-width: 1024px) 36vw, 92vw" src="/marketing/hero/scan-report-dashboard-with-privacy-details.jpg" width={1438} />
           </div>
         </div>

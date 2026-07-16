@@ -59,11 +59,13 @@ export async function sendContactSalesAction(
   }
 
   const gmailConfig = getGmailConfig();
-  const toEmail = "support@certscore.ai";
+  const toEmail = process.env.CONTACT_SALES_TO_EMAIL?.trim() ||
+    process.env.FEEDBACK_TO_EMAIL?.trim() ||
+    "support@certscore.ai";
 
   if (!gmailConfig) {
     return {
-      error: "Contact sales email is not configured yet. Add GMAIL_SMTP_USER and GMAIL_SMTP_APP_PASSWORD to enable sending."
+      error: "We couldn't send your message right now. Please email support@certscore.ai or try again shortly."
     };
   }
 
@@ -89,8 +91,13 @@ export async function sendContactSalesAction(
         `Sent from: ${gmailConfig.appUrl}/contact-sales`
       ].join("\n")
     });
-  } catch {
-    return { error: "Contact request could not be sent. Please verify the Gmail sender and app password." };
+  } catch (error) {
+    console.error("Contact request email delivery failed", {
+      code: typeof error === "object" && error !== null && "code" in error ? String(error.code) : "unknown",
+      command: typeof error === "object" && error !== null && "command" in error ? String(error.command) : "unknown",
+      responseCode: typeof error === "object" && error !== null && "responseCode" in error ? Number(error.responseCode) : null
+    });
+    return { error: "We couldn't send your message right now. Please email support@certscore.ai or try again shortly." };
   }
 
   if (requestType === "monitor-site") {

@@ -29,6 +29,7 @@ import {
   LOCAL_V2_DAG_LAMBDA_AWS_REGION,
   isLocalV2DagLambdaAwsRegion,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  LOCAL_V2_DAG_WC01_PROJECTION_VERSION,
   shouldUseLocalV2DagScanTool,
   type LocalV2DagScanProfile
 } from "./local-v2-dag-scan-config";
@@ -1594,15 +1595,19 @@ function browserApiProbeInstalled(bundle: CanonicalEvidenceBundle) {
 function summarizeFingerprintingEvidence(bundle: CanonicalEvidenceBundle) {
   const rows = browserApiAccessRows(bundle);
   const apiProbeRetained = browserApiProbeInstalled(bundle) || rows.length > 0;
+  // Browser API access is inventory. Promotion requires a separate typed
+  // transmission, identifier-linkage, known-library, or device-payload signal.
+  const strongCorroboratorObserved = false;
   return {
     apiProbeRetained,
     artifactCount: rows.length,
     coverageRetained: apiProbeRetained,
     fingerprintAttributeCategories: uniqueStrings(rows.flatMap((row) => row.fingerprintAttributeCategories)),
-    fingerprintingObserved: rows.length > 0,
+    fingerprintingObserved: strongCorroboratorObserved,
     highEntropySignals: uniqueStrings(rows.flatMap((row) => row.highEntropySignals)).slice(0, 12),
     hosts: uniqueStrings(rows.map((row) => row.host)),
-    preConsentObserved: rows.some((row) => row.preConsent)
+    preConsentObserved: strongCorroboratorObserved && rows.some((row) => row.preConsent),
+    strongCorroboratorObserved
   };
 }
 
@@ -1666,7 +1671,7 @@ export function summarizePolicySurfaces(
     privacySurfaces.filter((row) => !isGenericThirdPartyPrivacySurface(row, rootDomain))
   );
   const text = article13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
-  const policyTextQuality = assessRetainedPolicyTextQuality(text);
+  const policyTextQuality = assessRetainedPolicyTextQuality(text, { multilingual: true });
   const gdprTransparencyPolicyTextQuality = gdprTransparencyProductionEvidenceEnabled
     ? assessRetainedPolicyTextQuality(text, { multilingual: true })
     : policyTextQuality;
@@ -1894,7 +1899,7 @@ function buildPolicyTextExtractionHealth(
   const hasBlockedSurface = article13Surfaces.some((row) =>
     row.surface.fetchable === false || row.surface.httpStatus === 401 || row.surface.httpStatus === 403 || row.surface.httpStatus === 429
   );
-  const textQuality = assessRetainedPolicyTextQuality(text);
+  const textQuality = assessRetainedPolicyTextQuality(text, { multilingual: true });
   const policyTextExtractionStatus =
     !policySurfaceObserved
       ? "not_attempted"
@@ -2682,7 +2687,6 @@ function buildMaterializedLocalV2Detail(
       .sort((left, right) => left - right)
   );
   const consentSurfaceLikelyPresent = Boolean(
-    cmpVendorName ||
     bundle.derivedRuntimeSignals?.consentBannerLikelyPresent === true ||
     firstLayerConsentControlInventoryRetained ||
     retainedConsentSurfaceObservations.length > 0
@@ -2789,21 +2793,13 @@ function buildMaterializedLocalV2Detail(
     bundle.runtimeCoverage?.observationCounts.thirdPartyRequests ?? 0,
     thirdPartyRequests.length
   );
-  const cookiesBeforeConsentCount = Math.max(
-    bundle.runtimeCoverage?.observationCounts.cookiesBeforeConsent ?? 0,
-    preconsentCookies.length
-  );
+  // Use one stable report definition: unique retained cookie names observed
+  // before consent. Raw write-event totals remain available in evidence.
+  const cookiesBeforeConsentCount = preconsentCookieNames.length;
   const vendorCategoryCounts = reportableVendorRows.reduce<Record<string, number>>((counts, vendor) => {
     counts[vendor.vendorCategory] = (counts[vendor.vendorCategory] ?? 0) + 1;
     return counts;
   }, {});
-  const score =
-    !runtimeCountsRetained
-      ? 55
-      :
-    thirdPartyRequestCount > 0 || cookiesBeforeConsentCount > 0
-      ? Math.max(35, Math.min(72, 82 - Math.min(24, Math.round(thirdPartyRequestCount / 8)) - Math.min(18, cookiesBeforeConsentCount)))
-      : 88;
   const requestPurposeRows = (preconsentRequests
     .map((event) => {
       const matchedVendor = reportableVendorRows.find((vendor) => vendor.matchedEventIds.has(event.eventId)) ??
@@ -2840,6 +2836,24 @@ function buildMaterializedLocalV2Detail(
     })
     .filter((row) => row !== null) as Array<Record<string, unknown>>);
   const boundedRequestPurposeRows = selectBoundedPreconsentRequestPurposeRows(requestPurposeRows, 25);
+  const promotionGradeRequestPurposeRows = boundedRequestPurposeRows.filter(isPromotionGradePreconsentRequestRow);
+  const promotionGradePreconsentRequestUrls = uniqueStrings(
+    promotionGradeRequestPurposeRows.map((row) => firstString(row.requestUrl)).filter(Boolean)
+  );
+  const promotionGradeVendorNames = uniqueStrings(
+    promotionGradeRequestPurposeRows.map((row) => firstString(row.vendor, row.vendorName)).filter(Boolean)
+  );
+  const hasPromotionGradePreconsentTracking = promotionGradeRequestPurposeRows.length > 0;
+  const promotionGradePreconsentCookieNames = uniqueStrings(preconsentCookies
+    .filter((event) => event.cookiePurpose === "analytics" || event.cookiePurpose === "advertising")
+    .map((event) => cookieName(event)));
+  const hasPromotionGradePreconsentCookies = promotionGradePreconsentCookieNames.length > 0;
+  const score =
+    !runtimeCountsRetained
+      ? null
+      : hasPromotionGradePreconsentTracking || hasPromotionGradePreconsentCookies
+        ? Math.max(35, Math.min(72, 82 - Math.min(24, promotionGradeRequestPurposeRows.length) - Math.min(18, promotionGradePreconsentCookieNames.length)))
+        : 88;
   const embeddedContentSummary = summarizeEmbeddedContentEvidence(preconsentIframeEvents, preconsentRequests);
   const fingerprintingRuntimeEvidence = browserApiAccessRows(bundle);
   const fingerprintingEvidenceSummary = summarizeFingerprintingEvidence(bundle);
@@ -2954,6 +2968,12 @@ function buildMaterializedLocalV2Detail(
     ...(scanRecord.runtimeArtifacts ?? {}),
     ...timingArtifacts,
     local_v2_dag_scan_core_duration_ms: durationMsFromTimestamps(bundle.startedAt, bundle.completedAt),
+    wc01ProductionProjection: {
+      approved: true,
+      artifactBoundaryPreserved: true,
+      pipeline: "normalized_concern_policy_unified_finding",
+      version: LOCAL_V2_DAG_WC01_PROJECTION_VERSION
+    },
     ...(localV2NoGo ? {
       scanNoGoAssessment: localV2NoGo.scanNoGoAssessment,
       scan_no_go_assessment: localV2NoGo.scanNoGoAssessment,
@@ -2961,9 +2981,9 @@ function buildMaterializedLocalV2Detail(
       visual_access_review: localV2NoGo.visualAccessReview
     } : {}),
     consent_audit_completed: true,
-    consent_baseline_tracker_evidence_urls: runtimeEvidenceReportable ? preconsentRequestUrls : [],
-    consent_baseline_tracker_vendor_names: runtimeEvidenceReportable ? uniqueStrings(reportableVendorRows.map((vendor) => vendor.vendorName)) : [],
-    consent_preconsent_violation_count: runtimeEvidenceReportable ? Math.max(preconsentRequests.length, reportableVendorRows.length) : 0,
+    consent_baseline_tracker_evidence_urls: runtimeEvidenceReportable ? promotionGradePreconsentRequestUrls : [],
+    consent_baseline_tracker_vendor_names: runtimeEvidenceReportable ? promotionGradeVendorNames : [],
+    consent_preconsent_violation_count: runtimeEvidenceReportable ? promotionGradeRequestPurposeRows.length : 0,
     collection_surface_count: collectionSurfaceSummary.collectionSurfaceCount,
     collection_surface_observed: collectionSurfaceSummary.collectionSurfacesObserved,
     collectionSurfaceSummary,
@@ -3080,6 +3100,8 @@ function buildMaterializedLocalV2Detail(
     runtime_counts_retained: effectiveRuntimeCountsRetained,
     runtimeLimitationKeys: effectiveRuntimeLimitationKeys,
     runtime_limitation_keys: effectiveRuntimeLimitationKeys,
+    scoreConfidence: score === null ? "withheld_incomplete_runtime_coverage" : "supported_by_retained_runtime_evidence",
+    score_confidence: score === null ? "withheld_incomplete_runtime_coverage" : "supported_by_retained_runtime_evidence",
     visualCaptureFailureReason: visualCapture.failureReason,
     visualCaptureMethod: visualCapture.captureMethod,
     visualCaptureNotes: visualCapture.notes,
@@ -3125,8 +3147,8 @@ function buildMaterializedLocalV2Detail(
   const snapshot = {
     ...(scanRecord.snapshot ?? {}),
     certscore_overall: localV2NoGo ? null : score,
-    consent_maturity_score: localV2NoGo ? null : Math.max(0, score - 5),
-    consent_score: localV2NoGo ? null : Math.max(0, score - 10),
+    consent_maturity_score: localV2NoGo || score === null ? null : Math.max(0, score - 5),
+    consent_score: localV2NoGo || score === null ? null : Math.max(0, score - 10),
     cookie_banner_present: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
     cookie_count_total: runtimeEvidenceReportable ? cookieNames.length : 0,
     cookies_before_consent_count: runtimeEvidenceReportable ? cookiesBeforeConsentCount : 0,
@@ -3140,9 +3162,10 @@ function buildMaterializedLocalV2Detail(
     legal_coverage_score: localV2NoGo ? null : score,
     pages_scanned: localV2NoGo ? 0 : Math.max(scanRecord.scan.pagesScanned, 1),
     partial_scan: true,
-    preconsent_tracking_detected: runtimeEvidenceReportable ? bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0 : false,
+    preconsent_tracking_detected: runtimeEvidenceReportable ? hasPromotionGradePreconsentTracking : false,
     privacy_policy_present: Boolean(privacySurface),
     privacy_score: localV2NoGo ? null : score,
+    score_confidence: score === null ? "withheld_incomplete_runtime_coverage" : "supported_by_retained_runtime_evidence",
     site_language_primary: getLocalV2PrimaryLanguage(bundle),
     registered_domain: rootDomain,
     runtime_counts_retained: effectiveRuntimeCountsRetained,
@@ -3152,9 +3175,9 @@ function buildMaterializedLocalV2Detail(
     third_party_cookie_set_before_consent: runtimeEvidenceReportable ? preconsentCookies.length > 0 : false,
     third_party_request_count: runtimeEvidenceReportable ? thirdPartyRequestCount : 0,
     third_party_script_domain_count: runtimeEvidenceReportable ? thirdPartyDomains.length : 0,
-    tracker_count_total: runtimeEvidenceReportable ? Math.max(reportableVendorRows.length, thirdPartyDomains.length) : 0,
-    tracker_vendor_count: runtimeEvidenceReportable ? reportableVendorRows.length : 0,
-    tracking_before_consent_detected: runtimeEvidenceReportable ? bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0 : false,
+    tracker_count_total: runtimeEvidenceReportable ? promotionGradeRequestPurposeRows.length : 0,
+    tracker_vendor_count: runtimeEvidenceReportable ? promotionGradeVendorNames.length : 0,
+    tracking_before_consent_detected: runtimeEvidenceReportable ? hasPromotionGradePreconsentTracking : false,
     verified_public_surfaces_count: localV2NoGo ? 0 : policySurfaces.length,
     ...(consentRuntimeEvidenceReportable && cmpVendorName ? { cmp_vendor_name: cmpVendorName } : {}),
     ...(cookieSurface ? { cookie_policy_present: true } : {}),
@@ -3173,7 +3196,7 @@ function buildMaterializedLocalV2Detail(
     policy_mentions: (surface.observedTopics ?? []).map((topic) => ({ topic })),
     policy_summary_short: surface.textExcerpt ?? `${policySurfaceLabel(surface.surfaceType)} retained by local v2 DAG scan.`
   }));
-  const signalRows = (runtimeEvidenceReportable ? [
+  const signalRows = (runtimeEvidenceReportable && hasPromotionGradePreconsentTracking ? [
     {
       category: "privacy",
       key: "privacy.preconsent_tracking_detected",
@@ -3210,7 +3233,9 @@ function buildMaterializedLocalV2Detail(
     ...baseSignals,
     ...signalRows.filter((signal) => !existingSignalKeys.has(signal.key))
   ];
-  const preconsentViolations = runtimeEvidenceReportable ? reportableVendorRows.map((vendor) => ({
+  const preconsentViolations = runtimeEvidenceReportable ? reportableVendorRows
+    .filter((vendor) => promotionGradeVendorNames.includes(vendor.vendorName))
+    .map((vendor) => ({
     collectionEndpointType: vendor.collectionEndpointType,
     confidence: vendor.confidence,
     detectionSource: vendor.detectionSource,

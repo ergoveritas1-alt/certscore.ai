@@ -1353,6 +1353,9 @@ function hasFingerprintingRuntimeCoverage(input: GdprEprivacyCoveragePolicyInput
 
 function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const consentSurfaceInspection =
+    getObject(input.runtimeArtifacts, ["consentSurfaceInspection", "consent_surface_inspection"]) ??
+    getObject(hybridRuntimeEvidence, ["consentSurfaceInspection", "consent_surface_inspection"]);
   const consentControlLifecycle = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
   const consentUiPathEvidence = getObject(hybridRuntimeEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
   const rejectPathEvidence = getObject(input.runtimeArtifacts, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
@@ -1387,6 +1390,28 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
       visibleChoiceLabels.length > 0 ||
       layerInspected === "first_layer"
     );
+
+  const completeNoSurfaceObservation =
+    getString(consentSurfaceInspection, ["outcome"]) === "no_surface_observed_complete_coverage" &&
+    getString(consentSurfaceInspection, ["coverageStatus", "coverage_status"]) === "complete" &&
+    getBoolean(consentSurfaceInspection, ["inspectionCompleted", "inspection_completed"]) === true &&
+    getBoolean(consentSurfaceInspection, ["inspectedPreInteraction", "inspected_pre_interaction"]) === true;
+
+  if (completeNoSurfaceObservation) {
+    return makeOutcome(
+      "consent_surface_observed",
+      "Not observed",
+      "The completed pre-interaction consent-surface inspection did not observe a GDPR/ePrivacy consent surface in the tested context.",
+      ["Evidence: complete pre-interaction consent-surface inspection"],
+      {
+        retainedEvidence: {
+          consentSurfaceInspection,
+          consentSurfaceObserved: false,
+          gdprEprivacyConsentSurfaceObserved: false
+        }
+      }
+    );
+  }
 
   if (noticeGateEvidence.gateObserved) {
     return makeOutcome(
@@ -7554,9 +7579,12 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
     getBoolean(input.snapshot, ["session_replay_tool_detected", "session_replay_detected"]) === true ||
     (sessionReplayCount !== null && sessionReplayCount > 0) ||
     sessionReplayVendors.length > 0;
+  const strongFingerprintingCorroboratorObserved =
+    getBoolean(browserDeviceEntropyEvidence, ["strongCorroboratorObserved", "strong_corroborator_observed"]) === true;
   const fingerprintingObserved =
-    getBoolean(input.snapshot, ["fingerprinting_or_identity_vendor_detected", "fingerprinting_detected"]) === true ||
-    Boolean(browserDeviceEntropyEvidence);
+    getBoolean(input.snapshot, ["fingerprinting_or_identity_vendor_detected"]) === true ||
+    strongFingerprintingCorroboratorObserved;
+  const contextualBrowserApiEvidenceObserved = Boolean(browserDeviceEntropyEvidence) && !fingerprintingObserved;
 
   if (sessionReplayPostAcceptObserved || (sessionReplayObserved && sessionReplayEvidence)) {
     const sessionReplayTimingRef = typeof sessionReplayFirstSeenMs === "number"
@@ -7601,19 +7629,19 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
     );
   }
 
-  if (!sessionReplayObserved && fingerprintingObserved) {
+  if (!sessionReplayObserved && contextualBrowserApiEvidenceObserved) {
     return makeOutcome(
       "session_replay_fingerprinting_review",
-      "Review signal",
-      "Browser/device entropy review signal. Retained evidence showed browser or device entropy access, but no session replay vendor, entropy transmission, identifier linkage, known fingerprinting library, or device-data-like request payload was retained.",
+      "Insufficient evidence",
+      "Browser API access was retained as context, but no session replay vendor, entropy transmission, identifier linkage, known fingerprinting library, or device-data-like request payload was retained. This contextual observation is not promoted as a fingerprinting finding.",
       [
-        "Browser/device entropy review signal",
+        "Context: browser API access retained",
         ...getStringArray(browserDeviceEntropyEvidence, ["hosts"]).map((host) => `Observed host: ${host}`).slice(0, 3)
       ],
       {
         retainedEvidence: {
           browserDeviceEntropyEvidence,
-          fingerprintingObserved: true,
+          fingerprintingObserved: false,
           sessionReplayEvidence,
           sessionReplayObserved: false
         }
@@ -7703,9 +7731,11 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
 function deriveDeviceFingerprintingSignalOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const browserDeviceEntropyEvidence = buildBrowserDeviceEntropyReviewEvidence(input);
+  const strongFingerprintingCorroboratorObserved =
+    getBoolean(browserDeviceEntropyEvidence, ["strongCorroboratorObserved", "strong_corroborator_observed"]) === true;
   const fingerprintingObserved =
-    getBoolean(input.snapshot, ["fingerprinting_or_identity_vendor_detected", "fingerprinting_detected"]) === true ||
-    Boolean(browserDeviceEntropyEvidence);
+    getBoolean(input.snapshot, ["fingerprinting_or_identity_vendor_detected"]) === true ||
+    strongFingerprintingCorroboratorObserved;
 
   if (fingerprintingObserved) {
     const securityBotTelemetryObserved = getBoolean(browserDeviceEntropyEvidence, ["securityBotTelemetryObserved", "security_bot_telemetry_observed"]) === true;
@@ -7738,6 +7768,27 @@ function deriveDeviceFingerprintingSignalOutcome(input: GdprEprivacyCoveragePoli
           browserDeviceEntropyEvidence,
           fingerprintingObserved: true,
           securityBotTelemetryObserved
+        }
+      }
+    );
+  }
+
+  if (browserDeviceEntropyEvidence) {
+    return makeOutcome(
+      "device_identification_fingerprinting_signal_observed",
+      "Insufficient evidence",
+      "Browser API access was retained as contextual evidence, but no transmission, identifier linkage, known fingerprinting library, or device-data-like request corroborated a fingerprinting signal.",
+      [
+        "Context: browser API access retained",
+        ...getStringArray(browserDeviceEntropyEvidence, ["browserApiSignals", "browser_api_signals", "highEntropySignals", "high_entropy_signals"])
+          .map((signal) => `Browser API access: ${signal}`)
+          .slice(0, 4)
+      ],
+      {
+        retainedEvidence: {
+          browserDeviceEntropyEvidence,
+          fingerprintingObserved: false,
+          promotionEligible: false
         }
       }
     );

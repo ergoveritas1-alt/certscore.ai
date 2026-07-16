@@ -13,7 +13,7 @@ export const revalidate = 0;
 const statuses = ["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited", "no_go"] as const;
 
 type AdminPulsePageProps = {
-  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string }>;
+  searchParams?: Promise<{ email?: string; page?: string; perPage?: string; q?: string; status?: string }>;
 };
 
 function normalizeStatus(value: string | undefined): AdminPulseRequestStatus | null {
@@ -74,11 +74,12 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const resolved = searchParams ? await searchParams : {};
   const activeStatus = normalizeStatus(resolved.status);
   const activeQuery = normalizeQuery(resolved.q);
+  const activeEmail = normalizeQuery(resolved.email);
   const pageSize = normalizePageSize(resolved.perPage);
   const page = normalizePage(resolved.page);
   const [counts, requests] = await withServerTiming("app.admin.api_activity", () => Promise.all([
     getAdminPulseOverviewCounts(),
-    listAdminPulseRequests({ limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus })
+    listAdminPulseRequests({ email: activeEmail, limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus })
   ]));
 
   return (
@@ -97,11 +98,13 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
       <CardContent className="space-y-3 pt-0">
         <form action="/app/admin/pulse" className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-2">
           <input className="min-h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs" defaultValue={activeQuery ?? ""} name="q" placeholder="Domain, job, request, scan" />
+          <input aria-label="Filter API activity by user email" className="min-h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs" defaultValue={activeEmail ?? ""} name="email" placeholder="User email" />
           <select className="min-h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs" defaultValue={activeStatus ?? ""} name="status">
             <option value="">Any status</option>
             {statuses.map((status) => <option key={status} value={status}>{formatLabel(status)}</option>)}
           </select>
           <Button size="sm" type="submit" variant="secondary">Filter</Button>
+          {activeEmail || activeQuery || activeStatus ? <Link className="inline-flex min-h-8 items-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700" href="/app/admin/pulse">Clear</Link> : null}
         </form>
 
         <PaginationControls
@@ -110,7 +113,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           itemLabel="API requests"
           page={page}
           pageSize={pageSize}
-          searchParams={{ q: activeQuery, status: activeStatus }}
+          searchParams={{ email: activeEmail, q: activeQuery, status: activeStatus }}
           visibleCount={requests.length}
         />
 

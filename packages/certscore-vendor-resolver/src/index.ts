@@ -6,7 +6,7 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-14-wave15-publisher-infrastructure";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-16-wave16-leadfeeder";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -146,6 +146,21 @@ interface VendorRule {
 }
 
 const rules: VendorRule[] = [
+  {
+    entity: "Dealfront Group GmbH",
+    vendor: "Leadfeeder",
+    product: "Leadfeeder Website Visitor Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["analytics", "b2b_visitor_identification", "audience_measurement"],
+    confidence: 0.97,
+    hostPatterns: [/^(?:sc|tr)\.lfeeder\.com$/i],
+    urlPatterns: [
+      /^https:\/\/sc\.lfeeder\.com\/lftracker[^/]*\.js(?:[?#]|$)/i,
+      /^https:\/\/tr\.lfeeder\.com\/(?:[?#]|$)/i,
+    ],
+    cookiePatterns: [/^_lfa(?:_.*)?$/i],
+    basisLabel: "leadfeeder_visitor_analytics",
+  },
   {
     entity: "Axel Springer SE",
     vendor: "Axel Springer",

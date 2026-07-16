@@ -33,6 +33,7 @@ export type AdminScanRequestRow = {
   public_id: string;
   request_channel: string | null;
   requester_name: string | null;
+  requester_email: string | null;
   request_context: Record<string, unknown> | null;
   requested_at: string;
   requested_by: Record<string, unknown> | null;
@@ -57,6 +58,7 @@ export type AdminPulseScanAttributionRow = {
   request_context: Record<string, unknown> | null;
   requested_at: string;
   requester_name: string | null;
+  requester_email: string | null;
   resolution_mode: string | null;
   scan_id: string;
 };
@@ -329,7 +331,7 @@ export type AdminBlockedRunTelemetryRow = {
   scan_timestamp?: string | null;
 };
 
-export async function loadAdminScanListPageData(limit: number, offset = 0): Promise<{
+export async function loadAdminScanListPageData(limit: number, offset = 0, requesterEmail: string | null = null): Promise<{
   diagnosticEvents: AdminScanDiagnosticEventRow[];
   domains: AdminScanDomainRow[];
   organizations: AdminScanOrganizationRow[];
@@ -350,9 +352,25 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
               order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc
               limit 1) as page_language
        from scans
+      where ($3::text is null or exists (
+              select 1
+                from public.scan_requests sr
+                left join public.users request_app_user on request_app_user.id::text = sr.requested_by ->> 'userId'
+                left join public.better_auth_users request_auth_user on request_auth_user.id = sr.requested_by ->> 'userId'
+               where coalesce(sr.fulfilled_by_scan_id, sr.scan_id) = scans.id
+                 and lower(coalesce(request_app_user.email, request_auth_user.email, '')) like '%' || lower($3) || '%'
+            ) or exists (
+              select 1
+                from public.pulse_requests pr
+                left join public.integration_api_keys request_api_key on request_api_key.public_id = pr.requested_by ->> 'apiKeyId'
+                left join public.users request_pulse_app_user on request_pulse_app_user.id::text = coalesce(pr.requested_by ->> 'userId', request_api_key.owner_user_id::text)
+                left join public.better_auth_users request_pulse_auth_user on request_pulse_auth_user.id = pr.requested_by ->> 'userId'
+               where pr.scan_id = scans.id
+                 and lower(coalesce(request_pulse_app_user.email, request_pulse_auth_user.email, request_api_key.created_by, '')) like '%' || lower($3) || '%'
+            ))
       order by coalesce(completed_at, started_at, created_at) desc, created_at desc
       limit $1 offset $2`,
-    [limit, offset],
+    [limit, offset, requesterEmail],
     { readOnly: true }
   );
 
@@ -477,13 +495,14 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
   };
 }
 
-export async function loadAdminScanRequestRows(limit: number): Promise<AdminScanRequestRow[]> {
+export async function loadAdminScanRequestRows(limit: number, requesterEmail: string | null = null): Promise<AdminScanRequestRow[]> {
   await ensureScanRequestLogTable();
   const result = await query<AdminScanRequestRow>(
     `select sr.public_id,
             sr.request_type,
             sr.request_channel,
             coalesce(app_user.email, auth_user.email) as requester_name,
+            coalesce(app_user.email, auth_user.email) as requester_email,
             sr.requested_url,
             sr.normalized_url,
             sr.normalized_domain,
@@ -512,16 +531,17 @@ export async function loadAdminScanRequestRows(limit: number): Promise<AdminScan
        left join public.organizations org on org.id = sr.organization_id
        left join public.users app_user on app_user.id::text = sr.requested_by ->> 'userId'
        left join public.better_auth_users auth_user on auth_user.id = sr.requested_by ->> 'userId'
+      where ($2::text is null or lower(coalesce(app_user.email, auth_user.email, '')) like '%' || lower($2) || '%')
       order by sr.requested_at desc
       limit $1`,
-    [limit],
+    [limit, requesterEmail],
     { readOnly: true }
   );
 
   return result.rows;
 }
 
-export async function loadAdminPulseScanAttributionRows(scanIds: string[]): Promise<AdminPulseScanAttributionRow[]> {
+export async function loadAdminPulseScanAttributionRows(scanIds: string[], requesterEmail: string | null = null): Promise<AdminPulseScanAttributionRow[]> {
   if (scanIds.length === 0) {
     return [];
   }
@@ -536,6 +556,7 @@ export async function loadAdminPulseScanAttributionRows(scanIds: string[]): Prom
             pr.normalized_url,
             pr.resolution_mode,
             coalesce(app_user.email, auth_user.email, api_key.created_by) as requester_name
+            ,coalesce(app_user.email, auth_user.email, api_key.created_by) as requester_email
        from public.pulse_requests pr
        left join public.integration_api_keys api_key
          on api_key.public_id = pr.requested_by ->> 'apiKeyId'
@@ -544,10 +565,11 @@ export async function loadAdminPulseScanAttributionRows(scanIds: string[]): Prom
        left join public.better_auth_users auth_user
          on auth_user.id = pr.requested_by ->> 'userId'
       where pr.scan_id = any($1::uuid[])
+        and ($2::text is null or lower(coalesce(app_user.email, auth_user.email, api_key.created_by, '')) like '%' || lower($2) || '%')
       order by pr.scan_id,
                case when pr.resolution_mode in ('created_new_scan', 'queued_new_scan') then 0 else 1 end,
                pr.requested_at asc`,
-    [scanIds],
+    [scanIds, requesterEmail],
     { readOnly: true }
   );
 

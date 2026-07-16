@@ -29,7 +29,11 @@ const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 4;
 const POLICY_RENDERED_FETCH_CONCURRENCY = 1;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
-const POLICY_CANDIDATE_PROCESSING_TIMEOUT_MS = 8_000;
+// Text resolution for a warmed policy document can legitimately consume most
+// of eight seconds on a large notice. Preserve a bounded publication window so
+// already-fetched evidence is not replaced by `skipped_budget` immediately
+// before its observation is assembled.
+const POLICY_CANDIDATE_PROCESSING_TIMEOUT_MS = 12_000;
 const POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS = 10_000;
 const MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS = 1_000;
 const MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS = 500_000;
@@ -3231,6 +3235,7 @@ const ARTICLE13_SECTION_PROFILES: Array<{
   textPatterns: RegExp[];
   observedPattern: RegExp;
   partialPattern?: RegExp;
+  subjectScope?: "controller";
 }> = [
   {
     disclosureType: "data_retention",
@@ -3260,6 +3265,7 @@ const ARTICLE13_SECTION_PROFILES: Array<{
   },
   {
     disclosureType: "dpo_contact",
+    subjectScope: "controller",
     headingPatterns: [/contact/i, /European requirements/i, /data protection/i],
     textPatterns: [/privacy office/i, /data protection office/i, /data protection officer/i, /\bdpo\b/i, /contact (?:google|us)/i, /questions about this policy/i, /Google LLC/i, /Google Ireland Limited/i],
     observedPattern: /data protection officer|\bdpo\b/i,
@@ -3267,6 +3273,7 @@ const ARTICLE13_SECTION_PROFILES: Array<{
   },
   {
     disclosureType: "controller_contact",
+    subjectScope: "controller",
     headingPatterns: [/contact/i, /European requirements/i, /controller/i],
     textPatterns: [/contact Google/i, /contact us/i, /questions about this policy/i, /privacy office/i, /data protection office/i, /data protection officer/i, /Google LLC/i, /Google Ireland Limited/i],
     observedPattern: /data controller|\bcontroller\b|privacy@|contact (?:us|our privacy team).{0,120}(?:privacy|data protection)/i,
@@ -4425,12 +4432,35 @@ function bestSectionForProfile(
     profile.observedPattern.lastIndex = 0;
     if (profile.partialPattern?.test(section.textExcerpt)) score += 3;
     if (profile.partialPattern) profile.partialPattern.lastIndex = 0;
+    if (profile.subjectScope === "controller") {
+      score += controllerSubjectSectionScore(section);
+    }
     if (section.quality === "strong") score += 1;
     if (score > (best?.score ?? 0)) {
       best = { section, score };
     }
   }
   return best && best.score >= 3 ? best.section : undefined;
+}
+
+function controllerSubjectSectionScore(section: RetainedPolicySection): number {
+  const text = `${section.heading}\n${section.textExcerpt}`.toLowerCase();
+  let sourceHostname: string | null = null;
+  try {
+    sourceHostname = new URL(section.sourceUrl).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    sourceHostname = null;
+  }
+  const firstPartyContactObserved = sourceHostname
+    ? text.includes(`@${sourceHostname}`) || text.includes(`https://${sourceHostname}`) || text.includes(`www.${sourceHostname}`)
+    : false;
+  const externalSubjectFramingObserved =
+    /(?:data protection officer|datenschutzbeauftragte[rsn]?|dpo).{0,160}(?:service provider|platform operator|plattformbetreiber|third party|anbieter|provider)/i.test(text) ||
+    /(?:service provider|platform operator|plattformbetreiber|third party|anbieter|provider).{0,160}(?:data protection officer|datenschutzbeauftragte[rsn]?|dpo)/i.test(text);
+
+  if (firstPartyContactObserved) return 10;
+  if (externalSubjectFramingObserved) return -8;
+  return 0;
 }
 
 function bestSectionExcerptForProfile(

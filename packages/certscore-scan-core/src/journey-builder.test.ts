@@ -668,7 +668,7 @@ test("Google reCAPTCHA endpoint is security support, not tracker journey", () =>
   assert.equal(journeys.some((journey) => journey.journeyType === "tracker"), false);
 });
 
-test("classifies first-party GA, Optanon, and Akamai cookies with nuanced purposes", () => {
+test("classifies first-party GA, Leadfeeder, Optanon, and Akamai cookies with nuanced purposes", () => {
   const ga = cookieEvent({
     eventId: "cookie_ga",
     cookieName: "_ga",
@@ -680,6 +680,14 @@ test("classifies first-party GA, Optanon, and Akamai cookies with nuanced purpos
   const optanon = cookieEvent({
     eventId: "cookie_optanon",
     cookieName: "OptanonConsent",
+    hostname: "example.com",
+    registrableDomain: "example.com",
+    firstParty: true,
+    thirdParty: false,
+  });
+  const leadfeeder = cookieEvent({
+    eventId: "cookie_leadfeeder",
+    cookieName: "_lfa",
     hostname: "example.com",
     registrableDomain: "example.com",
     firstParty: true,
@@ -723,10 +731,11 @@ test("classifies first-party GA, Optanon, and Akamai cookies with nuanced purpos
     }),
   ];
 
-  const classified = classifyCookieEvents([ga, optanon, akamai], vendors);
+  const classified = classifyCookieEvents([ga, leadfeeder, optanon, akamai], vendors);
 
   assert.equal(classified.find((event) => event.cookieName === "_ga")?.cookieParty, "first_party");
   assert.equal(classified.find((event) => event.cookieName === "_ga")?.vendorAssociated, true);
+  assert.equal(classified.find((event) => event.cookieName === "_lfa")?.cookiePurpose, "analytics");
   assert.equal(classified.find((event) => event.cookieName === "OptanonConsent")?.cookiePurpose, "consent_management");
   assert.equal(classified.find((event) => event.cookieName === "akamai_generated_location")?.cookiePurpose, "security");
 

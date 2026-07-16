@@ -1005,7 +1005,7 @@ function classifyKnownCookiePurpose(cookieName: string): CookieEvent["cookiePurp
   if (/^(_abck|bm_sz|ak_bmsc|akaas_|akamai_|__cf_bm)/i.test(cookieName)) {
     return "security";
   }
-  if (/^_ga(?:_.+)?$|^_gid$|^_gat/i.test(cookieName)) {
+  if (/^_ga(?:_.+)?$|^_gid$|^_gat|^_lfa(?:_.*)?$/i.test(cookieName)) {
     return "analytics";
   }
   return "unknown";

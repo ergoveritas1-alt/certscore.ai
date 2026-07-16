@@ -1995,7 +1995,8 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     assert.equal(sessionReplaySummary.preConsentObserved, true);
     assert.deepEqual(sessionReplaySummary.vendors, ["Microsoft Clarity"]);
     assert.equal(fingerprintingSummary.coverageRetained, true);
-    assert.equal(fingerprintingSummary.fingerprintingObserved, true);
+    assert.equal(fingerprintingSummary.fingerprintingObserved, false);
+    assert.equal(fingerprintingSummary.strongCorroboratorObserved, false);
     assert.deepEqual(fingerprintingSummary.highEntropySignals, ["HTMLCanvasElement.toDataURL"]);
     assert.equal(firstLayerConsentChoices.rejectControlObserved, false);
     const requestPurposeRows = hybrid.requestPurposeClassificationConfidence as unknown as Array<Record<string, unknown>>;
@@ -2027,6 +2028,137 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     } else {
       process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
     }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail keeps unknown third-party requests and lone browser API reads out of findings", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/inventory-only-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-07-16T13:44:14.000Z",
+      consentUiObservations: [],
+      cookieEvents: [],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: false,
+        preConsentTrackingObserved: false
+      },
+      modulesRun: [{
+        completedAt: "2026-07-16T13:44:14.000Z",
+        durationMs: 14000,
+        errors: [],
+        evidenceRefs: [],
+        moduleName: "preConsentRuntimeScanner",
+        startedAt: "2026-07-16T13:44:00.000Z",
+        status: "completed",
+        timingBreakdown: [{ label: "browser api probe install", durationMs: 1 }]
+      }],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "unknown_1",
+          eventType: "network_request",
+          evidenceRefs: [],
+          hostname: "mwa.example.digital",
+          requestUrl: "https://mwa.example.digital/app.js",
+          sourceScanner: "pre_consent_runtime",
+          thirdParty: true,
+          timestampMs: 1400,
+          url: "https://mwa.example.digital/app.js"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "unknown_2",
+          eventType: "network_request",
+          evidenceRefs: [],
+          hostname: "mwa.example.digital",
+          requestUrl: "https://mwa.example.digital/config.json",
+          sourceScanner: "pre_consent_runtime",
+          thirdParty: true,
+          timestampMs: 1600,
+          url: "https://mwa.example.digital/config.json"
+        }
+      ],
+      normalizedUrl: "https://example.test/",
+      normalizedVendorObservations: [],
+      policySurfaceObservations: [],
+      runtimeCoverage: {
+        coverageStatus: "complete",
+        fallbackModesUsed: [],
+        limitationKeys: [],
+        notes: [],
+        observationCounts: {
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          networkEvents: 2,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+          thirdPartyRequests: 2
+        },
+        silentEmpty: false
+      },
+      runtimeTimeline: [{
+        consentStateAtTime: "pre_consent",
+        eventId: "browser_api_1",
+        eventType: "browser_api_access",
+        evidenceRefs: [{
+          eventType: "browser_api_access",
+          excerpt: "plugins",
+          label: "Browser API access: Navigator.mimeTypes",
+          refId: "browser_api_1"
+        }],
+        hostname: "example.test",
+        sourceScanner: "pre_consent_runtime",
+        timestampMs: 6400,
+        url: "https://example.test/"
+      }],
+      scanId: "inventory-only-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      startedAt: "2026-07-16T13:44:00.000Z",
+      url: "https://example.test/"
+    }, null, 2)}\n`, "utf8");
+
+    const base = makeScanRecord();
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...base.scan,
+        domainHostname: "example.test",
+        scanConfigJson: {
+          hostname: "example.test",
+          normalizedUrl: "https://example.test/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: { artifactOnly: true, localOnly: true, productionFindingIntegration: false }
+          }
+        }
+      }
+    }));
+
+    assert.equal(detail.snapshot?.preconsent_tracking_detected, false);
+    assert.equal(detail.snapshot?.tracking_before_consent_detected, false);
+    assert.equal(detail.snapshot?.tracker_count_total, 0);
+    assert.equal(detail.runtimeArtifacts?.consent_preconsent_violation_count, 0);
+    assert.deepEqual(detail.runtimeArtifacts?.consent_baseline_tracker_evidence_urls, []);
+    assert.equal(detail.signals.some((signal) => signal.key === "privacy.preconsent_tracking_detected"), false);
+    const fingerprintingSummary = detail.runtimeArtifacts?.fingerprintingEvidenceSummary as Record<string, unknown>;
+    assert.equal(fingerprintingSummary.fingerprintingObserved, false);
+    assert.equal(fingerprintingSummary.artifactCount, 1);
+
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      coverageLimited: false,
+      events: detail.events,
+      runtimeArtifacts: detail.runtimeArtifacts,
+      scanCompleted: true,
+      snapshot: detail.snapshot
+    });
+    assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Insufficient evidence");
+    assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Insufficient evidence");
+  } finally {
+    process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
     await rm(outDir, { recursive: true, force: true });
   }
 });
@@ -3494,7 +3626,11 @@ test("materializeLocalV2DagScanDetail keeps missing reject unconfirmed when runt
 
     assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, true);
     assert.equal(detail.runtimeArtifacts?.consent_surface_observed, true);
-    assert.equal(detail.runtimeArtifacts?.consent_preconsent_violation_count, 1);
+    assert.equal(
+      detail.runtimeArtifacts?.consent_preconsent_violation_count,
+      0,
+      "inventory-only requests must not become pre-consent violations without promotion-grade classification"
+    );
 
     const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
       coverageLimited: false,

@@ -8,7 +8,9 @@ type GmailConfig = {
 
 export function getGmailConfig(): GmailConfig | null {
   const fromEmail = process.env.GMAIL_SMTP_USER?.trim();
-  const appPassword = process.env.GMAIL_SMTP_APP_PASSWORD?.trim();
+  // Google displays app passwords in grouped blocks. Secrets copied with those
+  // spaces are valid credentials once normalized, but fail SMTP AUTH verbatim.
+  const appPassword = process.env.GMAIL_SMTP_APP_PASSWORD?.replace(/\s+/g, "");
 
   if (!fromEmail || !appPassword || appPassword === "your-gmail-app-password") {
     return null;

@@ -683,6 +683,35 @@ test("resolves Google Analytics from collection endpoint and cookie", () => {
   );
 });
 
+test("resolves Leadfeeder collection endpoints and its first-party identifier cookie", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "script",
+      url: "https://sc.lfeeder.com/lftracker_v1_kn9Eq4R7l6a8RlvP.js",
+      hostname: "sc.lfeeder.com",
+      consentStateAtTime: "pre_consent",
+    },
+    {
+      type: "request",
+      url: "https://tr.lfeeder.com/?event=tracking-event&consentLevel=none",
+      hostname: "tr.lfeeder.com",
+      consentStateAtTime: "pre_consent",
+    },
+    {
+      type: "cookie",
+      cookieName: "_lfa",
+      hostname: "example.com",
+      consentStateAtTime: "pre_consent",
+    },
+  ]);
+
+  const leadfeeder = observations.find((item) => item.vendor === "Leadfeeder");
+  assert.equal(leadfeeder?.product, "Leadfeeder Website Visitor Analytics");
+  assert.equal(leadfeeder?.purpose, "analytics");
+  assert.equal(leadfeeder?.matchedCookieNames.includes("_lfa"), true);
+  assert.equal(leadfeeder?.matchSources.some((source) => source.consentStateAtTime === "pre_consent"), true);
+});
+
 test("resolves publisher infrastructure and supported ownership domains canonically", () => {
   const observations = resolveVendorObservations([
     { type: "request", hostname: "a.bildstatic.de" },

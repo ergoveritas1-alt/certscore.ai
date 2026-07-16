@@ -297,6 +297,7 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
 }
 
 export async function listAdminPulseRequests(input: {
+  email?: string | null;
   limit?: number;
   offset?: number;
   query?: string | null;
@@ -307,6 +308,7 @@ export async function listAdminPulseRequests(input: {
   const limit = Math.max(1, Math.min(100, input.limit ?? 20));
   const offset = Math.max(0, input.offset ?? 0);
   const search = input.query?.trim() || null;
+  const email = input.email?.trim().slice(0, 160) || null;
   const rows = await query<Record<string, unknown>>(
     `select pr.public_id,
             pr.job_id,
@@ -377,9 +379,10 @@ export async function listAdminPulseRequests(input: {
           or pr.requested_url ilike '%' || $2 || '%'
           or pr.scan_id::text ilike '%' || $2 || '%'
         )
+        and ($3::text is null or lower(coalesce(app_user.email, auth_user.email, api_key.created_by, '')) like '%' || lower($3) || '%')
       order by pr.requested_at desc
-      limit $3 offset $4`,
-    [input.status ?? null, search, limit, offset],
+      limit $4 offset $5`,
+    [input.status ?? null, search, email, limit, offset],
     { readOnly: true }
   );
 

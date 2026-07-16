@@ -50,6 +50,7 @@ export type AdminScanListItem = {
   robotsFetchHttpStatus: number | null;
   scanId: string;
   requesterIp: string | null;
+  requesterEmail: string | null;
   requesterName: string | null;
   requestPublicId: string | null;
   requestedAt: string | null;
@@ -95,15 +96,16 @@ export type AdminScanListStatus = "any" | "no_go" | "failed" | "running" | "queu
 
 const ADMIN_FILTER_ACTIVITY_WINDOW_LIMIT = 25_000;
 
-export async function listAdminScans(limit = 50, offset = 0, filters?: { query?: string | null; status?: AdminScanListStatus }): Promise<AdminScanListItem[]> {
+export async function listAdminScans(limit = 50, offset = 0, filters?: { email?: string | null; query?: string | null; status?: AdminScanListStatus }): Promise<AdminScanListItem[]> {
   await requirePlatformAdminContext();
-  const hasFilters = Boolean(filters?.query?.trim()) || Boolean(filters?.status && filters.status !== "any");
+  const requesterEmail = filters?.email?.trim().slice(0, 160) || null;
+  const hasFilters = Boolean(requesterEmail) || Boolean(filters?.query?.trim()) || Boolean(filters?.status && filters.status !== "any");
   const activityWindowLimit = hasFilters
     ? Math.max(ADMIN_FILTER_ACTIVITY_WINDOW_LIMIT, limit + offset)
     : Math.max(limit + offset, limit);
   const [scanPageData, scanRequestRows] = await Promise.all([
-    loadAdminScanListPageData(activityWindowLimit, 0),
-    loadAdminScanRequestRows(activityWindowLimit)
+    loadAdminScanListPageData(activityWindowLimit, 0, requesterEmail),
+    loadAdminScanRequestRows(activityWindowLimit, requesterEmail)
   ]);
   const {
     diagnosticEvents,
@@ -112,7 +114,7 @@ export async function listAdminScans(limit = 50, offset = 0, filters?: { query?:
     resolvedSnapshots,
     scanRows
   } = scanPageData;
-  const pulseAttributionRows = await loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id));
+  const pulseAttributionRows = await loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id), requesterEmail);
   const pulseAttributionMap = new Map(pulseAttributionRows.map((row) => [row.scan_id, row] as const));
 
   const domainMap = new Map(domains.flatMap((domain) => (domain.id ? [[domain.id, domain] as const] : [])));
@@ -186,6 +188,7 @@ export async function listAdminScans(limit = 50, offset = 0, filters?: { query?:
         getRequesterIpFromRequest(linkedRequest) ??
         getRequesterIpFromContext(pulseAttribution?.request_context ?? null) ??
         selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
+      requesterEmail: linkedRequest?.requester_email ?? pulseAttribution?.requester_email ?? null,
       requesterName: linkedRequest?.requester_name ?? pulseAttribution?.requester_name ?? null,
       scanViewHref: getAdminAuthenticatedScanHref(scan.id),
       scanType: scan.scan_type,
@@ -297,6 +300,7 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     requestResolutionMode: request.resolution_mode,
     requestedUrl: request.requested_url,
     requesterIp,
+    requesterEmail: request.requester_email,
     requesterName: request.requester_name,
     reusedCompletedAt: request.reused_completed_at,
     reuseWindowHours: request.reuse_window_hours,

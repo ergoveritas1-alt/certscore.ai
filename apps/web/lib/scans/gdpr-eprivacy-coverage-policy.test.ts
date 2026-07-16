@@ -1983,6 +1983,31 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained consent surfaces a
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats complete no-surface inspection as authoritative", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentSurfaceInspection: {
+        coverageStatus: "complete",
+        inspectedPreInteraction: true,
+        inspectionCompleted: true,
+        outcome: "no_surface_observed_complete_coverage",
+        observedAtMs: 6400
+      },
+      consentSurfaceObserved: true
+    },
+    snapshot: {
+      cookie_banner_present: true
+    }
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Not observed");
+  assert.equal(
+    outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceObserved,
+    false
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes confirms simple cookie notices despite stale unknown-purpose demotion", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -3149,10 +3174,10 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat Akamai security or
     ["Akamai mPulse"]
   );
   assert.match(outcomes.analytics_vendor_observed?.limitation ?? "", /Performance\/RUM analytics evidence/i);
-  assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Review signal");
+  assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Insufficient evidence");
   assert.match(
     outcomes.device_identification_fingerprinting_signal_observed?.limitation ?? "",
-    /Security\/bot-detection telemetry/i
+    /contextual evidence/i
   );
 });
 
@@ -3182,7 +3207,9 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes retains concrete browser API name
           fingerprintingObserved: true,
           highEntropySignals: ["HTMLCanvasElement.toDataURL", "CanvasRenderingContext2D.getImageData"],
           hosts: ["nvidia.com"],
-          preConsentObserved: true
+          knownFingerprintLibraryMatch: "fixture-fingerprint-library",
+          preConsentObserved: true,
+          strongCorroboratorObserved: true
         }
       }
     },
@@ -4493,8 +4520,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes separates weak browser entropy fr
   });
 
   const outcome = outcomes.session_replay_fingerprinting_review;
-  assert.equal(outcome?.status, "Review signal");
-  assert.match(outcome?.limitation ?? "", /Browser\/device entropy review signal/i);
+  assert.equal(outcome?.status, "Insufficient evidence");
+  assert.match(outcome?.limitation ?? "", /context/i);
   assert.doesNotMatch(outcome?.limitation ?? "", /Session replay \/ behavioral analytics/i);
   assert.equal(outcome?.criticalEvidence.retainedEvidence.sessionReplayObserved, false);
   assert.deepEqual(outcome?.criticalEvidence.retainedEvidence.browserDeviceEntropyEvidence, {
@@ -5294,7 +5321,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes consent control lifecycl
   assert.equal(postChoiceCleanAbsence.preference_withdrawal_control?.status, "Not observed");
   assert.equal(
     postChoiceCleanAbsence.preference_withdrawal_control?.limitation,
-    "CertScore did not retain a qualifying post-choice cookie preference or withdrawal control after the initial consent action."
+    "CertScore.ai did not retain a qualifying post-choice cookie preference or withdrawal control after the initial consent action."
   );
   assert.ok(
     postChoiceCleanAbsence.preference_withdrawal_control?.evidenceRefs.includes(

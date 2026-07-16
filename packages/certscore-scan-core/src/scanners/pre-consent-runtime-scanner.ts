@@ -5509,7 +5509,7 @@ function classifyKnownCookiePurpose(name: string): CookieEvent["cookiePurpose"] 
   if (/^(_abck|bm_sz|ak_bmsc|akaas_|akamai_|__cf_bm)/i.test(name)) {
     return "security";
   }
-  if (/^_ga(?:_.+)?$|^_gid$|^_gat/i.test(name)) {
+  if (/^_ga(?:_.+)?$|^_gid$|^_gat|^_lfa(?:_.*)?$/i.test(name)) {
     return "analytics";
   }
   return "unknown";

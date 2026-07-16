@@ -6,6 +6,7 @@ export const LOCAL_V2_DAG_SCAN_PROFILES = ["standard", "tiny"] as const;
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1";
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us-west-2"] as const;
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
+export const LOCAL_V2_DAG_WC01_PROJECTION_VERSION = "wc01.normalized-concern-policy.v1";
 
 export type LocalV2DagScanProfile = (typeof LOCAL_V2_DAG_SCAN_PROFILES)[number];
 export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)[number];
@@ -253,6 +254,11 @@ export function applyLocalV2DagScanConfig(
         policyOutputGraceMs: 1_000,
         policyPlanningDeadlineMs: 1_500,
         productionFindingIntegration: false,
+        wc01ProductionProjection: {
+          approved: true,
+          pipeline: "normalized_concern_policy_unified_finding",
+          version: LOCAL_V2_DAG_WC01_PROJECTION_VERSION
+        },
         profile,
         scenarioConcurrency: 2,
         scenarioPlanningMode: "planned_parallel",
