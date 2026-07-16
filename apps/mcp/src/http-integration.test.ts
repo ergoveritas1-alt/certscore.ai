@@ -134,7 +134,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     await anonymousClient.connect(anonymousTransport);
     const anonymousTools = await anonymousClient.listTools();
     assert.ok(anonymousTools.tools.some((tool) => tool.name === "scan_site"));
-    const created = await anonymousClient.callTool({ name: "scan_site", arguments: { url: "https://example.com" } });
+    const created = await anonymousClient.callTool({ name: "scan_site", arguments: { url: "https://example.com", waitForCompletion: false } });
     assert.equal(created.isError, undefined);
     assert.match(JSON.stringify(created), /anonymous-mcp-job/);
     assert.equal(forwardedClientIp, "203.0.113.44");

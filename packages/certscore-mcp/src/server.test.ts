@@ -407,7 +407,7 @@ test("create_scan returns immediate completed Pulse when API responds 200", asyn
   }
 });
 
-test("scan_site uses API v2 scan creation", async () => {
+test("scan_site can return immediately for an explicitly asynchronous workflow", async () => {
   const mock = installFetch([
     {
       status: 202,
@@ -424,12 +424,63 @@ test("scan_site uses API v2 scan creation", async () => {
       const result = parseToolJson(
         await client.callTool({
           name: "scan_site",
-          arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "eu_ie" }
+          arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "eu_ie", waitForCompletion: false }
         })
       );
       assert.equal(result.type, "certscore_scan_job");
       assert.equal(result.status, "queued");
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("scan_site waits by default and returns the completed scan resource", async () => {
+  const mock = installFetch([
+    {
+      status: 202,
+      body: {
+        type: "certscore_scan_job",
+        status: "queued",
+        jobId: "pulse_job_123",
+        scanId: "scan_123",
+        retryAfterSeconds: 0,
+        links: { status: "https://certscore.ai/api/v2/scans/scan_123/status" }
+      }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan_job",
+        status: "completed",
+        jobId: "pulse_job_123",
+        scanId: "scan_123"
+      }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan",
+        status: "completed",
+        scanId: "scan_123",
+        domain: "example.com",
+        scanTimeSeconds: 21.4
+      }
+    }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const result = parseToolJson(await client.callTool({
+        name: "scan_site",
+        arguments: { url: "https://example.com" }
+      }));
+      assert.equal(result.type, "certscore_scan");
+      assert.equal(result.status, "completed");
+      assert.equal(result.scanTimeSeconds, 21.4);
+      assert.equal(mock.calls.length, 3);
+      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123\/status$/);
+      assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/scan_123$/);
     });
   } finally {
     mock.restore();
@@ -467,18 +518,6 @@ test("get_scan_status supports API v2 scanId status with timing fields", async (
         completedAt: "2026-07-08T12:00:34.000Z",
         scanTimeSeconds: 34
       }
-    },
-    {
-      status: 200,
-      body: {
-        type: "certscore_scan",
-        scanId: "00000000-0000-4000-8000-000000000123",
-        domain: "example.com",
-        status: "completed",
-        startedAt: "2026-07-08T12:00:00.000Z",
-        completedAt: "2026-07-08T12:00:34.000Z",
-        scanTimeSeconds: 34
-      }
     }
   ]);
   try {
@@ -494,6 +533,7 @@ test("get_scan_status supports API v2 scanId status with timing fields", async (
       assert.equal(result.startedAt, "2026-07-08T12:00:00.000Z");
       assert.equal(result.completedAt, "2026-07-08T12:00:34.000Z");
       assert.equal(result.scanTimeSeconds, 34);
+      assert.equal(mock.calls.length, 1);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status/);
     });
   } finally {

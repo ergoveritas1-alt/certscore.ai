@@ -97,10 +97,10 @@ REST API scan creation and TypeScript SDK workflows usually need scan:read and s
 MCP read tools usually need scan:read and mcp. MCP scan creation also needs scan:create.
 
 MCP workflow:
-1. scan_site or create_scan with a public URL.
-2. get_scan_status when scan creation returns a jobId, or with a stable scanId for API v2 status.
-3. get_scan with the stable scanId.
-4. list_findings for structured review handoff.
+1. scan_site with a public URL. It waits up to 45 seconds for completion by default.
+2. get_scan_status only when scan_site returns a non-terminal job; prefer the stable scanId.
+3. list_findings for structured review handoff.
+4. Fetch report, evidence, or cookie inventory only when the task needs that specific view.
 5. explain_finding for evidence summaries, caveats, and next steps.
 6. get_latest_domain_scan to find the latest eligible public scan for a domain.
 

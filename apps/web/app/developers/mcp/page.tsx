@@ -260,14 +260,12 @@ const status = await get_scan_status({ scanId });
         </Section>
 
         <Section eyebrow="Workflow" title="Recommended agent sequence">
-          <CodeBlock>{`1. scan_site with a public URL.
-2. get_scan_status when a job is pending.
-3. get_scan after a stable scanId is available.
-4. list_findings for compact structured review.
-5. get_evidence when a reviewer or agent needs the larger bounded evidence packet.
-6. get_pre_consent_cookies_trackers when the user asks for the Pre-consent Cookies & Trackers table as JSON.
-7. explain_finding for evidence summaries and caveats.
-8. get_latest_domain_scan or get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
+          <CodeBlock>{`1. scan_site with a public URL; it waits up to 45 seconds by default.
+2. get_scan_status only when scan_site returns a non-terminal job.
+3. list_findings for compact structured review.
+4. get_report, get_evidence, or cookie inventory only when that specific view is needed.
+5. explain_finding for evidence summaries and caveats.
+6. get_latest_domain_scan or get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
           <CodeBlock>{`get_pre_consent_cookies_trackers({
   scanId: "00000000-0000-4000-8000-000000000123"
 })

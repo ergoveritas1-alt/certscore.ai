@@ -31,6 +31,9 @@ const client = new Client({
 });
 
 function parseToolJson(result) {
+  if (result.structuredContent && typeof result.structuredContent === "object") {
+    return result.structuredContent;
+  }
   const first = result.content?.[0];
   if (!first || first.type !== "text") {
     throw new Error("MCP tool returned no text content.");
@@ -56,43 +59,30 @@ async function waitForTerminalScan(created) {
     if (terminalFailure.has(status)) {
       throw new Error(`MCP scan reached terminal failure status=${status} phase=${current?.phase ?? "unknown"}.`);
     }
-    if (!created.jobId) {
-      throw new Error(`MCP scan is non-terminal (${status}) but create_scan returned no jobId.`);
+    const scanId = getScanId(created);
+    if (!scanId && !created.jobId) {
+      throw new Error(`MCP scan is non-terminal (${status}) but scan_site returned no scanId or jobId.`);
     }
     if (Date.now() - startedAt >= timeoutMs) {
       throw new Error(`MCP scan timed out after ${timeoutMs}ms status=${status} jobId=${created.jobId}.`);
     }
-    await sleep(delayMs + Math.floor(Math.random() * Math.max(1, delayMs * 0.2)));
+    const recommendedDelayMs = typeof current.retryAfterSeconds === "number" ? current.retryAfterSeconds * 1_000 : delayMs;
+    await sleep(Math.min(5_000, recommendedDelayMs) + Math.floor(Math.random() * Math.max(1, delayMs * 0.2)));
     current = parseToolJson(await client.callTool({
       name: "get_scan_status",
-      arguments: { jobId: created.jobId }
+      arguments: scanId ? { scanId } : { jobId: created.jobId }
     }));
     console.log(`get_scan_status status=${current.status ?? "unknown"} phase=${current.phase ?? "unknown"} scanId=${getScanId(current) ?? "none"}`);
     delayMs = Math.min(5_000, Math.round(delayMs * 1.7));
   }
 }
 
-function verifyReport(report, expectedScanId, terminalStatus, terminal) {
-  const reportScanId = getScanId(report) ?? expectedScanId;
-  const domain = report.domain ?? report.scan?.domain ?? report.scan?.domainHostname ?? terminal?.domain ?? new URL(smokeUrl).hostname;
-  const score = report.summary?.score ?? report.score;
-  const topFindings = report.topFindings;
-  if (reportScanId !== expectedScanId) throw new Error(`MCP report scanId mismatch: expected ${expectedScanId}, received ${reportScanId ?? "none"}.`);
-  if (typeof domain !== "string" || !domain.trim()) throw new Error("MCP report did not include a domain.");
-  if (terminalStatus === "completed" && typeof score !== "number") throw new Error("Completed MCP report did not include a numeric score.");
-  if (terminalStatus === "completed" && !Array.isArray(topFindings)) throw new Error("Completed MCP report did not include topFindings.");
-  return {
-    domain,
-    score: typeof score === "number" ? score : "limited",
-    topFindingCount: Array.isArray(topFindings) ? topFindings.length : "limited",
-    privacy: report.summary?.privacyPolicyPresent ?? report.privacyPolicyPresent ?? "unknown",
-    cmp: report.summary?.cmpVendorName ?? report.cmpVendorName ?? "unknown",
-    scanTime: report.summary?.scanTimeSeconds ?? report.scanTimeSeconds ?? "unknown",
-    location: report.summary?.scanFrom ?? report.scanFrom ?? "unknown",
-    freshness: report.meta?.freshness ?? report.freshness ?? "unknown",
-    language: report.summary?.primaryLanguage ?? report.primaryLanguage ?? "unknown",
-    industry: report.summary?.industry ?? report.industry ?? "unknown"
-  };
+function verifyScanAndFindings(scan, findings, expectedScanId) {
+  if (getScanId(scan) !== expectedScanId) throw new Error(`MCP scanId mismatch: expected ${expectedScanId}, received ${getScanId(scan) ?? "none"}.`);
+  if (typeof scan.domain !== "string" || !scan.domain.trim()) throw new Error("MCP scan did not include a domain.");
+  if (scan.status === "completed" && typeof scan.score !== "number") throw new Error("Completed MCP scan did not include a numeric score.");
+  if (!Array.isArray(findings.findings)) throw new Error("MCP list_findings did not include a findings array.");
+  return { domain: scan.domain, score: scan.score ?? "limited", findingCount: findings.findings.length, scanTime: scan.scanTimeSeconds ?? "unknown" };
 }
 
 function printable(value) {
@@ -108,28 +98,31 @@ try {
 
   const created = parseToolJson(
     await client.callTool({
-      name: "create_scan",
+      name: "scan_site",
       arguments: {
         url: smokeUrl,
-        detail: "standard",
         freshness: smokeFreshness
       }
     })
   );
-  console.log(`create_scan status=${created.status} jobId=${created.jobId ?? "none"} scanId=${created.scanId ?? "none"}`);
+  console.log(`scan_site status=${created.status} jobId=${created.jobId ?? "none"} scanId=${created.scanId ?? "none"}`);
 
   if (!getScanId(created) && !created.jobId) {
-    throw new Error("create_scan returned neither scanId nor jobId.");
+    throw new Error("scan_site returned neither scanId nor jobId.");
   }
   const terminal = await waitForTerminalScan(created);
   const scanId = getScanId(terminal) ?? getScanId(created);
   if (!scanId) throw new Error("Terminal MCP scan response did not include scanId.");
-  const report = parseToolJson(await client.callTool({
-    name: "get_report",
-    arguments: { scanId, detail: "standard" }
+  const scan = terminal.type === "certscore_scan" ? terminal : parseToolJson(await client.callTool({
+    name: "get_scan",
+    arguments: { scanId }
   }));
-  const verified = verifyReport(report, scanId, terminal.status, terminal);
-  console.log(`get_report verified scanId=${scanId} domain=${verified.domain} score=${verified.score} topFindings=${verified.topFindingCount} privacy=${printable(verified.privacy)} cmp=${printable(verified.cmp)} scanTime=${printable(verified.scanTime)} location=${printable(verified.location)} freshness=${printable(verified.freshness)} language=${printable(verified.language)} industry=${printable(verified.industry)}`);
+  const findings = parseToolJson(await client.callTool({
+    name: "list_findings",
+    arguments: { scanId }
+  }));
+  const verified = verifyScanAndFindings(scan, findings, scanId);
+  console.log(`workflow verified scanId=${scanId} domain=${verified.domain} score=${verified.score} findings=${verified.findingCount} scanTime=${printable(verified.scanTime)}`);
 } finally {
   await client.close();
 }

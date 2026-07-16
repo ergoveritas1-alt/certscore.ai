@@ -14,7 +14,7 @@ Public docs:
 ## Tools
 
 - `create_scan` - Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable.
-- `scan_site` - Start or reuse a CertScore public-web scan. Completed no-go scans return completed_limited status, structured reason-specific guidance, and timing when available.
+- `scan_site` - Recommended one-call scan workflow. Starts or reuses a public-web scan and waits up to 45 seconds for the completed scan resource by default. If it is still running, returns the job for get_scan_status polling. Use list_findings next for structured findings; fetch report, evidence, or cookie inventory only when the task needs them. Completed no-go scans return completed_limited status and reason-specific guidance.
 - `get_scan` - Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available.
 - `get_scan_status` - Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available.
 - `get_report` - Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet.
@@ -220,14 +220,12 @@ Local repo config for contributors:
 
 ## Agent Workflow
 
-1. Call `scan_site` with a public URL.
-2. If it returns a `jobId`, call `get_scan_status` until the scan completes.
-3. Call `get_scan` with the stable `scanId`.
-4. Call `list_findings` to route structured findings into review workflows.
-5. Call `get_evidence` when a reviewer or agent needs the larger bounded evidence packet.
-6. Call `get_pre_consent_cookies_trackers` when the user asks for Cookies & Trackers (Pre-consent) table data as JSON.
-7. Call `explain_finding` when a reviewer needs evidence and caveats for a specific finding.
-8. Call `get_latest_domain_scan` or `get_latest_domain_pre_consent_cookies_trackers` when the user asks for latest eligible public data for a domain.
+1. Call `scan_site` with a public URL. It normally returns the completed scan resource in the same tool call.
+2. Only if it returns a non-terminal job, call `get_scan_status` using the stable `scanId` until completion.
+3. Call `list_findings` for the structured findings needed by most review workflows.
+4. Do not fetch every other resource automatically. Call `get_report`, `get_evidence`, or `get_pre_consent_cookies_trackers` only when the task needs that view.
+5. Call `explain_finding` when a reviewer needs evidence and caveats for a specific finding.
+6. Call `get_latest_domain_scan` or `get_latest_domain_pre_consent_cookies_trackers` when the user asks for latest eligible public data for a domain.
 
 ```json
 {

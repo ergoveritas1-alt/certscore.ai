@@ -111,7 +111,7 @@ const detailLevels = [
 
 const mcpTools = [
   ["create_scan", "Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable."],
-  ["scan_site", "Start or reuse a CertScore public-web scan. Completed no-go scans return completed_limited status, structured reason-specific guidance, and timing when available."],
+  ["scan_site", "Recommended one-call scan workflow. Starts or reuses a public-web scan and waits up to 45 seconds for the completed scan resource by default. If it is still running, returns the job for get_scan_status polling. Use list_findings next for structured findings; fetch report, evidence, or cookie inventory only when the task needs them. Completed no-go scans return completed_limited status and reason-specific guidance."],
   ["get_scan", "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available."],
   ["get_scan_status", "Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available."],
   ["get_report", "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet."],
@@ -688,8 +688,9 @@ pnpm mcp:certscore:generate-key -- --name "CertScore.ai MCP preview"`}</CodeBloc
   }
 }`}</CodeBlock>
             <p>
-              Recommended workflow: call `scan_site` with a public URL, poll `get_scan_status` when a job ID is returned, retrieve the
-              stable scan with `get_scan`, then use `list_findings` or `explain_finding` for review and ticketing.
+              Recommended workflow: call `scan_site` with a public URL. It waits for completion by default. Only poll `get_scan_status`
+              if a non-terminal job is returned, then use `list_findings` or `explain_finding` for review and ticketing. Fetch report,
+              evidence, and cookie inventory resources only when the task needs them.
             </p>
             <p>
               Preview keys are scoped to `pulse:read`, `pulse:scan`, and `mcp`; CertScore.ai validates bearer tokens before request

@@ -1,4 +1,4 @@
-import { CertScoreClient } from "@certscore/sdk";
+import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
 import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
@@ -19,6 +19,8 @@ type CreateScanInput = {
   format?: "json" | "markdown";
   freshness?: "latest" | "refresh";
   scanFrom?: "eu_ie";
+  waitForCompletion?: boolean;
+  maxWaitSeconds?: number;
 };
 type GetScanStatusInput = { jobId?: string; scanId?: string };
 type GetScanInput = { scanId: string };
@@ -32,6 +34,7 @@ type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_ie" };
 type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?: number; scanFrom?: "eu_ie" };
 
 let createScanDeprecationWarningPrinted = false;
+const DEFAULT_MCP_SCAN_WAIT_MS = 45_000;
 
 function toolContract(name: CertScoreMcpToolName): any {
   const contract = certScoreMcpToolContracts.find((candidate) => candidate.name === name);
@@ -106,12 +109,27 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     toolContract("scan_site"),
     async (input: CreateScanInput) => {
       try {
-        return toToolResult(
-          await client.scans.create(input.url, {
-            freshness: input.freshness ?? "latest",
-            scanFrom: input.scanFrom
-          })
-        );
+        const created = await client.scans.create(input.url, {
+          freshness: input.freshness ?? "latest",
+          scanFrom: input.scanFrom
+        });
+        if (input.waitForCompletion === false || created.type === "certscore_scan") {
+          return toToolResult(created);
+        }
+        try {
+          return toToolResult(await client.scans.wait(created, {
+            maxWaitMs: Math.min(input.maxWaitSeconds ? input.maxWaitSeconds * 1_000 : DEFAULT_MCP_SCAN_WAIT_MS, DEFAULT_MCP_SCAN_WAIT_MS)
+          }));
+        } catch (error) {
+          if (!(error instanceof CertScoreTimeoutError)) {
+            throw error;
+          }
+          const scanId = created.scanId ?? created.scan_id;
+          if (scanId) {
+            return toToolResult(await client.scans.status(scanId));
+          }
+          return toToolResult(created);
+        }
       } catch (error) {
         return toToolError(error);
       }
@@ -137,7 +155,10 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
       try {
         if (scanId) {
           const status = await client.scans.status(scanId);
-          if (status.status === "completed" || status.status === "completed_limited") {
+          const needsTerminalHydration = status.status === "completed_limited"
+            ? !status.noGo || !status.resultDisposition || status.scanTimeSeconds == null
+            : status.status === "completed" && status.scanTimeSeconds == null;
+          if (needsTerminalHydration) {
             try {
               const scan = await client.scans.get(scanId);
               return toToolResult({

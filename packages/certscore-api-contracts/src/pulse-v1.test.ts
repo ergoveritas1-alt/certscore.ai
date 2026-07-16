@@ -91,6 +91,10 @@ test("MCP contracts expose the current scoped tool surface", () => {
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_evidence")?.inputSchema.scanId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "explain_finding")?.inputSchema.findingId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_latest_domain_scan")?.inputSchema.domain);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema.waitForCompletion);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema.maxWaitSeconds);
+  assert.equal("detail" in (certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema ?? {}), false);
+  assert.equal("format" in (certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema ?? {}), false);
   assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.annotations, {
     readOnlyHint: false,
     destructiveHint: false,

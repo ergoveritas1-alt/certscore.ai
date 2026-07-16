@@ -26,6 +26,14 @@ export const mcpCreateScanInputSchema = {
   scanFrom: mcpScanFromSchema.optional().describe("Optional scan execution context for newly queued scans.")
 } as const;
 
+export const mcpScanSiteInputSchema = {
+  url: mcpCreateScanInputSchema.url,
+  freshness: mcpCreateScanInputSchema.freshness,
+  scanFrom: mcpCreateScanInputSchema.scanFrom,
+  waitForCompletion: z.boolean().optional().describe("Wait for a completed scan resource in this tool call. Defaults to true. Set false only for an explicitly asynchronous workflow."),
+  maxWaitSeconds: z.number().int().min(1).max(45).optional().describe("Maximum time to wait before returning the still-running job. Defaults to 45 seconds; never turns an active scan into an error.")
+} as const;
+
 export const mcpGetScanStatusInputSchema = {
   jobId: z.string().min(1).optional().describe("Pulse job ID for a just-created scan that has not yet returned a scanId."),
   scanId: z.string().min(1).optional().describe("Preferred stable CertScore scan ID for API v2 scan status.")
@@ -225,8 +233,8 @@ export const certScoreMcpToolContracts = [
   {
     name: "scan_site",
     title: "Scan site",
-    description: "Start or reuse a CertScore public-web scan. Completed no-go scans return completed_limited status, structured reason-specific guidance, and timing when available.",
-    inputSchema: mcpCreateScanInputSchema,
+    description: "Recommended one-call scan workflow. Starts or reuses a public-web scan and waits up to 45 seconds for the completed scan resource by default. If it is still running, returns the job for get_scan_status polling. Use list_findings next for structured findings; fetch report, evidence, or cookie inventory only when the task needs them. Completed no-go scans return completed_limited status and reason-specific guidance.",
+    inputSchema: mcpScanSiteInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
     annotations: scanCreationAnnotations
   },

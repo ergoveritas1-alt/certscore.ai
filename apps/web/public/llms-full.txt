@@ -277,7 +277,7 @@ MCP client config:
 
 Current tools:
 
-- `scan_site`
+- `scan_site` (recommended one-call workflow; waits up to 45 seconds by default)
 - `create_scan`
 - `get_scan`
 - `get_scan_status`
