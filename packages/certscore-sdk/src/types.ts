@@ -104,6 +104,8 @@ export interface ScanCreationMetadata {
   anonymousQuotaLimit?: number | null;
   anonymousQuotaRemaining?: number | null;
   anonymousQuotaResetAt?: string | null;
+  upgradeSupportEmail?: string | null;
+  upgradeMessage?: string | null;
   recommendedNextTool?: "get_scan_status" | "get_scan_bundle";
 }
 

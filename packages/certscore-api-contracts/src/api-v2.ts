@@ -28,6 +28,8 @@ const apiV2ScanCreationMetadataShape = {
   anonymousQuotaLimit: z.number().int().min(0).nullable().optional(),
   anonymousQuotaRemaining: z.number().int().min(0).nullable().optional(),
   anonymousQuotaResetAt: z.string().nullable().optional(),
+  upgradeSupportEmail: z.string().email().nullable().optional(),
+  upgradeMessage: z.string().nullable().optional(),
   recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).optional()
 } as const;
 

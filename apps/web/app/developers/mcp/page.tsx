@@ -32,26 +32,29 @@ export default function DeveloperMcpPage() {
           </p>
         </Section>
 
-        <Section eyebrow="No-account MCP" title="Connect without signup or OAuth">
+        <Section eyebrow="CertScore Light" title="Scan without signup, a key, or OAuth">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Agents that cannot create an account or complete OAuth can use the unauthenticated Streamable HTTP MCP endpoint at
-            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">https://mcp.certscore.ai/mcp/anonymous</code>. It exposes the
-            public-safe scan, status, findings, evidence, and latest-domain tools. New scans are limited to 10 per requester IP per UTC
-            day; reusing an eligible recent result does not consume the quota.
+            New agents should connect directly to the unauthenticated Streamable HTTP endpoint at
+            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">https://mcp.certscore.ai/mcp/light</code>. It exposes only the
+            three tools needed for the normal workflow: scan, status when still running, and a complete compact bundle. New scans are
+            limited to 20 per requester IP per UTC day; reusing an eligible recent result does not consume the allowance.
           </p>
-          <CodeBlock>{`Unauthenticated MCP endpoint:
-https://mcp.certscore.ai/mcp/anonymous`}</CodeBlock>
+          <CodeBlock>{`CertScore Light endpoint:
+https://mcp.certscore.ai/mcp/light
+
+Tools: scan_site, get_scan_status, get_scan_bundle`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Use the hosted OAuth endpoint or a scoped API key for higher-volume workflows. The unauthenticated endpoint intentionally has
-            no account, token, or OAuth setup step.
+            Every no-account scan response includes the allowance, remaining scans, UTC reset time, and an invitation to contact
+            <a className="mx-1 font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">support@certscore.ai</a>
+            for a higher-volume allowance—even when CertScore reuses a recent result.
           </p>
         </Section>
 
-        <Section eyebrow="No-account agent path" title="Run up to 10 scans per day without signup">
+        <Section eyebrow="No-account agent path" title="Run up to 20 scans per day without signup">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             If an agent cannot create an account or configure OAuth, use the public API v2 scan path instead. Send a JSON POST to{" "}
             <code className="rounded bg-white px-1">/api/v2/scans</code> without an Authorization header, then poll the returned
-            status resource and retrieve findings or evidence. New anonymous scans are limited to 10 per requester IP per UTC day;
+            status resource and retrieve findings or evidence. New anonymous scans are limited to 20 per requester IP per UTC day;
             recent-result reuse does not consume the quota.
           </p>
           <CodeBlock>{`curl -X POST https://certscore.ai/api/v2/scans \
@@ -276,9 +279,11 @@ const status = await get_scan_status({ scanId });
   "reusedScanAgeSeconds": 90,
   "freshnessDecision": "reused_existing_scan",
   "quotaConsumed": false,
-  "anonymousQuotaLimit": 10,
+  "anonymousQuotaLimit": 20,
   "anonymousQuotaRemaining": 7,
   "anonymousQuotaResetAt": "2026-07-16T00:00:00.000Z",
+  "upgradeSupportEmail": "support@certscore.ai",
+  "upgradeMessage": "For a higher-volume allowance, contact support@certscore.ai.",
   "recommendedNextTool": "get_scan_bundle"
 }`}</CodeBlock>
           <CodeBlock>{`get_pre_consent_cookies_trackers({

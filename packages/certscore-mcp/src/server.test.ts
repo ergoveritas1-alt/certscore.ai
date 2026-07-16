@@ -53,9 +53,9 @@ function installFetch(responses: MockResponse[]) {
   };
 }
 
-async function withMcpClient<T>(callback: (client: Client) => Promise<T>) {
+async function withMcpClient<T>(callback: (client: Client) => Promise<T>, options: Parameters<typeof createCertScoreMcpServer>[0] = {}) {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = createCertScoreMcpServer();
+  const server = createCertScoreMcpServer(options);
   const client = new Client({
     name: "certscore-mcp-test",
     version: "0.0.0"
@@ -169,6 +169,16 @@ test("CertScore MCP server exposes the scoped v1 tool surface", async () => {
   });
 });
 
+test("CertScore Light exposes only the focused no-account workflow", async () => {
+  await withMcpClient(async (client) => {
+    const tools = await client.listTools();
+    assert.deepEqual(
+      tools.tools.map((tool) => tool.name).sort(),
+      ["get_scan_bundle", "get_scan_status", "scan_site"]
+    );
+  }, { toolProfile: "light" });
+});
+
 test("CertScore MCP server tool metadata stays aligned with shared contracts", async () => {
   await withMcpClient(async (client) => {
     const tools = await client.listTools();
@@ -227,7 +237,7 @@ test("README documents current MCP tool surface and public docs", () => {
   assert.equal(packageJson.name, "@certscore/mcp");
   assert.equal(packageJson.private, false);
   assert.equal(packageJson.bin?.["certscore-mcp"], "dist/certscore-mcp.mjs");
-  assert.deepEqual(packageJson.files, ["dist", "README.md", "LICENSE", "server.json"]);
+  assert.deepEqual(packageJson.files, ["dist", "README.md", "LICENSE", "server.json", "server-light.json"]);
   assert.equal(packageJson.dependencies?.["@certscore/api-contracts"], undefined);
   assert.equal(packageJson.dependencies?.["@certscore/sdk"], undefined);
   assert.equal(packageJson.devDependencies?.["@certscore/api-contracts"], "workspace:*");

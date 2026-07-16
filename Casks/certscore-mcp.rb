@@ -1,8 +1,8 @@
 cask "certscore-mcp" do
-  version "0.2.11"
-  sha256 "801b8a1c80834714251c57b346876b0a5498bbc64662f51e9ae4876e31250cc3"
+  version "0.2.12"
+  sha256 "7dbdd91bd4278315c9af4ded249d8387d2d0b965fe1036c3162c373e23dc0d07"
 
-  url "https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v0.2.11/certscore-mcp-v0.2.11.tar.gz"
+  url "https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v0.2.12/certscore-mcp-v0.2.12.tar.gz"
   name "CertScore MCP"
   desc "CertScore MCP stdio server for public website risk-signal workflows"
   homepage "https://certscore.ai/developers/mcp"

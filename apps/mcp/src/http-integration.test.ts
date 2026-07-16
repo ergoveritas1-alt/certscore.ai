@@ -85,6 +85,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     await waitForHealth(origin, child);
     const health = await fetch(`${origin}/healthz`).then((response) => response.json());
     assert.equal(health.anonymousEndpoint, `${origin}/mcp/anonymous`);
+    assert.equal(health.lightEndpoint, `${origin}/mcp/light`);
     const metadata = await fetch(`${origin}/.well-known/oauth-protected-resource`).then((response) => response.json());
     assert.deepEqual(metadata.authorization_servers, ["https://certscore.ai"]);
 
@@ -140,6 +141,15 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.equal(forwardedClientIp, "203.0.113.44");
     assert.equal(apiAuthorization, undefined);
     await anonymousClient.close();
+
+    const lightTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/light`), {
+      requestInit: { headers: { "x-forwarded-for": "203.0.113.45" } }
+    });
+    const lightClient = new Client({ name: "certscore-light-http-integration", version: "0.1.0" });
+    await lightClient.connect(lightTransport);
+    const lightTools = await lightClient.listTools();
+    assert.deepEqual(lightTools.tools.map((tool) => tool.name).sort(), ["get_scan_bundle", "get_scan_status", "scan_site"]);
+    await lightClient.close();
 
     const invalidSession = await fetch(`${origin}/mcp`, {
       method: "POST",

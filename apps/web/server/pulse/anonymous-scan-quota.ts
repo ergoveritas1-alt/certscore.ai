@@ -1,4 +1,4 @@
-export const ANONYMOUS_SCAN_DAILY_LIMIT = 10;
+export const ANONYMOUS_SCAN_DAILY_LIMIT = 20;
 
 export type AnonymousScanQuotaDecision =
   | {
@@ -48,7 +48,10 @@ export class AnonymousScanQuotaError extends Error {
   readonly retryAfterSeconds: number;
 
   constructor(retryAfterSeconds: number) {
-    super(`Anonymous scans are limited to ${ANONYMOUS_SCAN_DAILY_LIMIT} new scans per requester per UTC day.`);
+    super(
+      `The no-account allowance is ${ANONYMOUS_SCAN_DAILY_LIMIT} new scans per requester per UTC day. ` +
+      "Reuse an eligible recent result, try again after the UTC reset, or contact support@certscore.ai to request a higher-volume allowance."
+    );
     this.name = "AnonymousScanQuotaError";
     this.retryAfterSeconds = retryAfterSeconds;
   }

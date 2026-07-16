@@ -10,6 +10,7 @@ export interface CertScoreMcpOptions {
   forwardedClientIp?: string | null;
   anonymousRequesterSecret?: string | null;
   timeout?: number;
+  toolProfile?: "full" | "light";
 }
 
 type CertScoreMcpToolName = (typeof certScoreMcpToolContracts)[number]["name"];
@@ -46,7 +47,9 @@ function scanCreationMetadata(value: Record<string, unknown>) {
     quotaConsumed: value.quotaConsumed,
     anonymousQuotaLimit: value.anonymousQuotaLimit,
     anonymousQuotaRemaining: value.anonymousQuotaRemaining,
-    anonymousQuotaResetAt: value.anonymousQuotaResetAt
+    anonymousQuotaResetAt: value.anonymousQuotaResetAt,
+    upgradeSupportEmail: value.upgradeSupportEmail,
+    upgradeMessage: value.upgradeMessage
   };
 }
 
@@ -78,7 +81,14 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     name: "certscore",
     version: CERTSCORE_MCP_VERSION
   });
-  const registerTool = server.registerTool.bind(server) as any;
+  const lightTools = new Set<CertScoreMcpToolName>(["scan_site", "get_scan_status", "get_scan_bundle"]);
+  const registerMcpTool = server.registerTool.bind(server) as any;
+  const registerTool = (name: CertScoreMcpToolName, contract: unknown, handler: unknown) => {
+    if (options.toolProfile === "light" && !lightTools.has(name)) {
+      return;
+    }
+    registerMcpTool(name, contract, handler);
+  };
 
   async function createPulseScanTool(input: CreateScanInput) {
     const result = await client.submitScan(input.url, {

@@ -1,6 +1,6 @@
 {
   "name": "@certscore/sdk",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Official TypeScript SDK for the CertScore Pulse API.",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## 0.2.6
+
+- Type the no-account scan allowance and higher-volume support guidance returned by API v2 scan creation.
+- Reflect the 20-new-scans-per-requester-per-UTC-day no-account allowance.
+
 ## 0.2.5
 
 - Send an `X-CertScore-Client` header on API requests for clearer SDK/MCP attribution.

@@ -61,7 +61,7 @@ const discoveryDocument = {
       method: "POST",
       route: "https://certscore.ai/api/v2/scans",
       authentication: "none",
-      dailyNewScanLimit: 10,
+      dailyNewScanLimit: 20,
       limitKey: "requester_ip_utc_day",
       recentReuseDoesNotConsumeQuota: true,
       statusRoute: "https://certscore.ai/api/v2/scans/{scanId}/status",
@@ -83,14 +83,14 @@ const discoveryDocument = {
     distribution: "npm",
     status: "published",
     package: "@certscore/sdk",
-    currentVersion: "0.2.5",
-    install: "npm install @certscore/sdk@0.2.5"
+    currentVersion: "0.2.6",
+    install: "npm install @certscore/sdk@0.2.6"
   },
   mcp: {
     distribution: "homebrew",
     binary: "certscore-mcp",
     packageStatus: "homebrew_developer_preview",
-    currentVersion: "0.2.11",
+    currentVersion: "0.2.12",
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
     install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
@@ -107,13 +107,24 @@ const discoveryDocument = {
       protectedResourceMetadata: "https://mcp.certscore.ai/.well-known/oauth-protected-resource",
       authorizationServerMetadata: "https://certscore.ai/.well-known/oauth-authorization-server",
       authentication: "OAuth 2.0 authorization code with PKCE",
-      currentVersion: "0.2.11"
+      currentVersion: "0.2.12"
+    },
+    light: {
+      name: "CertScore Light",
+      transport: "streamable_http",
+      endpoint: "https://mcp.certscore.ai/mcp/light",
+      authentication: "none",
+      dailyNewScanLimit: 20,
+      limitKey: "requester_ip_utc_day",
+      recentReuseDoesNotConsumeQuota: true,
+      tools: ["scan_site", "get_scan_status", "get_scan_bundle"],
+      intendedUse: "Frictionless no-account public website scans for new and low-volume agents."
     },
     anonymous: {
       transport: "streamable_http",
       endpoint: "https://mcp.certscore.ai/mcp/anonymous",
       authentication: "none",
-      dailyNewScanLimit: 10,
+      dailyNewScanLimit: 20,
       limitKey: "requester_ip_utc_day",
       recentReuseDoesNotConsumeQuota: true,
       intendedUse: "Low-volume agent discovery, evaluation, and public-web review workflows without account or OAuth setup."
@@ -176,7 +187,7 @@ const discoveryDocument = {
   responseFormats: ["application/json", "text/markdown"],
   authentication: {
     summary:
-      "Low-volume agents can create scans without an account or credential at 10 new scans per requester IP per UTC day. Bearer API keys are supported for scoped API, SDK, and MCP integrations. Read-only + MCP keys are self-serve for signed-in verified users; scan:create remains support-gated.",
+      "Low-volume agents can create scans without an account or credential at 20 new scans per requester IP per UTC day. Bearer API keys are supported for scoped API, SDK, and MCP integrations. Contact support@certscore.ai for a higher-volume allowance; read-only + MCP keys are self-serve for signed-in verified users, while scan:create remains support-gated.",
     accessStatus: "read_only_self_serve_scan_create_request",
     selfServeReadOnly: {
       route: "https://certscore.ai/api/v2/keys/request",

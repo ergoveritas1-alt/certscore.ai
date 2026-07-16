@@ -69,8 +69,8 @@ export default function DevelopersPage() {
           </p>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
             Agents that do not have an account can use <code className="rounded bg-white px-1">POST /api/v2/scans</code> without a
-            bearer token. New anonymous scans are limited to 10 per requester IP per UTC day; recent-result reuse does not consume
-            that quota. Authenticated keys remain the recommended path for repeated or production workflows.
+            bearer token. New anonymous scans are limited to 20 per requester IP per UTC day; recent-result reuse does not consume
+            that quota. Every response points higher-volume users to support@certscore.ai.
           </p>
         </Section>
 

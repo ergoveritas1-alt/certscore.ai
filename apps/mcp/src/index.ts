@@ -146,7 +146,7 @@ function isInitialize(body: unknown) {
   return Boolean(body && typeof body === "object" && !Array.isArray(body) && (body as Record<string, unknown>).method === "initialize");
 }
 
-async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: boolean) {
+async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: boolean, light = false) {
   if (!hostAllowed(req) || !requestOriginAllowed(req)) {
     return json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
   }
@@ -183,7 +183,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       anonymousRequesterSecret: anonymous ? env.jwtSecret : undefined,
       baseUrl: env.CERTSCORE_BASE_URL,
       forwardedClientIp: clientIp,
-      timeout: env.CERTSCORE_REQUEST_TIMEOUT_MS
+      timeout: env.CERTSCORE_REQUEST_TIMEOUT_MS,
+      toolProfile: light ? "light" : "full"
     });
     transport.onclose = () => {
       if (transport.sessionId) {
@@ -251,6 +252,7 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/healthz" && req.method === "GET") {
     return json(res, 200, {
       anonymousEndpoint: `${env.MCP_PUBLIC_URL}/mcp/anonymous`,
+      lightEndpoint: `${env.MCP_PUBLIC_URL}/mcp/light`,
       type: "certscore_mcp_http_health",
       status: "ok",
       version: CERTSCORE_MCP_VERSION,
@@ -261,8 +263,9 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/.well-known/oauth-protected-resource" && req.method === "GET") {
     return json(res, 200, publicMetadata(), corsHeaders(req));
   }
-  if ((url.pathname === "/mcp" || url.pathname === "/mcp/anonymous") && (req.method === "GET" || req.method === "POST" || req.method === "DELETE")) {
-    return handleMcp(req, res, url.pathname === "/mcp/anonymous").catch((error) => {
+  if ((url.pathname === "/mcp" || url.pathname === "/mcp/anonymous" || url.pathname === "/mcp/light") && (req.method === "GET" || req.method === "POST" || req.method === "DELETE")) {
+    const anonymous = url.pathname !== "/mcp";
+    return handleMcp(req, res, anonymous, url.pathname === "/mcp/light").catch((error) => {
       console.error("[mcp-http] request failed", { error });
       if (!res.headersSent) {
         json(res, 500, { error: "internal_error", error_description: "MCP endpoint is temporarily unavailable." }, corsHeaders(req));

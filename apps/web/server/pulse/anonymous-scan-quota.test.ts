@@ -35,5 +35,7 @@ test("anonymous scan quota errors are identifiable without exposing requester da
 
   assert.equal(isAnonymousScanQuotaError(error), true);
   assert.equal(error.message.includes("123"), false);
+  assert.match(error.message, /20 new scans/);
+  assert.match(error.message, /support@certscore\.ai/);
   assert.equal(error.retryAfterSeconds, 123);
 });

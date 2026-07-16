@@ -215,7 +215,7 @@ test("API v2 draft schemas accept resource-oriented public-safe shapes", () => {
     reusedScanAgeSeconds: 90,
     freshnessDecision: "reused_existing_scan",
     quotaConsumed: false,
-    anonymousQuotaLimit: 10,
+    anonymousQuotaLimit: 20,
     anonymousQuotaRemaining: 8,
     anonymousQuotaResetAt: "2026-07-16T00:00:00.000Z",
     recommendedNextTool: "get_scan_bundle"

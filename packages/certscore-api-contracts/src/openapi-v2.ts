@@ -22,9 +22,11 @@ const scanExample = {
   reusedScanAgeSeconds: 90,
   freshnessDecision: "reused_existing_scan",
   quotaConsumed: false,
-  anonymousQuotaLimit: 10,
+  anonymousQuotaLimit: 20,
   anonymousQuotaRemaining: 8,
   anonymousQuotaResetAt: "2026-07-16T00:00:00.000Z",
+  upgradeSupportEmail: "support@certscore.ai",
+  upgradeMessage: "For a higher-volume allowance, contact support@certscore.ai.",
   recommendedNextTool: "get_scan_bundle",
   links: {
     self: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123",
@@ -52,9 +54,11 @@ const scanJobExample = {
   reusedScanAgeSeconds: null,
   freshnessDecision: "no_eligible_recent_scan_queued",
   quotaConsumed: true,
-  anonymousQuotaLimit: 10,
+  anonymousQuotaLimit: 20,
   anonymousQuotaRemaining: 7,
   anonymousQuotaResetAt: "2026-07-16T00:00:00.000Z",
+  upgradeSupportEmail: "support@certscore.ai",
+  upgradeMessage: "For a higher-volume allowance, contact support@certscore.ai.",
   recommendedNextTool: "get_scan_status",
   links: {
     self: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status",
@@ -341,7 +345,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
           description:
             "Submit a public URL for CertScore automated public-web observations. The response may be a queued job or an already completed scan reference. " +
             "This v2 route reuses the existing Pulse scan creation, reuse, validation, and throttling path, then returns v2 Scan or ScanJob resources. " +
-            "Bearer authentication is optional for a reduced-friction anonymous path: unauthenticated new scans are limited to 10 per requester IP per UTC day, while recent-result reuse does not consume the quota.",
+            "Bearer authentication is optional for a reduced-friction anonymous path: unauthenticated new scans are limited to 20 per requester IP per UTC day, while recent-result reuse does not consume the quota. Contact support@certscore.ai for a higher-volume allowance.",
           security: [{}, { bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -687,6 +691,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             anonymousQuotaLimit: { type: ["integer", "null"], minimum: 0 },
             anonymousQuotaRemaining: { type: ["integer", "null"], minimum: 0 },
             anonymousQuotaResetAt: { type: ["string", "null"], format: "date-time" },
+            upgradeSupportEmail: { type: ["string", "null"], format: "email" },
+            upgradeMessage: { type: ["string", "null"], description: "Higher-volume contact guidance for no-account callers." },
             recommendedNextTool: { type: "string", enum: ["get_scan_status", "get_scan_bundle"] },
             links: { $ref: "#/components/schemas/Links" },
             disclaimer: { type: "string" }
@@ -720,6 +726,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             anonymousQuotaLimit: { type: ["integer", "null"], minimum: 0 },
             anonymousQuotaRemaining: { type: ["integer", "null"], minimum: 0 },
             anonymousQuotaResetAt: { type: ["string", "null"], format: "date-time" },
+            upgradeSupportEmail: { type: ["string", "null"], format: "email" },
+            upgradeMessage: { type: ["string", "null"], description: "Higher-volume contact guidance for no-account callers." },
             recommendedNextTool: { type: "string", enum: ["get_scan_status", "get_scan_bundle"] },
             links: { $ref: "#/components/schemas/Links" },
             disclaimer: { type: "string" }

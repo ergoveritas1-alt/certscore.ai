@@ -2,7 +2,7 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: public developer preview. Version 0.2.11 is prepared for the hosted Streamable HTTP service and the next deterministic Homebrew release. Local WC01 development uses `pnpm mcp:certscore`.
+Status: public developer preview. Version 0.2.12 adds the focused hosted CertScore Light workflow and current remote registry metadata. Local WC01 development uses `pnpm mcp:certscore`.
 
 Public docs:
 
@@ -66,8 +66,15 @@ For low-volume agent discovery without account or OAuth setup, use the unauthent
 https://mcp.certscore.ai/mcp/anonymous
 ```
 
-It exposes the same public-safe tool surface and preserves the existing limit of 10 new scans per requester IP per UTC day. Reusing an
-eligible recent result does not consume the quota. Use the OAuth endpoint or a scoped API key for higher-volume workflows.
+For the simplest no-account workflow, use CertScore Light:
+
+```text
+https://mcp.certscore.ai/mcp/light
+```
+
+Light exposes only `scan_site`, `get_scan_status`, and `get_scan_bundle`. The allowance is 20 new scans per requester IP per UTC day.
+Eligible recent-result reuse does not consume the allowance. Every no-account response includes the higher-volume contact path at
+`support@certscore.ai`.
 
 ## Configuration
 
@@ -149,7 +156,7 @@ curl -X POST https://certscore.ai/api/v2/scans \
   -d '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}'
 ```
 
-New anonymous scans are limited to 10 per requester IP per UTC day. Reusing an eligible recent result does not consume the quota. Poll the returned status resource, then retrieve findings or evidence. Use OAuth or a scoped API key for repeated or higher-volume workflows.
+New anonymous scans are limited to 20 per requester IP per UTC day. Reusing an eligible recent result does not consume the quota. Poll the returned status resource, then retrieve findings or evidence. Contact `support@certscore.ai` for a higher-volume allowance, including when reuse serves the current request.
 
 ## MCP Client Examples
 

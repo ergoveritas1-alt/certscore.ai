@@ -1,6 +1,6 @@
 {
   "name": "@certscore/mcp",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "mcpName": "ai.certscore/mcp",
   "private": false,
   "description": "MCP server for CertScore public website risk-signal workflows.",
@@ -31,7 +31,8 @@
     "dist",
     "README.md",
     "LICENSE",
-    "server.json"
+    "server.json",
+    "server-light.json"
   ],
   "publishConfig": {
     "access": "public"

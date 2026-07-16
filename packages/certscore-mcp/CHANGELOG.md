@@ -1,5 +1,12 @@
 # certscore-mcp
 
+## 0.2.12
+
+- Add the no-account `https://mcp.certscore.ai/mcp/light` endpoint with the focused `scan_site`, `get_scan_status`, and `get_scan_bundle` workflow.
+- Raise the no-account allowance to 20 new scans per requester per UTC day; eligible recent-result reuse remains free.
+- Give quota-limited agents a direct `support@certscore.ai` path for higher-volume access.
+- Advertise the hosted Streamable HTTP endpoint in MCP Registry metadata while retaining the npm stdio package.
+
 ## 0.2.11
 
 - Add `get_scan_bundle` as the compact second call after `scan_site`, retrieving the canonical scan, report summary, projected findings, bounded evidence, and pre-consent inventory in parallel.

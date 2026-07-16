@@ -87,6 +87,10 @@ function freshnessMetadata(input: {
     anonymousQuotaLimit: input.anonymousQuota?.limit ?? null,
     anonymousQuotaRemaining: input.anonymousQuota?.remaining ?? null,
     anonymousQuotaResetAt: input.anonymousQuota?.resetAt ?? null,
+    upgradeSupportEmail: input.anonymousQuota ? "support@certscore.ai" : null,
+    upgradeMessage: input.anonymousQuota
+      ? "For a higher-volume allowance, contact support@certscore.ai."
+      : null,
     recommendedNextTool: input.terminal ? "get_scan_bundle" : "get_scan_status"
   };
 }
@@ -179,7 +183,9 @@ export async function POST(request: Request) {
         quotaConsumed: false,
         anonymousQuotaLimit: anonymousQuota?.limit ?? null,
         anonymousQuotaRemaining: anonymousQuota?.remaining ?? null,
-        anonymousQuotaResetAt: anonymousQuota?.resetAt ?? null
+        anonymousQuotaResetAt: anonymousQuota?.resetAt ?? null,
+        upgradeSupportEmail: anonymousQuota ? "support@certscore.ai" : null,
+        upgradeMessage: anonymousQuota ? "For a higher-volume allowance, contact support@certscore.ai." : null
       },
       headers: retryAfter ? { "Retry-After": retryAfter } : undefined,
       requestId: id,

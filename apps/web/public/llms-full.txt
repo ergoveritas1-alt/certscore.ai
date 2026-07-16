@@ -53,7 +53,7 @@ Content-Type: application/json
 }
 ```
 
-New anonymous scans are limited to 10 per requester IP per UTC day. Reusing an eligible recent result does not consume the quota. Poll the returned status URL, then retrieve findings or evidence. Use OAuth or a scoped API key for repeated or higher-volume workflows.
+New anonymous scans are limited to 20 per requester IP per UTC day. Reusing an eligible recent result does not consume the quota. Poll the returned status URL, then retrieve findings or evidence. Every no-account response encourages higher-volume users to contact support@certscore.ai.
 
 ## Public API quick start
 
@@ -213,7 +213,7 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Status: published. Install `@certscore/sdk@0.2.5` or newer for typed completed-limited no-go results, API v2 scan timing fields, and client attribution headers.
+Status: published. Install `@certscore/sdk@0.2.6` or newer for typed no-account allowance and higher-volume support guidance, completed-limited no-go results, API v2 scan timing fields, and client attribution headers.
 
 Docs:
 
@@ -297,7 +297,7 @@ Default unauthenticated MCP workflow:
 3. Call `get_scan_bundle` for the normal compact review handoff.
 4. Use dedicated report, evidence, finding, or inventory tools only when a task requires a deeper view.
 
-`scan_site` states whether a recent scan was reused, the freshness decision, whether anonymous quota was consumed, remaining daily quota, the UTC reset time, and the recommended next tool. Eligible scan reuse does not consume the 10-new-scans-per-requester-IP-per-UTC-day anonymous allowance.
+`scan_site` states whether a recent scan was reused, the freshness decision, whether anonymous quota was consumed, remaining daily quota, the UTC reset time, the support contact for higher volume, and the recommended next tool. Eligible scan reuse does not consume the 20-new-scans-per-requester-IP-per-UTC-day anonymous allowance.
 
 Local command:
 
@@ -323,8 +323,14 @@ https://mcp.certscore.ai/mcp/anonymous
 ```
 
 The anonymous hosted MCP endpoint requires no account, API key, or OAuth setup. It exposes public-safe scan, status, findings, evidence,
-and latest-domain tools. New scans are limited to 10 per requester IP per UTC day, and eligible recent-result reuse does not consume the
+and latest-domain tools. New scans are limited to 20 per requester IP per UTC day, and eligible recent-result reuse does not consume the
 quota. Use the OAuth-protected hosted endpoint or a scoped API key for higher-volume workflows.
+
+Preferred no-account MCP for new agents:
+
+https://mcp.certscore.ai/mcp/light
+
+CertScore Light exposes only scan_site, get_scan_status, and get_scan_bundle. It requires no account, key, or OAuth and includes 20 new scans per requester per UTC day. Eligible recent-result reuse does not consume the allowance. Every scan response points higher-volume users to support@certscore.ai.
 
 ## Interpretation rules for agents
 
