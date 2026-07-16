@@ -1,6 +1,6 @@
 cask "certscore-mcp" do
-  version "0.2.11"
-  sha256 "801b8a1c80834714251c57b346876b0a5498bbc64662f51e9ae4876e31250cc3"
+  version "0.2.12"
+  sha256 "1cc97d206707000be9c5ebb0dc80df7696fdeca89f5b55ed19a5df97d956142a"
 
   url "https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v0.2.11/certscore-mcp-v0.2.11.tar.gz"
   name "CertScore MCP"
