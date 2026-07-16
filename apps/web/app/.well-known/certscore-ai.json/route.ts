@@ -112,6 +112,7 @@ const discoveryDocument = {
     light: {
       name: "CertScore.ai — Light mode",
       landingPage: "https://certscore.ai/mcp/light",
+      directoryListing: "https://smithery.ai/server/ben-qe1c/certscore-ai",
       transport: "streamable_http",
       endpoint: "https://mcp.certscore.ai/mcp/light",
       authentication: "none",

@@ -68,7 +68,7 @@ export default function McpLightPage() {
           <CodeBlock>{`Transport: Streamable HTTP\nURL: ${endpoint}\nAuthentication: None`}</CodeBlock>
           <p className="mt-4 text-sm text-slate-600">
             Prefer a managed directory connection? Find CertScore.ai on{" "}
-            <a className="font-semibold text-sky-700 hover:text-sky-800" href="https://smithery.ai/server/ben-qe1c/certscore-ai" rel="noreferrer" target="_blank">Smithery</a>.
+            <a className="font-semibold text-sky-700 hover:text-sky-800" href="https://smithery.ai/server/ben-qe1c/certscore-ai" rel="noopener" target="_blank">Smithery</a>.
           </p>
         </section>
 
