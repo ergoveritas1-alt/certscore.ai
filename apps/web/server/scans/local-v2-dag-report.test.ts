@@ -144,6 +144,29 @@ test("selectBoundedPreconsentRequestPurposeRows retains later promotion-grade ev
   );
 });
 
+test("canonical report counters dedupe repeated cookie writes and request rows", async () => {
+  const {
+    countCanonicalCookieObservations,
+    countCanonicalNetworkEvents,
+    deriveCriticalCoverageLimitationKeys
+  } = await loadLocalV2DagReport();
+  assert.equal(countCanonicalCookieObservations([
+    { cookieDomain: ".example.test", cookiePath: "/", cookieName: "session", operation: "set_cookie_header" },
+    { cookieDomain: ".example.test", cookiePath: "/", cookieName: "session", operation: "browser_snapshot" },
+    { cookieDomain: ".example.test", cookiePath: "/account", cookieName: "session", operation: "set_cookie_header" }
+  ]), 2);
+  assert.equal(countCanonicalNetworkEvents([
+    { eventId: "net-1", requestUrl: "https://vendor.test/a" },
+    { eventId: "net-1", requestUrl: "https://vendor.test/a" },
+    { eventId: "net-2", requestUrl: "https://vendor.test/a" }
+  ]), 2);
+  assert.deepEqual(deriveCriticalCoverageLimitationKeys({
+    applicablePolicyCoverageComplete: false,
+    consentCoverageComplete: true,
+    transportCoverageComplete: false
+  }), ["transport_security_observation_incomplete", "applicable_privacy_policy_unresolved"]);
+});
+
 function syntheticPngHeader(width: number, height: number, byteSize = 1024) {
   const buffer = Buffer.alloc(byteSize);
   Buffer.from("89504e470d0a1a0a", "hex").copy(buffer, 0);
@@ -746,6 +769,41 @@ test("summarizePolicySurfaces does not credit external vendor policies as first-
   assert.deepEqual(summary.article13DisclosureTypesObserved, []);
   assert.equal(summary.policyTextExtractionHealth.policySurfaceObserved, false);
   assert.equal(summary.policyTextExtractionHealth.policyUrlRetained, false);
+});
+
+test("policy projection rejects empty fetched documents and audience-specific privacy notices", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "empty-terms",
+      surfaceType: "terms",
+      url: "https://cnn.com/terms",
+      status: "fetched",
+      textExcerpt: "",
+      evidenceRefs: [{ refId: "empty", excerpt: "" }]
+    },
+    {
+      observationId: "children-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://cnn.com/privacy",
+      status: "fetched",
+      title: "Children's Privacy Policy",
+      textExcerpt: "Children's Privacy Policy. This document covers Services aimed at children. We collect and use personal information for those child-directed services.",
+      observedTopics: ["controller_contact"],
+      article13DisclosureSignals: [{
+        disclosureType: "controller_contact",
+        status: "observed",
+        evidenceText: "The controller for these child-directed services is Warner Bros. Discovery.",
+        confidence: 0.9,
+        source: "deterministic"
+      }]
+    }
+  ] as never, "https://cnn.com/");
+
+  assert.equal(surfaces.some((row) => row.surface.surfaceType === "terms"), false);
+  const summary = summarizePolicySurfaces(surfaces, "cnn.com");
+  assert.equal(summary.privacyPolicyPresent, false);
+  assert.deepEqual(summary.article13DisclosureTypesObserved, []);
 });
 
 test("summarizePolicySurfaces prefers general privacy notices over cookie-specific surfaces for Article 13", async () => {

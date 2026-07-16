@@ -414,6 +414,8 @@ export async function preConsentRuntimeScanner(
   let retainedConsentUiObservation: ConsentUiObservation | undefined;
   let retainedCollectionSurfaceObservations: CollectionSurfaceObservation[] = [];
   let retainedCmpRuntimeObservations: CmpRuntimeObservation[] = [];
+  let retainedTransportSecurityObservation: TransportSecurityObservation | undefined;
+  let retainedTransportSecurityArtifactRef: ArtifactRef | undefined;
 
   const buildSoftDeadlineResult = (): PreConsentRuntimeScannerResult => {
     const deadlineReason = abortReason(softDeadlineSignal);
@@ -456,11 +458,15 @@ export async function preConsentRuntimeScanner(
       consentUiObservations: retainedConsentUiObservations,
       collectionSurfaceObservations: [...retainedCollectionSurfaceObservations],
       cmpRuntimeObservations: [...retainedCmpRuntimeObservations],
-      transportSecurityObservations: [],
+      transportSecurityObservations: retainedTransportSecurityObservation
+        ? [retainedTransportSecurityObservation]
+        : [],
       screenshots: [...screenshots],
       visualCapture: { ...visualCapture },
       domSnapshots: [...fallbackDomSnapshots],
-      artifactRefs: [],
+      artifactRefs: retainedTransportSecurityArtifactRef
+        ? [retainedTransportSecurityArtifactRef]
+        : [],
       vendorResolverInputs: [...vendorResolverInputs],
     };
   };
@@ -556,6 +562,43 @@ export async function preConsentRuntimeScanner(
       }
     }
     initialNavigationHttpStatus = navigationResponse?.status();
+    const earlyTransportNetworkProbes = await transportNetworkProbesPromise;
+    timingBreakdown.push({
+      label: "transport security network probes",
+      detail: "HTTP redirect and strict TLS probes overlapped browser launch and initial navigation.",
+      durationMs: earlyTransportNetworkProbes.durationMs,
+    });
+    const earlyTransportFallback = () => ({
+      observation: availableTransportSecurityObservation({
+        networkProbes: earlyTransportNetworkProbes,
+        normalizedUrl: input.normalizedUrl,
+        pageUrl: safePageUrl(page, effectiveNavigationUrl),
+        requestedUrl: input.url,
+        scanStartedAtMs: input.scanStartedAtMs,
+      }),
+      artifactRef: undefined,
+    });
+    const earlyTransportCapture = await recordBoundedTiming(
+      timingBreakdown,
+      "page evidence: early transport security",
+      "Capture HTTPS, TLS, redirect, mixed-content, and form transport evidence before optional visual and consent work can exhaust the module budget.",
+      Math.min(2_500, Math.max(1_000, remainingModuleBudgetMs())),
+      () => captureTransportSecurityObservation({
+        collectionSurfaceObservations: [],
+        failedHttpRequests,
+        mixedContentConsoleMessages,
+        networkEvents,
+        normalizedUrl: input.normalizedUrl,
+        networkProbes: earlyTransportNetworkProbes,
+        page,
+        requestedUrl: input.url,
+        scanStartedAtMs: input.scanStartedAtMs,
+        artifactWriter: input.artifactWriter,
+      }),
+      earlyTransportFallback,
+    );
+    retainedTransportSecurityObservation = earlyTransportCapture.observation;
+    retainedTransportSecurityArtifactRef = earlyTransportCapture.artifactRef;
     const fastWait = input.waitMode === "fast";
     const networkIdleTimeoutMs = fastWait ? 1_500 : 5_000;
     const settleWaitMs = fastWait ? 350 : 1_000;
@@ -786,6 +829,26 @@ export async function preConsentRuntimeScanner(
             "Settled pre-consent viewport recaptured because the early frame was not representative of the rendered page.",
           ]),
         };
+        if (consentObservation.controls.length === 0 && remainingModuleBudgetMs() >= 750) {
+          const postSettledScreenshotObservation = await recordBoundedTiming(
+            timingBreakdown,
+            "consent UI immediate post-settled-screenshot inventory",
+            "Run one immediate typed consent-control inventory against the exact settled DOM retained in visual evidence.",
+            Math.min(1_250, remainingModuleBudgetMs()),
+            () => detectConsentUi(page, input.scanStartedAtMs, 0, {
+              allowFullDocumentCmpControls: true,
+            }),
+            () => consentObservation,
+          );
+          if (isStrongerConsentUiObservation(postSettledScreenshotObservation, consentObservation)) {
+            consentObservation = mergeConsentUiObservations(
+              consentObservation,
+              postSettledScreenshotObservation,
+              "recapture:post_settled_screenshot_typed_controls",
+            );
+            retainedConsentUiObservation = consentObservation;
+          }
+        }
       }
     }
 
@@ -1354,13 +1417,8 @@ export async function preConsentRuntimeScanner(
       }),
       artifactRef: undefined,
     });
-    const transportNetworkProbes = await transportNetworkProbesPromise;
+    const transportNetworkProbes = earlyTransportNetworkProbes;
     throwIfAborted(input.signal);
-    timingBreakdown.push({
-      label: "transport security network probes",
-      detail: "HTTP redirect and strict TLS probes overlapped browser launch, navigation, consent observation, and evidence capture.",
-      durationMs: transportNetworkProbes.durationMs,
-    });
     const transportSecurityRemainingMs = remainingModuleBudgetMs();
     const { observation: transportSecurityObservation, artifactRef: transportSecurityArtifactRef } =
       transportSecurityRemainingMs >= 1_000
@@ -1381,7 +1439,12 @@ export async function preConsentRuntimeScanner(
             scanStartedAtMs: input.scanStartedAtMs,
             artifactWriter: input.artifactWriter,
           }),
-          fallbackTransportSecurityObservation,
+          () => retainedTransportSecurityObservation
+            ? {
+                observation: retainedTransportSecurityObservation,
+                artifactRef: retainedTransportSecurityArtifactRef,
+              }
+            : fallbackTransportSecurityObservation(),
         )
         : (() => {
           recordInstantTiming(
@@ -1389,8 +1452,15 @@ export async function preConsentRuntimeScanner(
             "page evidence: transport security skipped",
             "Skipped bounded transport security observation because the pre-consent module budget was exhausted.",
           );
-          return fallbackTransportSecurityObservation();
+          return retainedTransportSecurityObservation
+            ? {
+                observation: retainedTransportSecurityObservation,
+                artifactRef: retainedTransportSecurityArtifactRef,
+              }
+            : fallbackTransportSecurityObservation();
         })();
+    retainedTransportSecurityObservation = transportSecurityObservation;
+    retainedTransportSecurityArtifactRef = transportSecurityArtifactRef;
 
     if (navigationNotes.length > 0) {
       visualCapture = {
@@ -1522,11 +1592,15 @@ export async function preConsentRuntimeScanner(
       consentUiObservations: retainedConsentUiObservations,
       collectionSurfaceObservations: retainedCollectionSurfaceObservations,
       cmpRuntimeObservations: retainedCmpRuntimeObservations,
-      transportSecurityObservations: [],
+      transportSecurityObservations: retainedTransportSecurityObservation
+        ? [retainedTransportSecurityObservation]
+        : [],
       screenshots,
       visualCapture,
       domSnapshots: fallbackDomSnapshots,
-      artifactRefs: [],
+      artifactRefs: retainedTransportSecurityArtifactRef
+        ? [retainedTransportSecurityArtifactRef]
+        : [],
       vendorResolverInputs,
     };
   } finally {
@@ -4877,6 +4951,47 @@ type TransportNetworkProbes = {
   httpProbe: TransportSecurityObservation["httpProbe"];
   tlsProbe: TransportSecurityObservation["tlsProbe"];
 };
+
+function availableTransportSecurityObservation(input: {
+  networkProbes: TransportNetworkProbes;
+  normalizedUrl: string;
+  pageUrl: string;
+  requestedUrl: string;
+  scanStartedAtMs: number;
+}): TransportSecurityObservation {
+  const pageScheme = schemeOf(input.pageUrl);
+  return {
+    observationId: "transport_security_pre_consent",
+    observedAtMs: elapsed(input.scanStartedAtMs),
+    sourceScanner: SOURCE_SCANNER,
+    scenario: SCENARIO,
+    requestedUrl: sanitizeTransportUrl(input.requestedUrl),
+    normalizedUrl: sanitizeTransportUrl(input.normalizedUrl),
+    requestedScheme: schemeOf(input.requestedUrl),
+    finalUrl: sanitizeTransportUrl(input.pageUrl),
+    finalScheme: pageScheme,
+    sampledPageUrls: unique([input.normalizedUrl, input.pageUrl].map((url) => sanitizeTransportUrl(url))).slice(0, 20),
+    pageHttpsObserved: pageScheme === "https",
+    httpProbe: input.networkProbes.httpProbe,
+    tlsProbe: input.networkProbes.tlsProbe,
+    mixedContent: {
+      loadedHttpSubresources: [],
+      blockedHttpSubresources: [],
+      observedCount: 0,
+    },
+    formTransports: [],
+    summary: {
+      scannedPagesUseHttps: pageScheme === "https",
+      validTlsCertificate: input.networkProbes.tlsProbe.validCertificate,
+      httpRedirectsToHttps: input.networkProbes.httpProbe.redirectedToHttps,
+      mixedContentObserved: false,
+      insecureFormTransportObserved: false,
+    },
+    evidenceRefs: [],
+    confidence: 0.9,
+    directVsInferred: "direct",
+  };
+}
 
 async function startTransportNetworkProbes(
   normalizedUrl: string,

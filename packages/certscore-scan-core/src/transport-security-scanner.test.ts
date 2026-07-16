@@ -76,6 +76,49 @@ test("pre-consent scanner uses strict TLS probe and records transport-security e
   }
 });
 
+test("pre-consent scanner retains early transport evidence when later runtime work exhausts the module budget", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-transport-budget-"));
+  const server = createHttpServer((request, response) => {
+    if (request.url === "/slow") {
+      setTimeout(() => {
+        response.writeHead(204);
+        response.end();
+      }, 5_000);
+      return;
+    }
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end("<!doctype html><html><body><script>fetch('/slow')</script><p>Loaded page</p></body></html>");
+  });
+  await listen(server);
+
+  try {
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const url = serverUrl(server, "http");
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 1_800,
+      softDeadlineSignal: AbortSignal.timeout(1_800),
+      artifactWriter,
+      screenshotMode: "never",
+      waitMode: "fast",
+    });
+
+    assert.equal(result.moduleRun.status, "partial");
+    const observation = result.transportSecurityObservations[0];
+    assert.ok(observation, "early transport observation should survive the soft deadline");
+    assert.equal(observation.finalScheme, "http");
+    assert.equal(observation.pageHttpsObserved, false);
+    assert.equal(observation.httpProbe.attempted, true);
+    assert.equal(observation.tlsProbe.attempted, true);
+  } finally {
+    server.closeAllConnections();
+    await closeServer(server);
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 async function createSelfSignedCertificate(tempRoot: string): Promise<{ certPath: string; keyPath: string }> {
   const certPath = path.join(tempRoot, "cert.pem");
   const keyPath = path.join(tempRoot, "key.pem");

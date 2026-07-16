@@ -60,11 +60,14 @@ test("policySurfaceScanner strips script/config noise before retaining Article 1
   });
 });
 
-test("policySurfaceScanner does not turn script-only policy pages into Article 13 evidence", async () => {
-  await withPolicyScan("policy-google-script-only", async ({ result }) => {
-    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+test("policySurfaceScanner rejects script-only policy pages as unusable evidence", async () => {
+  await withPolicyScan("policy-google-script-only", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/google-script-only`
+    );
 
-    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.status, "failed");
     assert.deepEqual(privacy?.article13DisclosureSignals, []);
     assert.deepEqual(privacy?.observedTopics, []);
   });

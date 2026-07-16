@@ -1213,6 +1213,23 @@ async function processPolicyCandidate({
       secondaryCandidates: [],
     };
   }
+  if (!textQuality.usable) {
+    return {
+      observation: observationFromCandidate(effectiveCandidate, {
+        status: "failed",
+        httpStatus: fetched.status,
+        title,
+        textExcerpt: boundedExcerpt(visibleText, []),
+        confidence: Math.max(0.35, Math.min(0.55, candidate.assisted?.confidence ?? candidate.deterministicScore)),
+      }),
+      artifactRefs: [],
+      secondaryCandidates: highValueSecondaryCandidatesFromPolicyPage(
+        effectiveCandidate.normalizedUrl,
+        uniqueStrings(secondaryCandidateHtmlInputs).join("\n"),
+        visibleText,
+      ),
+    };
+  }
   const policySections = textQuality.usable
     ? extractPolicySections({
         html: fetchedHtml,
