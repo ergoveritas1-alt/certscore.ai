@@ -798,6 +798,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     const queued = await createAnonymousFullScan({
       bypassRecentScanReuse: forceNewScan,
       coveragePlanCode: PULSE_SCAN_COVERAGE_PLAN_CODE,
+      countAnonymousQuota: !apiKeyContext.apiKeyId,
       hostname: normalized.normalizedDomain,
       minimumReusablePagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
       normalizedUrl: normalized.normalizedUrl,

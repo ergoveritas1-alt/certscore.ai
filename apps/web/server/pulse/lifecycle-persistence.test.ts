@@ -46,3 +46,9 @@ test("Pulse request persistence preserves direct API, SDK, and MCP channels", as
   assert.doesNotMatch(routeSource, /requestChannel: gptAction \? "gpt_action" : "pulse_api"/);
   assert.match(repositorySource, /input\.requestChannel \?\? input\.context\.channel \?\? input\.context\.source/);
 });
+
+test("authenticated Pulse API keys bypass the anonymous scan quota", async () => {
+  const routeSource = await readFile("apps/web/app/api/v1/pulse/route.ts", "utf8");
+
+  assert.match(routeSource, /countAnonymousQuota: !apiKeyContext\.apiKeyId/);
+});
