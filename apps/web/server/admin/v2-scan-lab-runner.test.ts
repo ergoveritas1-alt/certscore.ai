@@ -97,6 +97,13 @@ test("builds scan lab plans with optional planned consent DAG flags", () => {
     workspaceRoot,
   });
   const scanArgs = plan.steps[0]?.args ?? [];
+  assert.deepEqual(
+    scanArgs.slice(
+      scanArgs.indexOf("--pre-consent-screenshot-timeout-ms"),
+      scanArgs.indexOf("--pre-consent-screenshot-timeout-ms") + 2,
+    ),
+    ["--pre-consent-screenshot-timeout-ms", "15000"],
+  );
 
   assert.deepEqual(scanArgs.slice(scanArgs.indexOf("--scenario-planning-mode"), scanArgs.indexOf("--scenario-planning-mode") + 2), [
     "--scenario-planning-mode",

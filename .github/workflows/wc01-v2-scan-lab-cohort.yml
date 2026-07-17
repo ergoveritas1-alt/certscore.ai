@@ -215,4 +215,5 @@ jobs:
           path: |
             artifacts/v2-scan-lab-cohort-ci
             artifacts/v2-scan-lab-cohort-fixture-candidates-ci
+            artifacts/v2-calibration-*
           if-no-files-found: warn

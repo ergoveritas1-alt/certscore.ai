@@ -21,7 +21,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   if (!args.url) {
-    console.error("Usage: pnpm v2:scan --url <url> [--profile tiny] [--out ./artifacts/example] [--capture-replay] [--capture-replay-trace] [--capture-replay-aux-probes all|none|form|accessibility] [--privacy-control-url <url>...] [--scenario-planning-mode legacy_sequential|planned_parallel] [--policy-output-grace-ms 1000] [--scenario-resource-mode normal|lean] [--consent-flow-screenshot-mode auto|none]");
+    console.error("Usage: pnpm v2:scan --url <url> [--profile tiny] [--out ./artifacts/example] [--capture-replay] [--capture-replay-trace] [--capture-replay-aux-probes all|none|form|accessibility] [--privacy-control-url <url>...] [--scenario-planning-mode legacy_sequential|planned_parallel] [--policy-output-grace-ms 1000] [--pre-consent-screenshot-timeout-ms 15000] [--scenario-resource-mode normal|lean] [--consent-flow-screenshot-mode auto|none]");
     process.exit(1);
   }
 
@@ -38,6 +38,7 @@ async function main(): Promise<void> {
     scenarioConcurrency: args.scenarioConcurrency,
     policyPlanningDeadlineMs: args.policyPlanningDeadlineMs,
     policyOutputGraceMs: args.policyOutputGraceMs,
+    preConsentScreenshotTimeoutMs: args.preConsentScreenshotTimeoutMs,
     consentFlowDeadlineMs: args.consentFlowDeadlineMs,
     scenarioResourceMode: args.scenarioResourceMode,
     consentFlowScreenshotMode: args.consentFlowScreenshotMode,
@@ -65,6 +66,7 @@ function parseArgs(argv: string[]): {
   scenarioConcurrency?: number;
   policyPlanningDeadlineMs?: number;
   policyOutputGraceMs?: number;
+  preConsentScreenshotTimeoutMs?: number;
   consentFlowDeadlineMs?: number;
   scenarioResourceMode?: "normal" | "lean";
   consentFlowScreenshotMode?: "auto" | "none";
@@ -81,6 +83,7 @@ function parseArgs(argv: string[]): {
     scenarioConcurrency?: number;
     policyPlanningDeadlineMs?: number;
     policyOutputGraceMs?: number;
+    preConsentScreenshotTimeoutMs?: number;
     consentFlowDeadlineMs?: number;
     scenarioResourceMode?: "normal" | "lean";
     consentFlowScreenshotMode?: "auto" | "none";
@@ -120,6 +123,9 @@ function parseArgs(argv: string[]): {
       index += 1;
     } else if (key === "--policy-output-grace-ms" && value) {
       parsed.policyOutputGraceMs = numberArg(value);
+      index += 1;
+    } else if (key === "--pre-consent-screenshot-timeout-ms" && value) {
+      parsed.preConsentScreenshotTimeoutMs = numberArg(value);
       index += 1;
     } else if (key === "--consent-flow-deadline-ms" && value) {
       parsed.consentFlowDeadlineMs = numberArg(value);

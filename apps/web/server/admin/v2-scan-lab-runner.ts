@@ -109,6 +109,8 @@ export function buildV2ScanLabRunPlan(input: BuildRunPlanInput): V2ScanLabRunPla
           normalized.normalizedUrl,
           "--profile",
           input.profile,
+          "--pre-consent-screenshot-timeout-ms",
+          "15000",
           "--out",
           calibrationDir,
           ...privacyControlUrls.flatMap((privacyControlUrl) => ["--privacy-control-url", privacyControlUrl]),

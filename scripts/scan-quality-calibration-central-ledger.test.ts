@@ -37,6 +37,7 @@ test("live calibration workflow fails closed on central history and persists con
   assert.match(source, /effective-eligibility-ledger\.json/);
   assert.match(source, /v2:calibration-contact-persist/);
   assert.match(source, /pnpm --filter @certscore\/scan-core build/);
+  assert.match(source, /artifacts\/v2-calibration-\*/);
   assert.doesNotMatch(source, /^\s+schedule:/m);
 });
 
