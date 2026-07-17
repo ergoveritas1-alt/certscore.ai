@@ -1,7 +1,57 @@
 {
-  "manifestVersion": "certscore.scan_quality_calibration.1",
+  "manifestVersion": "certscore.scan_quality_calibration.2",
   "internalOnly": true,
   "sourceUrlList": "docs/certscore-v2/calibration-urls-lab-50.txt",
+  "eligibilityLedger": "docs/certscore-v2/scan-quality-calibration-ledger.json",
+  "centralContactLedger": {
+    "table": "public.scan_domain_contact_ledger",
+    "eventTable": "public.scan_domain_contacts",
+    "requiredForLiveSelection": true,
+    "includesAllScanChannels": true,
+    "failsClosedWhenUnavailable": true
+  },
+  "calibrationModel": {
+    "baselineUnit": "capability_lane",
+    "publicTargetMode": "rotating_inventory",
+    "fixedSiteRepetitionProhibited": true
+  },
+  "layers": {
+    "deterministicFixtures": {
+      "requiredForEveryScannerChange": true,
+      "initiatesPublicTraffic": false
+    },
+    "retainedReplay": {
+      "requiredForEveryScannerChange": true,
+      "initiatesPublicTraffic": false,
+      "boundedSanitizedArtifactsRequired": true
+    },
+    "ownedCanaries": {
+      "requiredForScannerRelease": true,
+      "initiatesPublicTraffic": true,
+      "ownershipRequired": true
+    },
+    "rotatingPublicSample": {
+      "requiredForScannerRelease": true,
+      "initiatesPublicTraffic": true,
+      "requiresEligibilityAttestation": true,
+      "minimumSize": 8,
+      "defaultSize": 10,
+      "maximumSize": 12
+    },
+    "passiveProductionSampling": {
+      "requiredForPostDeployReview": true,
+      "initiatesAdditionalTraffic": false,
+      "defaultSampleSize": 10
+    }
+  },
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28,
+    "maximumConcurrentScansPerDomain": 1,
+    "automaticRetryAfterNoGo": false,
+    "crossRegionRetryAfterBlock": false,
+    "retireAfterRepeatedNoGo": true,
+    "eligibilityStates": ["eligible", "cooldown", "blocked", "do_not_calibrate"]
+  },
   "owners": {
     "calibrationQuality": "Luna",
     "productionOperations": "SO",

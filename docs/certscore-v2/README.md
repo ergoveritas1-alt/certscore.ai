@@ -125,7 +125,11 @@ The regulatory gold corpus refresh is documented in `docs/certscore-v2/regulator
 ### Scan quality calibration program
 
 Ongoing scanner calibration follows `docs/certscore-v2/scan-quality-calibration-program.md`.
-The canonical lane registry is `docs/certscore-v2/scan-quality-calibration-manifest.json`.
+The canonical lane and rotation-policy registry is
+`docs/certscore-v2/scan-quality-calibration-manifest.json`. Deterministic fixtures and
+retained replay are the first gates; live calibration uses owned canaries plus a
+cooldown-aware rotating sample from the public target inventory. Do not routinely run
+the complete public inventory as an acceptance cohort.
 Validate it with:
 
 ```bash
@@ -133,7 +137,12 @@ pnpm v2:calibration-registry-check
 ```
 
 The registry check is deterministic and safe to run without live-site access. Use the
-existing Scan Lab and gold-corpus commands for live evidence capture and review.
+central contact export, repository-controlled eligibility ledger, and
+`pnpm v2:calibration-target-select` before live evidence capture. Selection fails closed
+when central history is unavailable. After a live run,
+`pnpm v2:calibration-ledger-record` writes a reviewable repository candidate and
+`pnpm v2:calibration-contact-persist` records the contact centrally with an idempotent
+run key.
 
 ### Replay corpus confidence gate
 

@@ -4,25 +4,33 @@ on:
   workflow_dispatch:
     inputs:
       limit:
-        description: "Number of cohort sites to scan"
+        description: "Number of cooldown-eligible inventory sites to scan"
         required: false
-        default: "50"
-      start_at:
-        description: "1-based index in docs/certscore-v2/calibration-urls-lab-50.txt"
+        default: "10"
+      rotation_key:
+        description: "Stable selection key, or auto for the current ISO week"
         required: false
-        default: "1"
+        default: "auto"
       profile:
         description: "Scan Lab profile"
         required: false
-        default: "standard"
-  schedule:
-    - cron: "0 9 * * 1"
+        default: "full"
+      eligibility_reviewed:
+        description: "SO confirmed the eligibility ledger is current and authorized this live run"
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   cohort:
+    concurrency:
+      group: wc01-v2-public-calibration
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
+      DATABASE_SSL_MODE: require
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       NEXT_PUBLIC_APP_URL: http://localhost:3000
 
@@ -30,11 +38,11 @@ jobs:
       - name: Check cohort secret availability
         id: preflight
         run: |
-          if [ -n "${OPENAI_API_KEY}" ]; then
+          if [ -n "${OPENAI_API_KEY}" ] && [ -n "${DATABASE_URL}" ]; then
             echo "enabled=true" >> "${GITHUB_OUTPUT}"
           else
             echo "enabled=false" >> "${GITHUB_OUTPUT}"
-            echo "Skipping v2 Scan Lab cohort because OPENAI_API_KEY is not configured."
+            echo "Skipping v2 Scan Lab cohort because OPENAI_API_KEY or PROD_DATABASE_URL is not configured."
 
           fi
 
@@ -63,6 +71,53 @@ jobs:
         if: steps.preflight.outputs.enabled == 'true'
         run: pnpm v2:calibration-registry-check
 
+      - name: Build database package
+        if: steps.preflight.outputs.enabled == 'true'
+        run: pnpm --filter @website-signal-risk-scanner/db build
+
+      - name: Export centralized contact history
+        if: steps.preflight.outputs.enabled == 'true'
+        run: |
+          mkdir -p artifacts/v2-scan-lab-cohort-ci
+          pnpm v2:calibration-ledger-export \
+            --out artifacts/v2-scan-lab-cohort-ci/effective-eligibility-ledger.json
+
+      - name: Select eligible rotating targets
+        if: steps.preflight.outputs.enabled == 'true'
+        id: selection
+        env:
+          LIMIT_INPUT: ${{ github.event.inputs.limit || '10' }}
+          ROTATION_KEY_INPUT: ${{ github.event.inputs.rotation_key || 'auto' }}
+          ELIGIBILITY_REVIEWED: ${{ github.event.inputs.eligibility_reviewed || 'false' }}
+        run: |
+          limit="${LIMIT_INPUT}"
+          rotation_key="${ROTATION_KEY_INPUT}"
+
+          if [ "${ELIGIBILITY_REVIEWED}" != "true" ]; then
+            echo "Public calibration requires an explicit domain eligibility and cooldown review." >&2
+            exit 1
+          fi
+
+          if ! [[ "${limit}" =~ ^[0-9]+$ ]] || [ "${limit}" -lt 8 ] || [ "${limit}" -gt 12 ]; then
+            echo "Live calibration samples must contain 8-12 sites; got ${limit}." >&2
+            exit 1
+          fi
+
+          if [ "${rotation_key}" = "auto" ]; then
+            rotation_key="$(date -u +%G-W%V)"
+          fi
+
+          mkdir -p artifacts/v2-scan-lab-cohort-ci
+          pnpm v2:calibration-target-select \
+            --ledger artifacts/v2-scan-lab-cohort-ci/effective-eligibility-ledger.json \
+            --limit "${limit}" \
+            --rotation-key "${rotation_key}" \
+            --out-urls artifacts/v2-scan-lab-cohort-ci/selected-targets.txt \
+            --out-selection artifacts/v2-scan-lab-cohort-ci/CalibrationTargetSelection.json
+
+          echo "limit=${limit}" >> "${GITHUB_OUTPUT}"
+          echo "rotation_key=${rotation_key}" >> "${GITHUB_OUTPUT}"
+
       - name: Install Playwright Chromium
         if: steps.preflight.outputs.enabled == 'true'
         run: pnpm --filter @certscore/scan-core exec playwright install chromium
@@ -87,20 +142,47 @@ jobs:
       - name: Run Scan Lab cohort
         if: steps.preflight.outputs.enabled == 'true'
         env:
-          LIMIT: ${{ github.event.inputs.limit || '50' }}
-          PROFILE: ${{ github.event.inputs.profile || 'standard' }}
-          START_AT: ${{ github.event.inputs.start_at || '1' }}
+          LIMIT: ${{ steps.selection.outputs.limit }}
+          PROFILE: ${{ github.event.inputs.profile || 'full' }}
         run: |
           pnpm v2:wc01-scan-lab-cohort \
+            --urls artifacts/v2-scan-lab-cohort-ci/selected-targets.txt \
             --profile "${PROFILE}" \
-            --start-at "${START_AT}" \
+            --start-at 1 \
             --limit "${LIMIT}" \
             --out-dir artifacts/v2-scan-lab-cohort-ci
+
+      - name: Record contact outcomes in ledger candidate
+        if: always() && steps.preflight.outputs.enabled == 'true'
+        run: |
+          summary=artifacts/v2-scan-lab-cohort-ci/Wc01V2ScanLabCohort.summary.json
+          if [ -f "${summary}" ]; then
+            pnpm v2:calibration-ledger-record \
+              --ledger artifacts/v2-scan-lab-cohort-ci/effective-eligibility-ledger.json \
+              --summary "${summary}" \
+              --out artifacts/v2-scan-lab-cohort-ci/scan-quality-calibration-ledger.candidate.json
+          else
+            echo "No cohort summary was written; no ledger candidate can be produced."
+          fi
+
+      - name: Persist calibration contacts centrally
+        if: always() && steps.preflight.outputs.enabled == 'true'
+        env:
+          CALIBRATION_RUN_KEY: github-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          summary=artifacts/v2-scan-lab-cohort-ci/Wc01V2ScanLabCohort.summary.json
+          if [ -f "${summary}" ]; then
+            pnpm v2:calibration-contact-persist \
+              --run-key "${CALIBRATION_RUN_KEY}" \
+              --summary "${summary}"
+          else
+            echo "No cohort summary was written; no central calibration contacts can be persisted."
+          fi
 
       - name: Verify Scan Lab cohort
         if: steps.preflight.outputs.enabled == 'true'
         env:
-          LIMIT: ${{ github.event.inputs.limit || '50' }}
+          LIMIT: ${{ steps.selection.outputs.limit }}
         run: |
           pnpm v2:wc01-verify-scan-lab-cohort \
             --summary artifacts/v2-scan-lab-cohort-ci/Wc01V2ScanLabCohort.summary.json \
@@ -114,7 +196,7 @@ jobs:
             --out-dir artifacts/v2-scan-lab-cohort-fixture-candidates-ci
 
       - name: Upload cohort artifacts
-        if: steps.preflight.outputs.enabled == 'true'
+        if: always() && steps.preflight.outputs.enabled == 'true'
         uses: actions/upload-artifact@v5
         with:
           name: wc01-v2-scan-lab-cohort

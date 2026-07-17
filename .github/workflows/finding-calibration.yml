@@ -9,7 +9,15 @@ on:
       - "packages/validation-shared/**"
       - "packages/shared/**"
       - "docs/certscore-v2/scan-quality-calibration-manifest.json"
+      - "docs/certscore-v2/scan-quality-calibration-ledger.json"
       - "docs/certscore-v2/calibration-urls-lab-50.txt"
+      - "scripts/lib/scan-quality-calibration-ledger.ts"
+      - "scripts/lib/scan-quality-calibration-ledger.test.ts"
+      - "scripts/scan-quality-calibration-central-ledger.test.ts"
+      - "scripts/select-scan-quality-calibration-targets.ts"
+      - "scripts/record-scan-quality-calibration-outcomes.ts"
+      - "scripts/export-scan-quality-calibration-ledger.ts"
+      - "scripts/persist-scan-quality-calibration-contacts.ts"
       - "scripts/verify-scan-quality-calibration-registry.ts"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -67,7 +75,7 @@ jobs:
         run: pnpm v2:calibration-registry-check
 
       - name: Run deterministic finding calibration tests
-        run: pnpm exec tsx --test apps/web/lib/scans/concern-policy.test.ts apps/web/lib/scans/hybrid-runtime-evidence.test.ts apps/web/lib/scans/report-surfacing-policy.test.ts apps/web/scripts/report-production-finding-frequency.test.ts packages/validation-shared/src/privacy-runtime-findings.dataset.test.ts packages/validation-shared/src/privacy-runtime-findings-eval.test.ts packages/validation-shared/src/privacy-runtime-findings-coverage.test.ts packages/validation-shared/src/privacy-runtime-findings-promote.test.ts
+        run: pnpm exec tsx --test scripts/lib/scan-quality-calibration-ledger.test.ts scripts/scan-quality-calibration-central-ledger.test.ts apps/web/lib/scans/concern-policy.test.ts apps/web/lib/scans/hybrid-runtime-evidence.test.ts apps/web/lib/scans/report-surfacing-policy.test.ts apps/web/scripts/report-production-finding-frequency.test.ts packages/validation-shared/src/privacy-runtime-findings.dataset.test.ts packages/validation-shared/src/privacy-runtime-findings-eval.test.ts packages/validation-shared/src/privacy-runtime-findings-coverage.test.ts packages/validation-shared/src/privacy-runtime-findings-promote.test.ts
 
       - name: Run production finding calibration gate
         if: steps.live-db.outputs.enabled == 'true'

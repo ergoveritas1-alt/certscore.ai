@@ -21,18 +21,34 @@ If Luna and SO are represented by different planning systems, this document is t
 source-of-truth handoff between them: Luna approves the quality baseline and SO
 executes the operational canary.
 
-## Canonical benchmark
+## Calibration model
 
-The canonical benchmark is the 50-site Scan Lab cohort registered in:
+The canonical benchmark is the set of stable capability lanes below, supported by a
+layered calibration pyramid. Public domains are replaceable evidence sources, not the
+baseline itself.
+
+1. **Deterministic fixtures** run for every scanner change and provide exact,
+   repeatable coverage without public traffic.
+2. **Retained replay** runs the change against bounded, sanitized evidence captured
+   previously. Replay is refreshed deliberately, not on every change.
+3. **Owned canaries** provide live end-to-end coverage on domains CertScore controls.
+4. **Rotating public samples** provide ecological coverage from a larger approved
+   inventory without repeatedly contacting the same domains.
+5. **Passive production sampling** reviews scans users already requested. It creates
+   bug leads and post-deploy signals without generating additional scans.
+
+The approved public-target inventory is registered in:
 
 - `docs/certscore-v2/scan-quality-calibration-manifest.json`
 - `docs/certscore-v2/calibration-urls-lab-50.txt`
+- `docs/certscore-v2/scan-quality-calibration-ledger.json`
 
-The JSON manifest is authoritative for lane expectations. The URL list remains the
-input format consumed by the cohort runner, and the registry check requires both files
-to stay in exact agreement.
+The JSON manifest is authoritative for lane expectations, layer requirements, and
+public contact safeguards. The URL list remains the input format consumed by the
+Scan Lab runner, and the registry check requires both files to stay in exact agreement.
+The complete inventory must not be run as the routine acceptance gate.
 
-The cohort is intentionally stratified across publishers, ecommerce, SaaS,
+The inventory is intentionally stratified across publishers, ecommerce, SaaS,
 healthcare, finance, government, global/CMP-heavy sites, behavioral analytics,
 and likely no-go or headless-sensitive sites.
 
@@ -49,36 +65,103 @@ Every qualifying run must report these lanes separately:
 | No-go resilience | Blocked, captcha, timeout, unsupported, and incomplete scans with explicit reason propagation. |
 | Language inference | Best-effort primary language with evidence source and unknown fallback. |
 
-The benchmark is a regression surface, not a set of hard-coded claims that every site
+The lanes are the regression surface, not a set of hard-coded claims that every site
 must have a banner, reject control, tracker, or GDPR topic. A site may legitimately
 produce `observed`, `gap`, `not_testable`, `limited`, or `no-go`; calibration reviews
 whether the status is supported by retained evidence and whether it is stable.
 
-## Operating loop
+## Public-target selection and contact policy
 
-1. Run the canonical cohort using the full profile for scanner-quality changes.
-2. Verify cohort completion and retain the summary plus bounded evidence artifacts.
-3. Compare the result with the last approved baseline.
-4. Review every gained or lost evidence row, every status transition, and every
-   material score change.
-5. Classify differences as intended change, evidence improvement, evidence loss,
+For a scanner release, select 8–12 eligible public targets, with 10 as the default.
+Stratify the sample across the required lanes and roles. Rotate through the inventory
+so the capability mix remains stable while individual domains change.
+
+The production contact ledger automatically records scan creation and outcomes across
+customer, API/SDK/MCP, admin, preview, browser, validation, and other channels at the
+shared database boundary. Before a live calibration run, the workflow exports those
+records and merges them with the repository-controlled manual ledger. Selection fails
+closed if central history is unavailable. The workflow also requires explicit SO
+authorization and is deliberately not scheduled. The following rules are mandatory:
+
+- wait at least 28 days before selecting the same domain again;
+- run at most one calibration scan for a domain at a time;
+- do not automatically retry a blocked, rate-limited, captcha, or other no-go result;
+- do not switch regions or identities to bypass a site's restriction;
+- move repeated no-go targets to `do_not_calibrate` and replace them with another
+  target serving the same lane/role;
+- use `eligible`, `cooldown`, `blocked`, and `do_not_calibrate` as the operational
+  eligibility states.
+
+A blocked result is useful no-go-resilience evidence. It is not permission to increase
+contact frequency. Retained evidence should be inspected before any rescan request.
+
+## Operating loops
+
+### Every scanner change
+
+1. Run focused deterministic fixtures for the affected lanes.
+2. Run the bounded retained-replay set for those lanes.
+3. Review every gained or lost evidence row, status transition, and material score
+   change.
+4. Classify differences as intended change, evidence improvement, evidence loss,
    runtime instability, extraction error, projection error, or unresolved review.
+
+### Scanner release
+
+1. Complete the change-level fixture and replay gates.
+2. Run the owned live canaries.
+3. Select and run a cooldown-eligible 8–12-site public sample.
+4. Verify completion and retain the summary plus bounded evidence artifacts.
+5. Compare lane-level results with the last Luna-approved baseline.
 6. Promote a new baseline only after Luna approves the evidence review.
-7. Run a smaller SO production canary after deployment and attach its result to the
-   approved calibration decision.
+
+### Post-deploy and anomaly review
+
+1. Review a passive sample of 10 recent, normally initiated production scans across
+   useful lanes and outcomes. Do not create replacement scans to fill the sample.
+2. Treat those scans as canaries and bug leads, not acceptance truth.
+3. For an anomaly, inspect retained evidence and the full projection chain first.
+4. Request a rescan only when retained evidence is insufficient or stale and the
+   domain is otherwise eligible under the contact policy.
 
 Useful commands:
 
 ```bash
 pnpm v2:calibration-registry-check
-pnpm v2:wc01-scan-lab-cohort --profile full --out-dir artifacts/v2-scan-quality-calibration
+pnpm v2:calibration-ledger-export \
+  --out artifacts/v2-scan-quality-calibration/effective-eligibility-ledger.json
+pnpm v2:calibration-target-select \
+  --ledger artifacts/v2-scan-quality-calibration/effective-eligibility-ledger.json \
+  --limit 10 \
+  --rotation-key <release-or-week-key> \
+  --out-urls artifacts/v2-scan-quality-calibration/selected-targets.txt \
+  --out-selection artifacts/v2-scan-quality-calibration/CalibrationTargetSelection.json
+pnpm v2:wc01-scan-lab-cohort \
+  --urls artifacts/v2-scan-quality-calibration/selected-targets.txt \
+  --profile full \
+  --limit 10 \
+  --out-dir artifacts/v2-scan-quality-calibration
 pnpm v2:wc01-verify-scan-lab-cohort \
   --summary artifacts/v2-scan-quality-calibration/Wc01V2ScanLabCohort.summary.json \
-  --min-sites 50
+  --min-sites 10
+pnpm v2:calibration-ledger-record \
+  --summary artifacts/v2-scan-quality-calibration/Wc01V2ScanLabCohort.summary.json \
+  --out artifacts/v2-scan-quality-calibration/scan-quality-calibration-ledger.candidate.json
 ```
 
-The scheduled workflow runs the registry check before attempting the live cohort.
-The live cohort may be skipped when scanner secrets are unavailable; that is an
+The ledger recorder never silently overwrites the canonical ledger. It writes a
+candidate beside the run artifacts. SO reviews that candidate and commits it as the
+canonical ledger before another public calibration run. This keeps contact history
+auditable and prevents a failed or partial workflow from corrupting eligibility state.
+The workflow also persists calibration contacts into the central event table using an
+idempotent run key, so subsequent selections see them even before the repository
+candidate is committed.
+
+The public live-sample workflow is manually dispatched for a scanner release after SO
+confirms target eligibility and cooldown. Its automatic 10-site slot selection rotates
+across five non-overlapping inventory segments, but the attestation remains necessary
+because calendar rotation cannot see customer scans, ad-hoc calibration, or block
+history. A live run may be skipped when scanner secrets are unavailable; that is an
 operational limitation and must not be reported as a passing quality result.
 
 ## Release decision rules
@@ -86,6 +169,8 @@ operational limitation and must not be reported as a passing quality result.
 - A single recent scan is a bug lead, not a calibration pass.
 - Three recent scans can identify a failure class, but cannot establish cohort-wide
   accuracy.
+- Ten passive production scans can identify operational patterns, but cannot replace
+  fixtures, replay, owned canaries, or the release sample.
 - No regression may be accepted solely because a screenshot looks correct; the
   structured evidence and projection chain must also be inspected.
 - A reduction in `not_testable` is only an improvement when the newly observed status
@@ -95,10 +180,16 @@ operational limitation and must not be reported as a passing quality result.
 - Baseline labels and expected evidence must never be changed to make a failing run
   pass without a review note and owner approval.
 
-## Current limitations and next expansion
+## Registry evolution
 
-The current registry defines lane coverage and review obligations, but does not yet
-encode site-specific expected statuses. Those should be added only after a site has a
-reviewed retained-evidence baseline. The initial pilot targets are registered in
-`docs/certscore-v2/scan-quality-calibration-pilot-10.txt`; promote reviewed expectations
-into the 50-site registry only after the pilot review.
+The registry defines lane coverage and review obligations but intentionally does not
+make a public site's current output a permanent expected status. Durable expectations
+belong in deterministic fixtures and bounded replay artifacts. Public targets may be
+added, retired, or replaced after Luna reviews their lane/role coverage and SO reviews
+their operational eligibility. Inventory changes must preserve coverage without
+weakening the approved lane baseline.
+
+The central ledger and repository ledger jointly enforce recorded contact history.
+Unattended public calibration remains disabled: explicit authorization is still
+required, no-go targets still require human review before re-enablement, and inventory
+composition remains a Luna baseline decision.
