@@ -142,7 +142,9 @@ central contact export, repository-controlled eligibility ledger, and
 when central history is unavailable. After a live run,
 `pnpm v2:calibration-ledger-record` writes a reviewable repository candidate and
 `pnpm v2:calibration-contact-persist` records the contact centrally with an idempotent
-run key.
+run key. For production calibration, both central-ledger commands use `--ecs-oneoff`
+so the GitHub-hosted runner assumes the approved AWS role and leaves database
+credentials and network access inside the production VPC.
 
 ### Replay corpus confidence gate
 

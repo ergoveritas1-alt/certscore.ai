@@ -24,9 +24,25 @@ test("central contact migration projects no-go outcomes and preserves manual sta
 
 test("live calibration workflow fails closed on central history and persists contacts", async () => {
   const source = await readFile(".github/workflows/wc01-v2-scan-lab-cohort.yml", "utf8");
-  assert.match(source, /PROD_DATABASE_URL/);
+  assert.match(source, /aws-actions\/configure-aws-credentials@v6/);
+  assert.match(source, /AWS_ROLE_TO_ASSUME/);
+  assert.doesNotMatch(source, /PROD_DATABASE_URL/);
   assert.match(source, /v2:calibration-ledger-export/);
+  assert.match(source, /--ecs-oneoff/);
   assert.match(source, /effective-eligibility-ledger\.json/);
   assert.match(source, /v2:calibration-contact-persist/);
   assert.doesNotMatch(source, /^\s+schedule:/m);
+});
+
+test("central ledger scripts use the production ECS psql one-off boundary", async () => {
+  const helper = await readFile("scripts/lib/prod-db-psql-oneoff.ts", "utf8");
+  const exporter = await readFile("scripts/export-scan-quality-calibration-ledger.ts", "utf8");
+  const persister = await readFile("scripts/persist-scan-quality-calibration-contacts.ts", "utf8");
+  assert.match(helper, /certscore-prod-psql-oneoff:1/);
+  assert.match(helper, /begin transaction read only/);
+  assert.match(helper, /PGSSLMODE/);
+  assert.match(exporter, /--ecs-oneoff/);
+  assert.match(exporter, /runProdDbSqlOneoff/);
+  assert.match(persister, /--ecs-oneoff/);
+  assert.match(persister, /runProdDbSqlOneoff/);
 });

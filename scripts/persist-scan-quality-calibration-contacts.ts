@@ -2,6 +2,7 @@ import { closePools, query } from "../packages/db/src/postgres.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { CalibrationTarget, CohortSummaryForLedger } from "./lib/scan-quality-calibration-ledger.js";
+import { runProdDbSqlOneoff } from "./lib/prod-db-psql-oneoff.js";
 
 type Manifest = { targets: CalibrationTarget[] };
 
@@ -29,10 +30,16 @@ async function main() {
 
   if (contacts.length === 0) throw new Error("Cohort summary contains no attempted calibration contacts");
 
-  await query(
-    `with input as (
+  const contactJson = JSON.stringify(contacts.map((contact) => ({
+    contact_at: contact.contactAt,
+    no_go: contact.noGo,
+    no_go_reason_codes: contact.noGoReasonCodes,
+    normalized_domain: contact.normalizedDomain,
+    scan_status: contact.scanStatus,
+  })));
+  const persistSql = `with input as (
        select *
-       from jsonb_to_recordset($2::jsonb) as row(
+       from jsonb_to_recordset(${args.ecsOneoff ? `${sqlLiteral(contactJson)}::jsonb` : "$2::jsonb"}) as row(
          normalized_domain text,
          contact_at timestamptz,
          scan_status text,
@@ -49,7 +56,7 @@ async function main() {
          no_go,
          no_go_reason_codes
        )
-       select $1, normalized_domain, contact_at, 'scan_quality_calibration', scan_status, no_go, no_go_reason_codes
+       select ${args.ecsOneoff ? sqlLiteral(args.runKey) : "$1"}, normalized_domain, contact_at, 'scan_quality_calibration', scan_status, no_go, no_go_reason_codes
        from input
        on conflict (calibration_run_key, normalized_domain) where calibration_run_key is not null
        do update set
@@ -61,26 +68,28 @@ async function main() {
        returning normalized_domain
      )
      select public.refresh_scan_domain_contact_ledger(normalized_domain)
-     from (select distinct normalized_domain from upserted) refreshed`,
-    [args.runKey, JSON.stringify(contacts.map((contact) => ({
-      contact_at: contact.contactAt,
-      no_go: contact.noGo,
-      no_go_reason_codes: contact.noGoReasonCodes,
-      normalized_domain: contact.normalizedDomain,
-      scan_status: contact.scanStatus,
-    })))],
-  );
+     from (select distinct normalized_domain from upserted) refreshed`;
+  if (args.ecsOneoff) {
+    await runProdDbSqlOneoff({ marker: "CALIBRATION_CONTACT_PERSIST", sql: persistSql });
+  } else {
+    await query(persistSql, [args.runKey, contactJson]);
+  }
   console.log(`Persisted ${contacts.length} calibration contacts for run ${args.runKey}`);
 }
 
 function parseArgs(argv: string[]) {
   const parsed = {
+    ecsOneoff: false,
     manifest: "docs/certscore-v2/scan-quality-calibration-manifest.json",
     runKey: "",
     summary: "",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === "--ecs-oneoff") {
+      parsed.ecsOneoff = true;
+      continue;
+    }
     const value = argv[index + 1];
     if (!value) throw new Error(`Missing value for ${arg}`);
     if (arg === "--manifest") parsed.manifest = value;
@@ -90,8 +99,13 @@ function parseArgs(argv: string[]) {
     index += 1;
   }
   if (!parsed.runKey) throw new Error("--run-key is required");
+  if (!/^[A-Za-z0-9._-]+$/.test(parsed.runKey)) throw new Error("--run-key contains unsupported characters");
   if (!parsed.summary) throw new Error("--summary is required");
   return parsed;
+}
+
+function sqlLiteral(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
 }
 
 function normalizedDomain(url: string) {

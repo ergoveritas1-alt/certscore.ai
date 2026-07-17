@@ -8,6 +8,7 @@ import {
   type CalibrationLedger,
   type CalibrationTarget,
 } from "./lib/scan-quality-calibration-ledger.js";
+import { parseSingleJsonOutput, runProdDbSqlOneoff } from "./lib/prod-db-psql-oneoff.js";
 
 type Manifest = {
   eligibilityLedger: string;
@@ -38,8 +39,7 @@ async function main() {
   if (validationErrors.length > 0) throw new Error(validationErrors.join("\n"));
 
   const domains = manifest.targets.map((target) => normalizedDomain(target.url));
-  const centralRows = await query<CentralLedgerRow>(
-    `select
+  const selectSql = `select
        normalized_domain,
        last_contact_at,
        last_source,
@@ -50,12 +50,12 @@ async function main() {
        coalesce(manual_state, automatic_state) as effective_state,
        manual_note
      from public.scan_domain_contact_ledger
-     where normalized_domain = any($1::text[])`,
-    [domains],
-    { readOnly: true },
-  );
+     where normalized_domain = any($1::text[])`;
+  const centralRows = args.ecsOneoff
+    ? await loadCentralRowsViaEcs(domains)
+    : (await query<CentralLedgerRow>(selectSql, [domains], { readOnly: true })).rows;
   const effectiveLedger = mergeCentralContactLedger({
-    centralRecords: centralRows.rows.map((row) => ({
+    centralRecords: centralRows.map((row) => ({
       consecutiveNoGoCount: row.consecutive_no_go_count,
       cooldownUntil: row.cooldown_until,
       effectiveState: row.effective_state,
@@ -76,17 +76,39 @@ async function main() {
   const outputPath = path.resolve(root, args.out);
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(effectiveLedger, null, 2)}\n`, "utf8");
-  console.log(`Exported ${centralRows.rows.length} central contact records into ${outputPath}`);
+  console.log(`Exported ${centralRows.length} central contact records into ${outputPath}`);
+}
+
+async function loadCentralRowsViaEcs(domains: string[]) {
+  const domainList = domains.map(sqlLiteral).join(", ");
+  const output = await runProdDbSqlOneoff({
+    marker: "CALIBRATION_LEDGER_EXPORT",
+    readOnly: true,
+    sql: `select coalesce(jsonb_agg(to_jsonb(rows)), '[]'::jsonb)::text
+          from (
+            select normalized_domain, last_contact_at, last_source, last_outcome,
+                   last_no_go_reason_codes, consecutive_no_go_count, cooldown_until,
+                   coalesce(manual_state, automatic_state) as effective_state, manual_note
+            from public.scan_domain_contact_ledger
+            where normalized_domain in (${domainList})
+          ) rows`,
+  });
+  return parseSingleJsonOutput<CentralLedgerRow[]>(output);
 }
 
 function parseArgs(argv: string[]) {
   const parsed = {
+    ecsOneoff: false,
     ledger: undefined as string | undefined,
     manifest: "docs/certscore-v2/scan-quality-calibration-manifest.json",
     out: "artifacts/v2-scan-quality-calibration/effective-eligibility-ledger.json",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === "--ecs-oneoff") {
+      parsed.ecsOneoff = true;
+      continue;
+    }
     const value = argv[index + 1];
     if (!value) throw new Error(`Missing value for ${arg}`);
     if (arg === "--ledger") parsed.ledger = value;
@@ -96,6 +118,10 @@ function parseArgs(argv: string[]) {
     index += 1;
   }
   return parsed;
+}
+
+function sqlLiteral(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
 }
 
 function normalizedDomain(url: string) {

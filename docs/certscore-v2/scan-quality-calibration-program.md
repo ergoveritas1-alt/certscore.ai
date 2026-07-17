@@ -129,6 +129,7 @@ Useful commands:
 ```bash
 pnpm v2:calibration-registry-check
 pnpm v2:calibration-ledger-export \
+  --ecs-oneoff \
   --out artifacts/v2-scan-quality-calibration/effective-eligibility-ledger.json
 pnpm v2:calibration-target-select \
   --ledger artifacts/v2-scan-quality-calibration/effective-eligibility-ledger.json \
@@ -147,12 +148,18 @@ pnpm v2:wc01-verify-scan-lab-cohort \
 pnpm v2:calibration-ledger-record \
   --summary artifacts/v2-scan-quality-calibration/Wc01V2ScanLabCohort.summary.json \
   --out artifacts/v2-scan-quality-calibration/scan-quality-calibration-ledger.candidate.json
+pnpm v2:calibration-contact-persist \
+  --ecs-oneoff \
+  --run-key <idempotent-run-key> \
+  --summary artifacts/v2-scan-quality-calibration/Wc01V2ScanLabCohort.summary.json
 ```
 
 The ledger recorder never silently overwrites the canonical ledger. It writes a
 candidate beside the run artifacts. SO reviews that candidate and commits it as the
 canonical ledger before another public calibration run. This keeps contact history
 auditable and prevents a failed or partial workflow from corrupting eligibility state.
+Production central-ledger reads and writes use the approved ECS psql one-off boundary;
+GitHub-hosted runners must not connect directly to the private production database.
 The workflow also persists calibration contacts into the central event table using an
 idempotent run key, so subsequent selections see them even before the repository
 candidate is committed.
