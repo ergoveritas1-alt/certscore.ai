@@ -11,6 +11,7 @@ import { requesterIpAttributionFromContext, type RequesterIpAttributionSource } 
 import { inferPrimaryLanguage, type PrimaryLanguageConfidence, type PrimaryLanguageSource } from "../../lib/scans/primary-language";
 import { ensurePulseTables } from "../pulse/schema";
 import { adminNoGoSql, projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
+import { loadAdminScanFilterOptions } from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminPulseRequestStatus =
@@ -55,6 +56,7 @@ export type AdminPulseRequestListItem = {
   resultPulseUrl: string | null;
   resultReportUrl: string | null;
   scanId: string | null;
+  scanOutcome: string | null;
   score: number | null;
   scanFromLabel: string;
   scanFromValue: string;
@@ -152,7 +154,8 @@ const PULSE_NO_GO_SQL = adminNoGoSql({
   captchaFlag: "ss.captcha_flag",
   responseSummary: "pr.response_summary",
   runtimeArtifacts: "sra",
-  snapshotOutcome: "ss.scan_outcome"
+  snapshotOutcome: "ss.scan_outcome",
+  outcomesParameter: "$12"
 });
 
 const PULSE_ACTIVITY_FILTER_SQL = `
@@ -175,7 +178,14 @@ const PULSE_ACTIVITY_FILTER_SQL = `
       or coalesce(pr.request_context -> 'provenance' ->> 'sourceIp', '') ilike '%' || $2 || '%'
       or coalesce(pr.request_context -> 'provenance' ->> 'originIp', '') ilike '%' || $2 || '%'
       or coalesce(pr.request_context -> 'provenance' ->> 'ipHash', '') ilike '%' || $2 || '%'
-    )`;
+    )
+    and ($3::text is null or (case when coalesce(pr.request_context ->> 'forceNewScan', pr.request_context ->> 'bypassRecentScanReuse') = 'true' then 'forced_fresh' when pr.resolution_mode = 'reused_existing_scan' then 'reused' else 'fresh' end) = $3)
+    and ($4::text is null or nullif(trim(ss.site_language_primary), '') = $4)
+    and ($5::text is null or ss.admin_industry_label = $5)
+    and ($6::text is null or coalesce(pr.request_context ->> 'scanFrom', s.scan_config_json ->> 'scanFrom', 'default') = $6)
+    and ($7::timestamptz is null or pr.requested_at >= $7::timestamptz)
+    and ($8::text is null or (case when coalesce(ss.captcha_flag, false) then 'captcha' when coalesce(ss.blocked_flag, false) or ss.access_posture_class = 'early_loss' then 'blocked' when ss.access_posture_class = 'robots_limited' then 'robots_limited' when ss.access_posture_class = 'degraded_but_useful' then 'limited' when ss.scan_id is not null then 'clear' else 'unknown' end) = $8)
+    and ($9::text is null or ss.scan_outcome = $9)`;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -299,6 +309,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId,
+    scanOutcome: typeof row.scan_outcome === "string" ? row.scan_outcome : null,
     score,
     scanFromLabel: formatScanFromLabel(scanFromValue),
     scanFromValue,
@@ -392,12 +403,27 @@ export async function listAdminPulseRequests(input: {
   offset?: number;
   query?: string | null;
   status?: AdminPulseRequestStatus | null;
+  freshness?: string | null;
+  language?: string | null;
+  industry?: string | null;
+  scanFrom?: string | null;
+  timeSpan?: "all" | "4h" | "12h" | "24h" | "7d" | "31d";
+  access?: string | null;
+  outcome?: string | null;
 } = {}): Promise<AdminPulseRequestListItem[]> {
   await requirePlatformAdminContext();
   await ensurePulseTables();
   const limit = Math.max(1, Math.min(100, input.limit ?? 20));
   const offset = Math.max(0, input.offset ?? 0);
   const search = input.query?.trim() || null;
+  const freshness = input.freshness?.trim() || null;
+  const language = input.language?.trim() || null;
+  const industry = input.industry?.trim() || null;
+  const scanFrom = input.scanFrom?.trim() || null;
+  const access = input.access?.trim() || null;
+  const outcome = input.outcome?.trim() || null;
+  const timeSpanHours = input.timeSpan === "4h" ? 4 : input.timeSpan === "12h" ? 12 : input.timeSpan === "24h" ? 24 : input.timeSpan === "7d" ? 168 : input.timeSpan === "31d" ? 744 : null;
+  const since = timeSpanHours === null ? null : new Date(Date.now() - timeSpanHours * 60 * 60 * 1000).toISOString();
   const rows = await query<Record<string, unknown>>(
     `select pr.public_id,
             pr.job_id,
@@ -467,8 +493,8 @@ export async function listAdminPulseRequests(input: {
        ) pad on true
       ${PULSE_ACTIVITY_FILTER_SQL}
       order by pr.requested_at desc
-      limit $3 offset $4`,
-    [input.status ?? null, search, limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES],
+      limit $10 offset $11`,
+    [input.status ?? null, search, freshness, language, industry, scanFrom, since, access, outcome, limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES],
     { readOnly: true }
   );
 
@@ -478,22 +504,35 @@ export async function listAdminPulseRequests(input: {
 export async function countAdminPulseRequests(input: {
   query?: string | null;
   status?: AdminPulseRequestStatus | null;
+  freshness?: string | null;
+  language?: string | null;
+  industry?: string | null;
+  scanFrom?: string | null;
+  timeSpan?: "all" | "4h" | "12h" | "24h" | "7d" | "31d";
+  access?: string | null;
+  outcome?: string | null;
 } = {}): Promise<number> {
   await requirePlatformAdminContext();
   await ensurePulseTables();
   const result = await queryOne<{ total_count: number }>(
-    `select count(*)::int as total_count, max($3::int) as requested_limit, max($4::int) as requested_offset
+    `select count(*)::int as total_count, max($10::int) as requested_limit, max($11::int) as requested_offset
        from pulse_requests pr
        left join scan_snapshots ss on ss.scan_id = pr.scan_id
        left join scan_runtime_artifacts sra on sra.scan_id = pr.scan_id
+       left join scans s on s.id = pr.scan_id
        left join users app_user on app_user.id::text = pr.requested_by ->> 'userId'
        left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
        left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
        ${PULSE_ACTIVITY_FILTER_SQL}`,
-    [input.status ?? null, input.query?.trim() || null, 0, 0, SCAN_NO_GO_SNAPSHOT_OUTCOMES],
+    [input.status ?? null, input.query?.trim() || null, input.freshness?.trim() || null, input.language?.trim() || null, input.industry?.trim() || null, input.scanFrom?.trim() || null, input.timeSpan && input.timeSpan !== "all" ? new Date(Date.now() - (input.timeSpan === "4h" ? 4 : input.timeSpan === "12h" ? 12 : input.timeSpan === "24h" ? 24 : input.timeSpan === "7d" ? 168 : 744) * 60 * 60 * 1000).toISOString() : null, input.access?.trim() || null, input.outcome?.trim() || null, 0, 0, SCAN_NO_GO_SNAPSHOT_OUTCOMES],
     { readOnly: true }
   );
   return result?.total_count ?? 0;
+}
+
+export async function getAdminPulseFilterOptions() {
+  await requirePlatformAdminContext();
+  return loadAdminScanFilterOptions();
 }
 
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {

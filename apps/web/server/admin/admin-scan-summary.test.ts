@@ -62,6 +62,28 @@ test("Admin Scans filters and counts the complete retained activity set in SQL",
   assert.match(pageSource, /scanPage\.totalCount/);
 });
 
+test("Admin Scans exposes server-side freshness, metadata, origin, and time-span filters", async () => {
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+
+  for (const name of ["freshness", "access", "outcome", "language", "industry", "scanFrom", "timeSpan"]) {
+    assert.match(pageSource, new RegExp(`name=\\"${name}\\"`));
+    assert.match(listSource, new RegExp(name));
+    assert.match(repositorySource, new RegExp(
+      name === "scanFrom" ? "scan_from_filter" :
+        name === "timeSpan" ? "activity_at >=" :
+          name === "access" ? "access_filter" : `${name}_filter`
+    ));
+  }
+  assert.match(repositorySource, /limit \$8 offset \$9/);
+  assert.match(pageSource, /Past 4 hours/);
+  assert.match(pageSource, /Past 31 days/);
+  assert.match(repositorySource, /from public\.industries/);
+  assert.match(repositorySource, /order by sort_order asc, label asc/);
+  assert.match(repositorySource, /outcomesParameter: "\$12"/);
+});
+
 test("admin activity pages use one search prompt across domain, scan, email, requester, and IP", async () => {
   const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
   const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");

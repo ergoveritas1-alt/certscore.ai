@@ -20,6 +20,7 @@ import { deriveDisplayCreatedAt } from "../scans/display-state";
 import {
   loadAdminScanOverviewCounts,
   loadAdminScanActivityPageRefs,
+  loadAdminScanFilterOptions,
   loadAdminScanListPageData,
   loadAdminPulseScanAttributionRows,
   loadAdminScanRequestRows,
@@ -84,6 +85,7 @@ export type AdminScanListItem = {
   scanType: string;
   scanFromLabel: string;
   scanFromValue: string;
+  scanOutcome: string | null;
   source: string | null;
   status: string;
   startedAt: string | null;
@@ -113,6 +115,9 @@ export type BlockedRunTelemetry = {
 };
 
 export type AdminScanListStatus = "any" | "no_go" | "failed" | "running" | "queued" | "limited" | "completed";
+export type AdminScanListFreshness = "any" | "fresh" | "forced_fresh" | "reused";
+export type AdminScanListAccess = "any" | "clear" | "blocked" | "captcha" | "robots_limited" | "limited" | "unknown";
+export type AdminScanListTimeSpan = "all" | "4h" | "12h" | "24h" | "7d" | "31d";
 
 export async function listAdminScans(limit = 50, offset = 0, filters?: { email?: string | null; query?: string | null; status?: AdminScanListStatus }): Promise<AdminScanListItem[]> {
   return (await listAdminScansPage(limit, offset, filters)).items;
@@ -121,13 +126,20 @@ export async function listAdminScans(limit = 50, offset = 0, filters?: { email?:
 export async function listAdminScansPage(
   limit = 50,
   offset = 0,
-  filters?: { email?: string | null; query?: string | null; status?: AdminScanListStatus }
+  filters?: { email?: string | null; query?: string | null; status?: AdminScanListStatus; freshness?: AdminScanListFreshness; access?: AdminScanListAccess; outcome?: string | null; language?: string | null; industry?: string | null; scanFrom?: string | null; timeSpan?: AdminScanListTimeSpan }
 ): Promise<{ items: AdminScanListItem[]; totalCount: number }> {
   await requirePlatformAdminContext();
   const requesterEmail = filters?.email?.trim().slice(0, 160) || null;
   const page = await loadAdminScanActivityPageRefs(limit, offset, {
     query: filters?.query ?? requesterEmail,
-    status: filters?.status
+    status: filters?.status,
+    freshness: filters?.freshness,
+    access: filters?.access,
+    outcome: filters?.outcome,
+    language: filters?.language,
+    industry: filters?.industry,
+    scanFrom: filters?.scanFrom,
+    timeSpan: filters?.timeSpan
   });
   const selectedScanIds = [...new Set(page.rows.flatMap((row) => row.scan_id ? [row.scan_id] : []))];
   const selectedRequestIds = page.rows.flatMap((row) => row.request_public_id ? [row.request_public_id] : []);
@@ -249,6 +261,7 @@ export async function listAdminScansPage(
       scanType: scan.scan_type,
       scanFromLabel: getScanFromDisplay(scan.scan_config_json).label,
       scanFromValue: getScanFromDisplay(scan.scan_config_json).value,
+      scanOutcome: snapshot?.scan_outcome ?? null,
       source: typeof scan.scan_config_json?.source === "string" ? scan.scan_config_json.source : null,
       status: scan.status,
       createdAt: displayCreatedAt,
@@ -307,6 +320,11 @@ export async function listAdminScansPage(
 export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMetrics> {
   await requirePlatformAdminContext();
   return await loadAdminScanOverviewCounts();
+}
+
+export async function getAdminScanFilterOptions() {
+  await requirePlatformAdminContext();
+  return await loadAdminScanFilterOptions();
 }
 
 function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListItem | null = null): AdminScanListItem {
@@ -376,6 +394,7 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     scanType: request.request_type,
     scanFromLabel: scanFromDisplay.label,
     scanFromValue: scanFromDisplay.value,
+    scanOutcome: linkedScan?.scanOutcome ?? null,
     scanViewHref: getAdminAuthenticatedScanHref(linkedScanId),
     source: request.request_channel,
     status: request.status,

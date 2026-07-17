@@ -1,21 +1,25 @@
-import Link from "next/link";
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { SCAN_FROM_VALUES, formatScanFromLabel } from "@website-signal-risk-scanner/shared";
 import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/scans/scan-from-icons";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import { getAdminAuthenticatedScanHref } from "../../../../server/admin/admin-scan-links";
-import { countAdminPulseRequests, getAdminPulseOverviewCounts, listAdminPulseRequests, type AdminPulseRequestStatus } from "../../../../server/admin/list-pulse-requests";
+import { countAdminPulseRequests, getAdminPulseFilterOptions, getAdminPulseOverviewCounts, listAdminPulseRequests, type AdminPulseRequestStatus } from "../../../../server/admin/list-pulse-requests";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminReportLink } from "../scans/admin-scan-actions";
+import { AdminScansFilterForm } from "../scans/admin-scans-filter-form";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const statuses = ["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited", "no_go"] as const;
+const freshnesses = ["any", "fresh", "forced_fresh", "reused"] as const;
+const accessValues = ["any", "clear", "blocked", "captcha", "robots_limited", "limited", "unknown"] as const;
+const timeSpans = ["all", "4h", "12h", "24h", "7d", "31d"] as const;
 
 type AdminPulsePageProps = {
-  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string }>;
+  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string }>;
 };
 
 function normalizeStatus(value: string | undefined): AdminPulseRequestStatus | null {
@@ -25,6 +29,10 @@ function normalizeStatus(value: string | undefined): AdminPulseRequestStatus | n
 function normalizeQuery(value: string | undefined) {
   const query = value?.trim().slice(0, 160) ?? "";
   return query || null;
+}
+
+function normalizeOption(value: string | undefined, options: readonly string[], fallback: string) {
+  return options.includes(value ?? "") ? value ?? fallback : fallback;
 }
 
 function formatLabel(value: string | null) {
@@ -60,6 +68,10 @@ function freshnessLabel(value: string | null, forced: boolean | null) {
   return formatLabel(value);
 }
 
+function outcomeLabel(value: string | null, noGo: boolean) {
+  return value ? `${formatLabel(value)} (${noGo ? "No-go" : "Go"})` : "—";
+}
+
 function accessLabel(request: {
   accessPostureClass: string | null;
   blockedFlag: boolean | null;
@@ -79,12 +91,23 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const resolved = searchParams ? await searchParams : {};
   const activeStatus = normalizeStatus(resolved.status);
   const activeQuery = normalizeQuery(resolved.q);
+  const activeFreshness = normalizeOption(resolved.freshness, freshnesses, "any");
+  const activeAccess = normalizeOption(resolved.access, accessValues, "any");
+  const activeOutcome = resolved.outcome?.trim().slice(0, 120) ?? "";
+  const activeLanguage = resolved.language?.trim().slice(0, 80) ?? "";
+  const activeIndustry = resolved.industry?.trim().slice(0, 200) ?? "";
+  const activeScanFrom = SCAN_FROM_VALUES.includes(resolved.scanFrom as typeof SCAN_FROM_VALUES[number]) ? resolved.scanFrom as typeof SCAN_FROM_VALUES[number] : "any";
+  const activeTimeSpan = normalizeOption(resolved.timeSpan, timeSpans, "all") as typeof timeSpans[number];
+  const hasFilters = Boolean(activeQuery) || Boolean(activeStatus) || activeFreshness !== "any" || activeAccess !== "any" || Boolean(activeOutcome) || Boolean(activeLanguage) || Boolean(activeIndustry) || activeScanFrom !== "any" || activeTimeSpan !== "all";
+  const [counts, filterOptions] = await Promise.all([
+    getAdminPulseOverviewCounts(),
+    getAdminPulseFilterOptions()
+  ]);
   const pageSize = normalizePageSize(resolved.perPage);
   const page = normalizePage(resolved.page);
-  const [counts, filteredTotal, requests] = await withServerTiming("app.admin.api_activity", () => Promise.all([
-    getAdminPulseOverviewCounts(),
-    countAdminPulseRequests({ query: activeQuery, status: activeStatus }),
-    listAdminPulseRequests({ limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus })
+  const [filteredTotal, requests] = await withServerTiming("app.admin.api_activity", () => Promise.all([
+    countAdminPulseRequests({ query: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan }),
+    listAdminPulseRequests({ limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan })
   ]));
   const pageCount = Math.max(1, Math.ceil(filteredTotal / pageSize));
 
@@ -103,15 +126,17 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
         </div>
       </CardHeader>
       <CardContent className="space-y-3 pt-0">
-        <form action="/app/admin/pulse" className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-2">
-          <input aria-label="Filter by domain, scan ID, email, requester, or IP" className="min-h-8 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-xs" defaultValue={activeQuery ?? ""} name="q" placeholder="Domain, scan_id, email, requester, IP" />
-          <select aria-label="Filter API activity by status" className="min-h-8 rounded-lg border border-slate-300 bg-white px-3 text-xs" defaultValue={activeStatus ?? ""} name="status">
-            <option value="">Any status</option>
-            {statuses.map((status) => <option key={status} value={status}>{formatLabel(status)}</option>)}
-          </select>
-          <Button size="sm" type="submit" variant="secondary">Filter</Button>
-          {activeQuery || activeStatus ? <Link className="inline-flex min-h-8 items-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700" href="/app/admin/pulse">Clear</Link> : null}
-        </form>
+        <AdminScansFilterForm basePath="/app/admin/pulse" clearHref="/app/admin/pulse" hasFilters={hasFilters}>
+          <input aria-label="Filter by domain, scan ID, email, requester, or IP" className="h-10 min-w-[28rem] flex-[1_1_32rem] rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery ?? ""} name="q" placeholder="Domain, scan_id, email, requester, IP" />
+          <select aria-label="Filter API activity by status" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeStatus ?? ""} name="status"><option value="">Any status</option>{statuses.map((status) => <option key={status} value={status}>{formatLabel(status)}</option>)}</select>
+          <select aria-label="Filter API activity by freshness" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeFreshness} name="freshness"><option value="any">Any freshness</option>{freshnesses.slice(1).map((freshness) => <option key={freshness} value={freshness}>{freshness === "forced_fresh" ? "Forced fresh" : freshness === "reused" ? "Reused <24h" : "Fresh"}</option>)}</select>
+          <select aria-label="Filter API activity by access posture" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeAccess} name="access"><option value="any">Any access</option>{accessValues.slice(1).map((access) => <option key={access} value={access}>{access === "robots_limited" ? "Robots-limited" : access === "captcha" ? "CAPTCHA" : formatLabel(access)}</option>)}</select>
+          <select aria-label="Filter API activity by outcome" className="h-10 w-[12rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeOutcome} name="outcome"><option value="">Any outcome</option>{filterOptions.outcomes.map((outcome) => <option key={outcome} value={outcome}>{outcomeLabel(outcome, outcome.startsWith("reachability_blocked") || ["robots_restricted", "transport_failure", "timeout_navigation", "unknown_access_limitation", "domain_inactive_or_unstable"].includes(outcome))}</option>)}</select>
+          <select aria-label="Filter API activity by language" className="h-10 w-[7rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeLanguage} name="language"><option value="">Any language</option>{filterOptions.languages.map((language) => <option key={language} value={language}>{language}</option>)}</select>
+          <select aria-label="Filter API activity by industry" className="h-10 w-[10.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeIndustry} name="industry"><option value="">Any industry</option>{filterOptions.industries.map((industry) => <option key={industry} value={industry}>{industry}</option>)}</select>
+          <select aria-label="Filter API activity by origin" className="h-10 w-[7.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeScanFrom} name="scanFrom"><option value="any">Any origin</option>{SCAN_FROM_VALUES.map((scanFrom) => <option key={scanFrom} value={scanFrom}>{formatScanFromLabel(scanFrom)}</option>)}</select>
+          <select aria-label="Filter API activity by time span" className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeTimeSpan} name="timeSpan">{timeSpans.map((timeSpan) => <option key={timeSpan} value={timeSpan}>{timeSpan === "all" ? "All time" : timeSpan === "4h" ? "Past 4 hours" : timeSpan === "12h" ? "Past 12 hours" : timeSpan === "24h" ? "Past 24 hours" : timeSpan === "7d" ? "Past 7 days" : "Past 31 days"}</option>)}</select>
+        </AdminScansFilterForm>
 
         <PaginationControls
           basePath="/app/admin/pulse"
@@ -119,18 +144,18 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           page={page}
           pageCount={pageCount}
           pageSize={pageSize}
-          searchParams={{ q: activeQuery, status: activeStatus }}
+          searchParams={{ q: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan }}
           totalCount={filteredTotal}
           visibleCount={requests.length}
         />
 
         <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="table-fixed text-left text-xs" style={{ minWidth: "1740px" }}>
+          <table className="table-fixed text-left text-xs" style={{ minWidth: "1920px" }}>
             <colgroup>
               <col style={{ width: "40px" }} /><col style={{ width: "70px" }} /><col style={{ width: "175px" }} />
               <col style={{ width: "140px" }} /><col style={{ width: "165px" }} /><col style={{ width: "70px" }} />
               <col style={{ width: "60px" }} /><col style={{ width: "210px" }} /><col style={{ width: "110px" }} />
-              <col style={{ width: "75px" }} /><col style={{ width: "55px" }} /><col style={{ width: "100px" }} />
+              <col style={{ width: "75px" }} /><col style={{ width: "180px" }} /><col style={{ width: "55px" }} /><col style={{ width: "100px" }} />
               <col style={{ width: "65px" }} /><col style={{ width: "160px" }} /><col style={{ width: "120px" }} />
               <col style={{ width: "130px" }} /><col style={{ width: "70px" }} />
             </colgroup>
@@ -140,7 +165,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Route" },
                   { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Site" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
-                  { label: "Time" }, { label: "From" }, { label: "Freshness" }, { label: "Language" },
+                  { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" },
                   { label: "Industry" }, { label: "Mode" }, { label: "Usage" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }
                 ].map(({ label, className }) => <th className={`border-b border-slate-200 px-2.5 py-1.5 font-semibold ${className ?? ""}`} key={label}>{label}</th>)}
@@ -170,6 +195,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                     <td className="px-2.5 py-1.5"><p className="whitespace-nowrap">Privacy {request.privacyPolicyPresent === true ? "✓" : request.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={request.cmpVendorName ?? undefined}>CMP {request.cmpVendorName ?? "—"}</p></td>
                     <td className="truncate px-2.5 py-1.5 font-medium text-slate-700" title={request.noGoReason ?? undefined}>{accessLabel(request)}</td>
                     <td className="px-2.5 py-1.5 font-medium text-slate-800">{request.elapsedSeconds !== null ? `${Number.isInteger(Math.round(request.elapsedSeconds * 10) / 10) ? Math.round(request.elapsedSeconds * 10) / 10 : (Math.round(request.elapsedSeconds * 10) / 10).toFixed(1)}s` : "—"}</td>
+                    <td className="truncate px-2.5 py-1.5 text-slate-700" title={request.scanOutcome ?? undefined}>{outcomeLabel(request.scanOutcome, request.noGoFlag)}</td>
                     <td className="px-2.5 py-1.5" title={request.scanFromLabel}><span aria-label={request.scanFromLabel} className="inline-flex"><ScanFromMarker flag={"flag" in marker ? marker.flag : undefined} icon={"icon" in marker ? marker.icon : undefined} selected /></span></td>
                     <td className="px-2.5 py-1.5"><span className="inline-flex rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200">{freshnessLabel(request.freshness, request.freshRescanRequested)}</span></td>
                     <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700" title={request.primaryLanguage ? `${request.primaryLanguageConfidence ?? "unknown"} confidence · ${(request.primaryLanguageSource ?? "unknown").replaceAll("_", " ")}` : "No reliable retained language evidence"}>{request.primaryLanguage ?? "—"}</td>

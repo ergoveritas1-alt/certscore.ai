@@ -1,0 +1,54 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { type FormEvent, type ReactNode, useTransition } from "react";
+
+type AdminScansFilterFormProps = {
+  basePath?: string;
+  children: ReactNode;
+  clearHref?: string;
+  hasFilters: boolean;
+};
+
+export function AdminScansFilterForm({ basePath = "/app/admin/scans", children, clearHref, hasFilters }: AdminScansFilterFormProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const params = new URLSearchParams();
+
+    new FormData(event.currentTarget).forEach((value, key) => {
+      if (typeof value === "string" && value.length > 0) {
+        params.set(key, value);
+      }
+    });
+
+    const query = params.toString();
+    startTransition(() => {
+      router.push(query ? `${basePath}?${query}` : basePath);
+    });
+  }
+
+  return (
+    <form
+      aria-busy={isPending}
+      className="flex flex-nowrap gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-2"
+      method="get"
+      onSubmit={handleSubmit}
+    >
+      {children}
+      <button
+        aria-label={isPending ? "Applying scan filters" : "Apply scan filters"}
+        className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70"
+        disabled={isPending}
+        type="submit"
+      >
+        {isPending ? <span aria-hidden="true" className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : null}
+        {isPending ? "Filtering…" : "Filter"}
+      </button>
+      {hasFilters ? <Link className="inline-flex h-10 shrink-0 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700" href={clearHref ?? basePath}>Clear</Link> : null}
+    </form>
+  );
+}

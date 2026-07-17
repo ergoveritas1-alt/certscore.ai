@@ -623,6 +623,14 @@ export async function recordLocalV2DagLambdaResultEvent(
       );
     }
   }
+  if (parsedMessage.status === "completed" && !retainedDiagnostics?.noGo) {
+    await query(
+      `update scan_snapshots
+          set scan_outcome = coalesce(scan_outcome, 'completed_partial')
+        where scan_id = $1`,
+      [parsedMessage.scanId]
+    );
+  }
   if (artifactMirror && options.mirrorAuxiliaryArtifacts !== false) {
     await mirrorLocalV2DagLambdaAuxiliaryArtifacts({
       mirror: artifactMirror,

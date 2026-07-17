@@ -11,6 +11,7 @@ export type AdminScanSummary = {
   industry: string | null;
   primaryLanguage: string | null;
   privacyPolicyPresent: boolean | null;
+  scanOutcome: string | null;
   score: number | null;
   topFindingIds: string[];
   topFindingCount: number;
@@ -65,6 +66,7 @@ export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRec
     industry: scanRecord.domainBenchmark?.industry ?? null,
     primaryLanguage: recordString(snapshot, "site_language_primary"),
     privacyPolicyPresent: recordBoolean(snapshot, "privacy_policy_present"),
+    scanOutcome: recordString(snapshot, "scan_outcome"),
     score: recordNumber(reportSummary, "score") ?? recordNumber(snapshot, "certscore_overall"),
     topFindingIds,
     topFindingCount: topFindingIds.length

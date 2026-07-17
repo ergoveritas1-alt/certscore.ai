@@ -125,6 +125,19 @@ export type AdminScanActivityPageRef = {
 export type AdminScanActivityFilters = {
   query?: string | null;
   status?: "any" | "no_go" | "failed" | "running" | "queued" | "limited" | "completed";
+  freshness?: "any" | "fresh" | "forced_fresh" | "reused";
+  access?: "any" | "clear" | "blocked" | "captcha" | "robots_limited" | "limited" | "unknown";
+  outcome?: string | null;
+  language?: string | null;
+  industry?: string | null;
+  scanFrom?: string | null;
+  timeSpan?: "all" | "4h" | "12h" | "24h" | "7d" | "31d";
+};
+
+export type AdminScanFilterOptions = {
+  languages: string[];
+  industries: string[];
+  outcomes: string[];
 };
 
 const SCAN_ACTIVITY_NO_GO_SQL = adminNoGoSql({
@@ -132,7 +145,8 @@ const SCAN_ACTIVITY_NO_GO_SQL = adminNoGoSql({
   blockedFlag: "ss.blocked_flag",
   captchaFlag: "ss.captcha_flag",
   runtimeArtifacts: "sra",
-  snapshotOutcome: "ss.scan_outcome"
+  snapshotOutcome: "ss.scan_outcome",
+  outcomesParameter: "$12"
 });
 
 function adminScanActivityBaseSql() {
@@ -145,9 +159,47 @@ function adminScanActivityBaseSql() {
       coalesce(s.completed_at, s.started_at, s.created_at) as activity_at,
       s.status,
       ss.access_posture_class,
-      ${SCAN_ACTIVITY_NO_GO_SQL} as no_go_flag
+      ${SCAN_ACTIVITY_NO_GO_SQL} as no_go_flag,
+      case
+        when exists (
+          select 1
+            from public.scan_requests sr
+           where coalesce(sr.fulfilled_by_scan_id, sr.scan_id) = s.id
+             and coalesce(sr.request_context ->> 'bypassRecentScanReuse', sr.request_context ->> 'forceNewScan') = 'true'
+        ) or exists (
+          select 1
+            from public.pulse_requests pr
+           where pr.scan_id = s.id
+             and coalesce(pr.request_context ->> 'forceNewScan', pr.request_context ->> 'bypassRecentScanReuse') = 'true'
+        ) then 'forced_fresh'
+        when exists (
+          select 1
+            from public.scan_requests sr
+           where coalesce(sr.fulfilled_by_scan_id, sr.scan_id) = s.id
+             and sr.resolution_mode = 'reused_existing_scan'
+        ) or exists (
+          select 1
+            from public.pulse_requests pr
+           where pr.scan_id = s.id
+             and pr.resolution_mode = 'reused_existing_scan'
+        ) then 'reused'
+        else 'fresh'
+      end as freshness_filter,
+      nullif(trim(ss.site_language_primary), '') as language_filter,
+      ind.label as industry_filter,
+      coalesce(s.scan_config_json ->> 'scanFrom', 'default') as scan_from_filter,
+      case
+        when coalesce(ss.captcha_flag, false) then 'captcha'
+        when coalesce(ss.blocked_flag, false) or ss.access_posture_class = 'early_loss' then 'blocked'
+        when ss.access_posture_class = 'robots_limited' then 'robots_limited'
+        when ss.access_posture_class = 'degraded_but_useful' then 'limited'
+        when s.id is not null then 'clear'
+        else 'unknown'
+      end as access_filter
+      ,ss.scan_outcome as outcome_filter
     from public.scans s
     left join public.domains d on d.id = s.domain_id
+    left join public.industries ind on ind.id = d.industry_primary_id
     left join public.scan_snapshots ss on ss.scan_id = s.id
     left join public.scan_runtime_artifacts sra on sra.scan_id = s.id
     where (
@@ -188,10 +240,28 @@ function adminScanActivityBaseSql() {
       sr.requested_at as activity_at,
       sr.status,
       ss.access_posture_class,
-      case when coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is null then false else ${SCAN_ACTIVITY_NO_GO_SQL} end as no_go_flag
+      case when coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is null then false else ${SCAN_ACTIVITY_NO_GO_SQL} end as no_go_flag,
+      case
+        when coalesce(sr.request_context ->> 'bypassRecentScanReuse', sr.request_context ->> 'forceNewScan') = 'true' then 'forced_fresh'
+        when sr.resolution_mode = 'reused_existing_scan' then 'reused'
+        else 'fresh'
+      end as freshness_filter,
+      nullif(trim(ss.site_language_primary), '') as language_filter,
+      ind.label as industry_filter,
+      coalesce(s.scan_config_json ->> 'scanFrom', sr.request_context ->> 'scanFrom', 'default') as scan_from_filter,
+      case
+        when coalesce(ss.captcha_flag, false) then 'captcha'
+        when coalesce(ss.blocked_flag, false) or ss.access_posture_class = 'early_loss' then 'blocked'
+        when ss.access_posture_class = 'robots_limited' then 'robots_limited'
+        when ss.access_posture_class = 'degraded_but_useful' then 'limited'
+        when s.id is not null then 'clear'
+        else 'unknown'
+      end as access_filter
+      ,ss.scan_outcome as outcome_filter
     from public.scan_requests sr
     left join public.scans s on s.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
     left join public.domains d on d.id = s.domain_id
+    left join public.industries ind on ind.id = d.industry_primary_id
     left join public.scan_snapshots ss on ss.scan_id = s.id
     left join public.scan_runtime_artifacts sra on sra.scan_id = s.id
     left join public.organizations org on org.id = sr.organization_id
@@ -219,15 +289,24 @@ function adminScanActivityBaseSql() {
   ), filtered_activity as (
     select *
     from scan_activity
-    where $2::text is null
-       or $2 = 'any'
-       or ($2 = 'no_go' and no_go_flag)
-       or ($2 = 'failed' and status = 'failed')
-       or ($2 = 'running' and status = 'running')
-       or ($2 = 'queued' and status = 'queued')
-       or ($2 = 'limited' and access_posture_class in ('degraded_but_useful', 'robots_limited'))
-       or ($2 = 'completed' and row_kind = 'scan' and status = 'completed' and not no_go_flag
-           and coalesce(access_posture_class, '') not in ('degraded_but_useful', 'robots_limited'))
+    where (
+         $2::text is null
+         or $2 = 'any'
+         or ($2 = 'no_go' and no_go_flag)
+         or ($2 = 'failed' and status = 'failed')
+         or ($2 = 'running' and status = 'running')
+         or ($2 = 'queued' and status = 'queued')
+         or ($2 = 'limited' and access_posture_class in ('degraded_but_useful', 'robots_limited'))
+         or ($2 = 'completed' and row_kind = 'scan' and status = 'completed' and not no_go_flag
+             and coalesce(access_posture_class, '') not in ('degraded_but_useful', 'robots_limited'))
+       )
+       and ($3::text is null or freshness_filter = $3)
+       and ($4::text is null or language_filter = $4)
+       and ($5::text is null or industry_filter = $5)
+       and ($6::text is null or scan_from_filter = $6)
+       and ($7::timestamptz is null or activity_at >= $7::timestamptz)
+       and ($10::text is null or access_filter = $10)
+       and ($11::text is null or outcome_filter = $11)
   )`;
 }
 
@@ -239,7 +318,16 @@ export async function loadAdminScanActivityPageRefs(
   await ensureScanRequestLogTable();
   const queryText = filters.query?.trim().slice(0, 160) || null;
   const status = filters.status && filters.status !== "any" ? filters.status : null;
-  const params = [queryText, status, limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES];
+  const freshness = filters.freshness && filters.freshness !== "any" ? filters.freshness : null;
+  const language = filters.language?.trim().slice(0, 80) || null;
+  const industry = filters.industry?.trim().slice(0, 200) || null;
+  const scanFrom = filters.scanFrom?.trim().slice(0, 80) || null;
+  const timeSpan = filters.timeSpan && filters.timeSpan !== "all" ? filters.timeSpan : null;
+  const access = filters.access && filters.access !== "any" ? filters.access : null;
+  const outcome = filters.outcome?.trim().slice(0, 120) || null;
+  const timeSpanHours = timeSpan === "4h" ? 4 : timeSpan === "12h" ? 12 : timeSpan === "24h" ? 24 : timeSpan === "7d" ? 24 * 7 : timeSpan === "31d" ? 24 * 31 : null;
+  const since = timeSpanHours === null ? null : new Date(Date.now() - timeSpanHours * 60 * 60 * 1000).toISOString();
+  const params = [queryText, status, freshness, language, industry, scanFrom, since, limit, offset, access, outcome, SCAN_NO_GO_SNAPSHOT_OUTCOMES];
   const baseSql = adminScanActivityBaseSql();
   const [pageResult, countResult] = await Promise.all([
     query<AdminScanActivityPageRef>(
@@ -247,19 +335,54 @@ export async function loadAdminScanActivityPageRefs(
        select row_kind, activity_id, scan_id::text as scan_id, request_public_id, activity_at
        from filtered_activity
        order by activity_at desc, activity_id desc
-       limit $3 offset $4`,
+       limit $8 offset $9`,
       params,
       { readOnly: true }
     ),
     queryOne<{ total_count: number }>(
       `${baseSql}
-       select count(*)::int as total_count, max($3::int) as requested_limit, max($4::int) as requested_offset
+       select count(*)::int as total_count, max($8::int) as requested_limit, max($9::int) as requested_offset
        from filtered_activity`,
       params,
       { readOnly: true }
     )
   ]);
   return { rows: pageResult.rows, totalCount: countResult?.total_count ?? 0 };
+}
+
+export async function loadAdminScanFilterOptions(): Promise<AdminScanFilterOptions> {
+  const [languagesResult, industriesResult, outcomesResult] = await Promise.all([
+    query<{ value: string }>(
+      `select distinct nullif(trim(site_language_primary), '') as value
+         from public.scan_snapshots
+        where nullif(trim(site_language_primary), '') is not null
+        order by value asc
+        limit 100`,
+      [],
+      { readOnly: true }
+    ),
+    query<{ value: string }>(
+      `select label as value
+         from public.industries
+        order by sort_order asc, label asc`,
+      [],
+      { readOnly: true }
+    ),
+    query<{ value: string }>(
+      `select distinct scan_outcome as value
+         from public.scan_snapshots
+        where nullif(trim(scan_outcome), '') is not null
+        order by value asc`,
+      [],
+      { readOnly: true }
+    )
+  ]);
+
+  return {
+    languages: languagesResult.rows.flatMap((row) => row.value ? [row.value] : []),
+    industries: industriesResult.rows.flatMap((row) => row.value ? [row.value] : []),
+    outcomes: outcomesResult.rows.flatMap((row) => row.value ? [row.value] : [])
+  };
 }
 
 export type AdminValidationRunSummaryRow = {
@@ -767,6 +890,7 @@ export async function persistAdminScanSummary(input: {
   industry: string | null;
   primaryLanguage: string | null;
   privacyPolicyPresent: boolean | null;
+  scanOutcome?: string | null;
   scanId: string;
   score: number | null;
   topFindingCount: number;
@@ -775,7 +899,7 @@ export async function persistAdminScanSummary(input: {
     `insert into scan_snapshots (
        scan_id, organization_id, domain_id, pages_requested, pages_scanned,
        admin_summary_generated_at, admin_industry_label, certscore_overall, top_finding_count,
-       site_language_primary,
+       site_language_primary, scan_outcome,
        privacy_policy_present, cmp_vendor_name
      )
      select scans.id,
@@ -787,7 +911,7 @@ export async function persistAdminScanSummary(input: {
             $6,
             $2,
             $3,
-            $7,
+            $7, $8,
             coalesce($4, false),
             $5
       from scans
@@ -799,9 +923,10 @@ export async function persistAdminScanSummary(input: {
            certscore_overall = excluded.certscore_overall,
            top_finding_count = excluded.top_finding_count,
            site_language_primary = excluded.site_language_primary,
+           scan_outcome = coalesce(scan_snapshots.scan_outcome, excluded.scan_outcome),
            privacy_policy_present = excluded.privacy_policy_present,
            cmp_vendor_name = excluded.cmp_vendor_name`,
-    [input.scanId, input.score, input.topFindingCount, input.privacyPolicyPresent, input.cmpVendorName, input.industry, input.primaryLanguage]
+    [input.scanId, input.score, input.topFindingCount, input.privacyPolicyPresent, input.cmpVendorName, input.industry, input.primaryLanguage, input.scanOutcome ?? null]
   );
 }
 

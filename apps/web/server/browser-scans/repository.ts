@@ -911,6 +911,7 @@ async function materializeBrowserScanAsCanonicalScan(input: {
        tracker_count_total, analytics_tracker_count, advertising_tracker_count,
        session_replay_tracker_count, tag_manager_present, third_party_script_domain_count,
        tracker_regulatory_risk_score, consent_maturity_score, privacy_score, certscore_overall
+       , scan_outcome
      )
      values (
        $1, $2, $3, 1, 1,
@@ -923,7 +924,7 @@ async function materializeBrowserScanAsCanonicalScan(input: {
        false, 0, 0,
        0, 0, 0,
        0, false, 0,
-       0, 0, 0, 0
+       0, 0, 0, 0, 'completed_successfully'
      )
      on conflict (scan_id) do update
        set total_signals = excluded.total_signals,
@@ -950,6 +951,7 @@ async function materializeBrowserScanAsCanonicalScan(input: {
            tracker_regulatory_risk_score = excluded.tracker_regulatory_risk_score,
            consent_maturity_score = excluded.consent_maturity_score,
            privacy_score = excluded.privacy_score,
+           scan_outcome = coalesce(scan_snapshots.scan_outcome, excluded.scan_outcome),
            certscore_overall = excluded.certscore_overall`,
     [
       scan.id,

@@ -9,6 +9,27 @@ test("uses the ALB-appended rightmost forwarded IP instead of a spoofable left e
   })), "203.0.113.42");
 });
 
+test("uses Cloudflare's original client IP when the final forwarded hop is Cloudflare", () => {
+  assert.equal(getTrustedRequestSourceIp(new Headers({
+    "cf-connecting-ip": "198.51.100.200",
+    "x-forwarded-for": "198.51.100.200, 172.64.217.24"
+  })), "198.51.100.200");
+});
+
+test("does not trust CF-Connecting-IP from an unverified forwarded hop", () => {
+  assert.equal(getTrustedRequestSourceIp(new Headers({
+    "cf-connecting-ip": "198.51.100.200",
+    "x-forwarded-for": "198.51.100.200, 203.0.113.42"
+  })), "203.0.113.42");
+});
+
+test("does not trust a standalone spoofed CF-Connecting-IP header", () => {
+  assert.equal(getTrustedRequestSourceIp(new Headers({
+    "cf-connecting-ip": "198.51.100.200",
+    "x-real-ip": "203.0.113.42"
+  })), "203.0.113.42");
+});
+
 test("normalizes valid address and optional proxy port forms", () => {
   assert.equal(normalizeRequestSourceIp("203.0.113.8:443"), "203.0.113.8");
   assert.equal(normalizeRequestSourceIp("[2001:db8::7]:443"), "2001:db8::7");

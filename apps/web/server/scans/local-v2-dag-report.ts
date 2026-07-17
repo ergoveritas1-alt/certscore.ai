@@ -3349,7 +3349,8 @@ function buildMaterializedLocalV2Detail(
     final_effective_url: canonicalDocumentUrl,
     final_url: canonicalDocumentUrl,
     ...(localV2NoGo ? buildLocalV2NoGoSnapshotFields(localV2NoGo.primaryReasonCode, localV2NoGo.pageState) : {
-      homepage_fetch_status: "success"
+      homepage_fetch_status: "success",
+      scan_outcome: scanRecord.snapshot?.scan_outcome ?? "completed_partial"
     }),
     legal_coverage_score: localV2NoGo ? null : score,
     pages_scanned: localV2NoGo ? 0 : Math.max(scanRecord.scan.pagesScanned, 1),
