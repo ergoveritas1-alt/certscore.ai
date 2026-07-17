@@ -87,7 +87,7 @@ export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
   if (!logGroup || !logPrefix) throw new Error("Production DB one-off log configuration is unavailable");
   const taskId = taskArn.split("/").at(-1) ?? taskArn;
   const streamName = `${logPrefix}/${containerName}/${taskId}`;
-  const logs = await readLogsWithRetry({ logGroup, region, streamName });
+  const logs = await readLogsWithRetry({ logGroup, marker, region, streamName });
   if ((taskContainer?.exitCode ?? 1) !== 0) {
     throw new Error(`Production DB one-off exited ${taskContainer?.exitCode ?? "unknown"}: ${taskContainer?.reason ?? task?.stoppedReason ?? logs}`);
   }
@@ -97,8 +97,13 @@ export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
 export function extractMarkedOutput(logs: string, marker: string) {
   const safeMarker = marker.replace(/[^A-Z0-9_]/g, "_");
   const match = new RegExp(`__${safeMarker}_START__\\s*([\\s\\S]*?)\\s*__${safeMarker}_END__`, "m").exec(logs);
-  if (!match?.[1]) throw new Error(`Could not locate ${safeMarker} output in production DB one-off logs`);
-  return match[1].trim();
+  if (!match) throw new Error(`Could not locate ${safeMarker} output in production DB one-off logs`);
+  return match[1]?.trim() ?? "";
+}
+
+export function hasCompleteMarkedOutput(logs: string, marker: string) {
+  const safeMarker = marker.replace(/[^A-Z0-9_]/g, "_");
+  return logs.includes(`__${safeMarker}_START__`) && logs.includes(`__${safeMarker}_END__`);
 }
 
 export function parseSingleJsonOutput<T>(output: string): T {
@@ -108,9 +113,9 @@ export function parseSingleJsonOutput<T>(output: string): T {
   return JSON.parse(line) as T;
 }
 
-async function readLogsWithRetry(input: { logGroup: string; region: string; streamName: string }) {
+async function readLogsWithRetry(input: { logGroup: string; marker: string; region: string; streamName: string }) {
   let lastError: unknown;
-  for (let attempt = 0; attempt < 10; attempt += 1) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
     try {
       const payload = parseJson<{ events?: Array<{ message?: string }> }>(await aws([
         "logs", "get-log-events",
@@ -121,13 +126,15 @@ async function readLogsWithRetry(input: { logGroup: string; region: string; stre
         "--output", "json",
       ]));
       const logs = payload.events?.map((event) => event.message).filter((message): message is string => Boolean(message)).join("\n") ?? "";
-      if (logs) return logs;
+      if (hasCompleteMarkedOutput(logs, input.marker)) return logs;
     } catch (error) {
       lastError = error;
     }
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
-  throw lastError instanceof Error ? lastError : new Error("Production DB one-off logs were not available");
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Production DB one-off logs did not contain the complete ${input.marker} output`);
 }
 
 async function aws(args: string[]) {

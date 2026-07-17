@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { extractMarkedOutput, hasCompleteMarkedOutput } from "./lib/prod-db-psql-oneoff.js";
+import {
+  createEmptyCalibrationLedger,
+  recordCalibrationOutcomes,
+} from "./lib/scan-quality-calibration-ledger.js";
 
 const migrationPath = "packages/db/migrations/0142_scan_domain_contact_ledger.sql";
 
@@ -31,7 +36,51 @@ test("live calibration workflow fails closed on central history and persists con
   assert.match(source, /--ecs-oneoff/);
   assert.match(source, /effective-eligibility-ledger\.json/);
   assert.match(source, /v2:calibration-contact-persist/);
+  assert.match(source, /pnpm --filter @certscore\/scan-core build/);
   assert.doesNotMatch(source, /^\s+schedule:/m);
+});
+
+test("production DB log polling requires both output markers", () => {
+  assert.equal(hasCompleteMarkedOutput("__TEST_START__\n", "TEST"), false);
+  assert.equal(hasCompleteMarkedOutput("__TEST_START__\nrow\n__TEST_END__", "TEST"), true);
+  assert.equal(extractMarkedOutput("__TEST_START__\n__TEST_END__", "TEST"), "");
+});
+
+test("pre-runtime infrastructure failures do not consume calibration cooldown", () => {
+  const ledger = recordCalibrationOutcomes({
+    ledger: createEmptyCalibrationLedger(),
+    minimumCooldownDays: 30,
+    now: new Date("2026-07-17T19:00:00.000Z"),
+    summary: {
+      results: [{
+        completedAt: "2026-07-17T18:57:26.481Z",
+        scannerRuntimeStarted: false,
+        status: "failed",
+        url: "https://ftc.gov",
+      }],
+    },
+    targetUrls: new Set(["https://ftc.gov"]),
+  });
+  assert.deepEqual(ledger.entries, {});
+});
+
+test("started scanner runtimes consume calibration cooldown even when the scan fails", () => {
+  const ledger = recordCalibrationOutcomes({
+    ledger: createEmptyCalibrationLedger(),
+    minimumCooldownDays: 30,
+    now: new Date("2026-07-17T19:00:00.000Z"),
+    summary: {
+      results: [{
+        completedAt: "2026-07-17T18:57:26.481Z",
+        scannerRuntimeStarted: true,
+        status: "failed",
+        url: "https://ftc.gov",
+      }],
+    },
+    targetUrls: new Set(["https://ftc.gov"]),
+  });
+  assert.equal(ledger.entries["https://ftc.gov"]?.state, "cooldown");
+  assert.equal(ledger.entries["https://ftc.gov"]?.lastOutcome, "failed");
 });
 
 test("central ledger scripts use the production ECS psql one-off boundary", async () => {

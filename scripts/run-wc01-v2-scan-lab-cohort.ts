@@ -59,6 +59,7 @@ type CohortResult = {
     total: number;
   };
   runtime: RuntimeSummary;
+  scannerRuntimeStarted: boolean;
   startedAt: string;
   status: "completed" | "failed" | "skipped";
   url: string;
@@ -278,6 +279,7 @@ async function main() {
         privacyControlUrls: planned.privacyControlUrls,
         reviewCandidateCounts: { eligible: 0, notEligible: 0, total: 0 },
         runtime: emptyRuntimeSummary(),
+        scannerRuntimeStarted: existsSync(path.join(path.dirname(planned.timingPath), "V2ScanCorePhases.json")),
         startedAt: siteStartedAt.toISOString(),
         status: "failed",
         url,
@@ -344,6 +346,7 @@ async function summarizeCompletedRun(input: {
     privacyControlUrls: input.plan.privacyControlUrls,
     reviewCandidateCounts: candidateCounts,
     runtime: summarizeRuntime(bundle, calibrationDir),
+    scannerRuntimeStarted: true,
     startedAt: input.startedAt.toISOString(),
     status: "completed",
     url: input.url,

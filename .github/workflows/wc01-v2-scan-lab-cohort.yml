@@ -146,8 +146,7 @@ jobs:
       - name: Build v2 packages
         if: steps.preflight.outputs.enabled == 'true'
         run: |
-          pnpm --filter @certscore/contracts build
-          pnpm --filter @certscore/vendor-resolver build
+          pnpm --filter @certscore/scan-core build
           pnpm --filter @certscore/review-engine build
           pnpm --filter @certscore/report-adapter build
 

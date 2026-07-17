@@ -13,7 +13,7 @@ async function main() {
   const summary = await readJson<CohortSummaryForLedger>(path.resolve(root, args.summary));
   const targetUrls = new Set(manifest.targets.map((target) => target.url));
   const contacts = (summary.results ?? [])
-    .filter((result) => result.url && result.status !== "skipped")
+    .filter((result) => result.url && result.status !== "skipped" && result.scannerRuntimeStarted === true)
     .map((result) => {
       if (!result.url || !targetUrls.has(result.url)) {
         throw new Error(`Cohort summary contains a URL outside the calibration inventory: ${result.url ?? "missing"}`);

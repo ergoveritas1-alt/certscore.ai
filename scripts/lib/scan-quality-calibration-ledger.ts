@@ -53,6 +53,7 @@ export type CohortSummaryForLedger = {
   results?: Array<{
     completedAt?: string;
     runtime?: { noGoCandidate?: boolean; noGoReasons?: string[] };
+    scannerRuntimeStarted?: boolean;
     startedAt?: string;
     status?: "completed" | "failed" | "skipped";
     url?: string;
@@ -208,7 +209,7 @@ export function recordCalibrationOutcomes(input: {
 }): CalibrationLedger {
   const entries = { ...input.ledger.entries };
   for (const result of input.summary.results ?? []) {
-    if (!result.url || result.status === "skipped") continue;
+    if (!result.url || result.status === "skipped" || result.scannerRuntimeStarted !== true) continue;
     if (!input.targetUrls.has(result.url)) {
       throw new Error(`Cohort summary contains a URL outside the calibration inventory: ${result.url}`);
     }
