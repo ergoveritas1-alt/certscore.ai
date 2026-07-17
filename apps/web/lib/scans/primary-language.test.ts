@@ -35,6 +35,19 @@ test("can correct a weak stored locale with stronger site evidence", () => {
   }), "de");
 });
 
+test("retained primary-language evidence wins over a conflicting single page declaration", () => {
+  assert.deepEqual(inferPrimaryLanguage({
+    declaredLanguages: ["en-US"],
+    persistedPrimaryLanguages: ["de"],
+    matchedLocales: ["de"],
+    urls: ["https://example.de"]
+  }), {
+    confidence: "high",
+    locale: "de",
+    source: "persisted_primary"
+  });
+});
+
 test("repeated canonical consent and policy locale matches form a best guess", () => {
   assert.equal(guessPrimaryLanguage({ matchedLocales: ["pl", "pl", "en"] }), "pl");
 });

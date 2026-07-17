@@ -16,6 +16,7 @@ export type AdminScanQueryRow = {
   pages_requested?: number;
   pages_scanned: number;
   page_language?: string | null;
+  page_languages?: string[] | null;
   scan_config_json?: Record<string, unknown> | null;
   scan_type: string;
   started_at: string | null;
@@ -502,7 +503,11 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
               where sp.scan_id = scans.id
                 and nullif(trim(sp.page_language), '') is not null
               order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc
-              limit 1) as page_language
+              limit 1) as page_language,
+            (select array_agg(sp.page_language order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc)
+               from scan_pages sp
+              where sp.scan_id = scans.id
+                and nullif(trim(sp.page_language), '') is not null) as page_languages
        from scans
       where ($4::uuid[] is null or scans.id = any($4::uuid[]))
         and ($3::text is null or exists (

@@ -7,13 +7,14 @@ import {
 export type PrimaryLanguageGuessInput = {
   contentLanguages?: Array<string | null | undefined>;
   declaredLanguages?: Array<string | null | undefined>;
+  persistedPrimaryLanguages?: Array<string | null | undefined>;
   matchedLocales?: Array<string | null | undefined>;
   textSamples?: Array<string | null | undefined>;
   urls?: Array<string | null | undefined>;
 };
 
 export type PrimaryLanguageConfidence = "high" | "medium" | "low";
-export type PrimaryLanguageSource = "declared" | "content_language" | "retained_text" | "retained_locale" | "url_hint";
+export type PrimaryLanguageSource = "declared" | "content_language" | "retained_text" | "retained_locale" | "persisted_primary" | "url_hint";
 export type PrimaryLanguageGuess = {
   confidence: PrimaryLanguageConfidence;
   locale: SupportedPrivacyEvidenceLocale;
@@ -122,6 +123,9 @@ export function inferPrimaryLanguage(input: PrimaryLanguageGuessInput): PrimaryL
   for (const declared of input.declaredLanguages ?? []) {
     addScore(normalizeLanguageCode(declared), 100, "declared");
   }
+  for (const persisted of input.persistedPrimaryLanguages ?? []) {
+    addScore(normalizeLanguageCode(persisted), 115, "persisted_primary");
+  }
   for (const contentLanguage of input.contentLanguages ?? []) {
     addScore(normalizeLanguageCode(contentLanguage), 85, "content_language");
   }
@@ -190,7 +194,7 @@ export function inferPrimaryLanguage(input: PrimaryLanguageGuessInput): PrimaryL
   const source = sourceScores[0]?.[0];
   if (!source) return null;
   const margin = winner[1] - (ranked[1]?.[1] ?? 0);
-  const confidence: PrimaryLanguageConfidence = source === "declared" || source === "content_language"
+  const confidence: PrimaryLanguageConfidence = source === "persisted_primary" || source === "declared" || source === "content_language"
     ? "high"
     : source === "retained_text" && winner[1] >= 30 && margin >= 8
       ? "high"

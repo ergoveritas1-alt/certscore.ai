@@ -232,7 +232,11 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
       ? responseSummary.score
       : typeof row.snapshot_score === "number" ? row.snapshot_score : null;
   const primaryLanguage = inferPrimaryLanguage({
-    declaredLanguages: [typeof row.page_language === "string" ? row.page_language : null],
+    declaredLanguages: [
+      typeof row.page_language === "string" ? row.page_language : null,
+      ...asStringArray(row.page_languages)
+    ],
+    persistedPrimaryLanguages: [typeof row.site_language_primary === "string" ? row.site_language_primary : null],
     matchedLocales: [typeof row.site_language_primary === "string" ? row.site_language_primary : null],
     urls: [
       typeof row.normalized_domain === "string" ? row.normalized_domain : null,
@@ -435,6 +439,7 @@ export async function listAdminPulseRequests(input: {
             sra.visual_access_review,
             ss.site_language_primary,
             (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1) as page_language,
+            (select array_agg(sp.page_language order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc) from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null) as page_languages,
             ss.admin_industry_label,
             s.scan_config_json,
             coalesce(pf.feedback_count, 0)::int as feedback_count,
@@ -548,6 +553,7 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               sra.visual_access_review,
               ss.site_language_primary,
               (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1) as page_language,
+              (select array_agg(sp.page_language order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc) from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null) as page_languages,
               ss.admin_industry_label,
               s.scan_config_json,
               coalesce(pf.feedback_count, 0)::int as feedback_count,
@@ -700,6 +706,7 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             sra.visual_access_review,
             ss.site_language_primary,
             (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1) as page_language,
+            (select array_agg(sp.page_language order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc) from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null) as page_languages,
             ss.admin_industry_label,
             coalesce(pf.feedback_count, 0)::int as feedback_count,
             coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,

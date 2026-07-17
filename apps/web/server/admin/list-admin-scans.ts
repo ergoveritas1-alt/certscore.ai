@@ -204,7 +204,8 @@ export async function listAdminScansPage(
       requesterIpAttributionFromEvents(diagnosticEventMap.get(scan.id) ?? [])
     );
     const primaryLanguage = inferPrimaryLanguage({
-      declaredLanguages: [scan.page_language],
+      declaredLanguages: [scan.page_language, ...(scan.page_languages ?? [])],
+      persistedPrimaryLanguages: [snapshot?.site_language_primary],
       matchedLocales: [snapshot?.site_language_primary],
       urls: [
         scan.domain_id ? domainMap.get(scan.domain_id)?.hostname : null,
