@@ -2,8 +2,8 @@
 set -euo pipefail
 
 check_name="${CHECK_NAME:-ecs-service}"
-cluster="${ECS_CLUSTER_NAME:-}"
-service="${ECS_SERVICE_NAME:-}"
+cluster="${ECS_CLUSTER_NAME:-certscore-web-cluster}"
+service="${ECS_SERVICE_NAME:-certscore-web-certscore}"
 container_name="${ECS_CONTAINER_NAME:-}"
 ecr_repository="${ECR_REPOSITORY:-}"
 expected_sha="${EXPECTED_GIT_SHA:-${GITHUB_SHA:-}}"

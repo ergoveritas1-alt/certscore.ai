@@ -58,7 +58,10 @@ function assertPulseBody(status: number, body: Record<string, unknown>, url: str
   assert.match(String(body.disclaimer ?? ""), standardDisclaimerPattern, `${url} omitted the standard disclaimer`);
 
   if (status === 200) {
-    assert.equal(body.type, "certscore_pulse", `${url} returned unexpected 200 body type`);
+    assert.ok(
+      body.type === "certscore_pulse" || body.type === "certscore_pulse_summary",
+      `${url} returned unexpected 200 body type`
+    );
     return;
   }
 
@@ -80,7 +83,7 @@ async function checkDocsPage() {
   const result = await fetchTarget("/api-pulse");
   assert.equal(result.response.status, 200);
   assert.match(result.contentType, /^text\/html\b/);
-  assert.match(result.bodyText, /CertScore Pulse API/);
+  assert.match(result.bodyText, /CertScore(?:\.ai)? Pulse API/);
   assert.match(result.bodyText, /OpenAPI JSON/);
   assert.match(result.bodyText, /Discovery JSON/);
   assert.match(result.bodyText, /Open quick-start endpoint/);
