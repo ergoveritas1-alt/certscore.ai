@@ -8,7 +8,7 @@ This is an internal calibration record. It does not promote v2 artifacts into pr
 
 ## Outcome
 
-The pilot completed 10/10 requested runs with no run-level failures and no silently empty completed runtime. It is useful as a calibration sample, but it is not a clean release gate yet.
+The pilot completed 10/10 requested runs with no run-level failures and no silently empty completed runtime. After verifier classification was corrected, the pilot verification passed. It still carries explicit warnings for intentionally disabled post-consent coverage, one expected no-go, and one headed fallback.
 
 | Measure | Result | Interpretation |
 | --- | ---: | --- |
@@ -16,7 +16,7 @@ The pilot completed 10/10 requested runs with no run-level failures and no silen
 | Pre-consent tracking observed | 9/10 | Runtime evidence is being retained on normal reachable sites. |
 | Third-party cookies before consent | 8/10 | Cookie evidence is present often enough to exercise the lane. |
 | Session replay / behavioral analytics | 3/10 | Vendor and behavior attribution needs a larger sample before setting a baseline. |
-| Confirmed no-go candidate | 1 | `ftc.gov` returned access-denied evidence and should be treated as an expected no-go control, not silently converted to a successful scan. |
+| Confirmed no-go candidate | 1 | `ftc.gov` returned access-denied evidence and is treated as an expected no-go control; its downstream resolver skip is excluded from the critical failure budget and remains visible as a warning. |
 | Runtime coverage limited | 10/10 | Expected because post-consent interaction is intentionally disabled; this is a declared coverage limitation. |
 | Headed fallback | 1 | `fidelity.com` completed after a headless navigation timeout; reliability follow-up required. |
 
@@ -58,7 +58,7 @@ All reachable sites retained a core policy surface and positive transport-securi
 ## Required follow-up before 50-site baseline promotion
 
 1. Add an explicit cohort review stage to verification and preserve `ReviewResult.json` for every completed bundle. The runner now creates this artifact automatically when it is absent.
-2. Update verifier semantics so an expected no-go can skip downstream modules without becoming a critical failure, while unexpected skips still fail the gate.
+2. Verifier semantics now distinguish corroborated no-go downstream skips from unexpected critical module failures; keep this behavior covered as the no-go cohort expands.
 3. Investigate consent geometry false negatives for detected CMPs, especially Guardian/Booking/Notion/Fidelity/Cloudflare, using retained screenshots and bounded inventory evidence.
 4. Investigate the Fidelity headless timeout and preserve the headed-fallback signal in calibration reporting.
 5. Add a canonical primary-language inference artifact with source signals, normalized language, and confidence, then include it in the language lane baseline.

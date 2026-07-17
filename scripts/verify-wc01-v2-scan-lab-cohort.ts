@@ -174,16 +174,23 @@ async function buildVerificationReport(input: {
 }): Promise<VerificationReport> {
   const completed = input.results.filter((result) => result.status === "completed");
   const failed = input.results.filter((result) => result.status === "failed");
+  const noGoCandidates = completed
+    .map((result) => ({ result, reasons: noGoCandidateReasons(result) }))
+    .filter((entry) => entry.reasons.length > 0);
   const moduleFailures = completed.flatMap((result) =>
     (result.moduleRuns ?? [])
       .filter((moduleRun) => moduleRun.status !== "completed")
       .map((moduleRun) => ({
         detail: `${result.domain ?? result.url}:${moduleRun.moduleName ?? "unknown"}:${moduleRun.status}`,
         moduleName: moduleRun.moduleName ?? "unknown",
+        result,
       })),
   );
+  const expectedNoGoModuleFailures = moduleFailures.filter((failure) =>
+    isExpectedNoGoModuleFailure(failure.result, failure.moduleName, failure.result.moduleRuns),
+  );
   const criticalModuleFailures = moduleFailures.filter((failure) =>
-    CRITICAL_COHORT_MODULES.has(failure.moduleName),
+    CRITICAL_COHORT_MODULES.has(failure.moduleName) && !expectedNoGoModuleFailures.includes(failure),
   );
   const moduleWarnings = completed.flatMap((result) =>
     (result.moduleRuns ?? [])
@@ -192,9 +199,6 @@ async function buildVerificationReport(input: {
   );
   const silentEmptyCompleted = completed.filter((result) => isSilentEmptyCompleted(result));
   const runtimeCoverageLimited = completed.filter((result) => isRuntimeCoverageLimited(result));
-  const noGoCandidates = completed
-    .map((result) => ({ result, reasons: noGoCandidateReasons(result) }))
-    .filter((entry) => entry.reasons.length > 0);
   const artifactMisses = completed.flatMap((result) => missingArtifactPaths(result));
   const ford = input.results.find((result) => result.domain === "ford.com" || result.url?.includes("ford.com"));
   const checks: VerificationCheck[] = [];
@@ -205,6 +209,13 @@ async function buildVerificationReport(input: {
     name: "summary_version",
     passed: input.summary.cohortSummaryVersion === "wc01.v2_scan_lab_cohort.1",
   }));
+  checks.push({
+    actual: expectedNoGoModuleFailures.map((failure) => failure.detail),
+    expected: "expected downstream skips on corroborated no-go sites are excluded from the critical failure budget",
+    name: "expected_no_go_module_exclusions",
+    severity: "warn",
+    status: expectedNoGoModuleFailures.length > 0 ? "warning" : "passed",
+  });
   checks.push(passFailCheck({
     actual: input.results.length,
     expected: `>= ${input.minSites}`,
@@ -479,6 +490,23 @@ function isSilentEmptyCompleted(result: CohortResult) {
 function isRuntimeCoverageLimited(result: CohortResult) {
   const status = result.runtime?.coverageStatus;
   return status === "limited_none" || status === "limited_partial";
+}
+
+function isExpectedNoGoModuleFailure(
+  result: CohortResult,
+  moduleName: string,
+  moduleRuns: ModuleRunSummary[] | undefined,
+) {
+  if (!CRITICAL_COHORT_MODULES.has(moduleName) || noGoCandidateReasons(result).length === 0) {
+    return false;
+  }
+  const moduleRun = (moduleRuns ?? []).find((candidate) => candidate.moduleName === moduleName);
+  if (!moduleRun || moduleRun.status === "completed") {
+    return false;
+  }
+  return (moduleRun.errors ?? []).some((error) =>
+    /normal public site was not reached|access denied|forbidden|no-go/i.test(error),
+  );
 }
 
 function noGoCandidateReasons(result: CohortResult) {
