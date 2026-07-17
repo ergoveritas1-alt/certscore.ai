@@ -6,6 +6,7 @@ import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } f
 import { ensureMonitorSiteRequestsTable } from "../monitor-site/monitor-site-request";
 import { ensureScanRequestLogTable } from "../scans/scan-request-log";
 import { adminNoGoSql } from "./admin-no-go";
+import { parseAdminActivitySearch } from "../../lib/admin/activity-search";
 
 export type AdminScanQueryRow = {
   completed_at: string | null;
@@ -229,6 +230,23 @@ function adminScanActivityBaseSql() {
                 prq.requested_by::text, prq.request_context::text) ilike '%' || $1 || '%'
       )
     )
+    and ($13::text is null or not (
+      exists (
+        select 1 from public.scan_requests srq
+        left join public.users au on au.id::text = srq.requested_by ->> 'userId'
+        left join public.better_auth_users bau on bau.id = srq.requested_by ->> 'userId'
+        where coalesce(srq.fulfilled_by_scan_id, srq.scan_id) = s.id
+          and concat_ws(' ', coalesce(au.email, bau.email, ''), srq.requested_by::text) ilike $13
+      )
+      or exists (
+        select 1 from public.pulse_requests prq
+        left join public.integration_api_keys aik on aik.public_id = prq.requested_by ->> 'apiKeyId'
+        left join public.users pau on pau.id::text = coalesce(prq.requested_by ->> 'userId', aik.owner_user_id::text)
+        left join public.better_auth_users pbau on pbau.id = prq.requested_by ->> 'userId'
+        where prq.scan_id = s.id
+          and concat_ws(' ', coalesce(pau.email, pbau.email, aik.created_by, ''), prq.requested_by::text) ilike $13
+      )
+    ))
 
     union all
 
@@ -286,6 +304,18 @@ function adminScanActivityBaseSql() {
                   prq.requested_by::text, prq.request_context::text) ilike '%' || $1 || '%'
         )
       )
+      and ($13::text is null or not (
+        concat_ws(' ', coalesce(au.email, bau.email, ''), sr.requested_by::text) ilike $13
+        or exists (
+          select 1
+          from public.pulse_requests prq
+          left join public.integration_api_keys aik on aik.public_id = prq.requested_by ->> 'apiKeyId'
+          left join public.users pau on pau.id::text = coalesce(prq.requested_by ->> 'userId', aik.owner_user_id::text)
+          left join public.better_auth_users pbau on pbau.id = prq.requested_by ->> 'userId'
+          where prq.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+            and concat_ws(' ', coalesce(pau.email, pbau.email, aik.created_by, ''), prq.requested_by::text) ilike $13
+        )
+      ))
   ), filtered_activity as (
     select *
     from scan_activity
@@ -316,7 +346,9 @@ export async function loadAdminScanActivityPageRefs(
   filters: AdminScanActivityFilters = {}
 ): Promise<{ rows: AdminScanActivityPageRef[]; totalCount: number }> {
   await ensureScanRequestLogTable();
-  const queryText = filters.query?.trim().slice(0, 160) || null;
+  const parsedSearch = parseAdminActivitySearch(filters.query);
+  const queryText = parsedSearch.query;
+  const requesterExclude = parsedSearch.requesterExclude;
   const status = filters.status && filters.status !== "any" ? filters.status : null;
   const freshness = filters.freshness && filters.freshness !== "any" ? filters.freshness : null;
   const language = filters.language?.trim().slice(0, 80) || null;
@@ -327,7 +359,7 @@ export async function loadAdminScanActivityPageRefs(
   const outcome = filters.outcome?.trim().slice(0, 120) || null;
   const timeSpanHours = timeSpan === "4h" ? 4 : timeSpan === "12h" ? 12 : timeSpan === "24h" ? 24 : timeSpan === "7d" ? 24 * 7 : timeSpan === "31d" ? 24 * 31 : null;
   const since = timeSpanHours === null ? null : new Date(Date.now() - timeSpanHours * 60 * 60 * 1000).toISOString();
-  const params = [queryText, status, freshness, language, industry, scanFrom, since, limit, offset, access, outcome, SCAN_NO_GO_SNAPSHOT_OUTCOMES];
+  const params = [queryText, status, freshness, language, industry, scanFrom, since, limit, offset, access, outcome, SCAN_NO_GO_SNAPSHOT_OUTCOMES, requesterExclude];
   const baseSql = adminScanActivityBaseSql();
   const [pageResult, countResult] = await Promise.all([
     query<AdminScanActivityPageRef>(

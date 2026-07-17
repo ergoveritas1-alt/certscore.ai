@@ -91,7 +91,7 @@ test("admin activity pages use one search prompt across domain, scan, email, req
   const pulseList = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
 
   for (const page of [scansPage, pulsePage]) {
-    assert.match(page, /placeholder="Domain, scan_id, email, requester, IP"/);
+    assert.match(page, /placeholder="Domain, scan_id, email, requester, IP/);
     assert.match(page, /name="q"/);
     assert.doesNotMatch(page, /name="email"/);
   }
@@ -103,6 +103,12 @@ test("admin activity pages use one search prompt across domain, scan, email, req
   assert.match(pulseList, /request_context ->> 'originIp'/);
   assert.match(pulseList, /request_context ->> 'ipHash'/);
   assert.match(pulseList, /request_context -> 'provenance' ->> 'originIp'/);
+});
+
+test("admin activity search supports requester exclusion syntax", async () => {
+  const source = await readFile("apps/web/lib/admin/activity-search.ts", "utf8");
+  assert.match(source, /requester\\s\*!=\\s\*\(\.\+\)/);
+  assert.match(source, /replaceAll\(\"\*\", \"%\"\)/);
 });
 
 test("admin activity pages share one page-level navigation overlay and API report links", async () => {
