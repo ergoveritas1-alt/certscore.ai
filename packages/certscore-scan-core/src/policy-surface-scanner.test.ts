@@ -726,6 +726,26 @@ test("policySurfaceScanner retries a substantive but incomplete privacy policy i
   });
 });
 
+test("policySurfaceScanner samples late GDPR sections beyond the opening classifier window", async () => {
+  await withPolicyScan("policy-late-gdpr-sections", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/late-gdpr-sections/privacy`
+    );
+    const topics = new Set(privacy?.gdprTransparencyTopicCandidates.map((candidate) => candidate.topic));
+
+    assert.ok(privacy);
+    assert.equal(topics.has("controller_contact"), true);
+    assert.equal(topics.has("legal_basis"), true);
+    assert.equal(topics.has("data_retention"), true);
+    assert.equal(topics.has("data_subject_rights"), true);
+    assert.equal(topics.has("international_transfers"), true);
+    assert.equal(topics.has("dpo_contact"), true);
+    assert.equal(topics.has("supervisory_authority"), true);
+  });
+});
+
 test("policySurfaceScanner extracts bounded Dutch GDPR Transparency evidence from privacy PDF surfaces", async () => {
   await withPolicyScan("policy-gdpr-transparency-pdf-nl", async ({ result, baseUrl }) => {
     const privacy = result.policySurfaceObservations.find((observation) =>

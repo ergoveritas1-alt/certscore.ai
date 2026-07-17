@@ -3221,7 +3221,7 @@ function mergeGdprTransparencyTopicCandidates(
 }
 
 function boundedGdprTransparencyClassifierText(text: string): string {
-  return normalizeWhitespace(text).slice(0, MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS);
+  return boundedPolicyAnalysisExcerpt(text);
 }
 
 function emptyPolicyFacts(): PolicyFacts {

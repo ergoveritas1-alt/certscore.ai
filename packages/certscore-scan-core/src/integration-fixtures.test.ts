@@ -523,6 +523,56 @@ test("pre-consent runtime scanner retains first-layer accept and reject controls
   }
 });
 
+test("pre-consent runtime scanner recognizes Osano deny non-essential as reject evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-deny-non-essential-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-deny-non-essential"),
+      path.join(tempRoot, "consent-deny-non-essential"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.label === "Deny Non-Essential" && control.actionType === "reject_all"
+      ),
+      true,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner does not promote a generic product Learn more link from broad page privacy context", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-generic-learn-more-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-generic-learn-more-page-context"),
+      path.join(tempRoot, "consent-generic-learn-more-page-context"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.managePreferencesControlObserved, false);
+    assert.equal(
+      observation?.controls.some((control) => control.label === "Learn more"),
+      false,
+      "contextual options labels need an actionable consent peer or a bounded CMP/consent surface",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner treats contextual Required Only as necessary-only reject evidence", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-required-only-"));

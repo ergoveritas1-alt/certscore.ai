@@ -29,6 +29,7 @@ export type StaticFixturePage =
   | "consent-compact-privacy-settings-controls"
   | "consent-contextual-continue-accept"
   | "consent-deny-non-essential"
+  | "consent-generic-learn-more-page-context"
   | "consent-first-layer-necessary-toggle-only"
   | "consent-first-layer-optional-toggle-off"
   | "consent-first-layer-optional-toggle-on"
@@ -106,6 +107,7 @@ export type StaticFixturePage =
   | "policy-link-aria-title"
   | "policy-large-homepage-legal-footer"
   | "policy-large-homepage-middle-legal-footer"
+  | "policy-late-gdpr-sections"
   | "policy-latimes-footer-surfaces"
   | "policy-localized-privacy-supplement"
   | "policy-mature-real-prose"
@@ -197,6 +199,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-compact-privacy-settings-controls": "consent-compact-privacy-settings-controls",
   "consent-contextual-continue-accept": "consent-contextual-continue-accept",
   "consent-deny-non-essential": "consent-deny-non-essential",
+  "consent-generic-learn-more-page-context": "consent-generic-learn-more-page-context",
   "consent-first-layer-necessary-toggle-only": "consent-first-layer-necessary-toggle-only",
   "consent-first-layer-optional-toggle-off": "consent-first-layer-optional-toggle-off",
   "consent-first-layer-optional-toggle-on": "consent-first-layer-optional-toggle-on",
@@ -274,6 +277,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-link-aria-title": "policy-link-aria-title",
   "policy-large-homepage-legal-footer": "policy-large-homepage-legal-footer",
   "policy-large-homepage-middle-legal-footer": "policy-large-homepage-middle-legal-footer",
+  "policy-late-gdpr-sections": "policy-late-gdpr-sections",
   "policy-latimes-footer-surfaces": "policy-latimes-footer-surfaces",
   "policy-localized-privacy-supplement": "policy-localized-privacy-supplement",
   "policy-mature-real-prose": "policy-mature-real-prose",
@@ -650,6 +654,25 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
       <p>Our data protection officer can be reached at dpo@example.test.</p>
       <p>You have the right to lodge a complaint with a supervisory authority.</p>
       <p>${"Additional policy details explain how personal data is handled for customers and visitors. ".repeat(30)}</p>
+    </main></body></html>`);
+    return;
+  }
+
+  if (url.pathname === "/late-gdpr-sections/privacy") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><html><head><title>Privacy Policy</title></head><body><main>
+      <h1>Privacy Policy</h1>
+      <p>${"General product privacy information describes account data, service delivery, security, and customer support. ".repeat(460)}</p>
+      <h2>European privacy disclosures</h2>
+      <p>Example Company is the data controller. The data controller can be contacted through privacy@example.test.</p>
+      <p>The purposes of processing personal data include providing the service.</p>
+      <p>Our legal basis for processing personal data includes contract, consent, legal obligations, and legitimate interests.</p>
+      <p>Recipients of personal data include processors, service providers, and analytics vendors.</p>
+      <p>We retain personal data only as long as necessary for the stated purposes.</p>
+      <p>You have the right to access your personal data and the right to erasure of personal data.</p>
+      <p>International transfers of personal data use standard contractual clauses for personal data transfers where required.</p>
+      <p>Our data protection officer can be reached at dpo@example.test.</p>
+      <p>You have the right to lodge a complaint with a supervisory authority.</p>
     </main></body></html>`);
     return;
   }
@@ -1254,6 +1277,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     cmpCookie: caseName === "consent-cmp-cookie-persists",
     cmpNetworkLateControls: caseName === "consent-cmp-network-late-controls",
     denyNonEssential: caseName === "consent-deny-non-essential",
+    genericLearnMorePageContext: caseName === "consent-generic-learn-more-page-context",
     analyticsCategoryControls: caseName === "consent-analytics-category-controls",
     analyticsCookie: caseName === "consent-analytics-cookie-persists",
     failedClick: caseName === "consent-banner-failed-click",
@@ -1264,6 +1288,22 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     leanGuardedImageCookie: caseName === "consent-lean-guarded-image-cookie",
     navigationTimeout: caseName === "consent-navigation-timeout",
   };
+  if (options.genericLearnMorePageContext) {
+    return `
+      <main>
+        <section aria-label="Mobile banking promotion">
+          <h1>Deposit checks with our app</h1>
+          <p>Use your phone camera to deposit a check.</p>
+          <a id="product-learn-more" href="/products/mobile-app">Learn more</a>
+        </section>
+        <section>
+          <h2>Privacy resources</h2>
+          <p>Read how cookies and privacy choices apply to this website.</p>
+          <a href="/policies/privacy">Privacy policy</a>
+        </section>
+      </main>
+    `;
+  }
   if (options.cmpNetworkLateControls) {
     return `
       <section>
@@ -1881,6 +1921,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-onetrust-notice-json": `<a href="/policies/onetrust-shell">Privacy Policy</a>`,
     "policy-rendered-article13-better": `<a href="/rendered-article13-better/privacy">Politique de confidentialité</a>`,
     "policy-rendered-incomplete-substantive": `<a href="/rendered-incomplete-substantive/privacy">Privacy Policy</a>`,
+    "policy-late-gdpr-sections": `<a href="/late-gdpr-sections/privacy">Privacy Policy</a>`,
     "policy-privacy-choices-link": `<a href="/privacy-choices">Your Privacy Choices</a>`,
     "policy-static-core-surfaces": [
       `<a href="/policies/privacy">Privacy Policy</a>`,

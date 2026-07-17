@@ -72,6 +72,8 @@ test("classifies observed English options labels", () => {
   assert.equal(classifyConsentControlLabel({ label: "Allow Optional Cookies" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Optional Cookies" }).intent, "unknown");
   assert.equal(classifyConsentControlLabel({ label: "Deny", ariaLabel: "Deny" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "Deny Non-Essential" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "Deny Non-Essential Cookies" }).intent, "reject");
   const subscribeReject = classifyConsentControlLabel({ label: "Decline and subscribe" });
   assert.equal(subscribeReject.intent, "reject");
   assert.equal(subscribeReject.variant, "reject_with_subscription");
