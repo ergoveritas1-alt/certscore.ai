@@ -231,6 +231,7 @@ test("keeps NBC-style hidden OneTrust preference center from counting as first-l
   assert.equal(artifact.summary.firstLayerAccept, false);
   assert.equal(artifact.summary.firstLayerReject, false);
   assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.ok(artifact.summary.limitations.includes("cmp_detected_without_visible_first_layer_controls"));
   assert.ok(artifact.candidates.some((candidate) => candidate.decisionStatus === "hidden" || candidate.decisionStatus === "deeper_layer"));
 });
 
@@ -483,6 +484,41 @@ test("captures visible first-layer controls inside a bounded iframe", async () =
   assert.equal(artifact.summary.firstLayerReject, true);
   assert.equal(artifact.summary.firstLayerOptions, false);
   assert.equal(findCandidate(artifact, "Accept all")?.frameContext.frameKind, "child_frame");
+});
+
+test("prioritizes known CMP frames when the page contains many unrelated iframes", async () => {
+  assert.ok(browser, "browser not initialized");
+  const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
+  await page.route("**/*", async (route) => {
+    if (route.request().url() === "https://cdn.cookielaw.org/cmp-frame.html") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: `<!doctype html><html><body>
+          <div id="onetrust-consent-sdk"><section id="onetrust-banner-sdk" role="dialog" style="position:fixed;inset:0;background:white">
+            <p>We use cookies and similar technologies.</p>
+            <button>Accept all</button><button>Reject all</button><button>Cookie settings</button>
+          </section></div>
+        </body></html>`,
+      });
+      return;
+    }
+    await route.fulfill({ status: 204, body: "" });
+  });
+  try {
+    const unrelatedFrames = Array.from({ length: 14 }, (_, index) =>
+      `<iframe src="https://unrelated.example.test/frame-${index}.html"></iframe>`,
+    ).join("");
+    await page.setContent(`<!doctype html><html><body>${unrelatedFrames}<iframe src="https://cdn.cookielaw.org/cmp-frame.html"></iframe></body></html>`);
+    await page.waitForTimeout(100);
+    const artifact = await captureConsentControlGeometry(page);
+    assert.equal(artifact.summary.cmpName, "OneTrust");
+    assert.equal(artifact.summary.firstLayerAccept, true);
+    assert.equal(artifact.summary.firstLayerReject, true);
+    assert.equal(artifact.summary.firstLayerOptions, true);
+  } finally {
+    await page.close();
+  }
 });
 
 test("does not count French privacy-policy links as first-layer options", async () => {

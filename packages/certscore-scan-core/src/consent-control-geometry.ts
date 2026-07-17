@@ -289,10 +289,17 @@ export async function captureConsentControlGeometry(
     containerLimit: options.containerLimit ?? DEFAULT_CONTAINER_LIMIT,
     registrySelectors,
   };
+  const mainFrame = page.mainFrame();
   const frames = [
-    page.mainFrame(),
-    ...page.frames().filter((frame) => frame !== page.mainFrame()),
-  ].slice(0, 12);
+    mainFrame,
+    ...page.frames().filter((frame) => frame !== mainFrame),
+  ]
+    .sort((left, right) => {
+      if (left === mainFrame) return -1;
+      if (right === mainFrame) return 1;
+      return cmpFramePriority(right.url()) - cmpFramePriority(left.url());
+    })
+    .slice(0, 12);
   const frameTimeoutMs = options.timeoutMs
     ? Math.max(250, Math.floor(options.timeoutMs / Math.max(frames.length, 1)))
     : undefined;
@@ -351,6 +358,26 @@ export async function captureConsentControlGeometry(
     candidates,
     summary,
   };
+}
+
+function cmpFramePriority(frameUrl: string): number {
+  if (!frameUrl) return 0;
+  try {
+    const parsed = new URL(frameUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    const matchesKnownCmpDomain = KNOWN_CMP_REGISTRY.some((definition) =>
+      definition.domains.some((domain) => {
+        const normalizedDomain = domain.toLowerCase().replace(/^\*\./, "");
+        return hostname === normalizedDomain || hostname.endsWith(`.${normalizedDomain}`);
+      }),
+    );
+    const matchesKnownCmpUrl = KNOWN_CMP_REGISTRY.some((definition) =>
+      definition.urlPatterns?.some((pattern) => pattern.test(frameUrl)) === true,
+    );
+    return matchesKnownCmpDomain || matchesKnownCmpUrl ? 100 : 0;
+  } catch {
+    return 0;
+  }
 }
 
 function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> {
@@ -717,6 +744,9 @@ function summarizeConsentControlGeometry(
     .map((candidate) => `${candidate.actionType}:${candidate.label}:${candidate.decisionStatus}`)
     .slice(0, 12);
   const observedCount = [firstLayerAccept, firstLayerReject, firstLayerOptions].filter(Boolean).length;
+  if (cmp.detected && observedCount === 0) {
+    limitations.unshift("cmp_detected_without_visible_first_layer_controls");
+  }
   return {
     firstLayerAccept,
     firstLayerReject,

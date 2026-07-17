@@ -71,3 +71,7 @@ pnpm v2:calibration-registry-check
 pnpm v2:wc01-scan-lab-cohort -- --urls docs/certscore-v2/scan-quality-calibration-pilot-10.txt --profile full --limit 10 --out-dir artifacts/v2-scan-quality-calibration-pilot
 pnpm v2:wc01-verify-scan-lab-cohort --summary artifacts/v2-scan-quality-calibration-pilot/Wc01V2ScanLabCohort.summary.json --min-sites 10 --out-dir artifacts/v2-scan-quality-calibration-pilot/verification
 ```
+
+## Geometry-priority rerun
+
+After prioritizing known CMP frames during geometry capture, the same 10-site cohort was rerun. It again completed 10/10 and passed verification. The rerun did not manufacture controls on sites where the CMP was detected but no visible first-layer banner was present; those cases now retain an explicit `cmp_detected_without_visible_first_layer_controls` limitation. That is the correct evidence posture until a visible control is actually retained.
