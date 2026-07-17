@@ -8,6 +8,9 @@ on:
       - "apps/web/scripts/**"
       - "packages/validation-shared/**"
       - "packages/shared/**"
+      - "docs/certscore-v2/scan-quality-calibration-manifest.json"
+      - "docs/certscore-v2/calibration-urls-lab-50.txt"
+      - "scripts/verify-scan-quality-calibration-registry.ts"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -59,6 +62,9 @@ jobs:
 
       - name: Build workspace packages for tests
         run: pnpm --filter @certscore/contracts --filter @certscore/vendor-resolver --filter @website-signal-risk-scanner/shared --filter @website-signal-risk-scanner/db --filter @website-signal-risk-scanner/validation-shared build
+
+      - name: Verify scan-quality calibration registry
+        run: pnpm v2:calibration-registry-check
 
       - name: Run deterministic finding calibration tests
         run: pnpm exec tsx --test apps/web/lib/scans/concern-policy.test.ts apps/web/lib/scans/hybrid-runtime-evidence.test.ts apps/web/lib/scans/report-surfacing-policy.test.ts apps/web/scripts/report-production-finding-frequency.test.ts packages/validation-shared/src/privacy-runtime-findings.dataset.test.ts packages/validation-shared/src/privacy-runtime-findings-eval.test.ts packages/validation-shared/src/privacy-runtime-findings-coverage.test.ts packages/validation-shared/src/privacy-runtime-findings-promote.test.ts

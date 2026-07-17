@@ -122,6 +122,19 @@ The comparison is only a screening gate. Review screenshot readability, consent-
 
 The regulatory gold corpus refresh is documented in `docs/certscore-v2/regulatory-gold-corpus.md`. It is an internal v2 diagnostic workflow for bounded live-scan indexing, promoted examples, deterministic fixtures, and regression gates. It remains artifact-only and does not change production report behavior.
 
+### Scan quality calibration program
+
+Ongoing scanner calibration follows `docs/certscore-v2/scan-quality-calibration-program.md`.
+The canonical lane registry is `docs/certscore-v2/scan-quality-calibration-manifest.json`.
+Validate it with:
+
+```bash
+pnpm v2:calibration-registry-check
+```
+
+The registry check is deterministic and safe to run without live-site access. Use the
+existing Scan Lab and gold-corpus commands for live evidence capture and review.
+
 ### Replay corpus confidence gate
 
 Before spending time and storage on the full 100-site replay corpus, run a small capture/replay pilot and inspect the diagnostic reports. This is capture/replay infrastructure only; it does not change production scoring, report copy, regulatory classification, checklist rows, or customer-facing report output.

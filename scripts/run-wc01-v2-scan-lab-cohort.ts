@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { canonicalEvidenceBundleSchema, type CanonicalEvidenceBundle } from "../packages/certscore-contracts/src/index.js";
+import { reviewEvidenceBundle } from "../packages/certscore-review-engine/src/index.js";
 import {
   buildV2ScanLabRunPlan,
   isV2ScanLabRunProfile,
@@ -322,9 +323,7 @@ async function summarizeCompletedRun(input: {
   const bundlePath = path.join(calibrationDir, "CanonicalEvidenceBundle.json");
   const reviewPath = path.join(calibrationDir, "ReviewResult.json");
   const bundle = await readJson<Record<string, unknown>>(bundlePath);
-  const review = existsSync(reviewPath)
-    ? await readJson<Record<string, unknown>>(reviewPath)
-    : {};
+  const review = await ensureReviewResult({ bundle, reviewPath });
   const moduleRuns = summarizeModuleRuns(bundle);
   const eligibleFindingKeys = summarizeEligibleFindingKeys(review);
   const candidateCounts = summarizeReviewCandidateCounts(review);
@@ -349,6 +348,20 @@ async function summarizeCompletedRun(input: {
     status: "completed",
     url: input.url,
   };
+}
+
+async function ensureReviewResult(input: {
+  bundle: Record<string, unknown>;
+  reviewPath: string;
+}): Promise<Record<string, unknown>> {
+  if (existsSync(input.reviewPath)) {
+    return readJson<Record<string, unknown>>(input.reviewPath);
+  }
+
+  const bundle = canonicalEvidenceBundleSchema.parse(input.bundle) as CanonicalEvidenceBundle;
+  const review = await reviewEvidenceBundle(bundle);
+  await writeFile(input.reviewPath, `${JSON.stringify(review, null, 2)}\n`, "utf8");
+  return review as unknown as Record<string, unknown>;
 }
 
 async function enrichCompletedRunEndpoints(input: {

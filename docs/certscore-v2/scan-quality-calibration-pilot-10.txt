@@ -1,0 +1,12 @@
+# Initial 10-site calibration pilot.
+# These targets provide a deliberately mixed sample across the required lanes.
+https://cnn.com
+https://theguardian.com
+https://walmart.com
+https://booking.com
+https://notion.so
+https://plannedparenthood.org
+https://fidelity.com
+https://ftc.gov
+https://fullstory.com
+https://cloudflare.com

@@ -83,6 +83,8 @@ For CertScore v2, artifact contracts must stay typed, bounded, display-safe wher
 
 ### Scan reliability and evidence quality
 
+Ongoing scanner calibration is governed by `docs/certscore-v2/scan-quality-calibration-program.md` and its machine-readable registry. For scanner-quality changes, use the canonical cohort and review evidence transitions across the required lanes; do not treat the latest three scans as an acceptance sample. Run `pnpm v2:calibration-registry-check` before live calibration. Luna owns benchmark and baseline decisions; SO owns production canaries and operational escalation.
+
 For GDPR/ePrivacy scan-quality work, start by auditing retained evidence, normalized concerns, concern policy, and unified finding projection before changing display code. Missing, downgraded, or unclear findings should be traced to the first broken point in the evidence pipeline.
 
 Preserve evidence quality over deploy speed or runtime size. Full Chromium remains the default browser runtime for scanner/validation paths unless the user explicitly approves a browser-runtime change after an evidence-quality review.
