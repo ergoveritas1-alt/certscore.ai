@@ -119,6 +119,7 @@ export type StaticFixturePage =
   | "policy-onetrust-notice-json"
   | "policy-privacy-center-link"
   | "policy-rendered-article13-better"
+  | "policy-rendered-incomplete-substantive"
   | "policy-retention-rights-only"
   | "policy-state-privacy-rights-link"
   | "policy-cmp-preference-control"
@@ -286,6 +287,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-onetrust-notice-json": "policy-onetrust-notice-json",
   "policy-privacy-center-link": "policy-privacy-center",
   "policy-rendered-article13-better": "policy-rendered-article13-better",
+  "policy-rendered-incomplete-substantive": "policy-rendered-incomplete-substantive",
   "policy-retention-rights-only": "policy-retention-rights-only",
   "policy-state-privacy-rights-link": "policy-state-rights",
   "policy-cmp-preference-control": "policy-cmp-preference-control",
@@ -619,6 +621,36 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
           </main>
         </body>
       </html>`);
+    return;
+  }
+
+  if (url.pathname === "/rendered-incomplete-substantive/privacy") {
+    const shared = [
+      "The controller for this service can be contacted through the privacy office.",
+      "We process personal data to provide services and improve the product.",
+      "We rely on consent, contract, legal obligation, and legitimate interests as legal bases.",
+      "Recipients include processors, service providers, and analytics partners.",
+      "We retain personal data only as long as necessary.",
+      "You may exercise rights to access, rectify, erase, restrict, and object.",
+      "International transfers use standard contractual clauses where required.",
+    ];
+    if (request.headers["sec-fetch-mode"] !== "navigate") {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><head><title>Privacy Policy</title></head><body><main>
+        <h1>Privacy Policy</h1>
+        ${shared.map((text) => `<p>${text}</p>`).join("")}
+        <p>${"General privacy information for customers and visitors. ".repeat(24)}</p>
+      </main></body></html>`);
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><html><head><title>Privacy Policy</title></head><body><main>
+      <h1>Privacy Policy</h1>
+      ${shared.map((text) => `<p>${text}</p>`).join("")}
+      <p>Our data protection officer can be reached at dpo@example.test.</p>
+      <p>You have the right to lodge a complaint with a supervisory authority.</p>
+      <p>${"Additional policy details explain how personal data is handled for customers and visitors. ".repeat(30)}</p>
+    </main></body></html>`);
     return;
   }
 
@@ -1848,6 +1880,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,
     "policy-onetrust-notice-json": `<a href="/policies/onetrust-shell">Privacy Policy</a>`,
     "policy-rendered-article13-better": `<a href="/rendered-article13-better/privacy">Politique de confidentialité</a>`,
+    "policy-rendered-incomplete-substantive": `<a href="/rendered-incomplete-substantive/privacy">Privacy Policy</a>`,
     "policy-privacy-choices-link": `<a href="/privacy-choices">Your Privacy Choices</a>`,
     "policy-static-core-surfaces": [
       `<a href="/policies/privacy">Privacy Policy</a>`,

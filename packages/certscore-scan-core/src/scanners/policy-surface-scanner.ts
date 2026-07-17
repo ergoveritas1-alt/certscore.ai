@@ -1415,7 +1415,11 @@ function shouldTryRenderedPolicyDocumentTextFallback(input: {
     normalized.length < 500 &&
     topicMatchCount === 0 &&
     textQuality.policyTermCount < 2;
+  const looksLikeIncompleteSubstantivePolicy =
+    normalized.length < MIN_SUBSTANTIVE_POLICY_TEXT_CHARS &&
+    topicMatchCount < 9;
   return looksLikeShortThinText ||
+    looksLikeIncompleteSubstantivePolicy ||
     looksLikePrivacyCenterShell(normalized) ||
     looksLikeLocalizedPolicyShell ||
     !textQuality.usable;

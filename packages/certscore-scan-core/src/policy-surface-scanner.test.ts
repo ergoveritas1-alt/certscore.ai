@@ -701,6 +701,31 @@ test("policySurfaceScanner adopts rendered text when it adds canonical GDPR Tran
   });
 });
 
+test("policySurfaceScanner retries a substantive but incomplete privacy policy in the rendered lane", async () => {
+  await withPolicyScan("policy-rendered-incomplete-substantive", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/rendered-incomplete-substantive/privacy`
+    );
+
+    assert.ok(privacy, "the incomplete static privacy policy should remain a fetched surface");
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("policy rendered low-quality text fallback")),
+      true,
+      "substantive text below the disclosure-review threshold should receive one bounded rendered retry",
+    );
+    assert.equal(
+      privacy.gdprTransparencyTopicCandidates.some((candidate) => candidate.topic === "dpo_contact"),
+      true,
+    );
+    assert.equal(
+      privacy.gdprTransparencyTopicCandidates.some((candidate) => candidate.topic === "supervisory_authority"),
+      true,
+    );
+  });
+});
+
 test("policySurfaceScanner extracts bounded Dutch GDPR Transparency evidence from privacy PDF surfaces", async () => {
   await withPolicyScan("policy-gdpr-transparency-pdf-nl", async ({ result, baseUrl }) => {
     const privacy = result.policySurfaceObservations.find((observation) =>

@@ -3569,7 +3569,11 @@ function isStaticTextConsentInventoryControl(control: ConsentUiInventoryControl)
 }
 
 function isCompositeConsentInventoryControl(control: ConsentUiInventoryControl): boolean {
-  const normalizedLabel = control.label.replace(/\s+/g, " ").trim().toLowerCase();
+  return hasMultipleCanonicalConsentIntents(control.label);
+}
+
+function hasMultipleCanonicalConsentIntents(label: string): boolean {
+  const normalizedLabel = label.replace(/\s+/g, " ").trim().toLowerCase();
   if (!normalizedLabel || normalizedLabel.length > 160) {
     return false;
   }
@@ -6637,6 +6641,9 @@ function isCompositeConfirmedGeometryControl(
   candidate: ConsentControlGeometryArtifact["candidates"][number],
   candidates: ConsentControlGeometryArtifact["candidates"],
 ): boolean {
+  if (hasMultipleCanonicalConsentIntents(candidate.label)) {
+    return true;
+  }
   if (["button", "a", "input", "select", "textarea"].includes(candidate.tagName.toLowerCase())) {
     return false;
   }

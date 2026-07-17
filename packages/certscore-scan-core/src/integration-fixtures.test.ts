@@ -692,6 +692,34 @@ test("pre-consent runtime scanner drops composite geometry containers when child
   );
 });
 
+test("pre-consent runtime scanner drops actionable elements whose labels concatenate multiple consent choices", () => {
+  const compositeButton = {
+    ...geometryCandidate(
+      "Cookies settingsReject All Accept All Cookies",
+      "accept_all",
+      "confirmed_visible",
+      "first_layer",
+    ),
+    tagName: "button",
+  };
+  const manage = geometryCandidate("Cookies settings", "manage_preferences", "confirmed_visible", "first_layer");
+  const reject = geometryCandidate("Reject All", "reject_all", "confirmed_visible", "first_layer");
+  const accept = geometryCandidate("Accept All Cookies", "accept_all", "confirmed_visible", "first_layer");
+
+  const observation = consentUiObservationFromConfirmedGeometryControls({
+    geometry: geometryFixture([compositeButton, manage, reject, accept]),
+    scanStartedAtMs: Date.now(),
+    text: "We use cookies and provide settings, reject, and accept choices.",
+  });
+
+  assert.deepEqual(observation?.visibleChoiceLabels, ["Cookies settings", "Reject All", "Accept All Cookies"]);
+  assert.equal(
+    observation?.controls.some((control) => control.label === compositeButton.label),
+    false,
+    "a concatenated multi-intent label must not become accept-control evidence even when exposed as a button",
+  );
+});
+
 test("pre-consent runtime scanner does not retain hidden footer or ambiguous geometry candidates", () => {
   const observation = consentUiObservationFromConfirmedGeometryControls({
     geometry: geometryFixture([
