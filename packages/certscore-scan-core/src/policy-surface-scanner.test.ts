@@ -1334,6 +1334,31 @@ test("policySurfaceScanner freshly validates a bounded prior policy seed when ho
   });
 });
 
+test("policySurfaceScanner fetches an observed privacy link before unverified common-path seeds", async () => {
+  await withPolicyScan("policy-footer-privacy", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/privacy`
+    );
+
+    assert.equal(privacy?.status, "fetched");
+    assert.notEqual(privacy?.discoveryMethod, "guessed_common_path");
+  }, {
+    discoveryMode: "fast",
+    policySurfaceSeeds: [
+      { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "/privacy-notice" },
+      { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "/privacy-policy" },
+      { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "/legal/privacy" },
+      { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "/privacy" },
+    ],
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not be needed when a direct observed privacy link is available.");
+      },
+    },
+  });
+});
+
 test("policySurfaceScanner uses common-path fallback when homepage fetch fails", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));

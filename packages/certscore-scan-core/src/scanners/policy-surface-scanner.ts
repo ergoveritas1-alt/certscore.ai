@@ -2566,6 +2566,7 @@ function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): Polic
     )
     .sort((left, right) =>
       surfacePriority(left.deterministicSurfaceType) - surfacePriority(right.deterministicSurfaceType) ||
+      policyCandidateDiscoveryPriority(left) - policyCandidateDiscoveryPriority(right) ||
       policyCandidateQualityScore(right) - policyCandidateQualityScore(left) ||
       right.deterministicScore - left.deterministicScore ||
       left.normalizedUrl.localeCompare(right.normalizedUrl),
@@ -2715,6 +2716,22 @@ function policyCandidateQualityScore(candidate: PolicySurfaceCandidate): number 
   return score;
 }
 
+function policyCandidateDiscoveryPriority(candidate: PolicySurfaceCandidate): number {
+  if (
+    candidate.clickable &&
+    ["footer_link", "header_link", "page_text_link"].includes(candidate.discoveryMethod)
+  ) {
+    return 0;
+  }
+  if (candidate.seedSource === "prior_scan_hint") {
+    return 1;
+  }
+  if (candidate.discoveryMethod === "guessed_common_path") {
+    return 3;
+  }
+  return 2;
+}
+
 function safeUrlPath(value: string): string {
   try {
     return new URL(value).pathname.replace(/\/+$/, "") || "/";
@@ -2775,6 +2792,7 @@ function mergeSupplementalPolicyCandidates(
     )
     .sort((left, right) =>
       surfacePriority(left.deterministicSurfaceType) - surfacePriority(right.deterministicSurfaceType) ||
+      policyCandidateDiscoveryPriority(left) - policyCandidateDiscoveryPriority(right) ||
       policyCandidateQualityScore(right) - policyCandidateQualityScore(left) ||
       right.deterministicScore - left.deterministicScore ||
       left.normalizedUrl.localeCompare(right.normalizedUrl),
