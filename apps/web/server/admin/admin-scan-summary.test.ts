@@ -105,10 +105,16 @@ test("admin activity pages use one search prompt across domain, scan, email, req
   assert.match(pulseList, /request_context -> 'provenance' ->> 'originIp'/);
 });
 
-test("admin activity search supports requester exclusion syntax", async () => {
+test("admin activity search supports field-specific exclusion syntax", async () => {
   const source = await readFile("apps/web/lib/admin/activity-search.ts", "utf8");
-  assert.match(source, /requester\\s\*!=\\s\*\(\.\+\)/);
+  const pulseList = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
+  const scanRepository = await readFile("apps/web/server/admin/repository.ts", "utf8");
+  assert.match(source, /domain\|scan_\?id\|email\|requester\|ip\|source/);
   assert.match(source, /replaceAll\(\"\*\", \"%\"\)/);
+  assert.match(source, /exclusions\[field\]\.push/);
+  assert.match(pulseList, /\$18::text\[\].*sourceIp/s);
+  assert.match(scanRepository, /\$18::text\[\].*sourceIp/s);
+  assert.match(scanRepository, /\$19::text\[\].*source_filter/s);
 });
 
 test("API activity treats Any filter values as unfiltered", async () => {

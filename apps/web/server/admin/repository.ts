@@ -258,13 +258,13 @@ function adminScanActivityBaseSql() {
                 prq.requested_by::text, prq.request_context::text) ilike '%' || $1 || '%'
       )
     )
-    and ($13::text is null or not (
+    and ($13::text[] is null or not (
       exists (
         select 1 from public.scan_requests srq
         left join public.users au on au.id::text = srq.requested_by ->> 'userId'
         left join public.better_auth_users bau on bau.id = srq.requested_by ->> 'userId'
         where coalesce(srq.fulfilled_by_scan_id, srq.scan_id) = s.id
-          and concat_ws(' ', coalesce(au.email, bau.email, ''), srq.requested_by::text) ilike $13
+          and concat_ws(' ', coalesce(au.email, bau.email, ''), srq.requested_by::text) ilike any($13::text[])
       )
       or exists (
         select 1 from public.pulse_requests prq
@@ -272,7 +272,44 @@ function adminScanActivityBaseSql() {
         left join public.users pau on pau.id::text = coalesce(prq.requested_by ->> 'userId', aik.owner_user_id::text)
         left join public.better_auth_users pbau on pbau.id = prq.requested_by ->> 'userId'
         where prq.scan_id = s.id
-          and concat_ws(' ', coalesce(pau.email, pbau.email, aik.created_by, ''), prq.requested_by::text) ilike $13
+          and concat_ws(' ', coalesce(pau.email, pbau.email, aik.created_by, ''), prq.requested_by::text) ilike any($13::text[])
+      )
+    ))
+    and ($15::text[] is null or not (coalesce(d.hostname, '') ilike any($15::text[])))
+    and ($16::text[] is null or not (s.id::text ilike any($16::text[])))
+    and ($17::text[] is null or not (
+      exists (
+        select 1 from public.scan_requests srq
+        left join public.users au on au.id::text = srq.requested_by ->> 'userId'
+        left join public.better_auth_users bau on bau.id = srq.requested_by ->> 'userId'
+        where coalesce(srq.fulfilled_by_scan_id, srq.scan_id) = s.id
+          and coalesce(au.email, bau.email, '') ilike any($17::text[])
+      ) or exists (
+        select 1 from public.pulse_requests prq
+        left join public.integration_api_keys aik on aik.public_id = prq.requested_by ->> 'apiKeyId'
+        left join public.users pau on pau.id::text = coalesce(prq.requested_by ->> 'userId', aik.owner_user_id::text)
+        left join public.better_auth_users pbau on pbau.id = prq.requested_by ->> 'userId'
+        where prq.scan_id = s.id
+          and coalesce(pau.email, pbau.email, aik.created_by, '') ilike any($17::text[])
+      )
+    ))
+    and ($18::text[] is null or not (
+      exists (
+        select 1 from public.scan_requests srq
+        where coalesce(srq.fulfilled_by_scan_id, srq.scan_id) = s.id
+          and concat_ws(' ',
+            srq.request_context ->> 'sourceIp', srq.request_context ->> 'originIp', srq.request_context ->> 'ipHash',
+            srq.request_context -> 'provenance' ->> 'sourceIp', srq.request_context -> 'provenance' ->> 'originIp',
+            srq.request_context -> 'provenance' ->> 'ipHash', srq.requested_by ->> 'sourceIp', srq.requested_by ->> 'ipHash'
+          ) ilike any($18::text[])
+      ) or exists (
+        select 1 from public.pulse_requests prq
+        where prq.scan_id = s.id
+          and concat_ws(' ',
+            prq.request_context ->> 'sourceIp', prq.request_context ->> 'originIp', prq.request_context ->> 'ipHash',
+            prq.request_context -> 'provenance' ->> 'sourceIp', prq.request_context -> 'provenance' ->> 'originIp',
+            prq.request_context -> 'provenance' ->> 'ipHash', prq.requested_by ->> 'sourceIp', prq.requested_by ->> 'ipHash'
+          ) ilike any($18::text[])
       )
     ))
 
@@ -338,8 +375,8 @@ function adminScanActivityBaseSql() {
                   prq.requested_by::text, prq.request_context::text) ilike '%' || $1 || '%'
         )
       )
-      and ($13::text is null or not (
-        concat_ws(' ', coalesce(au.email, bau.email, ''), sr.requested_by::text) ilike $13
+      and ($13::text[] is null or not (
+        concat_ws(' ', coalesce(au.email, bau.email, ''), sr.requested_by::text) ilike any($13::text[])
         or exists (
           select 1
           from public.pulse_requests prq
@@ -347,7 +384,36 @@ function adminScanActivityBaseSql() {
           left join public.users pau on pau.id::text = coalesce(prq.requested_by ->> 'userId', aik.owner_user_id::text)
           left join public.better_auth_users pbau on pbau.id = prq.requested_by ->> 'userId'
           where prq.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
-            and concat_ws(' ', coalesce(pau.email, pbau.email, aik.created_by, ''), prq.requested_by::text) ilike $13
+            and concat_ws(' ', coalesce(pau.email, pbau.email, aik.created_by, ''), prq.requested_by::text) ilike any($13::text[])
+        )
+      ))
+      and ($15::text[] is null or not (concat_ws(' ', sr.normalized_domain, sr.requested_url, d.hostname) ilike any($15::text[])))
+      and ($16::text[] is null or not (concat_ws(' ', coalesce(sr.fulfilled_by_scan_id, sr.scan_id)::text, sr.public_id) ilike any($16::text[])))
+      and ($17::text[] is null or not (
+        coalesce(au.email, bau.email, '') ilike any($17::text[])
+        or exists (
+          select 1 from public.pulse_requests prq
+          left join public.integration_api_keys aik on aik.public_id = prq.requested_by ->> 'apiKeyId'
+          left join public.users pau on pau.id::text = coalesce(prq.requested_by ->> 'userId', aik.owner_user_id::text)
+          left join public.better_auth_users pbau on pbau.id = prq.requested_by ->> 'userId'
+          where prq.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+            and coalesce(pau.email, pbau.email, aik.created_by, '') ilike any($17::text[])
+        )
+      ))
+      and ($18::text[] is null or not (
+        concat_ws(' ',
+          sr.request_context ->> 'sourceIp', sr.request_context ->> 'originIp', sr.request_context ->> 'ipHash',
+          sr.request_context -> 'provenance' ->> 'sourceIp', sr.request_context -> 'provenance' ->> 'originIp',
+          sr.request_context -> 'provenance' ->> 'ipHash', sr.requested_by ->> 'sourceIp', sr.requested_by ->> 'ipHash'
+        ) ilike any($18::text[])
+        or exists (
+          select 1 from public.pulse_requests prq
+          where prq.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+            and concat_ws(' ',
+              prq.request_context ->> 'sourceIp', prq.request_context ->> 'originIp', prq.request_context ->> 'ipHash',
+              prq.request_context -> 'provenance' ->> 'sourceIp', prq.request_context -> 'provenance' ->> 'originIp',
+              prq.request_context -> 'provenance' ->> 'ipHash', prq.requested_by ->> 'sourceIp', prq.requested_by ->> 'ipHash'
+            ) ilike any($18::text[])
         )
       ))
   ), filtered_activity as (
@@ -372,6 +438,7 @@ function adminScanActivityBaseSql() {
        and ($10::text is null or access_filter = $10)
        and ($11::text is null or outcome_filter = $11)
        and ($14::text is null or lower(source_filter) = lower($14))
+       and ($19::text[] is null or not (coalesce(source_filter, '') ilike any($19::text[])))
   )`;
 }
 
@@ -383,7 +450,7 @@ export async function loadAdminScanActivityPageRefs(
   await ensureScanRequestLogTable();
   const parsedSearch = parseAdminActivitySearch(filters.query, { source: true });
   const queryText = parsedSearch.query;
-  const requesterExclude = parsedSearch.requesterExclude;
+  const exclusionArray = (values: string[]) => values.length > 0 ? values : null;
   const source = parsedSearch.source;
   const status = filters.status && filters.status !== "any" ? filters.status : null;
   const freshness = filters.freshness && filters.freshness !== "any" ? filters.freshness : null;
@@ -395,7 +462,13 @@ export async function loadAdminScanActivityPageRefs(
   const outcome = filters.outcome?.trim().slice(0, 120) || null;
   const timeSpanHours = timeSpan === "4h" ? 4 : timeSpan === "12h" ? 12 : timeSpan === "24h" ? 24 : timeSpan === "7d" ? 24 * 7 : timeSpan === "31d" ? 24 * 31 : null;
   const since = timeSpanHours === null ? null : new Date(Date.now() - timeSpanHours * 60 * 60 * 1000).toISOString();
-  const params = [queryText, status, freshness, language, industry, scanFrom, since, limit, offset, access, outcome, SCAN_NO_GO_SNAPSHOT_OUTCOMES, requesterExclude, source];
+  const params = [
+    queryText, status, freshness, language, industry, scanFrom, since, limit, offset, access, outcome,
+    SCAN_NO_GO_SNAPSHOT_OUTCOMES, exclusionArray(parsedSearch.exclusions.requester), source,
+    exclusionArray(parsedSearch.exclusions.domain), exclusionArray(parsedSearch.exclusions.scanId),
+    exclusionArray(parsedSearch.exclusions.email), exclusionArray(parsedSearch.exclusions.ip),
+    exclusionArray(parsedSearch.exclusions.source)
+  ];
   const baseSql = adminScanActivityBaseSql();
   const [pageResult, countResult] = await Promise.all([
     query<AdminScanActivityPageRef>(

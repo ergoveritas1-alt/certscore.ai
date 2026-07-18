@@ -192,10 +192,20 @@ const PULSE_ACTIVITY_FILTER_SQL = `
     and ($7::timestamptz is null or pr.requested_at >= $7::timestamptz)
     and ($8::text is null or (case when coalesce(ss.captcha_flag, false) then 'captcha' when coalesce(ss.blocked_flag, false) or ss.access_posture_class = 'early_loss' then 'blocked' when ss.access_posture_class = 'robots_limited' then 'robots_limited' when ss.access_posture_class = 'degraded_but_useful' then 'limited' when ss.scan_id is not null then 'clear' else 'unknown' end) = $8)
     and ($9::text is null or ss.scan_outcome = $9)
-    and ($13::text is null or not (
-      concat_ws(' ', coalesce(app_user.email, auth_user.email, api_key.created_by, ''), pr.requested_by::text) ilike $13
+    and ($13::text[] is null or not (
+      concat_ws(' ', coalesce(app_user.email, auth_user.email, api_key.created_by, ''), pr.requested_by::text) ilike any($13::text[])
     ))
-    and ($14::text is null or ${PULSE_API_ROUTE_SQL} = $14)`;
+    and ($14::text is null or ${PULSE_API_ROUTE_SQL} = $14)
+    and ($15::text[] is null or not (concat_ws(' ', pr.normalized_domain, pr.requested_url, domain.hostname) ilike any($15::text[])))
+    and ($16::text[] is null or not (concat_ws(' ', pr.scan_id::text, pr.public_id, pr.job_id, pr.request_context ->> 'requestId') ilike any($16::text[])))
+    and ($17::text[] is null or not (coalesce(app_user.email, auth_user.email, api_key.created_by, '') ilike any($17::text[])))
+    and ($18::text[] is null or not (
+      concat_ws(' ',
+        pr.request_context ->> 'sourceIp', pr.request_context ->> 'originIp', pr.request_context ->> 'ipHash',
+        pr.request_context -> 'provenance' ->> 'sourceIp', pr.request_context -> 'provenance' ->> 'originIp',
+        pr.request_context -> 'provenance' ->> 'ipHash', pr.requested_by ->> 'sourceIp', pr.requested_by ->> 'ipHash'
+      ) ilike any($18::text[])
+    ))`;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -428,7 +438,7 @@ export async function listAdminPulseRequests(input: {
   const offset = Math.max(0, input.offset ?? 0);
   const parsedSearch = parseAdminActivitySearch(input.query);
   const search = parsedSearch.query;
-  const requesterExclude = parsedSearch.requesterExclude;
+  const exclusionArray = (values: string[]) => values.length > 0 ? values : null;
   const freshness = normalizeAdminActivityFilter(input.freshness, ["any"]);
   const language = normalizeAdminActivityFilter(input.language);
   const industry = normalizeAdminActivityFilter(input.industry);
@@ -508,7 +518,12 @@ export async function listAdminPulseRequests(input: {
       ${PULSE_ACTIVITY_FILTER_SQL}
       order by pr.requested_at desc
       limit $10 offset $11`,
-    [input.status ?? null, search, freshness, language, industry, scanFrom, since, access, outcome, limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES, requesterExclude, route],
+    [
+      input.status ?? null, search, freshness, language, industry, scanFrom, since, access, outcome,
+      limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES, exclusionArray(parsedSearch.exclusions.requester), route,
+      exclusionArray(parsedSearch.exclusions.domain), exclusionArray(parsedSearch.exclusions.scanId),
+      exclusionArray(parsedSearch.exclusions.email), exclusionArray(parsedSearch.exclusions.ip)
+    ],
     { readOnly: true }
   );
 
@@ -535,11 +550,25 @@ export async function countAdminPulseRequests(input: {
        left join scan_snapshots ss on ss.scan_id = pr.scan_id
        left join scan_runtime_artifacts sra on sra.scan_id = pr.scan_id
        left join scans s on s.id = pr.scan_id
+       left join domains domain on domain.id = s.domain_id
        left join users app_user on app_user.id::text = pr.requested_by ->> 'userId'
        left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
        left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
        ${PULSE_ACTIVITY_FILTER_SQL}`,
-    (() => { const parsedSearch = parseAdminActivitySearch(input.query); return [input.status ?? null, parsedSearch.query, normalizeAdminActivityFilter(input.freshness, ["any"]), normalizeAdminActivityFilter(input.language), normalizeAdminActivityFilter(input.industry), normalizeAdminActivityFilter(input.scanFrom, ["any"]), input.timeSpan && input.timeSpan !== "all" ? new Date(Date.now() - (input.timeSpan === "4h" ? 4 : input.timeSpan === "12h" ? 12 : input.timeSpan === "24h" ? 24 : input.timeSpan === "7d" ? 168 : 744) * 60 * 60 * 1000).toISOString() : null, normalizeAdminActivityFilter(input.access, ["any"]), normalizeAdminActivityFilter(input.outcome), 0, 0, SCAN_NO_GO_SNAPSHOT_OUTCOMES, parsedSearch.requesterExclude, input.route ?? null]; })(),
+    (() => {
+      const parsedSearch = parseAdminActivitySearch(input.query);
+      const exclusionArray = (values: string[]) => values.length > 0 ? values : null;
+      return [
+        input.status ?? null, parsedSearch.query, normalizeAdminActivityFilter(input.freshness, ["any"]),
+        normalizeAdminActivityFilter(input.language), normalizeAdminActivityFilter(input.industry),
+        normalizeAdminActivityFilter(input.scanFrom, ["any"]),
+        input.timeSpan && input.timeSpan !== "all" ? new Date(Date.now() - (input.timeSpan === "4h" ? 4 : input.timeSpan === "12h" ? 12 : input.timeSpan === "24h" ? 24 : input.timeSpan === "7d" ? 168 : 744) * 60 * 60 * 1000).toISOString() : null,
+        normalizeAdminActivityFilter(input.access, ["any"]), normalizeAdminActivityFilter(input.outcome),
+        0, 0, SCAN_NO_GO_SNAPSHOT_OUTCOMES, exclusionArray(parsedSearch.exclusions.requester), input.route ?? null,
+        exclusionArray(parsedSearch.exclusions.domain), exclusionArray(parsedSearch.exclusions.scanId),
+        exclusionArray(parsedSearch.exclusions.email), exclusionArray(parsedSearch.exclusions.ip)
+      ];
+    })(),
     { readOnly: true }
   );
   return result?.total_count ?? 0;

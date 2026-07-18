@@ -676,6 +676,58 @@ test("captures Le Monde-style clickable div consent controls", async () => {
   assert.equal(findCandidate(artifact, "Accept")?.actionType, "accept_all");
 });
 
+test("classifies deeply nested Borlabs modal controls as first-layer", async () => {
+  const wrappers = Array.from({ length: 12 }, () => "<div class=\"brlbs-wrapper\">").join("");
+  const closers = "</div>".repeat(12);
+  const artifact = await captureFixture(`
+    <div id="BorlabsCookieBox" data-borlabs-cookie-consent-required="true">
+      ${wrappers}
+        <div style="position: fixed; inset: 0; z-index: 99999; background: rgba(0,0,0,.5)">
+          <section role="alertdialog" aria-modal="true" aria-label="Data protection preference"
+            style="position:absolute;left:360px;top:180px;width:620px;padding:24px;background:white">
+            <p>We need your consent to use cookies for analytics and advertising.</p>
+            <button>Accept all</button>
+            <button>Accept essential cookies</button>
+            <button>Individual preferences</button>
+          </section>
+        </div>
+      ${closers}
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Accept all")?.layer, "first_layer");
+  assert.equal(findCandidate(artifact, "Accept essential cookies")?.layer, "first_layer");
+  assert.equal(findCandidate(artifact, "Individual preferences")?.layer, "first_layer");
+});
+
+test("reconciles a confirmed Borlabs control cluster when its outer container is mislayered", async () => {
+  const artifact = await captureFixture(`
+    <style>
+      #BorlabsCookieBox { position: absolute; top: 862px; left: 20px; width: 1200px; height: 34px; }
+      #BorlabsCookieBox button { height: 28px; margin-right: 12px; }
+    </style>
+    <div id="BorlabsCookieBox" data-borlabs-cookie-consent-required="true">
+      <span>Cookie consent and privacy preferences</span>
+      <button>Accept all</button>
+      <button>Accept essential cookies</button>
+      <button>Individual preferences</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(
+    findCandidate(artifact, "Accept all")?.reasons.includes(
+      "first_layer_reconciled_from_confirmed_modal_control_cluster",
+    ),
+    true,
+  );
+});
+
 test("retains visible label-only accept buttons without recognized containers", async () => {
   const artifact = await captureFixture(`
     <style>

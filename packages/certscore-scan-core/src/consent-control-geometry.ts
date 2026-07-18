@@ -332,6 +332,7 @@ export async function captureConsentControlGeometry(
   const candidates = raw.candidates.map((candidate, index) =>
     buildCandidateEvidence(candidate, index, raw.pageUrl, options.screenshotArtifactRef, containers)
   );
+  reconcileConfirmedConsentModalClusters(candidates, containers);
   const summary = summarizeConsentControlGeometry(candidates, cmp);
   const expectedPageUrl = page.url();
   const mainFrameUnavailable = !mainFrameCapture ||
@@ -358,6 +359,69 @@ export async function captureConsentControlGeometry(
     candidates,
     summary,
   };
+}
+
+function reconcileConfirmedConsentModalClusters(
+  candidates: ConsentControlCandidateEvidence[],
+  containers: ConsentControlContainerEvidence[],
+): void {
+  const containersById = new Map(containers.map((container) => [container.containerId, container]));
+  const candidatesByContainer = new Map<string, ConsentControlCandidateEvidence[]>();
+  for (const candidate of candidates) {
+    if (!candidate.containerId || candidate.layer !== "page_body" || candidate.decisionStatus !== "confirmed_visible") {
+      continue;
+    }
+    if (
+      candidate.actionType !== "accept_all" &&
+      candidate.actionType !== "reject_all" &&
+      candidate.actionType !== "manage_preferences"
+    ) {
+      continue;
+    }
+    const grouped = candidatesByContainer.get(candidate.containerId) ?? [];
+    grouped.push(candidate);
+    candidatesByContainer.set(candidate.containerId, grouped);
+  }
+
+  for (const [containerId, grouped] of candidatesByContainer) {
+    const container = containersById.get(containerId);
+    if (!container || !hasStrongConsentModalContainerEvidence(container)) {
+      continue;
+    }
+    const actions = new Set(grouped.map((candidate) => candidate.actionType));
+    const hasComplementaryControls = actions.has("accept_all") &&
+      (actions.has("reject_all") || actions.has("manage_preferences"));
+    if (!hasComplementaryControls) {
+      continue;
+    }
+    container.layer = "first_layer";
+    for (const candidate of candidates) {
+      if (candidate.containerId !== containerId || candidate.layer !== "page_body") {
+        continue;
+      }
+      candidate.layer = "first_layer";
+      candidate.reasons = [
+        ...candidate.reasons,
+        "first_layer_reconciled_from_confirmed_modal_control_cluster",
+      ];
+    }
+  }
+}
+
+function hasStrongConsentModalContainerEvidence(container: ConsentControlContainerEvidence): boolean {
+  const context = [
+    container.selectorHint,
+    container.id ?? "",
+    container.classes ?? "",
+    container.role ?? "",
+    container.ariaLabel ?? "",
+    container.textExcerpt,
+    container.htmlExcerpt,
+  ].join(" ");
+  const hasConsentContext = CONSENT_CONTEXT_PATTERN.test(context);
+  const hasModalSemantics = /\b(?:alert)?dialog\b|aria-modal\s*=\s*["']?true|data-borlabs-cookie-consent-required/i.test(context);
+  const hasOverlayStyling = /(?:position\s*:\s*fixed|\bfixed\b|w-screen|h-screen|inset-0|z-max|dialog-backdrop|cookiebox)/i.test(context);
+  return hasConsentContext && (hasModalSemantics || hasOverlayStyling);
 }
 
 function cmpFramePriority(frameUrl: string): number {
@@ -1179,7 +1243,7 @@ function collectConsentGeometryInPage(input: {
     ) {
       return "first_layer";
     }
-    if (hasFixedOrStickyAncestor(element)) {
+    if (hasFirstLayerAncestor(element)) {
       return "first_layer";
     }
     if (element.closest("footer") || /\bfooter\b|legal-footer|functional-footer/.test(text)) {
@@ -1200,14 +1264,20 @@ function collectConsentGeometryInPage(input: {
     return "page_body";
   }
 
-  function hasFixedOrStickyAncestor(element: Element): boolean {
+  function hasFirstLayerAncestor(element: Element): boolean {
     let current = parentElementOrHost(element);
-    for (let depth = 0; current && depth < 8; depth += 1) {
+    for (let depth = 0; current && depth < 24; depth += 1) {
       if (current === document.body || current === document.documentElement) {
         return false;
       }
       const style = window.getComputedStyle(current);
-      if (style.position === "fixed" || style.position === "sticky") {
+      if (
+        current.getAttribute("role") === "dialog" ||
+        current.getAttribute("role") === "alertdialog" ||
+        current.getAttribute("aria-modal") === "true" ||
+        style.position === "fixed" ||
+        style.position === "sticky"
+      ) {
         return true;
       }
       current = parentElementOrHost(current);
