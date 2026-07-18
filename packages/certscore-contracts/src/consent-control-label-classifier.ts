@@ -545,6 +545,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "cookies beheren"),
     ...direct("options", "voorkeuren beheren"),
     ...direct("options", "privacy-instellingen"),
+    contextual("options", "zelf instellen", { requiresConsentContext: true }),
     contextual("options", "mijn keuzes opslaan", { requiresPreferenceContext: true, variant: "save_preferences" }),
 
     ...direct("privacy_opt_out", "bezwaar maken"),
@@ -781,7 +782,7 @@ export function isProductionCreditworthySupplementalConsentControlClassification
 
   if (classification.matchedLocale === "nl") {
     if (classification.intent === "accept") return strongMatch && /\b(?:alles accepteren|alle cookies accepteren|accepteren|akkoord|ik ga akkoord|toestaan|alles toestaan)\b/i.test(normalizedLabel);
-    if (classification.intent === "options") return /(?:cookie-instellingen|cookie instellingen|privacy-instellingen|cookies beheren|voorkeuren beheren)/i.test(normalizedLabel) || (strongMatch && /(?:voorkeuren|instellingen|keuzes)/i.test(normalizedLabel));
+    if (classification.intent === "options") return /(?:cookie-instellingen|cookie instellingen|privacy-instellingen|cookies beheren|voorkeuren beheren)/i.test(normalizedLabel) || (classification.contextSatisfied && normalizedLabel === "zelf instellen") || (strongMatch && /(?:voorkeuren|instellingen|keuzes)/i.test(normalizedLabel));
     if (classification.intent === "reject") return strongMatch && /(?:weigeren|niet accepteren|niet toestaan|zonder (?:accepteren|toestemming|cookies)|alleen (?:noodzakelijke|essenti[eë]le))/i.test(normalizedLabel);
     return false;
   }

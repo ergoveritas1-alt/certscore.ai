@@ -179,6 +179,24 @@ test("does not treat generic Dutch settings page chrome as diagnostic consent ev
   assert.equal(settingsCandidates.some((candidate) => (candidate.diagnosticClassifications?.length ?? 0) > 0), false);
 });
 
+test("captures contextual Dutch self-configuration as a first-layer options control", async () => {
+  const artifact = await captureFixture(`
+    <form id="cookie-banner" role="dialog" style="position: fixed; left: 330px; top: 150px; width: 660px; padding: 24px; background: white;">
+      <h1>Cookies</h1>
+      <p>Wij gebruiken cookies. Hieronder kun je aangeven of je alles accepteert, weigert of je cookies zelf instelt.</p>
+      <button type="submit">Alles accepteren</button>
+      <button type="submit">Zelf instellen</button>
+    </form>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  const options = findCandidate(artifact, "Zelf instellen");
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.matchedLocale, "nl");
+  assert.equal(options?.decisionStatus, "confirmed_visible");
+});
+
 test("retains Polish long-form consent buttons as production geometry evidence", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>

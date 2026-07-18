@@ -223,6 +223,12 @@ test("classifies the compact English essential-only refusal label", () => {
 
 test("uses canonical Dutch and Polish controls in the default production classifier", () => {
   assert.equal(classifyConsentControlLabel({ label: "Cookie-instellingen" }).intent, "options");
+  const contextualDutchOptions = classifyConsentControlLabel({
+    label: "Zelf instellen",
+    contextText: "Wij gebruiken cookies. U kunt alles accepteren of uw cookies zelf instellen.",
+  });
+  assert.equal(contextualDutchOptions.intent, "options");
+  assert.equal(contextualDutchOptions.contextSatisfied, true);
   assert.equal(classifyConsentControlLabel({ label: "Ustawienia plików cookie" }).intent, "options");
 
   const multilingualDutch = classifyConsentControlLabel({

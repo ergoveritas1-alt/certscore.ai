@@ -818,6 +818,7 @@ export async function preConsentRuntimeScanner(
           normalizedUrl: input.normalizedUrl,
           page,
           scanStartedAtMs: input.scanStartedAtMs,
+          skipLegacyFallbackAfterAtomicTimeout: fastWait,
           timingBreakdown,
         }),
         consentUiObservationPromise,
@@ -888,7 +889,10 @@ export async function preConsentRuntimeScanner(
       }
       retainedConsentUiObservation = consentObservation;
     }
-    if (shouldRecaptureConsentUiAfterTimeout(consentObservation, { fastWait })) {
+    if (shouldRecaptureConsentUiAfterTimeout(consentObservation, {
+      fastWait,
+      evidenceHint: consentObservation.likelyPresent || likelyLateFirstLayerConsentSurfaceText(domText),
+    })) {
       const recaptureTimeoutMs = Math.min(fastWait ? 1_500 : 2_500, remainingModuleBudgetMs());
       const recapturedConsentObservation = await recordBoundedTiming(
         timingBreakdown,
@@ -2367,6 +2371,7 @@ async function capturePostSettlePageEvidence(input: {
   normalizedUrl: string;
   page: Page;
   scanStartedAtMs: number;
+  skipLegacyFallbackAfterAtomicTimeout?: boolean;
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
 }): Promise<{
   apiAccesses: RuntimeEvidenceEvent[];
@@ -2396,6 +2401,32 @@ async function capturePostSettlePageEvidence(input: {
       recordInstantTiming(input.timingBreakdown, label, detail);
     }
     return consolidatedPageEvidenceFromSnapshot(snapshot, input);
+  }
+
+  if (input.skipLegacyFallbackAfterAtomicTimeout) {
+    for (const [label, detail] of [
+      ["page evidence: storage snapshot", "Skipped legacy storage evaluation after the atomic main-document snapshot timed out."],
+      ["page evidence: script inventory", "Skipped legacy script evaluation after the atomic main-document snapshot timed out."],
+      ["page evidence: iframe inventory", "Skipped legacy iframe evaluation after the atomic main-document snapshot timed out."],
+      ["page evidence: browser API access", "Skipped legacy browser-API evaluation after the atomic main-document snapshot timed out."],
+      ["page evidence: collection surfaces", "Skipped legacy collection-surface evaluation after the atomic main-document snapshot timed out."],
+      ["page evidence: body text", "Skipped legacy visible-text evaluation after the atomic main-document snapshot timed out."],
+    ] as const) {
+      recordInstantTiming(input.timingBreakdown, label, detail);
+    }
+    recordInstantTiming(
+      input.timingBreakdown,
+      "page evidence: consolidated fallback skipped",
+      "Fast mode did not queue six additional renderer evaluations after the atomic snapshot timed out; retained network, cookie, screenshot, transport, and explicit limitation evidence remain available.",
+    );
+    return {
+      apiAccesses: [],
+      collectionSurfaceObservations: [],
+      domText: "",
+      frames: [],
+      scripts: [],
+      storageSnapshot: emptyStorageSnapshot(input.scanStartedAtMs, input.normalizedUrl),
+    };
   }
 
   const [storageSnapshot, scripts, frames, apiAccesses, collectionSurfaceObservations, domText] = await Promise.all([
@@ -4619,9 +4650,12 @@ function buildConsentUiObservationFromEvidence(input: {
 
 function shouldRecaptureConsentUiAfterTimeout(
   observation: ConsentUiObservation,
-  options: { fastWait: boolean },
+  options: { evidenceHint?: boolean; fastWait: boolean },
 ): boolean {
   if (options.fastWait && hasTextBackedConsentSurface(observation)) {
+    return false;
+  }
+  if (options.fastWait && options.evidenceHint === false) {
     return false;
   }
   return observation.basis.includes("bounded_capture_timeout_or_failure") &&
@@ -4720,8 +4754,7 @@ function shouldRecaptureTextBackedConsentUiAfterSettle(
   if (isTerminalVisualErrorShellText(domText || observation.textExcerpt || "")) {
     return false;
   }
-  return observation.controls.length === 0 ||
-    hasTextBackedConsentSurface(observation) ||
+  return hasTextBackedConsentSurface(observation) ||
     likelyLateFirstLayerConsentSurfaceText(domText);
 }
 

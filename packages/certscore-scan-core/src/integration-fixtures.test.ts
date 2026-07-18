@@ -2001,6 +2001,14 @@ test("planned pre-consent baseline skips screenshots when no consent surface is 
       result.moduleRun.timingBreakdown?.some((entry) => entry.label === "screenshot capture skipped"),
       true,
     );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((entry) =>
+        entry.label === "page evidence: consent UI post-settle recapture" ||
+        entry.label === "page evidence: consent UI timeout recapture"
+      ),
+      false,
+      "a completed no-banner inspection should not queue redundant consent inventory passes",
+    );
     assert.equal(result.domSnapshots.length, 1);
   } finally {
     await server.close();
