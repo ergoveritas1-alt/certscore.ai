@@ -180,7 +180,7 @@ export default async function MarketingHomePage() {
               </p>
             </div>
             <div id="homepage-scan" className="max-w-[650px] scroll-mt-24 pt-2">
-              <DomainScanForm buttonLabel="Scan a website" inputLabel="Website URL to scan" inputPlaceholder="Enter website here:" mode="full" scanSource="homepage" variant="homepage-hero" />
+              <DomainScanForm buttonLabel="Scan a website" inputLabel="Website URL to scan" inputPlaceholder="Enter website here:" mode="full" requestSource="homepage" scanSource="homepage" variant="homepage-hero" />
             </div>
             <div className="flex flex-nowrap gap-x-6 overflow-x-auto pb-1 text-sm font-medium text-slate-100">
               <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">

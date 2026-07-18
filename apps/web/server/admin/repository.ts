@@ -159,6 +159,34 @@ function adminScanActivityBaseSql() {
       null::text as request_public_id,
       coalesce(s.completed_at, s.started_at, s.created_at) as activity_at,
       s.status,
+      case
+        when coalesce(
+          nullif(s.scan_config_json ->> 'source', ''),
+          (
+            select nullif(srq.request_channel, '')
+            from public.scan_requests srq
+            where coalesce(srq.fulfilled_by_scan_id, srq.scan_id) = s.id
+            order by srq.requested_at desc
+            limit 1
+          )
+        ) = 'api-full-scan'
+        and exists (
+          select 1
+          from public.scan_requests srq
+          where coalesce(srq.fulfilled_by_scan_id, srq.scan_id) = s.id
+            and coalesce(srq.requested_by ->> 'anonymous', 'false') = 'true'
+        ) then 'homepage-anonymous'
+        else coalesce(
+          nullif(s.scan_config_json ->> 'source', ''),
+          (
+            select nullif(srq.request_channel, '')
+            from public.scan_requests srq
+            where coalesce(srq.fulfilled_by_scan_id, srq.scan_id) = s.id
+            order by srq.requested_at desc
+            limit 1
+          )
+        )
+      end as source_filter,
       ss.access_posture_class,
       ${SCAN_ACTIVITY_NO_GO_SQL} as no_go_flag,
       case
@@ -257,6 +285,12 @@ function adminScanActivityBaseSql() {
       sr.public_id as request_public_id,
       sr.requested_at as activity_at,
       sr.status,
+      case
+        when coalesce(nullif(sr.request_channel, ''), nullif(s.scan_config_json ->> 'source', '')) = 'api-full-scan'
+          and coalesce(sr.requested_by ->> 'anonymous', 'false') = 'true'
+          then 'homepage-anonymous'
+        else coalesce(nullif(sr.request_channel, ''), nullif(s.scan_config_json ->> 'source', ''))
+      end as source_filter,
       ss.access_posture_class,
       case when coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is null then false else ${SCAN_ACTIVITY_NO_GO_SQL} end as no_go_flag,
       case
@@ -337,6 +371,7 @@ function adminScanActivityBaseSql() {
        and ($7::timestamptz is null or activity_at >= $7::timestamptz)
        and ($10::text is null or access_filter = $10)
        and ($11::text is null or outcome_filter = $11)
+       and ($14::text is null or lower(source_filter) = lower($14))
   )`;
 }
 
@@ -346,9 +381,10 @@ export async function loadAdminScanActivityPageRefs(
   filters: AdminScanActivityFilters = {}
 ): Promise<{ rows: AdminScanActivityPageRef[]; totalCount: number }> {
   await ensureScanRequestLogTable();
-  const parsedSearch = parseAdminActivitySearch(filters.query);
+  const parsedSearch = parseAdminActivitySearch(filters.query, { source: true });
   const queryText = parsedSearch.query;
   const requesterExclude = parsedSearch.requesterExclude;
+  const source = parsedSearch.source;
   const status = filters.status && filters.status !== "any" ? filters.status : null;
   const freshness = filters.freshness && filters.freshness !== "any" ? filters.freshness : null;
   const language = filters.language?.trim().slice(0, 80) || null;
@@ -359,7 +395,7 @@ export async function loadAdminScanActivityPageRefs(
   const outcome = filters.outcome?.trim().slice(0, 120) || null;
   const timeSpanHours = timeSpan === "4h" ? 4 : timeSpan === "12h" ? 12 : timeSpan === "24h" ? 24 : timeSpan === "7d" ? 24 * 7 : timeSpan === "31d" ? 24 * 31 : null;
   const since = timeSpanHours === null ? null : new Date(Date.now() - timeSpanHours * 60 * 60 * 1000).toISOString();
-  const params = [queryText, status, freshness, language, industry, scanFrom, since, limit, offset, access, outcome, SCAN_NO_GO_SNAPSHOT_OUTCOMES, requesterExclude];
+  const params = [queryText, status, freshness, language, industry, scanFrom, since, limit, offset, access, outcome, SCAN_NO_GO_SNAPSHOT_OUTCOMES, requesterExclude, source];
   const baseSql = adminScanActivityBaseSql();
   const [pageResult, countResult] = await Promise.all([
     query<AdminScanActivityPageRef>(

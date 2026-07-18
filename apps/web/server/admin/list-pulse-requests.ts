@@ -6,13 +6,13 @@ import {
   normalizeScanFrom,
   SCAN_NO_GO_SNAPSHOT_OUTCOMES
 } from "@website-signal-risk-scanner/shared";
-import { classifyAdminApiRoute, type AdminApiRoute } from "../../lib/admin/api-route";
+import { adminApiRouteSql, classifyAdminApiRoute, type AdminApiRoute } from "../../lib/admin/api-route";
 import { requesterIpAttributionFromContext, type RequesterIpAttributionSource } from "../../lib/admin/requester-ip-attribution";
 import { inferPrimaryLanguage, type PrimaryLanguageConfidence, type PrimaryLanguageSource } from "../../lib/scans/primary-language";
 import { ensurePulseTables } from "../pulse/schema";
 import { adminNoGoSql, projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
 import { loadAdminScanFilterOptions } from "./repository";
-import { parseAdminActivitySearch } from "../../lib/admin/activity-search";
+import { normalizeAdminActivityFilter, parseAdminActivitySearch } from "../../lib/admin/activity-search";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminPulseRequestStatus =
@@ -159,6 +159,11 @@ const PULSE_NO_GO_SQL = adminNoGoSql({
   outcomesParameter: "$12"
 });
 
+const PULSE_API_ROUTE_SQL = adminApiRouteSql({
+  requestChannel: "pr.request_channel",
+  requestSource: "coalesce(pr.request_context ->> 'source', pr.request_context ->> 'channel')"
+});
+
 const PULSE_ACTIVITY_FILTER_SQL = `
   where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
     and ($1::text is null or ($1 = 'no_go' and ${PULSE_NO_GO_SQL}) or ($1 <> 'no_go' and pr.status = $1))
@@ -189,7 +194,8 @@ const PULSE_ACTIVITY_FILTER_SQL = `
     and ($9::text is null or ss.scan_outcome = $9)
     and ($13::text is null or not (
       concat_ws(' ', coalesce(app_user.email, auth_user.email, api_key.created_by, ''), pr.requested_by::text) ilike $13
-    ))`;
+    ))
+    and ($14::text is null or ${PULSE_API_ROUTE_SQL} = $14)`;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -414,6 +420,7 @@ export async function listAdminPulseRequests(input: {
   timeSpan?: "all" | "4h" | "12h" | "24h" | "7d" | "31d";
   access?: string | null;
   outcome?: string | null;
+  route?: AdminApiRoute | null;
 } = {}): Promise<AdminPulseRequestListItem[]> {
   await requirePlatformAdminContext();
   await ensurePulseTables();
@@ -422,12 +429,13 @@ export async function listAdminPulseRequests(input: {
   const parsedSearch = parseAdminActivitySearch(input.query);
   const search = parsedSearch.query;
   const requesterExclude = parsedSearch.requesterExclude;
-  const freshness = input.freshness?.trim() || null;
-  const language = input.language?.trim() || null;
-  const industry = input.industry?.trim() || null;
-  const scanFrom = input.scanFrom?.trim() || null;
-  const access = input.access?.trim() || null;
-  const outcome = input.outcome?.trim() || null;
+  const freshness = normalizeAdminActivityFilter(input.freshness, ["any"]);
+  const language = normalizeAdminActivityFilter(input.language);
+  const industry = normalizeAdminActivityFilter(input.industry);
+  const scanFrom = normalizeAdminActivityFilter(input.scanFrom, ["any"]);
+  const access = normalizeAdminActivityFilter(input.access, ["any"]);
+  const outcome = normalizeAdminActivityFilter(input.outcome);
+  const route = input.route ?? null;
   const timeSpanHours = input.timeSpan === "4h" ? 4 : input.timeSpan === "12h" ? 12 : input.timeSpan === "24h" ? 24 : input.timeSpan === "7d" ? 168 : input.timeSpan === "31d" ? 744 : null;
   const since = timeSpanHours === null ? null : new Date(Date.now() - timeSpanHours * 60 * 60 * 1000).toISOString();
   const rows = await query<Record<string, unknown>>(
@@ -500,7 +508,7 @@ export async function listAdminPulseRequests(input: {
       ${PULSE_ACTIVITY_FILTER_SQL}
       order by pr.requested_at desc
       limit $10 offset $11`,
-    [input.status ?? null, search, freshness, language, industry, scanFrom, since, access, outcome, limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES, requesterExclude],
+    [input.status ?? null, search, freshness, language, industry, scanFrom, since, access, outcome, limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES, requesterExclude, route],
     { readOnly: true }
   );
 
@@ -517,6 +525,7 @@ export async function countAdminPulseRequests(input: {
   timeSpan?: "all" | "4h" | "12h" | "24h" | "7d" | "31d";
   access?: string | null;
   outcome?: string | null;
+  route?: AdminApiRoute | null;
 } = {}): Promise<number> {
   await requirePlatformAdminContext();
   await ensurePulseTables();
@@ -530,7 +539,7 @@ export async function countAdminPulseRequests(input: {
        left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
        left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
        ${PULSE_ACTIVITY_FILTER_SQL}`,
-    (() => { const parsedSearch = parseAdminActivitySearch(input.query); return [input.status ?? null, parsedSearch.query, input.freshness?.trim() || null, input.language?.trim() || null, input.industry?.trim() || null, input.scanFrom?.trim() || null, input.timeSpan && input.timeSpan !== "all" ? new Date(Date.now() - (input.timeSpan === "4h" ? 4 : input.timeSpan === "12h" ? 12 : input.timeSpan === "24h" ? 24 : input.timeSpan === "7d" ? 168 : 744) * 60 * 60 * 1000).toISOString() : null, input.access?.trim() || null, input.outcome?.trim() || null, 0, 0, SCAN_NO_GO_SNAPSHOT_OUTCOMES, parsedSearch.requesterExclude]; })(),
+    (() => { const parsedSearch = parseAdminActivitySearch(input.query); return [input.status ?? null, parsedSearch.query, normalizeAdminActivityFilter(input.freshness, ["any"]), normalizeAdminActivityFilter(input.language), normalizeAdminActivityFilter(input.industry), normalizeAdminActivityFilter(input.scanFrom, ["any"]), input.timeSpan && input.timeSpan !== "all" ? new Date(Date.now() - (input.timeSpan === "4h" ? 4 : input.timeSpan === "12h" ? 12 : input.timeSpan === "24h" ? 24 : input.timeSpan === "7d" ? 168 : 744) * 60 * 60 * 1000).toISOString() : null, normalizeAdminActivityFilter(input.access, ["any"]), normalizeAdminActivityFilter(input.outcome), 0, 0, SCAN_NO_GO_SNAPSHOT_OUTCOMES, parsedSearch.requesterExclude, input.route ?? null]; })(),
     { readOnly: true }
   );
   return result?.total_count ?? 0;

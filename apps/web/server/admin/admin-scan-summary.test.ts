@@ -111,6 +111,45 @@ test("admin activity search supports requester exclusion syntax", async () => {
   assert.match(source, /replaceAll\(\"\*\", \"%\"\)/);
 });
 
+test("API activity treats Any filter values as unfiltered", async () => {
+  const source = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
+  assert.match(source, /normalizeAdminActivityFilter\(input\.freshness, \["any"\]\)/);
+  assert.match(source, /normalizeAdminActivityFilter\(input\.scanFrom, \["any"\]\)/);
+  assert.match(source, /normalizeAdminActivityFilter\(input\.access, \["any"\]\)/);
+  assert.doesNotMatch(source, /input\.freshness\?\.trim\(\) \|\| null/);
+});
+
+test("API activity offers a canonical server-side request route filter", async () => {
+  const page = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+  const source = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
+  assert.match(page, /name="route"/);
+  assert.match(page, /Any route/);
+  assert.match(source, /PULSE_API_ROUTE_SQL/);
+  assert.match(source, /\$14::text is null/);
+});
+
+test("admin scan activity supports exact source filtering", async () => {
+  const searchSource = await readFile("apps/web/lib/admin/activity-search.ts", "utf8");
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+
+  assert.match(searchSource, /source\\s\*:\\s\*/);
+  assert.match(repositorySource, /lower\(source_filter\) = lower\(\$14\)/);
+  assert.match(repositorySource, /requested_by ->> 'anonymous'/);
+  assert.match(repositorySource, /then 'homepage-anonymous'/);
+  assert.match(pageSource, /source:homepage-anonymous/);
+});
+
+test("homepage anonymous full scans retain distinct request provenance", async () => {
+  const homepageSource = await readFile("apps/web/app/(marketing)/page.tsx", "utf8");
+  const formSource = await readFile("apps/web/components/marketing/domain-scan-form.tsx", "utf8");
+  const routeSource = await readFile("apps/web/app/api/full-scan/route.ts", "utf8");
+
+  assert.match(homepageSource, /requestSource="homepage"/);
+  assert.match(formSource, /x-certscore-scan-source/);
+  assert.match(routeSource, /source: "homepage-anonymous"/);
+});
+
 test("admin activity pages share one page-level navigation overlay and API report links", async () => {
   const actions = await readFile("apps/web/app/app/admin/scans/admin-scan-actions.tsx", "utf8");
   const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");

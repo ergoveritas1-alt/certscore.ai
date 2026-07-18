@@ -4,6 +4,7 @@ import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/s
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
+import { ADMIN_API_ROUTES, type AdminApiRoute } from "../../../../lib/admin/api-route";
 import { getAdminAuthenticatedScanHref } from "../../../../server/admin/admin-scan-links";
 import { countAdminPulseRequests, getAdminPulseFilterOptions, getAdminPulseOverviewCounts, listAdminPulseRequests, type AdminPulseRequestStatus } from "../../../../server/admin/list-pulse-requests";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
@@ -19,11 +20,15 @@ const accessValues = ["any", "clear", "blocked", "captcha", "robots_limited", "l
 const timeSpans = ["all", "4h", "12h", "24h", "7d", "31d"] as const;
 
 type AdminPulsePageProps = {
-  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string }>;
+  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string; route?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string }>;
 };
 
 function normalizeStatus(value: string | undefined): AdminPulseRequestStatus | null {
   return statuses.includes(value as AdminPulseRequestStatus) ? (value as AdminPulseRequestStatus) : null;
+}
+
+function normalizeRoute(value: string | undefined): AdminApiRoute | null {
+  return ADMIN_API_ROUTES.includes(value as AdminApiRoute) ? value as AdminApiRoute : null;
 }
 
 function normalizeQuery(value: string | undefined) {
@@ -90,6 +95,7 @@ function accessLabel(request: {
 export default async function AdminPulsePage({ searchParams }: AdminPulsePageProps) {
   const resolved = searchParams ? await searchParams : {};
   const activeStatus = normalizeStatus(resolved.status);
+  const activeRoute = normalizeRoute(resolved.route);
   const activeQuery = normalizeQuery(resolved.q);
   const activeFreshness = normalizeOption(resolved.freshness, freshnesses, "any");
   const activeAccess = normalizeOption(resolved.access, accessValues, "any");
@@ -98,7 +104,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const activeIndustry = resolved.industry?.trim().slice(0, 200) ?? "";
   const activeScanFrom = SCAN_FROM_VALUES.includes(resolved.scanFrom as typeof SCAN_FROM_VALUES[number]) ? resolved.scanFrom as typeof SCAN_FROM_VALUES[number] : "any";
   const activeTimeSpan = normalizeOption(resolved.timeSpan, timeSpans, "all") as typeof timeSpans[number];
-  const hasFilters = Boolean(activeQuery) || Boolean(activeStatus) || activeFreshness !== "any" || activeAccess !== "any" || Boolean(activeOutcome) || Boolean(activeLanguage) || Boolean(activeIndustry) || activeScanFrom !== "any" || activeTimeSpan !== "all";
+  const hasFilters = Boolean(activeQuery) || Boolean(activeStatus) || Boolean(activeRoute) || activeFreshness !== "any" || activeAccess !== "any" || Boolean(activeOutcome) || Boolean(activeLanguage) || Boolean(activeIndustry) || activeScanFrom !== "any" || activeTimeSpan !== "all";
   const [counts, filterOptions] = await Promise.all([
     getAdminPulseOverviewCounts(),
     getAdminPulseFilterOptions()
@@ -106,8 +112,8 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const pageSize = normalizePageSize(resolved.perPage);
   const page = normalizePage(resolved.page);
   const [filteredTotal, requests] = await withServerTiming("app.admin.api_activity", () => Promise.all([
-    countAdminPulseRequests({ query: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan }),
-    listAdminPulseRequests({ limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan })
+    countAdminPulseRequests({ query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan }),
+    listAdminPulseRequests({ limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan })
   ]));
   const pageCount = Math.max(1, Math.ceil(filteredTotal / pageSize));
 
@@ -129,6 +135,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
         <AdminScansFilterForm basePath="/app/admin/pulse" clearHref="/app/admin/pulse" hasFilters={hasFilters}>
           <input aria-label="Filter by domain, scan ID, email, requester, or IP" className="h-10 min-w-[28rem] flex-[1_1_32rem] rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery ?? ""} name="q" placeholder="Domain, scan_id, email, requester, IP · requester!=name* to exclude" />
           <select aria-label="Filter API activity by status" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeStatus ?? ""} name="status"><option value="">Any status</option>{statuses.map((status) => <option key={status} value={status}>{formatLabel(status)}</option>)}</select>
+          <select aria-label="Filter API activity by request route" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeRoute ?? ""} name="route"><option value="">Any route</option>{ADMIN_API_ROUTES.map((route) => <option key={route} value={route}>{route}</option>)}</select>
           <select aria-label="Filter API activity by freshness" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeFreshness} name="freshness"><option value="any">Any freshness</option>{freshnesses.slice(1).map((freshness) => <option key={freshness} value={freshness}>{freshness === "forced_fresh" ? "Forced fresh" : freshness === "reused" ? "Reused <24h" : "Fresh"}</option>)}</select>
           <select aria-label="Filter API activity by access posture" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeAccess} name="access"><option value="any">Any access</option>{accessValues.slice(1).map((access) => <option key={access} value={access}>{access === "robots_limited" ? "Robots-limited" : access === "captcha" ? "CAPTCHA" : formatLabel(access)}</option>)}</select>
           <select aria-label="Filter API activity by outcome" className="h-10 w-[12rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeOutcome} name="outcome"><option value="">Any outcome</option>{filterOptions.outcomes.map((outcome) => <option key={outcome} value={outcome}>{outcomeLabel(outcome, outcome.startsWith("reachability_blocked") || ["robots_restricted", "transport_failure", "timeout_navigation", "unknown_access_limitation", "domain_inactive_or_unstable"].includes(outcome))}</option>)}</select>
@@ -144,7 +151,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           page={page}
           pageCount={pageCount}
           pageSize={pageSize}
-          searchParams={{ q: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan }}
+          searchParams={{ q: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan }}
           totalCount={filteredTotal}
           visibleCount={requests.length}
         />

@@ -202,6 +202,9 @@ export async function POST(request: Request) {
       }
 
       const clientRequestId = typeof payload?.requestId === "string" ? payload.requestId : null;
+      const anonymousProvenance = provenance.source === "homepage"
+        ? { ...provenance, source: "homepage-anonymous" }
+        : provenance;
       const existingClientScan = await findScanByClientRequestId(clientRequestId);
       if (existingClientScan) {
         return NextResponse.json(
@@ -223,7 +226,7 @@ export async function POST(request: Request) {
         localV2DagScanProfile,
         localV2DagRunViaLambda: publicLocalV2DagRunViaLambda,
         normalizedUrl: firstDomain.normalizedUrl,
-        provenance,
+        provenance: anonymousProvenance,
         requesterIpContext,
         scanFrom: publicScanFrom
       }).catch(async (error) => {

@@ -33,6 +33,7 @@ type DomainScanFormProps = {
   emptySubmitDomain?: string;
   mode?: "full" | "preview";
   sampleDomains?: string[];
+  requestSource?: "homepage";
   scanSource?: ScanSource;
   variant?: "default" | "homepage-hero";
 };
@@ -350,6 +351,7 @@ export function DomainScanForm({
   inputLabel = "Website domain",
   inputPlaceholder = "Enter yoursite.com",
   mode = "preview",
+  requestSource,
   sampleDomains = [],
   scanSource = "unknown",
   variant = "default"
@@ -699,7 +701,8 @@ export function DomainScanForm({
           requestId
         }),
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          ...(requestSource ? { "x-certscore-scan-source": requestSource } : {})
         },
         method: "POST"
       });
