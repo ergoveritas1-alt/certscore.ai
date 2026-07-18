@@ -3406,8 +3406,8 @@ const ARTICLE13_SECTION_PROFILES: Array<{
   {
     disclosureType: "international_transfers",
     headingPatterns: [/data transfers?/i, /international transfers?/i],
-    textPatterns: [/servers around the world/i, /processed? outside (?:your )?country/i, /outside (?:of )?the country where you live/i, /outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /third countr(?:y|ies)/i, /legal frameworks? relating to the transfer of data/i, /data protection laws vary/i, /agreements?.{0,180}(?:protect|safeguard)/i, /adequacy/i, /safeguards/i, /EU-U\.S\. Data Privacy Framework/i, /UK Extension/i, /Swiss-U\.S\./i],
-    observedPattern: /servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|legal frameworks? relating to the transfer of data|data protection laws vary|adequacy|safeguards|EU-U\.S\. Data Privacy Framework|UK Extension|Swiss-U\.S\.|standard contractual clauses/i,
+    textPatterns: [/servers around the world/i, /processed? outside (?:your )?country/i, /outside (?:of )?the country where you live/i, /outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /data transfers? to third countr(?:y|ies)/i, /third countr(?:y|ies)/i, /legal frameworks? relating to the transfer of data/i, /data protection laws vary/i, /agreements?.{0,180}(?:protect|safeguard)/i, /adequacy/i, /Article 45|Art\.\s*45/i, /Article 46|Art\.\s*46/i, /safeguards/i, /EU-U\.S\. Data Privacy Framework/i, /UK Extension/i, /Swiss-U\.S\./i],
+    observedPattern: /servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|data transfers? to third countr(?:y|ies)|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|legal frameworks? relating to the transfer of data|data protection laws vary|adequacy decision|(?:Article|Art\.)\s*45|(?:Article|Art\.)\s*46|appropriate safeguards|EU-U\.S\. Data Privacy Framework|UK Extension|Swiss-U\.S\.|standard contractual clauses/i,
   },
   {
     disclosureType: "supervisory_authority",
@@ -3427,9 +3427,9 @@ const ARTICLE13_SECTION_PROFILES: Array<{
   {
     disclosureType: "controller_contact",
     subjectScope: "controller",
-    headingPatterns: [/contact/i, /European requirements/i, /controller/i],
-    textPatterns: [/contact Google/i, /contact us/i, /questions about this policy/i, /privacy office/i, /data protection office/i, /data protection officer/i, /Google LLC/i, /Google Ireland Limited/i],
-    observedPattern: /data controller|\bcontroller\b|privacy@|contact (?:us|our privacy team).{0,120}(?:privacy|data protection)/i,
+    headingPatterns: [/contact/i, /European requirements/i, /information on (?:the )?controller/i, /controller/i],
+    textPatterns: [/\bcontroller\b/i, /Art\.?\s*4.{0,24}(?:No\.?\s*)?7\s+GDPR/i, /\bE-?Mail\s*:/i, /contact Google/i, /contact us/i, /questions about this policy/i, /privacy office/i, /data protection office/i, /data protection officer/i, /Google LLC/i, /Google Ireland Limited/i],
+    observedPattern: /information on (?:the )?controller|data controller|\bcontroller\b|Art\.?\s*4.{0,24}(?:No\.?\s*)?7\s+GDPR|privacy@|contact (?:us|our privacy team).{0,120}(?:privacy|data protection)/i,
     partialPattern: /Google LLC|Google Ireland Limited|contact Google|questions about this policy|privacy office|data protection office/i,
   },
   {
@@ -4550,7 +4550,7 @@ function retainedPolicySectionsForObservation(sections: RetainedPolicySection[])
     .slice(0, 24);
 }
 
-function retainedArticle13SectionEvidenceFromSections(
+export function retainedArticle13SectionEvidenceFromSections(
   sections: RetainedPolicySection[],
   sourceUrl: string,
 ): RetainedArticle13SectionEvidence[] {
@@ -4619,7 +4619,10 @@ function controllerSubjectSectionScore(section: RetainedPolicySection): number {
   const externalSubjectFramingObserved =
     /(?:data protection officer|datenschutzbeauftragte[rsn]?|dpo).{0,160}(?:service provider|platform operator|plattformbetreiber|third party|anbieter|provider)/i.test(text) ||
     /(?:service provider|platform operator|plattformbetreiber|third party|anbieter|provider).{0,160}(?:data protection officer|datenschutzbeauftragte[rsn]?|dpo)/i.test(text);
+  const privacyServiceMarketingObserved =
+    /(?:data protection officer|dpo)[-\s]*(?:as a service|service)|(?:our|managed)\s+(?:dpo|data protection)\s+services?/i.test(text);
 
+  if (privacyServiceMarketingObserved) return -10;
   if (firstPartyContactObserved) return 10;
   if (externalSubjectFramingObserved) return -8;
   return 0;
@@ -4635,8 +4638,10 @@ function bestSectionExcerptForProfile(
     ...(profile.partialPattern ? [profile.partialPattern] : []),
     ...profile.textPatterns,
   ];
-  const excerpt = boundedExcerptForPatterns(text, patterns);
-  return normalizeWhitespace(`${section.heading}. ${excerpt}`).slice(0, 1_200);
+  const excerpt = boundedExcerptForPatterns(text, patterns).slice(0, 1_200);
+  const firstUrlIndex = excerpt.search(/\bhttps?:\/\//i);
+  const rowSpecificExcerpt = firstUrlIndex >= 80 ? excerpt.slice(0, firstUrlIndex) : excerpt;
+  return normalizeWhitespace(`${section.heading}. ${rowSpecificExcerpt}`).slice(0, 1_200);
 }
 
 function sectionEvidenceStatus(

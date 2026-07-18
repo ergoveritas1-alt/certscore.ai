@@ -523,6 +523,52 @@ test("pre-consent runtime scanner retains first-layer accept and reject controls
   }
 });
 
+test("pre-consent runtime scanner retains SITS-style controls before screenshot work", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-sits-style-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-sits-style-preferences"),
+      path.join(tempRoot, "consent-sits-style-preferences"),
+      "fast",
+      "always",
+      "viewport_first",
+    );
+    const observation = bundle.consentUiObservations[0];
+    const controls = observation?.controls ?? [];
+
+    assert.equal(controls.some((control) => control.label === "Accept all" && control.actionType === "accept_all"), true);
+    assert.equal(
+      controls.some((control) => control.label === "Save consent" && control.actionType === "save_preferences"),
+      true,
+      JSON.stringify(controls),
+    );
+    assert.equal(
+      controls.some((control) =>
+        control.label === "Accept essential cookies" &&
+        control.actionType === "reject_all" &&
+        control.classifierVariant === "necessary_only"
+      ),
+      true,
+      JSON.stringify(controls),
+    );
+    assert.equal(new Set(controls.map((control) => `${control.actionType}:${control.label}`)).size, controls.length);
+
+    assert.equal(
+      bundle.screenshots.some((screenshot) => screenshot.captureMethod === "primary_viewport_fallback"),
+      true,
+      "the production-safe viewport capture should be retained before any supplemental full-page attempt",
+    );
+    assert.ok(
+      (bundle.modulesRun[0]?.durationMs ?? Number.POSITIVE_INFINITY) < 6_000,
+      "the SITS-style fixture should retain controls and visual evidence within the bounded runtime",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner recognizes Osano deny non-essential as reject evidence", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-deny-non-essential-"));

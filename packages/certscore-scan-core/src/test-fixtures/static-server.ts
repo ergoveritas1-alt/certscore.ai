@@ -56,6 +56,7 @@ export type StaticFixturePage =
   | "consent-reject-subscribe"
   | "consent-required-only"
   | "consent-simple-accept-reject"
+  | "consent-sits-style-preferences"
   | "consent-tracking-persists-after-reject"
   | "ga-collection"
   | "ga-first-party-vendor-associated-cookie"
@@ -226,6 +227,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-reject-subscribe": "consent-reject-subscribe",
   "consent-required-only": "consent-required-only",
   "consent-simple-accept-reject": "consent-simple",
+  "consent-sits-style-preferences": "consent-sits-style-preferences",
   "consent-tracking-persists-after-reject": "consent-persists",
   "ga-collection": "ga-page",
   "ga-first-party-vendor-associated-cookie": "ga-first-party-cookie",
@@ -1239,6 +1241,7 @@ function bodyMarkup(caseName: StaticFixturePage): string {
 function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
   const options = {
     simple: caseName === "consent-simple-accept-reject",
+    sitsStylePreferences: caseName === "consent-sits-style-preferences",
     persists: caseName === "consent-tracking-persists-after-reject",
     acceptOnly: caseName === "consent-accept-only-activation",
     noReject: caseName === "consent-no-reject",
@@ -1302,6 +1305,18 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
           <a href="/policies/privacy">Privacy policy</a>
         </section>
       </main>
+    `;
+  }
+  if (options.sitsStylePreferences) {
+    return `
+      <main><h1>Consulting services</h1></main>
+      <div id="data-protection-preference" role="dialog" aria-label="Data protection preference" style="position: fixed; inset: 10% 15%; padding: 24px; background: #123b55; color: white;">
+        <h2>Data protection preference</h2>
+        <p>We need your consent before you can continue. Some cookies are essential, while optional services help us analyze and improve this website. Adjust your cookie preferences below.</p>
+        <button type="button">Accept all</button>
+        <button type="button">Save consent</button>
+        <button type="button">Accept essential cookies</button>
+      </div>
     `;
   }
   if (options.cmpNetworkLateControls) {

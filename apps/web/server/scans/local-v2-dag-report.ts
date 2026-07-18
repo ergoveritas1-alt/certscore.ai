@@ -2169,7 +2169,34 @@ function selectArticle13PrivacySurfaces(
   privacySurfaces: ReturnType<typeof dedupePolicySurfaces>
 ) {
   const generalPrivacySurfaces = privacySurfaces.filter((row) => !isCookieSpecificPrivacySurface(row));
+  const canonicalPrivacyNotices = generalPrivacySurfaces.filter(isCanonicalPrivacyNoticeSurface);
+  if (canonicalPrivacyNotices.length > 0) {
+    return generalPrivacySurfaces.filter((row) => !isPrivacyServiceMarketingSurface(row));
+  }
   return generalPrivacySurfaces.length > 0 ? generalPrivacySurfaces : privacySurfaces;
+}
+
+function isPrivacyServiceMarketingSurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
+  const evidence = [
+    row.surface.title,
+    row.surface.linkText,
+    row.surface.textExcerpt,
+    row.pageUrl,
+    row.surface.normalizedUrl,
+    row.surface.url,
+  ].filter(Boolean).join(" ");
+  return /(?:DPO|data protection officer)[-\s]*(?:as a service|service)|(?:data privacy|data protection)\s+(?:services?|solutions?|consulting)|(?:our|managed)\s+(?:DPO|data protection)\s+services?/i.test(evidence);
+}
+
+function isCanonicalPrivacyNoticeSurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
+  const evidence = [
+    row.pageUrl,
+    row.surface.normalizedUrl,
+    row.surface.url,
+    row.surface.title,
+    row.surface.linkText,
+  ].filter(Boolean).join(" ");
+  return /(?:privacy|data[-_\s]*protection)[-_\s]*(?:policy|notice|statement)|datenschutzerkl[aä]rung|politique[-_\s]*de[-_\s]*confidentialit[eé]|pol[ií]tica[-_\s]*de[-_\s]*privacidad/i.test(evidence);
 }
 
 function isSpecializedPrivacySurfaceForDifferentAudience(

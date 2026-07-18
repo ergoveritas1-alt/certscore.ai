@@ -12,6 +12,7 @@ import {
   isFetchablePolicyHrefForPolicySurface,
   isFetchablePolicyUrlForPolicySurface,
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
+  retainedArticle13SectionEvidenceFromSections,
   type PolicyNanoAssistProvider,
   policySurfaceScanner,
   wwwFallbackUrlForPolicyFetch,
@@ -2279,6 +2280,47 @@ test("policySurfaceScanner confirms international transfer disclosure from recip
       },
     },
   });
+});
+
+test("retained policy sections prefer controller identity over DPO service marketing and isolate transfer prose from URL lists", () => {
+  const sourceUrl = "https://sits.example/privacy-policy/";
+  const evidence = retainedArticle13SectionEvidenceFromSections([
+    {
+      sourceUrl,
+      heading: "Information on the controller",
+      textExcerpt: "Information on the controller pursuant to Art. 4 No. 7 GDPR: SITS Group AG, Etzelmatt 1, CH-5430 Wettingen. E-Mail: INFO@SITS.EXAMPLE.",
+      charStart: 0,
+      charEnd: 142,
+      quality: "partial",
+    },
+    {
+      sourceUrl,
+      heading: "Data Privacy Solutions",
+      textExcerpt: "Our DPO-as-a-Service provides a seamless approach to managing your data. Every organization can use our data protection services to support its compliance program.",
+      charStart: 143,
+      charEnd: 301,
+      quality: "partial",
+    },
+    {
+      sourceUrl,
+      heading: "Data transfers",
+      textExcerpt: "Data transfers to third countries are secured by an adequacy decision pursuant to Art. 45 GDPR or by appropriate safeguards pursuant to Art. 46 GDPR. https://vendor.example/privacy https://vendor.example/help https://vendor.example/contact https://vendor.example/legal https://vendor.example/settings https://vendor.example/faq https://vendor.example/about https://vendor.example/more",
+      charStart: 302,
+      charEnd: 700,
+      quality: "strong",
+    },
+  ]);
+
+  const controller = evidence.find((row) => row.coverageArea === "controller_contact");
+  const transfers = evidence.find((row) => row.coverageArea === "international_transfers");
+
+  assert.equal(controller?.signalObserved, "observed");
+  assert.equal(controller?.selectedPolicySectionHeading, "Information on the controller");
+  assert.match(controller?.selectedPolicySectionExcerpt ?? "", /SITS Group AG|INFO@SITS\.EXAMPLE/i);
+  assert.doesNotMatch(controller?.selectedPolicySectionExcerpt ?? "", /DPO-as-a-Service/i);
+  assert.equal(transfers?.signalObserved, "observed");
+  assert.match(transfers?.selectedPolicySectionExcerpt ?? "", /Art\. 45 GDPR|Art\. 46 GDPR/i);
+  assert.doesNotMatch(transfers?.selectedPolicySectionExcerpt ?? "", /vendor\.example/i);
 });
 
 test("policySurfaceScanner extracts late mature-policy GDPR transparency signals without promoting legal basis", async () => {

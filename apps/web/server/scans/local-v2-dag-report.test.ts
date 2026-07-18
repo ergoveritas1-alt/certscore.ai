@@ -954,6 +954,62 @@ test("summarizePolicySurfaces prefers general privacy notices over cookie-specif
   assert.match(summary.retainedPrivacyPolicyTextExcerpt, /Privacy Policy/i);
 });
 
+test("summarizePolicySurfaces excludes privacy-service marketing when a canonical privacy policy was retained", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "canonical-policy",
+      surfaceType: "privacy_policy",
+      url: "https://sits.example/en/privacy-policy/",
+      normalizedUrl: "https://sits.example/en/privacy-policy/",
+      discoveryMethod: "footer_link",
+      status: "fetched",
+      fetchable: true,
+      confidence: 0.95,
+      textExcerpt: "Information on the controller pursuant to Art. 4 No. 7 GDPR: SITS Group AG. E-Mail: INFO@SITS.EXAMPLE. We process personal data for the purposes described in this privacy policy.",
+      observedTopics: ["controller_contact", "processing_purposes"],
+      article13DisclosureSignals: [{
+        disclosureType: "controller_contact",
+        status: "observed",
+        evidenceText: "Information on the controller pursuant to Art. 4 No. 7 GDPR: SITS Group AG. E-Mail: INFO@SITS.EXAMPLE.",
+        confidence: 0.9,
+        source: "deterministic"
+      }]
+    },
+    {
+      observationId: "privacy-services-marketing",
+      surfaceType: "privacy_policy",
+      url: "https://sits.example/en/security-advisory/dataprivacy/",
+      normalizedUrl: "https://sits.example/en/security-advisory/dataprivacy/",
+      discoveryMethod: "homepage_link",
+      status: "fetched",
+      fetchable: true,
+      confidence: 0.78,
+      title: "Data Privacy Solutions",
+      textExcerpt: "Our DPO-as-a-Service provides a seamless approach to managing your data and supports customer compliance programs.",
+      observedTopics: ["controller_contact"],
+      article13DisclosureSignals: [{
+        disclosureType: "controller_contact",
+        status: "partial",
+        evidenceText: "Our DPO-as-a-Service provides a seamless approach to managing your data and supports customer compliance programs.",
+        confidence: 0.62,
+        source: "deterministic"
+      }]
+    }
+  ] as never, "https://sits.example/");
+
+  const summary = summarizePolicySurfaces(surfaces, "sits.example");
+  const controllerSignals = summary.article13DisclosureSignals.filter((signal) =>
+    signal.disclosureType === "controller_contact"
+  );
+
+  assert.equal(controllerSignals.length, 1);
+  assert.equal(controllerSignals[0]?.status, "observed");
+  assert.match(controllerSignals[0]?.evidenceText ?? "", /SITS Group AG/i);
+  assert.doesNotMatch(summary.retainedPrivacyPolicyTextExcerpt, /DPO-as-a-Service/i);
+  assert.equal(summary.article13DisclosureTypesPartial.includes("controller_contact"), false);
+});
+
 test("summarizePolicySurfaces retains substantive policy text beyond navigation chrome", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const navigationChrome = "Privacy Policy Privacy & Terms Overview Technologies FAQ Terms of Service Introduction ".repeat(18);

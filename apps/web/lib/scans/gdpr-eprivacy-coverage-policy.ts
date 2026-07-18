@@ -5428,6 +5428,11 @@ function getPolicyArticle13DisclosureSignal(
   }
   return sanitizedCandidates
     .sort((left, right) =>
+      policyArticle13SignalStatusScore(getString(right, ["status"])) -
+      policyArticle13SignalStatusScore(getString(left, ["status"])) ||
+      selectedEvidenceStrengthScore(getString(right, ["selectedEvidenceStrength", "selected_evidence_strength"])) -
+      selectedEvidenceStrengthScore(getString(left, ["selectedEvidenceStrength", "selected_evidence_strength"])) ||
+      (getNumber(right, ["confidence"]) ?? 0) - (getNumber(left, ["confidence"]) ?? 0) ||
       scorePolicyDisclosureEvidenceText(
         getString(right, ["evidenceText", "evidence_text"]) ?? "",
         disclosureType
@@ -5436,6 +5441,10 @@ function getPolicyArticle13DisclosureSignal(
         disclosureType
       )
     )[0] ?? null;
+}
+
+function policyArticle13SignalStatusScore(value: string | null | undefined) {
+  return value === "observed" ? 2 : value === "partial" ? 1 : 0;
 }
 
 function getRetainedArticle13SectionEvidence(
@@ -6061,7 +6070,7 @@ function hasSubstantiveControllerContactDisclosure(value: string) {
   const body = disclosureEvidenceBodyAfterHeading(value, [
     /^(?:contact us|data controller|controller|privacy contact|privacy office|data protection officer)[.:;\-–—]?\s*/i
   ]);
-  return /\b(?:data controller|controller.{0,80}(?:contact|privacy|data protection)|google llc|contact google about privacy questions|contact (?:us|google).{0,120}(?:privacy|data protection)|contact form|privacy office|data protection office|data protection officer|privacy@|postal address|registered address)\b/i.test(body);
+  return /\b(?:information on (?:the )?controller|data controller|controller.{0,180}(?:contact|privacy|data protection|e-?mail|email|postal address|registered address|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b)|google llc|contact google about privacy questions|contact (?:us|google).{0,120}(?:privacy|data protection)|contact form|privacy office|data protection office|data protection officer|privacy@|postal address|registered address)\b/i.test(body);
 }
 
 function hasSubstantiveDataSubjectRightsDisclosure(value: string) {

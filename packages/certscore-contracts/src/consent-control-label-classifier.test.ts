@@ -332,6 +332,22 @@ test("uses Dutch and Polish preference context in the default production classif
   assert.equal(multilingualPolish.variant, "save_preferences");
 });
 
+test("classifies Save consent only inside a bounded preference context", () => {
+  const preferenceControl = classifyConsentControlLabel({
+    label: "Save consent",
+    contextText: "Data protection preference. Choose optional cookies and adjust your consent settings.",
+  });
+  assert.equal(preferenceControl.intent, "options");
+  assert.equal(preferenceControl.variant, "save_preferences");
+  assert.equal(preferenceControl.contextSatisfied, true);
+
+  const unrelatedSave = classifyConsentControlLabel({
+    label: "Save consent",
+    contextText: "Save this article to your reading list.",
+  });
+  assert.equal(unrelatedSave.intent, "unknown");
+});
+
 test("supports Dutch and Polish terms in the default profile and honors locale hints", () => {
   const dutchWithHintOnly = classifyConsentControlLabel({
     label: "Alles weigeren",

@@ -541,6 +541,46 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes sanitizes and prefers Ireland-rel
   assert.doesNotMatch(retentionText, /Back to Top|<[^>]+>/i);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes prefers observed controller evidence over a richer partial marketing candidate", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            disclosureType: "controller_contact",
+            evidenceText: "Our DPO and data protection services provide a seamless approach to managing customer data, ensuring compliance with GDPR and supporting privacy programs.",
+            confidence: 0.95,
+            selectedEvidenceStrength: "strong",
+            source: "deterministic",
+            status: "partial"
+          },
+          {
+            disclosureType: "controller_contact",
+            evidenceText: "Information on the controller pursuant to Art. 4 No. 7 GDPR: SITS Group AG, Etzelmatt 1, CH-5430 Wettingen. E-Mail: INFO@SITS.COM.",
+            confidence: 0.9,
+            selectedEvidenceStrength: "strong",
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://sits.com/en/privacy-policy/"],
+        retainedPrivacyPolicyTextExcerpt: "Information on the controller pursuant to Art. 4 No. 7 GDPR: SITS Group AG, Etzelmatt 1, CH-5430 Wettingen. E-Mail: INFO@SITS.COM."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.controller_contact_disclosure?.status, "Observed");
+  const controllerText = retainedArticle13Signal(outcomes.controller_contact_disclosure!)?.evidenceText ?? "";
+  assert.match(controllerText, /SITS Group AG/i);
+  assert.doesNotMatch(controllerText, /DPO and data protection services/i);
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps generic contact excerpts out of controller observed", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

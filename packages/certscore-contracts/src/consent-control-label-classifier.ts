@@ -214,6 +214,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "privacy preference center"),
     contextual("options", "save choices", { requiresPreferenceContext: true, variant: "save_preferences" }),
     contextual("options", "save my choices", { requiresPreferenceContext: true, variant: "save_preferences" }),
+    contextual("options", "save consent", { requiresPreferenceContext: true, variant: "save_preferences" }),
     contextual("options", "confirm my choices", { requiresPreferenceContext: true, variant: "save_preferences" }),
     contextual("options", "learn more", { requiresConsentContext: true }),
     contextual("options", "details", { requiresConsentContext: true }),

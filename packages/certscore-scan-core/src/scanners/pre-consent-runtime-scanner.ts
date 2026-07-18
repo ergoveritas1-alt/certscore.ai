@@ -763,14 +763,20 @@ export async function preConsentRuntimeScanner(
         timeout: Math.min(networkIdleTimeoutMs, input.internalBudgetMs),
       }).catch(() => undefined),
     );
+    let preScreenshotConsentObservation: ConsentUiObservation | undefined;
     if ((input.screenshotMode ?? "always") === "always") {
+      // Retain the first typed control inventory before any browser screenshot
+      // can monopolize the page/CDP session. Keep the existing parallel path
+      // when no early screenshot will run so unrelated iframe/runtime timing is
+      // unchanged.
+      preScreenshotConsentObservation = await consentUiObservationPromise;
       const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
       const screenshotCapture = await recordTiming(
         timingBreakdown,
         "early screenshot capture",
         "Early pre-consent screenshot immediately after DOMContentLoaded.",
         () => capturePreConsentScreenshot(page, screenshotPath, {
-          captureMode: input.screenshotCaptureMode ?? "full_page_first",
+          captureMode: input.screenshotCaptureMode ?? "viewport_first",
           screenshotErrors,
           timeoutMs: input.screenshotTimeoutMs ?? 5_000,
         }),
@@ -811,18 +817,17 @@ export async function preConsentRuntimeScanner(
     const [pageEvidence, initialConsentObservation] = await recordTiming(
       timingBreakdown,
       "page evidence capture",
-      "Atomic read-only storage, scripts, iframes, browser API, collection surface, DOM text snapshot plus consent UI capture.",
-      () => Promise.all([
-        capturePostSettlePageEvidence({
+      "Atomic read-only storage, scripts, iframes, browser API, collection surface, and DOM text snapshot after the first structured consent inventory is retained.",
+      () => Promise.all([capturePostSettlePageEvidence({
           firstPartyHostname,
           normalizedUrl: input.normalizedUrl,
           page,
           scanStartedAtMs: input.scanStartedAtMs,
           skipLegacyFallbackAfterAtomicTimeout: fastWait,
           timingBreakdown,
-        }),
-        consentUiObservationPromise,
-      ]),
+        }), preScreenshotConsentObservation
+          ? Promise.resolve(preScreenshotConsentObservation)
+          : consentUiObservationPromise]),
     );
     const {
       apiAccesses,
@@ -1138,7 +1143,7 @@ export async function preConsentRuntimeScanner(
         initialObservation: consentObservation,
         navigationStartedAtMs,
         onTenSecondGate: earlyScreenshotCaptured &&
-          (input.screenshotCaptureMode ?? "full_page_first") === "viewport_first"
+          (input.screenshotCaptureMode ?? "viewport_first") === "viewport_first"
           ? async () => {
             supplementalScreenshotAttempted = true;
             const supplementalCapture = await recordTiming(
@@ -1316,7 +1321,7 @@ export async function preConsentRuntimeScanner(
       const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
       const screenshotCapture = await recordTiming(timingBreakdown, "screenshot capture", "Full-page pre-consent screenshot with 1x1 fallback on failure.", () =>
         capturePreConsentScreenshot(page, screenshotPath, {
-          captureMode: input.screenshotCaptureMode ?? "full_page_first",
+          captureMode: input.screenshotCaptureMode ?? "viewport_first",
           screenshotErrors,
           timeoutMs: input.screenshotTimeoutMs ?? 5_000,
         })
@@ -1380,7 +1385,7 @@ export async function preConsentRuntimeScanner(
     if (
       earlyScreenshotCaptured &&
       !supplementalScreenshotAttempted &&
-      (input.screenshotCaptureMode ?? "full_page_first") === "viewport_first" &&
+      (input.screenshotCaptureMode ?? "viewport_first") === "viewport_first" &&
       screenshots.some((screenshot) => screenshot.captureMethod === "primary_viewport_fallback") &&
       shouldCaptureSupplementalFullPageScreenshot({
         cmpRuntimeObservations,
@@ -1474,7 +1479,7 @@ export async function preConsentRuntimeScanner(
         }
         if (
           !supplementalScreenshotAttempted &&
-          (input.screenshotCaptureMode ?? "full_page_first") === "viewport_first" &&
+          (input.screenshotCaptureMode ?? "viewport_first") === "viewport_first" &&
           hasBelowFoldFirstLayerGeometryControls(geometry)
         ) {
           supplementalScreenshotAttempted = true;
@@ -2417,15 +2422,52 @@ async function capturePostSettlePageEvidence(input: {
     recordInstantTiming(
       input.timingBreakdown,
       "page evidence: consolidated fallback skipped",
-      "Fast mode did not queue six additional renderer evaluations after the atomic snapshot timed out; retained network, cookie, screenshot, transport, and explicit limitation evidence remain available.",
+      "Fast mode did not queue six separate renderer evaluations after the atomic snapshot timed out; one short consolidated retry preserves evidence when transient page contention clears.",
     );
+    const retrySnapshot = await recordBoundedTiming(
+      input.timingBreakdown,
+      "page evidence: consolidated snapshot retry",
+      "One short atomic retry preserves storage, script, iframe, browser-API, collection-surface, and text evidence without restoring the six-call legacy fallback.",
+      1_000,
+      () => captureConsolidatedPageEvidenceSnapshot(input.page),
+      () => undefined,
+    );
+    const retryEvidence = retrySnapshot
+      ? consolidatedPageEvidenceFromSnapshot(retrySnapshot, input)
+      : {
+          apiAccesses: [],
+          collectionSurfaceObservations: [],
+          domText: "",
+          frames: [],
+          scripts: [],
+          storageSnapshot: emptyStorageSnapshot(input.scanStartedAtMs, input.normalizedUrl),
+        };
+    const [frames, apiAccesses] = await Promise.all([
+      retryEvidence.frames.length > 0
+        ? Promise.resolve(retryEvidence.frames)
+        : recordBoundedTiming(
+            input.timingBreakdown,
+            "page evidence: bounded iframe fallback",
+            "A bounded iframe-only read preserves embedded-content evidence when both atomic snapshots omit it.",
+            750,
+            () => captureIframeEvents(input.page, input.scanStartedAtMs, input.firstPartyHostname),
+            () => [],
+          ),
+      retryEvidence.apiAccesses.length > 0
+        ? Promise.resolve(retryEvidence.apiAccesses)
+        : recordBoundedTiming(
+            input.timingBreakdown,
+            "page evidence: bounded browser API fallback",
+            "A bounded browser-API-only read preserves installed runtime probes when both atomic snapshots omit them.",
+            750,
+            () => captureBrowserApiAccessEvents(input.page, input.scanStartedAtMs, input.normalizedUrl),
+            () => [],
+          ),
+    ]);
     return {
-      apiAccesses: [],
-      collectionSurfaceObservations: [],
-      domText: "",
-      frames: [],
-      scripts: [],
-      storageSnapshot: emptyStorageSnapshot(input.scanStartedAtMs, input.normalizedUrl),
+      ...retryEvidence,
+      apiAccesses,
+      frames,
     };
   }
 
@@ -3621,6 +3663,24 @@ function isCompositeConsentInventoryControl(control: ConsentUiInventoryControl):
 function hasMultipleCanonicalConsentIntents(label: string): boolean {
   const normalizedLabel = label.replace(/\s+/g, " ").trim().toLowerCase();
   if (!normalizedLabel || normalizedLabel.length > 160) {
+    return false;
+  }
+  // A complete canonical label such as "Accept essential cookies" or
+  // "Save consent" legitimately contains a shorter canonical token with a
+  // different intent. The exact phrase is the actionable control; composite
+  // suppression is reserved for parent containers that concatenate controls.
+  if (CANONICAL_CONSENT_INVENTORY_TERMS.some((term) => term.phrase === normalizedLabel)) {
+    return false;
+  }
+  const fullLabelClassification = classifyConsentControlLabel({
+    label: normalizedLabel,
+    hasConsentContext: true,
+    hasPreferenceContext: true,
+  });
+  if (
+    fullLabelClassification.variant === "necessary_only" ||
+    fullLabelClassification.variant === "save_preferences"
+  ) {
     return false;
   }
   const matchedIntents = new Set<string>();
@@ -6926,7 +6986,7 @@ async function retryPreConsentScreenshotInFreshContext(input: {
           retryPage,
           screenshotPath,
           {
-            captureMode: input.input.screenshotCaptureMode ?? "full_page_first",
+            captureMode: input.input.screenshotCaptureMode ?? "viewport_first",
             screenshotErrors: input.screenshotErrors,
             timeoutMs: Math.max(1_000, Math.min(input.input.screenshotTimeoutMs ?? 5_000, 15_000)),
           },
