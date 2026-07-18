@@ -888,6 +888,19 @@ test("resolves first-party Borlabs Cookie runtime markers as consent management"
   assert.ok(borlabs.matchSources.some((source) => source.matchedField === "dom_selector"));
 });
 
+test("resolves an exact self-hosted Borlabs runtime asset without waiting for DOM access", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "script",
+      url: "https://example.test/wp-content/plugins/borlabs-cookie/assets/javascript/borlabs-cookie.min.js?ver=3.4.2",
+      hostname: "example.test",
+    },
+  ]);
+
+  assertResolved(observations, "Borlabs", "Borlabs Cookie CMP", "consent_management");
+  assert.ok(observations[0]?.matchSources.some((source) => source.matchedField === "url_pattern"));
+});
+
 test("resolves Consentmanager CDN as consent management CMP", () => {
   const observations = resolveVendorObservations([
     {

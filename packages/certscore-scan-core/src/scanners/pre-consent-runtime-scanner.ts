@@ -754,7 +754,10 @@ export async function preConsentRuntimeScanner(
       "page evidence: consent UI",
       "First-layer consent surface/control text and affordance inventory, started immediately after DOMContentLoaded.",
       consentUiCaptureTimeoutMs,
-      () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs),
+      () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs, {
+        returnAfterCheapNoEvidence: true,
+        waitForCompleteChoiceControls: true,
+      }),
       () => emptyConsentUiObservation(input.scanStartedAtMs),
     );
     const networkIdlePromise = recordTiming(
@@ -775,22 +778,34 @@ export async function preConsentRuntimeScanner(
       // unchanged.
       preScreenshotConsentObservation = await consentUiObservationPromise;
       if (!hasSufficientFirstLayerConsentControls(preScreenshotConsentObservation)) {
-        const earlyCmpProbeInputs = await recordBoundedTiming(
-          timingBreakdown,
-          "early CMP runtime probe",
-          "Recognize direct CMP runtime markers before screenshot work can consume the late-rendering consent-control window.",
-          Math.min(1_250, remainingModuleBudgetMs()),
-          () => captureCmpRuntimeProbeInputs({
-            page,
-            scanStartedAtMs: input.scanStartedAtMs,
-          }),
-          () => [],
-        );
-        vendorResolverInputs.push(...earlyCmpProbeInputs);
-        const earlyCmpRuntimeObservations = buildCmpRuntimeObservations(
+        let earlyCmpRuntimeObservations = buildCmpRuntimeObservations(
           vendorResolverInputs,
           input.scanStartedAtMs,
         );
+        if (!hasHighConfidenceDirectCmpRuntimeEvidence(earlyCmpRuntimeObservations)) {
+          const earlyCmpProbeInputs = await recordBoundedTiming(
+            timingBreakdown,
+            "early CMP runtime probe",
+            "Recognize direct CMP runtime markers before screenshot work can consume the late-rendering consent-control window.",
+            Math.min(1_250, remainingModuleBudgetMs()),
+            () => captureCmpRuntimeProbeInputs({
+              page,
+              scanStartedAtMs: input.scanStartedAtMs,
+            }),
+            () => [],
+          );
+          vendorResolverInputs.push(...earlyCmpProbeInputs);
+          earlyCmpRuntimeObservations = buildCmpRuntimeObservations(
+            vendorResolverInputs,
+            input.scanStartedAtMs,
+          );
+        } else {
+          recordInstantTiming(
+            timingBreakdown,
+            "early CMP network recognition",
+            "Recognized a high-confidence canonical CMP from retained network evidence before running optional DOM/global probes.",
+          );
+        }
         retainedCmpRuntimeObservations = earlyCmpRuntimeObservations;
         if (hasHighConfidenceDirectCmpRuntimeEvidence(earlyCmpRuntimeObservations)) {
           const cmpGatedWaitMs = Math.min(
@@ -3293,6 +3308,7 @@ export async function detectConsentUi(
     waitForActionableChoiceControls?: boolean;
     waitForCompleteChoiceControls?: boolean;
     waitForControlsOnTextOnlySurface?: boolean;
+    returnAfterCheapNoEvidence?: boolean;
   } = {},
 ): Promise<ConsentUiObservation> {
   const waitStartedAtMs = Date.now();
@@ -3300,7 +3316,11 @@ export async function detectConsentUi(
   const rapidInventoryHasPotentialToggle = rapidObservation.inventoryDiagnostics?.timingMarkers.includes(
     "rapid_inventory_toggle_present",
   ) === true;
-  if (hasSufficientFirstLayerConsentControls(rapidObservation) && !rapidInventoryHasPotentialToggle) {
+  if (
+    hasSufficientFirstLayerConsentControls(rapidObservation) &&
+    !rapidInventoryHasPotentialToggle &&
+    options.waitForCompleteChoiceControls !== true
+  ) {
     return annotateConsentInventoryTimingMarkers(rapidObservation, [
       "rapid_first_layer_inventory",
       "early_exit_controls_found",
@@ -3335,6 +3355,7 @@ export async function detectConsentUi(
     ) ||
     (mergedImmediateObservation.likelyPresent && !options.waitForControlsOnTextOnlySurface) ||
     (!shouldWaitForRequestedRecapture && !mergedImmediateObservation.likelyPresent && page.frames().length <= 1) ||
+    (options.returnAfterCheapNoEvidence === true && !mergedImmediateObservation.likelyPresent) ||
     waitForControlTimeoutMs <= 0
   ) {
     return annotateConsentInventoryTimingMarkers(

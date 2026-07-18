@@ -141,6 +141,7 @@ interface VendorRule {
   domSelectorPatterns?: RegExp[];
   excludeHostPatterns?: RegExp[];
   requireUrlPatternMatch?: boolean;
+  allowUrlPatternWithoutHostMatch?: boolean;
   suppressCookieMatchedHostname?: boolean;
   basisLabel: string;
 }
@@ -155,6 +156,7 @@ const rules: VendorRule[] = [
     confidence: 0.96,
     hostPatterns: [/\.borlabs\.io$/i],
     urlPatterns: [/\/borlabs-cookie\//i, /borlabs-cookie(?:\.min)?\.js(?:[?#]|$)/i],
+    allowUrlPatternWithoutHostMatch: true,
     cookiePatterns: [/^borlabs-cookie$/i, /^borlabsCookie$/i],
     globalPatterns: [/^BorlabsCookie$/i],
     storageKeyPatterns: [/^borlabs-cookie$/i, /^borlabsCookie$/i],
@@ -4235,7 +4237,11 @@ export function resolveVendorObservations(
         ? matchesAny(hostname, rule.hostPatterns) && !matchesAny(hostname, rule.excludeHostPatterns)
         : false;
       const matchedUrlPattern = url ? matchesAny(url, rule.urlPatterns) : false;
-      const matchedUrl = matchedUrlPattern && (!rule.hostPatterns || matchedHost);
+      const matchedUrl = matchedUrlPattern && (
+        !rule.hostPatterns ||
+        matchedHost ||
+        rule.allowUrlPatternWithoutHostMatch === true
+      );
       const matchedCookie = cookieName
         ? matchesAny(cookieName, rule.cookiePatterns)
         : false;
