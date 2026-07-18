@@ -45,6 +45,12 @@ export type LocalV2DagLambdaDispatchPayload = {
   productionFindingIntegration: false;
   profile: "standard" | "tiny";
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
+  policySurfaceSeeds?: Array<{
+    confidence?: number;
+    hintType: string;
+    source: "prior_scan_hint" | "canonical_legal_surface_hint";
+    url: string;
+  }>;
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
   debugOverrides?: LocalV2DagLambdaDebugOverrides;
   resultHandoff: "sqs";
@@ -378,6 +384,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   const record = asRecord(typeof event === "string" ? JSON.parse(event) : event);
   const coordinatorPlanSummary = parseCoordinatorPlanSummary(record.coordinatorPlanSummary);
   const debugOverrides = parseDebugOverrides(record.debugOverrides);
+  const policySurfaceSeeds = parsePolicySurfaceSeeds(record.policySurfaceSeeds);
   const payload: LocalV2DagLambdaDispatchPayload = {
     artifactOnly: true,
     awsRegion: parseAwsRegion(record.awsRegion),
@@ -392,6 +399,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     productionFindingIntegration: false,
     profile: record.profile === "tiny" ? "tiny" : "standard",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    ...(policySurfaceSeeds.length > 0 ? { policySurfaceSeeds } : {}),
     ...(coordinatorPlanSummary ? { coordinatorPlanSummary } : {}),
     ...(debugOverrides ? { debugOverrides } : {}),
     resultHandoff: "sqs",
@@ -428,6 +436,43 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   }
 
   return payload;
+}
+
+function parsePolicySurfaceSeeds(value: unknown): NonNullable<LocalV2DagLambdaDispatchPayload["policySurfaceSeeds"]> {
+  if (!Array.isArray(value)) return [];
+  const selected = new Map<string, NonNullable<LocalV2DagLambdaDispatchPayload["policySurfaceSeeds"]>[number]>();
+  for (const item of value.slice(0, 24)) {
+    const record = asRecord(item);
+    const hintType = compactString(record.hintType);
+    const source = record.source;
+    const rawUrl = compactString(record.url);
+    if (
+      !hintType ||
+      !["privacy_policy", "cookie_policy", "privacy_choice", "consent_preferences"].includes(hintType) ||
+      (source !== "prior_scan_hint" && source !== "canonical_legal_surface_hint") ||
+      !rawUrl
+    ) continue;
+    try {
+      const parsed = new URL(rawUrl);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
+      parsed.hash = "";
+      const url = parsed.toString();
+      if (!selected.has(url)) {
+        selected.set(url, {
+          ...(typeof record.confidence === "number" && Number.isFinite(record.confidence)
+            ? { confidence: Math.max(0, Math.min(1, record.confidence)) }
+            : {}),
+          hintType,
+          source,
+          url,
+        });
+      }
+    } catch {
+      // Ignore malformed hints. They are acceleration inputs, never evidence.
+    }
+    if (selected.size >= 12) break;
+  }
+  return [...selected.values()];
 }
 
 function isWorkerLane(value: unknown): value is LocalV2DagLambdaWorkerLane {
@@ -623,6 +668,7 @@ async function runLocalV2DagLambdaScanBundle(
         outDir: options.artifactRoot,
         policyOutputGraceMs: 1_000,
         policyPlanningDeadlineMs: 1_500,
+        policySurfaceSeeds: payload.policySurfaceSeeds,
         postConsentFlowsEnabled: false,
         preConsentScreenshotMode: options.preConsentScreenshotMode,
         preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,

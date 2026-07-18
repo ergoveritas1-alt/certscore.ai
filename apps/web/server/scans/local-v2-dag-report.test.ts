@@ -201,6 +201,7 @@ test("canonical report counters dedupe repeated cookie writes and request rows",
   const {
     countCanonicalCookieObservations,
     countCanonicalNetworkEvents,
+    deriveApplicablePolicyCoverageComplete,
     deriveCriticalCoverageLimitationKeys
   } = await loadLocalV2DagReport();
   assert.equal(countCanonicalCookieObservations([
@@ -218,6 +219,30 @@ test("canonical report counters dedupe repeated cookie writes and request rows",
     consentCoverageComplete: true,
     transportCoverageComplete: false
   }), ["transport_security_observation_incomplete", "applicable_privacy_policy_unresolved"]);
+  assert.equal(deriveApplicablePolicyCoverageComplete({
+    policySurfaceInspection: {
+      outcome: "indeterminate_limited_coverage",
+      coverageStatus: "limited",
+      inspectionCompleted: false,
+      privacyPolicyObserved: false,
+      observedSurfaceTypes: [],
+      limitationKeys: ["policy_surface_inspection_runtime_failed"]
+    },
+    privacyPolicyPresent: false,
+    rawPrivacyPolicyCandidateCount: 0
+  }), false, "a failed policy module must not project an absent policy as complete coverage");
+  assert.equal(deriveApplicablePolicyCoverageComplete({
+    policySurfaceInspection: {
+      outcome: "no_privacy_policy_observed_complete_coverage",
+      coverageStatus: "complete",
+      inspectionCompleted: true,
+      privacyPolicyObserved: false,
+      observedSurfaceTypes: [],
+      limitationKeys: []
+    },
+    privacyPolicyPresent: false,
+    rawPrivacyPolicyCandidateCount: 0
+  }), true, "a completed bounded negative search remains complete coverage");
 });
 
 function syntheticPngHeader(width: number, height: number, byteSize = 1024) {

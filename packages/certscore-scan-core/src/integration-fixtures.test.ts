@@ -1571,6 +1571,13 @@ test("scan pipeline completes with explicit limited coverage after the pre-conse
 
     assert.equal(preConsentRun?.status, "partial");
     assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("pre_consent_runtime_partial"));
+    assert.ok(bundle.policySurfaceInspection, "canonical bundle should retain typed policy inspection coverage");
+    assert.equal(
+      bundle.policySurfaceInspection?.coverageStatus,
+      bundle.modulesRun.find((run) => run.moduleName === "policySurfaceScanner")?.status === "completed"
+        ? "complete"
+        : "limited",
+    );
     assert.ok(
       bundle.networkEvents.length > 0 || bundle.networkResponseEvents.length > 0 || bundle.screenshots.length > 0,
       "completed bundle should carry evidence retained before the module deadline",
@@ -2301,6 +2308,7 @@ test("scan-core emits scan no-go assessment when initial navigation fails before
     assert.ok(bundle.scan_no_go_assessment?.corroboratorCodes.includes("pre_consent_navigation_failed"));
     assert.equal(bundle.runtimeCoverage?.coverageStatus, "limited_none");
     assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("navigation_transport_failure"));
+    assert.equal(bundle.policySurfaceInspection?.outcome, "indeterminate_limited_coverage");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }

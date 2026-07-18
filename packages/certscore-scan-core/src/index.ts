@@ -23,6 +23,7 @@ import {
   SCHEMA_VERSION,
   canonicalEvidenceBundleSchema,
   deriveConsentSurfaceInspectionOutcome,
+  derivePolicySurfaceInspectionOutcome,
 } from "@certscore/contracts";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
 import type { ScanNoGoReasonCode } from "@website-signal-risk-scanner/shared";
@@ -99,6 +100,7 @@ export interface RunScanInput {
   allowedConsentFlowScenarios?: ConsentFlowScenario[];
   policyPlanningDeadlineMs?: number;
   policyOutputGraceMs?: number;
+  policySurfaceSeeds?: PolicySurfaceSeed[];
   preConsentScreenshotMode?: "always" | "selective" | "never";
   preConsentScreenshotTimeoutMs?: number;
   preConsentVisualFallbackDeadlineMs?: number;
@@ -116,6 +118,13 @@ export interface RunScanInput {
   consentFlowForceAllowedScenarioPlanning?: boolean;
   postConsentFlowsEnabled?: boolean;
   browserReuseMode?: "per_module" | "single";
+}
+
+export interface PolicySurfaceSeed {
+  confidence?: number;
+  hintType: string;
+  source: "prior_scan_hint" | "canonical_legal_surface_hint";
+  url: string;
 }
 
 export interface ConsentActionRecipeInput {
@@ -244,6 +253,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       artifactWriter,
       browser: sharedBrowser,
       nanoAssistProvider: nanoPolicyAssistProvider,
+      policySurfaceSeeds: input.policySurfaceSeeds,
       discoveryMode: input.scenarioPlanningMode === "planned_parallel" ? "fast" : "full",
       signal: input.signal,
     }).then(
@@ -699,6 +709,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     screenshots: preConsentResult.screenshots,
     visualCapture: preConsentResult.visualCapture,
   });
+  const policySurfaceInspection = derivePolicySurfaceInspectionOutcome({
+    modulesRun: boundedModulesRun,
+    policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
+  });
   const bundle = compactCanonicalEvidenceBundleForRetention(canonicalEvidenceBundleSchema.parse({
     scanId,
     url: input.url,
@@ -745,6 +759,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     derivedRuntimeSignals,
     runtimeCoverage,
     consentSurfaceInspection,
+    policySurfaceInspection,
     visualCapture: preConsentResult.visualCapture,
     ...(scanNoGoEvidence
       ? {

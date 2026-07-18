@@ -11,7 +11,9 @@ import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   classifyConsentControlLabel,
   deriveConsentSurfaceInspectionOutcome,
-  type CanonicalEvidenceBundle
+  derivePolicySurfaceInspectionOutcome,
+  type CanonicalEvidenceBundle,
+  type PolicySurfaceInspectionOutcome
 } from "@certscore/contracts";
 import { resolveVendorDisplayCategory, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import { resolveScanNoGoPresentation } from "@website-signal-risk-scanner/shared";
@@ -695,6 +697,20 @@ export function deriveCriticalCoverageLimitationKeys(input: {
     ...(!input.transportCoverageComplete ? ["transport_security_observation_incomplete"] : []),
     ...(!input.applicablePolicyCoverageComplete ? ["applicable_privacy_policy_unresolved"] : []),
   ]);
+}
+
+export function deriveApplicablePolicyCoverageComplete(input: {
+  policySurfaceInspection: PolicySurfaceInspectionOutcome;
+  privacyPolicyPresent: boolean;
+  rawPrivacyPolicyCandidateCount: number;
+}) {
+  if (input.privacyPolicyPresent) {
+    return true;
+  }
+  if (input.rawPrivacyPolicyCandidateCount > 0) {
+    return false;
+  }
+  return input.policySurfaceInspection.outcome === "no_privacy_policy_observed_complete_coverage";
 }
 
 function v2ArtifactRoots() {
@@ -2999,6 +3015,10 @@ function buildMaterializedLocalV2Detail(
   const hasPromotionGradePreconsentCookies = promotionGradePreconsentCookieNames.length > 0;
   const rawPrivacyPolicyCandidates = (bundle.policySurfaceObservations ?? [])
     .filter((surface) => surface.surfaceType === "privacy_policy");
+  const policySurfaceInspection = bundle.policySurfaceInspection ?? derivePolicySurfaceInspectionOutcome({
+    modulesRun: bundle.modulesRun,
+    policySurfaceObservations: bundle.policySurfaceObservations,
+  });
   const consentCoverageComplete = consentSurfaceInspection.inspectionCompleted === true &&
     consentSurfaceInspection.coverageStatus === "complete";
   const assessedConsentSurfaceObserved = consentSurfaceInspection.consentSurfaceObserved === true
@@ -3015,8 +3035,11 @@ function buildMaterializedLocalV2Detail(
     transportSecuritySummary.pageHttpsObserved !== null &&
     transportSecuritySummary.httpProbeAttempted === true &&
     transportSecuritySummary.tlsProbeAttempted === true;
-  const applicablePolicyCoverageComplete = rawPrivacyPolicyCandidates.length === 0 ||
-    policySurfaceSummary.privacyPolicyPresent === true;
+  const applicablePolicyCoverageComplete = deriveApplicablePolicyCoverageComplete({
+    policySurfaceInspection,
+    privacyPolicyPresent: policySurfaceSummary.privacyPolicyPresent === true,
+    rawPrivacyPolicyCandidateCount: rawPrivacyPolicyCandidates.length,
+  });
   const criticalCoverageLimitationKeys = deriveCriticalCoverageLimitationKeys({
     applicablePolicyCoverageComplete,
     consentCoverageComplete,
@@ -3282,6 +3305,8 @@ function buildMaterializedLocalV2Detail(
     gdpr_transparency_production_evidence_enabled: policySurfaceSummary.gdprTransparencyProductionEvidenceEnabled,
     policyDisclosureSummary: policySurfaceSummary,
     policy_disclosure_summary: policySurfaceSummary,
+    policySurfaceInspection,
+    policy_surface_inspection: policySurfaceInspection,
     runtimeCoverageStatus: effectiveRuntimeCoverageStatus,
     runtime_coverage_status: effectiveRuntimeCoverageStatus,
     runtimeCountsRetained: effectiveRuntimeCountsRetained,

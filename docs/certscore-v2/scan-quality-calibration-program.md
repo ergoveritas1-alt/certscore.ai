@@ -145,6 +145,11 @@ pnpm v2:wc01-scan-lab-cohort \
 pnpm v2:wc01-verify-scan-lab-cohort \
   --summary artifacts/v2-scan-quality-calibration/Wc01V2ScanLabCohort.summary.json \
   --min-sites 10
+pnpm v2:privacy-policy-capture-gate \
+  --candidate-dir artifacts/v2-scan-quality-calibration/privacy-policy-candidate \
+  --baseline-dir artifacts/v2-scan-quality-calibration/privacy-policy-baseline \
+  --expectations artifacts/v2-scan-quality-calibration/privacy-policy-expectations.json \
+  --out-dir artifacts/v2-scan-quality-calibration/privacy-policy-candidate
 pnpm v2:calibration-ledger-record \
   --summary artifacts/v2-scan-quality-calibration/Wc01V2ScanLabCohort.summary.json \
   --out artifacts/v2-scan-quality-calibration/scan-quality-calibration-ledger.candidate.json
@@ -163,6 +168,19 @@ GitHub-hosted runners must not connect directly to the private production databa
 The workflow also persists calibration contacts into the central event table using an
 idempotent run key, so subsequent selections see them even before the repository
 candidate is committed.
+
+The privacy-policy capture gate requires an explicit reviewed expectations file shaped
+as `{ "sites": [{ "domain": "example.com", "privacyPolicyExpected": true,
+"evidence": "review note or retained artifact reference" }] }`. It excludes no-go and
+normally unreachable scans from capture and latency denominators, gives no credit to
+URL-only guesses, and fails closed when reviewed expected-policy coverage is too small.
+Its default release thresholds are at least 30 normally reached candidate and baseline
+sites, at least 83% policy capture, at least 15 reviewed expected-policy sites, no more
+than 3% reviewed false negatives, no invalid captured evidence, no more than 1 second
+median scan-latency increase, and no more than 5 seconds p95 increase. Latency uses
+paired-domain deltas when enough paired artifacts exist; otherwise Luna must confirm
+that the baseline and candidate cohorts are composition-matched before treating the
+result as a release decision.
 
 The public live-sample workflow is manually dispatched for a scanner release after SO
 confirms target eligibility and cooldown. Its automatic 10-site slot selection rotates

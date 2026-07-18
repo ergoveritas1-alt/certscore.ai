@@ -59,6 +59,24 @@ test("handler validates local v2 DAG Lambda dispatch contract", () => {
   assert.equal(parsed.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
 });
 
+test("handler bounds and validates policy surface seeds", () => {
+  const parsed = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    policySurfaceSeeds: [
+      { confidence: 4, hintType: "privacy_policy", source: "prior_scan_hint", url: "https://example.com/legal/privacy#section" },
+      { hintType: "unrelated", source: "prior_scan_hint", url: "https://example.com/about" },
+      { hintType: "cookie_policy", source: "unknown", url: "https://example.com/cookies" },
+      { hintType: "privacy_policy", source: "prior_scan_hint", url: "javascript:alert(1)" }
+    ]
+  }));
+
+  assert.deepEqual(parsed.policySurfaceSeeds, [{
+    confidence: 1,
+    hintType: "privacy_policy",
+    source: "prior_scan_hint",
+    url: "https://example.com/legal/privacy"
+  }]);
+});
+
 test("handler accepts the approved regional Lambda dispatch targets", () => {
   assert.equal(parseLocalV2DagLambdaDispatchPayload(validPayload({ awsRegion: "eu-central-1" })).awsRegion, "eu-central-1");
   assert.equal(parseLocalV2DagLambdaDispatchPayload(validPayload({

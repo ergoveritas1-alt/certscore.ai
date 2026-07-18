@@ -56,6 +56,16 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
     hostname: "example.com",
     localCallbackUrl: null,
     orchestrationMode: "single",
+    policySurfaceSeeds: [
+      { confidence: 0.62, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "https://example.com/privacy" },
+      { confidence: 0.68, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "https://example.com/privacy-policy" },
+      { confidence: 0.66, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "https://example.com/privacy-notice" },
+      { confidence: 0.58, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "https://example.com/legal/privacy" },
+      { confidence: 0.62, hintType: "cookie_policy", source: "canonical_legal_surface_hint", url: "https://example.com/cookies" },
+      { confidence: 0.66, hintType: "cookie_policy", source: "canonical_legal_surface_hint", url: "https://example.com/cookie-policy" },
+      { confidence: 0.54, hintType: "privacy_choice", source: "canonical_legal_surface_hint", url: "https://example.com/privacy/choices" },
+      { confidence: 0.54, hintType: "privacy_choice", source: "canonical_legal_surface_hint", url: "https://example.com/privacy-rights" }
+    ],
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     profile: "tiny",
@@ -67,6 +77,43 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
     targetUrl: "https://example.com/",
     vpcMode: "none"
   });
+});
+
+test("carries bounded prior policy URLs into Lambda as acceleration hints", () => {
+  const config = buildLambdaScanConfig();
+  config.execution = {
+    ...config.execution,
+    crawlSeedHints: [
+      {
+        confidence: 0.91,
+        hintType: "privacy_policy",
+        source: "prior_scan_hint",
+        sourceCompletedAt: "2026-07-16T00:00:00.000Z",
+        sourceScanId: "prior-1",
+        url: "https://legal.example.net/company/privacy"
+      },
+      {
+        hintType: "unrelated_page",
+        source: "prior_scan_hint",
+        sourceCompletedAt: "2026-07-16T00:00:00.000Z",
+        sourceScanId: "prior-1",
+        url: "https://example.com/about"
+      }
+    ]
+  };
+
+  const payload = buildLocalV2DagLambdaDispatchPayload({
+    localCallbackUrl: null,
+    scanConfig: config,
+    scanId: "scan-policy-seed"
+  });
+
+  assert.deepEqual(payload.policySurfaceSeeds, [{
+    confidence: 0.91,
+    hintType: "privacy_policy",
+    source: "prior_scan_hint",
+    url: "https://legal.example.net/company/privacy"
+  }]);
 });
 
 test("builds local Lambda dispatch payload with bounded debug overrides", () => {

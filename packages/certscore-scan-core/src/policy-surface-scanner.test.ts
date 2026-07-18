@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import type { Browser } from "playwright";
+import { classifyPrivacySurface } from "@certscore/contracts";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
   gdprTransparencyTopicCandidatesFromRetainedPolicySections,
@@ -872,6 +873,45 @@ test("policySurfaceScanner treats external terms links as fetchable policy surfa
   );
 });
 
+test("reviewed privacy-policy misses remain discoverable across retained URL and locale shapes", () => {
+  const reviewedMisses = [
+    ["https://meshy.ai/", "https://www.meshy.ai/privacy-policy", "Privacy Policy"],
+    ["https://mobiauto.com.br/", "https://www.mobiauto.com.br/institucional/privacidade", "Política de Privacidade"],
+    ["https://userpilot.io/", "https://userpilot.com/privacy-policy/", "Privacy Policy"],
+    ["https://nordea.com/", "https://www.nordea.com/en/privacy-policy", "Privacy Policy"],
+    ["https://usabilla.com/", "https://www.surveymonkey.com/mp/legal/privacy/", "Privacy Policy"],
+    ["https://500px.com/", "https://500px.com/privacy-policy", "Privacy Policy"],
+    ["https://supermicro.com/", "https://www.supermicro.com/en/about/policies/privacy", "Privacy Policy"],
+    ["https://indiewire.com/", "https://www.pmc.com/privacy-policy", "Privacy Policy"],
+    ["https://adp.com/", "https://www.adp.com/about-adp/data-privacy.aspx", "Privacy Policy"],
+    ["https://mercadopago.com.br/", "https://www.mercadopago.com.br/privacidade/declaracao-privacidade", "Declaração de Privacidade"],
+    ["https://ambafrance.org/", "https://www.diplomatie.gouv.fr/fr/donnees-personnelles-et-cookies", "Données personnelles et cookies"],
+    ["https://medpagetoday.com/", "https://www.medpagetoday.com/about/privacy", "Privacy Policy"],
+    ["https://dal.ca/", "https://www.dal.ca/privacy.html", "Privacy Statement"],
+    ["https://monotaro.com/", "https://www.monotaro.com/main/prvplc/", "プライバシーポリシー"],
+    ["https://siemens.de/", "https://www.siemens.com/en-us/privacy-notice/", "Privacy Notice"],
+    ["https://dable.io/", "https://dable.io/privacy-policy", "Privacy Policy"],
+    ["https://whatsapp.com/", "https://www.whatsapp.com/legal/", "Privacy Policy"],
+  ] as const;
+
+  for (const [baseUrl, policyUrl, linkText] of reviewedMisses) {
+    const classification = classifyPrivacySurface({ linkText, url: policyUrl });
+    assert.equal(classification.surfaceType, "privacy_policy", `${baseUrl} should classify ${linkText}`);
+    assert.equal(
+      isFetchablePolicyCandidateForPolicySurface({
+        baseUrl,
+        href: policyUrl,
+        normalizedUrl: policyUrl,
+        surfaceType: classification.surfaceType,
+        matchStrength: classification.matchStrength,
+        linkText,
+      }),
+      true,
+      `${baseUrl} should retain ${policyUrl} as a fetchable policy candidate`,
+    );
+  }
+});
+
 test("policySurfaceScanner treats external localized policy hash links as fetchable", () => {
   const baseUrl = "https://www.se.pl/";
   const href = "https://rodo.grupazpr.pl/#time-polityka-prywatnosci-cookies";
@@ -1274,6 +1314,23 @@ test("policySurfaceScanner uses common-path fallback when no homepage policy lin
 
     assert.ok(fallback);
     assert.equal(fallback.surfaceType, "privacy_policy");
+  });
+});
+
+test("policySurfaceScanner freshly validates a bounded prior policy seed when homepage discovery has no links", async () => {
+  await withPolicyScan("policy-no-links", async ({ result, baseUrl }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    assert.equal(privacy?.normalizedUrl, `${baseUrl}/policies/privacy`);
+    assert.equal(privacy?.status, "fetched");
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    assert.equal(diagnostics.corePolicySurfaceRetained, true);
+  }, {
+    policySurfaceSeeds: [{
+      confidence: 0.9,
+      hintType: "privacy_policy",
+      source: "prior_scan_hint",
+      url: "/policies/privacy",
+    }],
   });
 });
 

@@ -1603,6 +1603,61 @@ export const runtimeCoverageSummarySchema = z.object({
   notes: z.array(z.string()).default([]),
 });
 
+export const policySurfaceInspectionOutcomeSchema = z.object({
+  outcome: z.enum([
+    "privacy_policy_observed",
+    "no_privacy_policy_observed_complete_coverage",
+    "indeterminate_limited_coverage",
+  ]),
+  coverageStatus: z.enum(["complete", "limited"]),
+  inspectionCompleted: z.boolean(),
+  privacyPolicyObserved: z.boolean(),
+  observedSurfaceTypes: z.array(policySurfaceObservationSchema.shape.surfaceType).max(16).default([]),
+  limitationKeys: z.array(z.string().max(120)).max(16).default([]),
+});
+
+export function derivePolicySurfaceInspectionOutcome(input: {
+  modulesRun?: z.infer<typeof scanModuleRunSchema>[];
+  policySurfaceObservations?: z.infer<typeof policySurfaceObservationSchema>[];
+}) {
+  const observations = input.policySurfaceObservations ?? [];
+  const policyRun = (input.modulesRun ?? []).find((moduleRun) =>
+    moduleRun.moduleName === "policySurfaceScanner"
+  );
+  const retainedObservations = observations.filter((observation) =>
+    observation.status === "fetched" || observation.status === "observed"
+  );
+  const privacyPolicyObserved = retainedObservations.some((observation) =>
+    observation.surfaceType === "privacy_policy"
+  );
+  const inspectionCompleted = policyRun?.status === "completed";
+  const limitationKeys = [
+    !policyRun ? "policy_surface_inspection_runtime_not_run" : null,
+    policyRun && policyRun.status !== "completed"
+      ? `policy_surface_inspection_runtime_${policyRun.status}`
+      : null,
+  ].filter((value): value is string => value !== null)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .slice(0, 16);
+  const coverageStatus = privacyPolicyObserved || inspectionCompleted
+    ? "complete" as const
+    : "limited" as const;
+  const outcome = privacyPolicyObserved
+    ? "privacy_policy_observed" as const
+    : inspectionCompleted
+      ? "no_privacy_policy_observed_complete_coverage" as const
+      : "indeterminate_limited_coverage" as const;
+
+  return policySurfaceInspectionOutcomeSchema.parse({
+    outcome,
+    coverageStatus,
+    inspectionCompleted,
+    privacyPolicyObserved,
+    observedSurfaceTypes: [...new Set(retainedObservations.map((observation) => observation.surfaceType))],
+    limitationKeys,
+  });
+}
+
 export const consentSurfaceInspectionOutcomeSchema = z.object({
   outcome: z.enum([
     "actionable_surface_observed",
@@ -1846,6 +1901,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   derivedRuntimeSignals: derivedRuntimeSignalsSchema,
   runtimeCoverage: runtimeCoverageSummarySchema.optional(),
   consentSurfaceInspection: consentSurfaceInspectionOutcomeSchema.optional(),
+  policySurfaceInspection: policySurfaceInspectionOutcomeSchema.optional(),
   visualCapture: visualCaptureSummarySchema.optional(),
   scanNoGoAssessment: scanNoGoAssessmentSchema.optional(),
   scan_no_go_assessment: scanNoGoAssessmentSchema.optional(),
@@ -2033,6 +2089,7 @@ export type TransportSecurityObservation = z.infer<typeof transportSecurityObser
 export type DerivedRuntimeSignals = z.infer<typeof derivedRuntimeSignalsSchema>;
 export type RuntimeCoverageSummary = z.infer<typeof runtimeCoverageSummarySchema>;
 export type ConsentSurfaceInspectionOutcome = z.infer<typeof consentSurfaceInspectionOutcomeSchema>;
+export type PolicySurfaceInspectionOutcome = z.infer<typeof policySurfaceInspectionOutcomeSchema>;
 export type ScanNoGoAssessment = z.infer<typeof scanNoGoAssessmentSchema>;
 export type VisualAccessReview = z.infer<typeof visualAccessReviewSchema>;
 export type ObservedBehavior = z.infer<typeof observedBehaviorSchema>;

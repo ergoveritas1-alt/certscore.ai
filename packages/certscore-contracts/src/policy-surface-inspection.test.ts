@@ -1,0 +1,74 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { derivePolicySurfaceInspectionOutcome } from "./index";
+
+function moduleRun(status: "completed" | "failed" | "skipped_budget") {
+  return {
+    moduleName: "policySurfaceScanner",
+    status,
+    startedAt: "2026-07-17T00:00:00.000Z",
+    completedAt: "2026-07-17T00:00:01.000Z",
+    durationMs: 1_000,
+    evidenceRefs: [],
+    errors: status === "completed" ? [] : ["bounded fixture failure"],
+  };
+}
+
+test("policy inspection distinguishes a completed negative search from limited coverage", () => {
+  const completed = derivePolicySurfaceInspectionOutcome({
+    modulesRun: [moduleRun("completed")],
+    policySurfaceObservations: [],
+  });
+  assert.equal(completed.outcome, "no_privacy_policy_observed_complete_coverage");
+  assert.equal(completed.coverageStatus, "complete");
+  assert.equal(completed.inspectionCompleted, true);
+  assert.deepEqual(completed.limitationKeys, []);
+
+  const failed = derivePolicySurfaceInspectionOutcome({
+    modulesRun: [moduleRun("failed")],
+    policySurfaceObservations: [],
+  });
+  assert.equal(failed.outcome, "indeterminate_limited_coverage");
+  assert.equal(failed.coverageStatus, "limited");
+  assert.equal(failed.inspectionCompleted, false);
+  assert.deepEqual(failed.limitationKeys, ["policy_surface_inspection_runtime_failed"]);
+});
+
+test("retained privacy-policy evidence remains complete when later policy work is limited", () => {
+  const outcome = derivePolicySurfaceInspectionOutcome({
+    modulesRun: [moduleRun("skipped_budget")],
+    policySurfaceObservations: [{
+      observationId: "privacy-fixture",
+      sourceScanner: "policy_surface",
+      scenario: "policy_surface_review",
+      consentStateAtTime: "not_applicable",
+      url: "https://example.test/privacy",
+      normalizedUrl: "https://example.test/privacy",
+      surfaceType: "privacy_policy",
+      discoveryMethod: "footer_link",
+      status: "fetched",
+      evidenceRefs: [],
+      artifactRefs: [],
+      boundedTextExcerptIds: [],
+      observedTopics: [],
+      article13DisclosureSignals: [],
+      discardedArticle13DisclosureSignals: [],
+      gdprTransparencyTopicCandidates: [],
+      retainedPolicySections: [],
+      retainedArticle13SectionEvidence: [],
+      mentionedVendors: [],
+      mentionedPurposes: [],
+      mentionedRights: [],
+      mentionedControls: [],
+      assistMetadata: [],
+      confidence: 0.9,
+      directVsInferred: "direct",
+    }],
+  });
+
+  assert.equal(outcome.outcome, "privacy_policy_observed");
+  assert.equal(outcome.coverageStatus, "complete");
+  assert.equal(outcome.inspectionCompleted, false);
+  assert.equal(outcome.privacyPolicyObserved, true);
+  assert.deepEqual(outcome.observedSurfaceTypes, ["privacy_policy"]);
+});

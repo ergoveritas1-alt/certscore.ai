@@ -1,4 +1,4 @@
-import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
+import type { SharedCrawlSeedHint, SharedScanConfig } from "@website-signal-risk-scanner/shared";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
@@ -38,7 +38,56 @@ export type LocalV2DagLambdaDispatchPayload = {
   targetUrl: string;
   vpcMode: "none";
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
+  policySurfaceSeeds?: Array<Pick<SharedCrawlSeedHint, "confidence" | "hintType" | "source" | "url">>;
 };
+
+const MAX_POLICY_SURFACE_SEEDS = 12;
+const POLICY_SURFACE_HINT_TYPES = new Set([
+  "privacy_policy",
+  "cookie_policy",
+  "privacy_choice",
+  "consent_preferences",
+]);
+
+function policySurfaceSeedsFromConfig(config: SharedScanConfig | Record<string, unknown>) {
+  const execution = asRecord(asRecord(config).execution);
+  const rawHints = Array.isArray(execution.crawlSeedHints) ? execution.crawlSeedHints : [];
+  const selected = new Map<string, NonNullable<LocalV2DagLambdaDispatchPayload["policySurfaceSeeds"]>[number]>();
+  for (const rawHint of rawHints) {
+    const hint = asRecord(rawHint);
+    const hintType = stringValue(hint.hintType);
+    const source = hint.source;
+    const url = stringValue(hint.url);
+    if (
+      !hintType ||
+      !POLICY_SURFACE_HINT_TYPES.has(hintType) ||
+      (source !== "prior_scan_hint" && source !== "canonical_legal_surface_hint") ||
+      !url
+    ) {
+      continue;
+    }
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
+      parsed.hash = "";
+      const normalizedUrl = parsed.toString();
+      if (!selected.has(normalizedUrl)) {
+        selected.set(normalizedUrl, {
+          ...(typeof hint.confidence === "number" && Number.isFinite(hint.confidence)
+            ? { confidence: Math.max(0, Math.min(1, hint.confidence)) }
+            : {}),
+          hintType,
+          source,
+          url: normalizedUrl,
+        });
+      }
+    } catch {
+      // Ignore malformed or non-web crawl hints at the dispatch boundary.
+    }
+    if (selected.size >= MAX_POLICY_SURFACE_SEEDS) break;
+  }
+  return [...selected.values()];
+}
 
 export type LocalV2DagLambdaDispatchSummary = {
   awsRegion: LocalV2DagLambdaAwsRegion;
@@ -261,6 +310,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     throw new Error("Local v2 DAG Lambda dispatch contract version is not supported.");
   }
   const awsRegion = requireAwsRegion(intent.awsRegion);
+  const policySurfaceSeeds = policySurfaceSeedsFromConfig(input.scanConfig);
 
   return {
     artifactOnly: true,
@@ -275,6 +325,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     localCallbackUrl: stringValue(input.localCallbackUrl),
     orchestrationMode: intent.orchestrationMode === "sharded" ? "sharded" : "single",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    ...(policySurfaceSeeds.length > 0 ? { policySurfaceSeeds } : {}),
     productionFindingIntegration: false,
     profile: getProfile(config),
     resultHandoff: "sqs",

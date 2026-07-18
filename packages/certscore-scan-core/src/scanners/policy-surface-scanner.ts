@@ -78,6 +78,12 @@ export interface PolicySurfaceScannerInput {
   browser?: Browser;
   enableNanoPolicyAssist?: boolean;
   nanoAssistProvider?: PolicyNanoAssistProvider;
+  policySurfaceSeeds?: Array<{
+    confidence?: number;
+    hintType: string;
+    source: "prior_scan_hint" | "canonical_legal_surface_hint";
+    url: string;
+  }>;
   discoveryMode?: "full" | "fast";
   signal?: AbortSignal;
 }
@@ -158,6 +164,7 @@ interface PolicySurfaceCandidate {
   deterministicClassifierProvenance: "privacy_surface_classifier.v1";
   discoveryMethod: PolicySurfaceObservation["discoveryMethod"];
   rankedFromCommonPath?: boolean;
+  seedSource?: "prior_scan_hint" | "canonical_legal_surface_hint";
   assisted?: NanoLinkClassificationResult["rankedCandidates"][number];
 }
 
@@ -273,6 +280,7 @@ export async function policySurfaceScanner(
   };
 
   try {
+    const seededCandidates = policySurfaceSeedCandidatesFor(input);
     const homepage = await recordPolicyTiming(
       timingBreakdown,
       "homepage fetch",
@@ -295,7 +303,10 @@ export async function policySurfaceScanner(
       input = { ...input, normalizedUrl: homepageFinalUrl, url: homepageFinalUrl };
     }
     if (!homepage.ok) {
-      const fallbackCandidates = commonPathCandidatesFor(input.normalizedUrl, 0);
+      const fallbackCandidates = dedupeCandidates([
+        ...seededCandidates,
+        ...commonPathCandidatesFor(input.normalizedUrl, seededCandidates.length),
+      ]);
       const speculativeCommonPathNanoAbortController = new AbortController();
       const speculativeCommonPathNanoRankingPromise = recordPolicyTiming(
         timingBreakdown,
@@ -413,6 +424,7 @@ export async function policySurfaceScanner(
         commonPathFallbackUsed,
         observations,
         candidates: dedupeCandidates([
+          ...seededCandidates,
           ...renderedCandidates,
           ...fallbackCandidates,
         ]),
@@ -439,6 +451,7 @@ export async function policySurfaceScanner(
       "candidate extraction/dedupe",
       "Static and control policy candidate extraction plus dedupe.",
       async () => dedupeCandidates([
+        ...seededCandidates,
         ...extractCandidates(input.normalizedUrl, candidateHtml, homepageText),
         ...extractControlCandidates(input.normalizedUrl, candidateHtml, homepageText),
         ...extractEmbeddedConsentConfigCandidates(input.normalizedUrl, candidateHtml, homepageText),
@@ -534,6 +547,7 @@ export async function policySurfaceScanner(
         "candidate extraction/dedupe rendered merge",
         "Merge static, rendered, and control policy candidates plus dedupe.",
         async () => dedupeCandidates([
+          ...seededCandidates,
           ...staticCandidates,
           ...renderedCandidates,
         ]),
@@ -2340,6 +2354,81 @@ function commonPathCandidatesFor(
   }).filter((candidate) => candidate.deterministicScore > 0.2);
 }
 
+function policySurfaceSeedCandidatesFor(input: PolicySurfaceScannerInput): PolicySurfaceCandidate[] {
+  const candidates: PolicySurfaceCandidate[] = [];
+  const seen = new Set<string>();
+  for (const [index, seed] of (input.policySurfaceSeeds ?? []).slice(0, 12).entries()) {
+    const normalizedUrl = normalizeUrl(seed.url, input.normalizedUrl);
+    if (!normalizedUrl || seen.has(normalizedUrl)) continue;
+    seen.add(normalizedUrl);
+    const seededSurface = seededSurfaceType(seed.hintType);
+    if (!seededSurface) continue;
+    const linkText = seededSurfaceLabel(seededSurface);
+    const deterministic = classifySurface({ linkText, url: normalizedUrl });
+    const confidence = typeof seed.confidence === "number" && Number.isFinite(seed.confidence)
+      ? Math.max(0, Math.min(1, seed.confidence))
+      : 0.7;
+    candidates.push({
+      candidateId: `policy_seed_candidate_${index}`,
+      url: normalizedUrl,
+      normalizedUrl,
+      linkText,
+      domLocation: "body",
+      sameOrigin: sameOrigin(input.normalizedUrl, normalizedUrl),
+      fetchable: true,
+      clickable: false,
+      mayLeadToConsentControls: ["your_privacy_choices", "consent_preferences"].includes(seededSurface),
+      observationOnly: false,
+      deterministicSurfaceType: seededSurface,
+      deterministicScore: Math.max(0.72, deterministic.score, confidence),
+      deterministicKeywordMatches: uniqueStrings([
+        ...deterministic.keywords,
+        `policy_seed:${seed.hintType}`,
+      ]),
+      ...classifierCandidateFields(deterministic),
+      deterministicClassifierReasonCodes: uniqueStrings([
+        ...deterministic.classifierReasonCodes,
+        "bounded_policy_surface_seed",
+        seed.source,
+      ]),
+      discoveryMethod: seed.source === "prior_scan_hint" ? "sitemap_or_common_path" : "guessed_common_path",
+      rankedFromCommonPath: seed.source === "canonical_legal_surface_hint",
+      seedSource: seed.source,
+    });
+  }
+  return candidates;
+}
+
+function seededSurfaceType(hintType: string): PolicySurfaceObservation["surfaceType"] | undefined {
+  switch (hintType) {
+    case "privacy_policy":
+      return "privacy_policy";
+    case "cookie_policy":
+      return "cookie_policy";
+    case "privacy_choice":
+      return "your_privacy_choices";
+    case "consent_preferences":
+      return "consent_preferences";
+    default:
+      return undefined;
+  }
+}
+
+function seededSurfaceLabel(surfaceType: PolicySurfaceObservation["surfaceType"]): string {
+  switch (surfaceType) {
+    case "privacy_policy":
+      return "Privacy policy";
+    case "cookie_policy":
+      return "Cookie policy";
+    case "your_privacy_choices":
+      return "Your privacy choices";
+    case "consent_preferences":
+      return "Consent preferences";
+    default:
+      return surfaceType.replaceAll("_", " ");
+  }
+}
+
 function commonPolicyPathsFor(baseUrl: string, localeHints: SupportedPrivacyEvidenceLocale[]): string[] {
   const genericCorePaths = [
     "/privacy",
@@ -2773,6 +2862,7 @@ function summarizePolicyCandidates(candidates: PolicySurfaceCandidate[]): Array<
   normalizedUrl: string;
   observationOnly: boolean;
   surfaceType: PolicySurfaceObservation["surfaceType"];
+  seedSource?: PolicySurfaceCandidate["seedSource"];
 }> {
   return candidates
     .filter((candidate) =>
@@ -2801,6 +2891,7 @@ function summarizePolicyCandidates(candidates: PolicySurfaceCandidate[]): Array<
       normalizedUrl: candidate.normalizedUrl,
       observationOnly: candidate.observationOnly,
       surfaceType: candidate.deterministicSurfaceType,
+      ...(candidate.seedSource ? { seedSource: candidate.seedSource } : {}),
     }));
 }
 
