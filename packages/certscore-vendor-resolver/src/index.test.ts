@@ -861,6 +861,33 @@ test("keeps CMP classification separate from tracker classification", () => {
   assert.equal(observations[0]?.purpose, "consent_management");
 });
 
+test("resolves first-party Borlabs Cookie runtime markers as consent management", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "script",
+      url: "https://example.test/wp-content/plugins/borlabs-cookie/assets/javascript/borlabs-cookie.min.js",
+      hostname: "example.test",
+    },
+    {
+      type: "cmp_runtime",
+      globalName: "BorlabsCookie",
+      matchSource: "cmp_runtime_probe",
+    },
+    {
+      type: "cmp_runtime",
+      domSelector: "#BorlabsCookieBox",
+      matchSource: "cmp_runtime_probe",
+    },
+  ]);
+
+  assertResolved(observations, "Borlabs", "Borlabs Cookie CMP", "consent_management");
+  const borlabs = observations.find((observation) => observation.product === "Borlabs Cookie CMP");
+  assert.ok(borlabs);
+  assert.equal(resolveVendorDisplayCategory(borlabs), "Cookie compliance");
+  assert.ok(borlabs.matchSources.some((source) => source.matchedField === "global_name"));
+  assert.ok(borlabs.matchSources.some((source) => source.matchedField === "dom_selector"));
+});
+
 test("resolves Consentmanager CDN as consent management CMP", () => {
   const observations = resolveVendorObservations([
     {

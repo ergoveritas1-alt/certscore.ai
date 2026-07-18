@@ -22,6 +22,7 @@ import {
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
 } from "@certscore/contracts";
 import { resolveEndpointGeography, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
+import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { connect as tlsConnect } from "node:tls";
@@ -85,6 +86,9 @@ const CANONICAL_CONSENT_CONTEXT_HINTS = unique(
     .map((phrase) => phrase.replace(/\s+/g, " ").trim().toLowerCase())
     .filter((phrase) => phrase.length >= 4 && phrase.length <= 80),
 ).slice(0, 1_000);
+const CANONICAL_CMP_CONTAINER_SELECTORS = unique(
+  KNOWN_CMP_REGISTRY.flatMap((definition) => definition.domSelectors ?? []),
+).slice(0, 250);
 const ONE_PIXEL_TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64",
@@ -770,6 +774,47 @@ export async function preConsentRuntimeScanner(
       // when no early screenshot will run so unrelated iframe/runtime timing is
       // unchanged.
       preScreenshotConsentObservation = await consentUiObservationPromise;
+      if (!hasSufficientFirstLayerConsentControls(preScreenshotConsentObservation)) {
+        const earlyCmpProbeInputs = await recordBoundedTiming(
+          timingBreakdown,
+          "early CMP runtime probe",
+          "Recognize direct CMP runtime markers before screenshot work can consume the late-rendering consent-control window.",
+          Math.min(1_250, remainingModuleBudgetMs()),
+          () => captureCmpRuntimeProbeInputs({
+            page,
+            scanStartedAtMs: input.scanStartedAtMs,
+          }),
+          () => [],
+        );
+        vendorResolverInputs.push(...earlyCmpProbeInputs);
+        const earlyCmpRuntimeObservations = buildCmpRuntimeObservations(
+          vendorResolverInputs,
+          input.scanStartedAtMs,
+        );
+        retainedCmpRuntimeObservations = earlyCmpRuntimeObservations;
+        if (hasHighConfidenceDirectCmpRuntimeEvidence(earlyCmpRuntimeObservations)) {
+          const cmpGatedWaitMs = Math.min(
+            fastWait ? 6_000 : 7_000,
+            Math.max(0, remainingModuleBudgetMs() - 750),
+          );
+          const cmpGatedObservation = await recordBoundedTiming(
+            timingBreakdown,
+            "early CMP-gated consent control wait",
+            "Bounded typed control inventory for a directly observed CMP whose first layer had not rendered controls yet.",
+            cmpGatedWaitMs,
+            () => waitForRapidConsentControls(page, input.scanStartedAtMs, Math.max(0, cmpGatedWaitMs - 100)),
+            () => preScreenshotConsentObservation as ConsentUiObservation,
+          );
+          if (isStrongerConsentUiObservation(cmpGatedObservation, preScreenshotConsentObservation)) {
+            preScreenshotConsentObservation = mergeConsentUiObservations(
+              preScreenshotConsentObservation,
+              cmpGatedObservation,
+              "recapture:early_direct_cmp_controls",
+            );
+          }
+          retainedConsentUiObservation = preScreenshotConsentObservation;
+        }
+      }
       const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
       const screenshotCapture = await recordTiming(
         timingBreakdown,
@@ -2187,7 +2232,7 @@ function resolverInputForEvent(
 
 async function captureCmpRuntimeProbeInputs(input: {
   page: Page;
-  storageSnapshot: StorageSnapshot;
+  storageSnapshot?: StorageSnapshot;
   scanStartedAtMs: number;
 }): Promise<VendorResolverInput[]> {
   const observed = await input.page.evaluate(() => {
@@ -2218,8 +2263,8 @@ async function captureCmpRuntimeProbeInputs(input: {
   }).catch(() => ({ globalNames: [], selectors: [] }));
 
   const storageKeys = unique([
-    ...input.storageSnapshot.localStorageKeys,
-    ...input.storageSnapshot.sessionStorageKeys,
+    ...(input.storageSnapshot?.localStorageKeys ?? []),
+    ...(input.storageSnapshot?.sessionStorageKeys ?? []),
   ]).slice(0, 150);
   const result: VendorResolverInput[] = [];
   for (const globalName of observed.globalNames) {
@@ -3261,9 +3306,14 @@ export async function detectConsentUi(
       "early_exit_controls_found",
     ]);
   }
-  const immediateObservation = await readConsentUiObservation(page, scanStartedAtMs, {
-    allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
-  });
+  const cheapTextObservation = rapidObservation.controls.length === 0
+    ? await readCheapConsentTextObservation(page, scanStartedAtMs)
+    : undefined;
+  const immediateObservation = rapidObservation.controls.length > 0 || cheapTextObservation?.likelyPresent
+    ? await readConsentUiObservation(page, scanStartedAtMs, {
+        allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
+      })
+    : cheapTextObservation ?? rapidObservation;
   const mergedImmediateObservation = rapidObservation.controls.length > 0
     ? mergeConsentUiObservations(
         immediateObservation,
@@ -3356,6 +3406,14 @@ export async function detectConsentUi(
     return requireActionableChoiceControl ? visibleConsentControls.length >= 2 : visibleConsentControls.length > 0;
   })()`, undefined, { timeout: waitForControlTimeoutMs }).catch(() => undefined);
 
+  const postWaitRapidObservation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
+  if (hasSufficientFirstLayerConsentControls(postWaitRapidObservation)) {
+    return annotateConsentInventoryTimingMarkers(
+      postWaitRapidObservation,
+      ["rapid_first_layer_inventory", "post_wait_inventory", "early_exit_controls_found"],
+    );
+  }
+
   const postWaitInventory = await readConsentUiObservation(page, scanStartedAtMs, {
     allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
   });
@@ -3379,6 +3437,14 @@ export async function detectConsentUi(
     await page.waitForTimeout(remainingWaitMs).catch(() => undefined);
   }
 
+  const finalRapidObservation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
+  if (hasSufficientFirstLayerConsentControls(finalRapidObservation)) {
+    return annotateConsentInventoryTimingMarkers(
+      finalRapidObservation,
+      ["rapid_first_layer_inventory", "final_inventory", "early_exit_controls_found"],
+    );
+  }
+
   const finalInventory = await readConsentUiObservation(page, scanStartedAtMs, {
     allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
   });
@@ -3393,12 +3459,72 @@ export async function detectConsentUi(
   );
 }
 
+async function readCheapConsentTextObservation(
+  page: Page,
+  scanStartedAtMs: number,
+): Promise<ConsentUiObservation> {
+  const text = await page.evaluate(() =>
+    (document.body?.innerText ?? document.body?.textContent ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 12_000)
+  ).catch(() => "");
+  const observation = buildConsentUiObservationFromEvidence({
+    scanStartedAtMs,
+    text,
+    controls: [],
+    fallbackBasis: ["inventory:cheap_text_prefilter"],
+    inventoryDiagnostics: {
+      candidateContainerCount: 0,
+      candidateControlCount: 0,
+      retainedControlCount: 0,
+      inventorySources: [],
+      candidateLabels: [],
+      rejectionReasons: [],
+      timingMarkers: ["cheap_text_prefilter_completed"],
+    },
+  });
+  const normalizedText = text.toLowerCase();
+  const canonicalMultilingualHint = [
+    ...CANONICAL_CONSENT_INVENTORY_LABELS,
+    ...CANONICAL_CONSENT_CONTEXT_HINTS,
+  ].some((hint) => normalizedText.includes(hint));
+  return canonicalMultilingualHint && !observation.likelyPresent
+    ? {
+        ...observation,
+        likelyPresent: true,
+        basis: [...observation.basis, "canonical_multilingual_consent_text_hint"],
+        confidence: Math.max(observation.confidence, 0.7),
+      }
+    : observation;
+}
+
+async function waitForRapidConsentControls(
+  page: Page,
+  scanStartedAtMs: number,
+  timeoutMs: number,
+): Promise<ConsentUiObservation> {
+  const deadlineAtMs = Date.now() + Math.max(0, timeoutMs);
+  let observation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
+  while (!hasSufficientFirstLayerConsentControls(observation) && Date.now() < deadlineAtMs) {
+    await page.waitForTimeout(Math.min(250, Math.max(0, deadlineAtMs - Date.now()))).catch(() => undefined);
+    observation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
+  }
+  return annotateConsentInventoryTimingMarkers(
+    observation,
+    hasSufficientFirstLayerConsentControls(observation)
+      ? ["rapid_cmp_poll", "early_exit_controls_found"]
+      : ["rapid_cmp_poll", "timing_expired_before_controls_surfaced"],
+  );
+}
+
 async function readRapidFirstLayerConsentUiObservation(
   page: Page,
   scanStartedAtMs: number,
 ): Promise<ConsentUiObservation> {
   type RapidConsentInventory = {
     controls: Array<{
+      cmpScoped: boolean;
       label: string;
       role?: string;
       selectorHint: string;
@@ -3409,10 +3535,15 @@ async function readRapidFirstLayerConsentUiObservation(
     hasPotentialToggle: boolean;
   };
   type RapidConsentInventoryInput = {
+    canonicalCmpContainerSelectors: string[];
     canonicalConsentInventoryLabels: string[];
     canonicalConsentContextHints: string[];
   };
-  const installed = await page.evaluate(String.raw`(() => {
+  const alreadyInstalled = await page.evaluate(() =>
+    typeof (window as typeof window & { __certscoreRapidConsentInventory?: unknown })
+      .__certscoreRapidConsentInventory === "function"
+  ).catch(() => false);
+  const installed = alreadyInstalled || await page.evaluate(String.raw`(() => {
     window.__certscoreRapidConsentInventory = (input) => {
     const normalize = (value) => (value ?? "").replace(/\s+/g, " ").trim();
     const canonicalLabels = new Set(input.canonicalConsentInventoryLabels.map((value) => normalize(value).toLowerCase()));
@@ -3468,17 +3599,46 @@ async function readRapidFirstLayerConsentUiObservation(
     const controls = [];
     const contexts = [];
     const seen = new Set();
-    const candidates = Array.from(document.querySelectorAll(
-      "button, [role='button'], a, input[type='button'], input[type='submit']",
-    )).slice(0, 800);
+    const semanticControlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']";
+    const scopedCandidates = [];
+    const scopedSeen = new Set();
+    for (const selector of input.canonicalCmpContainerSelectors || []) {
+      let containers = [];
+      try {
+        containers = Array.from(document.querySelectorAll(selector)).slice(0, 8);
+      } catch {
+        continue;
+      }
+      for (const container of containers) {
+        const values = [
+          ...(container.matches?.(semanticControlSelector) ? [container] : []),
+          ...Array.from(container.querySelectorAll?.(semanticControlSelector) || []).slice(0, 100),
+        ];
+        for (const value of values) {
+          if (!scopedSeen.has(value)) {
+            scopedSeen.add(value);
+            scopedCandidates.push(value);
+          }
+        }
+      }
+    }
+    const candidates = scopedCandidates.length > 0
+      ? scopedCandidates
+      : document.querySelectorAll(semanticControlSelector);
+    let visitedCandidates = 0;
     for (const element of candidates) {
-      if (!visibleInFirstLayer(element)) continue;
+      visitedCandidates += 1;
+      if (visitedCandidates > 5_000) break;
       const label = labelFor(element).slice(0, 120);
       const normalizedLabel = label.toLowerCase();
       if (!label || label.length > 120 || !(
         canonicalLabels.has(normalizedLabel) ||
         embeddedLabels.some((phrase) => normalizedLabel.length <= 80 && normalizedLabel.includes(phrase))
       )) continue;
+      // CMPs are commonly appended after large navigation trees. Filter by
+      // canonical labels before forcing expensive layout/style reads, and
+      // bound total semantic candidates instead of truncating the first 800.
+      if (!visibleInFirstLayer(element)) continue;
       const contextText = consentContextFor(element);
       if (!contextText) continue;
       const key = element.tagName + ":" + normalizedLabel;
@@ -3486,6 +3646,7 @@ async function readRapidFirstLayerConsentUiObservation(
       seen.add(key);
       contexts.push(contextText);
       controls.push({
+        cmpScoped: scopedSeen.has(element),
         label,
         role: element.getAttribute("role") || undefined,
         selectorHint: selectorHintFor(element),
@@ -3510,6 +3671,7 @@ async function readRapidFirstLayerConsentUiObservation(
     };
     return scope.__certscoreRapidConsentInventory(input);
   }, {
+    canonicalCmpContainerSelectors: CANONICAL_CMP_CONTAINER_SELECTORS,
     canonicalConsentInventoryLabels: CANONICAL_CONSENT_INVENTORY_LABELS,
     canonicalConsentContextHints: CANONICAL_CONSENT_CONTEXT_HINTS,
   }).catch((): RapidConsentInventory => ({ controls: [], contextText: "", hasPotentialToggle: false }))
@@ -3524,8 +3686,10 @@ async function readRapidFirstLayerConsentUiObservation(
     });
     const actionType = consentUiControlActionTypeFromClassification(classification);
     if (!actionType || actionType === "other") return [];
+    if (classification.matchStrength === "contextual" && !control.cmpScoped) return [];
+    const { cmpScoped: _cmpScoped, ...retainedControl } = control;
     return [{
-      ...control,
+      ...retainedControl,
       actionType,
       matchedTerm: classification.matchedTerm,
       matchedLocale: classification.matchedLocale,
@@ -3546,7 +3710,10 @@ async function readRapidFirstLayerConsentUiObservation(
       inventorySources: controls.length > 0 ? ["viewport"] : [],
       candidateLabels: snapshot.controls.map((control) => control.label),
       rejectionReasons: [],
-      timingMarkers: snapshot.hasPotentialToggle ? ["rapid_inventory_toggle_present"] : [],
+      timingMarkers: [
+        "rapid_inventory_completed",
+        ...(snapshot.hasPotentialToggle ? ["rapid_inventory_toggle_present"] : []),
+      ],
     },
   });
 }

@@ -137,3 +137,17 @@ test("recognizes canonical and alias CMP labels", () => {
   assert.equal(isKnownCmpVendorLabel("Transcend Consent Management"), true);
   assert.equal(isKnownCmpVendorLabel("Unknown Analytics"), false);
 });
+
+test("detects first-party Borlabs Cookie runtime signals", () => {
+  const [detection] = detectKnownCmps({
+    domSelectors: ["#BorlabsCookieBox"],
+    jsGlobals: ["BorlabsCookie"],
+    urls: ["https://example.test/wp-content/plugins/borlabs-cookie/assets/javascript/borlabs-cookie.min.js"],
+  });
+
+  assert.equal(detection?.canonicalName, "Borlabs Cookie");
+  assert.equal(detection?.confidence, 0.95);
+  assert.ok(detection?.matchedSignals.some((signal) => signal.source === "global"));
+  assert.ok(detection?.matchedSignals.some((signal) => signal.source === "dom"));
+  assert.ok(detection?.matchedSignals.some((signal) => signal.source === "script"));
+});

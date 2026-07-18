@@ -76,6 +76,21 @@ test("pre-consent scanner recaptures below-fold consent geometry before proof sc
 test("pre-consent scanner retains a proof screenshot for deeply nested animated Borlabs controls", async () => {
   const wrappers = Array.from({ length: 12 }, () => "<div class=\"brlbs-wrapper\">").join("");
   const closers = "</div>".repeat(12);
+  const consentMarkup = `${wrappers}
+    <div class="overlay">
+      <section class="dialog" role="alertdialog" aria-modal="true" aria-label="Data protection preference">
+        <p>We need your consent before you can continue. We use cookies for analytics and advertising.</p>
+        <button>Accept all</button>
+        <button>Save consent</button>
+        <button>Accept essential cookies</button>
+        <button>Individual preferences</button>
+      </section>
+    </div>
+  ${closers}`;
+  const navigationLinks = Array.from(
+    { length: 900 },
+    (_, index) => `<a href="/navigation-${index}">Navigation ${index}</a>`,
+  ).join("");
   const server = await startServer(`
     <!doctype html>
     <html>
@@ -89,20 +104,15 @@ test("pre-consent scanner retains a proof screenshot for deeply nested animated 
         </style>
       </head>
       <body>
+        <nav>${navigationLinks}</nav>
         <main><h1>SITS-style fixture</h1></main>
-        <div id="BorlabsCookieBox" data-borlabs-cookie-consent-required="true">
-          ${wrappers}
-            <div class="overlay">
-              <section class="dialog" role="alertdialog" aria-modal="true" aria-label="Data protection preference">
-                <p>We need your consent before you can continue. We use cookies for analytics and advertising.</p>
-                <button>Accept all</button>
-                <button>Save consent</button>
-                <button>Accept essential cookies</button>
-                <button>Individual preferences</button>
-              </section>
-            </div>
-          ${closers}
-        </div>
+        <div id="BorlabsCookieBox" data-borlabs-cookie-consent-required="true"></div>
+        <script>
+          window.BorlabsCookie = { Consents: {} };
+          window.setTimeout(() => {
+            document.querySelector("#BorlabsCookieBox").innerHTML = ${JSON.stringify(consentMarkup)};
+          }, 2200);
+        </script>
       </body>
     </html>
   `);
@@ -125,12 +135,18 @@ test("pre-consent scanner retains a proof screenshot for deeply nested animated 
     assert.equal(result.consentUiObservations[0]?.rejectControlObserved, true);
     assert.equal(result.consentUiObservations[0]?.managePreferencesControlObserved, true);
     assert.ok(
-      result.consentUiObservations[0]?.inventoryDiagnostics?.timingMarkers.includes("rapid_first_layer_inventory"),
+      result.consentUiObservations[0]?.inventoryDiagnostics?.timingMarkers.includes("rapid_inventory_completed"),
+      JSON.stringify(result.consentUiObservations[0], null, 2),
+    );
+    assert.ok(
+      result.consentUiObservations[0]?.inventoryDiagnostics?.timingMarkers.some((marker) =>
+        marker === "rapid_first_layer_inventory" || marker === "rapid_cmp_poll"
+      ),
       JSON.stringify(result.consentUiObservations[0], null, 2),
     );
     assert.deepEqual(
-      result.consentUiObservations[0]?.controls.map((control) => control.label),
-      ["Accept all", "Save consent", "Accept essential cookies", "Individual preferences"],
+      result.consentUiObservations[0]?.controls.map((control) => control.label).sort(),
+      ["Accept all", "Accept essential cookies", "Individual preferences", "Save consent"].sort(),
     );
     assert.ok(result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof"));
 

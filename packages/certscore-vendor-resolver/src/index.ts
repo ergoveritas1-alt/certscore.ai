@@ -6,7 +6,7 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-16-wave16-leadfeeder";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-18-wave17-borlabs";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -146,6 +146,21 @@ interface VendorRule {
 }
 
 const rules: VendorRule[] = [
+  {
+    entity: "Borlabs GmbH",
+    vendor: "Borlabs",
+    product: "Borlabs Cookie CMP",
+    purpose: "consent_management",
+    regulatoryRelevance: ["consent_management", "preference_tooling"],
+    confidence: 0.96,
+    hostPatterns: [/\.borlabs\.io$/i],
+    urlPatterns: [/\/borlabs-cookie\//i, /borlabs-cookie(?:\.min)?\.js(?:[?#]|$)/i],
+    cookiePatterns: [/^borlabs-cookie$/i, /^borlabsCookie$/i],
+    globalPatterns: [/^BorlabsCookie$/i],
+    storageKeyPatterns: [/^borlabs-cookie$/i, /^borlabsCookie$/i],
+    domSelectorPatterns: [/^#BorlabsCookieBox$/i, /^\[data-borlabs-cookie-consent-required\]$/i, /^\.brlbs-/i],
+    basisLabel: "borlabs_cookie_cmp_runtime",
+  },
   {
     entity: "Dealfront Group GmbH",
     vendor: "Leadfeeder",

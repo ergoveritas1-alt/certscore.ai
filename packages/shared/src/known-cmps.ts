@@ -140,6 +140,19 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     urlPatterns: [/cookieyes/i, /\bcky-/i]
   },
   {
+    aliases: ["Borlabs Cookie", "Borlabs Cookie CMP", "BorlabsCookie"],
+    canonicalName: "Borlabs Cookie",
+    cookieNames: ["borlabs-cookie", "borlabsCookie"],
+    domains: ["borlabs.io"],
+    domSelectors: ["#BorlabsCookieBox", "[data-borlabs-cookie-consent-required]", "[class*='brlbs-' i]"],
+    evidenceTreatment: "cmp_infrastructure",
+    globalNames: ["BorlabsCookie"],
+    reopenControlHints: ["borlabs", "privacy preferences", "cookie preferences"],
+    role: "consent management platform",
+    storageKeys: ["borlabs-cookie", "borlabsCookie"],
+    urlPatterns: [/borlabs-cookie/i, /borlabscookie/i]
+  },
+  {
     aliases: ["Sourcepoint CMP", "Sourcepoint Dialogue"],
     canonicalName: "Sourcepoint",
     cookieNames: ["_sp_"],
