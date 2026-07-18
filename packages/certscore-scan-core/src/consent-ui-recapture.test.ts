@@ -79,6 +79,47 @@ test("a failed inventory probe cannot replace an earlier incomplete capture as a
   assert.equal(result.observation, current);
 });
 
+test("a newly retained options control strengthens an existing accept and reject inventory", () => {
+  const current = observation({
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    visibleChoiceLabels: ["Accept All", "Reject All"],
+    acceptControlObserved: true,
+    rejectControlObserved: true,
+    controls: [
+      { label: "Accept All", actionType: "accept_all", visible: true, classifierReasonCodes: [] },
+      { label: "Reject All", actionType: "reject_all", visible: true, classifierReasonCodes: [] },
+    ],
+  });
+  const candidate = observation({
+    likelyPresent: false,
+    layerInspected: "unknown",
+    visibleChoiceLabels: ["More Choices"],
+    managePreferencesControlObserved: true,
+    controls: [
+      { label: "More Choices", actionType: "manage_preferences", visible: true, classifierReasonCodes: [] },
+    ],
+  });
+
+  const result = reconcileConsentUiRecapture({
+    current,
+    candidate,
+    strongerBasis: "recapture:options",
+    completedWithoutControlsBasis: "recapture:completed_without_controls",
+  });
+
+  assert.equal(result.strongerEvidenceRetained, true);
+  assert.equal(result.observation.acceptControlObserved, true);
+  assert.equal(result.observation.rejectControlObserved, true);
+  assert.equal(result.observation.managePreferencesControlObserved, true);
+  assert.equal(result.observation.likelyPresent, true);
+  assert.equal(result.observation.layerInspected, "first_layer");
+  assert.deepEqual(
+    result.observation.controls.map((control) => control.actionType).sort(),
+    ["accept_all", "manage_preferences", "reject_all"],
+  );
+});
+
 test("settled screenshot replaces an early loading frame once substantive content appears", () => {
   assert.equal(shouldCaptureSettledPreConsentScreenshot({
     settledBodyText: "American Express ".repeat(50),

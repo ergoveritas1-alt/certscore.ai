@@ -6,6 +6,17 @@ type JsonRecord = Record<string, any>;
 
 const DEFAULT_EVIDENCE_DIR = "/Volumes/miniben/CertScore/evidence";
 const DEFAULT_OUT_DIR = path.join(DEFAULT_EVIDENCE_DIR, "calibration");
+const GDPR_TRANSPARENCY_ROW_IDS = new Set([
+  "controller_contact_disclosure",
+  "processing_purposes_disclosure",
+  "legal_basis_disclosure_observed",
+  "recipients_vendor_categories_disclosure",
+  "retention_disclosure_observed",
+  "data_subject_rights_disclosure",
+  "international_transfers_disclosure",
+  "dpo_contact_point_disclosure",
+  "supervisory_authority_complaint_disclosure"
+]);
 
 const nonEnglishSignals: Array<[string, RegExp]> = [
   ["fr", /\b(confidentialit[eé]|vie privee|donnees personnelles|protection des donnees)\b/i],
@@ -73,7 +84,14 @@ function noGo(json: JsonRecord): boolean {
 
 function accessLimited(json: JsonRecord): boolean {
   const posture = record(record(json.coverageDiagnostics).accessPosture);
-  return posture.verifiedPublicSurfacesCount === 0
+  const explicitLimitedPosture = [
+    posture.accessPostureClass,
+    posture.blockPageClassification,
+    posture.highestSuccessfulTier,
+    posture.stopTier
+  ].map(text).some(Boolean);
+  return explicitLimitedPosture
+    && posture.verifiedPublicSurfacesCount === 0
     && (posture.pagesScanned === 0 || posture.homepageFetchStatus === "skipped");
 }
 
@@ -86,20 +104,19 @@ function buildRow(json: JsonRecord, jsonPath: string, pngPath: string | null, pn
     statusFor(rows, "reject_all_path_availability"),
     statusFor(rows, "options_settings_preferences_control")
   ];
-  const transparencyStatuses = rows.filter((row) => [
-    "controller_contact_disclosure",
-    "processing_purposes_disclosure",
-    "legal_basis_disclosure",
-    "recipients_vendor_categories_disclosed",
-    "retention_disclosure",
-    "data_subject_rights_disclosure",
-    "international_transfer_disclosure",
-    "dpo_privacy_contact_point",
-    "supervisory_authority_complaint"
-  ].includes(text(row.id)));
+  const transparencyStatuses = rows.filter((row) => GDPR_TRANSPARENCY_ROW_IDS.has(text(row.id)));
   const notTestableTransparency = transparencyStatuses.filter((row) => /not testable/i.test(text(row.status))).length;
   const consentObserved = consentStatuses.some((status) => status === "observed" || status === "gap observed");
-  const consentIncomplete = consentStatuses.some((status) => status === "not testable" || status === "");
+  const consentSurfaceObserved = consentStatuses[0] === "observed" || consentStatuses[0] === "gap observed";
+  const consentIncomplete = consentSurfaceObserved
+    && consentStatuses.slice(1).some((status) => status === "not testable" || status === "");
+  const transparencyNotes = transparencyStatuses.map((row) => text(row.note)).join(" ");
+  const privacyPolicyFetchIncomplete = notTestableTransparency >= 3
+    && /A privacy-policy surface was discovered, but (?:it was not fetched before the scan budget ended|the fetch failed)/i.test(transparencyNotes);
+  const privacyPolicyNotDiscovered = notTestableTransparency >= 3
+    && /No privacy-policy surface was discovered or retained/i.test(transparencyNotes);
+  const nonPrivacyPolicySurfaceOnly = notTestableTransparency >= 3
+    && /No privacy-policy surface was retained/i.test(transparencyNotes);
   const hasScreenshot = Boolean(pngPath);
   const isNoGo = noGo(json);
   const isAccessLimited = accessLimited(json);
@@ -123,8 +140,10 @@ function buildRow(json: JsonRecord, jsonPath: string, pngPath: string | null, pn
       ? "benchmark"
       : "diagnostics";
   const reviewReasons: string[] = [];
-  if (hasScreenshot && consentIncomplete) reviewReasons.push("screenshot_present_but_consent_rows_incomplete");
-  if (policyItems.length > 0 && notTestableTransparency >= 3) reviewReasons.push("policy_surface_present_but_gdpr_rows_not_testable");
+  if (hasScreenshot && consentIncomplete) reviewReasons.push("screenshot_present_but_observed_consent_rows_incomplete");
+  if (policyItems.length > 0 && privacyPolicyFetchIncomplete) reviewReasons.push("privacy_policy_discovered_but_gdpr_rows_not_testable");
+  if (policyItems.length > 0 && privacyPolicyNotDiscovered) reviewReasons.push("privacy_policy_not_discovered");
+  if (policyItems.length > 0 && nonPrivacyPolicySurfaceOnly) reviewReasons.push("non_privacy_policy_surface_only");
   if (isNoGo) reviewReasons.push("confirmed_no_go");
   else if (isAccessLimited) reviewReasons.push("access_limited_or_public_site_not_reached");
   if (!hasScreenshot) reviewReasons.push("screenshot_missing");
@@ -155,6 +174,9 @@ function buildRow(json: JsonRecord, jsonPath: string, pngPath: string | null, pn
       consentIncomplete,
       gdprTransparencyRows: transparencyStatuses.length,
       gdprTransparencyNotTestable: notTestableTransparency,
+      privacyPolicyFetchIncomplete,
+      privacyPolicyNotDiscovered,
+      nonPrivacyPolicySurfaceOnly,
       completeness: evidenceCompleteness
     },
     assignment,

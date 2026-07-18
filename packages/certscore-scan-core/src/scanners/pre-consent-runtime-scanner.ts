@@ -1300,6 +1300,7 @@ export async function preConsentRuntimeScanner(
           "recapture:post_cmp_no_first_layer_choice_controls",
         );
       }
+      retainedConsentUiObservation = consentObservation;
     }
 
     const shouldCaptureScreenshot = shouldCapturePreConsentScreenshot({
@@ -1353,6 +1354,7 @@ export async function preConsentRuntimeScanner(
           completedWithoutControlsBasis: "recapture:post_screenshot_completed_without_first_layer_controls",
         });
         consentObservation = recaptureResolution.observation;
+        retainedConsentUiObservation = consentObservation;
         if (recaptureResolution.strongerEvidenceRetained) {
           domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
         }
@@ -1432,6 +1434,7 @@ export async function preConsentRuntimeScanner(
             recapturedConsentObservation,
             recaptureBasis,
           );
+          retainedConsentUiObservation = consentObservation;
           domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
         }
       }
@@ -1535,6 +1538,7 @@ export async function preConsentRuntimeScanner(
             geometryConsentObservation,
             "geometry:confirmed_first_layer_controls",
           );
+          retainedConsentUiObservation = consentObservation;
         }
         },
       ).catch((error: unknown) => {
@@ -3920,7 +3924,7 @@ async function readAccessibilityConsentInventory(page: Page): Promise<{
         };
         return consentControlsFromAccessibilityTree(result.nodes ?? []);
       } finally {
-        await client.detach().catch(() => undefined);
+        await boundedCleanup(client.detach(), 250);
       }
     })(),
     new Promise<{ controls: ConsentUiInventoryControl[]; textExcerpts: string[] }>((resolve) => {
@@ -4112,6 +4116,9 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
             .filter((value) => value.length >= 4 && value.length <= 80)
           : []
       );
+      const canonicalEmbeddedActionLabels = Array.from(canonicalActionLabelSet)
+        .filter((phrase) => phrase.length >= 8);
+      const canonicalActionLabelMatchCache = new Map();
       const canonicalContextHintSet = new Set(
         Array.isArray(canonicalConsentContextHints)
           ? canonicalConsentContextHints
@@ -4128,12 +4135,16 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
       };
       const isCanonicalActionLabel = (label) => {
         const normalizedLabel = String(label || "").replace(/\s+/g, " ").trim().toLowerCase();
-        if (canonicalActionLabelSet.has(normalizedLabel)) {
-          return true;
+        if (canonicalActionLabelMatchCache.has(normalizedLabel)) {
+          return canonicalActionLabelMatchCache.get(normalizedLabel);
         }
-        return normalizedLabel.length <= 80 && Array.from(canonicalActionLabelSet).some((phrase) =>
-          phrase.length >= 8 && normalizedLabel.includes(phrase)
+        const matched = canonicalActionLabelSet.has(normalizedLabel) || (
+          normalizedLabel.length <= 80 && canonicalEmbeddedActionLabels.some((phrase) =>
+            normalizedLabel.includes(phrase)
+          )
         );
+        canonicalActionLabelMatchCache.set(normalizedLabel, matched);
+        return matched;
       };
       const isExactCanonicalActionLabel = (label) => {
         const normalizedLabel = String(label || "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -4169,8 +4180,8 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           return true;
         }
         return String(label || "").replace(/\s+/g, " ").trim().length <= 40 &&
-          isCanonicalActionLabel(label) &&
-          hasStrongCmpContainerContext(element);
+          hasStrongCmpContainerContext(element) &&
+          isCanonicalActionLabel(label);
       };
       const selectorHintFor = (element) => {
         const id = element.getAttribute("id");
@@ -4818,6 +4829,9 @@ function isStrongerConsentUiObservation(
   if (!current.acceptControlObserved && candidate.acceptControlObserved) {
     return true;
   }
+  if (!current.managePreferencesControlObserved && candidate.managePreferencesControlObserved) {
+    return true;
+  }
   if (current.defaultToggleStatesObserved !== true && candidate.defaultToggleStatesObserved === true) {
     return true;
   }
@@ -4863,6 +4877,11 @@ function mergeConsentUiObservations(
       candidate.inventoryDiagnostics,
       controls.length,
     ),
+    layerInspected:
+      current.layerInspected === "first_layer" || candidate.layerInspected === "first_layer"
+        ? "first_layer"
+        : candidate.layerInspected,
+    likelyPresent: current.likelyPresent || candidate.likelyPresent || controls.length > 0,
     nonEssentialDefaultsOff: candidate.nonEssentialDefaultsOff ?? current.nonEssentialDefaultsOff ?? null,
     managePreferencesControlObserved: current.managePreferencesControlObserved || candidate.managePreferencesControlObserved ||
       controls.some((control) => control.actionType === "manage_preferences" || control.actionType === "save_preferences"),
@@ -6372,7 +6391,7 @@ async function captureScaledFullPageScreenshotWithCdp(
     if (timer) {
       clearTimeout(timer);
     }
-    await client.detach().catch(() => undefined);
+    await boundedCleanup(client.detach(), 250);
   }
 }
 
@@ -6502,7 +6521,7 @@ async function captureViewportScreenshotWithCdp(
     if (timer) {
       clearTimeout(timer);
     }
-    await client.detach().catch(() => undefined);
+    await boundedCleanup(client.detach(), 250);
   }
 }
 
