@@ -116,11 +116,22 @@ test("pre-consent scanner retains a proof screenshot for deeply nested animated 
       internalBudgetMs: 8_000,
       artifactWriter,
       screenshotCaptureMode: "viewport_first",
-      screenshotMode: "never",
+      screenshotMode: "always",
       waitMode: "fast",
     });
 
     assert.equal(result.moduleRun.status, "completed", result.moduleRun.errors.join("; "));
+    assert.equal(result.consentUiObservations[0]?.acceptControlObserved, true);
+    assert.equal(result.consentUiObservations[0]?.rejectControlObserved, true);
+    assert.equal(result.consentUiObservations[0]?.managePreferencesControlObserved, true);
+    assert.ok(
+      result.consentUiObservations[0]?.inventoryDiagnostics?.timingMarkers.includes("rapid_first_layer_inventory"),
+      JSON.stringify(result.consentUiObservations[0], null, 2),
+    );
+    assert.deepEqual(
+      result.consentUiObservations[0]?.controls.map((control) => control.label),
+      ["Accept all", "Save consent", "Accept essential cookies", "Individual preferences"],
+    );
     assert.ok(result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof"));
 
     const geometry = JSON.parse(

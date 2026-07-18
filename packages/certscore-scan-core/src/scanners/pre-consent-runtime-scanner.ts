@@ -3251,28 +3251,45 @@ export async function detectConsentUi(
   } = {},
 ): Promise<ConsentUiObservation> {
   const waitStartedAtMs = Date.now();
+  const rapidObservation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
+  const rapidInventoryHasPotentialToggle = rapidObservation.inventoryDiagnostics?.timingMarkers.includes(
+    "rapid_inventory_toggle_present",
+  ) === true;
+  if (hasSufficientFirstLayerConsentControls(rapidObservation) && !rapidInventoryHasPotentialToggle) {
+    return annotateConsentInventoryTimingMarkers(rapidObservation, [
+      "rapid_first_layer_inventory",
+      "early_exit_controls_found",
+    ]);
+  }
   const immediateObservation = await readConsentUiObservation(page, scanStartedAtMs, {
     allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
   });
+  const mergedImmediateObservation = rapidObservation.controls.length > 0
+    ? mergeConsentUiObservations(
+        immediateObservation,
+        rapidObservation,
+        "inventory:rapid_first_layer_controls",
+      )
+    : immediateObservation;
   const shouldWaitForRequestedRecapture =
     options.waitForActionableChoiceControls === true ||
     options.waitForCompleteChoiceControls === true ||
     options.waitForControlsOnTextOnlySurface === true ||
     options.allowFullDocumentCmpControls === true;
   const requestedControlSetRetained = options.waitForCompleteChoiceControls
-    ? hasSufficientFirstLayerConsentControls(immediateObservation)
-    : !options.waitForActionableChoiceControls || hasActionableConsentChoiceControl(immediateObservation);
+    ? hasSufficientFirstLayerConsentControls(mergedImmediateObservation)
+    : !options.waitForActionableChoiceControls || hasActionableConsentChoiceControl(mergedImmediateObservation);
   if (
-    immediateObservation.controls.length > 0 && (
+    mergedImmediateObservation.controls.length > 0 && (
       requestedControlSetRetained
     ) ||
-    (immediateObservation.likelyPresent && !options.waitForControlsOnTextOnlySurface) ||
-    (!shouldWaitForRequestedRecapture && !immediateObservation.likelyPresent && page.frames().length <= 1) ||
+    (mergedImmediateObservation.likelyPresent && !options.waitForControlsOnTextOnlySurface) ||
+    (!shouldWaitForRequestedRecapture && !mergedImmediateObservation.likelyPresent && page.frames().length <= 1) ||
     waitForControlTimeoutMs <= 0
   ) {
     return annotateConsentInventoryTimingMarkers(
-      immediateObservation,
-      immediateObservation.controls.length > 0
+      mergedImmediateObservation,
+      mergedImmediateObservation.controls.length > 0
         ? ["immediate_inventory", "early_exit_controls_found"]
         : ["immediate_inventory"],
     );
@@ -3339,9 +3356,12 @@ export async function detectConsentUi(
     return requireActionableChoiceControl ? visibleConsentControls.length >= 2 : visibleConsentControls.length > 0;
   })()`, undefined, { timeout: waitForControlTimeoutMs }).catch(() => undefined);
 
-  const postWaitObservation = await readConsentUiObservation(page, scanStartedAtMs, {
+  const postWaitInventory = await readConsentUiObservation(page, scanStartedAtMs, {
     allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
   });
+  const postWaitObservation = rapidObservation.controls.length > 0
+    ? mergeConsentUiObservations(postWaitInventory, rapidObservation, "inventory:rapid_first_layer_controls")
+    : postWaitInventory;
   const postWaitControlSetRetained = options.waitForCompleteChoiceControls
     ? hasSufficientFirstLayerConsentControls(postWaitObservation)
     : !options.waitForActionableChoiceControls || hasActionableConsentChoiceControl(postWaitObservation);
@@ -3359,15 +3379,176 @@ export async function detectConsentUi(
     await page.waitForTimeout(remainingWaitMs).catch(() => undefined);
   }
 
-  const finalObservation = await readConsentUiObservation(page, scanStartedAtMs, {
+  const finalInventory = await readConsentUiObservation(page, scanStartedAtMs, {
     allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
   });
+  const finalObservation = rapidObservation.controls.length > 0
+    ? mergeConsentUiObservations(finalInventory, rapidObservation, "inventory:rapid_first_layer_controls")
+    : finalInventory;
   return annotateConsentInventoryTimingMarkers(
     finalObservation,
     finalObservation.controls.length > 0
       ? ["immediate_inventory", "post_wait_inventory", "final_inventory"]
       : ["immediate_inventory", "post_wait_inventory", "final_inventory", "timing_expired_before_controls_surfaced"],
   );
+}
+
+async function readRapidFirstLayerConsentUiObservation(
+  page: Page,
+  scanStartedAtMs: number,
+): Promise<ConsentUiObservation> {
+  type RapidConsentInventory = {
+    controls: Array<{
+      label: string;
+      role?: string;
+      selectorHint: string;
+      tagName: string;
+      visible: true;
+    }>;
+    contextText: string;
+    hasPotentialToggle: boolean;
+  };
+  type RapidConsentInventoryInput = {
+    canonicalConsentInventoryLabels: string[];
+    canonicalConsentContextHints: string[];
+  };
+  const installed = await page.evaluate(String.raw`(() => {
+    window.__certscoreRapidConsentInventory = (input) => {
+    const normalize = (value) => (value ?? "").replace(/\s+/g, " ").trim();
+    const canonicalLabels = new Set(input.canonicalConsentInventoryLabels.map((value) => normalize(value).toLowerCase()));
+    const embeddedLabels = [...canonicalLabels].filter((value) => value.length >= 8);
+    const contextHints = input.canonicalConsentContextHints.map((value) => normalize(value).toLowerCase());
+    const contextPattern = /cookie|cookies|privacy|consent|preference|preferences|tracking|analytics|marketing|data protection/i;
+    const labelFor = (element) => normalize(
+      element.getAttribute("aria-label") ||
+      element.getAttribute("title") ||
+      (element instanceof HTMLInputElement ? element.value : "") ||
+      element.textContent
+    );
+    const visibleInFirstLayer = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 &&
+        rect.top <= window.innerHeight + 200 && rect.bottom >= -200 &&
+        style.visibility !== "hidden" && style.display !== "none" &&
+        element.getAttribute("aria-hidden") !== "true" &&
+        Number.parseFloat(style.opacity || "1") > 0.05;
+    };
+    const consentContextFor = (element) => {
+      let current = element;
+      for (let depth = 0; current && depth < 24; depth += 1) {
+        if (current !== document.body && current !== document.documentElement) {
+          const attrs = normalize([
+            current.getAttribute("id"),
+            current.getAttribute("class"),
+            current.getAttribute("role"),
+            current.getAttribute("aria-label"),
+            current.getAttribute("data-testid"),
+          ].filter(Boolean).join(" "));
+          const text = normalize(current.textContent).slice(0, 8_000);
+          const normalizedContext = (attrs + " " + text).toLowerCase();
+          if (
+            contextPattern.test(normalizedContext) ||
+            contextHints.some((hint) => normalizedContext.includes(hint))
+          ) {
+            return text;
+          }
+        }
+        current = current.parentElement;
+      }
+      return "";
+    };
+    const selectorHintFor = (element) => {
+      const id = element.getAttribute("id");
+      if (id) return "#" + id;
+      const dataTestId = element.getAttribute("data-testid");
+      if (dataTestId) return '[data-testid="' + dataTestId + '"]';
+      return element.tagName.toLowerCase();
+    };
+    const controls = [];
+    const contexts = [];
+    const seen = new Set();
+    const candidates = Array.from(document.querySelectorAll(
+      "button, [role='button'], a, input[type='button'], input[type='submit']",
+    )).slice(0, 800);
+    for (const element of candidates) {
+      if (!visibleInFirstLayer(element)) continue;
+      const label = labelFor(element).slice(0, 120);
+      const normalizedLabel = label.toLowerCase();
+      if (!label || label.length > 120 || !(
+        canonicalLabels.has(normalizedLabel) ||
+        embeddedLabels.some((phrase) => normalizedLabel.length <= 80 && normalizedLabel.includes(phrase))
+      )) continue;
+      const contextText = consentContextFor(element);
+      if (!contextText) continue;
+      const key = element.tagName + ":" + normalizedLabel;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      contexts.push(contextText);
+      controls.push({
+        label,
+        role: element.getAttribute("role") || undefined,
+        selectorHint: selectorHintFor(element),
+        tagName: element.tagName.toLowerCase(),
+        visible: true,
+      });
+      if (controls.length >= 12) break;
+    }
+    const hasPotentialToggle = Array.from(document.querySelectorAll(
+      "input[type='checkbox'], input[type='radio'], [role='switch'], [role='checkbox'], [aria-checked]"
+    )).slice(0, 200).some((element) => visibleInFirstLayer(element) && Boolean(consentContextFor(element)));
+    return {
+      controls,
+      contextText: [...new Set(contexts)].join(" ").slice(0, 12_000),
+      hasPotentialToggle,
+    };
+    };
+  })()`).then(() => true).catch(() => false);
+  const snapshot = installed ? await page.evaluate<RapidConsentInventory, RapidConsentInventoryInput>((input) => {
+    const scope = window as typeof window & {
+      __certscoreRapidConsentInventory: (input: RapidConsentInventoryInput) => RapidConsentInventory;
+    };
+    return scope.__certscoreRapidConsentInventory(input);
+  }, {
+    canonicalConsentInventoryLabels: CANONICAL_CONSENT_INVENTORY_LABELS,
+    canonicalConsentContextHints: CANONICAL_CONSENT_CONTEXT_HINTS,
+  }).catch((): RapidConsentInventory => ({ controls: [], contextText: "", hasPotentialToggle: false }))
+    : { controls: [], contextText: "", hasPotentialToggle: false };
+
+  const controls = snapshot.controls.flatMap((control) => {
+    if (hasMultipleCanonicalConsentIntents(control.label)) return [];
+    const classification = classifyConsentControlLabel({
+      label: control.label,
+      contextText: snapshot.contextText,
+      hasConsentContext: true,
+    });
+    const actionType = consentUiControlActionTypeFromClassification(classification);
+    if (!actionType || actionType === "other") return [];
+    return [{
+      ...control,
+      actionType,
+      matchedTerm: classification.matchedTerm,
+      matchedLocale: classification.matchedLocale,
+      matchStrength: classification.matchStrength,
+      classifierReasonCodes: classification.reasonCodes,
+      classifierVariant: classification.variant,
+    }];
+  });
+  return buildConsentUiObservationFromEvidence({
+    scanStartedAtMs,
+    text: snapshot.contextText,
+    controls,
+    fallbackBasis: controls.length > 0 ? ["inventory:rapid_first_layer_controls"] : [],
+    inventoryDiagnostics: {
+      candidateContainerCount: snapshot.contextText ? 1 : 0,
+      candidateControlCount: snapshot.controls.length,
+      retainedControlCount: controls.length,
+      inventorySources: controls.length > 0 ? ["viewport"] : [],
+      candidateLabels: snapshot.controls.map((control) => control.label),
+      rejectionReasons: [],
+      timingMarkers: snapshot.hasPotentialToggle ? ["rapid_inventory_toggle_present"] : [],
+    },
+  });
 }
 
 async function readConsentUiObservation(
