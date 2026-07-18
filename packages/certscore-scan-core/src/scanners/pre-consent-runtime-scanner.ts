@@ -755,7 +755,7 @@ export async function preConsentRuntimeScanner(
       "First-layer consent surface/control text and affordance inventory, started immediately after DOMContentLoaded.",
       consentUiCaptureTimeoutMs,
       () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs, {
-        returnAfterCheapNoEvidence: true,
+        returnAfterRapidAndCheapSnapshot: true,
         waitForCompleteChoiceControls: true,
       }),
       () => emptyConsentUiObservation(input.scanStartedAtMs),
@@ -3309,6 +3309,7 @@ export async function detectConsentUi(
     waitForCompleteChoiceControls?: boolean;
     waitForControlsOnTextOnlySurface?: boolean;
     returnAfterCheapNoEvidence?: boolean;
+    returnAfterRapidAndCheapSnapshot?: boolean;
   } = {},
 ): Promise<ConsentUiObservation> {
   const waitStartedAtMs = Date.now();
@@ -3349,6 +3350,14 @@ export async function detectConsentUi(
   const requestedControlSetRetained = options.waitForCompleteChoiceControls
     ? hasSufficientFirstLayerConsentControls(mergedImmediateObservation)
     : !options.waitForActionableChoiceControls || hasActionableConsentChoiceControl(mergedImmediateObservation);
+  if (options.returnAfterRapidAndCheapSnapshot === true) {
+    return annotateConsentInventoryTimingMarkers(
+      mergedImmediateObservation,
+      mergedImmediateObservation.controls.length > 0
+        ? ["rapid_cheap_snapshot", "early_exit_controls_found"]
+        : ["rapid_cheap_snapshot"],
+    );
+  }
   if (
     mergedImmediateObservation.controls.length > 0 && (
       requestedControlSetRetained
@@ -3621,9 +3630,12 @@ async function readRapidFirstLayerConsentUiObservation(
     const contexts = [];
     const seen = new Set();
     const semanticControlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']";
+    const probeStartedAt = performance.now();
+    const probeBudgetExpired = () => performance.now() - probeStartedAt >= 180;
     const scopedCandidates = [];
     const scopedSeen = new Set();
     for (const selector of input.canonicalCmpContainerSelectors || []) {
+      if (probeBudgetExpired()) break;
       let containers = [];
       try {
         containers = Array.from(document.querySelectorAll(selector)).slice(0, 8);
@@ -3631,11 +3643,13 @@ async function readRapidFirstLayerConsentUiObservation(
         continue;
       }
       for (const container of containers) {
+        if (probeBudgetExpired()) break;
         const values = [
           ...(container.matches?.(semanticControlSelector) ? [container] : []),
           ...Array.from(container.querySelectorAll?.(semanticControlSelector) || []).slice(0, 100),
         ];
         for (const value of values) {
+          if (probeBudgetExpired()) break;
           if (!scopedSeen.has(value)) {
             scopedSeen.add(value);
             scopedCandidates.push(value);
@@ -3648,6 +3662,7 @@ async function readRapidFirstLayerConsentUiObservation(
       : document.querySelectorAll(semanticControlSelector);
     let visitedCandidates = 0;
     for (const element of candidates) {
+      if (probeBudgetExpired()) break;
       visitedCandidates += 1;
       if (visitedCandidates > 5_000) break;
       const label = labelFor(element).slice(0, 120);
@@ -3676,9 +3691,12 @@ async function readRapidFirstLayerConsentUiObservation(
       });
       if (controls.length >= 12) break;
     }
-    const hasPotentialToggle = Array.from(document.querySelectorAll(
+    const hasPotentialToggle = controls.length > 0 && Array.from(document.querySelectorAll(
       "input[type='checkbox'], input[type='radio'], [role='switch'], [role='checkbox'], [aria-checked]"
-    )).slice(0, 200).some((element) => visibleInFirstLayer(element) && Boolean(consentContextFor(element)));
+    )).slice(0, 100).some((element) => {
+      if (probeBudgetExpired()) return false;
+      return visibleInFirstLayer(element) && Boolean(consentContextFor(element));
+    });
     return {
       controls,
       contextText: [...new Set(contexts)].join(" ").slice(0, 12_000),
