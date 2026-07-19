@@ -148,6 +148,13 @@ export const scanModuleRunSchema = z.object({
     attemptCount: z.number().int().nonnegative(),
     modes: z.array(z.string().min(1).max(80)).max(12).default([]),
     durationMs: z.number().int().nonnegative(),
+    attempts: z.array(z.object({
+      url: z.string().max(500),
+      mode: z.string().min(1).max(80),
+      outcome: z.enum(["success", "http_error", "transport_error", "committed_timeout"]),
+      httpStatus: z.number().int().optional(),
+      durationMs: z.number().int().nonnegative(),
+    })).max(8).optional(),
   }).optional(),
   evidenceRefs: z.array(evidenceRefSchema).default([]),
   errors: z.array(z.string()).default([]),
@@ -1827,6 +1834,22 @@ export const scanNoGoAssessmentSchema = z.object({
   evidenceRefs: z.array(z.string().max(160)).max(16).default([]),
 });
 
+export const scanEvidenceLaneAssessmentSchema = z.object({
+  status: z.literal("available"),
+  version: z.literal("scan-evidence-lane-assessment-v1"),
+  outcome: z.enum(["usable", "partial_with_diagnostics", "no_go"]),
+  lanes: z.object({
+    homepageRuntime: z.enum(["usable", "limited", "unusable"]),
+    consent: z.enum(["usable", "limited", "not_testable"]),
+    cookiesTrackers: z.enum(["usable", "limited", "not_testable"]),
+    policyGdpr: z.enum(["usable", "limited", "not_testable"]),
+    transport: z.enum(["usable", "limited", "not_testable"]),
+  }),
+  usablePolicySurfaceUrls: z.array(z.string().max(500)).max(8).default([]),
+  limitationKeys: z.array(z.string().max(120)).max(24).default([]),
+  evidenceRefs: z.array(z.string().max(160)).max(24).default([]),
+});
+
 export const evidenceExcerptKindSchema = z.enum([
   "network_request",
   "network_response",
@@ -1905,6 +1928,8 @@ export const canonicalEvidenceBundleSchema = z.object({
   visualCapture: visualCaptureSummarySchema.optional(),
   scanNoGoAssessment: scanNoGoAssessmentSchema.optional(),
   scan_no_go_assessment: scanNoGoAssessmentSchema.optional(),
+  scanEvidenceLaneAssessment: scanEvidenceLaneAssessmentSchema.optional(),
+  scan_evidence_lane_assessment: scanEvidenceLaneAssessmentSchema.optional(),
   visualAccessReview: visualAccessReviewSchema.optional(),
   visual_access_review: visualAccessReviewSchema.optional(),
   artifactRefs: z.array(artifactRefSchema),
@@ -2091,6 +2116,7 @@ export type RuntimeCoverageSummary = z.infer<typeof runtimeCoverageSummarySchema
 export type ConsentSurfaceInspectionOutcome = z.infer<typeof consentSurfaceInspectionOutcomeSchema>;
 export type PolicySurfaceInspectionOutcome = z.infer<typeof policySurfaceInspectionOutcomeSchema>;
 export type ScanNoGoAssessment = z.infer<typeof scanNoGoAssessmentSchema>;
+export type ScanEvidenceLaneAssessment = z.infer<typeof scanEvidenceLaneAssessmentSchema>;
 export type VisualAccessReview = z.infer<typeof visualAccessReviewSchema>;
 export type ObservedBehavior = z.infer<typeof observedBehaviorSchema>;
 export type JourneyEventRef = z.infer<typeof journeyEventRefSchema>;

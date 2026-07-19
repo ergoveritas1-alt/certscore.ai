@@ -2679,16 +2679,20 @@ function getProvidedLocalV2ScanNoGoAssessment(bundle: CanonicalEvidenceBundle) {
   };
 }
 
-function buildLocalV2ScanNoGoAssessment(input: {
+export function buildLocalV2ScanNoGoAssessment(input: {
   bundle: CanonicalEvidenceBundle;
   consentSurfaceLikelyPresent: boolean;
   localOutDir?: string | null;
   runtimeActivityObserved: boolean;
   lowRuntimeActivity: boolean;
 }) {
+  const providedAssessment = input.bundle.scan_no_go_assessment ?? input.bundle.scanNoGoAssessment ?? null;
   const providedScanNoGo = getProvidedLocalV2ScanNoGoAssessment(input.bundle);
   if (providedScanNoGo) {
     return providedScanNoGo;
+  }
+  if (providedAssessment) {
+    return null;
   }
 
   const textCandidates = collectLocalV2NoGoTextCandidates(input.bundle);
@@ -2909,6 +2913,12 @@ function buildMaterializedLocalV2Detail(
     runtimeActivityObserved,
     lowRuntimeActivity,
   });
+  const providedScanNoGoAssessment = bundle.scan_no_go_assessment ?? bundle.scanNoGoAssessment ?? null;
+  const providedVisualAccessReview = bundle.visual_access_review ?? bundle.visualAccessReview ?? null;
+  const scanEvidenceLaneAssessment = bundle.scan_evidence_lane_assessment ?? bundle.scanEvidenceLaneAssessment ?? null;
+  const policyOnlyPartial = Boolean(
+    localV2NoGo && scanEvidenceLaneAssessment?.outcome === "partial_with_diagnostics"
+  );
   const visualCaptureUnavailable = !localV2NoGo &&
     (visualCapture.status === "failed" || visualCapture.status === "unavailable") &&
     (bundle.screenshots ?? []).length === 0;
@@ -3212,6 +3222,18 @@ function buildMaterializedLocalV2Detail(
       pipeline: "normalized_concern_policy_unified_finding",
       version: LOCAL_V2_DAG_WC01_PROJECTION_VERSION
     },
+    ...(providedScanNoGoAssessment ? {
+      scanNoGoAssessment: providedScanNoGoAssessment,
+      scan_no_go_assessment: providedScanNoGoAssessment,
+    } : {}),
+    ...(providedVisualAccessReview ? {
+      visualAccessReview: providedVisualAccessReview,
+      visual_access_review: providedVisualAccessReview,
+    } : {}),
+    ...(scanEvidenceLaneAssessment ? {
+      scanEvidenceLaneAssessment,
+      scan_evidence_lane_assessment: scanEvidenceLaneAssessment,
+    } : {}),
     ...(localV2NoGo ? {
       scanNoGoAssessment: localV2NoGo.scanNoGoAssessment,
       scan_no_go_assessment: localV2NoGo.scanNoGoAssessment,
@@ -3400,7 +3422,18 @@ function buildMaterializedLocalV2Detail(
     domain: requestedHost,
     final_effective_url: canonicalDocumentUrl,
     final_url: canonicalDocumentUrl,
-    ...(localV2NoGo ? buildLocalV2NoGoSnapshotFields(localV2NoGo.primaryReasonCode, localV2NoGo.pageState) : {
+    ...(policyOnlyPartial ? {
+      access_posture_class: "homepage_limited_policy_verified",
+      block_page_classification: localV2NoGo?.pageState ?? "access_blocked",
+      blocked_flag: true,
+      challenge_suspected: localV2NoGo?.primaryReasonCode === "captcha_or_challenge",
+      coverage_level: "limited_partial",
+      homepage_fetch_status: "blocked",
+      scan_outcome: "completed_partial",
+      stop_reason_code: "homepage_unavailable_policy_evidence_retained",
+      stop_reason_detail: "Homepage runtime was unavailable, but independently fetched first-party policy evidence was retained.",
+      stop_reason_label: "Homepage unavailable; policy evidence retained",
+    } : localV2NoGo ? buildLocalV2NoGoSnapshotFields(localV2NoGo.primaryReasonCode, localV2NoGo.pageState) : {
       homepage_fetch_status: "success",
       scan_outcome: scanRecord.snapshot?.scan_outcome ?? "completed_partial"
     }),
@@ -3427,7 +3460,7 @@ function buildMaterializedLocalV2Detail(
     tracker_count_total: runtimeEvidenceReportable ? promotionGradeRequestPurposeRows.length : 0,
     tracker_vendor_count: runtimeEvidenceReportable ? promotionGradeVendorNames.length : 0,
     tracking_before_consent_detected: runtimeEvidenceReportable ? hasPromotionGradePreconsentTracking : false,
-    verified_public_surfaces_count: localV2NoGo ? 0 : policySurfaces.length,
+    verified_public_surfaces_count: localV2NoGo && !policyOnlyPartial ? 0 : policySurfaces.length,
     ...(consentRuntimeEvidenceReportable && cmpVendorName ? { cmp_vendor_name: cmpVendorName } : {}),
     ...(cookieSurface ? { cookie_policy_present: true } : {}),
     ...(termsSurface ? { terms_of_service_present: true } : {})
@@ -3509,7 +3542,7 @@ function buildMaterializedLocalV2Detail(
     runtimeArtifacts,
     scan: {
       ...scanRecord.scan,
-      pagesScanned: localV2NoGo ? 0 : Math.max(scanRecord.scan.pagesScanned, 1)
+      pagesScanned: localV2NoGo && !policyOnlyPartial ? 0 : Math.max(scanRecord.scan.pagesScanned, 1)
     },
     signals: materializedSignals,
     snapshot,

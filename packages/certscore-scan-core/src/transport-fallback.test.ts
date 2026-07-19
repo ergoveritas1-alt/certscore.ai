@@ -40,8 +40,8 @@ test("entry navigation recovery stays on bounded apex/www and protocol variants"
   assert.equal(alternateWwwNavigationUrl("https://shop.example.co.uk/path"), null);
   assert.equal(alternateWwwNavigationUrl("https://127.0.0.1/path"), null);
   assert.deepEqual(navigationTransportRecoveryUrls("https://example.com/path"), [
-    "http://example.com/path",
     "https://www.example.com/path",
+    "http://example.com/path",
     "http://www.example.com/path",
   ]);
 });
@@ -124,6 +124,45 @@ test("pre-consent navigation retries one transient main-document response", asyn
     assert.ok(result.networkResponseEvents.some((event) => event.status === 200));
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent navigation gives a strong 403 challenge one bounded passive same-region retry", async () => {
+  let requestCount = 0;
+  const server = createServer((request, response) => {
+    const browserDocumentRequest = request.headers["sec-fetch-dest"] === "document";
+    if (browserDocumentRequest) requestCount += 1;
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    if (browserDocumentRequest && requestCount === 1) {
+      response.writeHead(403);
+      response.end("<!doctype html><html><body><h1>Checking your browser</h1><p>Performing security verification.</p></body></html>");
+      return;
+    }
+    response.writeHead(200);
+    response.end("<!doctype html><html><body><h1>Recovered public site</h1><p>Products, company information, support, news, and public navigation are now available.</p></body></html>");
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const url = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-challenge-recovery-"));
+  try {
+    const result = await preConsentRuntimeScanner({
+      artifactWriter: await createArtifactWriter(tempRoot),
+      internalBudgetMs: 12_000,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      screenshotMode: "selective",
+      url,
+      waitMode: "fast",
+    });
+    assert.ok(requestCount >= 2);
+    assert.ok(result.moduleRun.recoveryDiagnostics?.modes.includes("security_challenge_passive_wait"));
+    assert.ok(result.moduleRun.recoveryDiagnostics?.modes.includes("security_challenge_same_region_retry"));
+    assert.ok(result.domSnapshots.some((snapshot) => /Recovered public site/.test(snapshot.textExcerpt)));
+  } finally {
+    server.close();
     await rm(tempRoot, { recursive: true, force: true });
   }
 });

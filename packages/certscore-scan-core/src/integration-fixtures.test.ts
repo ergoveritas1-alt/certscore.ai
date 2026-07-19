@@ -2220,6 +2220,8 @@ test("scan-core emits scan no-go assessment for Cloudflare-style security challe
     assert.equal(bundle.runtimeCoverage?.coverageStatus, "limited_none");
     assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("captcha_or_challenge"));
     assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("scan_no_go_assessment"));
+    assert.equal(bundle.scan_evidence_lane_assessment?.outcome, "no_go");
+    assert.equal(bundle.scan_evidence_lane_assessment?.lanes.homepageRuntime, "unusable");
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -2244,6 +2246,7 @@ test("scan-core does not stop a substantive site for background security challen
     assert.ok(bundle.scan_no_go_assessment?.contradictorCodes.includes("substantive_dom_text_observed"));
     assert.notEqual(bundle.runtimeCoverage?.coverageStatus, "limited_none");
     assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("scan_no_go_diagnostics"));
+    assert.equal(bundle.scan_evidence_lane_assessment?.outcome, "usable");
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });

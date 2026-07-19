@@ -1,4 +1,5 @@
 import path from "node:path";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import {
   type CanonicalEvidenceBundle,
@@ -15,6 +16,7 @@ import {
   type RuntimeEvidenceEvent,
   type ScanProfile,
   type ScanNoGoAssessment,
+  type ScanEvidenceLaneAssessment,
   type ScreenshotArtifact,
   type ConsentFlowScenario,
   type StorageSnapshot,
@@ -509,6 +511,17 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     plannedParallel,
     policySurfaceEnabled,
   });
+  if (earlyConfirmedNoGo && policySurfaceEnabled && !policySurfaceSettled) {
+    const noGoPolicyGraceMs = Math.min(5_000, Math.max(0, scanProfile.internalBudgetMs - (Date.now() - startedAtMs) - 750));
+    await phaseRecorder.record("policy_surface_no_go_diagnostic_grace", noGoPolicyGraceMs > 0 ? "started" : "skipped", {
+      deadlineMs: noGoPolicyGraceMs,
+    });
+    policySurfaceSettled = await settlePolicySurfaceBeforeDeadline(policySurfaceResultPromise, noGoPolicyGraceMs);
+    await phaseRecorder.record(
+      "policy_surface_no_go_diagnostic_grace",
+      policySurfaceSettled?.status === "fulfilled" ? "completed" : "skipped",
+    );
+  }
   throwIfAborted(input.signal);
   await phaseRecorder.record("policy_surface_for_output", policyRequiredForOutput ? "started" : "skipped");
   if (policyRequiredForOutput) {
@@ -760,6 +773,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       }
       : baseRuntimeCoverage;
 
+  const scanEvidenceLaneAssessment = buildScanEvidenceLaneAssessment({
+    normalizedUrl,
+    policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
+    runtimeCoverage,
+    scanNoGoAssessment: scanNoGoEvidence?.scanNoGoAssessment ?? null,
+    transportSecurityObservationCount: preConsentResult.transportSecurityObservations.length,
+  });
+
   const boundedModulesRun = modulesRun.map(boundModuleRunTimingBreakdown);
   const consentSurfaceInspection = deriveConsentSurfaceInspectionOutcome({
     cmpRuntimeObservations: preConsentResult.cmpRuntimeObservations,
@@ -830,6 +851,8 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         visual_access_review: scanNoGoEvidence.visualAccessReview,
       }
       : {}),
+    scanEvidenceLaneAssessment,
+    scan_evidence_lane_assessment: scanEvidenceLaneAssessment,
     artifactRefs: [
       ...preConsentResult.screenshots.map((artifact) => ({
         artifactId: artifact.artifactId,
@@ -1422,7 +1445,7 @@ function postConsentFlowRuntimeDisabled(input: {
 }
 
 const SCAN_NO_GO_TEXT_PATTERN =
-  /access to this site has been denied|access denied|access is temporarily restricted|forbidden|http\s*403|403(?:\s*-\s*|\s+)forbidden|403\s+error|the request could not be satisfied|block access from your country|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|dein browser wird geprüft|performing security verification|security check|protected by kasada|x-kpsdk|detected unusual (?:behaviour|activity)[^.]{0,180}(?:bot|browser|network)|resembles that of a bot|real (?:shopper|person|user)s?[^.]{0,80}not robots?|(?:please )?verif(?:y|ies|ying)[^.]{0,80}(?:you are|that you(?:'|’)re) human|are you (?:a )?(?:person|human) or (?:a )?robot|press and hold[^.]{0,100}verif|\bzaraz wracamy\b/i;
+  /access to this site has been denied|access denied|access is temporarily restricted|forbidden|http\s*403|403(?:\s*-\s*|\s+)forbidden|403\s+error|the request could not be satisfied|block access from your country|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|dein browser wird geprüft|performing security verification|verification failed(?:\.|\s)+(?:please\s+)?try again|security check|protected by kasada|x-kpsdk|detected unusual (?:behaviour|activity)[^.]{0,180}(?:bot|browser|network)|resembles that of a bot|real (?:shopper|person|user)s?[^.]{0,80}not robots?|(?:please )?verif(?:y|ies|ying)[^.]{0,80}(?:you are|that you(?:'|’)re) human|are you (?:a )?(?:person|human) or (?:a )?robot|press and hold[^.]{0,100}verif|\bzaraz wracamy\b/i;
 
 const SCAN_NO_GO_NOT_FOUND_PATTERN =
   /^(?:not found(?:\s+not found)?|404(?: not found)?)[.!\s]*$|\b404\b[^\n]{0,80}(?:not found|file not found)|(?:requested (?:page|file|url)|the (?:page|file))[^\n]{0,80}not found|the page you (?:requested|are looking for) (?:could not be found|does not exist)/i;
@@ -1449,7 +1472,7 @@ const SCAN_NO_GO_SECURITY_CHALLENGE_REQUEST_PATTERN =
 const SCAN_NO_GO_NAVIGATION_FAILURE_PATTERN =
   /page\.goto|net::ERR_|ERR_HTTP2_PROTOCOL_ERROR|ERR_QUIC_PROTOCOL_ERROR|navigation timeout|timeout \d+ms exceeded/i;
 
-function buildScanNoGoAssessment(input: {
+export function buildScanNoGoAssessment(input: {
   consentUiObservations: ConsentUiObservation[];
   domSnapshots: DomSnapshotArtifact[];
   modulesRun: CanonicalEvidenceBundle["modulesRun"];
@@ -1526,21 +1549,71 @@ function buildScanNoGoAssessment(input: {
   ].filter((text): text is string => Boolean(text)));
   const longestText = [...textCandidates].sort((left, right) => right.length - left.length)[0] ?? "";
   const longestDomText = [...domTextCandidates].sort((left, right) => right.length - left.length)[0] ?? "";
+  const consentSurfaceTexts = input.consentUiObservations
+    .map((observation) => boundedScanNoGoText(observation.textExcerpt))
+    .filter((text): text is string => Boolean(text));
+  const longestConsentSurfaceText = [...consentSurfaceTexts]
+    .sort((left, right) => right.length - left.length)[0] ?? "";
+  const consentSurfaceWordCount = longestConsentSurfaceText
+    .split(/\s+/)
+    .filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
+  const actionableConsentControlObserved = input.consentUiObservations.some((observation) =>
+    observation.acceptControlObserved ||
+    observation.rejectControlObserved ||
+    observation.managePreferencesControlObserved ||
+    observation.visibleChoiceLabels.length > 0 ||
+    observation.controls.some((control) => control.visible)
+  );
   const mainDocumentStatus = getMainDocumentStatus(input.networkEvents, input.networkResponseEvents);
+  const mainDocumentStatuses = getMainDocumentStatuses(input.networkEvents, input.networkResponseEvents);
+  const successfulMainDocumentBeforeTerminal = mainDocumentStatuses.length > 1 &&
+    mainDocumentStatuses.slice(0, -1).some((status) => status >= 200 && status < 400) &&
+    mainDocumentStatus !== null && classifyMainDocumentStatus(mainDocumentStatus)?.hardTerminal === true;
   const successfulFirstPartyResponses = input.networkResponseEvents.filter((event) =>
     event.firstParty === true && (event.status ?? 0) >= 200 && (event.status ?? 0) < 400
   ).length;
   const substantiveDomWordCount = longestDomText.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
-  const textPageState = classifyScanNoGoText(longestText);
+  const screenshotStructure = inspectRetainedScreenshotStructure(input.screenshots);
+  const visuallySubstantiveScreenshotObserved = screenshotStructure?.visuallySubstantive === true;
+  // Settled DOM text is the closest textual representation of the page the
+  // visitor saw. Consent probes can contain large inline scripts whose source
+  // mentions blocking or challenge behavior without representing page state.
+  // Only fall back to consent-surface text when no settled DOM text survived.
+  const textPageState = longestDomText
+    ? classifyScanNoGoText(longestDomText)
+    : classifyScanNoGoText(longestText);
+  const consentSurfaceTextPageState = classifyScanNoGoText(longestConsentSurfaceText);
+  const substantiveDomTextObserved =
+    !classifyScanNoGoText(longestDomText) &&
+    longestDomText.length >= 180 &&
+    substantiveDomWordCount >= 24;
+  const substantiveCapturedPageTextObserved =
+    substantiveDomTextObserved ||
+    (
+      !longestDomText &&
+      !consentSurfaceTextPageState &&
+      longestConsentSurfaceText.length >= 180 &&
+      consentSurfaceWordCount >= 24
+    );
+  const substantiveConsentSurfaceTextObserved =
+    input.consentUiObservations.some((observation) => observation.likelyPresent) &&
+    !consentSurfaceTextPageState &&
+    longestConsentSurfaceText.length >= 180 &&
+    consentSurfaceWordCount >= 24;
   const positiveSiteSignals = uniqueStrings([
     mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400
       ? "main_document_success"
       : null,
-    !textPageState && longestDomText.length >= 180 && substantiveDomWordCount >= 24
+    substantiveDomTextObserved
       ? "substantive_dom_text_observed"
       : null,
+    actionableConsentControlObserved ? "actionable_consent_control_observed" : null,
+    substantiveCapturedPageTextObserved ? "substantive_captured_page_text_observed" : null,
+    substantiveConsentSurfaceTextObserved ? "substantive_consent_surface_text_observed" : null,
     input.policySurfaceObservations.length > 0 ? "policy_surface_observed" : null,
     successfulFirstPartyResponses >= 4 ? "multiple_first_party_resources_loaded" : null,
+    successfulMainDocumentBeforeTerminal ? "successful_main_document_before_terminal_state" : null,
+    visuallySubstantiveScreenshotObserved ? "visually_substantive_screenshot_observed" : null,
   ].filter((value): value is string => Boolean(value)));
   const strongPositiveSiteEvidence = positiveSiteSignals.some((signal) =>
     signal !== "main_document_success"
@@ -1563,7 +1636,10 @@ function buildScanNoGoAssessment(input: {
           visualPageState: "captcha_or_challenge",
         }
       : null;
-  const pageState = challengePageState ?? httpPageState ?? textPageState;
+  const explicitTextChallenge = textPageState?.reasonCode === "captcha_or_challenge"
+    ? textPageState
+    : null;
+  const pageState = challengePageState ?? explicitTextChallenge ?? httpPageState ?? textPageState;
   const nearlyEmptyPage = longestDomText.length <= 40 && substantiveDomWordCount <= 6;
   const sparseSecondLookRetained = input.screenshots.some((artifact) =>
     artifact.artifactId === "screenshot_pre_consent_no_go_confirmation"
@@ -1604,11 +1680,29 @@ function buildScanNoGoAssessment(input: {
     (sparseSuccessfulPage || temporallyConfirmedSparsePage ? "blank_or_unusable" : "degraded_but_useful");
   const blockedMainDocument = mainDocumentStatus !== null && [401, 403, 407, 429, 451, 500, 502, 503, 504].includes(mainDocumentStatus);
   const explicitTerminalPage = Boolean(pageState) || sparseSuccessfulPage || temporallyConfirmedSparsePage;
+  const strongTerminalContradiction =
+    successfulMainDocumentBeforeTerminal &&
+    visuallySubstantiveScreenshotObserved &&
+    (
+      (substantiveCapturedPageTextObserved && successfulFirstPartyResponses >= 8) ||
+      successfulFirstPartyResponses >= 16
+    );
   const contradictedByNormalSite =
     strongPositiveSiteEvidence &&
-    !blockedMainDocument &&
-    !pageState?.hardTerminal &&
-    !temporallyConfirmedSparsePage;
+    (
+      (!blockedMainDocument && !pageState?.hardTerminal) ||
+      strongTerminalContradiction ||
+      (
+        temporallyConfirmedSparsePage &&
+        !pageState?.hardTerminal &&
+        (
+          actionableConsentControlObserved ||
+          substantiveConsentSurfaceTextObserved ||
+          visuallySubstantiveScreenshotObserved ||
+          successfulFirstPartyResponses >= 4
+        )
+      )
+    );
   const decision: ScanNoGoAssessment["decision"] =
     explicitTerminalPage && !contradictedByNormalSite
       ? "no_go"
@@ -1661,9 +1755,18 @@ function buildScanNoGoAssessment(input: {
       successfulFirstPartyResponses,
       retainedVisualArtifactAvailable: Boolean(screenshot),
       securityChallengeRequestObserved,
+      actionableConsentControlObserved,
+      substantiveCapturedPageTextObserved,
+      substantiveConsentSurfaceTextObserved,
+      consentSurfaceWordCount,
       visualHardNoGoPageState: decision === "no_go",
       visualNoGo: decision === "no_go",
       visualPageState,
+      successfulMainDocumentBeforeTerminal,
+      visuallySubstantiveScreenshotObserved,
+      screenshotEncodedBytesPerPixel: screenshotStructure?.encodedBytesPerPixel ?? null,
+      screenshotHeight: screenshotStructure?.height ?? null,
+      screenshotWidth: screenshotStructure?.width ?? null,
     },
     evidenceRefs,
   };
@@ -1673,6 +1776,138 @@ function buildScanNoGoAssessment(input: {
     scanNoGoAssessment,
     visualAccessReview,
   };
+}
+
+export function buildScanEvidenceLaneAssessment(input: {
+  normalizedUrl: string;
+  policySurfaceObservations: PolicySurfaceObservation[];
+  runtimeCoverage: RuntimeCoverageSummary;
+  scanNoGoAssessment: ScanNoGoAssessment | null;
+  transportSecurityObservationCount: number;
+}): ScanEvidenceLaneAssessment {
+  const homepageNoGo = input.scanNoGoAssessment?.decision === "no_go";
+  const usablePolicySurfaces = input.policySurfaceObservations.filter((observation) =>
+    isIndependentlyUsablePolicySurface(observation, input.normalizedUrl)
+  );
+  const runtimeUsable = !homepageNoGo && input.runtimeCoverage.coverageStatus === "usable";
+  const runtimeLimited = !homepageNoGo && input.runtimeCoverage.coverageStatus === "limited_partial";
+  const outcome: ScanEvidenceLaneAssessment["outcome"] = runtimeUsable || runtimeLimited
+    ? "usable"
+    : usablePolicySurfaces.length > 0
+      ? "partial_with_diagnostics"
+      : "no_go";
+  const runtimeLane = runtimeUsable ? "usable" as const : runtimeLimited ? "limited" as const : "unusable" as const;
+  const policyLane = usablePolicySurfaces.length > 0
+    ? "usable" as const
+    : input.policySurfaceObservations.length > 0
+      ? "limited" as const
+      : "not_testable" as const;
+  return {
+    status: "available",
+    version: "scan-evidence-lane-assessment-v1",
+    outcome,
+    lanes: {
+      homepageRuntime: runtimeLane,
+      consent: runtimeUsable ? "usable" : runtimeLimited ? "limited" : "not_testable",
+      cookiesTrackers: runtimeUsable ? "usable" : runtimeLimited ? "limited" : "not_testable",
+      policyGdpr: policyLane,
+      transport: input.transportSecurityObservationCount > 0 ? "usable" : "not_testable",
+    },
+    usablePolicySurfaceUrls: usablePolicySurfaces
+      .map((observation) => observation.normalizedUrl ?? observation.url)
+      .slice(0, 8),
+    limitationKeys: uniqueStrings([
+      ...input.runtimeCoverage.limitationKeys,
+      homepageNoGo ? "homepage_runtime_no_go" : null,
+      outcome === "partial_with_diagnostics" ? "partial_policy_evidence_only" : null,
+      policyLane !== "usable" ? "verified_policy_surface_unavailable" : null,
+    ].filter((value): value is string => Boolean(value))).slice(0, 24),
+    evidenceRefs: uniqueStrings([
+      ...usablePolicySurfaces.flatMap((observation) => observation.evidenceRefs.map((ref) => ref.refId)),
+      ...(homepageNoGo ? ["scan_runtime_artifacts.scan_no_go_assessment"] : []),
+    ]).slice(0, 24),
+  };
+}
+
+function isIndependentlyUsablePolicySurface(
+  observation: PolicySurfaceObservation,
+  requestedUrl: string,
+): boolean {
+  if (observation.status !== "fetched" || observation.fetchable === false) return false;
+  if (typeof observation.httpStatus !== "number" || observation.httpStatus < 200 || observation.httpStatus >= 400) return false;
+  if (observation.surfaceType === "unknown" || observation.surfaceType === "terms") return false;
+  const text = observation.textExcerpt?.replace(/\s+/g, " ").trim() ?? "";
+  const wordCount = text.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
+  if (text.length < 240 || wordCount < 35 || observation.evidenceRefs.length === 0) return false;
+  try {
+    const requested = new URL(requestedUrl).hostname.toLowerCase().replace(/^www\./, "");
+    const observed = new URL(observation.normalizedUrl ?? observation.url).hostname.toLowerCase().replace(/^www\./, "");
+    return observed === requested || observed.endsWith(`.${requested}`) || requested.endsWith(`.${observed}`);
+  } catch {
+    return false;
+  }
+}
+
+type RetainedScreenshotStructure = {
+  encodedBytesPerPixel: number;
+  height: number;
+  visuallySubstantive: boolean;
+  width: number;
+};
+
+function inspectRetainedScreenshotStructure(
+  screenshots: ScreenshotArtifact[],
+): RetainedScreenshotStructure | null {
+  const ranked = [...screenshots].sort((left, right) =>
+    screenshotNoGoReviewRank(left) - screenshotNoGoReviewRank(right)
+  );
+  let strongest: RetainedScreenshotStructure | null = null;
+  for (const screenshot of ranked) {
+    let descriptor: number | null = null;
+    try {
+      descriptor = openSync(screenshot.path, "r");
+      const header = Buffer.alloc(24);
+      const bytesRead = readSync(descriptor, header, 0, header.length, 0);
+      if (bytesRead < 24 || header.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") {
+        continue;
+      }
+      const width = header.readUInt32BE(16);
+      const height = header.readUInt32BE(20);
+      if (width <= 0 || height <= 0) continue;
+      const byteLength = statSync(screenshot.path).size;
+      const encodedBytesPerPixel = byteLength / (width * height);
+      const candidate = {
+        encodedBytesPerPixel,
+        height,
+        visuallySubstantive:
+          width >= 640 &&
+          height >= 400 &&
+          byteLength >= 80_000 &&
+          encodedBytesPerPixel >= 0.06,
+        width,
+      };
+      if (!strongest || candidate.encodedBytesPerPixel > strongest.encodedBytesPerPixel) {
+        strongest = candidate;
+      }
+    } catch {
+      // Screenshot disagreement is a conservative veto only; missing local bytes do not create no-go evidence.
+    } finally {
+      if (descriptor !== null) closeSync(descriptor);
+    }
+  }
+  return strongest;
+}
+
+function screenshotNoGoReviewRank(screenshot: ScreenshotArtifact) {
+  switch (screenshot.artifactId) {
+    case "screenshot_pre_consent_no_go_confirmation": return 0;
+    case "screenshot_pre_consent_settled": return 1;
+    case "screenshot_pre_consent_cmp_controls": return 2;
+    case "screenshot_pre_consent_geometry_proof": return 3;
+    case "screenshot_pre_consent": return 4;
+    case "screenshot_pre_consent_full_page": return 5;
+    default: return 6;
+  }
 }
 
 type ClassifiedNoGoPageState = {
@@ -1717,7 +1952,7 @@ function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {
     return { confidence: 0.95, evidenceText, hardTerminal: true, reasonCode: "maintenance_or_unavailable", visualPageState: "maintenance_or_unavailable" };
   }
   if (SCAN_NO_GO_TEXT_PATTERN.test(normalized)) {
-    const challenge = /not a bot|not robots?|person or (?:a )?robot|verif(?:y|ies|ying)[^.]{0,80}(?:you are|that you(?:'|’)re) human|press and hold[^.]{0,100}verif|security (?:check|verification)|checking your browser|dein browser wird geprüft|performing security verification|protected by kasada|x-kpsdk|resembles that of a bot/i.test(normalized);
+    const challenge = /not a bot|not robots?|person or (?:a )?robot|verif(?:y|ies|ying)[^.]{0,80}(?:you are|that you(?:'|’)re) human|verification failed(?:\.|\s)+(?:please\s+)?try again|press and hold[^.]{0,100}verif|security (?:check|verification)|checking your browser|dein browser wird geprüft|performing security verification|protected by kasada|x-kpsdk|resembles that of a bot/i.test(normalized);
     return {
       confidence: challenge ? 0.95 : 0.93,
       evidenceText,
@@ -1764,14 +1999,20 @@ function getMainDocumentStatus(
   networkEvents: NetworkEvent[],
   networkResponseEvents: NetworkResponseEvent[],
 ): number | null {
+  return getMainDocumentStatuses(networkEvents, networkResponseEvents).at(-1) ?? null;
+}
+
+function getMainDocumentStatuses(
+  networkEvents: NetworkEvent[],
+  networkResponseEvents: NetworkResponseEvent[],
+): number[] {
   const mainDocumentRequestIds = new Set(networkEvents
     .filter((event) => event.resourceType === "document" && event.isMainFrame === true)
     .map((event) => event.requestId));
-  const statuses = networkResponseEvents
+  return networkResponseEvents
     .filter((event) => event.requestId && mainDocumentRequestIds.has(event.requestId))
     .map((event) => event.status)
     .filter((status): status is number => typeof status === "number");
-  return statuses.at(-1) ?? null;
 }
 
 function detectScanNoGoNetworkChallengeEvidence(input: {

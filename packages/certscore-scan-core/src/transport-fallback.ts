@@ -52,11 +52,11 @@ export function alternateWwwNavigationUrl(value: string): string | null {
 }
 
 export function navigationTransportRecoveryUrls(value: string): string[] {
-  const candidates = [
-    httpTransportFallbackUrl(value),
-    alternateWwwNavigationUrl(value),
-  ];
   const alternateHost = alternateWwwNavigationUrl(value);
+  const candidates = [
+    alternateHost,
+    httpTransportFallbackUrl(value),
+  ];
   if (alternateHost) candidates.push(httpTransportFallbackUrl(alternateHost));
   return [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate) && candidate !== value))];
 }

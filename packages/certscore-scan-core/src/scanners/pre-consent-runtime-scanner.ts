@@ -517,6 +517,7 @@ export async function preConsentRuntimeScanner(
 
   const screenshots: ScreenshotArtifact[] = [];
   const screenshotErrors: string[] = [];
+  const navigationAttempts: NonNullable<NonNullable<ScanModuleRun["recoveryDiagnostics"]>["attempts"]> = [];
   let recoveryAttemptCount = 0;
   let recoveryDurationMs = 0;
   const recoveryModes = new Set<string>();
@@ -538,6 +539,7 @@ export async function preConsentRuntimeScanner(
     attemptCount: recoveryAttemptCount,
     modes: Array.from(recoveryModes).slice(0, 12),
     durationMs: recoveryDurationMs,
+    attempts: navigationAttempts.slice(0, 8),
   });
   let earlyScreenshotCaptured = false;
   let supplementalScreenshotAttempted = false;
@@ -631,6 +633,12 @@ export async function preConsentRuntimeScanner(
       const candidates = [input.normalizedUrl, ...navigationTransportRecoveryUrls(input.normalizedUrl)];
       let lastError: unknown;
       for (const [index, candidateUrl] of candidates.entries()) {
+        const attemptStartedAtMs = Date.now();
+        const attemptMode = index === 0
+          ? "initial_https_navigation"
+          : candidateUrl.startsWith("https:")
+            ? "https_apex_www_recovery"
+            : "http_transport_fallback";
         if (index > 0) {
           if (!isNavigationTransportFailure(lastError)) throw lastError;
           navigationNotes.push(
@@ -655,6 +663,13 @@ export async function preConsentRuntimeScanner(
           if (index > 0) {
             navigationNotes.push(`Entry navigation recovered through ${candidateUrl}`);
           }
+          navigationAttempts.push({
+            url: candidateUrl,
+            mode: attemptMode,
+            outcome: response && response.status() >= 400 ? "http_error" : "success",
+            ...(response ? { httpStatus: response.status() } : {}),
+            durationMs: Date.now() - attemptStartedAtMs,
+          });
           return response;
         } catch (error) {
           const currentPageUrl = page.url();
@@ -665,15 +680,29 @@ export async function preConsentRuntimeScanner(
             navigationNotes.push(
               "Entry navigation committed a document but did not reach DOMContentLoaded within the bounded wait; retained the current page for evidence capture.",
             );
+            navigationAttempts.push({
+              url: candidateUrl,
+              mode: attemptMode,
+              outcome: "committed_timeout",
+              durationMs: Date.now() - attemptStartedAtMs,
+            });
             return null;
           }
+          navigationAttempts.push({
+            url: candidateUrl,
+            mode: attemptMode,
+            outcome: "transport_error",
+            durationMs: Date.now() - attemptStartedAtMs,
+          });
           lastError = error;
         }
       }
       throw lastError;
     });
 
+    let transientStatusRetried = false;
     if (navigationResponse && isTransientMainDocumentStatus(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {
+      transientStatusRetried = true;
       const initialStatus = navigationResponse.status();
       const retryAfterMs = boundedRetryAfterMs(await navigationResponse.headerValue("retry-after").catch(() => null));
       navigationNotes.push(`Main document returned transient HTTP ${initialStatus}; performed one bounded retry after ${retryAfterMs}ms.`);
@@ -687,6 +716,40 @@ export async function preConsentRuntimeScanner(
       await page.waitForLoadState("domcontentloaded", { timeout: Math.min(2_000, remainingModuleBudgetMs()) }).catch(() => undefined);
       effectiveNavigationUrl = page.url() === "about:blank" ? effectiveNavigationUrl : page.url();
       navigationNotes.push(`Transient response retry completed with HTTP ${navigationResponse?.status() ?? "unknown"}.`);
+    }
+
+    if (
+      navigationResponse &&
+      [403, 429, 503].includes(navigationResponse.status()) &&
+      remainingModuleBudgetMs() >= 4_750 &&
+      await hasStrongUnresolvedSecurityChallenge(page)
+    ) {
+      navigationNotes.push(
+        `Strong security-challenge markers were observed on HTTP ${navigationResponse.status()}; allowed one bounded passive resolution window.`,
+      );
+      await measureRecovery("security_challenge_passive_wait", () =>
+        page.waitForTimeout(Math.min(3_000, Math.max(0, remainingModuleBudgetMs() - 1_500))),
+      );
+      if (await hasStrongUnresolvedSecurityChallenge(page) && !transientStatusRetried && remainingModuleBudgetMs() >= 1_250) {
+        const challengeRetry = await measureRecovery("security_challenge_same_region_retry", () =>
+          page.reload({
+            waitUntil: "commit",
+            timeout: Math.min(2_000, remainingModuleBudgetMs()),
+          }).catch(() => null),
+        );
+        if (challengeRetry) {
+          navigationResponse = challengeRetry;
+          effectiveNavigationUrl = page.url() === "about:blank" ? effectiveNavigationUrl : page.url();
+          await page.waitForLoadState("domcontentloaded", {
+            timeout: Math.min(750, remainingModuleBudgetMs()),
+          }).catch(() => undefined);
+        }
+      }
+      navigationNotes.push(
+        await hasStrongUnresolvedSecurityChallenge(page)
+          ? "The bounded security-challenge recovery window ended without normal public content."
+          : "The security challenge resolved passively and normal page evidence became available.",
+      );
     }
 
     if (navigationResponse && [404, 410].includes(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {
@@ -823,15 +886,20 @@ export async function preConsentRuntimeScanner(
         }
         retainedCmpRuntimeObservations = earlyCmpRuntimeObservations;
         if (hasHighConfidenceDirectCmpRuntimeEvidence(earlyCmpRuntimeObservations)) {
+          const evidenceFinalizationReserveMs = 750;
           const cmpGatedWaitMs = Math.min(
             fastWait ? 10_000 : 12_000,
-            Math.max(0, remainingModuleBudgetMs() - 750),
+            Math.max(0, remainingModuleBudgetMs() - evidenceFinalizationReserveMs),
           );
           await recordTiming(
             timingBreakdown,
             "early CMP-gated passive render wait",
-            "Passive render window for a directly observed CMP; no DOM inventory runs before the retained screenshot.",
-            () => page.waitForTimeout(cmpGatedWaitMs).catch(() => undefined),
+            "Passive render window for a directly observed CMP; exits when a complete first-layer choice set is visible or the bounded wait expires.",
+            () => waitForSufficientDirectCmpSemanticControls(
+              page,
+              input.scanStartedAtMs,
+              cmpGatedWaitMs,
+            ),
           );
           retainedConsentUiObservation = preScreenshotConsentObservation;
         }
@@ -867,7 +935,11 @@ export async function preConsentRuntimeScanner(
           timingBreakdown,
           "direct CMP semantic controls after screenshot",
           "Read only canonical semantic consent controls after retaining the rendered direct-CMP screenshot.",
-          () => readDirectCmpSemanticConsentUiObservation(page, input.scanStartedAtMs),
+          async () => mergeConsentUiObservations(
+            await readDirectCmpSemanticConsentUiObservation(page, input.scanStartedAtMs),
+            await readRapidFirstLayerConsentUiObservation(page, input.scanStartedAtMs),
+            "inventory:post_screenshot_rapid_cmp_controls",
+          ),
         );
         if (isStrongerConsentUiObservation(postScreenshotCmpObservation, preScreenshotConsentObservation)) {
           preScreenshotConsentObservation = mergeConsentUiObservations(
@@ -1541,8 +1613,12 @@ export async function preConsentRuntimeScanner(
       }
     }
 
+    const structuredFirstLayerControlsConfirmed = consentObservation.layerInspected === "first_layer" &&
+      consentObservation.controls.some((control) =>
+        ["accept_all", "reject_all", "essential_only", "manage_preferences"].includes(control.actionType)
+      );
     const geometryBudgetCushionMs = input.internalBudgetMs <= 10_000
-      ? 2_500
+      ? structuredFirstLayerControlsConfirmed ? 1_000 : 2_500
       : input.waitMode === "fast" ? 8_000 : 10_000;
     if (remainingModuleBudgetMs() >= geometryBudgetCushionMs) {
       await recordTiming(
@@ -2064,6 +2140,13 @@ export async function preConsentRuntimeScanner(
       });
     }
   }
+}
+
+async function hasStrongUnresolvedSecurityChallenge(page: import("playwright").Page): Promise<boolean> {
+  const text = await page.locator("body").innerText({ timeout: 600 }).catch(() => "");
+  const normalized = text.replace(/\s+/g, " ").trim().slice(0, 4_000);
+  if (normalized.length > 1_200 && normalized.split(/\s+/).length > 170) return false;
+  return /checking (?:your )?browser|verify (?:you are|that you(?:'|’)re) human|performing security verification|cloudflare ray id|press and hold.{0,100}verif|security (?:check|challenge)|just a moment/i.test(normalized);
 }
 
 async function recordTiming<T>(
@@ -3812,6 +3895,25 @@ async function readDirectCmpSemanticConsentUiObservation(
   });
 }
 
+async function waitForSufficientDirectCmpSemanticControls(
+  page: Page,
+  scanStartedAtMs: number,
+  timeoutMs: number,
+): Promise<void> {
+  const deadlineAtMs = Date.now() + Math.max(0, timeoutMs);
+  while (Date.now() < deadlineAtMs) {
+    const observation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
+    if (hasSufficientFirstLayerConsentControls(observation)) {
+      return;
+    }
+    const remainingMs = deadlineAtMs - Date.now();
+    if (remainingMs <= 0) {
+      return;
+    }
+    await page.waitForTimeout(Math.min(250, remainingMs)).catch(() => undefined);
+  }
+}
+
 async function readRapidFirstLayerConsentUiObservation(
   page: Page,
   scanStartedAtMs: number,
@@ -3898,14 +4000,15 @@ async function readRapidFirstLayerConsentUiObservation(
     const probeBudgetExpired = () => performance.now() - probeStartedAt >= 180;
     const scopedCandidates = [];
     const scopedSeen = new Set();
-    for (const selector of input.canonicalCmpContainerSelectors || []) {
-      if (probeBudgetExpired()) break;
-      let containers = [];
-      try {
-        containers = Array.from(document.querySelectorAll(selector)).slice(0, 8);
-      } catch {
-        continue;
-      }
+    let combinedCmpContainers = [];
+    try {
+      combinedCmpContainers = Array.from(document.querySelectorAll(
+        (input.canonicalCmpContainerSelectors || []).join(",")
+      )).slice(0, 24);
+    } catch {
+      combinedCmpContainers = [];
+    }
+    const collectScopedControls = (containers) => {
       for (const container of containers) {
         if (probeBudgetExpired()) break;
         const values = [
@@ -3920,6 +4023,17 @@ async function readRapidFirstLayerConsentUiObservation(
           }
         }
       }
+    };
+    collectScopedControls(combinedCmpContainers);
+    for (const selector of scopedCandidates.length > 0 ? [] : (input.canonicalCmpContainerSelectors || [])) {
+      if (probeBudgetExpired()) break;
+      let containers = [];
+      try {
+        containers = Array.from(document.querySelectorAll(selector)).slice(0, 8);
+      } catch {
+        continue;
+      }
+      collectScopedControls(containers);
     }
     const candidates = scopedCandidates.length > 0
       ? scopedCandidates
@@ -4015,6 +4129,7 @@ async function readRapidFirstLayerConsentUiObservation(
       rejectionReasons: [],
       timingMarkers: [
         "rapid_inventory_completed",
+        ...(controls.length > 0 ? ["rapid_first_layer_inventory"] : []),
         ...(snapshot.hasPotentialToggle ? ["rapid_inventory_toggle_present"] : []),
       ],
     },
@@ -5149,8 +5264,27 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
         );
       };
       const roots = collectRoots();
-      const directCandidates = queryAllRoots(roots, controlSelector, 2_500);
-      const directSet = new Set(directCandidates);
+      const allDirectCandidates = queryAllRoots(roots, controlSelector, 2_500);
+      const cheapDirectCandidatePriority = (element) => {
+        const label = labelFor(element).toLowerCase();
+        const tagName = element.tagName.toLowerCase();
+        const role = (element.getAttribute("role") || "").toLowerCase();
+        const insideDialog = Boolean(element.closest?.("[role='dialog'],[role='alertdialog'],[aria-modal='true']"));
+        const insidePageChrome = Boolean(element.closest?.("footer,header,nav,aside,[role='navigation']"));
+        return (
+          (isCanonicalActionLabel(label) ? 400 : 0) +
+          (/^(?:button|input|select|textarea)$/.test(tagName) || role === "button" ? 120 : 0) +
+          (insideDialog ? 180 : 0) +
+          (/\b(?:accept|reject|decline|allow|agree|settings|preferences|options|choices|cookie|cookies|consent|ablehnen|akzeptieren|accepter|refuser)\b/i.test(label) ? 100 : 0) -
+          (insidePageChrome ? 80 : 0)
+        );
+      };
+      const directCandidates = allDirectCandidates.length > 320
+        ? [...allDirectCandidates]
+            .sort((left, right) => cheapDirectCandidatePriority(right) - cheapDirectCandidatePriority(left))
+            .slice(0, 320)
+        : allDirectCandidates;
+      const directSet = new Set(allDirectCandidates);
       const rejectedReasons = new Set();
       const diagnosticLabels = [];
       const diagnosticContainers = new Set();

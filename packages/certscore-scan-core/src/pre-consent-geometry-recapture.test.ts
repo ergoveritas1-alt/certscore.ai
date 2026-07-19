@@ -55,7 +55,10 @@ test("pre-consent scanner recaptures below-fold consent geometry before proof sc
     });
 
     assert.equal(result.moduleRun.status, "completed", result.moduleRun.errors.join("; "));
-    assert.ok(result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof"));
+    assert.ok(
+      result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof"),
+      JSON.stringify(result.moduleRun.timingBreakdown, null, 2),
+    );
 
     const geometry = JSON.parse(
       await readFile(path.join(tempRoot, "out", "ConsentControlGeometryEvidence.json"), "utf8"),
@@ -148,7 +151,10 @@ test("pre-consent scanner retains a proof screenshot for deeply nested animated 
       result.consentUiObservations[0]?.controls.map((control) => control.label).sort(),
       ["Accept all", "Accept essential cookies", "Individual preferences", "Save consent"].sort(),
     );
-    assert.ok(result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof"));
+    assert.ok(
+      result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof"),
+      JSON.stringify(result.moduleRun.timingBreakdown, null, 2),
+    );
 
     const geometry = JSON.parse(
       await readFile(path.join(tempRoot, "out", "ConsentControlGeometryEvidence.json"), "utf8"),

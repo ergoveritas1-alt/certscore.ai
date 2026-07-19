@@ -103,6 +103,40 @@ test("buildLocalV2NoGoSnapshotFields gives Cerebras site-not-ready snapshot copy
   assert.doesNotMatch(snapshot.stop_reason_detail, /capture failed/i);
 });
 
+test("explicit scanner continue assessment blocks downstream raw-text no-go reconstruction", async () => {
+  const { buildLocalV2ScanNoGoAssessment } = await loadLocalV2DagReport();
+  const result = buildLocalV2ScanNoGoAssessment({
+    bundle: {
+      scanNoGoAssessment: {
+        status: "available",
+        version: "scan-no-go-assessment-v1",
+        decision: "continue_with_diagnostics",
+        scanNoGoConfidence: 0.72,
+        reasonCodes: ["potential_security_challenge", "scan_no_go_corroborated"],
+        corroboratorCodes: ["network_cloudflare_challenge"],
+        contradictorCodes: ["multiple_first_party_resources_loaded"],
+        supportingSignals: {},
+        evidenceRefs: [],
+      },
+      visualAccessReview: {
+        confidence: 0.72,
+        go_no_go: "GO",
+        key_visual_evidence: ["Background challenge traffic was contradicted by retained normal-site evidence."],
+        page_state: "degraded_but_useful",
+        reason_code: "potential_security_challenge",
+        short_explanation: "Normal-site evidence required the scan to continue.",
+        status: "available",
+        version: "visual-access-review-v1",
+      },
+    } as unknown as CanonicalEvidenceBundle,
+    consentSurfaceLikelyPresent: false,
+    runtimeActivityObserved: true,
+    lowRuntimeActivity: false,
+  });
+
+  assert.equal(result, null);
+});
+
 test("buildLocalV2DagTimingArtifacts retains bounded module and policy timings", async () => {
   const { buildLocalV2DagTimingArtifacts } = await loadLocalV2DagReport();
   const bundle = {
