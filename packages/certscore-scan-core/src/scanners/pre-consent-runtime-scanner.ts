@@ -813,24 +813,15 @@ export async function preConsentRuntimeScanner(
         retainedCmpRuntimeObservations = earlyCmpRuntimeObservations;
         if (hasHighConfidenceDirectCmpRuntimeEvidence(earlyCmpRuntimeObservations)) {
           const cmpGatedWaitMs = Math.min(
-            fastWait ? 6_000 : 7_000,
+            fastWait ? 10_000 : 12_000,
             Math.max(0, remainingModuleBudgetMs() - 750),
           );
-          const cmpGatedObservation = await recordBoundedTiming(
+          await recordTiming(
             timingBreakdown,
-            "early CMP-gated consent control wait",
-            "Bounded typed control inventory for a directly observed CMP whose first layer had not rendered controls yet.",
-            cmpGatedWaitMs,
-            () => waitForRapidConsentControls(page, input.scanStartedAtMs, Math.max(0, cmpGatedWaitMs - 100)),
-            () => preScreenshotConsentObservation as ConsentUiObservation,
+            "early CMP-gated passive render wait",
+            "Passive render window for a directly observed CMP; no DOM inventory runs before the retained screenshot.",
+            () => page.waitForTimeout(cmpGatedWaitMs).catch(() => undefined),
           );
-          if (isStrongerConsentUiObservation(cmpGatedObservation, preScreenshotConsentObservation)) {
-            preScreenshotConsentObservation = mergeConsentUiObservations(
-              preScreenshotConsentObservation,
-              cmpGatedObservation,
-              "recapture:early_direct_cmp_controls",
-            );
-          }
           retainedConsentUiObservation = preScreenshotConsentObservation;
         }
       }
@@ -856,6 +847,26 @@ export async function preConsentRuntimeScanner(
       });
       earlyScreenshotCaptured = true;
       visualCapture = visualCaptureFromScreenshotSummary(screenshotCapture, screenshotPath);
+      if (
+        !hasSufficientFirstLayerConsentControls(preScreenshotConsentObservation) &&
+        hasHighConfidenceDirectCmpRuntimeEvidence(retainedCmpRuntimeObservations) &&
+        remainingModuleBudgetMs() >= 500
+      ) {
+        const postScreenshotCmpObservation = await recordTiming(
+          timingBreakdown,
+          "direct CMP semantic controls after screenshot",
+          "Read only canonical semantic consent controls after retaining the rendered direct-CMP screenshot.",
+          () => readDirectCmpSemanticConsentUiObservation(page, input.scanStartedAtMs),
+        );
+        if (isStrongerConsentUiObservation(postScreenshotCmpObservation, preScreenshotConsentObservation)) {
+          preScreenshotConsentObservation = mergeConsentUiObservations(
+            preScreenshotConsentObservation,
+            postScreenshotCmpObservation,
+            "recapture:post_passive_cmp_screenshot",
+          );
+          retainedConsentUiObservation = preScreenshotConsentObservation;
+        }
+      }
     }
     await networkIdlePromise;
     await recordTiming(
@@ -3556,37 +3567,120 @@ async function readCheapConsentTextObservation(
     : observation;
 }
 
-async function waitForRapidConsentControls(
+async function readDirectCmpSemanticConsentUiObservation(
   page: Page,
   scanStartedAtMs: number,
-  timeoutMs: number,
 ): Promise<ConsentUiObservation> {
-  const deadlineAtMs = Date.now() + Math.max(0, timeoutMs);
-  // A busy CMP/page bootstrap can delay page.evaluate itself. Repeated polling
-  // then competes with the very main-thread work that must render the banner.
-  // Give directly observed CMPs a passive settle window and perform at most two
-  // bounded typed reads instead.
-  const firstSettleMs = Math.min(2_500, Math.max(0, timeoutMs));
-  if (firstSettleMs > 0) {
-    await page.waitForTimeout(firstSettleMs).catch(() => undefined);
-  }
-  let observation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
-  const remainingMs = Math.max(0, deadlineAtMs - Date.now());
-  if (remainingMs > 50) {
-    await page.waitForTimeout(remainingMs).catch(() => undefined);
-    const finalObservation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
-    observation = mergeConsentUiObservations(
-      observation,
-      finalObservation,
-      "recapture:passive_cmp_settle",
+  type DirectCmpSemanticInventory = {
+    controls: Array<{
+      label: string;
+      role?: string;
+      selectorHint: string;
+      tagName: string;
+      visible: true;
+    }>;
+  };
+  const snapshot = await page.evaluate<DirectCmpSemanticInventory, {
+    canonicalConsentInventoryLabels: string[];
+  }>((input) => {
+    const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+    const canonicalLabels = new Set(
+      input.canonicalConsentInventoryLabels.map((value) => normalize(value).toLowerCase()),
     );
-  }
-  return annotateConsentInventoryTimingMarkers(
-    observation,
-    hasSufficientFirstLayerConsentControls(observation)
-      ? ["rapid_cmp_poll", "early_exit_controls_found"]
-      : ["rapid_cmp_poll", "timing_expired_before_controls_surfaced"],
-  );
+    const embeddedLabels = [...canonicalLabels].filter((value) => value.length >= 8);
+    const semanticControls = document.querySelectorAll<HTMLElement>(
+      "button, [role='button'], a, input[type='button'], input[type='submit']",
+    );
+    const controls: DirectCmpSemanticInventory["controls"] = [];
+    const seen = new Set<string>();
+    let visited = 0;
+    for (const element of semanticControls) {
+      visited += 1;
+      if (visited > 5_000) break;
+      const label = normalize(
+        element.getAttribute("aria-label") ||
+        element.getAttribute("title") ||
+        (element instanceof HTMLInputElement ? element.value : "") ||
+        element.textContent,
+      ).slice(0, 120);
+      const normalizedLabel = label.toLowerCase();
+      if (!label || !(
+        canonicalLabels.has(normalizedLabel) ||
+        embeddedLabels.some((phrase) => normalizedLabel.length <= 80 && normalizedLabel.includes(phrase))
+      )) {
+        continue;
+      }
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      if (
+        rect.width <= 0 || rect.height <= 0 ||
+        rect.top > window.innerHeight + 200 || rect.bottom < -200 ||
+        style.visibility === "hidden" || style.display === "none" ||
+        element.getAttribute("aria-hidden") === "true" ||
+        Number.parseFloat(style.opacity || "1") <= 0.05
+      ) {
+        continue;
+      }
+      const key = `${element.tagName}:${normalizedLabel}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const id = element.getAttribute("id");
+      const dataTestId = element.getAttribute("data-testid");
+      controls.push({
+        label,
+        role: element.getAttribute("role") || undefined,
+        selectorHint: id
+          ? `#${id}`
+          : dataTestId
+            ? `[data-testid="${dataTestId}"]`
+            : element.tagName.toLowerCase(),
+        tagName: element.tagName.toLowerCase(),
+        visible: true,
+      });
+      if (controls.length >= 12) break;
+    }
+    return { controls };
+  }, {
+    canonicalConsentInventoryLabels: CANONICAL_CONSENT_INVENTORY_LABELS,
+  }).catch((): DirectCmpSemanticInventory => ({ controls: [] }));
+
+  const controls = snapshot.controls.flatMap((control) => {
+    if (hasMultipleCanonicalConsentIntents(control.label)) return [];
+    const classification = classifyConsentControlLabel({
+      label: control.label,
+      contextText: "Direct CMP runtime evidence was retained before this semantic control inventory.",
+      hasConsentContext: true,
+    });
+    const actionType = consentUiControlActionTypeFromClassification(classification);
+    if (!actionType || actionType === "other") return [];
+    return [{
+      ...control,
+      actionType,
+      matchedTerm: classification.matchedTerm,
+      matchedLocale: classification.matchedLocale,
+      matchStrength: classification.matchStrength,
+      classifierReasonCodes: classification.reasonCodes,
+      classifierVariant: classification.variant,
+    }];
+  });
+  return buildConsentUiObservationFromEvidence({
+    scanStartedAtMs,
+    text: snapshot.controls.map((control) => control.label).join(" "),
+    controls,
+    fallbackBasis: controls.length > 0 ? ["inventory:direct_cmp_semantic_controls"] : [],
+    inventoryDiagnostics: {
+      candidateContainerCount: controls.length > 0 ? 1 : 0,
+      candidateControlCount: snapshot.controls.length,
+      retainedControlCount: controls.length,
+      inventorySources: controls.length > 0 ? ["viewport"] : [],
+      candidateLabels: snapshot.controls.map((control) => control.label),
+      rejectionReasons: [],
+      timingMarkers: [
+        "post_screenshot_direct_cmp_inventory_completed",
+        ...(controls.length > 0 ? ["early_exit_controls_found"] : []),
+      ],
+    },
+  });
 }
 
 async function readRapidFirstLayerConsentUiObservation(
