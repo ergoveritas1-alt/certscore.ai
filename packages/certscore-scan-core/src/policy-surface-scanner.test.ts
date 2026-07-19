@@ -7,17 +7,86 @@ import type { Browser } from "playwright";
 import { classifyPrivacySurface } from "@certscore/contracts";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
+  countRecoveredPolicySurfaceObservations,
   gdprTransparencyTopicCandidatesFromRetainedPolicySections,
   isFetchablePolicyCandidateForPolicySurface,
   isFetchablePolicyHrefForPolicySurface,
   isFetchablePolicyUrlForPolicySurface,
+  mergePolicySurfaceObservations,
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
+  policySurfaceObservationsFromRetainedRenderedLinks,
   retainedArticle13SectionEvidenceFromSections,
   type PolicyNanoAssistProvider,
   policySurfaceScanner,
   wwwFallbackUrlForPolicyFetch,
 } from "./scanners/policy-surface-scanner.js";
 import { startStaticFixtureServer, type StaticFixturePage } from "./test-fixtures/static-server.js";
+
+test("retained rendered links recover obvious policy surfaces when the separate policy browser is blocked", () => {
+  const observations = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [
+      {
+        domLocation: "footer",
+        href: "https://www.sony.example/en/privacy-policy/",
+        linkText: "Privacy Policy",
+        pageUrl: "https://www.sony.example/en/",
+      },
+      {
+        domLocation: "body",
+        href: "https://www.sony.example/en/cookie-policy/",
+        linkText: "Cookie Policy",
+        pageUrl: "https://www.sony.example/en/",
+      },
+    ],
+    evidenceRef: {
+      refId: "dom_text_pre_consent",
+      artifactId: "dom_text_pre_consent",
+      path: "/tmp/dom-text-pre-consent.txt",
+    },
+  });
+
+  const privacy = observations.find((observation) => observation.surfaceType === "privacy_policy");
+  const cookie = observations.find((observation) => observation.surfaceType === "cookie_policy");
+  assert.equal(privacy?.status, "observed");
+  assert.equal(privacy?.discoveryMethod, "footer_link");
+  assert.equal(privacy?.normalizedUrl, "https://www.sony.example/en/privacy-policy/");
+  assert.equal(privacy?.evidenceRefs[0]?.artifactId, "dom_text_pre_consent");
+  assert.equal(cookie?.status, "observed");
+  assert.deepEqual(privacy?.observedTopics, []);
+});
+
+test("fetched policy evidence outranks a supplemental rendered-link observation", () => {
+  const observed = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "footer",
+      href: "https://example.com/privacy-policy",
+      linkText: "Privacy Policy",
+      pageUrl: "https://example.com/",
+    }],
+  })[0];
+  assert.ok(observed);
+  const fetched = { ...observed, status: "fetched" as const, textExcerpt: "Substantive retained policy text." };
+  const merged = mergePolicySurfaceObservations([fetched], [observed]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]?.status, "fetched");
+  assert.equal(merged[0]?.textExcerpt, "Substantive retained policy text.");
+  assert.equal(countRecoveredPolicySurfaceObservations([fetched], [observed]), 0);
+});
+
+test("rendered-link diagnostics count only surfaces absent from usable dedicated policy evidence", () => {
+  const rendered = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "footer",
+      href: "https://example.com/privacy-policy",
+      linkText: "Privacy Policy",
+      pageUrl: "https://example.com/",
+    }],
+  })[0];
+  assert.ok(rendered);
+  const failed = { ...rendered, status: "failed" as const };
+  assert.equal(countRecoveredPolicySurfaceObservations([failed], [rendered]), 1);
+  assert.equal(countRecoveredPolicySurfaceObservations([], [rendered]), 1);
+});
 
 test("policySurfaceScanner discovers footer privacy links and bounded policy facts", async () => {
   await withPolicyScan("policy-footer-privacy", async ({ result, baseUrl }) => {

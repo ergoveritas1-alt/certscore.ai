@@ -94,6 +94,103 @@ export interface PolicySurfaceScannerResult {
   artifactRefs: ArtifactRef[];
 }
 
+export type RetainedRenderedPolicyLink = {
+  domLocation: "footer" | "header" | "nav" | "body";
+  href: string;
+  linkText: string;
+  pageUrl: string;
+  selector?: string;
+};
+
+export function policySurfaceObservationsFromRetainedRenderedLinks(input: {
+  links: RetainedRenderedPolicyLink[];
+  evidenceRef?: EvidenceRef;
+}): PolicySurfaceObservation[] {
+  const observations = input.links.flatMap((link, index): PolicySurfaceObservation[] => {
+    const deterministic = classifySurface({ linkText: link.linkText, url: link.href });
+    if (deterministic.surfaceType === "unknown" || deterministic.score <= 0.2) return [];
+    const candidate: PolicySurfaceCandidate = {
+      candidateId: `policy_preconsent_rendered_candidate_${index}`,
+      url: link.href,
+      normalizedUrl: link.href,
+      linkText: link.linkText || link.href,
+      selector: link.selector,
+      domLocation: link.domLocation,
+      sameOrigin: sameOrigin(link.pageUrl, link.href),
+      fetchable: true,
+      clickable: true,
+      mayLeadToConsentControls: isPreferenceControlSurface(deterministic.surfaceType, link.linkText),
+      observationOnly: true,
+      deterministicSurfaceType: deterministic.surfaceType,
+      deterministicScore: deterministic.score,
+      deterministicKeywordMatches: deterministic.keywords,
+      ...classifierCandidateFields(deterministic),
+      discoveryMethod: link.domLocation === "footer"
+        ? "footer_link"
+        : link.domLocation === "header" || link.domLocation === "nav"
+          ? "header_link"
+          : "page_text_link",
+    };
+    return [observationFromCandidate(candidate, {
+      status: "observed",
+      confidence: Math.max(
+        deterministic.matchStrength === "direct" ? 0.9 : 0.72,
+        deterministic.score,
+      ),
+      evidenceRefs: input.evidenceRef ? [input.evidenceRef] : [],
+    })];
+  });
+  return mergePolicySurfaceObservations([], observations);
+}
+
+export function mergePolicySurfaceObservations(
+  primary: PolicySurfaceObservation[],
+  supplemental: PolicySurfaceObservation[],
+): PolicySurfaceObservation[] {
+  const merged = new Map<string, PolicySurfaceObservation>();
+  for (const observation of [...primary, ...supplemental]) {
+    const key = policySurfaceObservationKey(observation);
+    const existing = merged.get(key);
+    if (!existing || policyObservationRank(observation) > policyObservationRank(existing)) {
+      merged.set(key, observation);
+    }
+  }
+  return [...merged.values()];
+}
+
+export function countRecoveredPolicySurfaceObservations(
+  primary: PolicySurfaceObservation[],
+  supplemental: PolicySurfaceObservation[],
+): number {
+  const confirmedPrimaryKeys = new Set(
+    primary
+      .filter((observation) => observation.status === "observed" || observation.status === "fetched")
+      .map(policySurfaceObservationKey),
+  );
+  return new Set(
+    supplemental
+      .filter((observation) => !confirmedPrimaryKeys.has(policySurfaceObservationKey(observation)))
+      .map(policySurfaceObservationKey),
+  ).size;
+}
+
+function policySurfaceObservationKey(observation: PolicySurfaceObservation): string {
+  return `${observation.surfaceType}:${observation.normalizedUrl ?? observation.url}`;
+}
+
+function policyObservationRank(observation: PolicySurfaceObservation): number {
+  const statusRank: Record<PolicySurfaceObservation["status"], number> = {
+    fetched: 7,
+    observed: 6,
+    candidate: 5,
+    assisted_candidate: 4,
+    failed: 3,
+    skipped_budget: 2,
+    not_observed: 1,
+  };
+  return statusRank[observation.status] * 10 + observation.confidence;
+}
+
 export interface PolicyNanoAssistProvider {
   classifyLinks?(input: NanoLinkClassificationInput): Promise<NanoLinkClassificationResult>;
   extractTopics?(input: NanoTopicExtractionInput): Promise<NanoTopicExtractionResult>;

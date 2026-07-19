@@ -1237,6 +1237,35 @@ test("regulatory review projects policy surfaces conservatively", async () => {
   assert.equal(california?.rows.find((row) => row.id === "targeted_advertising_signals")?.status, "not_testable");
 });
 
+test("partial policy coverage preserves a directly observed privacy-policy link without claiming fetched content", async () => {
+  const result = await reviewEvidenceBundle(
+    policyBundle({
+      modulesRun: [{
+        ...policyModuleRun(),
+        status: "partial",
+        errors: ["Dedicated policy-document fetch failed; rendered link evidence was retained."],
+      }],
+      policySurfaceObservations: [
+        policyObservation({
+          observationId: "rendered_privacy_link_only",
+          status: "observed",
+          textExcerpt: undefined,
+          boundedTextExcerptIds: [],
+          observedTopics: [],
+        }),
+      ],
+    }),
+  );
+
+  const finding = result.findingCandidates.find(
+    (candidate) => candidate.findingKey === "privacy_notice_observed_or_not_observed",
+  );
+  assert.equal(finding?.eligibility.status, "eligible");
+  assert.equal(finding?.matchedCriteria.includes("privacy_notice_surface_observed"), true);
+  assert.equal(finding?.matchedCriteria.includes("privacy_notice_fetch_succeeded"), false);
+  assert.deepEqual(finding?.missingCorroborators, ["bounded_privacy_notice_excerpt"]);
+});
+
 test("Do Not Sell or Share availability accepts contextual Your Privacy Choices surfaces", async () => {
   const result = await reviewEvidenceBundle(
     policyBundle({

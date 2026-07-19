@@ -619,6 +619,38 @@ test("pre-consent runtime scanner does not promote a generic product Learn more 
   }
 });
 
+test("pre-consent runtime scanner retains canonical rendered policy links from the successful page context", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-rendered-policy-links-"));
+  try {
+    const url = server.urlFor("consent-generic-learn-more-page-context");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 6_000,
+      artifactWriter,
+      routeFulfillers,
+      screenshotMode: "selective",
+      waitMode: "fast",
+    });
+
+    assert.equal(result.moduleRun.status, "completed", result.moduleRun.errors.join("; "));
+    assert.equal(
+      result.renderedPolicyLinks.some((link) =>
+        link.linkText === "Privacy policy" &&
+        link.href === new URL("/policies/privacy", url).toString()
+      ),
+      true,
+      `the successful pre-consent browser should retain the exact rendered privacy-policy href; retained=${JSON.stringify(result.renderedPolicyLinks)} timing=${JSON.stringify(result.moduleRun.timingBreakdown)}`,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner treats contextual Required Only as necessary-only reject evidence", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-required-only-"));

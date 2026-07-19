@@ -18,6 +18,7 @@ import {
   type ConsentUiObservation,
   type VisualCaptureSummary,
   classifyConsentControlLabel,
+  classifyPrivacySurface,
   consentControlTerms,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
 } from "@certscore/contracts";
@@ -268,7 +269,16 @@ export interface PreConsentRuntimeScannerResult {
   domSnapshots: DomSnapshotArtifact[];
   artifactRefs: ArtifactRef[];
   vendorResolverInputs: VendorResolverInput[];
+  renderedPolicyLinks: RetainedRenderedPolicyLink[];
 }
+
+export type RetainedRenderedPolicyLink = {
+  domLocation: "footer" | "header" | "nav" | "body";
+  href: string;
+  linkText: string;
+  pageUrl: string;
+  selector?: string;
+};
 
 export async function preConsentRuntimeScanner(
   input: PreConsentRuntimeScannerInput,
@@ -603,6 +613,7 @@ export async function preConsentRuntimeScanner(
         ? [retainedTransportSecurityArtifactRef]
         : [],
       vendorResolverInputs: [...vendorResolverInputs],
+      renderedPolicyLinks: [],
     };
   };
   const softDeadlineResultPromise = softDeadlineSignal
@@ -911,6 +922,7 @@ export async function preConsentRuntimeScanner(
       frames,
       scripts,
       storageSnapshot,
+      renderedPolicyLinks,
     } = pageEvidence;
     retainedStorageSnapshot = storageSnapshot;
     retainedCollectionSurfaceObservations = collectionSurfaceObservations;
@@ -1806,6 +1818,7 @@ export async function preConsentRuntimeScanner(
       domSnapshots: [domSnapshot],
       artifactRefs: transportSecurityArtifactRef ? [transportSecurityArtifactRef] : [],
       vendorResolverInputs,
+      renderedPolicyLinks,
     };
   } catch (error) {
     const parentCancellation = abortReason(parentSignal);
@@ -1919,6 +1932,7 @@ export async function preConsentRuntimeScanner(
         ? [retainedTransportSecurityArtifactRef]
         : [],
       vendorResolverInputs,
+      renderedPolicyLinks: [],
     };
   } finally {
     input.signal?.removeEventListener("abort", abortRuntime);
@@ -2447,6 +2461,13 @@ type ConsolidatedPageEvidenceSnapshot = {
   domText: string;
   frames: Array<{ name?: string; src?: string }>;
   localStorageEntries: Record<string, string>;
+  pageUrl: string;
+  links: Array<{
+    domLocation: "footer" | "header" | "nav" | "body";
+    href: string;
+    linkText: string;
+    selector?: string;
+  }>;
   scripts: Array<{ async: boolean; defer: boolean; src?: string }>;
   sessionStorageEntries: Record<string, string>;
 };
@@ -2465,6 +2486,7 @@ async function capturePostSettlePageEvidence(input: {
   frames: IframeEvent[];
   scripts: ScriptEvent[];
   storageSnapshot: StorageSnapshot;
+  renderedPolicyLinks: RetainedRenderedPolicyLink[];
 }> {
   const snapshot = await recordBoundedTiming(
     input.timingBreakdown,
@@ -2521,8 +2543,9 @@ async function capturePostSettlePageEvidence(input: {
           frames: [],
           scripts: [],
           storageSnapshot: emptyStorageSnapshot(input.scanStartedAtMs, input.normalizedUrl),
+          renderedPolicyLinks: [],
         };
-    const [frames, apiAccesses] = await Promise.all([
+    const [frames, apiAccesses, renderedPolicyLinks] = await Promise.all([
       retryEvidence.frames.length > 0
         ? Promise.resolve(retryEvidence.frames)
         : recordBoundedTiming(
@@ -2543,15 +2566,26 @@ async function capturePostSettlePageEvidence(input: {
             () => captureBrowserApiAccessEvents(input.page, input.scanStartedAtMs, input.normalizedUrl),
             () => [],
           ),
+      retryEvidence.renderedPolicyLinks.length > 0
+        ? Promise.resolve(retryEvidence.renderedPolicyLinks)
+        : recordBoundedTiming(
+            input.timingBreakdown,
+            "page evidence: bounded rendered policy links fallback",
+            "A bounded canonical link-only read preserves obvious privacy, cookie, and privacy-choice surfaces when both atomic snapshots omit them.",
+            1_000,
+            () => captureRenderedPolicyLinks(input.page),
+            () => [],
+          ),
     ]);
     return {
       ...retryEvidence,
       apiAccesses,
       frames,
+      renderedPolicyLinks,
     };
   }
 
-  const [storageSnapshot, scripts, frames, apiAccesses, collectionSurfaceObservations, domText] = await Promise.all([
+  const [storageSnapshot, scripts, frames, apiAccesses, collectionSurfaceObservations, domText, renderedPolicyLinks] = await Promise.all([
     recordBoundedTiming(
       input.timingBreakdown,
       "page evidence: storage snapshot",
@@ -2600,13 +2634,21 @@ async function capturePostSettlePageEvidence(input: {
       () => input.page.locator("body").innerText({ timeout: 2_000 }),
       () => "",
     ),
+    recordBoundedTiming(
+      input.timingBreakdown,
+      "page evidence: rendered policy links",
+      "Bounded canonical policy-link inventory retained from the successfully rendered pre-consent document.",
+      1_000,
+      () => captureRenderedPolicyLinks(input.page),
+      () => [],
+    ),
   ]);
   recordInstantTiming(
     input.timingBreakdown,
     "page evidence: consolidated fallback",
     "The atomic snapshot was unavailable; legacy read-only evidence collectors retained coverage.",
   );
-  return { apiAccesses, collectionSurfaceObservations, domText, frames, scripts, storageSnapshot };
+  return { apiAccesses, collectionSurfaceObservations, domText, frames, scripts, storageSnapshot, renderedPolicyLinks };
 }
 
 async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<ConsolidatedPageEvidenceSnapshot> {
@@ -2674,6 +2716,8 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
         name: frame.name || undefined,
       })),
       localStorageEntries,
+      pageUrl: window.location.href,
+      links: boundedRenderedAnchorRows(),
       scripts: [...document.scripts].map((script) => ({
         src: script.src || undefined,
         async: script.async,
@@ -2681,6 +2725,36 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
       })),
       sessionStorageEntries,
     };
+
+    function boundedRenderedAnchorRows() {
+      const elements = [...document.querySelectorAll("a[href]")];
+      const selected = elements.length > 1_000
+        ? [...elements.slice(0, 500), ...elements.slice(-500)]
+        : elements;
+      return selected.flatMap((element) => {
+        const href = element.getAttribute("href")?.trim();
+        if (!href) return [];
+        const linkText = [
+          element.textContent,
+          element.getAttribute("aria-label"),
+          element.getAttribute("title"),
+        ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 220);
+        const domLocation = element.closest("footer")
+          ? "footer" as const
+          : element.closest("header")
+            ? "header" as const
+            : element.closest("nav")
+              ? "nav" as const
+              : "body" as const;
+        const id = element.getAttribute("id")?.trim();
+        return [{
+          domLocation,
+          href,
+          linkText,
+          ...(id ? { selector: `#${id.replace(/[^a-zA-Z0-9_-]/g, "")}` } : {}),
+        }];
+      });
+    }
   });
 }
 
@@ -2715,7 +2789,62 @@ function consolidatedPageEvidenceFromSnapshot(
       input.normalizedUrl,
     ),
     domText: snapshot.domText,
+    renderedPolicyLinks: retainedRenderedPolicyLinks(snapshot.links, snapshot.pageUrl || input.normalizedUrl),
   };
+}
+
+function retainedRenderedPolicyLinks(
+  rows: ConsolidatedPageEvidenceSnapshot["links"],
+  pageUrl: string,
+): RetainedRenderedPolicyLink[] {
+  const retained: RetainedRenderedPolicyLink[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    let href: string;
+    try {
+      const parsed = new URL(row.href, pageUrl);
+      if (!/^https?:$/.test(parsed.protocol)) continue;
+      parsed.hash = "";
+      href = parsed.toString();
+    } catch {
+      continue;
+    }
+    const classification = classifyPrivacySurface({ linkText: row.linkText, url: href });
+    if (classification.surfaceType === "unknown" || classification.confidence <= 0.2) continue;
+    const key = `${classification.surfaceType}:${href}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    retained.push({ ...row, href, pageUrl });
+    if (retained.length >= 40) break;
+  }
+  return retained;
+}
+
+async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRenderedPolicyLink[]> {
+  const snapshot = await page.evaluate(() => {
+    const elements = [...document.querySelectorAll("a[href]")];
+    const selected = elements.length > 1_000
+      ? [...elements.slice(0, 500), ...elements.slice(-500)]
+      : elements;
+    return {
+      pageUrl: window.location.href,
+      links: selected.flatMap((element) => {
+        const href = element.getAttribute("href")?.trim();
+        if (!href) return [];
+        const linkText = [element.textContent, element.getAttribute("aria-label"), element.getAttribute("title")]
+          .filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 220);
+        const domLocation = element.closest("footer")
+          ? "footer" as const
+          : element.closest("header")
+            ? "header" as const
+            : element.closest("nav")
+              ? "nav" as const
+              : "body" as const;
+        return [{ domLocation, href, linkText }];
+      }),
+    };
+  });
+  return retainedRenderedPolicyLinks(snapshot.links, snapshot.pageUrl);
 }
 
 async function captureStorageSnapshot(

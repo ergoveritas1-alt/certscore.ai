@@ -43,7 +43,12 @@ import {
   readDeclaredDocumentLanguage,
   type PreConsentRuntimeScannerResult,
 } from "./scanners/pre-consent-runtime-scanner.js";
-import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
+import {
+  countRecoveredPolicySurfaceObservations,
+  mergePolicySurfaceObservations,
+  policySurfaceObservationsFromRetainedRenderedLinks,
+  policySurfaceScanner,
+} from "./scanners/policy-surface-scanner.js";
 import { chromiumContextOptions, chromiumLaunchOptions, chromiumProxyOptions } from "./playwright-runtime.js";
 import { throwIfAborted } from "./abort.js";
 import { isNavigationTransportFailure, navigationTransportRecoveryUrls } from "./transport-fallback.js";
@@ -526,8 +531,57 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   }
   const policySurfaceResult = policySurfaceSettled?.value;
   if (policySurfaceResult) {
+    const domSnapshot = preConsentResult.domSnapshots[0];
+    const renderedPolicyEvidenceRef = domSnapshot
+      ? { refId: domSnapshot.artifactId, artifactId: domSnapshot.artifactId, path: domSnapshot.path }
+      : undefined;
+    const retainedRenderedPolicyObservations = policySurfaceObservationsFromRetainedRenderedLinks({
+      links: preConsentResult.renderedPolicyLinks,
+      evidenceRef: renderedPolicyEvidenceRef,
+    });
+    const recoveredPolicySurfaceCount = countRecoveredPolicySurfaceObservations(
+      policySurfaceResult.policySurfaceObservations,
+      retainedRenderedPolicyObservations,
+    );
+    policySurfaceResult.policySurfaceObservations = mergePolicySurfaceObservations(
+      policySurfaceResult.policySurfaceObservations,
+      retainedRenderedPolicyObservations,
+    );
+    if (recoveredPolicySurfaceCount > 0) {
+      if (["failed", "not_testable", "skipped_budget"].includes(policySurfaceResult.moduleRun.status)) {
+        policySurfaceResult.moduleRun.status = "partial";
+        policySurfaceResult.moduleRun.errors.push(
+          "The dedicated policy browser did not retain policy-document content, but canonical policy links were observed in the successful pre-consent browser.",
+        );
+      }
+      policySurfaceResult.moduleRun.timingBreakdown = [
+        ...(policySurfaceResult.moduleRun.timingBreakdown ?? []),
+        {
+          label: "rendered policy-link handoff",
+          durationMs: 0,
+          detail: `Recovered ${recoveredPolicySurfaceCount} canonical policy surface(s) retained by the successful pre-consent browser.`,
+        },
+      ].slice(0, 40);
+      const existingRecovery = policySurfaceResult.moduleRun.recoveryDiagnostics;
+      policySurfaceResult.moduleRun.recoveryDiagnostics = {
+        attempted: true,
+        attemptCount: (existingRecovery?.attemptCount ?? 0) + 1,
+        modes: [...new Set([
+          ...(existingRecovery?.modes ?? []),
+          "pre_consent_rendered_policy_link_handoff",
+        ])].slice(0, 12),
+        durationMs: existingRecovery?.durationMs ?? 0,
+      };
+      if (renderedPolicyEvidenceRef && !policySurfaceResult.moduleRun.evidenceRefs.some(
+        (ref) => ref.artifactId === renderedPolicyEvidenceRef.artifactId,
+      )) {
+        policySurfaceResult.moduleRun.evidenceRefs.push(renderedPolicyEvidenceRef);
+      }
+    }
     await phaseRecorder.record("policy_surface_for_output", "completed", {
       durationMs: policySurfaceResult.moduleRun.durationMs,
+      recoveredRenderedPolicyLinks: recoveredPolicySurfaceCount,
+      retainedRenderedPolicyLinks: retainedRenderedPolicyObservations.length,
       status: policySurfaceResult.moduleRun.status,
     });
   }
@@ -2172,5 +2226,6 @@ function emptyPreConsentResult(startedAt: string): PreConsentRuntimeScannerResul
     domSnapshots: [],
     artifactRefs: [],
     vendorResolverInputs: [],
+    renderedPolicyLinks: [],
   };
 }
