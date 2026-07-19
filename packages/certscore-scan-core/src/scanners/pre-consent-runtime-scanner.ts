@@ -749,12 +749,16 @@ export async function preConsentRuntimeScanner(
     const settleWaitMs = fastWait ? 350 : 1_000;
     const consentUiWaitTimeoutMs = fastWait ? 1_800 : 3_500;
     const consentUiCaptureTimeoutMs = fastWait ? 3_500 : 5_500;
+    const directCmpNetworkEvidenceAtInitialCapture = hasHighConfidenceDirectCmpRuntimeEvidence(
+      buildCmpRuntimeObservations(vendorResolverInputs, input.scanStartedAtMs),
+    );
     const consentUiObservationPromise = recordBoundedTiming(
       timingBreakdown,
       "page evidence: consent UI",
       "First-layer consent surface/control text and affordance inventory, started immediately after DOMContentLoaded.",
       consentUiCaptureTimeoutMs,
       () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs, {
+        deferBrowserProbeUntilCmpOrScreenshot: directCmpNetworkEvidenceAtInitialCapture,
         returnAfterRapidAndCheapSnapshot: true,
         waitForCompleteChoiceControls: true,
       }),
@@ -1492,7 +1496,12 @@ export async function preConsentRuntimeScanner(
           ),
           () => consentObservation,
         );
-        if (isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation)) {
+        const recapturedFullDocumentControls = recapturedConsentObservation.controls.length > 0 &&
+          recapturedConsentObservation.basis.some((basis) => basis.startsWith("inventory:full_document_"));
+        if (
+          isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation) ||
+          recapturedFullDocumentControls
+        ) {
           const recaptureBasis = recapturedConsentObservation.basis.some((basis) =>
             basis.startsWith("inventory:full_document_")
           )
@@ -3305,6 +3314,7 @@ export async function detectConsentUi(
   waitForControlTimeoutMs = 3_500,
   options: {
     allowFullDocumentCmpControls?: boolean;
+    deferBrowserProbeUntilCmpOrScreenshot?: boolean;
     waitForActionableChoiceControls?: boolean;
     waitForCompleteChoiceControls?: boolean;
     waitForControlsOnTextOnlySurface?: boolean;
@@ -3312,6 +3322,23 @@ export async function detectConsentUi(
     returnAfterRapidAndCheapSnapshot?: boolean;
   } = {},
 ): Promise<ConsentUiObservation> {
+  if (options.deferBrowserProbeUntilCmpOrScreenshot === true) {
+    const deferredObservation = emptyConsentUiObservation(scanStartedAtMs);
+    return {
+      ...deferredObservation,
+      basis: ["browser_probe_deferred_until_cmp_or_screenshot"],
+      confidence: 0.2,
+      inventoryDiagnostics: {
+        candidateContainerCount: 0,
+        candidateControlCount: 0,
+        retainedControlCount: 0,
+        inventorySources: [],
+        candidateLabels: [],
+        rejectionReasons: [],
+        timingMarkers: ["browser_probe_deferred_until_cmp_or_screenshot"],
+      },
+    };
+  }
   const waitStartedAtMs = Date.now();
   const rapidObservation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
   const rapidInventoryHasPotentialToggle = rapidObservation.inventoryDiagnostics?.timingMarkers.includes(
@@ -3535,10 +3562,24 @@ async function waitForRapidConsentControls(
   timeoutMs: number,
 ): Promise<ConsentUiObservation> {
   const deadlineAtMs = Date.now() + Math.max(0, timeoutMs);
+  // A busy CMP/page bootstrap can delay page.evaluate itself. Repeated polling
+  // then competes with the very main-thread work that must render the banner.
+  // Give directly observed CMPs a passive settle window and perform at most two
+  // bounded typed reads instead.
+  const firstSettleMs = Math.min(2_500, Math.max(0, timeoutMs));
+  if (firstSettleMs > 0) {
+    await page.waitForTimeout(firstSettleMs).catch(() => undefined);
+  }
   let observation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
-  while (!hasSufficientFirstLayerConsentControls(observation) && Date.now() < deadlineAtMs) {
-    await page.waitForTimeout(Math.min(250, Math.max(0, deadlineAtMs - Date.now()))).catch(() => undefined);
-    observation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
+  const remainingMs = Math.max(0, deadlineAtMs - Date.now());
+  if (remainingMs > 50) {
+    await page.waitForTimeout(remainingMs).catch(() => undefined);
+    const finalObservation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
+    observation = mergeConsentUiObservations(
+      observation,
+      finalObservation,
+      "recapture:passive_cmp_settle",
+    );
   }
   return annotateConsentInventoryTimingMarkers(
     observation,
