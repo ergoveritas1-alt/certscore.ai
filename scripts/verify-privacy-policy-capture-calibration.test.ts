@@ -11,8 +11,11 @@ function site(input: Partial<PrivacyPolicyCalibrationSite> & { domain: string })
   return {
     captured: true,
     completed: true,
+    documentFetchFailed: false,
+    documentFetchSkippedBudget: false,
     evidenceIntegrityValid: true,
     noGo: false,
+    observedLink: true,
     policyInspectionOutcome: "privacy_policy_observed",
     policyModuleDurationMs: 500,
     policyModuleStatus: "completed",
@@ -59,8 +62,30 @@ test("does not credit a URL-only policy guess and flags its evidence integrity",
 
   assert.equal(summarized.captured, false);
   assert.equal(summarized.evidenceIntegrityValid, false);
+  assert.equal(summarized.observedLink, false);
   assert.equal(summarized.policyInspectionOutcome, "indeterminate_limited_coverage");
   assert.equal(summarized.policyModuleStatus, "failed");
+});
+
+test("records a rendered policy link separately when its document fetch fails", () => {
+  const summarized = summarizePrivacyPolicyCalibrationBundle({
+    normalizedUrl: "https://example.com/",
+    completedAt: "2026-07-17T00:00:12.000Z",
+    policySurfaceObservations: [{
+      surfaceType: "privacy_policy",
+      status: "failed",
+      linkObservationState: "observed",
+      documentFetchState: "failed",
+      discoveryMethod: "footer_link",
+      url: "https://example.com/privacy",
+      evidenceRefs: [{ evidenceId: "footer-link" }],
+    }],
+  });
+
+  assert.equal(summarized.observedLink, true);
+  assert.equal(summarized.documentFetchFailed, true);
+  assert.equal(summarized.captured, false);
+  assert.equal(summarized.evidenceIntegrityValid, true);
 });
 
 test("passes capture, reviewed false-negative, integrity, and paired latency gates", () => {
@@ -83,6 +108,7 @@ test("passes capture, reviewed false-negative, integrity, and paired latency gat
 
   assert.equal(report.overallStatus, "passed");
   assert.equal(report.metrics.captureRate, 1);
+  assert.equal(report.metrics.observedLinkRate, 1);
   assert.equal(report.metrics.falseNegativeRate, 0);
   assert.equal(report.metrics.latencyComparisonMethod, "paired_domains");
   assert.equal(report.metrics.medianLatencyDeltaMs, 500);

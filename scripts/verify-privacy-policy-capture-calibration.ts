@@ -8,8 +8,11 @@ type JsonRecord = Record<string, unknown>;
 export type PrivacyPolicyCalibrationSite = {
   captured: boolean;
   completed: boolean;
+  documentFetchFailed: boolean;
+  documentFetchSkippedBudget: boolean;
   domain: string;
   evidenceIntegrityValid: boolean;
+  observedLink: boolean;
   noGo: boolean;
   policyInspectionOutcome: string | null;
   policyModuleDurationMs: number | null;
@@ -74,17 +77,34 @@ function canonicalDomain(value: string): string {
   }
 }
 
-function observationHasSubstantiveEvidence(observation: JsonRecord): boolean {
+function observationHasSubstantiveDocumentEvidence(observation: JsonRecord): boolean {
   const text = asString(observation.textExcerpt);
   return Boolean(
     text ||
     asArray(observation.observedTopics).length > 0 ||
     asArray(observation.article13DisclosureSignals).length > 0 ||
     asArray(observation.retainedPolicySections).length > 0 ||
-    asArray(observation.retainedArticle13SectionEvidence).length > 0 ||
-    asArray(observation.evidenceRefs).length > 0 ||
-    asArray(observation.artifactRefs).length > 0
+    asArray(observation.retainedArticle13SectionEvidence).length > 0
   );
+}
+
+function observationIsObservedLink(observation: JsonRecord): boolean {
+  if (observation.linkObservationState === "observed") return true;
+  const discoveryMethod = asString(observation.discoveryMethod);
+  const status = asString(observation.status);
+  return discoveryMethod !== "guessed_common_path" &&
+    ["footer_link", "header_link", "page_text_link", "deterministic_keyword_match"].includes(discoveryMethod ?? "") &&
+    ["observed", "fetched", "failed", "skipped_budget"].includes(status ?? "");
+}
+
+function observationDocumentFetchState(observation: JsonRecord): string | null {
+  const typedState = asString(observation.documentFetchState);
+  if (typedState) return typedState;
+  const status = asString(observation.status);
+  if (status === "fetched") return "fetched";
+  if (status === "failed") return "failed";
+  if (status === "skipped_budget") return "skipped_budget";
+  return "not_attempted";
 }
 
 export function summarizePrivacyPolicyCalibrationBundle(
@@ -96,12 +116,19 @@ export function summarizePrivacyPolicyCalibrationBundle(
   const policyObservations = asArray(bundle.policySurfaceObservations)
     .map(asRecord)
     .filter((observation) => observation.surfaceType === "privacy_policy");
-  const retainedPrivacyObservations = policyObservations.filter((observation) =>
-    ["fetched", "observed"].includes(asString(observation.status) ?? "")
+  const observedLink = policyObservations.some(observationIsObservedLink);
+  const fetchedPrivacyObservations = policyObservations.filter((observation) =>
+    observationDocumentFetchState(observation) === "fetched"
   );
-  const captured = retainedPrivacyObservations.some(observationHasSubstantiveEvidence);
-  const evidenceIntegrityValid = retainedPrivacyObservations.length === 0 ||
-    retainedPrivacyObservations.every(observationHasSubstantiveEvidence);
+  const captured = fetchedPrivacyObservations.some(observationHasSubstantiveDocumentEvidence);
+  const evidenceIntegrityValid = fetchedPrivacyObservations.length === 0 ||
+    fetchedPrivacyObservations.every(observationHasSubstantiveDocumentEvidence);
+  const documentFetchFailed = policyObservations.some((observation) =>
+    observationDocumentFetchState(observation) === "failed"
+  );
+  const documentFetchSkippedBudget = policyObservations.some((observation) =>
+    observationDocumentFetchState(observation) === "skipped_budget"
+  );
   const moduleRuns = asArray(bundle.modulesRun).map(asRecord);
   const policyRun = moduleRuns.find((moduleRun) => moduleRun.moduleName === "policySurfaceScanner");
   const noGoAssessment = asRecord(bundle.scanNoGoAssessment ?? bundle.scan_no_go_assessment);
@@ -118,9 +145,12 @@ export function summarizePrivacyPolicyCalibrationBundle(
   return {
     captured,
     completed: Boolean(completedAt),
+    documentFetchFailed,
+    documentFetchSkippedBudget,
     domain: canonicalDomain(normalizedUrl),
     evidenceIntegrityValid,
     noGo: noGoAssessment.decision === "no_go" || runtimeCoverage.coverageStatus === "limited_none",
+    observedLink,
     policyInspectionOutcome: asString(inspection.outcome),
     policyModuleDurationMs: asNumber(policyRun?.durationMs),
     policyModuleStatus: asString(policyRun?.status),
@@ -179,6 +209,7 @@ export function evaluatePrivacyPolicyCalibration(input: {
     ? percentile(pairedLatencyDeltas, 0.95)
     : candidateP95 !== null && baselineP95 !== null ? candidateP95 - baselineP95 : null;
   const captureRate = rate(candidateEligible.filter((site) => site.captured).length, candidateEligible.length);
+  const observedLinkRate = rate(candidateEligible.filter((site) => site.observedLink).length, candidateEligible.length);
   const falseNegativeRate = rate(falseNegatives.length, reviewedExpectedPresent.length);
   const checks = [
     check("candidate_site_count", candidateEligible.length >= thresholds.minSites, candidateEligible.length, `>= ${thresholds.minSites}`),
@@ -201,6 +232,8 @@ export function evaluatePrivacyPolicyCalibration(input: {
       baselineMedianScanDurationMs: baselineMedian,
       baselineP95ScanDurationMs: baselineP95,
       candidateCapturedPolicies: candidateEligible.filter((site) => site.captured).length,
+      candidateDocumentFetchFailed: candidateEligible.filter((site) => site.documentFetchFailed).length,
+      candidateDocumentFetchSkippedBudget: candidateEligible.filter((site) => site.documentFetchSkippedBudget).length,
       candidateEligibleSites: candidateEligible.length,
       candidateMedianScanDurationMs: candidateMedian,
       candidateP95ScanDurationMs: candidateP95,
@@ -209,6 +242,8 @@ export function evaluatePrivacyPolicyCalibration(input: {
       falseNegatives: falseNegatives.map((site) => site.domain),
       latencyComparisonMethod,
       medianLatencyDeltaMs: medianDeltaMs,
+      observedLinkRate,
+      observedPolicyLinks: candidateEligible.filter((site) => site.observedLink).length,
       pairedLatencySites: pairedLatencyDeltas.length,
       p95LatencyDeltaMs: p95DeltaMs,
       reviewedExpectedPresent: reviewedExpectedPresent.length,
@@ -218,6 +253,7 @@ export function evaluatePrivacyPolicyCalibration(input: {
     guardrails: [
       "Only completed, normally reached sites are included in capture and latency denominators.",
       "A captured policy requires retained substantive evidence; URL guesses alone receive no credit.",
+      "Observed links, document retrieval, and usable policy content are measured as separate funnel stages.",
       "False-negative measurement requires an explicit reviewed expectation with supporting evidence.",
       "Latency uses per-domain deltas when enough paired artifacts exist; otherwise baseline and candidate cohorts must be composition-matched.",
       "This verifier reads artifacts only and does not contact public sites or alter production findings.",
@@ -308,6 +344,9 @@ function renderMarkdown(report: ReturnType<typeof evaluatePrivacyPolicyCalibrati
     `Overall: **${report.overallStatus.toUpperCase()}**`,
     "",
     `- Capture rate: ${report.metrics.captureRate === null ? "n/a" : `${(report.metrics.captureRate * 100).toFixed(1)}%`}`,
+    `- Observed-link rate: ${report.metrics.observedLinkRate === null ? "n/a" : `${(report.metrics.observedLinkRate * 100).toFixed(1)}%`}`,
+    `- Document fetch failures: ${report.metrics.candidateDocumentFetchFailed}`,
+    `- Document fetches skipped for budget: ${report.metrics.candidateDocumentFetchSkippedBudget}`,
     `- Reviewed false-negative rate: ${report.metrics.falseNegativeRate === null ? "n/a" : `${(report.metrics.falseNegativeRate * 100).toFixed(1)}%`}`,
     `- Median scan latency delta: ${report.metrics.medianLatencyDeltaMs ?? "n/a"} ms`,
     `- P95 scan latency delta: ${report.metrics.p95LatencyDeltaMs ?? "n/a"} ms`,

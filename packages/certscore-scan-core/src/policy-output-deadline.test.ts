@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { policySurfaceRequiredForUnboundedOutput } from "./index.js";
+import {
+  buildRetainedRenderedPolicyFallbackResult,
+  policySurfaceRequiredForUnboundedOutput,
+} from "./index.js";
 
 test("planned-parallel production scans retain complete policy output", () => {
   assert.equal(policySurfaceRequiredForUnboundedOutput({
@@ -33,4 +36,28 @@ test("confirmed no-go scans do not wait for policy output", () => {
     plannedParallel: true,
     policySurfaceEnabled: true,
   }), false);
+});
+
+test("unsettled policy output retains typed rendered-link evidence as a partial module result", () => {
+  const result = buildRetainedRenderedPolicyFallbackResult({
+    completedAtMs: 2_500,
+    startedAtMs: 1_000,
+    observations: [{
+      observationId: "rendered-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy",
+      normalizedUrl: "https://example.test/privacy",
+      discoveryMethod: "footer_link",
+      status: "observed",
+      linkObservationState: "observed",
+      documentFetchState: "not_attempted",
+      documentEvaluationState: "not_attempted",
+      confidence: 0.9,
+    } as never],
+  });
+
+  assert.equal(result.moduleRun.status, "partial");
+  assert.equal(result.moduleRun.durationMs, 1_500);
+  assert.deepEqual(result.moduleRun.recoveryDiagnostics?.modes, ["pre_consent_rendered_policy_link_handoff"]);
+  assert.equal(result.policySurfaceObservations[0]?.normalizedUrl, "https://example.test/privacy");
 });

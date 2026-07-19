@@ -51,8 +51,29 @@ test("retained rendered links recover obvious policy surfaces when the separate 
   assert.equal(privacy?.discoveryMethod, "footer_link");
   assert.equal(privacy?.normalizedUrl, "https://www.sony.example/en/privacy-policy/");
   assert.equal(privacy?.evidenceRefs[0]?.artifactId, "dom_text_pre_consent");
+  assert.equal(privacy?.linkObservationState, "observed");
+  assert.equal(privacy?.documentFetchState, "not_attempted");
+  assert.equal(privacy?.documentEvaluationState, "not_attempted");
   assert.equal(cookie?.status, "observed");
   assert.deepEqual(privacy?.observedTopics, []);
+});
+
+test("retained combined privacy and cookie links produce both typed surfaces", () => {
+  const observations = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "footer",
+      href: "https://www.wickes.example/privacy",
+      linkText: "Privacy & Cookie Policy",
+      pageUrl: "https://www.wickes.example/",
+    }],
+  });
+
+  assert.deepEqual(
+    observations.map((observation) => observation.surfaceType).sort(),
+    ["cookie_policy", "privacy_policy"],
+  );
+  assert.equal(observations.every((observation) => observation.status === "observed"), true);
+  assert.equal(observations.every((observation) => observation.linkObservationState === "observed"), true);
 });
 
 test("fetched policy evidence outranks a supplemental rendered-link observation", () => {
@@ -110,6 +131,35 @@ test("policySurfaceScanner discovers footer privacy links and bounded policy fac
     assert.match(retainedPolicySurfaceText, /Google Analytics and Meta/i);
     assert.doesNotMatch(retainedPolicySurfaceText, /<main|<script|<footer/i);
     assert.ok(retainedPolicySurfaceText.length <= 256_000);
+  });
+});
+
+test("policySurfaceScanner protects one strong observed privacy link after the soft budget", async () => {
+  const defaultNanoProvider = createDefaultMockNanoPolicyAssistProvider();
+  const delayedNanoProvider: PolicyNanoAssistProvider = {
+    async classifyLinks(input) {
+      await new Promise((resolve) => setTimeout(resolve, 5_150));
+      return defaultNanoProvider.classifyLinks!(input);
+    },
+  };
+
+  await withPolicyScan("policy-footer-privacy", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/privacy`
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.documentFetchState, "fetched");
+    assert.equal(diagnostics.funnel.protectedObservedFetchAttempts, 1);
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("policy protected fetch")),
+      true,
+    );
+  }, {
+    internalBudgetMs: 5_000,
+    nanoAssistProvider: delayedNanoProvider,
   });
 });
 
@@ -1620,7 +1670,7 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
     assert.equal(
       diagnostics.failedFetches.some((failure) =>
         failure.stage === "candidate_direct" &&
-        failure.httpStatus === 429 &&
+        failure.httpStatus === 503 &&
         failure.failureReason === "http_error"
       ),
       true,
@@ -1633,6 +1683,8 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("policy rendered fetch fallback")),
       true,
     );
+    assert.equal(diagnostics.funnel.renderedRecoveryAttempts >= 1, true);
+    assert.equal(diagnostics.funnel.renderedRecoverySuccesses >= 1, true);
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -2085,16 +2137,23 @@ test("policySurfaceScanner retains visible terms links across policy gold corpus
   }
 });
 
-test("policySurfaceScanner dedupes slash variants before applying common-path fallback cap", async () => {
+test("policySurfaceScanner dedupes slash variants per surface before applying common-path fallback cap", async () => {
   await withPolicyScan("policy-gold-ford-secondary-only", async ({ result, baseUrl }) => {
-    const commonPathUrls = result.policySurfaceObservations
+    const commonPathObservations = result.policySurfaceObservations
       .filter((observation) => observation.discoveryMethod === "guessed_common_path")
+    const commonPathUrls = commonPathObservations
       .map((observation) => observation.normalizedUrl ?? observation.url);
 
     assert.ok(commonPathUrls.length <= 18);
     assert.equal(commonPathUrls.includes(`${baseUrl}/privacy-notice`), true);
     assert.equal(commonPathUrls.includes(`${baseUrl}/help/privacy/`), false);
-    assert.equal(new Set(commonPathUrls.map((value) => value.replace(/\/$/, ""))).size, commonPathUrls.length);
+    assert.equal(
+      new Set(commonPathObservations.map((observation) =>
+        `${observation.surfaceType}:${(observation.normalizedUrl ?? observation.url).replace(/\/$/, "")}`
+      )).size,
+      commonPathObservations.length,
+      "expected common-path observations to be slash-normalized within each typed surface",
+    );
   });
 });
 
@@ -2663,6 +2722,19 @@ async function readPolicyCaptureDiagnostics(
   commonPathFallbackUsed: boolean;
   fetchedCount: number;
   failedCandidateCount: number;
+  funnel: {
+    candidateDiscoveredCount: number;
+    candidateSelectedCount: number;
+    documentFetchStartedCount: number;
+    documentFetchedCount: number;
+    documentUsableCount: number;
+    fetchFailedCount: number;
+    observedLinkCount: number;
+    protectedObservedFetchAttempts: number;
+    renderedRecoveryAttempts: number;
+    renderedRecoverySuccesses: number;
+    skippedBudgetCount: number;
+  };
   homepageFetch?: {
     failureReason?: string;
     httpStatus?: number;

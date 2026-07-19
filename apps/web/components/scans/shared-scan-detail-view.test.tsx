@@ -1097,6 +1097,23 @@ test("deriveExecutivePolicySurfaces keeps generic label when there is only one p
   );
 });
 
+test("deriveExecutivePolicySurfaces shows discovered privacy links without claiming document evaluation", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+  const surfaces = deriveExecutivePolicySurfaces([], {}, {
+    policyDisclosureSummary: {
+      discoveredPrivacyPolicyUrls: ["https://example.test/privacy"],
+      privacyPolicyDiscovered: true,
+      privacyPolicyEvaluationState: "discovered_fetch_failed"
+    }
+  });
+
+  assert.deepEqual(surfaces, [{
+    details: ["Privacy-policy link observed; document retrieval failed, so its contents were not evaluated."],
+    pageLabel: "Privacy policy link",
+    pageUrl: "https://example.test/privacy"
+  }]);
+});
+
 test("deriveExecutivePolicySurfaces prefers retention sections over security-only policy excerpts", async () => {
   const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
   const sharedUrl = "https://ikea.example/global/en/legal/privacy-cookie-statement";

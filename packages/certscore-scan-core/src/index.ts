@@ -8,6 +8,7 @@ import {
   type ConsentUiObservation,
   type CookieSnapshot,
   type DomSnapshotArtifact,
+  type EvidenceRef,
   type IframeEvent,
   type NetworkEvent,
   type NetworkResponseEvent,
@@ -50,6 +51,7 @@ import {
   mergePolicySurfaceObservations,
   policySurfaceObservationsFromRetainedRenderedLinks,
   policySurfaceScanner,
+  type PolicySurfaceScannerResult,
 } from "./scanners/policy-surface-scanner.js";
 import { chromiumContextOptions, chromiumLaunchOptions, chromiumProxyOptions } from "./playwright-runtime.js";
 import { throwIfAborted } from "./abort.js";
@@ -159,6 +161,40 @@ export interface ConsentActionRecipeInput {
     scenario: string;
     targetUrl?: string;
   }>;
+}
+
+export function buildRetainedRenderedPolicyFallbackResult(input: {
+  completedAtMs: number;
+  evidenceRef?: EvidenceRef;
+  observations: PolicySurfaceObservation[];
+  startedAtMs: number;
+}): PolicySurfaceScannerResult {
+  return {
+    moduleRun: {
+      moduleName: "policySurfaceScanner",
+      status: "partial",
+      startedAt: new Date(input.startedAtMs).toISOString(),
+      completedAt: new Date(input.completedAtMs).toISOString(),
+      durationMs: Math.max(0, input.completedAtMs - input.startedAtMs),
+      timingBreakdown: [{
+        label: "rendered policy-link partial handoff",
+        durationMs: 0,
+        detail: `Retained ${input.observations.length} canonical policy link(s) from the pre-consent browser after dedicated policy output did not settle.`,
+      }],
+      recoveryDiagnostics: {
+        attempted: true,
+        attemptCount: 1,
+        modes: ["pre_consent_rendered_policy_link_handoff"],
+        durationMs: 0,
+      },
+      evidenceRefs: input.evidenceRef ? [input.evidenceRef] : [],
+      errors: [
+        "The dedicated policy scanner did not settle before output, but bounded rendered policy-link evidence was retained from the pre-consent browser.",
+      ],
+    },
+    policySurfaceObservations: input.observations,
+    artifactRefs: [],
+  };
 }
 
 export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBundle> {
@@ -542,16 +578,24 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     });
     throw policySurfaceSettled.reason;
   }
-  const policySurfaceResult = policySurfaceSettled?.value;
-  if (policySurfaceResult) {
-    const domSnapshot = preConsentResult.domSnapshots[0];
-    const renderedPolicyEvidenceRef = domSnapshot
-      ? { refId: domSnapshot.artifactId, artifactId: domSnapshot.artifactId, path: domSnapshot.path }
-      : undefined;
-    const retainedRenderedPolicyObservations = policySurfaceObservationsFromRetainedRenderedLinks({
-      links: preConsentResult.renderedPolicyLinks,
+  const domSnapshot = preConsentResult.domSnapshots[0];
+  const renderedPolicyEvidenceRef = domSnapshot
+    ? { refId: domSnapshot.artifactId, artifactId: domSnapshot.artifactId, path: domSnapshot.path }
+    : undefined;
+  const retainedRenderedPolicyObservations = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: preConsentResult.renderedPolicyLinks,
+    evidenceRef: renderedPolicyEvidenceRef,
+  });
+  let policySurfaceResult = policySurfaceSettled?.value;
+  if (!policySurfaceResult && retainedRenderedPolicyObservations.length > 0) {
+    policySurfaceResult = buildRetainedRenderedPolicyFallbackResult({
+      completedAtMs: Date.now(),
       evidenceRef: renderedPolicyEvidenceRef,
+      observations: retainedRenderedPolicyObservations,
+      startedAtMs,
     });
+  }
+  if (policySurfaceResult) {
     const recoveredPolicySurfaceCount = countRecoveredPolicySurfaceObservations(
       policySurfaceResult.policySurfaceObservations,
       retainedRenderedPolicyObservations,

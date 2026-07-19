@@ -604,9 +604,24 @@ function hasSubstantivePolicySurfaceEvidence(surface: LocalV2PolicySurface) {
   );
 }
 
+function isEvaluatedPrivacyPolicySurface(surface: LocalV2PolicySurface) {
+  return surface.surfaceType === "privacy_policy" && (
+    surface.documentEvaluationState === "usable" ||
+    ((surface.status === undefined || ["fetched", "observed"].includes(surface.status)) &&
+      hasSubstantivePolicySurfaceEvidence(surface))
+  );
+}
+
 function isReportablePolicySurface(surface: LocalV2PolicySurface) {
-  if (surface.status === "failed" || surface.status === "skipped_budget" || surface.status === "not_observed") {
+  if (surface.status === "not_observed") {
     return false;
+  }
+
+  if (surface.status === "failed" || surface.status === "skipped_budget") {
+    return surface.linkObservationState === "observed" &&
+      surface.discoveryMethod !== "guessed_common_path" &&
+      surface.confidence >= 0.72 &&
+      Boolean(firstString(surface.normalizedUrl, surface.url));
   }
 
   if (surface.status === "fetched") {
@@ -1779,8 +1794,11 @@ export function summarizePolicySurfaces(
   const privacySurfaces = policySurfaces.filter((row) => row.surface.surfaceType === "privacy_policy");
   const discoveredPrivacySurfaces = (options.discoveredPolicySurfaces ?? [])
     .filter((surface) => surface.surfaceType === "privacy_policy");
+  const evaluatedPrivacySurfaces = privacySurfaces.filter((row) =>
+    isEvaluatedPrivacyPolicySurface(row.surface)
+  );
   const article13Surfaces = selectArticle13PrivacySurfaces(
-    privacySurfaces.filter((row) =>
+    evaluatedPrivacySurfaces.filter((row) =>
       !isGenericThirdPartyPrivacySurface(row, rootDomain) &&
       !isSpecializedPrivacySurfaceForDifferentAudience(row, rootDomain)
     )
@@ -1899,6 +1917,20 @@ export function summarizePolicySurfaces(
   const discoveredPrivacyPolicyStatuses = uniqueStrings(discoveredPrivacySurfaces
     .map((surface) => firstString(surface.status))
     .filter(Boolean));
+  const discoveredPrivacyPolicyDetails = discoveredPrivacySurfaces.map((surface) => ({
+    documentEvaluationState: surface.documentEvaluationState ?? "not_attempted",
+    documentFetchState: surface.documentFetchState ?? (
+      surface.status === "fetched" ? "fetched" :
+      surface.status === "failed" ? "failed" :
+      surface.status === "skipped_budget" ? "skipped_budget" : "not_attempted"
+    ),
+    fetchFailureReason: surface.fetchFailureReason ?? null,
+    linkObservationState: surface.linkObservationState ?? (
+      surface.status === "observed" ? "observed" : "candidate"
+    ),
+    status: surface.status,
+    url: firstString(surface.finalUrl, surface.normalizedUrl, surface.url),
+  })).filter((surface) => Boolean(surface.url));
   const privacyPolicyEvaluationState = article13Surfaces.length > 0
     ? policyTextExtractionHealth.policyTextExtractionStatus === "ok"
       ? "fetched_usable"
@@ -1970,12 +2002,14 @@ export function summarizePolicySurfaces(
     policyTextCoverageMode: retainedPolicySections.length > 1 ? "section_targeted" : text.length > 0 ? "front_loaded" : "none",
     retainedPolicySectionHeadings,
     policySurfaceCount: policySurfaces.length,
+    evaluatedPrivacyPolicySurfaceCount: evaluatedPrivacySurfaces.length,
     policyTextExtractionHealth,
     policy_text_extraction_health: policyTextExtractionHealth,
     privacyPolicyPresent: article13Surfaces.length > 0,
     privacyPolicyDiscovered: discoveredPrivacySurfaces.length > 0 || article13Surfaces.length > 0,
     privacyPolicyEvaluationState,
     discoveredPrivacyPolicyStatuses,
+    discoveredPrivacyPolicyDetails,
     discoveredPrivacyPolicyUrls,
     privacyPolicyTextCharacterCount: text.length,
     privacyPolicyUrls: uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
@@ -2986,11 +3020,14 @@ function buildMaterializedLocalV2Detail(
     discoveredPolicySurfaces: bundle.policySurfaceObservations ?? [],
     gdprTransparencyEvidenceProfile
   });
+  const verifiedPolicySurfaces = policySurfaces.filter((row) =>
+    row.surface.surfaceType !== "privacy_policy" || isEvaluatedPrivacyPolicySurface(row.surface)
+  );
   const collectionSurfaceSummary = summarizeCollectionSurfaces(bundle);
   const transportSecuritySummary = summarizeTransportSecurity(bundle);
-  const privacySurface = policySurfaces.find((row) => row.surface.surfaceType === "privacy_policy");
-  const termsSurface = policySurfaces.find((row) => row.surface.surfaceType === "terms");
-  const cookieSurface = policySurfaces.find((row) =>
+  const privacySurface = verifiedPolicySurfaces.find((row) => row.surface.surfaceType === "privacy_policy");
+  const termsSurface = verifiedPolicySurfaces.find((row) => row.surface.surfaceType === "terms");
+  const cookieSurface = verifiedPolicySurfaces.find((row) =>
     row.surface.surfaceType === "cookie_policy" ||
     row.surface.surfaceType === "cookie_settings"
   );
@@ -3460,12 +3497,12 @@ function buildMaterializedLocalV2Detail(
     tracker_count_total: runtimeEvidenceReportable ? promotionGradeRequestPurposeRows.length : 0,
     tracker_vendor_count: runtimeEvidenceReportable ? promotionGradeVendorNames.length : 0,
     tracking_before_consent_detected: runtimeEvidenceReportable ? hasPromotionGradePreconsentTracking : false,
-    verified_public_surfaces_count: localV2NoGo && !policyOnlyPartial ? 0 : policySurfaces.length,
+    verified_public_surfaces_count: localV2NoGo && !policyOnlyPartial ? 0 : verifiedPolicySurfaces.length,
     ...(consentRuntimeEvidenceReportable && cmpVendorName ? { cmp_vendor_name: cmpVendorName } : {}),
     ...(cookieSurface ? { cookie_policy_present: true } : {}),
     ...(termsSurface ? { terms_of_service_present: true } : {})
   };
-  const policyEnrichmentRows = policySurfaces.map(({ pageUrl, surface }) => ({
+  const policyEnrichmentRows = verifiedPolicySurfaces.map(({ pageUrl, surface }) => ({
     id: `local-v2-${surface.observationId}`,
     pageType: normalizePolicyPageType(surface.surfaceType),
     pageUrl: pageUrl ?? surface.normalizedUrl ?? surface.url,

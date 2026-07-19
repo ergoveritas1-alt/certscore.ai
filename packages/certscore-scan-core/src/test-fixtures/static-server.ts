@@ -463,8 +463,8 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
 
   if (url.pathname === "/browser-visible-policy-homepage/privacy") {
     if (request.headers["sec-fetch-mode"] !== "navigate") {
-      response.writeHead(429, { "Content-Type": "text/plain; charset=utf-8" });
-      response.end("policy fetch blocked");
+      response.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end("policy fetch temporarily unavailable");
       return;
     }
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });

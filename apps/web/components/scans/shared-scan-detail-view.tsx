@@ -3203,6 +3203,37 @@ function deriveSnapshotPolicySurfaceFallbacks(
     .filter((surface) => !existingLabels.has(surface.pageLabel.toLowerCase()));
 }
 
+function deriveDiscoveredPrivacyPolicySurfaceFallbacks(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  existingSurfaces: ExecutivePolicySurface[]
+): ExecutivePolicySurface[] {
+  const summary = getPolicyDisclosureSummary(runtimeArtifacts);
+  if (!summary || existingSurfaces.some((surface) => /privacy/i.test(surface.pageLabel))) {
+    return [];
+  }
+  const discovered = getRecordBoolean(summary, "privacyPolicyDiscovered") ??
+    getRecordBoolean(summary, "privacy_policy_discovered");
+  if (discovered !== true) {
+    return [];
+  }
+  const urls = uniqueStrings([
+    ...getRecordStringArray(summary, "discoveredPrivacyPolicyUrls"),
+    ...getRecordStringArray(summary, "discovered_privacy_policy_urls")
+  ]).slice(0, 3);
+  const state = getRecordString(summary, "privacyPolicyEvaluationState") ??
+    getRecordString(summary, "privacy_policy_evaluation_state");
+  const detail = state === "discovered_fetch_failed"
+    ? "Privacy-policy link observed; document retrieval failed, so its contents were not evaluated."
+    : state === "discovered_skipped_budget"
+      ? "Privacy-policy link observed; document retrieval did not finish within the scan budget, so its contents were not evaluated."
+      : "Privacy-policy link observed; document contents were not evaluated from retained evidence.";
+  return urls.map((pageUrl) => ({
+    details: [detail],
+    pageLabel: "Privacy policy link",
+    pageUrl
+  }));
+}
+
 const EXECUTIVE_RETENTION_HEADING_PATTERN =
   /\b(?:how long (?:we )?(?:keep|retain)|retention(?: period)?|data retention|storage period|retaining your information)\b/i;
 const EXECUTIVE_RETENTION_LIFECYCLE_PATTERN =
@@ -3359,7 +3390,8 @@ export function deriveExecutivePolicySurfaces(
     .filter((surface) => surface.pageUrl || surface.details.length > 0);
   return disambiguatePolicySurfaceLabels([
     ...enrichedSurfaces,
-    ...deriveSnapshotPolicySurfaceFallbacks(snapshot, enrichedSurfaces, runtimeArtifacts)
+    ...deriveSnapshotPolicySurfaceFallbacks(snapshot, enrichedSurfaces, runtimeArtifacts),
+    ...deriveDiscoveredPrivacyPolicySurfaceFallbacks(runtimeArtifacts, enrichedSurfaces)
   ]);
 }
 

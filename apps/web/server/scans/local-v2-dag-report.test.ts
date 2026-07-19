@@ -81,6 +81,34 @@ test("policy summary distinguishes discovered-but-budget-skipped privacy notices
   assert.deepEqual(summary.discoveredPrivacyPolicyUrls, ["https://example.test/privacy"]);
 });
 
+test("observed rendered privacy links remain reportable when document fetch fails without becoming evaluated policy evidence", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const discoveredSurface = {
+    observationId: "privacy-rendered-fetch-failed",
+    surfaceType: "privacy_policy",
+    normalizedUrl: "https://example.test/privacy",
+    url: "https://example.test/privacy",
+    discoveryMethod: "footer_link",
+    status: "failed",
+    linkObservationState: "observed",
+    documentFetchState: "failed",
+    documentEvaluationState: "not_attempted",
+    fetchFailureReason: "http_error",
+    confidence: 0.9,
+  } as CanonicalEvidenceBundle["policySurfaceObservations"][number];
+  const surfaces = dedupePolicySurfaces([discoveredSurface], "https://example.test/");
+  const summary = summarizePolicySurfaces(surfaces, "example.test", {
+    discoveredPolicySurfaces: [discoveredSurface],
+  });
+
+  assert.equal(surfaces.length, 1);
+  assert.equal(summary.privacyPolicyPresent, false);
+  assert.equal(summary.privacyPolicyDiscovered, true);
+  assert.equal(summary.privacyPolicyEvaluationState, "discovered_fetch_failed");
+  assert.deepEqual(summary.privacyPolicyUrls, []);
+  assert.deepEqual(summary.discoveredPrivacyPolicyUrls, ["https://example.test/privacy"]);
+});
+
 test("buildLocalV2NoGoSnapshotFields preserves every canonical no-go reason classification", async () => {
   const { buildLocalV2NoGoSnapshotFields } = await loadLocalV2DagReport();
   for (const reasonCode of SCAN_NO_GO_REASON_CODES) {

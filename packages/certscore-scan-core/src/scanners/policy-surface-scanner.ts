@@ -29,6 +29,13 @@ const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 4;
 const POLICY_RENDERED_FETCH_CONCURRENCY = 1;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
+// The policy module already has a five-second hard-deadline reserve. Use part
+// of that existing reserve for one strong, actually observed privacy link
+// that reached evaluation just after the soft budget; this does not extend
+// the module's outer deadline or broaden common-path guessing.
+const POLICY_PROTECTED_OBSERVED_FETCH_TIMEOUT_MS = 1_800;
+const POLICY_PROTECTED_RENDERED_FETCH_TIMEOUT_MS = 2_200;
+const POLICY_PROTECTED_RESERVE_MS = 4_500;
 // Text resolution for a warmed policy document can legitimately consume most
 // of eight seconds on a large notice. Preserve a bounded publication window so
 // already-fetched evidence is not replaced by `skipped_budget` immediately
@@ -140,7 +147,8 @@ export function policySurfaceObservationsFromRetainedRenderedLinks(input: {
       evidenceRefs: input.evidenceRef ? [input.evidenceRef] : [],
     })];
   });
-  return mergePolicySurfaceObservations([], observations);
+  const combinedAliases = privacyAliasesForCombinedPrivacyCookieSurfaces(observations);
+  return mergePolicySurfaceObservations([], [...observations, ...combinedAliases]);
 }
 
 export function mergePolicySurfaceObservations(
@@ -328,6 +336,9 @@ interface PolicyFetchDiagnostic {
 interface PolicyFetchDiagnosticsCollector {
   homepageFetch?: PolicyFetchDiagnostic;
   failedFetches: PolicyFetchDiagnostic[];
+  protectedObservedFetchAttempts: number;
+  renderedRecoveryAttempts: number;
+  renderedRecoverySuccesses: number;
   seenFailureKeys: Set<string>;
 }
 
@@ -354,6 +365,9 @@ export async function policySurfaceScanner(
   };
   const policyFetchDiagnostics: PolicyFetchDiagnosticsCollector = {
     failedFetches: [],
+    protectedObservedFetchAttempts: 0,
+    renderedRecoveryAttempts: 0,
+    renderedRecoverySuccesses: 0,
     seenFailureKeys: new Set(),
   };
   const policyBrowserRuntime = createPolicyBrowserRuntime(input.browser);
@@ -870,9 +884,13 @@ function privacyAliasesForCombinedPrivacyCookieSurfaces(
     .map((observation) => ({
       ...observation,
       observationId: `${observation.observationId}_privacy_alias`,
-      discoveryMethod: "page_text_link" as const,
+      discoveryMethod: observation.discoveryMethod,
       surfaceType: "privacy_policy" as const,
       directVsInferred: "mixed" as const,
+      classifierReasonCodes: uniqueStrings([
+        ...(observation.classifierReasonCodes ?? []),
+        "combined_privacy_cookie_surface",
+      ]).slice(0, 16),
     }));
 }
 
@@ -903,6 +921,18 @@ async function writePolicyCaptureDiagnostics(input: {
     isCorePolicyOrControlSurface(observation) &&
     !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
   );
+  const observedLinkCount = input.observations.filter((observation) =>
+    observation.linkObservationState === "observed"
+  ).length;
+  const fetchStartedCount = input.observations.filter((observation) =>
+    observation.documentFetchState === "fetched" || observation.documentFetchState === "failed"
+  ).length;
+  const skippedBudgetCount = input.observations.filter((observation) =>
+    observation.documentFetchState === "skipped_budget" || observation.status === "skipped_budget"
+  ).length;
+  const usableDocumentCount = input.observations.filter((observation) =>
+    observation.documentEvaluationState === "usable"
+  ).length;
   const path = await input.input.artifactWriter.writeJsonArtifact("PolicySurfaceCaptureDiagnostics.json", {
     artifactVersion: "policy_surface_capture_diagnostics.v2",
     sourceScanner: SOURCE_SCANNER,
@@ -916,6 +946,19 @@ async function writePolicyCaptureDiagnostics(input: {
     commonPathFallbackUsed: input.commonPathFallbackUsed,
     fetchedCount: fetchedObservations.length,
     failedCandidateCount: input.observations.filter((observation) => observation.status === "failed").length,
+    funnel: {
+      candidateDiscoveredCount: input.staticCandidateCount + input.renderedCandidateCount,
+      candidateSelectedCount: input.observations.length,
+      documentFetchStartedCount: fetchStartedCount,
+      documentFetchedCount: fetchedObservations.length,
+      documentUsableCount: usableDocumentCount,
+      fetchFailedCount: input.observations.filter((observation) => observation.documentFetchState === "failed").length,
+      observedLinkCount,
+      protectedObservedFetchAttempts: input.policyFetchDiagnostics.protectedObservedFetchAttempts,
+      renderedRecoveryAttempts: input.policyFetchDiagnostics.renderedRecoveryAttempts,
+      renderedRecoverySuccesses: input.policyFetchDiagnostics.renderedRecoverySuccesses,
+      skippedBudgetCount,
+    },
     homepageFetch: input.policyFetchDiagnostics.homepageFetch,
     failedFetches: input.policyFetchDiagnostics.failedFetches,
     candidateSummary: summarizePolicyCandidates(input.candidates ?? []),
@@ -1097,13 +1140,37 @@ async function fetchPolicyCandidateGroup(input: {
 function prioritizePolicyCandidateEvaluation(
   rankedCandidates: PolicySurfaceCandidate[],
 ): PolicySurfaceCandidate[] {
+  const seen = new Set<string>();
   return rankedCandidates
     .map((candidate, originalIndex) => ({ candidate, originalIndex }))
     .sort((left, right) =>
       surfacePriority(left.candidate.deterministicSurfaceType) - surfacePriority(right.candidate.deterministicSurfaceType) ||
+      policyCandidateDiscoveryPriority(left.candidate) - policyCandidateDiscoveryPriority(right.candidate) ||
+      policyCandidateQualityScore(right.candidate) - policyCandidateQualityScore(left.candidate) ||
+      right.candidate.deterministicScore - left.candidate.deterministicScore ||
       left.originalIndex - right.originalIndex
     )
-    .map(({ candidate }) => candidate);
+    .map(({ candidate }) => candidate)
+    .filter((candidate) => {
+      const key = policyEvaluationCandidateKey(candidate);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function policyEvaluationCandidateKey(candidate: PolicySurfaceCandidate): string {
+  if (candidate.observationOnly && candidate.selector) {
+    return `${candidate.normalizedUrl}#${candidate.selector}`;
+  }
+  try {
+    const parsed = new URL(candidate.normalizedUrl);
+    parsed.hash = "";
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    return parsed.toString();
+  } catch {
+    return candidate.normalizedUrl.replace(/#.*$/, "").replace(/\/+$/, "") || "/";
+  }
 }
 
 async function processPolicyCandidateBeforeDeadline(
@@ -1117,6 +1184,7 @@ async function processPolicyCandidateBeforeDeadline(
       resolve({
         observation: observationFromCandidate(input.candidate, {
           status: "skipped_budget",
+          fetchFailureReason: "scan_budget_exhausted",
           confidence: input.candidate.assisted?.confidence ?? input.candidate.deterministicScore,
         }),
         artifactRefs: [],
@@ -1152,23 +1220,38 @@ async function processPolicyCandidate({
       secondaryCandidates: [],
     };
   }
-  const hasPrefetchedDirectDocument = fetchCaches.direct.has(candidate.normalizedUrl);
+  const hasPrefetchedDirectDocument = fetchCaches.direct.has(
+    policyDocumentFetchCacheKey(candidate.normalizedUrl),
+  );
+  const protectedObservedFetch = shouldUseProtectedObservedPolicyFetch({
+    candidate,
+    candidateIndex,
+    input,
+    moduleStartedAtMs,
+  });
   const prefetchedAfterSoftBudget =
     (Date.now() - moduleStartedAtMs > input.internalBudgetMs || prefetchedOnly === true) &&
     hasPrefetchedDirectDocument;
   if (
     (Date.now() - moduleStartedAtMs > input.internalBudgetMs || prefetchedOnly === true) &&
-    !hasPrefetchedDirectDocument
+    !hasPrefetchedDirectDocument &&
+    !protectedObservedFetch
   ) {
     return {
       observation: observationFromCandidate(candidate, {
         status: "skipped_budget",
+        fetchFailureReason: "scan_budget_exhausted",
         confidence: candidate.assisted?.confidence ?? candidate.deterministicScore,
       }),
       artifactRefs: [],
       secondaryCandidates: [],
     };
   }
+
+  if (protectedObservedFetch) {
+    fetchCaches.diagnostics.protectedObservedFetchAttempts += 1;
+  }
+  const boundedAfterSoftBudget = prefetchedAfterSoftBudget || protectedObservedFetch;
 
   // Fast discovery warms deterministic static policy documents while the
   // rendered lane searches for additional controls. Keep that already-bounded
@@ -1177,12 +1260,17 @@ async function processPolicyCandidate({
 
   let fetched = await recordPolicyTiming(
     timingBreakdown,
-    `policy fetch ${candidateIndex + 1}`,
+    `${protectedObservedFetch ? "policy protected fetch" : "policy fetch"} ${candidateIndex + 1}`,
     `Fetch ${candidate.deterministicSurfaceType} candidate document.`,
     () => fetchPolicyDocumentSingleFlight(
       fetchCaches.direct,
       candidate.normalizedUrl,
-      remainingPolicyFetchMs(input, moduleStartedAtMs),
+      protectedObservedFetch
+        ? Math.min(
+            POLICY_PROTECTED_OBSERVED_FETCH_TIMEOUT_MS,
+            remainingProtectedPolicyFetchMs(input, moduleStartedAtMs),
+          )
+        : remainingPolicyFetchMs(input, moduleStartedAtMs),
       input.signal,
     ),
   );
@@ -1196,16 +1284,23 @@ async function processPolicyCandidate({
     candidateIndex,
     input,
     moduleStartedAtMs,
+    protectedObservedFetch,
     status: fetched.status,
   })) {
+    fetchCaches.diagnostics.renderedRecoveryAttempts += 1;
     const renderedFetched = await recordPolicyTiming(
       timingBreakdown,
-      `policy rendered fetch fallback ${candidateIndex + 1}`,
+      `${protectedObservedFetch ? "policy protected rendered fetch fallback" : "policy rendered fetch fallback"} ${candidateIndex + 1}`,
       `Fetch ${candidate.deterministicSurfaceType} candidate document through bounded browser-rendered navigation after direct fetch failed.`,
       () => fetchRenderedPolicyDocumentSingleFlight(fetchCaches, {
         input,
         url: candidate.normalizedUrl,
-        timeoutMs: Math.min(4_000, remainingMs(input, moduleStartedAtMs)),
+        timeoutMs: protectedObservedFetch
+          ? Math.min(
+              POLICY_PROTECTED_RENDERED_FETCH_TIMEOUT_MS,
+              remainingProtectedPolicyFetchMs(input, moduleStartedAtMs),
+            )
+          : Math.min(4_000, remainingMs(input, moduleStartedAtMs)),
       }),
     );
     recordPolicyFetchDiagnostic(fetchCaches.diagnostics, {
@@ -1214,14 +1309,18 @@ async function processPolicyCandidate({
       candidate,
     });
     if (renderedFetched.ok) {
+      fetchCaches.diagnostics.renderedRecoverySuccesses += 1;
       fetched = renderedFetched;
     }
   }
   if (!fetched.ok) {
+    const failedAttempt = [...(fetched.attempts ?? [])].reverse().find((attempt) => attempt.outcome !== "fetched");
     return {
       observation: observationFromCandidate(candidate, {
         status: "failed",
         httpStatus: fetched.status,
+        fetchFailureReason: failedAttempt?.outcome === "fetched" ? undefined : failedAttempt?.outcome,
+        redirectChain: policyFetchRedirectChain(fetched),
         confidence: Math.max(0.35, candidate.assisted?.confidence ?? candidate.deterministicScore),
       }),
       artifactRefs: [],
@@ -1242,7 +1341,7 @@ async function processPolicyCandidate({
   let fetchedHtml = fetched.text;
   const secondaryCandidateHtmlInputs = [fetchedHtml];
   let title = titleFromHtml(fetchedHtml);
-  let visibleText = prefetchedAfterSoftBudget
+  let visibleText = boundedAfterSoftBudget
     ? await recordPolicyTiming(
       timingBreakdown,
       `policy prefetched text resolution ${candidateIndex + 1}`,
@@ -1260,7 +1359,7 @@ async function processPolicyCandidate({
         timeoutMs: Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
       }),
     );
-  const urlOnlyStubResolution = prefetchedAfterSoftBudget
+  const urlOnlyStubResolution = boundedAfterSoftBudget
     ? undefined
     : await recordPolicyTiming(
       timingBreakdown,
@@ -1294,16 +1393,23 @@ async function processPolicyCandidate({
     documentFormat: fetched.documentFormat,
     input,
     moduleStartedAtMs,
+    protectedObservedFetch,
     visibleText,
   })) {
+    fetchCaches.diagnostics.renderedRecoveryAttempts += 1;
     const renderedFetched = await recordPolicyTiming(
       timingBreakdown,
-      `policy rendered low-quality text fallback ${candidateIndex + 1}`,
+      `${protectedObservedFetch ? "policy protected rendered low-quality text fallback" : "policy rendered low-quality text fallback"} ${candidateIndex + 1}`,
       `Fetch ${effectiveCandidate.deterministicSurfaceType} candidate document through bounded browser-rendered navigation after direct fetch retained only low-quality text.`,
       () => fetchRenderedPolicyDocumentSingleFlight(fetchCaches, {
         input,
         url: effectiveCandidate.normalizedUrl,
-        timeoutMs: Math.max(5_000, Math.min(6_000, remainingMs(input, moduleStartedAtMs))),
+        timeoutMs: protectedObservedFetch
+          ? Math.min(
+              POLICY_PROTECTED_RENDERED_FETCH_TIMEOUT_MS,
+              remainingProtectedPolicyFetchMs(input, moduleStartedAtMs),
+            )
+          : Math.max(5_000, Math.min(6_000, remainingMs(input, moduleStartedAtMs))),
       }),
     );
     recordPolicyFetchDiagnostic(fetchCaches.diagnostics, {
@@ -1312,6 +1418,7 @@ async function processPolicyCandidate({
       candidate: effectiveCandidate,
     });
     if (renderedFetched.ok) {
+      fetchCaches.diagnostics.renderedRecoverySuccesses += 1;
       const renderedVisibleText = await recordPolicyTiming(
         timingBreakdown,
         `policy rendered text resolution ${candidateIndex + 1}`,
@@ -1338,6 +1445,9 @@ async function processPolicyCandidate({
       observation: observationFromCandidate(effectiveCandidate, {
         status: "failed",
         httpStatus: fetched.status,
+        finalUrl: fetchedFinalUrl,
+        redirectChain: policyFetchRedirectChain(fetched),
+        fetchFailureReason: "low_quality_access_challenge",
         title,
         textExcerpt: excerpt,
         confidence: Math.max(0.35, candidate.assisted?.confidence ?? candidate.deterministicScore),
@@ -1351,6 +1461,9 @@ async function processPolicyCandidate({
       observation: observationFromCandidate(effectiveCandidate, {
         status: "failed",
         httpStatus: fetched.status,
+        finalUrl: fetchedFinalUrl,
+        redirectChain: policyFetchRedirectChain(fetched),
+        fetchFailureReason: "insufficient_policy_text",
         title,
         textExcerpt: boundedExcerpt(visibleText, []),
         confidence: Math.max(0.35, Math.min(0.55, candidate.assisted?.confidence ?? candidate.deterministicScore)),
@@ -1429,7 +1542,7 @@ async function processPolicyCandidate({
     artifactRef,
     ...(policySurfaceTextArtifactRef ? [policySurfaceTextArtifactRef] : []),
   ];
-  const topicAssist = textQuality.usable && !prefetchedAfterSoftBudget
+  const topicAssist = textQuality.usable && !boundedAfterSoftBudget
     ? await recordPolicyTiming(
         timingBreakdown,
         `Nano topic extraction ${candidateIndex + 1}`,
@@ -1447,6 +1560,8 @@ async function processPolicyCandidate({
     observation: observationFromCandidate(effectiveCandidate, {
       status: "fetched",
       httpStatus: fetched.status,
+      finalUrl: fetchedFinalUrl,
+      redirectChain: policyFetchRedirectChain(fetched),
       title,
       textExcerpt: excerpt,
       boundedTextExcerptIds: [excerptId],
@@ -1489,6 +1604,7 @@ function shouldTryRenderedPolicyDocumentFetch(input: {
   candidateIndex: number;
   input: PolicySurfaceScannerInput;
   moduleStartedAtMs: number;
+  protectedObservedFetch: boolean;
   status: number | undefined;
 }): boolean {
   if (
@@ -1497,8 +1613,36 @@ function shouldTryRenderedPolicyDocumentFetch(input: {
   ) {
     return false;
   }
-  return (input.status === undefined || [401, 403, 429].includes(input.status)) &&
-    remainingMs(input.input, input.moduleStartedAtMs) >= 2_500;
+  const recoverableStatus = input.status === undefined ||
+    [401, 403, 408, 425, 429, 500, 502, 503, 504].includes(input.status);
+  const remainingRecoveryMs = input.protectedObservedFetch
+    ? remainingProtectedPolicyFetchMs(input.input, input.moduleStartedAtMs)
+    : remainingMs(input.input, input.moduleStartedAtMs);
+  const minimumRecoveryMs = input.protectedObservedFetch ? 1_000 : 2_500;
+  return recoverableStatus && remainingRecoveryMs >= minimumRecoveryMs;
+}
+
+function shouldUseProtectedObservedPolicyFetch(input: {
+  candidate: PolicySurfaceCandidate;
+  candidateIndex: number;
+  input: PolicySurfaceScannerInput;
+  moduleStartedAtMs: number;
+}): boolean {
+  const elapsedMs = Date.now() - input.moduleStartedAtMs;
+  return input.candidateIndex === 0 &&
+    elapsedMs >= input.input.internalBudgetMs &&
+    elapsedMs < input.input.internalBudgetMs + POLICY_PROTECTED_RESERVE_MS &&
+    input.candidate.deterministicSurfaceType === "privacy_policy" &&
+    input.candidate.clickable === true &&
+    !input.candidate.observationOnly &&
+    !isCommonPathFallbackCandidate(input.candidate) &&
+    ["footer_link", "header_link", "page_text_link", "nano_assisted_link_classification"].includes(
+      input.candidate.discoveryMethod,
+    ) &&
+    Math.max(
+      input.candidate.assisted?.confidence ?? 0,
+      input.candidate.deterministicScore,
+    ) >= 0.72;
 }
 
 function shouldTryRenderedPolicyDocumentTextFallback(input: {
@@ -1506,18 +1650,28 @@ function shouldTryRenderedPolicyDocumentTextFallback(input: {
   documentFormat?: "pdf" | "text";
   input: PolicySurfaceScannerInput;
   moduleStartedAtMs: number;
+  protectedObservedFetch: boolean;
   visibleText: string;
 }): boolean {
+  const remainingRecoveryMs = input.protectedObservedFetch
+    ? remainingProtectedPolicyFetchMs(input.input, input.moduleStartedAtMs)
+    : remainingMs(input.input, input.moduleStartedAtMs);
   if (
     input.documentFormat === "pdf" ||
     input.candidate.deterministicSurfaceType !== "privacy_policy" ||
-    remainingMs(input.input, input.moduleStartedAtMs) < 2_000
+    remainingRecoveryMs < (input.protectedObservedFetch ? 1_000 : 2_000)
   ) {
     return false;
   }
   const normalized = normalizeWhitespace(input.visibleText);
   const topicMatchCount = gdprTransparencyTopicMatchCount(normalized);
   const textQuality = assessPolicyTextQuality(normalized);
+  // A protected late-link attempt is for preserving the strongest observed
+  // surface, not for spending the reserve re-rendering an already substantive
+  // direct response. Reserve browser recovery here for genuinely thin shells.
+  if (input.protectedObservedFetch && normalized.length >= 100) {
+    return false;
+  }
   const looksLikeLocalizedPolicyShell =
     topicMatchCount === 0 &&
     normalized.length < MIN_SUBSTANTIVE_POLICY_TEXT_CHARS &&
@@ -3204,6 +3358,23 @@ function observationFromCandidate(
       usedForFinalFinding: false,
     }]
     : [];
+  const linkObservationState = candidate.observationOnly || candidate.clickable
+    ? "observed" as const
+    : "candidate" as const;
+  const documentFetchState = input.status === "fetched"
+    ? "fetched" as const
+    : input.status === "failed"
+      ? "failed" as const
+      : input.status === "skipped_budget"
+        ? "skipped_budget" as const
+        : "not_attempted" as const;
+  const documentEvaluationState = input.status === "fetched"
+    ? "usable" as const
+    : input.fetchFailureReason === "low_quality_access_challenge"
+      ? "blocked" as const
+      : input.fetchFailureReason === "insufficient_policy_text"
+        ? "insufficient" as const
+        : "not_attempted" as const;
   return {
     observationId: `policy_surface_${stableHash(candidate.normalizedUrl)}`,
     sourceScanner: SOURCE_SCANNER,
@@ -3217,7 +3388,16 @@ function observationFromCandidate(
     surroundingTextExcerpt: candidate.surroundingTextExcerpt,
     discoveryMethod: candidate.discoveryMethod,
     status: input.status,
+    linkObservationState,
+    documentFetchState,
+    documentEvaluationState,
     httpStatus: input.httpStatus,
+    finalUrl: input.finalUrl,
+    redirectChain: input.redirectChain ?? [],
+    fetchFailureReason: input.fetchFailureReason,
+    matchedLocale: candidate.deterministicMatchedLocale,
+    classifierProvenance: candidate.deterministicClassifierProvenance,
+    classifierReasonCodes: candidate.deterministicClassifierReasonCodes.slice(0, 16),
     fetchable: candidate.fetchable,
     clickable: candidate.clickable,
     mayLeadToConsentControls: candidate.mayLeadToConsentControls,
@@ -4092,6 +4272,13 @@ type FetchTextResult = {
   status?: number;
   text: string;
 };
+
+function policyFetchRedirectChain(result: FetchTextResult): string[] {
+  return uniqueStrings((result.attempts ?? [])
+    .flatMap((attempt) => [attempt.requestedUrl, attempt.finalUrl].filter((value): value is string => Boolean(value)))
+    .map(boundedDiagnosticUrl))
+    .slice(0, 8);
+}
 
 function successfulPolicyFetchFinalUrl(result: FetchTextResult, fallbackUrl: string): string {
   const finalUrl = [...(result.attempts ?? [])]
@@ -5539,6 +5726,13 @@ function remainingMs(input: PolicySurfaceScannerInput, startedAtMs: number): num
 
 function remainingPolicyFetchMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
   return Math.min(POLICY_FETCH_TIMEOUT_MS, remainingMs(input, startedAtMs));
+}
+
+function remainingProtectedPolicyFetchMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
+  return Math.max(
+    500,
+    input.internalBudgetMs + POLICY_PROTECTED_RESERVE_MS - (Date.now() - startedAtMs),
+  );
 }
 
 function elapsed(scanStartedAtMs: number): number {
