@@ -256,7 +256,7 @@ function getComparableTimestampMs(value: string | null) {
   return parsed - roundedHourDelta * hourMs;
 }
 
-function derivePreviewDisplayState(scan: ScanRow, events: ScanEventRow[]) {
+export function derivePreviewDisplayState(scan: ScanRow, events: ScanEventRow[]) {
   const lifecycleEvents = events.filter((event) => !isPresentationOnlyEvent(event.event_type));
 
   if (lifecycleEvents.length === 0) {
@@ -270,17 +270,13 @@ function derivePreviewDisplayState(scan: ScanRow, events: ScanEventRow[]) {
   const completedAt =
     scan.completed_at ??
     getLatestEventCreatedAt(lifecycleEvents, [
-      PREVIEW_SCAN_EVENT_TYPES.completed,
-      SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
-      SCAN_EVENT_TYPES.nanoDocRetrievalCompleted
+      PREVIEW_SCAN_EVENT_TYPES.completed
     ]);
   const failedAt =
     scan.status === "failed"
       ? scan.updated_at
       : getLatestEventCreatedAt(lifecycleEvents, [
-          PREVIEW_SCAN_EVENT_TYPES.failed,
-          SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
-          SCAN_EVENT_TYPES.nanoDocRetrievalFailed
+          PREVIEW_SCAN_EVENT_TYPES.failed
         ]);
   const latestEventAt = getLatestEventCreatedAt(
     lifecycleEvents,
@@ -289,9 +285,7 @@ function derivePreviewDisplayState(scan: ScanRow, events: ScanEventRow[]) {
   const startedAt =
     scan.started_at ??
     getEarliestEventCreatedAt(lifecycleEvents, [
-      PREVIEW_SCAN_EVENT_TYPES.started,
-      SCAN_EVENT_TYPES.nanoDocRetrievalStarted,
-      SCAN_EVENT_TYPES.nanoSignalEnrichmentStarted
+      PREVIEW_SCAN_EVENT_TYPES.started
     ]);
   const staleRunning =
     !completedAt &&

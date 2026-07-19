@@ -2,9 +2,50 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildActivityLineWithExecutionSummary,
+  derivePreviewDisplayState,
   hasPersistedSignalsMismatch,
   sanitizeStaleAccessDiagnostics
 } from "./preview-scan-repository";
+
+test("Nano enrichment activity does not promote a queued scanner record to running or completed", () => {
+  const scan = {
+    completed_at: null,
+    created_at: "2026-07-19T04:33:30.310Z",
+    domain_id: "domain-1",
+    duration_ms: null,
+    error_message: null,
+    id: "scan-1",
+    organization_id: null,
+    pages_requested: 1,
+    pages_scanned: 0,
+    scan_config_json: {},
+    scan_type: "preview" as const,
+    started_at: null,
+    status: "queued" as const,
+    submitted_by_user_id: null,
+    updated_at: "2026-07-19T04:33:30.310Z"
+  };
+  const enrichmentEvents = [
+    {
+      created_at: "2026-07-19T04:33:31.000Z",
+      event_type: "signals.nano_doc_enrichment_started",
+      message: "Nano document signal enrichment started.",
+      metadata_json: { stage: "nano_doc_signals" }
+    },
+    {
+      created_at: "2026-07-19T04:33:32.000Z",
+      event_type: "signals.nano_doc_enrichment_completed",
+      message: "Nano document signal enrichment completed.",
+      metadata_json: { stage: "nano_doc_signals" }
+    }
+  ];
+
+  assert.deepEqual(derivePreviewDisplayState(scan, enrichmentEvents), {
+    completedAt: null,
+    startedAt: null,
+    status: "queued"
+  });
+});
 
 test("hasPersistedSignalsMismatch detects degraded signal persistence behind a signals.persisted event", () => {
   const result = hasPersistedSignalsMismatch({
