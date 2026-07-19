@@ -20,6 +20,24 @@ test("runCalibration fails fast when OPENAI_API_KEY is missing", async () => {
   );
 });
 
+test("runCalibration refuses a repository-held public test domain before scanner contact", async () => {
+  let scannerCalled = false;
+  await assert.rejects(
+    () => runCalibration({
+      profile: "tiny",
+      urls: ["https://sits.com/en/"],
+      outDir: "/tmp/certscore-v2-calibration-held-domain",
+      env: { OPENAI_API_KEY: "test-key" },
+      scanner: async () => {
+        scannerCalled = true;
+        return minimalBundle();
+      },
+    }),
+    /Live test contact is paused for sits\.com/,
+  );
+  assert.equal(scannerCalled, false);
+});
+
 test("runCalibration records one failed URL without stopping the batch", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-calibration-"));
   try {

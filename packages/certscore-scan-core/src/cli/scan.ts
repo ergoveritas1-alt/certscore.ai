@@ -3,6 +3,7 @@ import path from "node:path";
 import type { WriteStream } from "node:tty";
 import type { ScanProfile } from "@certscore/contracts";
 import { runScan } from "../index.js";
+import { assertPublicTestContactAllowed } from "../public-test-contact-holds.js";
 
 void main().then(
   async () => {
@@ -26,6 +27,7 @@ async function main(): Promise<void> {
   }
 
   const outDir = args.out ?? path.join(process.cwd(), "artifacts", "v2-scan");
+  assertPublicTestContactAllowed(args.url, "v2 diagnostic scan");
   const bundle = await runScan({
     url: args.url,
     profile: args.profile ?? "tiny",

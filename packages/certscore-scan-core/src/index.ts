@@ -63,6 +63,13 @@ export {
 } from "./playwright-runtime.js";
 
 export {
+  assertPublicTestContactAllowed,
+  PUBLIC_TEST_CONTACT_HOLDS,
+  publicTestContactHoldForUrl,
+  type PublicTestContactHold,
+} from "./public-test-contact-holds.js";
+
+export {
   captureConsentControlGeometry,
   type ConsentControlCandidateEvidence,
   type ConsentControlCmpEvidence,

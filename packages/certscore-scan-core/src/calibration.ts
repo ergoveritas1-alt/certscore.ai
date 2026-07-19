@@ -3,6 +3,7 @@ import path from "node:path";
 import type { CanonicalEvidenceBundle, ScanProfile } from "@certscore/contracts";
 import { inspectBundle, type BundleInspectionReport } from "./inspector.js";
 import { runScan } from "./index.js";
+import { assertPublicTestContactAllowed } from "./public-test-contact-holds.js";
 
 export interface CalibrationInput {
   profile: ScanProfile["profileId"];
@@ -92,6 +93,7 @@ export async function runCalibration(input: CalibrationInput): Promise<Calibrati
   if (urls.length === 0) {
     throw new Error("At least one calibration URL is required.");
   }
+  for (const url of urls) assertPublicTestContactAllowed(url, "v2 calibration");
 
   await mkdir(input.outDir, { recursive: true });
   const scanner = input.scanner ?? ((scanInput) => runScan(scanInput));

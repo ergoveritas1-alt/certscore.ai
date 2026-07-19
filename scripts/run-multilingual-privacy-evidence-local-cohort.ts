@@ -2,7 +2,13 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { SCHEMA_VERSION, classifyPrivacySurface } from "../packages/certscore-contracts/src/index.js";
-import { runScan, scanProfiles, policySurfaceScanner, type RunScanInput } from "../packages/certscore-scan-core/src/index.js";
+import {
+  assertPublicTestContactAllowed,
+  runScan,
+  scanProfiles,
+  policySurfaceScanner,
+  type RunScanInput,
+} from "../packages/certscore-scan-core/src/index.js";
 import { createArtifactWriter } from "../packages/certscore-scan-core/src/artifact-writer.js";
 import type { PolicyNanoAssistProvider } from "../packages/certscore-scan-core/src/scanners/policy-surface-scanner.js";
 
@@ -183,6 +189,7 @@ async function main() {
 
     try {
       if (!args.skipScan && !(args.resume && existsSync(bundlePath))) {
+        assertPublicTestContactAllowed(target.url, "multilingual privacy-evidence local cohort");
         console.log(`[${index + 1}/${targets.length}] scanning ${target.key} ${target.url}`);
         if (args.scanMode === "policy-surface-only") {
           await runPolicySurfaceOnlyScan(target.url, artifactDir);

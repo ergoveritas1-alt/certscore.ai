@@ -17,6 +17,7 @@ import {
   type ConsentScenarioShadowSiteInput,
 } from "../consent-scenario-shadow-compare.js";
 import { runScan } from "../index.js";
+import { assertPublicTestContactAllowed } from "../public-test-contact-holds.js";
 
 interface ShadowTarget {
   url: string;
@@ -107,6 +108,7 @@ async function runShadowSite(input: {
     plannedDurationMs = planned ? bundleDurationMs(planned) : undefined;
 
     if (!legacy) {
+      assertPublicTestContactAllowed(input.target.url, "consent DAG shadow legacy scan");
       const legacyStartedAtMs = Date.now();
       legacy = await runScan({
         url: input.target.url,
@@ -122,6 +124,7 @@ async function runShadowSite(input: {
     }
 
     if (!planned) {
+      assertPublicTestContactAllowed(input.target.url, "consent DAG shadow planned scan");
       const plannedStartedAtMs = Date.now();
       planned = await runScan({
         url: input.target.url,

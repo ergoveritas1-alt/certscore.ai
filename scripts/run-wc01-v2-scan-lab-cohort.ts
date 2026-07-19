@@ -10,6 +10,7 @@ import {
   type V2ScanLabRunProfile,
 } from "../apps/web/server/admin/v2-scan-lab-runner";
 import { writeReplayCaptureHealthReport } from "../packages/certscore-scan-core/src/replay-capture-health";
+import { assertPublicTestContactAllowed } from "../packages/certscore-scan-core/src/public-test-contact-holds";
 import {
   buildEndpointEnrichmentOverlay,
   collectEndpointEnrichmentCandidatesFromBundle,
@@ -164,6 +165,7 @@ async function main() {
   const planEntries = await readCohortPlan(args.urlsPath);
   const selectedEntries = planEntries.slice(Math.max(0, args.startAt - 1));
   const limitedEntries = args.limit === undefined ? selectedEntries : selectedEntries.slice(0, args.limit);
+  for (const entry of limitedEntries) assertPublicTestContactAllowed(entry.url, "WC01 v2 Scan Lab cohort");
 
   if (args.dryRun) {
     console.log(`WC01 v2 Scan Lab cohort dry run: ${limitedEntries.length}/${planEntries.length} URLs`);

@@ -83,6 +83,10 @@ records and merges them with the repository-controlled manual ledger. Selection 
 closed if central history is unavailable. The workflow also requires explicit SO
 authorization and is deliberately not scheduled. The following rules are mandatory:
 
+- honor repository-controlled live-test contact holds in
+  `packages/certscore-scan-core/src/public-test-contact-holds.ts`; these holds apply to
+  CertScore-initiated calibration and diagnostic traffic, not ordinary customer scans;
+
 - wait at least 28 days before selecting the same domain again;
 - run at most one calibration scan for a domain at a time;
 - do not automatically retry a blocked, rate-limited, captcha, or other no-go result;
