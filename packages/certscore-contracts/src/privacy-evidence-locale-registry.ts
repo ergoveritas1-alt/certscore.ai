@@ -129,7 +129,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
     consentControls: { accept: ["összes elfogadása", "mindent elfogadok"], reject: ["összes elutasítása", "mindent elutasítok", "nem kötelező sütik elutasítása"], options: ["süti beállítások", "beállítások kezelése"], necessaryOnly: ["csak a szükséges", "csak szükséges sütik"] },
   }),
   locale("ro", {
-    privacyPolicyLabels: ["politica de confidențialitate"], privacyPolicyPathSlugs: ["politica-de-confidentialitate"], cookiePolicyLabels: ["politica de cookie-uri"], cookiePolicyPathSlugs: ["politica-de-cookie-uri"], cookieSettingsLabels: ["setări cookie"], termsLabels: ["termeni și condiții"], termsPathSlugs: ["termeni-si-conditii"], contextHints: ["confidențialitate", "date personale", "cookie", "consimțământ"], tldHints: [".ro"],
+    privacyPolicyLabels: ["politică de confidențialitate", "politica de confidențialitate"], privacyPolicyPathSlugs: ["politica-de-confidentialitate"], cookiePolicyLabels: ["politica de cookie-uri"], cookiePolicyPathSlugs: ["politica-de-cookie-uri"], cookieSettingsLabels: ["setări cookie"], termsLabels: ["termeni și condiții"], termsPathSlugs: ["termeni-si-conditii"], contextHints: ["confidențialitate", "date personale", "cookie", "consimțământ"], tldHints: [".ro"],
     consentControls: { accept: ["acceptă toate", "permite toate"], reject: ["respinge toate", "refuză toate"], options: ["setări cookie", "gestionează preferințele"], necessaryOnly: ["doar cele necesare", "doar cookie-urile necesare"] },
   }),
   locale("th", {
@@ -169,7 +169,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
     consentControls: { accept: ["priimti visus", "leisti visus"], reject: ["atmesti visus", "neleisti visų", "atsisakyti visų"], options: ["slapukų nustatymai", "rinktis", "tvarkyti nuostatas"], necessaryOnly: ["tik būtinieji", "tik būtinieji slapukai"] },
   }),
   locale("sl", {
-    privacyPolicyLabels: ["politika zasebnosti"], privacyPolicyPathSlugs: ["politika-zasebnosti"], cookiePolicyLabels: ["politika piškotkov"], cookiePolicyPathSlugs: ["politika-piskotkov"], cookieSettingsLabels: ["nastavitve piškotkov"], termsLabels: ["pogoji uporabe"], termsPathSlugs: ["pogoji-uporabe"], contextHints: ["zasebnost", "osebni podatki", "piškotki", "soglasje"], tldHints: [".si"],
+    privacyPolicyLabels: ["politika zasebnosti", "pravilnik o zasebnosti"], privacyPolicyPathSlugs: ["politika-zasebnosti"], cookiePolicyLabels: ["politika piškotkov"], cookiePolicyPathSlugs: ["politika-piskotkov"], cookieSettingsLabels: ["nastavitve piškotkov"], termsLabels: ["pogoji uporabe"], termsPathSlugs: ["pogoji-uporabe"], contextHints: ["zasebnost", "osebni podatki", "piškotki", "soglasje"], tldHints: [".si"],
     consentControls: { accept: ["sprejmi vse", "dovoli vse"], reject: ["zavrni vse", "onemogoči vse"], options: ["nastavitve piškotkov", "upravljaj nastavitve"], necessaryOnly: ["sprejmi samo obvezne piškotke", "samo nujni", "samo nujni piškotki"] },
   }),
   locale("ca", {

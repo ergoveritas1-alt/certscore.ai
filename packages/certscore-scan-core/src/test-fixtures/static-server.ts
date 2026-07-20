@@ -102,7 +102,11 @@ export type StaticFixturePage =
   | "policy-gdpr-transparency-compact-nl"
   | "policy-gdpr-transparency-latin1-es"
   | "policy-gdpr-transparency-pdf-nl"
-  | "policy-gdpr-transparency-twenty-two-long-locales"
+  | "policy-gdpr-transparency-long-wave-one"
+  | "policy-gdpr-transparency-long-wave-two"
+  | "policy-gdpr-transparency-long-wave-three"
+  | "policy-gdpr-transparency-long-wave-four"
+  | "policy-gdpr-transparency-long-wave-five"
   | "policy-gpc-disclosure-late"
   | "policy-gpc-disclosure"
   | "policy-generic-links"
@@ -275,7 +279,11 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-gdpr-transparency-compact-nl": "policy-gdpr-transparency-compact-nl",
   "policy-gdpr-transparency-latin1-es": "policy-gdpr-transparency-latin1-es",
   "policy-gdpr-transparency-pdf-nl": "policy-gdpr-transparency-pdf-nl",
-  "policy-gdpr-transparency-twenty-two-long-locales": "policy-gdpr-transparency-twenty-two-long-locales",
+  "policy-gdpr-transparency-long-wave-one": "policy-gdpr-transparency-long-wave-one",
+  "policy-gdpr-transparency-long-wave-two": "policy-gdpr-transparency-long-wave-two",
+  "policy-gdpr-transparency-long-wave-three": "policy-gdpr-transparency-long-wave-three",
+  "policy-gdpr-transparency-long-wave-four": "policy-gdpr-transparency-long-wave-four",
+  "policy-gdpr-transparency-long-wave-five": "policy-gdpr-transparency-long-wave-five",
   "policy-gpc-disclosure-late": "policy-gpc-late",
   "policy-gpc-disclosure": "policy-gpc",
   "policy-generic-links": "policy-generic-links",
@@ -1894,30 +1902,37 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/policies/article13-pl">Polityka prywatności</a>`,
       `<a href="/policies/article13-pt">Política de privacidade</a>`,
     ].join(" | "),
-    "policy-gdpr-transparency-twenty-two-long-locales": [
+    "policy-gdpr-transparency-long-wave-one": [
       `<a href="/policies/article13-long-pt">Política de privacidade</a>`,
       `<a href="/policies/article13-long-ru">Политика конфиденциальности</a>`,
       `<a href="/policies/article13-long-ja">プライバシーポリシー</a>`,
       `<a href="/policies/article13-long-zh">隐私政策</a>`,
       `<a href="/policies/article13-long-ar">سياسة الخصوصية</a>`,
       `<a href="/policies/article13-long-sv">Integritetspolicy</a>`,
-      `<a href="/policies/article13-long-ro">Politică de confidențialitate</a>`,
+    ].join(" | "),
+    "policy-gdpr-transparency-long-wave-two": [
       `<a href="/policies/article13-long-cs">Zásady ochrany osobních údajů</a>`,
       `<a href="/policies/article13-long-el">Πολιτική απορρήτου</a>`,
       `<a href="/policies/article13-long-hu">Adatvédelmi tájékoztató</a>`,
       `<a href="/policies/article13-long-da">Privatlivspolitik</a>`,
       `<a href="/policies/article13-long-fi">Tietosuojakäytäntö</a>`,
+    ].join(" | "),
+    "policy-gdpr-transparency-long-wave-three": [
       `<a href="/policies/article13-long-sk">Zásady ochrany osobných údajov</a>`,
       `<a href="/policies/article13-long-bg">Политика за поверителност</a>`,
       `<a href="/policies/article13-long-hr">Pravila privatnosti</a>`,
       `<a href="/policies/article13-long-nb">Personvernerklæring</a>`,
       `<a href="/policies/article13-long-sl">Pravilnik o zasebnosti</a>`,
+    ].join(" | "),
+    "policy-gdpr-transparency-long-wave-four": [
       `<a href="/policies/article13-long-lt">Privatumo politika</a>`,
       `<a href="/policies/article13-long-lv">Privātuma politika</a>`,
       `<a href="/policies/article13-long-et">Privaatsuspoliitika</a>`,
       `<a href="/policies/article13-long-uk">Політика конфіденційності</a>`,
       `<a href="/policies/article13-long-tr">Gizlilik politikası</a>`,
     ].join(" | "),
+    "policy-gdpr-transparency-long-wave-five":
+      `<a href="/policies/article13-long-ro">Politică de confidențialitate</a>`,
     "policy-multilingual-surfaces": [
       `<a href="/policies/privacy">Privacy Policy</a>`,
       `<a href="/policies/de-datenschutz">Datenschutzerklärung</a>`,

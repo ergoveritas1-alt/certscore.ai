@@ -17,6 +17,8 @@ test("classifies canonical privacy-policy surfaces across supported locales", ()
     ["Privacybeleid", "nl"],
     ["Privacy reglement", "nl"],
     ["Polityka prywatności", "pl"],
+    ["Politică de confidențialitate", "ro"],
+    ["Pravilnik o zasebnosti", "sl"],
   ] as const;
 
   for (const [linkText, locale] of examples) {
