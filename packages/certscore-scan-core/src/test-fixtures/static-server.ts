@@ -102,7 +102,7 @@ export type StaticFixturePage =
   | "policy-gdpr-transparency-compact-nl"
   | "policy-gdpr-transparency-latin1-es"
   | "policy-gdpr-transparency-pdf-nl"
-  | "policy-gdpr-transparency-six-long-locales"
+  | "policy-gdpr-transparency-twenty-two-long-locales"
   | "policy-gpc-disclosure-late"
   | "policy-gpc-disclosure"
   | "policy-generic-links"
@@ -275,7 +275,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-gdpr-transparency-compact-nl": "policy-gdpr-transparency-compact-nl",
   "policy-gdpr-transparency-latin1-es": "policy-gdpr-transparency-latin1-es",
   "policy-gdpr-transparency-pdf-nl": "policy-gdpr-transparency-pdf-nl",
-  "policy-gdpr-transparency-six-long-locales": "policy-gdpr-transparency-six-long-locales",
+  "policy-gdpr-transparency-twenty-two-long-locales": "policy-gdpr-transparency-twenty-two-long-locales",
   "policy-gpc-disclosure-late": "policy-gpc-late",
   "policy-gpc-disclosure": "policy-gpc",
   "policy-generic-links": "policy-generic-links",
@@ -1894,13 +1894,29 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/policies/article13-pl">Polityka prywatności</a>`,
       `<a href="/policies/article13-pt">Política de privacidade</a>`,
     ].join(" | "),
-    "policy-gdpr-transparency-six-long-locales": [
+    "policy-gdpr-transparency-twenty-two-long-locales": [
       `<a href="/policies/article13-long-pt">Política de privacidade</a>`,
       `<a href="/policies/article13-long-ru">Политика конфиденциальности</a>`,
       `<a href="/policies/article13-long-ja">プライバシーポリシー</a>`,
       `<a href="/policies/article13-long-zh">隐私政策</a>`,
       `<a href="/policies/article13-long-ar">سياسة الخصوصية</a>`,
       `<a href="/policies/article13-long-sv">Integritetspolicy</a>`,
+      `<a href="/policies/article13-long-ro">Politică de confidențialitate</a>`,
+      `<a href="/policies/article13-long-cs">Zásady ochrany osobních údajů</a>`,
+      `<a href="/policies/article13-long-el">Πολιτική απορρήτου</a>`,
+      `<a href="/policies/article13-long-hu">Adatvédelmi tájékoztató</a>`,
+      `<a href="/policies/article13-long-da">Privatlivspolitik</a>`,
+      `<a href="/policies/article13-long-fi">Tietosuojakäytäntö</a>`,
+      `<a href="/policies/article13-long-sk">Zásady ochrany osobných údajov</a>`,
+      `<a href="/policies/article13-long-bg">Политика за поверителност</a>`,
+      `<a href="/policies/article13-long-hr">Pravila privatnosti</a>`,
+      `<a href="/policies/article13-long-nb">Personvernerklæring</a>`,
+      `<a href="/policies/article13-long-sl">Pravilnik o zasebnosti</a>`,
+      `<a href="/policies/article13-long-lt">Privatumo politika</a>`,
+      `<a href="/policies/article13-long-lv">Privātuma politika</a>`,
+      `<a href="/policies/article13-long-et">Privaatsuspoliitika</a>`,
+      `<a href="/policies/article13-long-uk">Політика конфіденційності</a>`,
+      `<a href="/policies/article13-long-tr">Gizlilik politikası</a>`,
     ].join(" | "),
     "policy-multilingual-surfaces": [
       `<a href="/policies/privacy">Privacy Policy</a>`,
@@ -1990,7 +2006,9 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
   `;
 }
 
-type LongArticle13FixtureLocale = "pt" | "ru" | "ja" | "zh" | "ar" | "sv";
+type LongArticle13FixtureLocale =
+  | "pt" | "ru" | "ja" | "zh" | "ar" | "sv" | "ro" | "cs" | "el" | "hu" | "da"
+  | "fi" | "sk" | "bg" | "hr" | "nb" | "sl" | "lt" | "lv" | "et" | "uk" | "tr";
 
 const LONG_ARTICLE13_FIXTURE_COPY: Record<LongArticle13FixtureLocale, {
   title: string;
@@ -2040,6 +2058,118 @@ const LONG_ARTICLE13_FIXTURE_COPY: Record<LongArticle13FixtureLocale, {
     middle: "Vi beskriver rättslig grund för behandling av personuppgifter, kategorier av mottagare av personuppgifter och lagringstid för personuppgifter.",
     ending: "Vi beskriver den registrerades rättigheter, internationella överföringar av personuppgifter, rätt att lämna in klagomål till en tillsynsmyndighet och automatiserat beslutsfattande med personuppgifter.",
     filler: "Detta avsnitt beskriver allmänna rutiner för integritet, säkerhet, support och kontohantering utan att dra någon särskild rättslig slutsats.",
+  },
+  ro: {
+    title: "Politică de confidențialitate",
+    opening: "Operatorul de date cu caracter personal furnizează datele de contact ale responsabilului cu protecția datelor. Explicăm scopurile prelucrării datelor cu caracter personal.",
+    middle: "Explicăm temeiul juridic al prelucrării datelor cu caracter personal, categoriile de destinatari ai datelor cu caracter personal și perioada de păstrare a datelor cu caracter personal.",
+    ending: "Explicăm drepturile persoanei vizate, transferurile internaționale de date cu caracter personal, dreptul de a depune o plângere la o autoritate de supraveghere și procesul decizional automatizat privind datele cu caracter personal.",
+    filler: "Această secțiune descrie practici generale de confidențialitate, securitate, asistență și administrare a contului fără a formula o concluzie juridică separată.",
+  },
+  cs: {
+    title: "Zásady ochrany osobních údajů",
+    opening: "Správce osobních údajů uvádí kontaktní údaje pověřence pro ochranu osobních údajů. Popisujeme účely zpracování osobních údajů.",
+    middle: "Popisujeme právní základ pro zpracování osobních údajů, kategorie příjemců osobních údajů a dobu uložení osobních údajů.",
+    ending: "Popisujeme práva subjektu údajů, mezinárodní předávání osobních údajů, právo podat stížnost u dozorového úřadu a automatizované rozhodování včetně profilování.",
+    filler: "Tato část popisuje obecné postupy ochrany soukromí, zabezpečení, podpory a správy účtu bez samostatného právního závěru.",
+  },
+  el: {
+    title: "Πολιτική απορρήτου",
+    opening: "Ο υπεύθυνος επεξεργασίας δεδομένων προσωπικού χαρακτήρα παρέχει τα στοιχεία επικοινωνίας του υπευθύνου προστασίας δεδομένων. Περιγράφουμε τους σκοπούς της επεξεργασίας δεδομένων προσωπικού χαρακτήρα.",
+    middle: "Περιγράφουμε τη νομική βάση για την επεξεργασία δεδομένων προσωπικού χαρακτήρα, τις κατηγορίες αποδεκτών των δεδομένων προσωπικού χαρακτήρα και το διάστημα αποθήκευσης των δεδομένων προσωπικού χαρακτήρα.",
+    ending: "Περιγράφουμε τα δικαιώματα του υποκειμένου των δεδομένων, τις διεθνείς διαβιβάσεις δεδομένων προσωπικού χαρακτήρα, το δικαίωμα υποβολής καταγγελίας σε εποπτική αρχή και την αυτοματοποιημένη λήψη αποφάσεων με δεδομένα προσωπικού χαρακτήρα.",
+    filler: "Η ενότητα περιγράφει γενικές πρακτικές απορρήτου, ασφάλειας, υποστήριξης και διαχείρισης λογαριασμού χωρίς χωριστό νομικό συμπέρασμα.",
+  },
+  hu: {
+    title: "Adatvédelmi tájékoztató",
+    opening: "A személyes adatok adatkezelője megadja az adatvédelmi tisztviselő elérhetőségeit. Ismertetjük a személyes adatok kezelésének célját.",
+    middle: "Ismertetjük az adatkezelés jogalapját, a személyes adatok címzettjeinek kategóriáit és a személyes adatok tárolásának időtartamát.",
+    ending: "Ismertetjük az érintett jogait, a személyes adatok nemzetközi továbbítását, a panasz benyújtásának jogát valamely felügyeleti hatósághoz és a személyes adatok felhasználásával történő automatizált döntéshozatalt.",
+    filler: "Ez a szakasz az adatvédelem, a biztonság, a támogatás és a fiókkezelés általános gyakorlatait ismerteti külön jogi következtetés nélkül.",
+  },
+  da: {
+    title: "Privatlivspolitik",
+    opening: "Den dataansvarlige angiver kontaktoplysninger for databeskyttelsesrådgiveren. Vi beskriver formålene med behandlingen af personoplysninger.",
+    middle: "Vi beskriver retsgrundlaget for behandlingen af personoplysninger, kategorier af modtagere af personoplysninger og opbevaringsperioden for personoplysninger.",
+    ending: "Vi beskriver den registreredes rettigheder, internationale overførsler af personoplysninger, retten til at indgive en klage til en tilsynsmyndighed og automatiserede afgørelser med personoplysninger.",
+    filler: "Dette afsnit beskriver generelle fremgangsmåder for privatliv, sikkerhed, support og kontoadministration uden en særskilt juridisk konklusion.",
+  },
+  fi: {
+    title: "Tietosuojakäytäntö",
+    opening: "Rekisterinpitäjän yhteystiedot ja tietosuojavastaavan yhteystiedot annetaan tässä ilmoituksessa. Kuvaamme henkilötietojen käsittelyn tarkoitukset.",
+    middle: "Kuvaamme henkilötietojen käsittelyn oikeusperusteen, henkilötietojen vastaanottajaryhmät ja henkilötietojen säilytysajan.",
+    ending: "Kuvaamme rekisteröidyn oikeudet, henkilötietojen kansainväliset siirrot, oikeuden tehdä valitus valvontaviranomaiselle ja automatisoidun päätöksenteon mukaan lukien profilointi.",
+    filler: "Tässä osiossa kuvataan yleisiä tietosuoja-, turvallisuus-, tuki- ja tilinhallintakäytäntöjä ilman erillistä oikeudellista johtopäätöstä.",
+  },
+  sk: {
+    title: "Zásady ochrany osobných údajov",
+    opening: "Kontaktné údaje prevádzkovateľa a kontaktné údaje zodpovednej osoby sú uvedené v tomto oznámení. Opisujeme účely spracúvania osobných údajov.",
+    middle: "Opisujeme právny základ spracúvania osobných údajov, kategórie príjemcov osobných údajov a dobu uchovávania osobných údajov.",
+    ending: "Opisujeme práva dotknutej osoby, medzinárodné prenosy osobných údajov, právo podať sťažnosť dozornému orgánu a automatizované rozhodovanie vrátane profilovania.",
+    filler: "Táto časť opisuje všeobecné postupy ochrany súkromia, bezpečnosti, podpory a správy účtu bez samostatného právneho záveru.",
+  },
+  bg: {
+    title: "Политика за поверителност",
+    opening: "Данните за контакт на администратора и данните за контакт на длъжностното лице по защита на данните са посочени тук. Описваме целите на обработването на лични данни.",
+    middle: "Описваме правното основание за обработването на лични данни, категориите получатели на лични данни и срока за съхранение на личните данни.",
+    ending: "Описваме правата на субекта на данните, международното предаване на лични данни, правото на жалба до надзорен орган и автоматизираното вземане на решения включително профилиране.",
+    filler: "Този раздел описва общи практики за поверителност, сигурност, поддръжка и управление на акаунта без отделен правен извод.",
+  },
+  hr: {
+    title: "Pravila privatnosti",
+    opening: "Kontaktni podaci voditelja obrade i kontaktni podaci službenika za zaštitu podataka navedeni su u ovoj obavijesti. Opisujemo svrhe obrade osobnih podataka.",
+    middle: "Opisujemo pravnu osnovu za obradu osobnih podataka, kategorije primatelja osobnih podataka i razdoblje pohrane osobnih podataka.",
+    ending: "Opisujemo prava ispitanika, međunarodne prijenose osobnih podataka, pravo na podnošenje pritužbe nadzornom tijelu i automatizirano donošenje odluka uključujući izradu profila.",
+    filler: "Ovaj odjeljak opisuje opće prakse privatnosti, sigurnosti, podrške i upravljanja računom bez zasebnog pravnog zaključka.",
+  },
+  nb: {
+    title: "Personvernerklæring",
+    opening: "Kontaktopplysninger til den behandlingsansvarlige og personvernombudets kontaktopplysninger oppgis her. Vi beskriver formålene med behandlingen av personopplysninger.",
+    middle: "Vi beskriver rettslig grunnlag for behandling av personopplysninger, kategorier av mottakere av personopplysninger og lagringsperiode for personopplysninger.",
+    ending: "Vi beskriver den registrertes rettigheter, internasjonale overføringer av personopplysninger, rett til å klage til en tilsynsmyndighet og automatiserte avgjørelser herunder profilering.",
+    filler: "Dette avsnittet beskriver generelle rutiner for personvern, sikkerhet, støtte og kontoadministrasjon uten en særskilt juridisk konklusjon.",
+  },
+  sl: {
+    title: "Pravilnik o zasebnosti",
+    opening: "Kontaktni podatki upravljavca in kontaktni podatki pooblaščene osebe za varstvo podatkov so navedeni tukaj. Opisujemo namene obdelave osebnih podatkov.",
+    middle: "Opisujemo pravno podlago za obdelavo osebnih podatkov, kategorije prejemnikov osebnih podatkov in obdobje hrambe osebnih podatkov.",
+    ending: "Opisujemo pravice posameznika na katerega se nanašajo osebni podatki, mednarodne prenose osebnih podatkov, pravico do vložitve pritožbe pri nadzornem organu in avtomatizirano sprejemanje odločitev vključno z oblikovanjem profilov.",
+    filler: "Ta razdelek opisuje splošne prakse zasebnosti, varnosti, podpore in upravljanja računa brez ločenega pravnega zaključka.",
+  },
+  lt: {
+    title: "Privatumo politika",
+    opening: "Duomenų valdytojo kontaktiniai duomenys ir duomenų apsaugos pareigūno kontaktiniai duomenys pateikiami čia. Aprašome asmens duomenų tvarkymo tikslus.",
+    middle: "Aprašome teisinį asmens duomenų tvarkymo pagrindą, asmens duomenų gavėjų kategorijas ir asmens duomenų saugojimo laikotarpį.",
+    ending: "Aprašome duomenų subjekto teises, tarptautinį asmens duomenų perdavimą, teisę pateikti skundą priežiūros institucijai ir automatizuotą sprendimų priėmimą įskaitant profiliavimą.",
+    filler: "Šiame skyriuje aprašoma bendra privatumo, saugumo, pagalbos ir paskyros valdymo praktika be atskiros teisinės išvados.",
+  },
+  lv: {
+    title: "Privātuma politika",
+    opening: "Pārziņa kontaktinformācija un datu aizsardzības speciālista kontaktinformācija ir norādīta šeit. Aprakstām personas datu apstrādes nolūkus.",
+    middle: "Aprakstām personas datu apstrādes juridisko pamatu, personas datu saņēmēju kategorijas un personas datu glabāšanas laikposmu.",
+    ending: "Aprakstām datu subjekta tiesības, personas datu starptautisku nosūtīšanu, tiesības iesniegt sūdzību uzraudzības iestādei un automatizētu lēmumu pieņemšanu tostarp profilēšanu.",
+    filler: "Šajā sadaļā aprakstīta vispārīga privātuma, drošības, atbalsta un konta pārvaldības prakse bez atsevišķa juridiska secinājuma.",
+  },
+  et: {
+    title: "Privaatsuspoliitika",
+    opening: "Vastutava töötleja kontaktandmed ja andmekaitsespetsialisti kontaktandmed on esitatud siin. Kirjeldame isikuandmete töötlemise eesmärke.",
+    middle: "Kirjeldame isikuandmete töötlemise õiguslikku alust, isikuandmete vastuvõtjate kategooriaid ja isikuandmete säilitamise ajavahemikku.",
+    ending: "Kirjeldame andmesubjekti õigusi, isikuandmete rahvusvahelist edastamist, õigust esitada kaebus järelevalveasutusele ja automatiseeritud otsuste tegemist sealhulgas profiilianalüüsi.",
+    filler: "Selles osas kirjeldatakse üldisi privaatsuse, turvalisuse, toe ja konto haldamise tavasid ilma eraldi õigusliku järelduseta.",
+  },
+  uk: {
+    title: "Політика конфіденційності",
+    opening: "Контактні дані володільця персональних даних і контактні дані відповідальної особи із захисту даних наведено тут. Описуємо цілі обробки персональних даних.",
+    middle: "Описуємо правову підставу для обробки персональних даних, категорії одержувачів персональних даних і строк зберігання персональних даних.",
+    ending: "Описуємо права суб'єкта персональних даних, міжнародну передачу персональних даних, право подати скаргу до наглядового органу й автоматизоване прийняття рішень включаючи профілювання.",
+    filler: "У цьому розділі описано загальні правила конфіденційності, безпеки, підтримки та керування обліковим записом без окремого правового висновку.",
+  },
+  tr: {
+    title: "Gizlilik politikası",
+    opening: "Veri sorumlusunun iletişim bilgileri ve veri koruma görevlisinin iletişim bilgileri burada verilir. Kişisel verilerin işlenme amaçlarını açıklıyoruz.",
+    middle: "Kişisel verilerin işlenmesinin hukuki dayanağını, kişisel veri alıcılarının kategorilerini ve kişisel verilerin saklama süresini açıklıyoruz.",
+    ending: "İlgili kişinin haklarını, kişisel verilerin uluslararası aktarımını, denetim makamına şikayette bulunma hakkını ve otomatik karar verme ve profillemeyi açıklıyoruz.",
+    filler: "Bu bölüm, ayrı bir hukuki sonuca varmadan genel gizlilik, güvenlik, destek ve hesap yönetimi uygulamalarını açıklar.",
   },
 };
 

@@ -1,6 +1,6 @@
 # 40-locale privacy-evidence calibration
 
-`pnpm v2:multilingual-gold` is the deterministic release gate. It uses an independent, human-reviewed 40-locale corpus and verifies localized privacy/cookie surfaces, accept/reject/options/necessary-only classification, browser geometry retention, retained screenshot references, and generic-page negative controls. It does not make Article 13/GDPR-transparency claims beyond the separately calibrated thirteen locales (`en`, `de`, `fr`, `es`, `it`, `nl`, `pl`, `pt`, `ru`, `ja`, `zh`, `ar`, and `sv`).
+`pnpm v2:multilingual-gold` is the deterministic release gate. It uses an independent, human-reviewed 40-locale corpus and verifies localized privacy/cookie surfaces, accept/reject/options/necessary-only classification, browser geometry retention, retained screenshot references, and generic-page negative controls. It does not make Article 13/GDPR-transparency claims beyond the separately calibrated twenty-nine locales (`en`, `de`, `fr`, `es`, `it`, `nl`, `pl`, `pt`, `ru`, `ja`, `zh`, `ar`, `sv`, `ro`, `cs`, `el`, `hu`, `da`, `fi`, `sk`, `bg`, `hr`, `nb`, `sl`, `lt`, `lv`, `et`, `uk`, and `tr`).
 
 For live calibration, maintain a reviewed manifest with one or more screenshot-backed targets per locale. Each target declares whether privacy/cookie surfaces and accept/reject/options are expected. After retaining the production scan artifacts, run:
 
@@ -17,7 +17,7 @@ Every registry addition or phrase change should add a deterministic gold value a
 
 ## GDPR Transparency calibrated locales
 
-The canonical GDPR Transparency classifier is independently calibrated for `en`, `de`, `fr`, `es`, `it`, `nl`, `pl`, `pt`, `ru`, `ja`, `zh`, `ar`, and `sv`. The six-locale expansion (`pt`, `ru`, `ja`, `zh`, `ar`, and `sv`) has deterministic long-policy fixtures, regional/script/inflection variants, generic-text negative controls, and full classifier-to-checklist projection tests.
+The canonical GDPR Transparency classifier is independently calibrated for `en`, `de`, `fr`, `es`, `it`, `nl`, `pl`, `pt`, `ru`, `ja`, `zh`, `ar`, `sv`, `ro`, `cs`, `el`, `hu`, `da`, `fi`, `sk`, `bg`, `hr`, `nb`, `sl`, `lt`, `lv`, `et`, `uk`, and `tr`. The expansion waves (`pt`, `ru`, `ja`, `zh`, `ar`, `sv`; `ro`, `cs`, `el`, `hu`, `da`; `fi`, `sk`, `bg`, `hr`, `nb`; then `sl`, `lt`, `lv`, `et`, `uk`, `tr`) have deterministic long-policy fixtures, reviewed grammatical and script variants, generic-text negative controls, owned passive canaries, and full classifier-to-checklist projection tests.
 
 The reviewed owned-canary manifest is `docs/certscore-v2/gdpr-transparency-multilingual-live-canaries.json`. Its pages are no-index calibration surfaces on `certscore.ai`; they are not legal notices and do not create production findings by themselves. After deployment and passive scans have retained artifacts, audit them with:
 

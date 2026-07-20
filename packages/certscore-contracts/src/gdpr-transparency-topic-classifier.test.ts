@@ -1103,6 +1103,77 @@ test("classifies reviewed regional, script, inflection, and punctuation variants
   }
 });
 
+test("classifies reviewed inflection and official-vocabulary variants for the five EU expansion locales", () => {
+  const cases = [
+    {
+      locale: "ro",
+      text: "Politica explică baza legală pentru prelucrarea datelor cu caracter personal și perioada pentru care vor fi stocate datele cu caracter personal.",
+      topics: ["legal_basis", "data_retention"],
+    },
+    {
+      locale: "cs",
+      text: "Uvádíme právní titul zpracování osobních údajů a dobu uchovávání osobních údajů.",
+      topics: ["legal_basis", "data_retention"],
+    },
+    {
+      locale: "el",
+      text: "Αναφέρουμε τη νομική βάση της επεξεργασίας δεδομένων προσωπικού χαρακτήρα και την περίοδο διατήρησης των δεδομένων προσωπικού χαρακτήρα.",
+      topics: ["legal_basis", "data_retention"],
+    },
+    {
+      locale: "hu",
+      text: "Ismertetjük az érintett jogait, a személyes adatok nemzetközi továbbítását és a panasz benyújtásának jogát valamely felügyeleti hatósághoz.",
+      topics: ["data_subject_rights", "international_transfers", "supervisory_authority"],
+    },
+    {
+      locale: "da",
+      text: "Vi beskriver opbevaringsperioden for personoplysninger og retten til at indgive en klage til en tilsynsmyndighed.",
+      topics: ["data_retention", "supervisory_authority"],
+    },
+  ] as const;
+
+  for (const entry of cases) {
+    const matches = classifyGdprTransparencyTopics({ text: entry.text, localeHints: [entry.locale] }).matches;
+    for (const topic of entry.topics) {
+      assert.equal(matches.some((match) => match.topic === topic && match.matchedLocale === entry.locale), true, `${entry.locale} ${topic}`);
+    }
+  }
+});
+
+test("does not classify generic operational copy in the five EU expansion locales", () => {
+  const cases = [
+    ["ro", "Perioada de păstrare a coletelor depinde de curier, iar scopul paginii este prezentarea produselor."],
+    ["cs", "Doba uložení zásilky závisí na dopravci a automatizované třídění objednávek zrychluje sklad."],
+    ["el", "Η περίοδος αποθήκευσης των προϊόντων εξαρτάται από την αποθήκη και η αυτόματη ταξινόμηση αφορά παραγγελίες."],
+    ["hu", "A csomagok tárolási ideje a futártól függ, az automatizált raktári döntés pedig a készletet kezeli."],
+    ["da", "Opbevaringsperioden for varer afhænger af lageret, og automatiske afgørelser bruges til forsendelser."],
+  ] as const;
+
+  for (const [locale, text] of cases) {
+    assert.deepEqual(classifyGdprTransparencyTopics({ text, localeHints: [locale] }).matches, [], locale);
+  }
+});
+
+test("does not classify generic operational copy in the Nordic, Central European, Baltic, Ukrainian, or Turkish expansion locales", () => {
+  const cases = [
+    ["fi", "Tuotteiden säilytysaika riippuu varastosta, ja automaattinen lajittelu nopeuttaa toimituksia."],
+    ["sk", "Doba uloženia zásielky závisí od dopravcu a automatické triedenie urýchľuje skladové operácie."],
+    ["bg", "Срокът за съхранение на стоките зависи от склада, а автоматичното сортиране ускорява доставките."],
+    ["hr", "Razdoblje pohrane robe ovisi o skladištu, a automatizirano razvrstavanje ubrzava isporuku."],
+    ["nb", "Lagringsperioden for varer avhenger av lageret, og automatisk sortering gjør forsendelsen raskere."],
+    ["sl", "Obdobje hrambe blaga je odvisno od skladišča, avtomatizirano razvrščanje pa pospeši dostavo."],
+    ["lt", "Prekių saugojimo laikotarpis priklauso nuo sandėlio, o automatinis rūšiavimas pagreitina pristatymą."],
+    ["lv", "Preču glabāšanas laikposms ir atkarīgs no noliktavas, un automātiska šķirošana paātrina piegādi."],
+    ["et", "Kauba säilitamise aeg sõltub laost ning automaatne sortimine kiirendab tarnimist."],
+    ["uk", "Строк зберігання товарів залежить від складу, а автоматичне сортування прискорює доставку."],
+    ["tr", "Ürünlerin saklama süresi depoya bağlıdır ve otomatik sıralama teslimatı hızlandırır."],
+  ] as const;
+
+  for (const [locale, text] of cases) {
+    assert.deepEqual(classifyGdprTransparencyTopics({ text, localeHints: [locale] }).matches, [], locale);
+  }
+});
+
 test("registry covers every supported locale", () => {
   const registryLocales = new Set(GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY.map((term) => term.locale));
 

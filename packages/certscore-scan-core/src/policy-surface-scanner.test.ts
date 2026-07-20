@@ -675,13 +675,29 @@ test("policySurfaceScanner derives diagnostic GDPR Transparency candidates from 
   );
 });
 
-test("policySurfaceScanner derives all canonical GDPR Transparency candidates for the five newly calibrated locales", () => {
+test("policySurfaceScanner derives all canonical GDPR Transparency candidates for the twenty-one expansion locales", () => {
   const policies = [
     ["ru", "Оператор персональных данных указывает контакт ответственного по защите данных. Мы описываем цели обработки персональных данных, правовые основания обработки персональных данных, категории получателей персональных данных, срок хранения персональных данных, права субъекта персональных данных, трансграничную передачу персональных данных, право подать жалобу в надзорный орган и автоматизированное принятие решений с использованием персональных данных."],
     ["ja", "個人データの管理者はデータ保護責任者への連絡先を示します。個人データを処理する目的、個人データ処理の法的根拠、個人データの受領者のカテゴリー、個人データの保存期間、データ主体の権利、個人データの国際移転、監督機関に苦情を申し立てる権利、個人データを用いた自動意思決定について説明します。"],
     ["zh", "个人数据控制者提供数据保护负责人的联系方式。我们说明处理个人数据的目的、处理个人数据的法律依据、个人数据接收方的类别、个人数据的保存期限、数据主体的权利、个人数据的跨境传输、向监管机构投诉的权利以及使用个人数据进行自动化决策。"],
     ["ar", "يقدم مراقب البيانات الشخصية بيانات الاتصال بمسؤول حماية البيانات. نشرح أغراض معالجة البيانات الشخصية والأساس القانوني لمعالجة البيانات الشخصية وفئات مستلمي البيانات الشخصية ومدة الاحتفاظ بالبيانات الشخصية وحقوق صاحب البيانات والنقل الدولي للبيانات الشخصية والحق في تقديم شكوى إلى سلطة رقابية واتخاذ القرارات الآلية باستخدام البيانات الشخصية."],
     ["sv", "Personuppgiftsansvarig anger kontaktuppgifter till dataskyddsombudet. Vi beskriver ändamålen med behandlingen av personuppgifter, rättslig grund för behandling av personuppgifter, kategorier av mottagare av personuppgifter, lagringstid för personuppgifter, den registrerades rättigheter, internationella överföringar av personuppgifter, rätt att lämna in klagomål till en tillsynsmyndighet och automatiserat beslutsfattande med personuppgifter."],
+    ["ro", "Operatorul de date cu caracter personal furnizează datele de contact ale responsabilului cu protecția datelor. Explicăm scopurile prelucrării datelor cu caracter personal, temeiul juridic al prelucrării datelor cu caracter personal, categoriile de destinatari ai datelor cu caracter personal, perioada de păstrare a datelor cu caracter personal, drepturile persoanei vizate, transferurile internaționale de date cu caracter personal, dreptul de a depune o plângere la o autoritate de supraveghere și procesul decizional automatizat privind datele cu caracter personal."],
+    ["cs", "Správce osobních údajů uvádí kontaktní údaje pověřence pro ochranu osobních údajů. Popisujeme účely zpracování osobních údajů, právní základ pro zpracování osobních údajů, kategorie příjemců osobních údajů, dobu uložení osobních údajů, práva subjektu údajů, mezinárodní předávání osobních údajů, právo podat stížnost u dozorového úřadu a automatizované rozhodování včetně profilování."],
+    ["el", "Ο υπεύθυνος επεξεργασίας δεδομένων προσωπικού χαρακτήρα παρέχει τα στοιχεία επικοινωνίας του υπευθύνου προστασίας δεδομένων. Περιγράφουμε τους σκοπούς της επεξεργασίας δεδομένων προσωπικού χαρακτήρα, τη νομική βάση για την επεξεργασία δεδομένων προσωπικού χαρακτήρα, τις κατηγορίες αποδεκτών των δεδομένων προσωπικού χαρακτήρα, το διάστημα αποθήκευσης των δεδομένων προσωπικού χαρακτήρα, τα δικαιώματα του υποκειμένου των δεδομένων, τις διεθνείς διαβιβάσεις δεδομένων προσωπικού χαρακτήρα, το δικαίωμα υποβολής καταγγελίας σε εποπτική αρχή και την αυτοματοποιημένη λήψη αποφάσεων με δεδομένα προσωπικού χαρακτήρα."],
+    ["hu", "A személyes adatok adatkezelője megadja az adatvédelmi tisztviselő elérhetőségeit. Ismertetjük a személyes adatok kezelésének célját, az adatkezelés jogalapját, a személyes adatok címzettjeinek kategóriáit, a személyes adatok tárolásának időtartamát, az érintett jogait, a személyes adatok nemzetközi továbbítását, a panasz benyújtásának jogát valamely felügyeleti hatósághoz és a személyes adatok felhasználásával történő automatizált döntéshozatalt."],
+    ["da", "Den dataansvarlige angiver kontaktoplysninger for databeskyttelsesrådgiveren. Vi beskriver formålene med behandlingen af personoplysninger, retsgrundlaget for behandlingen af personoplysninger, kategorier af modtagere af personoplysninger, opbevaringsperioden for personoplysninger, den registreredes rettigheder, internationale overførsler af personoplysninger, retten til at indgive en klage til en tilsynsmyndighed og automatiserede afgørelser med personoplysninger."],
+    ["fi", "Rekisterinpitäjän yhteystiedot ja tietosuojavastaavan yhteystiedot. Henkilötietojen käsittelyn tarkoitukset, henkilötietojen käsittelyn oikeusperuste, henkilötietojen vastaanottajaryhmät, henkilötietojen säilytysaika, rekisteröidyn oikeudet, henkilötietojen kansainväliset siirrot, oikeus tehdä valitus valvontaviranomaiselle ja automatisoitu päätöksenteko mukaan lukien profilointi."],
+    ["sk", "Kontaktné údaje prevádzkovateľa a kontaktné údaje zodpovednej osoby. Účely spracúvania osobných údajov, právny základ spracúvania osobných údajov, kategórie príjemcov osobných údajov, doba uchovávania osobných údajov, práva dotknutej osoby, medzinárodné prenosy osobných údajov, právo podať sťažnosť dozornému orgánu a automatizované rozhodovanie vrátane profilovania."],
+    ["bg", "Данни за контакт на администратора и данни за контакт на длъжностното лице по защита на данните. Целите на обработването на лични данни, правното основание за обработването на лични данни, категориите получатели на лични данни, срокът за съхранение на личните данни, правата на субекта на данните, международно предаване на лични данни, право на жалба до надзорен орган и автоматизирано вземане на решения включително профилиране."],
+    ["hr", "Kontaktni podaci voditelja obrade i kontaktni podaci službenika za zaštitu podataka. Svrhe obrade osobnih podataka, pravna osnova za obradu osobnih podataka, kategorije primatelja osobnih podataka, razdoblje pohrane osobnih podataka, prava ispitanika, međunarodni prijenosi osobnih podataka, pravo na podnošenje pritužbe nadzornom tijelu i automatizirano donošenje odluka uključujući izradu profila."],
+    ["nb", "Kontaktopplysninger til den behandlingsansvarlige og personvernombudets kontaktopplysninger. Formålene med behandlingen av personopplysninger, rettslig grunnlag for behandling av personopplysninger, kategorier av mottakere av personopplysninger, lagringsperiode for personopplysninger, den registrertes rettigheter, internasjonale overføringer av personopplysninger, rett til å klage til en tilsynsmyndighet og automatiserte avgjørelser herunder profilering."],
+    ["sl", "Kontaktni podatki upravljavca in kontaktni podatki pooblaščene osebe za varstvo podatkov. Nameni obdelave osebnih podatkov, pravna podlaga za obdelavo osebnih podatkov, kategorije prejemnikov osebnih podatkov, obdobje hrambe osebnih podatkov, pravice posameznika na katerega se nanašajo osebni podatki, mednarodni prenosi osebnih podatkov, pravica do vložitve pritožbe pri nadzornem organu in avtomatizirano sprejemanje odločitev vključno z oblikovanjem profilov."],
+    ["lt", "Duomenų valdytojo kontaktiniai duomenys ir duomenų apsaugos pareigūno kontaktiniai duomenys. Asmens duomenų tvarkymo tikslai, teisinis asmens duomenų tvarkymo pagrindas, asmens duomenų gavėjų kategorijos, asmens duomenų saugojimo laikotarpis, duomenų subjekto teisės, tarptautinis asmens duomenų perdavimas, teisė pateikti skundą priežiūros institucijai ir automatizuotas sprendimų priėmimas įskaitant profiliavimą."],
+    ["lv", "Pārziņa kontaktinformācija un datu aizsardzības speciālista kontaktinformācija. Personas datu apstrādes nolūki, personas datu apstrādes juridiskais pamats, personas datu saņēmēju kategorijas, personas datu glabāšanas laikposms, datu subjekta tiesības, personas datu starptautiska nosūtīšana, tiesības iesniegt sūdzību uzraudzības iestādei un automatizēta lēmumu pieņemšana tostarp profilēšana."],
+    ["et", "Vastutava töötleja kontaktandmed ja andmekaitsespetsialisti kontaktandmed. Isikuandmete töötlemise eesmärgid, isikuandmete töötlemise õiguslik alus, isikuandmete vastuvõtjate kategooriad, isikuandmete säilitamise ajavahemik, andmesubjekti õigused, isikuandmete rahvusvaheline edastamine, õigus esitada kaebus järelevalveasutusele ja automatiseeritud otsuste tegemine sealhulgas profiilianalüüs."],
+    ["uk", "Контактні дані володільця персональних даних і контактні дані відповідальної особи із захисту даних. Цілі обробки персональних даних, правова підстава для обробки персональних даних, категорії одержувачів персональних даних, строк зберігання персональних даних, права суб'єкта персональних даних, міжнародна передача персональних даних, право подати скаргу до наглядового органу та автоматизоване прийняття рішень включаючи профілювання."],
+    ["tr", "Veri sorumlusunun iletişim bilgileri ve veri koruma görevlisinin iletişim bilgileri. Kişisel verilerin işlenme amaçları, kişisel verilerin işlenmesinin hukuki dayanağı, kişisel veri alıcılarının kategorileri, kişisel verilerin saklama süresi, ilgili kişinin hakları, kişisel verilerin uluslararası aktarımı, denetim makamına şikayette bulunma hakkı ve otomatik karar verme ve profilleme."],
   ] as const;
   const expectedTopics = new Set([
     "controller_contact",
@@ -708,8 +724,8 @@ test("policySurfaceScanner derives all canonical GDPR Transparency candidates fo
   }
 });
 
-test("policySurfaceScanner fetches long policies and captures all canonical GDPR Transparency topics for the six calibrated locales", async () => {
-  await withPolicyScan("policy-gdpr-transparency-six-long-locales", async ({ result, baseUrl }) => {
+test("policySurfaceScanner fetches long policies and captures all canonical GDPR Transparency topics for the twenty-two expansion locales", async () => {
+  await withPolicyScan("policy-gdpr-transparency-twenty-two-long-locales", async ({ result, baseUrl }) => {
     const expectedTopics = new Set([
       "controller_contact",
       "dpo_contact",
@@ -722,7 +738,10 @@ test("policySurfaceScanner fetches long policies and captures all canonical GDPR
       "supervisory_authority",
       "automated_decision_making_or_profiling",
     ]);
-    const expectedPolicies = ["pt", "ru", "ja", "zh", "ar", "sv"] as const;
+    const expectedPolicies = [
+      "pt", "ru", "ja", "zh", "ar", "sv", "ro", "cs", "el", "hu", "da",
+      "fi", "sk", "bg", "hr", "nb", "sl", "lt", "lv", "et", "uk", "tr",
+    ] as const;
 
     for (const locale of expectedPolicies) {
       const normalizedUrl = `${baseUrl}/policies/article13-long-${locale}`;

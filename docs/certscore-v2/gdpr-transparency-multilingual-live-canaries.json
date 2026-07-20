@@ -21,6 +21,22 @@
     { "key": "owned-gdpr-transparency-ja", "locale": "ja", "url": "https://certscore.ai/calibration/gdpr-transparency/ja" },
     { "key": "owned-gdpr-transparency-zh", "locale": "zh", "url": "https://certscore.ai/calibration/gdpr-transparency/zh" },
     { "key": "owned-gdpr-transparency-ar", "locale": "ar", "url": "https://certscore.ai/calibration/gdpr-transparency/ar" },
-    { "key": "owned-gdpr-transparency-sv", "locale": "sv", "url": "https://certscore.ai/calibration/gdpr-transparency/sv" }
+    { "key": "owned-gdpr-transparency-sv", "locale": "sv", "url": "https://certscore.ai/calibration/gdpr-transparency/sv" },
+    { "key": "owned-gdpr-transparency-ro", "locale": "ro", "url": "https://certscore.ai/calibration/gdpr-transparency/ro" },
+    { "key": "owned-gdpr-transparency-cs", "locale": "cs", "url": "https://certscore.ai/calibration/gdpr-transparency/cs" },
+    { "key": "owned-gdpr-transparency-el", "locale": "el", "url": "https://certscore.ai/calibration/gdpr-transparency/el" },
+    { "key": "owned-gdpr-transparency-hu", "locale": "hu", "url": "https://certscore.ai/calibration/gdpr-transparency/hu" },
+    { "key": "owned-gdpr-transparency-da", "locale": "da", "url": "https://certscore.ai/calibration/gdpr-transparency/da" },
+    { "key": "owned-gdpr-transparency-fi", "locale": "fi", "url": "https://certscore.ai/calibration/gdpr-transparency/fi" },
+    { "key": "owned-gdpr-transparency-sk", "locale": "sk", "url": "https://certscore.ai/calibration/gdpr-transparency/sk" },
+    { "key": "owned-gdpr-transparency-bg", "locale": "bg", "url": "https://certscore.ai/calibration/gdpr-transparency/bg" },
+    { "key": "owned-gdpr-transparency-hr", "locale": "hr", "url": "https://certscore.ai/calibration/gdpr-transparency/hr" },
+    { "key": "owned-gdpr-transparency-nb", "locale": "nb", "url": "https://certscore.ai/calibration/gdpr-transparency/nb" },
+    { "key": "owned-gdpr-transparency-sl", "locale": "sl", "url": "https://certscore.ai/calibration/gdpr-transparency/sl" },
+    { "key": "owned-gdpr-transparency-lt", "locale": "lt", "url": "https://certscore.ai/calibration/gdpr-transparency/lt" },
+    { "key": "owned-gdpr-transparency-lv", "locale": "lv", "url": "https://certscore.ai/calibration/gdpr-transparency/lv" },
+    { "key": "owned-gdpr-transparency-et", "locale": "et", "url": "https://certscore.ai/calibration/gdpr-transparency/et" },
+    { "key": "owned-gdpr-transparency-uk", "locale": "uk", "url": "https://certscore.ai/calibration/gdpr-transparency/uk" },
+    { "key": "owned-gdpr-transparency-tr", "locale": "tr", "url": "https://certscore.ai/calibration/gdpr-transparency/tr" }
   ]
 }

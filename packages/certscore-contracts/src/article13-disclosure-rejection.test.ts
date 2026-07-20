@@ -194,6 +194,35 @@ test("Article 13 rejection contract rejects DPO nouns without a contact anchor",
   );
 });
 
+test("Article 13 rejection contract accepts calibrated DPO contact evidence in the sixteen expansion locales", () => {
+  const examples = [
+    "Datele de contact ale responsabilului cu protecția datelor sunt privacy@example.test.",
+    "Kontaktní údaje pověřence pro ochranu osobních údajů jsou privacy@example.test.",
+    "Τα στοιχεία επικοινωνίας του υπευθύνου προστασίας δεδομένων είναι privacy@example.test.",
+    "Az adatvédelmi tisztviselő elérhetőségei: privacy@example.test.",
+    "Kontaktoplysninger for databeskyttelsesrådgiveren: privacy@example.test.",
+    "Tietosuojavastaavan yhteystiedot ovat privacy@example.test.",
+    "Kontaktné údaje zodpovednej osoby pre ochranu osobných údajov sú privacy@example.test.",
+    "Данни за контакт на длъжностното лице по защита на данните: privacy@example.test.",
+    "Kontaktni podaci službenika za zaštitu podataka su privacy@example.test.",
+    "Personvernombudets kontaktopplysninger er privacy@example.test.",
+    "Kontaktni podatki pooblaščene osebe za varstvo podatkov so privacy@example.test.",
+    "Duomenų apsaugos pareigūno kontaktiniai duomenys: privacy@example.test.",
+    "Datu aizsardzības speciālista kontaktinformācija: privacy@example.test.",
+    "Andmekaitsespetsialisti kontaktandmed on privacy@example.test.",
+    "Контактні дані відповідальної особи із захисту даних: privacy@example.test.",
+    "Veri koruma görevlisinin iletişim bilgileri: privacy@example.test.",
+  ];
+
+  for (const example of examples) {
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(example, "dpo_contact", { mode: "multilingual_classifier" }),
+      true,
+      example,
+    );
+  }
+});
+
 test("Article 13 rejection contract rejects generic contact and GDPR page chrome for row-specific disclosures", () => {
   const footerChrome =
     "Parents Teachers Privacy Policy Cookie Policy Terms Contact us Content Removal Upload Home New videos Search Menu";

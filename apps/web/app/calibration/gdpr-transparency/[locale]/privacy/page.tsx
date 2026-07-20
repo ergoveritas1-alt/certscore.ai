@@ -1,5 +1,9 @@
 import { notFound } from "next/navigation";
-import { GDPR_TRANSPARENCY_CANARY_COPY, isGdprTransparencyCanaryLocale } from "../../content";
+import {
+  buildGdprTransparencyCanaryPolicyParagraphs,
+  GDPR_TRANSPARENCY_CANARY_COPY,
+  isGdprTransparencyCanaryLocale,
+} from "../../content";
 
 export default async function GdprTransparencyCanaryPolicy({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -11,7 +15,9 @@ export default async function GdprTransparencyCanaryPolicy({ params }: { params:
       <p>CertScore owned GDPR Transparency calibration canary.</p>
       <h1 className="mt-4 text-3xl font-semibold">{copy.title}</h1>
       <article className="mt-8 space-y-6 text-base leading-8">
-        {copy.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+        {buildGdprTransparencyCanaryPolicyParagraphs(locale).map((paragraph, index) => (
+          <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>
+        ))}
       </article>
     </main>
   );

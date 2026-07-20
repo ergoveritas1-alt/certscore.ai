@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyGdprTransparencyTopics, type GdprTransparencyTopic } from "@certscore/contracts";
-import { GDPR_TRANSPARENCY_CANARY_COPY, GDPR_TRANSPARENCY_CANARY_LOCALES } from "./content";
+import {
+  buildGdprTransparencyCanaryPolicyParagraphs,
+  GDPR_TRANSPARENCY_CANARY_COPY,
+  GDPR_TRANSPARENCY_CANARY_LOCALES,
+} from "./content";
 
 const EXPECTED_TOPICS = new Set<GdprTransparencyTopic>([
   "controller_contact",
@@ -21,5 +25,11 @@ test("owned GDPR Transparency canaries retain all canonical topics in their decl
     const result = classifyGdprTransparencyTopics({ text: GDPR_TRANSPARENCY_CANARY_COPY[locale].paragraphs.join(" ") });
     assert.deepEqual(new Set(result.matches.map((match) => match.topic)), EXPECTED_TOPICS, locale);
     assert.equal(result.matches.every((match) => match.matchedLocale === locale), true, locale);
+  }
+});
+
+test("owned GDPR Transparency canaries exceed the production policy-text threshold", () => {
+  for (const locale of GDPR_TRANSPARENCY_CANARY_LOCALES) {
+    assert.ok(buildGdprTransparencyCanaryPolicyParagraphs(locale).join(" ").length >= 2_800, locale);
   }
 });

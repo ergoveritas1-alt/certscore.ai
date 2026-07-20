@@ -21,6 +21,21 @@ test("uses retained text and script evidence when no declaration is available", 
   }), "ja");
 });
 
+test("distinguishes the newly calibrated Central European and Baltic policy languages from retained text", () => {
+  const cases = [
+    ["sk", "Tieto zásady vysvetľujú, ktoré osobné údaje spracúvame, aké sú vaše práva a ako nás môžete kontaktovať."],
+    ["hr", "Ova pravila objašnjavaju koje osobne podatke obrađujemo, koja su vaša prava i kako nas možete kontaktirati."],
+    ["sl", "Ta pravilnik pojasnjuje, katere osebne podatke obdelujemo, katere so vaše pravice in kako nas lahko kontaktirate."],
+    ["lt", "Ši politika paaiškina, kokius asmens duomenis tvarkome, kokios yra jūsų teisės ir kaip galite su mumis susisiekti."],
+    ["lv", "Šī politika izskaidro, kādus personas datus mēs apstrādājam, kādas ir jūsu tiesības un kā ar mums sazināties."],
+    ["et", "Käesolev poliitika selgitab, milliseid isikuandmeid me töötleme, millised on teie õigused ja kuidas meiega ühendust võtta."],
+  ] as const;
+
+  for (const [locale, text] of cases) {
+    assert.equal(guessPrimaryLanguage({ textSamples: [text.repeat(8)] }), locale, locale);
+  }
+});
+
 test("uses locale paths and country TLDs without guessing from generic domains", () => {
   assert.equal(guessPrimaryLanguage({ urls: ["https://example.com/de/produkte"] }), "de");
   assert.equal(guessPrimaryLanguage({ urls: ["https://example.cn"] }), "zh");

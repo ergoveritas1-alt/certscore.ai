@@ -1631,7 +1631,7 @@ test("summarizePolicySurfaces accepts substantive Portuguese policy text and pro
   assert.equal(summary.gdprTransparencyProductionEvidenceDiagnostics.productionCreditSignalCount, 1);
 });
 
-test("summarizePolicySurfaces treats all five newly calibrated policy languages as usable", async () => {
+test("summarizePolicySurfaces treats all twenty-one expansion policy languages as usable", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const policies = [
     ["ru", "Настоящая политика описывает цели обработки персональных данных, правовые основания обработки персональных данных и права субъекта персональных данных. "],
@@ -1639,6 +1639,22 @@ test("summarizePolicySurfaces treats all five newly calibrated policy languages 
     ["zh", "本隐私政策说明处理个人数据的目的、处理个人数据的法律依据以及数据主体的权利，并介绍我们如何保护个人信息。"],
     ["ar", "توضح سياسة الخصوصية أغراض معالجة البيانات الشخصية والأساس القانوني لمعالجة البيانات الشخصية وحقوق صاحب البيانات وطرق حماية المعلومات. "],
     ["sv", "Denna integritetspolicy beskriver ändamålen med behandlingen av personuppgifter, rättslig grund för behandling av personuppgifter och den registrerades rättigheter. "],
+    ["ro", "Această politică de confidențialitate descrie scopurile prelucrării datelor cu caracter personal, temeiul juridic al prelucrării datelor cu caracter personal și drepturile persoanei vizate. "],
+    ["cs", "Tyto zásady ochrany osobních údajů popisují účely zpracování osobních údajů, právní základ pro zpracování osobních údajů a práva subjektu údajů. "],
+    ["el", "Η παρούσα πολιτική απορρήτου περιγράφει τους σκοπούς της επεξεργασίας δεδομένων προσωπικού χαρακτήρα, τη νομική βάση για την επεξεργασία δεδομένων προσωπικού χαρακτήρα και τα δικαιώματα του υποκειμένου των δεδομένων. "],
+    ["hu", "Ez az adatvédelmi tájékoztató ismerteti a személyes adatok kezelésének célját, az adatkezelés jogalapját és az érintett jogait. "],
+    ["da", "Denne privatlivspolitik beskriver formålene med behandlingen af personoplysninger, retsgrundlaget for behandlingen af personoplysninger og den registreredes rettigheder. "],
+    ["fi", "Tämä tietosuojakäytäntö kuvaa henkilötietojen käsittelyn tarkoitukset, henkilötietojen käsittelyn oikeusperusteen ja rekisteröidyn oikeudet. "],
+    ["sk", "Tieto zásady ochrany osobných údajov opisujú účely spracúvania osobných údajov, právny základ spracúvania osobných údajov a práva dotknutej osoby. "],
+    ["bg", "Тази политика за поверителност описва целите на обработването на лични данни, правното основание за обработването на лични данни и правата на субекта на данните. "],
+    ["hr", "Ova pravila privatnosti opisuju svrhe obrade osobnih podataka, pravnu osnovu za obradu osobnih podataka i prava ispitanika. "],
+    ["nb", "Denne personvernerklæringen beskriver formålene med behandlingen av personopplysninger, rettslig grunnlag for behandling av personopplysninger og den registrertes rettigheter. "],
+    ["sl", "Ta pravilnik o zasebnosti opisuje namene obdelave osebnih podatkov, pravno podlago za obdelavo osebnih podatkov in pravice posameznika na katerega se nanašajo osebni podatki. "],
+    ["lt", "Ši privatumo politika aprašo asmens duomenų tvarkymo tikslus, teisinį asmens duomenų tvarkymo pagrindą ir duomenų subjekto teises. "],
+    ["lv", "Šī privātuma politika apraksta personas datu apstrādes nolūkus, personas datu apstrādes juridisko pamatu un datu subjekta tiesības. "],
+    ["et", "Käesolevas privaatsuspoliitikas selgitame, kuidas me teie isikuandmeid kogume, kasutame ja kaitseme, millised on isikuandmete töötlemise eesmärgid ja õiguslik alus ning kuidas andmesubjekt saab oma õigusi kasutada. "],
+    ["uk", "Ця політика конфіденційності описує цілі обробки персональних даних, правову підставу для обробки персональних даних і права суб'єкта персональних даних. "],
+    ["tr", "Bu gizlilik politikası kişisel verilerin işlenme amaçlarını, kişisel verilerin işlenmesinin hukuki dayanağını ve ilgili kişinin haklarını açıklar. "],
   ] as const;
 
   for (const [locale, sentence] of policies) {
@@ -1696,19 +1712,19 @@ test("summarizePolicySurfaces prefers the selected policy language over a differ
 
 test("summarizePolicySurfaces does not let a supported homepage mask an unsupported policy language", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
-  const policyText = "Bu gizlilik politikası kişisel verilerin işlenmesini, kullanıcı haklarını, saklama sürelerini ve iletişim yöntemlerini açıklar. ".repeat(35);
+  const policyText = "이 개인정보 처리방침은 개인정보 처리 목적, 이용자 권리, 보관 기간 및 연락 방법을 설명합니다. ".repeat(35);
   const surfaces = dedupePolicySurfaces([{
-    observationId: "mixed-language-tr",
+    observationId: "mixed-language-ko",
     surfaceType: "privacy_policy",
-    url: "https://example.test/gizlilik-politikasi",
-    normalizedUrl: "https://example.test/gizlilik-politikasi",
+    url: "https://example.test/privacy-ko",
+    normalizedUrl: "https://example.test/privacy-ko",
     confidence: 0.95,
     status: "fetched",
     textExcerpt: policyText,
   }] as never, "https://example.test/");
   const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
 
-  assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguage, "tr");
+  assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguage, "ko");
   assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguageSource, "policy_surface");
   assert.equal(summary.policyTextExtractionHealth.gdprTransparencyLanguageSupported, false);
   assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "unsupported_language");
@@ -1737,9 +1753,9 @@ test("summarizePolicySurfaces reports unknown when usable policy text has no rel
 
 test("summarizePolicySurfaces distinguishes unsupported policy language from low-quality content", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
-  const policyText = "Bu gizlilik politikası kişisel verilerin işlenmesini, kullanıcı haklarını ve iletişim yöntemlerini açıklar. ".repeat(35);
+  const policyText = "이 개인정보 처리방침은 개인정보 처리 목적, 이용자 권리 및 연락 방법을 설명합니다. ".repeat(35);
   const surfaces = dedupePolicySurfaces([{
-    observationId: "privacy-tr",
+    observationId: "privacy-ko",
     surfaceType: "privacy_policy",
     url: "https://example.test/privacy",
     confidence: 0.95,
@@ -1747,11 +1763,11 @@ test("summarizePolicySurfaces distinguishes unsupported policy language from low
     textExcerpt: policyText,
   }] as never, "https://example.test/");
 
-  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "tr" });
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "ko" });
 
   assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "unsupported_language");
   assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_language_unsupported");
-  assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguage, "tr");
+  assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguage, "ko");
   assert.equal(summary.policyTextExtractionHealth.gdprTransparencyLanguageSupported, false);
 });
 
