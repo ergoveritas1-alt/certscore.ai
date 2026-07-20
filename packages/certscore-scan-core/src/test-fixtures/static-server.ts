@@ -168,6 +168,7 @@ export type StaticFixturePage =
 export interface StaticFixtureServer {
   baseUrl: string;
   urlFor(page: StaticFixturePage): string;
+  requestCountFor(pathname: string): number;
   close(): Promise<void>;
 }
 
@@ -358,7 +359,12 @@ const fixturePrivacyPdfNl = createTextPdf([
 ].join("\n"));
 
 export async function startStaticFixtureServer(): Promise<StaticFixtureServer> {
-  const server = createServer(handleRequest);
+  const requestCounts = new Map<string, number>();
+  const server = createServer((request, response) => {
+    const pathname = new URL(request.url ?? "/", "http://fixture.local").pathname;
+    requestCounts.set(pathname, (requestCounts.get(pathname) ?? 0) + 1);
+    handleRequest(request, response);
+  });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
@@ -376,6 +382,9 @@ export async function startStaticFixtureServer(): Promise<StaticFixtureServer> {
     baseUrl,
     urlFor(page: StaticFixturePage): string {
       return `${baseUrl}/f/${fixtureSlugs[page]}`;
+    },
+    requestCountFor(pathname: string): number {
+      return requestCounts.get(pathname) ?? 0;
     },
     close(): Promise<void> {
       return closeServer(server);

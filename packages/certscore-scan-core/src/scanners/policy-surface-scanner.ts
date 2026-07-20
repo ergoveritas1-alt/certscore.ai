@@ -1770,7 +1770,7 @@ async function fetchRenderedPolicyDocumentText(input: {
   }
 }
 
-async function resolvePolicyVisibleText(input: {
+export async function resolvePolicyVisibleText(input: {
   html: string;
   baseUrl: string;
   surfaceType: PolicySurfaceObservation["surfaceType"];
@@ -1778,6 +1778,9 @@ async function resolvePolicyVisibleText(input: {
 }): Promise<string> {
   const visibleText = htmlToVisibleText(input.html);
   let bestText = bestPolicyDocumentText(input.html, visibleText);
+  if (shouldUseDirectPolicyDocumentText(bestText)) {
+    return bestText;
+  }
   const shouldSpeculateCanonicalPolicyLink =
     input.surfaceType === "privacy_policy" &&
     shouldFollowCanonicalPolicyDocumentLink(input.html, input.baseUrl, bestText);
@@ -1819,6 +1822,19 @@ async function resolvePolicyVisibleText(input: {
   }
 
   return bestText;
+}
+
+export function shouldUseDirectPolicyDocumentText(value: string): boolean {
+  const normalized = normalizeWhitespace(value);
+  if (normalized.length < MIN_SUBSTANTIVE_POLICY_TEXT_CHARS) {
+    return false;
+  }
+
+  const quality = assessPolicyTextQuality(normalized);
+  return quality.usable && (
+    quality.policyTermCount >= 2 ||
+    gdprTransparencyTopicMatchCount(normalized) > 0
+  );
 }
 
 async function resolveUrlOnlyPolicyStub(input: {

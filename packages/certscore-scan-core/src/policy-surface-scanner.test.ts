@@ -16,11 +16,42 @@ import {
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
   policySurfaceObservationsFromRetainedRenderedLinks,
   retainedArticle13SectionEvidenceFromSections,
+  resolvePolicyVisibleText,
+  shouldUseDirectPolicyDocumentText,
   type PolicyNanoAssistProvider,
   policySurfaceScanner,
   wwwFallbackUrlForPolicyFetch,
 } from "./scanners/policy-surface-scanner.js";
 import { startStaticFixtureServer, type StaticFixturePage } from "./test-fixtures/static-server.js";
+
+test("substantive direct policy text avoids supplemental policy resolution", async () => {
+  const server = await startStaticFixtureServer();
+  const substantivePolicyText = Array.from({ length: 18 }, (_, index) => [
+    `Privacy policy section ${index + 1}.`,
+    "We collect and use personal data to provide services and protect users.",
+    "Our legal basis includes consent, contract, legal obligation, and legitimate interests.",
+    "Recipients include processors and service providers, and we retain data only as long as necessary.",
+    "You may exercise access, deletion, portability, restriction, and objection rights by contacting our privacy team.",
+  ].join(" ")).join(" ");
+
+  try {
+    const supplementalPath = "/onetrust/supplemental-should-not-be-fetched.json";
+    const resolved = await resolvePolicyVisibleText({
+      html: `<!doctype html><html><head><script>OneTrust.NoticeApi.LoadNotices(["${server.baseUrl}${supplementalPath}"])</script></head><body><main><h1>Privacy Policy</h1><p>${substantivePolicyText}</p></main></body></html>`,
+      baseUrl: `${server.baseUrl}/privacy-policy`,
+      surfaceType: "privacy_policy",
+      timeoutMs: 500,
+    });
+
+    assert.equal(substantivePolicyText.length >= 2_500, true);
+    assert.equal(shouldUseDirectPolicyDocumentText(substantivePolicyText), true);
+    assert.match(resolved, /legal basis includes consent/i);
+    assert.equal(server.requestCountFor(supplementalPath), 0);
+    assert.equal(shouldUseDirectPolicyDocumentText("Processing Error. Privacy Policy Cookie Settings."), false);
+  } finally {
+    await server.close();
+  }
+});
 
 test("retained rendered links recover obvious policy surfaces when the separate policy browser is blocked", () => {
   const observations = policySurfaceObservationsFromRetainedRenderedLinks({
