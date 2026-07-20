@@ -911,6 +911,100 @@ test("summarizePolicySurfaces does not credit external vendor policies as first-
   assert.equal(summary.policyTextExtractionHealth.policyUrlRetained, false);
 });
 
+test("summarizePolicySurfaces rejects consent-provider privacy policies without a provider host allowlist", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "piwik-provider-policy",
+      surfaceType: "privacy_policy",
+      url: "https://piwik.pro/privacy-policy/",
+      normalizedUrl: "https://piwik.pro/privacy-policy/",
+      linkText: "Learn more about this provider — Piwik Pro's privacy policy",
+      status: "fetched",
+      documentEvaluationState: "usable",
+      confidence: 0.95,
+      textExcerpt: "Piwik PRO Privacy Policy. Piwik PRO is the controller and explains its processing purposes.",
+      observedTopics: ["controller_contact", "processing_purposes"]
+    },
+    {
+      observationId: "cookiebot-provider-policy",
+      surfaceType: "privacy_policy",
+      url: "https://www.cookiebot.com/en/privacy-policy/",
+      normalizedUrl: "https://www.cookiebot.com/en/privacy-policy/",
+      linkText: "Learn more about this provider — Cookiebot's privacy policy",
+      status: "fetched",
+      documentEvaluationState: "usable",
+      confidence: 0.95,
+      textExcerpt: "Cookiebot Privacy Policy. Usercentrics is the controller and explains its processing purposes.",
+      observedTopics: ["controller_contact", "processing_purposes"]
+    }
+  ] as never, "https://punktum.dk/");
+
+  const summary = summarizePolicySurfaces(surfaces, "punktum.dk", {
+    discoveredPolicySurfaces: surfaces.map((row) => row.surface)
+  });
+
+  assert.equal(summary.privacyPolicyPresent, false);
+  assert.equal(summary.privacyPolicyDiscovered, false);
+  assert.deepEqual(summary.privacyPolicyUrls, []);
+  assert.deepEqual(summary.discoveredPrivacyPolicyUrls, []);
+  assert.deepEqual(summary.article13DisclosureTypesObserved, []);
+});
+
+test("summarizePolicySurfaces retains a legitimate externally hosted brand privacy notice", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "hosted-brand-policy",
+      surfaceType: "privacy_policy",
+      url: "https://privacy.example-cdn.test/acme/privacy-policy",
+      normalizedUrl: "https://privacy.example-cdn.test/acme/privacy-policy",
+      linkText: "Acme's privacy policy",
+      status: "fetched",
+      documentEvaluationState: "usable",
+      confidence: 0.95,
+      textExcerpt: "Acme Privacy Policy. Acme is the controller and explains its processing purposes.",
+      observedTopics: ["controller_contact", "processing_purposes"]
+    }
+  ] as never, "https://acme.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "acme.test", {
+    discoveredPolicySurfaces: surfaces.map((row) => row.surface)
+  });
+
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.equal(summary.privacyPolicyDiscovered, true);
+  assert.deepEqual(summary.privacyPolicyUrls, ["https://privacy.example-cdn.test/acme/privacy-policy"]);
+});
+
+test("summarizePolicySurfaces does not credit an external challenge-provider policy on a no-go homepage", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "challenge-provider-policy",
+      surfaceType: "privacy_policy",
+      url: "https://www.cloudflare.com/privacypolicy/",
+      normalizedUrl: "https://www.cloudflare.com/privacypolicy/",
+      linkText: "Privacy",
+      status: "fetched",
+      documentEvaluationState: "usable",
+      confidence: 0.95,
+      textExcerpt: "Cloudflare Privacy Policy. Cloudflare explains its processing purposes and controller contact.",
+      observedTopics: ["controller_contact", "processing_purposes"]
+    }
+  ] as never, "batmanapollo.ru");
+
+  const summary = summarizePolicySurfaces(surfaces, "batmanapollo.ru", {
+    discoveredPolicySurfaces: surfaces.map((row) => row.surface),
+    homepageNoGo: true
+  });
+
+  assert.equal(summary.privacyPolicyPresent, false);
+  assert.equal(summary.privacyPolicyDiscovered, false);
+  assert.deepEqual(summary.privacyPolicyUrls, []);
+  assert.deepEqual(summary.discoveredPrivacyPolicyUrls, []);
+});
+
 test("policy projection rejects empty fetched documents and audience-specific privacy notices", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const surfaces = dedupePolicySurfaces([
