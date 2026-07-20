@@ -163,6 +163,10 @@ test("Pulse evidence JSON includes diagnostic metadata and projection warnings",
   assert.match(source, /canonical_endpoint_vendor_replaced_raw_vendor/);
   assert.match(source, /request_event_missing_url/);
   assert.match(source, /projectionDiagnostics/);
+  assert.match(source, /calibrationContext/);
+  assert.match(source, /scannerRegion: executionProvenance\?\.lambdaAwsRegion/);
+  assert.match(source, /site_language_primary/);
+  assert.match(source, /gdprTransparencyTopicCandidateSummary/);
   assert.match(source, /domainsRejected/);
   assert.match(source, /hostsRejected/);
   assert.match(source, /policy_surface_url_recovered_from_alternate_field/);

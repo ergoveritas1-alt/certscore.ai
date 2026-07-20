@@ -3541,6 +3541,14 @@ function buildMaterializedLocalV2Detail(
     page_url: pageUrl ?? surface.normalizedUrl ?? surface.url,
     policyActionableFlags: surface.mentionedControls ?? [],
     policyMentions: (surface.observedTopics ?? []).map((topic) => ({ topic })),
+    gdprTransparencyTopicCandidateSummary: (surface.gdprTransparencyTopicCandidates ?? []).slice(0, 16).map((candidate) => ({
+      classifierProvenance: candidate.classifierProvenance,
+      confidence: candidate.confidence,
+      matchedLocale: candidate.matchedLocale,
+      matchStrength: candidate.matchStrength,
+      productionCredit: candidate.productionCredit,
+      topic: candidate.topic
+    })),
     policySummaryShort: surface.textExcerpt ?? `${policySurfaceLabel(surface.surfaceType)} retained by local v2 DAG scan.`,
     policy_actionable_flags: surface.mentionedControls ?? [],
     policy_mentions: (surface.observedTopics ?? []).map((topic) => ({ topic })),

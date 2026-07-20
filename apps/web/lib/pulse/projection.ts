@@ -49,6 +49,8 @@ import {
   PULSE_COVERAGE_LIMITATION_COPY
 } from "./constants";
 import { buildPulseAgentInterpretation } from "./agent-interpretation";
+import { projectGdprTransparencyTopicCandidateSummary, projectPulseCalibrationContext } from "./calibration-context";
+export { projectPulseCalibrationContext } from "./calibration-context";
 import type { PulseDetail, PulseFormat, PulseFreshnessMode } from "./types";
 
 type PulseProjectionInput = {
@@ -1368,6 +1370,13 @@ function buildEvidenceArtifact(input: {
         hostsRejected: capArray(rejectedTrackerHostRows, 40)
       }
     },
+    calibrationContext: {
+      ...projectPulseCalibrationContext(scanRecord),
+      gdprTransparencyTopicCandidates: capArray(
+        scanRecord.policyEnrichment.flatMap((row) => projectGdprTransparencyTopicCandidateSummary(row.gdprTransparencyTopicCandidateSummary)),
+        80
+      )
+    },
     projectedFindings: capArray(findings, 100),
     gdprEprivacyChecklistRows: capArray(checklistRows, 120),
     retainedEvidence: {
@@ -1493,6 +1502,7 @@ function buildEvidenceArtifact(input: {
     disclaimer: input.base.disclaimer
   };
 }
+
 
 function buildSummary(input: {
   benchmark: string | null;
