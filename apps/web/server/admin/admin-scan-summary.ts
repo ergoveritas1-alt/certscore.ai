@@ -55,6 +55,7 @@ export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRec
     ? reportProjectionRecord.summary as Record<string, unknown>
     : null;
   const reportTopFindings = Array.isArray(reportProjectionRecord.topFindings) ? reportProjectionRecord.topFindings : [];
+  const resultDisposition = recordString(reportProjectionRecord, "resultDisposition");
   const topFindingIds = reportTopFindings.flatMap((finding) => {
     if (!finding || typeof finding !== "object" || Array.isArray(finding)) return [];
     const id = (finding as Record<string, unknown>).id;
@@ -66,7 +67,9 @@ export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRec
     industry: scanRecord.domainBenchmark?.industry ?? null,
     primaryLanguage: recordString(snapshot, "site_language_primary"),
     privacyPolicyPresent: recordBoolean(snapshot, "privacy_policy_present"),
-    scanOutcome: recordString(snapshot, "scan_outcome"),
+    scanOutcome:
+      recordString(snapshot, "scan_outcome") ??
+      (resultDisposition === "no_go" ? null : "completed_partial"),
     score: recordNumber(reportSummary, "score") ?? recordNumber(snapshot, "certscore_overall"),
     topFindingIds,
     topFindingCount: topFindingIds.length
@@ -105,8 +108,15 @@ export async function materializeAdminScanSummaries(scans: Array<{ organizationI
       const scan = scans[nextIndex];
       nextIndex += 1;
       if (!scan) continue;
-      const summary = await materializeAdminScanSummary(scan.scanId, scan.organizationId);
-      if (summary) results.set(scan.scanId, summary);
+      try {
+        const summary = await materializeAdminScanSummary(scan.scanId, scan.organizationId);
+        if (summary) results.set(scan.scanId, summary);
+      } catch (error) {
+        console.error("[admin-scan-summary] bounded summary repair failed", {
+          error: error instanceof Error ? error.message : String(error),
+          scanId: scan.scanId
+        });
+      }
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, scans.length) }, () => worker()));

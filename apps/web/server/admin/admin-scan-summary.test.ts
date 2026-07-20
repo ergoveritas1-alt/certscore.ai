@@ -7,6 +7,7 @@ test("admin scan summaries consume the canonical report projection", async () =>
   assert.match(source, /buildPulseProjection/);
   assert.match(source, /reportSummary/);
   assert.match(source, /topFindingIds\.length/);
+  assert.match(source, /resultDisposition === "no_go" \? null : "completed_partial"/);
   assert.doesNotMatch(source, /projectExecutiveFindingsFromUnifiedPackets/);
 });
 
@@ -20,6 +21,17 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   assert.doesNotMatch(source, /materializeAdminScanSummar/);
   assert.doesNotMatch(source, /materializeLocalV2DagScanDetail/);
   assert.doesNotMatch(source, /getAnonymousScanById/);
+});
+
+test("API activity repairs bounded missing canonical summaries outside the list query", async () => {
+  const listSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
+  const pageSource = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+
+  assert.match(listSource, /ss\.admin_summary_generated_at/);
+  assert.doesNotMatch(listSource, /materializeAdminScanSummar/);
+  assert.match(pageSource, /materializeAdminScanSummaries/);
+  assert.match(pageSource, /slice\(0, 8\)/);
+  assert.match(pageSource, /listAdminPulseRequests\(requestListInput\)/);
 });
 
 test("API activity groups SDK and MCP result retrieval under the initiating logical request", async () => {

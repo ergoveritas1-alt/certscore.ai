@@ -27,6 +27,7 @@ export type AdminPulseRequestStatus =
   | "no_go";
 
 export type AdminPulseRequestListItem = {
+  adminSummaryGeneratedAt: string | null;
   accessPostureClass: string | null;
   apiRoute: AdminApiRoute;
   blockedFlag: boolean | null;
@@ -285,6 +286,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     visualAccessReview: asRecord(row.visual_access_review)
   });
   return {
+    adminSummaryGeneratedAt: timestampString(row.admin_summary_generated_at),
     accessPostureClass: typeof row.access_posture_class === "string" ? row.access_posture_class : null,
     apiRoute: classifyAdminApiRoute({
       requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
@@ -477,6 +479,7 @@ export async function listAdminPulseRequests(input: {
             domain.hostname as scan_domain_hostname,
             ss.total_signals::int as snapshot_total_signals,
             ss.report_finding_count::int as snapshot_finding_count,
+            ss.admin_summary_generated_at,
             ss.certscore_overall::int as snapshot_score,
             ss.top_finding_count::int as top_finding_count,
             ss.privacy_policy_present,
@@ -624,6 +627,7 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               domain.hostname as scan_domain_hostname,
               ss.total_signals::int as snapshot_total_signals,
               ss.report_finding_count::int as snapshot_finding_count,
+              ss.admin_summary_generated_at,
               ss.certscore_overall::int as snapshot_score,
               ss.top_finding_count::int as top_finding_count,
               ss.privacy_policy_present,
@@ -778,6 +782,7 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             pr.created_at,
             s.scan_config_json,
             ss.certscore_overall::int as snapshot_score,
+            ss.admin_summary_generated_at,
             ss.top_finding_count::int as top_finding_count,
             ss.privacy_policy_present,
             ss.cmp_vendor_name,

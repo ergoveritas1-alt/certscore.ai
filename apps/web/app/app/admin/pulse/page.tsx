@@ -6,6 +6,7 @@ import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import { ADMIN_API_ROUTES, type AdminApiRoute } from "../../../../lib/admin/api-route";
 import { getAdminAuthenticatedScanHref } from "../../../../server/admin/admin-scan-links";
+import { materializeAdminScanSummaries } from "../../../../server/admin/admin-scan-summary";
 import { countAdminPulseRequests, getAdminPulseFilterOptions, getAdminPulseOverviewCounts, listAdminPulseRequests, type AdminPulseRequestStatus } from "../../../../server/admin/list-pulse-requests";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminReportLink } from "../scans/admin-scan-actions";
@@ -111,10 +112,22 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   ]);
   const pageSize = normalizePageSize(resolved.perPage);
   const page = normalizePage(resolved.page);
-  const [filteredTotal, requests] = await withServerTiming("app.admin.api_activity", () => Promise.all([
+  const requestListInput = { limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan };
+  const [filteredTotal, initialRequests] = await withServerTiming("app.admin.api_activity", () => Promise.all([
     countAdminPulseRequests({ query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan }),
-    listAdminPulseRequests({ limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan })
+    listAdminPulseRequests(requestListInput)
   ]));
+  const missingSummaryScans = Array.from(new Set(initialRequests
+    .filter((request) => request.scanId && !request.adminSummaryGeneratedAt && ["completed", "completed_limited"].includes(request.status))
+    .map((request) => request.scanId as string)))
+    .slice(0, 8)
+    .map((scanId) => ({ organizationId: null, scanId }));
+  if (missingSummaryScans.length > 0) {
+    await withServerTiming("app.admin.api_activity.summary_repair", () => materializeAdminScanSummaries(missingSummaryScans));
+  }
+  const requests = missingSummaryScans.length > 0
+    ? await listAdminPulseRequests(requestListInput)
+    : initialRequests;
   const pageCount = Math.max(1, Math.ceil(filteredTotal / pageSize));
 
   return (
