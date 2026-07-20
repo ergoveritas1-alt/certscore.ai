@@ -102,6 +102,7 @@ export type StaticFixturePage =
   | "policy-gdpr-transparency-compact-nl"
   | "policy-gdpr-transparency-latin1-es"
   | "policy-gdpr-transparency-pdf-nl"
+  | "policy-gdpr-transparency-six-long-locales"
   | "policy-gpc-disclosure-late"
   | "policy-gpc-disclosure"
   | "policy-generic-links"
@@ -274,6 +275,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-gdpr-transparency-compact-nl": "policy-gdpr-transparency-compact-nl",
   "policy-gdpr-transparency-latin1-es": "policy-gdpr-transparency-latin1-es",
   "policy-gdpr-transparency-pdf-nl": "policy-gdpr-transparency-pdf-nl",
+  "policy-gdpr-transparency-six-long-locales": "policy-gdpr-transparency-six-long-locales",
   "policy-gpc-disclosure-late": "policy-gpc-late",
   "policy-gpc-disclosure": "policy-gpc",
   "policy-generic-links": "policy-generic-links",
@@ -1892,6 +1894,14 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/policies/article13-pl">Polityka prywatności</a>`,
       `<a href="/policies/article13-pt">Política de privacidade</a>`,
     ].join(" | "),
+    "policy-gdpr-transparency-six-long-locales": [
+      `<a href="/policies/article13-long-pt">Política de privacidade</a>`,
+      `<a href="/policies/article13-long-ru">Политика конфиденциальности</a>`,
+      `<a href="/policies/article13-long-ja">プライバシーポリシー</a>`,
+      `<a href="/policies/article13-long-zh">隐私政策</a>`,
+      `<a href="/policies/article13-long-ar">سياسة الخصوصية</a>`,
+      `<a href="/policies/article13-long-sv">Integritetspolicy</a>`,
+    ].join(" | "),
     "policy-multilingual-surfaces": [
       `<a href="/policies/privacy">Privacy Policy</a>`,
       `<a href="/policies/de-datenschutz">Datenschutzerklärung</a>`,
@@ -1978,6 +1988,78 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       ${links[caseName] ?? ""}
     </footer>
   `;
+}
+
+type LongArticle13FixtureLocale = "pt" | "ru" | "ja" | "zh" | "ar" | "sv";
+
+const LONG_ARTICLE13_FIXTURE_COPY: Record<LongArticle13FixtureLocale, {
+  title: string;
+  opening: string;
+  middle: string;
+  ending: string;
+  filler: string;
+}> = {
+  pt: {
+    title: "Política de privacidade",
+    opening: "O responsável pelo tratamento de dados pessoais fornece o contato do controlador e o contato do encarregado de proteção de dados. Explicamos as finalidades do tratamento de dados pessoais.",
+    middle: "A base legal para o tratamento de dados pessoais inclui consentimento e contrato. Também descrevemos as categorias de destinatários dos dados pessoais e o prazo de conservação dos dados pessoais.",
+    ending: "Você tem o direito de acesso aos dados pessoais. Explicamos as transferências internacionais de dados pessoais, o direito de apresentar reclamação à Autoridade Nacional de Proteção de Dados e as decisões automatizadas com dados pessoais.",
+    filler: "Esta política descreve práticas gerais de privacidade, segurança, atendimento e administração da conta sem acrescentar uma conclusão jurídica específica.",
+  },
+  ru: {
+    title: "Политика конфиденциальности",
+    opening: "Оператор персональных данных указывает контакт ответственного по защите данных. Мы описываем цели обработки персональных данных.",
+    middle: "Правовые основания обработки персональных данных включают согласие и договор. Мы указываем категории получателей персональных данных и срок хранения персональных данных.",
+    ending: "Мы объясняем права субъекта персональных данных, трансграничную передачу персональных данных, право подать жалобу в надзорный орган и автоматизированное принятие решений с использованием персональных данных.",
+    filler: "Этот раздел описывает общие правила конфиденциальности, безопасности, поддержки и управления учетной записью без отдельного правового вывода.",
+  },
+  ja: {
+    title: "プライバシーポリシー",
+    opening: "個人データの管理者はデータ保護責任者への連絡先を示します。個人データを処理する目的について説明します。",
+    middle: "個人データ処理の法的根拠、個人データの受領者のカテゴリー、個人データの保存期間について説明します。",
+    ending: "データ主体の権利、個人データの国際移転、監督機関に苦情を申し立てる権利、個人データを用いた自動意思決定について説明します。",
+    filler: "この節では、特定の法的結論を示すことなく、一般的なプライバシー、安全性、サポート、およびアカウント管理について説明します。",
+  },
+  zh: {
+    title: "隐私政策",
+    opening: "个人数据控制者提供数据保护负责人的联系方式。我们说明处理个人数据的目的。",
+    middle: "我们说明处理个人数据的法律依据、个人数据接收方的类别以及个人数据的保存期限。",
+    ending: "我们说明数据主体的权利、个人数据的跨境传输、向监管机构投诉的权利以及使用个人数据进行自动化决策。",
+    filler: "本节介绍一般隐私、安全、客户支持和账户管理措施，不作出单独的法律结论。",
+  },
+  ar: {
+    title: "سياسة الخصوصية",
+    opening: "يقدم مراقب البيانات الشخصية بيانات الاتصال بمسؤول حماية البيانات. نشرح أغراض معالجة البيانات الشخصية.",
+    middle: "نشرح الأساس القانوني لمعالجة البيانات الشخصية وفئات مستلمي البيانات الشخصية ومدة الاحتفاظ بالبيانات الشخصية.",
+    ending: "نشرح حقوق صاحب البيانات والنقل الدولي للبيانات الشخصية والحق في تقديم شكوى إلى سلطة رقابية واتخاذ القرارات الآلية باستخدام البيانات الشخصية.",
+    filler: "يصف هذا القسم ممارسات الخصوصية والأمان والدعم وإدارة الحساب بصورة عامة من دون تقديم نتيجة قانونية مستقلة.",
+  },
+  sv: {
+    title: "Integritetspolicy",
+    opening: "Personuppgiftsansvarig anger kontaktuppgifter till dataskyddsombudet. Vi beskriver ändamålen med behandlingen av personuppgifter.",
+    middle: "Vi beskriver rättslig grund för behandling av personuppgifter, kategorier av mottagare av personuppgifter och lagringstid för personuppgifter.",
+    ending: "Vi beskriver den registrerades rättigheter, internationella överföringar av personuppgifter, rätt att lämna in klagomål till en tillsynsmyndighet och automatiserat beslutsfattande med personuppgifter.",
+    filler: "Detta avsnitt beskriver allmänna rutiner för integritet, säkerhet, support och kontohantering utan att dra någon särskild rättslig slutsats.",
+  },
+};
+
+function longMultilingualArticle13Documents(): Record<string, { title: string; body: string }> {
+  return Object.fromEntries((Object.entries(LONG_ARTICLE13_FIXTURE_COPY) as Array<[
+    LongArticle13FixtureLocale,
+    (typeof LONG_ARTICLE13_FIXTURE_COPY)[LongArticle13FixtureLocale],
+  ]>).map(([locale, copy]) => [
+    `/policies/article13-long-${locale}`,
+    {
+      title: copy.title,
+      body: [
+        copy.opening,
+        copy.filler.repeat(Math.ceil(42_000 / Math.max(copy.filler.length, 1) / 2)),
+        copy.middle,
+        copy.filler.repeat(Math.ceil(42_000 / Math.max(copy.filler.length, 1) / 2)),
+        copy.ending,
+      ].join(" "),
+    },
+  ]));
 }
 
 function policyDocumentHtml(pathname: string): string | undefined {
@@ -2091,6 +2173,7 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Política de privacidade",
       body: "O responsável pelo tratamento de dados pessoais fornece o contato do controlador e o contato do encarregado de proteção de dados. Explicamos as finalidades do tratamento de dados pessoais, a base legal para o tratamento de dados pessoais, as categorias de destinatários dos dados pessoais, o prazo de conservação dos dados pessoais, o direito de acesso aos dados pessoais, as transferências internacionais de dados pessoais, o direito de apresentar reclamação à Autoridade Nacional de Proteção de Dados e as decisões automatizadas com dados pessoais.",
     },
+    ...longMultilingualArticle13Documents(),
     "/policies/article13-toc-de": {
       title: "Datenschutzerklärung",
       body: "Inhaltsverzeichnis. Zwecke der Verarbeitung personenbezogener Daten. Rechtsgrundlage für die Verarbeitung personenbezogener Daten. Kategorien von Empfängern personenbezogener Daten. Speicherdauer personenbezogener Daten. Recht auf Auskunft über personenbezogene Daten. Übermittlung personenbezogener Daten in ein Drittland. Recht auf Beschwerde bei einer Aufsichtsbehörde. Automatisierte Entscheidungsfindung mit personenbezogenen Daten.",

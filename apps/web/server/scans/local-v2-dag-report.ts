@@ -1814,6 +1814,22 @@ export function summarizePolicySurfaces(
     )
   );
   const text = article13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
+  const policyPrimaryLanguage = guessPrimaryLanguage({
+    matchedLocales: article13Surfaces.flatMap((row) => [
+      ...(row.surface.gdprTransparencyTopicCandidates ?? []).map((candidate) => candidate.matchedLocale),
+      ...(row.surface.article13DisclosureSignals ?? []).map((signal) => signal.matchedLocale),
+    ]),
+    textSamples: article13Surfaces.flatMap((row) => [
+      row.surface.title,
+      row.surface.linkText,
+      row.surface.textExcerpt,
+    ]),
+    urls: article13Surfaces.flatMap((row) => [
+      row.pageUrl,
+      row.surface.normalizedUrl,
+      row.surface.url,
+    ]),
+  });
   const policyTextQuality = assessRetainedPolicyTextQuality(text, { multilingual: true });
   const gdprTransparencyPolicyTextQuality = gdprTransparencyProductionEvidenceEnabled
     ? assessRetainedPolicyTextQuality(text, { multilingual: true })
@@ -1924,6 +1940,7 @@ export function summarizePolicySurfaces(
     article13Surfaces,
     text,
     processingErrorObserved,
+    policyPrimaryLanguage,
     options.primaryLanguage,
   );
   const discoveredPrivacyPolicyUrls = uniqueStrings(targetRelevantDiscoveredPrivacySurfaces
@@ -2072,7 +2089,8 @@ function buildPolicyTextExtractionHealth(
   article13Surfaces: ReturnType<typeof dedupePolicySurfaces>,
   text: string,
   processingErrorObserved: boolean,
-  primaryLanguage?: string | null,
+  policyPrimaryLanguage?: string | null,
+  sitePrimaryLanguage?: string | null,
 ) {
   const policySurfaceObserved = article13Surfaces.length > 0;
   const policyUrls = uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url));
@@ -2086,10 +2104,18 @@ function buildPolicyTextExtractionHealth(
     row.surface.fetchable === false || row.surface.httpStatus === 401 || row.surface.httpStatus === 403 || row.surface.httpStatus === 429
   );
   const textQuality = assessRetainedPolicyTextQuality(text, { multilingual: true });
-  const normalizedPrimaryLanguage = primaryLanguage?.trim().toLowerCase().split(/[-_]/)[0] ?? null;
-  const transparencyLanguageSupported = normalizedPrimaryLanguage === null ||
-    SUPPORTED_GDPR_TRANSPARENCY_LOCALES.includes(
-      normalizedPrimaryLanguage as (typeof SUPPORTED_GDPR_TRANSPARENCY_LOCALES)[number],
+  const normalizedPolicyLanguage = policyPrimaryLanguage?.trim().toLowerCase().split(/[-_]/)[0] ?? null;
+  const normalizedSiteLanguage = sitePrimaryLanguage?.trim().toLowerCase().split(/[-_]/)[0] ?? null;
+  const detectedPolicyLanguage = normalizedPolicyLanguage ?? normalizedSiteLanguage;
+  const detectedPolicyLanguageSource = normalizedPolicyLanguage
+    ? "policy_surface"
+    : normalizedSiteLanguage
+      ? "site_fallback"
+      : null;
+  const transparencyLanguageSupported = detectedPolicyLanguage === null
+    ? null
+    : SUPPORTED_GDPR_TRANSPARENCY_LOCALES.includes(
+      detectedPolicyLanguage as (typeof SUPPORTED_GDPR_TRANSPARENCY_LOCALES)[number],
     );
   const policyTextExtractionStatus =
     !policySurfaceObserved
@@ -2098,10 +2124,12 @@ function buildPolicyTextExtractionHealth(
         ? "errored"
         : hasBlockedSurface
           ? "blocked"
-          : !transparencyLanguageSupported
+          : transparencyLanguageSupported === false
             ? "unsupported_language"
           : !textQuality.usable
             ? "low_quality_extracted_code_or_config"
+          : transparencyLanguageSupported === null
+            ? "language_unknown"
           : extractedTextLength >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
             ? "ok"
             : "thin";
@@ -2116,6 +2144,8 @@ function buildPolicyTextExtractionHealth(
           ? "privacy_policy_text_processing_error"
           : policyTextExtractionStatus === "unsupported_language"
             ? "privacy_policy_language_unsupported"
+          : policyTextExtractionStatus === "language_unknown"
+            ? "privacy_policy_language_unknown"
           : policyTextExtractionStatus === "low_quality_extracted_code_or_config"
               ? "privacy_policy_text_low_quality_or_non_policy_content"
               : "privacy_policy_text_below_minimum_length";
@@ -2127,7 +2157,8 @@ function buildPolicyTextExtractionHealth(
     nanoInvoked,
     nanoSkipReason: policyTextExtractionStatus === "ok" || nanoInvoked ? undefined : "policy_text_input_limited",
     policySurfaceObserved,
-    detectedPolicyLanguage: normalizedPrimaryLanguage,
+    detectedPolicyLanguage,
+    detectedPolicyLanguageSource,
     gdprTransparencyLanguageSupported: transparencyLanguageSupported,
     supportedGdprTransparencyLocales: [...SUPPORTED_GDPR_TRANSPARENCY_LOCALES],
     policyTextQuality: textQuality,

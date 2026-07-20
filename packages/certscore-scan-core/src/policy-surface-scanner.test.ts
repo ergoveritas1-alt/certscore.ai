@@ -708,6 +708,50 @@ test("policySurfaceScanner derives all canonical GDPR Transparency candidates fo
   }
 });
 
+test("policySurfaceScanner fetches long policies and captures all canonical GDPR Transparency topics for the six calibrated locales", async () => {
+  await withPolicyScan("policy-gdpr-transparency-six-long-locales", async ({ result, baseUrl }) => {
+    const expectedTopics = new Set([
+      "controller_contact",
+      "dpo_contact",
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers",
+      "supervisory_authority",
+      "automated_decision_making_or_profiling",
+    ]);
+    const expectedPolicies = ["pt", "ru", "ja", "zh", "ar", "sv"] as const;
+
+    for (const locale of expectedPolicies) {
+      const normalizedUrl = `${baseUrl}/policies/article13-long-${locale}`;
+      const privacy = result.policySurfaceObservations.find((observation) =>
+        observation.status === "fetched" &&
+        observation.surfaceType === "privacy_policy" &&
+        observation.normalizedUrl === normalizedUrl
+      );
+      assert.ok(privacy, `${locale} long policy should be fetched`);
+      assert.deepEqual(
+        new Set(privacy.gdprTransparencyTopicCandidates.map((candidate) => candidate.topic)),
+        expectedTopics,
+        locale,
+      );
+      assert.equal(privacy.gdprTransparencyTopicCandidates.every((candidate) =>
+        candidate.matchedLocale === locale &&
+        candidate.status === "diagnostic_only" &&
+        candidate.productionCredit === false &&
+        candidate.evidenceText.length > 0 &&
+        candidate.evidenceText.length <= 360
+      ), true, locale);
+      const lateTopic = privacy.gdprTransparencyTopicCandidates.find((candidate) =>
+        candidate.topic === "automated_decision_making_or_profiling"
+      );
+      assert.ok(lateTopic, `${locale} should retain the topic placed after the former 40k cutoff`);
+    }
+  }, { internalBudgetMs: 30_000 });
+});
+
 test("policySurfaceScanner retains diagnostic GDPR Transparency candidates from encoded fetched policy text", async () => {
   await withPolicyScan("policy-gdpr-transparency-encoded-it", async ({ result, baseUrl }) => {
     const privacy = result.policySurfaceObservations.find((observation) =>

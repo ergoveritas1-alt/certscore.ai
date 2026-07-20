@@ -1050,6 +1050,59 @@ test("matches Japanese and Chinese policy phrases without whitespace and preserv
   }
 });
 
+test("classifies reviewed regional, script, inflection, and punctuation variants for the six calibrated locales", () => {
+  const cases = [
+    {
+      locale: "pt",
+      text: "O fundamento jurídico para o tratamento de dados pessoais é explicado, incluindo o direito de apresentar reclamação a uma autoridade de controlo.",
+      topics: ["legal_basis", "supervisory_authority"],
+    },
+    {
+      locale: "ru",
+      text: "В уведомлении сообщается о правовых основаниях обработки персональных данных, сроках хранения персональных данных и правах субъектов персональных данных.",
+      topics: ["legal_basis", "data_retention", "data_subject_rights"],
+    },
+    {
+      locale: "ja",
+      text: "個人データ処理の法的根拠と個人データの保存期間およびデータ主体の権利を説明します。",
+      topics: ["legal_basis", "data_retention", "data_subject_rights"],
+    },
+    {
+      locale: "zh",
+      text: "個人資料控制者提供資料保護長的聯絡方式，並說明處理個人資料的目的、處理個人資料的法律依據、個人資料接收者的類別、個人資料的保存期限、資料當事人的權利、個人資料的跨境傳輸、向監管機構投訴的權利及使用個人資料進行自動化決策。",
+      topics: [
+        "controller_contact",
+        "dpo_contact",
+        "processing_purposes",
+        "legal_basis",
+        "recipients_or_vendor_categories",
+        "data_retention",
+        "data_subject_rights",
+        "international_transfers",
+        "supervisory_authority",
+        "automated_decision_making_or_profiling",
+      ],
+    },
+    {
+      locale: "ar",
+      text: "وَالْأَسَاسُ الْقَانُونِيُّ لِمُعَالَجَةِ الْبَيَانَاتِ الشَّخْصِيَّةِ يشمل الموافقة والعقد.",
+      topics: ["legal_basis"],
+    },
+    {
+      locale: "sv",
+      text: "Policyn beskriver personuppgifternas lagringstid och de registrerades rättigheter.",
+      topics: ["data_retention", "data_subject_rights"],
+    },
+  ] as const;
+
+  for (const entry of cases) {
+    const matches = classifyGdprTransparencyTopics({ text: entry.text, localeHints: [entry.locale] }).matches;
+    for (const topic of entry.topics) {
+      assert.equal(matches.some((match) => match.topic === topic && match.matchedLocale === entry.locale), true, `${entry.locale} ${topic}`);
+    }
+  }
+});
+
 test("registry covers every supported locale", () => {
   const registryLocales = new Set(GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY.map((term) => term.locale));
 

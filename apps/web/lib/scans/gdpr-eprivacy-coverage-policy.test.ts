@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { classifyGdprTransparencyTopics } from "@certscore/contracts";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
+import { GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE } from "./gdpr-transparency-production-profile";
+import { adaptGdprTransparencyTopicCandidatesForProduction } from "./gdpr-transparency-topic-evidence-adapter";
 import { buildNormalizedConcerns } from "./normalized-concerns";
 
 const completedInputBase = {
@@ -175,6 +178,73 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit t
       true,
       `${rowId} should retain normalized concern provenance`
     );
+  }
+});
+
+test("six calibrated locales capture all topics through classifier, adapter, normalized concerns, and checklist policy", () => {
+  const samples = [
+    ["pt", "O responsável pelo tratamento de dados pessoais fornece o contato do controlador e o contato do encarregado de proteção de dados. Explicamos as finalidades do tratamento de dados pessoais, a base legal para o tratamento de dados pessoais, as categorias de destinatários dos dados pessoais, o prazo de conservação dos dados pessoais, o direito de acesso aos dados pessoais, as transferências internacionais de dados pessoais, o direito de apresentar reclamação à Autoridade Nacional de Proteção de Dados e as decisões automatizadas com dados pessoais."],
+    ["ru", "Оператор персональных данных указывает контакт ответственного по защите данных. Мы описываем цели обработки персональных данных, правовые основания обработки персональных данных, категории получателей персональных данных, срок хранения персональных данных, права субъекта персональных данных, трансграничную передачу персональных данных, право подать жалобу в надзорный орган и автоматизированное принятие решений с использованием персональных данных."],
+    ["ja", "個人データの管理者はデータ保護責任者への連絡先を示します。個人データを処理する目的、個人データ処理の法的根拠、個人データの受領者のカテゴリー、個人データの保存期間、データ主体の権利、個人データの国際移転、監督機関に苦情を申し立てる権利、個人データを用いた自動意思決定について説明します。"],
+    ["zh", "个人数据控制者提供数据保护负责人的联系方式。我们说明处理个人数据的目的、处理个人数据的法律依据、个人数据接收方的类别、个人数据的保存期限、数据主体的权利、个人数据的跨境传输、向监管机构投诉的权利以及使用个人数据进行自动化决策。"],
+    ["ar", "يقدم مراقب البيانات الشخصية بيانات الاتصال بمسؤول حماية البيانات. نشرح أغراض معالجة البيانات الشخصية والأساس القانوني لمعالجة البيانات الشخصية وفئات مستلمي البيانات الشخصية ومدة الاحتفاظ بالبيانات الشخصية وحقوق صاحب البيانات والنقل الدولي للبيانات الشخصية والحق في تقديم شكوى إلى سلطة رقابية واتخاذ القرارات الآلية باستخدام البيانات الشخصية."],
+    ["sv", "Personuppgiftsansvarig anger kontaktuppgifter till dataskyddsombudet. Vi beskriver ändamålen med behandlingen av personuppgifter, rättslig grund för behandling av personuppgifter, kategorier av mottagare av personuppgifter, lagringstid för personuppgifter, den registrerades rättigheter, internationella överföringar av personuppgifter, rätt att lämna in klagomål till en tillsynsmyndighet och automatiserat beslutsfattande med personuppgifter."],
+  ] as const;
+
+  for (const [locale, policyText] of samples) {
+    const matches = classifyGdprTransparencyTopics({ text: policyText, localeHints: [locale] }).matches;
+    assert.equal(new Set(matches.map((match) => match.topic)).size, 10, `${locale} classifier topics`);
+    const candidates = matches.map((match) => ({
+      classifierProvenance: match.classifierProvenance,
+      classifierReasonCodes: match.reasonCodes,
+      confidence: match.confidence,
+      evidenceText: match.evidenceExcerpt,
+      matchedLocale: match.matchedLocale,
+      matchedTerm: match.matchedTerm,
+      matchStrength: match.matchStrength,
+      productionCredit: false as const,
+      status: "diagnostic_only" as const,
+      topic: match.topic,
+      variant: match.variant,
+    }));
+    const adapted = adaptGdprTransparencyTopicCandidatesForProduction({
+      policyTextQuality: { usable: true },
+      profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+      surface: {
+        gdprTransparencyTopicCandidates: candidates,
+        normalizedUrl: `https://example.test/privacy-${locale}`,
+        status: "fetched",
+        surfaceType: "privacy_policy",
+        textExcerpt: policyText,
+        url: `https://example.test/privacy-${locale}`,
+      },
+    });
+    assert.equal(adapted.acceptedProductionSignals.length, 10, `${locale} adapter signals`);
+    assert.equal(adapted.discardedArticle13DisclosureSignals.length, 0, `${locale} adapter discards`);
+
+    const concerns = buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts: {
+        policyDisclosureSummary: {
+          article13DisclosureSignals: adapted.acceptedProductionSignals,
+          gdprTransparencyEvidenceProfile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+          gdprTransparencyProductionEvidenceEnabled: true,
+        },
+      },
+      validationFindings: [],
+    });
+    assert.equal(concerns.filter((concern) => concern.originKey.startsWith("gdpr_transparency.article13.")).length, 10, `${locale} concerns`);
+
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      ...completedInputBase,
+      normalizedConcerns: concerns,
+      runtimeArtifacts: {},
+      snapshot: {},
+    });
+    for (const rowId of Object.values(GDPR_TRANSPARENCY_TOPIC_TO_ROW_ID)) {
+      assert.equal(outcomes[rowId]?.status, "Observed", `${locale} ${rowId}`);
+    }
+    assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Review signal", `${locale} automated review`);
   }
 });
 
@@ -1430,6 +1500,32 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes reports unsupported policy langua
   assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
   assert.match(outcomes.policy_text_extraction?.limitation ?? "", /detected tr language is not yet supported/i);
   assert.doesNotMatch(outcomes.policy_text_extraction?.limitation ?? "", /low-quality or non-policy/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes reports unknown policy language explicitly", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4200,
+        privacyPolicyUrls: ["https://example.test/notice"],
+        retainedPrivacyPolicyTextExcerpt: "Privacy datum rights informatio regula principa transparen documenta.",
+        policyTextExtractionHealth: {
+          detectedPolicyLanguage: null,
+          detectedPolicyLanguageSource: null,
+          extractedTextLength: 4200,
+          gdprTransparencyLanguageSupported: null,
+          minimumTextLengthRequired: 2500,
+          policyTextExtractionStatus: "language_unknown",
+        },
+      },
+    },
+    snapshot: { privacy_policy_present: true },
+  });
+
+  assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
+  assert.match(outcomes.policy_text_extraction?.limitation ?? "", /did not support a reliable policy-language decision/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes lets strong section-targeted evidence override global extraction errors", () => {

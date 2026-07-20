@@ -103,6 +103,7 @@
     "v2:gdpr-transparency-post-projection-sample": "node --import tsx ./scripts/build-gdpr-transparency-post-projection-sample.ts",
     "v2:gdpr-transparency-prod-region-provenance": "node --import tsx ./scripts/audit-prod-region-provenance.ts",
     "v2:gdpr-transparency-fetch-regional-sample": "node --import tsx ./scripts/fetch-regional-gdpr-passive-sample.ts",
+    "v2:gdpr-transparency-live-calibration": "TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx ./scripts/audit-gdpr-transparency-multilingual-live-calibration.ts",
     "v2:privacy-policy-gap-analysis": "TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx ./scripts/analyze-privacy-policy-gap-cohort.ts",
     "v2:privacy-policy-capture-gate": "TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx ./scripts/verify-privacy-policy-capture-calibration.ts",
     "v2:calibration-contact-persist": "node --import tsx ./scripts/persist-scan-quality-calibration-contacts.ts",

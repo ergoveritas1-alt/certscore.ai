@@ -1,0 +1,26 @@
+{
+  "version": "certscore.gdpr_transparency_live_calibration.1",
+  "owner": "CertScore",
+  "artifactOnly": true,
+  "consentInteractionAllowed": false,
+  "expectedTopics": [
+    "controller_contact",
+    "dpo_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling"
+  ],
+  "targets": [
+    { "key": "owned-gdpr-transparency-pt", "locale": "pt", "url": "https://certscore.ai/calibration/gdpr-transparency/pt" },
+    { "key": "owned-gdpr-transparency-ru", "locale": "ru", "url": "https://certscore.ai/calibration/gdpr-transparency/ru" },
+    { "key": "owned-gdpr-transparency-ja", "locale": "ja", "url": "https://certscore.ai/calibration/gdpr-transparency/ja" },
+    { "key": "owned-gdpr-transparency-zh", "locale": "zh", "url": "https://certscore.ai/calibration/gdpr-transparency/zh" },
+    { "key": "owned-gdpr-transparency-ar", "locale": "ar", "url": "https://certscore.ai/calibration/gdpr-transparency/ar" },
+    { "key": "owned-gdpr-transparency-sv", "locale": "sv", "url": "https://certscore.ai/calibration/gdpr-transparency/sv" }
+  ]
+}

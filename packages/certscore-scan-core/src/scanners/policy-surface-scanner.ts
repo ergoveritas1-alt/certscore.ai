@@ -3583,7 +3583,11 @@ function extractPolicyFacts(text: string): PolicyFacts {
 
 function gdprTransparencyTopicCandidatesFromText(text: string): PolicySurfaceObservation["gdprTransparencyTopicCandidates"] {
   const classification = classifyGdprTransparencyTopics({
-    text: boundedGdprTransparencyClassifierText(text),
+    // Policy fetch and rendered-text inputs are already bounded by the scanner's
+    // 500k text limits. Classify that bounded source directly so canonical locale
+    // phrases near the end of a long policy are not lost to the English-oriented
+    // Nano analysis packet. The classifier retains only bounded native excerpts.
+    text,
   });
   return classification.matches.map((match) => ({
     topic: match.topic,
@@ -3620,10 +3624,6 @@ function mergeGdprTransparencyTopicCandidates(
     }
   }
   return [...merged.values()];
-}
-
-function boundedGdprTransparencyClassifierText(text: string): string {
-  return boundedPolicyAnalysisExcerpt(text);
 }
 
 function emptyPolicyFacts(): PolicyFacts {

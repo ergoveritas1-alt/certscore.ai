@@ -14,3 +14,18 @@ pnpm v2:multilingual-live-calibration -- \
 The command is artifact-only and never clicks a consent control. `--strict` fails only reviewed, expected evidence that was not retained; access blocks and missing artifacts remain explicit report rows instead of false negatives.
 
 Every registry addition or phrase change should add a deterministic gold value and a reviewed live target before release. Public-site drift makes the live cohort diagnostic rather than a general CI blocker.
+
+## GDPR Transparency calibrated locales
+
+The canonical GDPR Transparency classifier is independently calibrated for `en`, `de`, `fr`, `es`, `it`, `nl`, `pl`, `pt`, `ru`, `ja`, `zh`, `ar`, and `sv`. The six-locale expansion (`pt`, `ru`, `ja`, `zh`, `ar`, and `sv`) has deterministic long-policy fixtures, regional/script/inflection variants, generic-text negative controls, and full classifier-to-checklist projection tests.
+
+The reviewed owned-canary manifest is `docs/certscore-v2/gdpr-transparency-multilingual-live-canaries.json`. Its pages are no-index calibration surfaces on `certscore.ai`; they are not legal notices and do not create production findings by themselves. After deployment and passive scans have retained artifacts, audit them with:
+
+```bash
+pnpm v2:gdpr-transparency-live-calibration -- \
+  --manifest docs/certscore-v2/gdpr-transparency-multilingual-live-canaries.json \
+  --artifact-root ./artifacts/gdpr-transparency-live \
+  --strict
+```
+
+The audit is artifact-only. It verifies privacy-policy fetch success, all ten canonical topics in the expected locale, and bounded retained excerpts. It does not click or otherwise interact with consent controls.
