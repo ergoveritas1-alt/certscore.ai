@@ -1464,26 +1464,29 @@ function makeGdprTransparencyPolicyDisclosureSummary(
 function makeApprovedGdprTransparencyArticle13Signal(
   input: {
     disclosureType?: string;
+    evidenceText?: string;
+    matchedLocale?: string;
     productionCredit?: boolean;
     productionCreditProfile?: string;
     status?: string;
   } = {}
 ) {
   const disclosureType = input.disclosureType ?? "legal_basis";
+  const evidenceText = input.evidenceText ?? "La base juridica del tratamiento de datos personales incluye el consentimiento y el contrato.";
   return {
     classifierProvenance: "gdpr_transparency_topic_classifier.v1",
     classifierReasonCodes: [`matched_${disclosureType}`],
     confidence: 0.93,
     disclosureType,
     evidenceSource: "gdpr_transparency_topic_candidate",
-    evidenceText: "La base juridica del tratamiento de datos personales incluye el consentimiento y el contrato.",
+    evidenceText,
     matchStrength: "direct",
-    matchedLocale: "es",
+    matchedLocale: input.matchedLocale ?? "es",
     matchedTerm: "base juridica",
     productionCredit: input.productionCredit ?? true,
     productionCreditProfile: input.productionCreditProfile ?? "gdpr_transparency_multilingual_article13_v1",
     selectedEvidenceStrength: "strong",
-    selectedPolicySectionExcerpt: "La base juridica del tratamiento de datos personales incluye el consentimiento y el contrato.",
+    selectedPolicySectionExcerpt: evidenceText,
     selectedPolicySectionUrl: "https://example.test/privacy",
     source: "deterministic",
     status: input.status ?? "observed"
@@ -1507,6 +1510,55 @@ test("explicit legacy_only creates no multilingual GDPR Transparency normalized 
     concerns.some((concern) => concern.originKey.startsWith("gdpr_transparency.article13.")),
     false
   );
+});
+
+test("adapter-approved Portuguese GDPR Transparency evidence creates a normalized concern", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: makeGdprTransparencyPolicyDisclosureSummary({
+        signals: [makeApprovedGdprTransparencyArticle13Signal({
+          evidenceText: "A base legal para o tratamento de dados pessoais inclui consentimento e contrato.",
+          matchedLocale: "pt",
+        })],
+      }),
+    },
+    validationFindings: [],
+  });
+  const concern = concerns.find((item) => item.originKey === "gdpr_transparency.article13.legal_basis");
+
+  assert.ok(concern);
+  assert.equal(concern.regulatoryChecklistEligibility, "observed");
+  assert.equal(concern.evidenceBundle.rawEvidence?.matchedLocale, "pt");
+  assert.equal(concern.evidenceBundle.rawEvidence?.productionCredit, true);
+});
+
+test("adapter-approved evidence from each newly calibrated locale creates a normalized concern", () => {
+  const examples = [
+    ["ru", "Правовые основания обработки персональных данных включают согласие и договор."],
+    ["ja", "個人データ処理の法的根拠には、同意および契約の履行が含まれます。"],
+    ["zh", "处理个人数据的法律依据包括同意以及履行合同。"],
+    ["ar", "يشمل الأساس القانوني لمعالجة البيانات الشخصية الموافقة وتنفيذ العقد."],
+    ["sv", "Rättslig grund för behandling av personuppgifter omfattar samtycke och avtal."],
+  ] as const;
+
+  for (const [matchedLocale, evidenceText] of examples) {
+    const concerns = buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts: {
+        policyDisclosureSummary: makeGdprTransparencyPolicyDisclosureSummary({
+          signals: [makeApprovedGdprTransparencyArticle13Signal({ evidenceText, matchedLocale })],
+        }),
+      },
+      validationFindings: [],
+    });
+    const concern = concerns.find((item) => item.originKey === "gdpr_transparency.article13.legal_basis");
+
+    assert.ok(concern, matchedLocale);
+    assert.equal(concern.regulatoryChecklistEligibility, "observed", matchedLocale);
+    assert.equal(concern.evidenceBundle.rawEvidence?.matchedLocale, matchedLocale, matchedLocale);
+    assert.equal(concern.evidenceBundle.rawEvidence?.productionCredit, true, matchedLocale);
+  }
 });
 
 test("adapter-approved GDPR Transparency evidence creates Article 13 normalized concern inputs", () => {

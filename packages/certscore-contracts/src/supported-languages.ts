@@ -51,6 +51,12 @@ export const SUPPORTED_GDPR_TRANSPARENCY_LOCALES = [
   "it",
   "nl",
   "pl",
+  "pt",
+  "ru",
+  "ja",
+  "zh",
+  "ar",
+  "sv",
 ] as const;
 
 export type SupportedGdprTransparencyLocale = typeof SUPPORTED_GDPR_TRANSPARENCY_LOCALES[number];

@@ -1890,6 +1890,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/policies/article13-it">Informativa sulla privacy</a>`,
       `<a href="/policies/article13-nl">Privacybeleid</a>`,
       `<a href="/policies/article13-pl">Polityka prywatności</a>`,
+      `<a href="/policies/article13-pt">Política de privacidade</a>`,
     ].join(" | "),
     "policy-multilingual-surfaces": [
       `<a href="/policies/privacy">Privacy Policy</a>`,
@@ -2085,6 +2086,10 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/policies/article13-pl": {
       title: "Polityka prywatności",
       body: "Administrator danych podaje kontakt w sprawie ochrony danych oraz inspektor ochrony danych. Opisujemy cele przetwarzania danych osobowych, podstawa prawna przetwarzania danych osobowych, kategorie odbiorców danych osobowych, okres przechowywania danych osobowych, prawo dostępu do danych osobowych, transfery międzynarodowe danych osobowych, prawo do wniesienia skargi do organu nadzorczego oraz zautomatyzowane podejmowanie decyzji z użyciem danych osobowych.",
+    },
+    "/policies/article13-pt": {
+      title: "Política de privacidade",
+      body: "O responsável pelo tratamento de dados pessoais fornece o contato do controlador e o contato do encarregado de proteção de dados. Explicamos as finalidades do tratamento de dados pessoais, a base legal para o tratamento de dados pessoais, as categorias de destinatários dos dados pessoais, o prazo de conservação dos dados pessoais, o direito de acesso aos dados pessoais, as transferências internacionais de dados pessoais, o direito de apresentar reclamação à Autoridade Nacional de Proteção de Dados e as decisões automatizadas com dados pessoais.",
     },
     "/policies/article13-toc-de": {
       title: "Datenschutzerklärung",

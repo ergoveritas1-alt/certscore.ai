@@ -583,6 +583,7 @@ test("policySurfaceScanner retains canonical GDPR Transparency topic candidates 
       ["it", "/policies/article13-it"],
       ["nl", "/policies/article13-nl"],
       ["pl", "/policies/article13-pl"],
+      ["pt", "/policies/article13-pt"],
     ] as const;
 
     for (const [locale, path] of expectedPolicies) {
@@ -672,6 +673,39 @@ test("policySurfaceScanner derives diagnostic GDPR Transparency candidates from 
     ),
     true
   );
+});
+
+test("policySurfaceScanner derives all canonical GDPR Transparency candidates for the five newly calibrated locales", () => {
+  const policies = [
+    ["ru", "Оператор персональных данных указывает контакт ответственного по защите данных. Мы описываем цели обработки персональных данных, правовые основания обработки персональных данных, категории получателей персональных данных, срок хранения персональных данных, права субъекта персональных данных, трансграничную передачу персональных данных, право подать жалобу в надзорный орган и автоматизированное принятие решений с использованием персональных данных."],
+    ["ja", "個人データの管理者はデータ保護責任者への連絡先を示します。個人データを処理する目的、個人データ処理の法的根拠、個人データの受領者のカテゴリー、個人データの保存期間、データ主体の権利、個人データの国際移転、監督機関に苦情を申し立てる権利、個人データを用いた自動意思決定について説明します。"],
+    ["zh", "个人数据控制者提供数据保护负责人的联系方式。我们说明处理个人数据的目的、处理个人数据的法律依据、个人数据接收方的类别、个人数据的保存期限、数据主体的权利、个人数据的跨境传输、向监管机构投诉的权利以及使用个人数据进行自动化决策。"],
+    ["ar", "يقدم مراقب البيانات الشخصية بيانات الاتصال بمسؤول حماية البيانات. نشرح أغراض معالجة البيانات الشخصية والأساس القانوني لمعالجة البيانات الشخصية وفئات مستلمي البيانات الشخصية ومدة الاحتفاظ بالبيانات الشخصية وحقوق صاحب البيانات والنقل الدولي للبيانات الشخصية والحق في تقديم شكوى إلى سلطة رقابية واتخاذ القرارات الآلية باستخدام البيانات الشخصية."],
+    ["sv", "Personuppgiftsansvarig anger kontaktuppgifter till dataskyddsombudet. Vi beskriver ändamålen med behandlingen av personuppgifter, rättslig grund för behandling av personuppgifter, kategorier av mottagare av personuppgifter, lagringstid för personuppgifter, den registrerades rättigheter, internationella överföringar av personuppgifter, rätt att lämna in klagomål till en tillsynsmyndighet och automatiserat beslutsfattande med personuppgifter."],
+  ] as const;
+  const expectedTopics = new Set([
+    "controller_contact",
+    "dpo_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ]);
+
+  for (const [locale, textExcerpt] of policies) {
+    const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([{ heading: "Privacy", textExcerpt }]);
+    assert.deepEqual(new Set(candidates.map((candidate) => candidate.topic)), expectedTopics, locale);
+    assert.equal(candidates.every((candidate) =>
+      candidate.matchedLocale === locale &&
+      candidate.status === "diagnostic_only" &&
+      candidate.productionCredit === false &&
+      candidate.classifierProvenance === "gdpr_transparency_topic_classifier.v1"
+    ), true, locale);
+  }
 });
 
 test("policySurfaceScanner retains diagnostic GDPR Transparency candidates from encoded fetched policy text", async () => {

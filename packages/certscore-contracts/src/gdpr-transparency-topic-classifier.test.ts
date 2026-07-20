@@ -929,6 +929,10 @@ test("classifies every GDPR Transparency topic with privacy-specific evidence ac
       locale: "pl",
       text: "Administrator danych podaje kontakt w sprawie ochrony danych oraz inspektor ochrony danych. Opisujemy cele przetwarzania danych osobowych, podstawa prawna przetwarzania danych osobowych, kategorie odbiorców danych osobowych, okres przechowywania danych osobowych, prawo dostępu do danych osobowych, transfery międzynarodowe danych osobowych, prawo do wniesienia skargi do organu nadzorczego oraz zautomatyzowane podejmowanie decyzji z użyciem danych osobowych.",
     },
+    {
+      locale: "pt",
+      text: "O responsável pelo tratamento de dados pessoais fornece o contato do controlador e o contato do encarregado de proteção de dados. Explicamos as finalidades do tratamento de dados pessoais, a base legal para o tratamento de dados pessoais, as categorias de destinatários dos dados pessoais, o prazo de conservação dos dados pessoais, o direito de acesso aos dados pessoais, as transferências internacionais de dados pessoais, o direito de apresentar reclamação à Autoridade Nacional de Proteção de Dados e as decisões automatizadas com dados pessoais.",
+    },
   ] as const;
 
   const expectedTopics: GdprTransparencyTopic[] = [
@@ -956,6 +960,93 @@ test("classifies every GDPR Transparency topic with privacy-specific evidence ac
         `${example.locale} should classify ${topic}`,
       );
     }
+  }
+});
+
+test("Portuguese operational copy does not create GDPR Transparency topic evidence", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["pt"],
+    text: "Entre em contato com o suporte para métricas do produto. O prazo de entrega, o processamento do pagamento, as decisões automáticas do fluxo e os destinatários da lista de notícias são configurações operacionais.",
+  });
+
+  assert.deepEqual(classification.matches, []);
+});
+
+test("classifies all GDPR Transparency topics in the five newly calibrated locales", () => {
+  const examples = [
+    {
+      locale: "ru",
+      text: "Оператор персональных данных указывает контакт ответственного по защите данных. Мы описываем цели обработки персональных данных, правовые основания обработки персональных данных, категории получателей персональных данных, срок хранения персональных данных, права субъекта персональных данных, трансграничную передачу персональных данных, право подать жалобу в надзорный орган и автоматизированное принятие решений с использованием персональных данных.",
+    },
+    {
+      locale: "ja",
+      text: "個人データの管理者はデータ保護責任者への連絡先を示します。個人データを処理する目的、個人データ処理の法的根拠、個人データの受領者のカテゴリー、個人データの保存期間、データ主体の権利、個人データの国際移転、監督機関に苦情を申し立てる権利、個人データを用いた自動意思決定について説明します。",
+    },
+    {
+      locale: "zh",
+      text: "个人数据控制者提供数据保护负责人的联系方式。我们说明处理个人数据的目的、处理个人数据的法律依据、个人数据接收方的类别、个人数据的保存期限、数据主体的权利、个人数据的跨境传输、向监管机构投诉的权利以及使用个人数据进行自动化决策。",
+    },
+    {
+      locale: "ar",
+      text: "يقدم مراقب البيانات الشخصية بيانات الاتصال بمسؤول حماية البيانات. نشرح أغراض معالجة البيانات الشخصية والأساس القانوني لمعالجة البيانات الشخصية وفئات مستلمي البيانات الشخصية ومدة الاحتفاظ بالبيانات الشخصية وحقوق صاحب البيانات والنقل الدولي للبيانات الشخصية والحق في تقديم شكوى إلى سلطة رقابية واتخاذ القرارات الآلية باستخدام البيانات الشخصية.",
+    },
+    {
+      locale: "sv",
+      text: "Personuppgiftsansvarig anger kontaktuppgifter till dataskyddsombudet. Vi beskriver ändamålen med behandlingen av personuppgifter, rättslig grund för behandling av personuppgifter, kategorier av mottagare av personuppgifter, lagringstid för personuppgifter, den registrerades rättigheter, internationella överföringar av personuppgifter, rätt att lämna in klagomål till en tillsynsmyndighet och automatiserat beslutsfattande med personuppgifter.",
+    },
+  ] as const;
+  const expectedTopics: GdprTransparencyTopic[] = [
+    "controller_contact",
+    "dpo_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ];
+
+  for (const example of examples) {
+    const matches = classifyGdprTransparencyTopics({ text: example.text, localeHints: [example.locale] }).matches;
+    for (const topic of expectedTopics) {
+      assert.ok(matches.some((match) => match.topic === topic && match.matchedLocale === example.locale), `${example.locale} should classify ${topic}`);
+    }
+  }
+});
+
+test("does not classify generic operational copy in the five newly calibrated locales", () => {
+  const examples = [
+    { locale: "ru", text: "Свяжитесь со службой поддержки по вопросам доставки. Автоматизация заказов и сроки хранения товаров описаны в каталоге." },
+    { locale: "ja", text: "配送についてはサポートにお問い合わせください。商品の保管期間と自動注文処理はカタログに記載されています。" },
+    { locale: "zh", text: "如需了解配送信息，请联系客户支持。商品保存时间和自动订单流程属于商城运营设置。" },
+    { locale: "ar", text: "تواصل مع دعم العملاء بشأن الشحن. مدة تخزين المنتجات ومعالجة الطلبات الآلية من إعدادات المتجر." },
+    { locale: "sv", text: "Kontakta kundsupport om leveranser. Lagring av produkter och automatisering av beställningar är butiksfunktioner." },
+  ] as const;
+
+  for (const example of examples) {
+    assert.deepEqual(
+      classifyGdprTransparencyTopics({ text: example.text, localeHints: [example.locale] }).matches,
+      [],
+      `${example.locale} operational copy should not classify`,
+    );
+  }
+});
+
+test("matches Japanese and Chinese policy phrases without whitespace and preserves bounded native excerpts", () => {
+  const examples = [
+    { locale: "ja", text: "当社の方針では、個人データ処理の法的根拠について明確に説明します。" },
+    { locale: "zh", text: "本隐私政策详细说明处理个人数据的法律依据以及相关保护措施。" },
+  ] as const;
+
+  for (const example of examples) {
+    const match = classifyGdprTransparencyTopics({ text: example.text, localeHints: [example.locale] }).matches
+      .find((candidate) => candidate.topic === "legal_basis");
+    assert.ok(match, `${example.locale} should match an unsegmented phrase`);
+    assert.equal(match.matchedLocale, example.locale);
+    assert.ok(match.evidenceExcerpt.includes(example.locale === "ja" ? "法的根拠" : "法律依据"));
+    assert.ok(match.evidenceExcerpt.length <= 360);
   }
 });
 

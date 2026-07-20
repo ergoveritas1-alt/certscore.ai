@@ -1586,6 +1586,100 @@ test("summarizePolicySurfaces rejects script/config text as Article 13 policy ev
   ), true);
 });
 
+test("summarizePolicySurfaces accepts substantive Portuguese policy text and production-credit topic evidence", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const evidenceText = "A base legal para o tratamento de dados pessoais inclui consentimento, contrato e legítimo interesse.";
+  const policyText = [
+    "Esta política de privacidade explica como tratamos dados pessoais e como você pode exercer seus direitos.",
+    "Nós utilizamos dados pessoais para prestar serviços, proteger contas e atender às solicitações dos usuários.",
+    "Os titulares podem entrar em contato com o controlador para obter informações sobre proteção de dados.",
+    evidenceText,
+  ].join(" ").repeat(12);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "privacy-pt",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/politica-de-privacidade",
+    normalizedUrl: "https://example.test/politica-de-privacidade",
+    confidence: 0.95,
+    status: "fetched",
+    textExcerpt: policyText,
+    gdprTransparencyTopicCandidates: [{
+      topic: "legal_basis",
+      status: "diagnostic_only",
+      evidenceText,
+      confidence: 0.9,
+      classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+      matchedLocale: "pt",
+      matchedTerm: "base legal para o tratamento de dados pessoais",
+      matchStrength: "direct",
+      classifierReasonCodes: ["matched_legal_basis", "match_strength_direct"],
+      productionCredit: false,
+    }],
+  }] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "pt-BR" });
+
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguage, "pt");
+  assert.equal(summary.policyTextExtractionHealth.gdprTransparencyLanguageSupported, true);
+  assert.equal(summary.policyTextExtractionHealth.policyTextQuality.usable, true);
+  assert.equal(summary.article13DisclosureSignals.some((signal) =>
+    signal.disclosureType === "legal_basis" &&
+    "matchedLocale" in signal &&
+    signal.matchedLocale === "pt"
+  ), true);
+  assert.equal(summary.gdprTransparencyProductionEvidenceDiagnostics.productionCreditSignalCount, 1);
+});
+
+test("summarizePolicySurfaces treats all five newly calibrated policy languages as usable", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const policies = [
+    ["ru", "Настоящая политика описывает цели обработки персональных данных, правовые основания обработки персональных данных и права субъекта персональных данных. "],
+    ["ja", "本プライバシーポリシーでは、個人データを処理する目的、個人データ処理の法的根拠、およびデータ主体の権利について説明します。"],
+    ["zh", "本隐私政策说明处理个人数据的目的、处理个人数据的法律依据以及数据主体的权利，并介绍我们如何保护个人信息。"],
+    ["ar", "توضح سياسة الخصوصية أغراض معالجة البيانات الشخصية والأساس القانوني لمعالجة البيانات الشخصية وحقوق صاحب البيانات وطرق حماية المعلومات. "],
+    ["sv", "Denna integritetspolicy beskriver ändamålen med behandlingen av personuppgifter, rättslig grund för behandling av personuppgifter och den registrerades rättigheter. "],
+  ] as const;
+
+  for (const [locale, sentence] of policies) {
+    const surfaces = dedupePolicySurfaces([{
+      observationId: `privacy-${locale}`,
+      surfaceType: "privacy_policy",
+      url: `https://example.test/privacy-${locale}`,
+      normalizedUrl: `https://example.test/privacy-${locale}`,
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: sentence.repeat(80),
+    }] as never, "https://example.test/");
+    const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: locale });
+
+    assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguage, locale, locale);
+    assert.equal(summary.policyTextExtractionHealth.gdprTransparencyLanguageSupported, true, locale);
+    assert.equal(summary.policyTextExtractionHealth.policyTextQuality.usable, true, locale);
+    assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok", locale);
+  }
+});
+
+test("summarizePolicySurfaces distinguishes unsupported policy language from low-quality content", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const policyText = "Bu gizlilik politikası kişisel verilerin işlenmesini, kullanıcı haklarını ve iletişim yöntemlerini açıklar. ".repeat(35);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "privacy-tr",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    confidence: 0.95,
+    status: "fetched",
+    textExcerpt: policyText,
+  }] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "tr" });
+
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "unsupported_language");
+  assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_language_unsupported");
+  assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguage, "tr");
+  assert.equal(summary.policyTextExtractionHealth.gdprTransparencyLanguageSupported, false);
+});
+
 test("summarizePolicySurfaces separates weak Article 13 candidates from validated disclosure signals", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const surfaces = dedupePolicySurfaces([

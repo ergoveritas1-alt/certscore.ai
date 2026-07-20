@@ -1406,6 +1406,32 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats thin policy extraction as 
   assert.match(outcomes.legal_basis_disclosure_observed?.limitation ?? "", /did not extract enough usable policy text/i);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes reports unsupported policy language explicitly", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "Политика конфиденциальности и обработка персональных данных.",
+        policyTextExtractionHealth: {
+          detectedPolicyLanguage: "tr",
+          extractedTextLength: 4200,
+          gdprTransparencyLanguageSupported: false,
+          minimumTextLengthRequired: 2500,
+          policyTextExtractionStatus: "unsupported_language",
+        },
+      },
+    },
+    snapshot: { privacy_policy_present: true },
+  });
+
+  assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
+  assert.match(outcomes.policy_text_extraction?.limitation ?? "", /detected tr language is not yet supported/i);
+  assert.doesNotMatch(outcomes.policy_text_extraction?.limitation ?? "", /low-quality or non-policy/i);
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes lets strong section-targeted evidence override global extraction errors", () => {
   const sectionEvidence = [
     {

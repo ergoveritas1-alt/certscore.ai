@@ -6959,6 +6959,13 @@ function derivePolicyTextExtractionOutcome(input: GdprEprivacyCoveragePolicyInpu
 
 function policyTextExtractionLimitationMessage(summary: Record<string, unknown> | null | undefined) {
   const status = policyTextExtractionStatus(summary);
+  if (status === "unsupported_language") {
+    const language = getString(getPolicyTextExtractionHealth(summary), [
+      "detectedPolicyLanguage",
+      "detected_policy_language",
+    ]);
+    return `A privacy-policy surface was found, but its${language ? ` detected ${language}` : ""} language is not yet supported for row-specific GDPR Transparency extraction.`;
+  }
   if (status === "low_quality_extracted_code_or_config" || looksLikeCodeOrConfigText(getPolicyDisclosureText(summary))) {
     return "A privacy-policy surface was found, but the retained text was low-quality or non-policy content, so row-specific disclosure extraction could not be completed.";
   }

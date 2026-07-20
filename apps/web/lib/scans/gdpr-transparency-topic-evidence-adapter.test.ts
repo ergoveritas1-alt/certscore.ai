@@ -140,6 +140,36 @@ test("explicit GDPR Transparency profile accepts strong direct multilingual cand
       matchedTerm: "podstawa prawna",
       text: "Podstawa prawna przetwarzania dane osobowe obejmuje zgodę, umowę oraz uzasadniony interes.",
     },
+    {
+      locale: "pt",
+      matchedTerm: "base legal",
+      text: "A base legal para o tratamento de dados pessoais inclui consentimento, contrato e legítimo interesse.",
+    },
+    {
+      locale: "ru",
+      matchedTerm: "правовые основания обработки персональных данных",
+      text: "Правовые основания обработки персональных данных включают согласие, исполнение договора и законный интерес.",
+    },
+    {
+      locale: "ja",
+      matchedTerm: "個人データ処理の法的根拠",
+      text: "本ポリシーでは、個人データ処理の法的根拠として同意、契約の履行および正当な利益を説明します。",
+    },
+    {
+      locale: "zh",
+      matchedTerm: "处理个人数据的法律依据",
+      text: "本隐私政策说明处理个人数据的法律依据，包括同意、履行合同以及合法利益。",
+    },
+    {
+      locale: "ar",
+      matchedTerm: "الأساس القانوني لمعالجة البيانات الشخصية",
+      text: "يشمل الأساس القانوني لمعالجة البيانات الشخصية الموافقة وتنفيذ العقد والمصلحة المشروعة.",
+    },
+    {
+      locale: "sv",
+      matchedTerm: "rättslig grund för behandling av personuppgifter",
+      text: "Rättslig grund för behandling av personuppgifter omfattar samtycke, avtal och berättigat intresse.",
+    },
   ];
   const candidates = examples.map((example) =>
     candidate({

@@ -62,6 +62,12 @@ const es = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhra
 const it = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhrase => ({ locale: "it", ...term }));
 const nl = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhrase => ({ locale: "nl", ...term }));
 const pl = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhrase => ({ locale: "pl", ...term }));
+const pt = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhrase => ({ locale: "pt", ...term }));
+const ru = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhrase => ({ locale: "ru", ...term }));
+const ja = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhrase => ({ locale: "ja", ...term }));
+const zh = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhrase => ({ locale: "zh", ...term }));
+const ar = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhrase => ({ locale: "ar", ...term }));
+const sv = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhrase => ({ locale: "sv", ...term }));
 
 export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhrase[] = [
   ...en([
@@ -295,6 +301,202 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("automated_decision_making_or_profiling", "automatycznemu przetwarzaniu danych"),
     equivalent("automated_decision_making_or_profiling", "profilowanie danych osobowych"),
   ]),
+  ...pt([
+    direct("controller_contact", "controlador dos dados pessoais"),
+    direct("controller_contact", "responsável pelo tratamento de dados pessoais"),
+    equivalent("controller_contact", "contato do controlador"),
+    equivalent("controller_contact", "contato de privacidade"),
+    direct("dpo_contact", "encarregado de proteção de dados"),
+    equivalent("dpo_contact", "contato do encarregado"),
+    equivalent("dpo_contact", "contato do dpo"),
+    direct("processing_purposes", "finalidades do tratamento de dados pessoais"),
+    direct("processing_purposes", "finalidade do tratamento de dados pessoais"),
+    equivalent("processing_purposes", "utilizamos seus dados pessoais para"),
+    equivalent("processing_purposes", "usamos seus dados pessoais para"),
+    direct("legal_basis", "base legal para o tratamento de dados pessoais"),
+    direct("legal_basis", "bases legais para o tratamento de dados pessoais"),
+    equivalent("legal_basis", "legítimo interesse para tratar dados pessoais"),
+    direct("recipients_or_vendor_categories", "destinatários dos dados pessoais"),
+    equivalent("recipients_or_vendor_categories", "categorias de destinatários dos dados pessoais"),
+    equivalent("recipients_or_vendor_categories", "terceiros com quem compartilhamos dados pessoais"),
+    equivalent("recipients_or_vendor_categories", "prestadores de serviços que tratam dados pessoais"),
+    direct("data_retention", "prazo de conservação dos dados pessoais"),
+    direct("data_retention", "período de retenção dos dados pessoais"),
+    equivalent("data_retention", "pelo tempo necessário para o tratamento"),
+    direct("data_subject_rights", "direito de acesso aos dados pessoais"),
+    equivalent("data_subject_rights", "direito à eliminação dos dados pessoais"),
+    equivalent("data_subject_rights", "direitos do titular dos dados pessoais"),
+    direct("international_transfers", "transferências internacionais de dados pessoais"),
+    equivalent("international_transfers", "dados pessoais fora do espaço econômico europeu"),
+    equivalent("international_transfers", "cláusulas contratuais padrão para transferências de dados pessoais"),
+    direct("supervisory_authority", "direito de apresentar reclamação à autoridade nacional de proteção de dados"),
+    equivalent("supervisory_authority", "reclamação à autoridade nacional de proteção de dados"),
+    equivalent("supervisory_authority", "reclamação à anpd"),
+    direct("automated_decision_making_or_profiling", "decisões automatizadas com dados pessoais"),
+    equivalent("automated_decision_making_or_profiling", "tratamento automatizado de dados pessoais"),
+    equivalent("automated_decision_making_or_profiling", "elaboração de perfis com dados pessoais"),
+  ]),
+  ...ru([
+    direct("controller_contact", "оператор персональных данных"),
+    direct("controller_contact", "ответственный за обработку персональных данных"),
+    equivalent("controller_contact", "контакт по вопросам защиты персональных данных"),
+    direct("dpo_contact", "сотрудник по защите данных"),
+    equivalent("dpo_contact", "должностное лицо по защите данных"),
+    equivalent("dpo_contact", "контакт ответственного по защите данных"),
+    direct("processing_purposes", "цели обработки персональных данных"),
+    equivalent("processing_purposes", "обрабатываем персональные данные для"),
+    equivalent("processing_purposes", "используем ваши персональные данные для"),
+    direct("legal_basis", "правовые основания обработки персональных данных"),
+    direct("legal_basis", "правовое основание для обработки персональных данных"),
+    equivalent("legal_basis", "законный интерес при обработке персональных данных"),
+    direct("recipients_or_vendor_categories", "получатели персональных данных"),
+    equivalent("recipients_or_vendor_categories", "категории получателей персональных данных"),
+    equivalent("recipients_or_vendor_categories", "третьи лица которым мы передаем персональные данные"),
+    direct("data_retention", "срок хранения персональных данных"),
+    equivalent("data_retention", "период хранения персональных данных"),
+    equivalent("data_retention", "храним персональные данные столько сколько необходимо"),
+    direct("data_subject_rights", "права субъекта персональных данных"),
+    equivalent("data_subject_rights", "право на доступ к персональным данным"),
+    equivalent("data_subject_rights", "право на удаление персональных данных"),
+    direct("international_transfers", "трансграничная передача персональных данных"),
+    equivalent("international_transfers", "трансграничную передачу персональных данных"),
+    equivalent("international_transfers", "передача персональных данных за пределы европейской экономической зоны"),
+    equivalent("international_transfers", "стандартные договорные положения для передачи персональных данных"),
+    direct("supervisory_authority", "право подать жалобу в надзорный орган"),
+    equivalent("supervisory_authority", "жалоба в орган по защите данных"),
+    equivalent("supervisory_authority", "обратиться с жалобой в надзорный орган"),
+    direct("automated_decision_making_or_profiling", "автоматизированное принятие решений с использованием персональных данных"),
+    equivalent("automated_decision_making_or_profiling", "автоматизированная обработка персональных данных"),
+    equivalent("automated_decision_making_or_profiling", "профилирование персональных данных"),
+  ]),
+  ...ja([
+    direct("controller_contact", "個人データの管理者"),
+    direct("controller_contact", "個人情報取扱事業者"),
+    equivalent("controller_contact", "個人データ管理者への連絡先"),
+    direct("dpo_contact", "データ保護責任者"),
+    equivalent("dpo_contact", "データ保護責任者への連絡先"),
+    equivalent("dpo_contact", "dpoへのお問い合わせ"),
+    direct("processing_purposes", "個人データを処理する目的"),
+    direct("processing_purposes", "個人情報の利用目的"),
+    equivalent("processing_purposes", "以下の目的で個人データを利用します"),
+    direct("legal_basis", "個人データ処理の法的根拠"),
+    direct("legal_basis", "個人データを処理する法的根拠"),
+    equivalent("legal_basis", "個人データ処理における正当な利益"),
+    direct("recipients_or_vendor_categories", "個人データの受領者"),
+    equivalent("recipients_or_vendor_categories", "個人データの受領者のカテゴリー"),
+    equivalent("recipients_or_vendor_categories", "個人データを共有する第三者"),
+    direct("data_retention", "個人データの保存期間"),
+    equivalent("data_retention", "個人情報の保有期間"),
+    equivalent("data_retention", "必要な期間に限り個人データを保持します"),
+    direct("data_subject_rights", "データ主体の権利"),
+    equivalent("data_subject_rights", "個人データにアクセスする権利"),
+    equivalent("data_subject_rights", "個人データの消去を求める権利"),
+    direct("international_transfers", "個人データの国際移転"),
+    equivalent("international_transfers", "欧州経済領域外への個人データの移転"),
+    equivalent("international_transfers", "個人データ移転のための標準契約条項"),
+    direct("supervisory_authority", "監督機関に苦情を申し立てる権利"),
+    equivalent("supervisory_authority", "データ保護機関に苦情を申し立てる"),
+    equivalent("supervisory_authority", "監督当局への苦情"),
+    direct("automated_decision_making_or_profiling", "個人データを用いた自動意思決定"),
+    equivalent("automated_decision_making_or_profiling", "個人データの自動処理"),
+    equivalent("automated_decision_making_or_profiling", "個人データのプロファイリング"),
+  ]),
+  ...zh([
+    direct("controller_contact", "个人数据控制者"),
+    direct("controller_contact", "个人信息处理者"),
+    equivalent("controller_contact", "个人数据控制者的联系方式"),
+    direct("dpo_contact", "数据保护官"),
+    equivalent("dpo_contact", "数据保护负责人的联系方式"),
+    equivalent("dpo_contact", "联系数据保护官"),
+    direct("processing_purposes", "处理个人数据的目的"),
+    direct("processing_purposes", "处理个人信息的目的"),
+    equivalent("processing_purposes", "我们出于以下目的使用您的个人数据"),
+    direct("legal_basis", "处理个人数据的法律依据"),
+    direct("legal_basis", "个人数据处理的法律基础"),
+    equivalent("legal_basis", "处理个人数据的合法利益"),
+    direct("recipients_or_vendor_categories", "个人数据的接收方"),
+    equivalent("recipients_or_vendor_categories", "个人数据接收方的类别"),
+    equivalent("recipients_or_vendor_categories", "与其共享个人数据的第三方"),
+    direct("data_retention", "个人数据的保存期限"),
+    equivalent("data_retention", "个人信息的保留期限"),
+    equivalent("data_retention", "仅在必要期间保留个人数据"),
+    direct("data_subject_rights", "数据主体的权利"),
+    equivalent("data_subject_rights", "访问个人数据的权利"),
+    equivalent("data_subject_rights", "删除个人数据的权利"),
+    direct("international_transfers", "个人数据的跨境传输"),
+    equivalent("international_transfers", "向欧洲经济区以外传输个人数据"),
+    equivalent("international_transfers", "个人数据传输的标准合同条款"),
+    direct("supervisory_authority", "向监管机构投诉的权利"),
+    equivalent("supervisory_authority", "向数据保护机构提出投诉"),
+    equivalent("supervisory_authority", "向监督机关投诉"),
+    direct("automated_decision_making_or_profiling", "使用个人数据进行自动化决策"),
+    equivalent("automated_decision_making_or_profiling", "个人数据的自动化处理"),
+    equivalent("automated_decision_making_or_profiling", "对个人数据进行画像分析"),
+  ]),
+  ...ar([
+    direct("controller_contact", "مراقب البيانات الشخصية"),
+    direct("controller_contact", "المتحكم في البيانات الشخصية"),
+    equivalent("controller_contact", "بيانات الاتصال بمراقب البيانات"),
+    direct("dpo_contact", "مسؤول حماية البيانات"),
+    equivalent("dpo_contact", "بيانات الاتصال بمسؤول حماية البيانات"),
+    equivalent("dpo_contact", "التواصل مع مسؤول حماية البيانات"),
+    direct("processing_purposes", "أغراض معالجة البيانات الشخصية"),
+    equivalent("processing_purposes", "نعالج بياناتك الشخصية من أجل"),
+    equivalent("processing_purposes", "نستخدم بياناتك الشخصية للأغراض التالية"),
+    direct("legal_basis", "الأساس القانوني لمعالجة البيانات الشخصية"),
+    direct("legal_basis", "الأسس القانونية لمعالجة البيانات الشخصية"),
+    equivalent("legal_basis", "المصلحة المشروعة في معالجة البيانات الشخصية"),
+    direct("recipients_or_vendor_categories", "مستلمو البيانات الشخصية"),
+    equivalent("recipients_or_vendor_categories", "فئات مستلمي البيانات الشخصية"),
+    equivalent("recipients_or_vendor_categories", "الأطراف الثالثة التي نشارك معها البيانات الشخصية"),
+    direct("data_retention", "مدة الاحتفاظ بالبيانات الشخصية"),
+    equivalent("data_retention", "فترة الاحتفاظ بالبيانات الشخصية"),
+    equivalent("data_retention", "نحتفظ بالبيانات الشخصية طالما كان ذلك ضروريا"),
+    direct("data_subject_rights", "حقوق صاحب البيانات"),
+    equivalent("data_subject_rights", "الحق في الوصول إلى البيانات الشخصية"),
+    equivalent("data_subject_rights", "الحق في محو البيانات الشخصية"),
+    direct("international_transfers", "النقل الدولي للبيانات الشخصية"),
+    equivalent("international_transfers", "نقل البيانات الشخصية خارج المنطقة الاقتصادية الأوروبية"),
+    equivalent("international_transfers", "البنود التعاقدية القياسية لنقل البيانات الشخصية"),
+    direct("supervisory_authority", "الحق في تقديم شكوى إلى سلطة رقابية"),
+    equivalent("supervisory_authority", "تقديم شكوى إلى هيئة حماية البيانات"),
+    equivalent("supervisory_authority", "شكوى لدى السلطة الإشرافية"),
+    direct("automated_decision_making_or_profiling", "اتخاذ القرارات الآلية باستخدام البيانات الشخصية"),
+    equivalent("automated_decision_making_or_profiling", "المعالجة الآلية للبيانات الشخصية"),
+    equivalent("automated_decision_making_or_profiling", "التنميط باستخدام البيانات الشخصية"),
+  ]),
+  ...sv([
+    direct("controller_contact", "personuppgiftsansvarig"),
+    direct("controller_contact", "kontaktuppgifter till den personuppgiftsansvarige"),
+    equivalent("controller_contact", "kontakt för dataskyddsfrågor"),
+    direct("dpo_contact", "dataskyddsombud"),
+    equivalent("dpo_contact", "kontaktuppgifter till dataskyddsombudet"),
+    equivalent("dpo_contact", "kontakta vårt dataskyddsombud"),
+    direct("processing_purposes", "ändamålen med behandlingen av personuppgifter"),
+    equivalent("processing_purposes", "behandlar personuppgifter för följande ändamål"),
+    equivalent("processing_purposes", "använder dina personuppgifter för att"),
+    direct("legal_basis", "rättslig grund för behandling av personuppgifter"),
+    direct("legal_basis", "laglig grund för behandling av personuppgifter"),
+    equivalent("legal_basis", "berättigat intresse för behandling av personuppgifter"),
+    direct("recipients_or_vendor_categories", "mottagare av personuppgifter"),
+    equivalent("recipients_or_vendor_categories", "kategorier av mottagare av personuppgifter"),
+    equivalent("recipients_or_vendor_categories", "tredje parter som vi delar personuppgifter med"),
+    direct("data_retention", "lagringstid för personuppgifter"),
+    equivalent("data_retention", "perioden som personuppgifterna sparas"),
+    equivalent("data_retention", "sparar personuppgifter så länge som det är nödvändigt"),
+    direct("data_subject_rights", "den registrerades rättigheter"),
+    equivalent("data_subject_rights", "rätt till tillgång till personuppgifter"),
+    equivalent("data_subject_rights", "rätt till radering av personuppgifter"),
+    direct("international_transfers", "internationella överföringar av personuppgifter"),
+    equivalent("international_transfers", "personuppgifter utanför europeiska ekonomiska samarbetsområdet"),
+    equivalent("international_transfers", "standardavtalsklausuler för överföring av personuppgifter"),
+    direct("supervisory_authority", "rätt att lämna in klagomål till en tillsynsmyndighet"),
+    equivalent("supervisory_authority", "klagomål till integritetsskyddsmyndigheten"),
+    equivalent("supervisory_authority", "klaga hos en tillsynsmyndighet"),
+    direct("automated_decision_making_or_profiling", "automatiserat beslutsfattande med personuppgifter"),
+    equivalent("automated_decision_making_or_profiling", "automatiserad behandling av personuppgifter"),
+    equivalent("automated_decision_making_or_profiling", "profilering av personuppgifter"),
+  ]),
 ];
 
 export function classifyGdprTransparencyTopics(
@@ -363,7 +565,7 @@ export function normalizeGdprTransparencyText(value: string | null | undefined):
     .replace(/\p{Diacritic}/gu, "")
     .replace(/[\u00a0\t\r\n]+/g, " ")
     .replace(/\s*[-–—]\s*/g, "-")
-    .replace(/[.,;:!?()[\]{}]+/g, " ")
+    .replace(/[.,;:!?()[\]{}。、，；：！？（）،؛؟]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
@@ -432,7 +634,7 @@ function equivalent(topic: GdprTransparencyTopic, phrase: string, variant?: stri
 
 function phraseScore(term: GdprTransparencyTopicPhrase, normalizedText: string): number {
   const phrase = normalizeGdprTransparencyText(term.phrase);
-  if (!phrase || !paddedIncludes(normalizedText, phrase)) {
+  if (!phrase || !phraseIncludes(normalizedText, phrase)) {
     return 0;
   }
   return 600 + phrase.length + strengthRank(term.strength) * 80;
@@ -440,6 +642,37 @@ function phraseScore(term: GdprTransparencyTopicPhrase, normalizedText: string):
 
 function paddedIncludes(normalizedValue: string, phrase: string) {
   return ` ${normalizedValue} `.includes(` ${phrase} `);
+}
+
+function phraseIncludes(normalizedValue: string, phrase: string) {
+  if (usesBoundarylessScript(phrase)) {
+    return [...phrase].length >= 4 && normalizedValue.includes(phrase);
+  }
+  if (usesArabicScript(phrase)) {
+    return paddedIncludes(normalizedValue, phrase) || arabicCliticIndex(normalizedValue, phrase) >= 0;
+  }
+  return paddedIncludes(normalizedValue, phrase);
+}
+
+function usesBoundarylessScript(value: string) {
+  return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(value);
+}
+
+function usesArabicScript(value: string) {
+  return /\p{Script=Arabic}/u.test(value);
+}
+
+function arabicCliticIndex(normalizedValue: string, phrase: string) {
+  if ([...phrase].length < 8) {
+    return -1;
+  }
+  for (const clitic of ["و", "ف", "ب", "ك", "ل"]) {
+    const index = ` ${normalizedValue} `.indexOf(` ${clitic}${phrase} `);
+    if (index >= 0) {
+      return Math.max(0, index);
+    }
+  }
+  return -1;
 }
 
 function confidenceFor(term: GdprTransparencyTopicPhrase) {
@@ -533,6 +766,13 @@ function buildEvidenceSearchIndex(sourceText: string) {
 }
 
 function paddedIndexOf(normalizedValue: string, phrase: string) {
+  if (usesBoundarylessScript(phrase)) {
+    return normalizedValue.indexOf(phrase);
+  }
+  if (usesArabicScript(phrase)) {
+    const directIndex = ` ${normalizedValue} `.indexOf(` ${phrase} `);
+    return directIndex >= 0 ? directIndex : arabicCliticIndex(normalizedValue, phrase);
+  }
   const index = ` ${normalizedValue} `.indexOf(` ${phrase} `);
   return index < 0 ? -1 : index;
 }
