@@ -19,7 +19,7 @@ import {
   type PolicySurfaceInspectionOutcome
 } from "@certscore/contracts";
 import { resolveVendorDisplayCategory, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
-import { resolveScanNoGoPresentation } from "@website-signal-risk-scanner/shared";
+import { isScanNoGoSnapshotOutcome, resolveScanNoGoPresentation } from "@website-signal-risk-scanner/shared";
 import {
   adaptGdprTransparencyTopicCandidatesForProduction,
   type GdprTransparencyTopicEvidenceAdapterResult
@@ -51,6 +51,16 @@ function getRecord(value: unknown, key: string) {
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function resolveFinalMaterializedScanOutcome(input: { existingOutcome: unknown }) {
+  const existingOutcome = getString(input.existingOutcome);
+
+  // This path runs only after the final canonical bundle did not produce a no-go.
+  if (existingOutcome && isScanNoGoSnapshotOutcome(existingOutcome)) {
+    return "completed_partial";
+  }
+  return existingOutcome ?? "completed_partial";
 }
 
 export function getLocalV2PrimaryLanguage(bundle: CanonicalEvidenceBundle) {
@@ -3878,7 +3888,9 @@ function buildMaterializedLocalV2Detail(
       stop_reason_label: "Homepage unavailable; policy evidence retained",
     } : localV2NoGo ? buildLocalV2NoGoSnapshotFields(localV2NoGo.primaryReasonCode, localV2NoGo.pageState) : {
       homepage_fetch_status: "success",
-      scan_outcome: scanRecord.snapshot?.scan_outcome ?? "completed_partial"
+      scan_outcome: resolveFinalMaterializedScanOutcome({
+        existingOutcome: scanRecord.snapshot?.scan_outcome,
+      })
     }),
     legal_coverage_score: localV2NoGo ? null : score,
     pages_scanned: localV2NoGo ? 0 : Math.max(scanRecord.scan.pagesScanned, 1),

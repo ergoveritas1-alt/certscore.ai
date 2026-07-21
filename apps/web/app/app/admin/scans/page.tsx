@@ -177,7 +177,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
           <table className="min-w-[1700px] table-fixed text-left text-xs">
             <colgroup>
               <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "170px" }} />
-              <col style={{ width: "150px" }} /><col style={{ width: "70px" }} /><col style={{ width: "60px" }} />
+              <col style={{ width: "150px" }} /><col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} />
               <col style={{ width: "210px" }} /><col style={{ width: "110px" }} /><col style={{ width: "80px" }} />
               <col style={{ width: "180px" }} /><col style={{ width: "65px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} />
               <col style={{ width: "160px" }} /><col style={{ width: "78px" }} />
@@ -186,7 +186,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
               <tr>
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" },
-                  { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Site" },
+                  { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
                   { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }
@@ -217,6 +217,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                       </div>
                       <p className="truncate font-mono text-[10px] text-slate-400" title={scan.linkedScanId ?? scan.scanId}>scan_id {scan.linkedScanId ?? scan.scanId}</p>
                     </td>
+                    <td className="px-2.5 py-1.5 font-medium text-slate-700">{scan.trancoRank ? `#${scan.trancoRank.toLocaleString()}` : "—"}</td>
                     <td className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.certscoreOverall ?? "—"}</span>{scan.certscoreOverall !== null ? <span className="text-slate-400">/100</span> : null}</td>
                     <td className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.topFindingCount ?? "—"}</span></td>
                     <td className="px-2.5 py-1.5"><p className="whitespace-nowrap">Privacy {scan.privacyPolicyPresent === true ? "✓" : scan.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={scan.cmpVendorName ?? undefined}>CMP {scan.cmpVendorName ?? "—"}</p></td>

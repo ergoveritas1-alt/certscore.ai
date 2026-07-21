@@ -158,7 +158,9 @@ test("validation worker Lambda result poller retains leases and bounds result co
 test("validation worker continuously reconciles accepted scans without terminal Lambda results", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
-  assert.match(source, /ORPHAN_RECONCILIATION_AGE_MS\s*=\s*90_000/);
+  assert.match(source, /ORPHAN_RECONCILIATION_INTERVAL_MS\s*=\s*10_000/);
+  assert.match(source, /ORPHAN_RECONCILIATION_AGE_MS\s*=\s*75_000/);
+  assert.match(source, /within 75 seconds/);
   assert.match(source, /for update of s skip locked/);
   assert.match(source, /lambda_terminal_result_absent/);
   assert.match(source, /void loopReconciliation\(\)/);

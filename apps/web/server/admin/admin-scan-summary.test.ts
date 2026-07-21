@@ -11,12 +11,39 @@ test("admin scan summaries consume the canonical report projection", async () =>
   assert.doesNotMatch(source, /projectExecutiveFindingsFromUnifiedPackets/);
 });
 
+test("an explicit final scan outcome replaces stale snapshot state without letting null summaries erase it", async () => {
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(repositorySource, /scan_outcome = coalesce\(excluded\.scan_outcome, scan_snapshots\.scan_outcome\)/);
+  assert.doesNotMatch(repositorySource, /scan_outcome = coalesce\(scan_snapshots\.scan_outcome, excluded\.scan_outcome\)/);
+});
+
+test("admin summary persistence retains structured no-go evidence and scan-linked Tranco rank", async () => {
+  const summarySource = await readFile("apps/web/server/admin/admin-scan-summary.ts", "utf8");
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+  const scanDetailSource = await readFile("apps/web/server/scans/get-scan-by-id.ts", "utf8");
+  const migrationSource = await readFile("packages/db/migrations/0144_scan_assessment_and_tranco_rank.sql", "utf8");
+
+  assert.match(summarySource, /scanNoGoAssessment/);
+  assert.match(summarySource, /scanTrancoRank/);
+  assert.match(repositorySource, /scan_no_go_assessment/);
+  assert.match(repositorySource, /update public\.scan_runtime_artifacts/);
+  assert.match(repositorySource, /tranco_rank/);
+  assert.match(repositorySource, /scan_snapshots ss/);
+  assert.match(scanDetailSource, /snapshotBackedRuntimeArtifacts/);
+  assert.match(scanDetailSource, /normalizedSnapshot\.scan_no_go_assessment/);
+  assert.match(migrationSource, /add column if not exists tranco_rank integer/);
+  assert.match(migrationSource, /add column if not exists scan_no_go_assessment jsonb/);
+});
+
 test("API activity resolves authenticated owners and linked scan enrichment", async () => {
   const source = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
   assert.match(source, /coalesce\(app_user\.email, auth_user\.email, api_key\.created_by\) as requester_name/);
   assert.match(source, /domain\.hostname as scan_domain_hostname/);
   assert.match(source, /scan_completed_at/);
   assert.match(source, /ss\.top_finding_count::int as top_finding_count/);
+  assert.match(source, /ss\.tranco_rank/);
+  assert.match(source, /trancoRank:/);
   assert.match(source, /topFindingCount:/);
   assert.doesNotMatch(source, /materializeAdminScanSummar/);
   assert.doesNotMatch(source, /materializeLocalV2DagScanDetail/);
@@ -51,6 +78,7 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   const pulseSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
   const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
   const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
 
   assert.match(scansSource, /projectAdminNoGo/);
   assert.match(scansSource, /runtimeAssessment: runtimeArtifact\?\.scan_no_go_assessment/);
@@ -59,6 +87,8 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   assert.match(repositorySource, /scan_no_go_assessment/);
   assert.match(repositorySource, /visual_access_review/);
   assert.match(scansPage, /scan\.noGoFlag/);
+  assert.match(scansPage, /label: "Tranco"/);
+  assert.match(pulsePage, /label: "Tranco"/);
 });
 
 test("Admin Scans filters and counts the complete retained activity set in SQL", async () => {

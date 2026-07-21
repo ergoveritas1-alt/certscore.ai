@@ -100,8 +100,11 @@ export type AdminScanSnapshotRow = {
   robots_fetch_http_status: number | null;
   scan_id?: string;
   scan_outcome?: string | null;
+  scan_no_go_assessment?: Record<string, unknown> | null;
   scan_timestamp?: string | null;
+  tranco_rank?: number | null;
   site_language_primary?: string | null;
+  visual_access_review?: Record<string, unknown> | null;
   stop_tier?: ScanExecutionTier | null;
   total_signals?: number;
   top_finding_count?: number | null;
@@ -112,6 +115,7 @@ export type AdminRuntimeArtifactRow = {
   scan_id: string;
   scan_no_go_assessment?: Record<string, unknown> | null;
   visual_access_review?: Record<string, unknown> | null;
+  visual_evidence_artifacts?: unknown[] | null;
   [key: string]: unknown;
 };
 
@@ -879,7 +883,11 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
                   legal_coverage_score,
                   verified_public_surfaces_count,
                   site_language_primary,
-                  scan_outcome
+                  scan_outcome,
+                  tranco_rank,
+                  scan_no_go_assessment,
+                  visual_access_review,
+                  visual_evidence_artifacts
              from scan_snapshots
             where scan_id = any($1::uuid[])`,
           [scanIds],
@@ -899,9 +907,13 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
       : Promise.resolve({ rows: [] as AdminScanDiagnosticEventRow[] }),
     scanIds.length
       ? query<AdminRuntimeArtifactRow>(
-          `select scan_id, scan_no_go_assessment, visual_access_review
-             from scan_runtime_artifacts
-            where scan_id = any($1::uuid[])`,
+          `select sra.scan_id,
+                  coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
+                  coalesce(sra.visual_access_review, ss.visual_access_review) as visual_access_review,
+                  coalesce(sra.visual_evidence_artifacts, ss.visual_evidence_artifacts) as visual_evidence_artifacts
+             from scan_snapshots ss
+             left join scan_runtime_artifacts sra on sra.scan_id = ss.scan_id
+            where ss.scan_id = any($1::uuid[])`,
           [scanIds],
           { readOnly: true }
         )
@@ -1035,13 +1047,18 @@ export async function persistAdminScanSummary(input: {
   scanId: string;
   score: number | null;
   topFindingCount: number;
+  trancoRank?: number | null;
+  scanNoGoAssessment?: Record<string, unknown> | null;
+  visualAccessReview?: Record<string, unknown> | null;
+  visualEvidenceArtifacts?: unknown[] | null;
 }) {
   await query(
     `insert into scan_snapshots (
        scan_id, organization_id, domain_id, pages_requested, pages_scanned,
        admin_summary_generated_at, admin_industry_label, certscore_overall, top_finding_count,
        site_language_primary, scan_outcome,
-       privacy_policy_present, cmp_vendor_name
+       privacy_policy_present, cmp_vendor_name, tranco_rank,
+       scan_no_go_assessment, visual_access_review, visual_evidence_artifacts
      )
      select scans.id,
             scans.organization_id,
@@ -1054,7 +1071,11 @@ export async function persistAdminScanSummary(input: {
             $3,
             $7, $8,
             coalesce($4, false),
-            $5
+            $5,
+            $9,
+            $10::jsonb,
+            $11::jsonb,
+            $12::jsonb
       from scans
       where scans.id = $1
         and scans.domain_id is not null
@@ -1064,11 +1085,45 @@ export async function persistAdminScanSummary(input: {
            certscore_overall = excluded.certscore_overall,
            top_finding_count = excluded.top_finding_count,
            site_language_primary = excluded.site_language_primary,
-           scan_outcome = coalesce(scan_snapshots.scan_outcome, excluded.scan_outcome),
+           scan_outcome = coalesce(excluded.scan_outcome, scan_snapshots.scan_outcome),
            privacy_policy_present = excluded.privacy_policy_present,
-           cmp_vendor_name = excluded.cmp_vendor_name`,
-    [input.scanId, input.score, input.topFindingCount, input.privacyPolicyPresent, input.cmpVendorName, input.industry, input.primaryLanguage, input.scanOutcome ?? null]
+           cmp_vendor_name = excluded.cmp_vendor_name,
+           tranco_rank = coalesce(excluded.tranco_rank, scan_snapshots.tranco_rank),
+           scan_no_go_assessment = coalesce(excluded.scan_no_go_assessment, scan_snapshots.scan_no_go_assessment),
+           visual_access_review = coalesce(excluded.visual_access_review, scan_snapshots.visual_access_review),
+           visual_evidence_artifacts = coalesce(excluded.visual_evidence_artifacts, scan_snapshots.visual_evidence_artifacts)`,
+    [
+      input.scanId,
+      input.score,
+      input.topFindingCount,
+      input.privacyPolicyPresent,
+      input.cmpVendorName,
+      input.industry,
+      input.primaryLanguage,
+      input.scanOutcome ?? null,
+      input.trancoRank ?? null,
+      input.scanNoGoAssessment ? JSON.stringify(input.scanNoGoAssessment) : null,
+      input.visualAccessReview ? JSON.stringify(input.visualAccessReview) : null,
+      input.visualEvidenceArtifacts ? JSON.stringify(input.visualEvidenceArtifacts) : null
+    ]
   );
+
+  if (input.scanNoGoAssessment || input.visualAccessReview || input.visualEvidenceArtifacts) {
+    await query(
+      `update public.scan_runtime_artifacts
+          set scan_no_go_assessment = coalesce($2::jsonb, scan_no_go_assessment),
+              visual_access_review = coalesce($3::jsonb, visual_access_review),
+              visual_evidence_artifacts = coalesce($4::jsonb, visual_evidence_artifacts),
+              updated_at = timezone('utc', now())
+        where scan_id = $1`,
+      [
+        input.scanId,
+        input.scanNoGoAssessment ? JSON.stringify(input.scanNoGoAssessment) : null,
+        input.visualAccessReview ? JSON.stringify(input.visualAccessReview) : null,
+        input.visualEvidenceArtifacts ? JSON.stringify(input.visualEvidenceArtifacts) : null
+      ]
+    );
+  }
 }
 
 export async function loadAdminScanDetailData(scanId: string): Promise<{
@@ -1165,7 +1220,17 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
     scan.organization_id
       ? queryOne<AdminScanOrganizationRow>(`select name from organizations where id = $1`, [scan.organization_id], { readOnly: true })
       : Promise.resolve(null),
-    queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
+    queryOne<Record<string, unknown>>(
+      `select sra.*,
+              coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
+              coalesce(sra.visual_access_review, ss.visual_access_review) as visual_access_review,
+              coalesce(sra.visual_evidence_artifacts, ss.visual_evidence_artifacts) as visual_evidence_artifacts
+         from scan_snapshots ss
+         left join scan_runtime_artifacts sra on sra.scan_id = ss.scan_id
+        where ss.scan_id = $1`,
+      [scanId],
+      { readOnly: true }
+    ),
     query<Record<string, unknown>>(
       `select event_type, message, metadata_json, created_at
          from scan_events

@@ -153,6 +153,20 @@ test("buildLocalV2NoGoSnapshotFields preserves every canonical no-go reason clas
   }
 });
 
+test("final non-no-go materialization replaces a stale provisional no-go outcome", async () => {
+  const { resolveFinalMaterializedScanOutcome } = await loadLocalV2DagReport();
+
+  assert.equal(resolveFinalMaterializedScanOutcome({
+    existingOutcome: "homepage_access_blocked",
+  }), "completed_partial");
+  assert.equal(resolveFinalMaterializedScanOutcome({
+    existingOutcome: "homepage_visual_capture_failed",
+  }), "completed_partial");
+  assert.equal(resolveFinalMaterializedScanOutcome({
+    existingOutcome: "completed_successfully",
+  }), "completed_successfully");
+});
+
 test("buildLocalV2NoGoSnapshotFields gives Cerebras site-not-ready snapshot copy", async () => {
   const { buildLocalV2NoGoSnapshotFields } = await loadLocalV2DagReport();
   const snapshot = buildLocalV2NoGoSnapshotFields("site_not_ready", "parked_or_placeholder");

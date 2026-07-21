@@ -1196,14 +1196,28 @@ async function loadScanDetailRecord(input: {
   const baseRuntimeArtifacts = runtimeArtifacts
     ? stripSnapshotRecord(runtimeArtifacts as Record<string, unknown>)
     : null;
+  const snapshotBackedRuntimeArtifacts = normalizedSnapshot
+    ? {
+        ...(baseRuntimeArtifacts ?? {}),
+        ...(baseRuntimeArtifacts?.scan_no_go_assessment ?? normalizedSnapshot.scan_no_go_assessment
+          ? { scan_no_go_assessment: baseRuntimeArtifacts?.scan_no_go_assessment ?? normalizedSnapshot.scan_no_go_assessment }
+          : {}),
+        ...(baseRuntimeArtifacts?.visual_access_review ?? normalizedSnapshot.visual_access_review
+          ? { visual_access_review: baseRuntimeArtifacts?.visual_access_review ?? normalizedSnapshot.visual_access_review }
+          : {}),
+        ...(baseRuntimeArtifacts?.visual_evidence_artifacts ?? normalizedSnapshot.visual_evidence_artifacts
+          ? { visual_evidence_artifacts: baseRuntimeArtifacts?.visual_evidence_artifacts ?? normalizedSnapshot.visual_evidence_artifacts }
+          : {})
+      }
+    : baseRuntimeArtifacts;
   const browserExtensionRuntimeArtifacts: Record<string, unknown> | null =
     browserExtensionMaterialization
       ? (() => {
           const existingHybrid =
-            baseRuntimeArtifacts?.hybrid_runtime_evidence &&
-            typeof baseRuntimeArtifacts.hybrid_runtime_evidence === "object" &&
-            !Array.isArray(baseRuntimeArtifacts.hybrid_runtime_evidence)
-              ? (baseRuntimeArtifacts.hybrid_runtime_evidence as Record<string, unknown>)
+            snapshotBackedRuntimeArtifacts?.hybrid_runtime_evidence &&
+            typeof snapshotBackedRuntimeArtifacts.hybrid_runtime_evidence === "object" &&
+            !Array.isArray(snapshotBackedRuntimeArtifacts.hybrid_runtime_evidence)
+              ? (snapshotBackedRuntimeArtifacts.hybrid_runtime_evidence as Record<string, unknown>)
               : {};
           const mergedHybrid = {
             ...browserExtensionMaterialization.hybridRuntimeEvidencePatch,
@@ -1216,7 +1230,7 @@ async function loadScanDetailRecord(input: {
             mergedHybridRecord.policySurfaceSummary ?? mergedHybridRecord.policy_surface_summary;
 
           return {
-            ...(baseRuntimeArtifacts ?? {}),
+            ...(snapshotBackedRuntimeArtifacts ?? {}),
             consent_baseline_tracker_evidence_urls: browserExtensionMaterialization.preconsentTrackerEvidenceUrls,
             consent_baseline_tracker_vendor_names: browserExtensionMaterialization.preconsentTrackerVendors,
             consent_preconsent_violation_count: browserExtensionMaterialization.preconsentViolationCount,
@@ -1230,7 +1244,7 @@ async function loadScanDetailRecord(input: {
             transportSecuritySummary
           } satisfies Record<string, unknown>;
         })()
-      : baseRuntimeArtifacts;
+      : snapshotBackedRuntimeArtifacts;
   const normalizedRuntimeArtifacts = browserExtensionRuntimeArtifacts
     ? withHybridRuntimeArtifactFallbacks(browserExtensionRuntimeArtifacts) ?? browserExtensionRuntimeArtifacts
     : null;

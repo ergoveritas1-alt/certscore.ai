@@ -173,7 +173,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           <table className="table-fixed text-left text-xs" style={{ minWidth: "1920px" }}>
             <colgroup>
               <col style={{ width: "40px" }} /><col style={{ width: "70px" }} /><col style={{ width: "175px" }} />
-              <col style={{ width: "140px" }} /><col style={{ width: "165px" }} /><col style={{ width: "70px" }} />
+              <col style={{ width: "140px" }} /><col style={{ width: "165px" }} /><col style={{ width: "70px" }} /><col style={{ width: "75px" }} />
               <col style={{ width: "60px" }} /><col style={{ width: "210px" }} /><col style={{ width: "110px" }} />
               <col style={{ width: "75px" }} /><col style={{ width: "180px" }} /><col style={{ width: "55px" }} /><col style={{ width: "100px" }} />
               <col style={{ width: "65px" }} /><col style={{ width: "160px" }} /><col style={{ width: "120px" }} />
@@ -183,7 +183,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
               <tr>
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Route" },
-                  { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Site" },
+                  { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
                   { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" },
                   { label: "Industry" }, { label: "Mode" }, { label: "Usage" },
@@ -210,6 +210,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                     <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={request.requesterName ?? provenance.label}>{request.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${sourceIpLabel(request)} · ${request.sourceIpSource.replaceAll("_", " ")}`}>{sourceIpLabel(request)}</p></td>
                     <td className="whitespace-nowrap px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(request.requestedAt)}</td>
                     <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-900" title={request.normalizedDomain ?? undefined}>{request.normalizedDomain ?? "Unknown"}</p><p className="truncate font-mono text-[10px] text-slate-400" title={request.publicId}>{request.publicId}</p></td>
+                    <td className="px-2.5 py-1.5 font-medium text-slate-700">{request.trancoRank ? `#${request.trancoRank.toLocaleString()}` : "—"}</td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.score !== null ? <><span>{request.score}</span><span className="text-[11px] font-normal text-slate-400">/100</span></> : "—"}</td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.topFindingCount ?? "—"}</td>
                     <td className="px-2.5 py-1.5"><p className="whitespace-nowrap">Privacy {request.privacyPolicyPresent === true ? "✓" : request.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={request.cmpVendorName ?? undefined}>CMP {request.cmpVendorName ?? "—"}</p></td>

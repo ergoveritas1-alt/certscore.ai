@@ -59,6 +59,7 @@ export type AdminPulseRequestListItem = {
   resultReportUrl: string | null;
   scanId: string | null;
   scanOutcome: string | null;
+  trancoRank: number | null;
   score: number | null;
   scanFromLabel: string;
   scanFromValue: string;
@@ -332,6 +333,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId,
     scanOutcome: typeof row.scan_outcome === "string" ? row.scan_outcome : null,
+    trancoRank: typeof row.tranco_rank === "number" ? row.tranco_rank : null,
     score,
     scanFromLabel: formatScanFromLabel(scanFromValue),
     scanFromValue,
@@ -487,9 +489,10 @@ export async function listAdminPulseRequests(input: {
             ss.access_posture_class,
             ss.blocked_flag,
             ss.captcha_flag,
-            ss.scan_outcome,
-            sra.scan_no_go_assessment,
-            sra.visual_access_review,
+              ss.scan_outcome,
+              ss.tranco_rank,
+            coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
+            coalesce(sra.visual_access_review, ss.visual_access_review) as visual_access_review,
             ss.site_language_primary,
             (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1) as page_language,
             (select array_agg(sp.page_language order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc) from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null) as page_languages,
@@ -635,9 +638,10 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               ss.access_posture_class,
               ss.blocked_flag,
               ss.captcha_flag,
-              ss.scan_outcome,
-              sra.scan_no_go_assessment,
-              sra.visual_access_review,
+            ss.scan_outcome,
+            ss.tranco_rank,
+              coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
+              coalesce(sra.visual_access_review, ss.visual_access_review) as visual_access_review,
               ss.site_language_primary,
               (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1) as page_language,
               (select array_agg(sp.page_language order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc) from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null) as page_languages,
@@ -790,8 +794,9 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             ss.blocked_flag,
             ss.captcha_flag,
             ss.scan_outcome,
-            sra.scan_no_go_assessment,
-            sra.visual_access_review,
+            ss.tranco_rank,
+            coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
+            coalesce(sra.visual_access_review, ss.visual_access_review) as visual_access_review,
             ss.site_language_primary,
             (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1) as page_language,
             (select array_agg(sp.page_language order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc) from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null) as page_languages,

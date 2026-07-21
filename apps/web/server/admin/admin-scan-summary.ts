@@ -34,6 +34,19 @@ function recordNumber(record: Record<string, unknown> | null, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function recordObject(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function scanTrancoRank(scanConfig: Record<string, unknown> | null) {
+  const tranco = recordObject(recordObject(scanConfig, "siteMetadata"), "tranco");
+  const rank = tranco ? recordNumber(tranco, "rank") : null;
+  return rank && rank > 0 ? Math.trunc(rank) : null;
+}
+
 export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRecord): Promise<AdminScanSummary | null> {
   if (!scanRecord || scanRecord.scan.status !== "completed") {
     return null;
@@ -62,6 +75,14 @@ export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRec
     return typeof id === "string" && id.trim() ? [id.trim()] : [];
   });
   const snapshot = scanRecord.snapshot;
+  const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  const scanNoGoAssessment = recordObject(runtimeArtifacts, "scan_no_go_assessment") ??
+    recordObject(runtimeArtifacts, "scanNoGoAssessment");
+  const visualAccessReview = recordObject(runtimeArtifacts, "visual_access_review") ??
+    recordObject(runtimeArtifacts, "visualAccessReview");
+  const visualEvidenceArtifacts = Array.isArray(runtimeArtifacts?.visual_evidence_artifacts)
+    ? runtimeArtifacts.visual_evidence_artifacts
+    : null;
   const summary: AdminScanSummary = {
     cmpVendorName: recordString(snapshot, "cmp_vendor_name"),
     industry: scanRecord.domainBenchmark?.industry ?? null,
@@ -75,7 +96,14 @@ export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRec
     topFindingCount: topFindingIds.length
   };
 
-  await persistAdminScanSummary({ scanId, ...summary });
+  await persistAdminScanSummary({
+    scanId,
+    ...summary,
+    trancoRank: scanTrancoRank(scanRecord.scan.scanConfigJson),
+    scanNoGoAssessment,
+    visualAccessReview,
+    visualEvidenceArtifacts
+  });
   return summary;
 }
 
