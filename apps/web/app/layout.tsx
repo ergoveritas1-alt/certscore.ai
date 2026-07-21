@@ -8,6 +8,10 @@ import { buildConsentBootstrapScript } from "../lib/analytics/consent-bootstrap"
 import { SITE_NAME, SITE_URL } from "../lib/seo";
 
 const GOOGLE_TAG_ID = "G-B6TQVX35ZB";
+const UMAMI_SCRIPT_URL = "https://cloud.umami.is/script.js";
+const UMAMI_WEBSITE_ID = process.env.NODE_ENV === "production"
+  ? "8638201f-1970-4229-9239-95a23a0bdb1c"
+  : "";
 const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
 const bingSiteVerification = process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION?.trim();
 
@@ -67,7 +71,11 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="en" suppressHydrationWarning>
       <body>
         <Script id="certscore-consent-bootstrap" strategy="beforeInteractive">
-          {buildConsentBootstrapScript(GOOGLE_TAG_ID)}
+          {buildConsentBootstrapScript(GOOGLE_TAG_ID, {
+            domains: ["certscore.ai", "www.certscore.ai"],
+            scriptUrl: UMAMI_SCRIPT_URL,
+            websiteId: UMAMI_WEBSITE_ID
+          })}
         </Script>
         <DataLayerClickTracker />
         <AnalyticsConsentBanner />

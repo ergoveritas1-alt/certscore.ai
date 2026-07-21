@@ -38,6 +38,9 @@ declare global {
   interface Window {
     dataLayer?: unknown[];
     gtag?: (...args: unknown[]) => void;
+    umami?: {
+      track: (eventName: string, data?: Record<string, unknown>) => unknown;
+    };
   }
 }
 
@@ -56,6 +59,15 @@ function pushGoogleAnalyticsEvent(event: CertScoreDataLayerEvent, eventCallback?
   });
 }
 
+function pushUmamiEvent(event: CertScoreDataLayerEvent) {
+  if (typeof window === "undefined" || typeof window.umami?.track !== "function") {
+    return;
+  }
+
+  const { event: eventName, ...parameters } = event;
+  window.umami.track(eventName, parameters);
+}
+
 export function pushDataLayerEvent(event: CertScoreDataLayerEvent) {
   if (typeof window === "undefined" || !hasAnalyticsConsent()) {
     return;
@@ -64,6 +76,7 @@ export function pushDataLayerEvent(event: CertScoreDataLayerEvent) {
   window.dataLayer = window.dataLayer ?? [];
   window.dataLayer.push(event);
   pushGoogleAnalyticsEvent(event);
+  pushUmamiEvent(event);
 }
 
 export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEvent, timeoutMs = 300) {
@@ -94,6 +107,7 @@ export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEven
     window.dataLayer = window.dataLayer ?? [];
     window.dataLayer.push(eventWithCallback);
     pushGoogleAnalyticsEvent(event, finish, timeoutMs);
+    pushUmamiEvent(event);
   });
 }
 

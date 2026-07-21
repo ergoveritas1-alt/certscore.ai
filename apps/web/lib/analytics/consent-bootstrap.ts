@@ -7,8 +7,15 @@ function serializeConsentState(state: ReturnType<typeof getGoogleConsentModeStat
   return JSON.stringify(state).replace(/</g, "\\u003c");
 }
 
-export function buildConsentBootstrapScript(googleTagId: string) {
+export function buildConsentBootstrapScript(googleTagId: string, umami?: {
+  domains?: string[];
+  scriptUrl: string;
+  websiteId: string;
+}) {
   const safeGoogleTagId = JSON.stringify(googleTagId);
+  const safeUmamiDomains = JSON.stringify(umami?.domains?.join(",") ?? "");
+  const safeUmamiScriptUrl = JSON.stringify(umami?.scriptUrl ?? "");
+  const safeUmamiWebsiteId = JSON.stringify(umami?.websiteId ?? "");
   const defaultConsent = serializeConsentState(DEFAULT_CONSENT);
   const grantedConsent = serializeConsentState(GRANTED_CONSENT);
   const storageKey = JSON.stringify(ANALYTICS_CONSENT_STORAGE_KEY);
@@ -17,6 +24,9 @@ export function buildConsentBootstrapScript(googleTagId: string) {
     (function(w,d){
       var storageKey = ${storageKey};
       var googleTagId = ${safeGoogleTagId};
+      var umamiDomains = ${safeUmamiDomains};
+      var umamiScriptUrl = ${safeUmamiScriptUrl};
+      var umamiWebsiteId = ${safeUmamiWebsiteId};
       var defaultConsent = ${defaultConsent};
       var grantedConsent = ${grantedConsent};
       var storedChoice = null;
@@ -51,10 +61,37 @@ export function buildConsentBootstrapScript(googleTagId: string) {
         w.gtag('config', googleTagId);
       }
 
+      function loadUmami(){
+        if (w.certscoreAnalyticsConsent !== 'granted' || w.certscoreUmamiLoaded || !umamiScriptUrl || !umamiWebsiteId) {
+          return;
+        }
+
+        w.certscoreUmamiLoaded = true;
+
+        var firstScript = d.getElementsByTagName('script')[0];
+        var script = d.createElement('script');
+        script.defer = true;
+        script.src = umamiScriptUrl;
+        script.setAttribute('data-website-id', umamiWebsiteId);
+        script.setAttribute('data-do-not-track', 'true');
+        script.setAttribute('data-exclude-search', 'true');
+        if (umamiDomains) {
+          script.setAttribute('data-domains', umamiDomains);
+        }
+        firstScript.parentNode.insertBefore(script, firstScript);
+      }
+
+      function loadAnalytics(){
+        loadGoogleTag();
+        loadUmami();
+      }
+
       w.certscoreLoadGoogleTag = loadGoogleTag;
+      w.certscoreLoadUmami = loadUmami;
+      w.certscoreLoadAnalytics = loadAnalytics;
 
       if (storedChoice === 'granted') {
-        loadGoogleTag();
+        loadAnalytics();
       }
     })(window,document);
   `;
