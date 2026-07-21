@@ -4,7 +4,9 @@ import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tl
 
 type TrancoRankRow = {
   hostname: string;
+  list_id: string | null;
   rank_band: string | null;
+  source: SharedTrancoRankMetadata["source"];
   tranco_rank: number | null;
   updated_at: Date | string | null;
 };
@@ -98,11 +100,35 @@ export async function lookupTrancoRankMetadata(input: {
 
   const row = await queryOne<TrancoRankRow>(
     `
-      select hostname, tranco_rank, rank_band, updated_at
-        from validation_targets
-       where hostname = any($1::text[])
-         and tranco_rank is not null
-       order by array_position($1::text[], hostname), tranco_rank asc
+      select hostname, list_id, rank_band, source, tranco_rank, updated_at
+        from (
+          select ranking.hostname,
+                 ranking.list_id,
+                 null::text as rank_band,
+                 'static_snapshot'::text as source,
+                 ranking.tranco_rank,
+                 snapshot.imported_at as updated_at,
+                 0 as source_priority
+            from tranco_rank_settings settings
+            join tranco_rank_snapshots snapshot
+              on snapshot.list_id = settings.active_list_id
+            join tranco_rankings ranking
+              on ranking.list_id = snapshot.list_id
+           where settings.singleton = true
+             and ranking.hostname = any($1::text[])
+          union all
+          select hostname,
+                 null::text as list_id,
+                 rank_band,
+                 'validation_targets'::text as source,
+                 tranco_rank,
+                 updated_at,
+                 1 as source_priority
+            from validation_targets
+           where hostname = any($1::text[])
+             and tranco_rank is not null
+        ) candidates
+       order by source_priority, array_position($1::text[], hostname), tranco_rank asc
        limit 1
     `,
     [lookup.candidates],
@@ -120,7 +146,8 @@ export async function lookupTrancoRankMetadata(input: {
     rank: row.tranco_rank,
     rankBand: row.rank_band,
     matchedHostname: row.hostname,
-    source: "validation_targets",
+    source: row.source,
+    sourceListId: row.list_id,
     sourceUpdatedAt: toIsoTimestamp(row.updated_at)
   };
 }

@@ -53,7 +53,8 @@ export type SharedTrancoRankMetadata = {
   rank: number;
   rankBand?: string | null;
   matchedHostname: string;
-  source: "validation_targets";
+  source: "static_snapshot" | "validation_targets";
+  sourceListId?: string | null;
   sourceUpdatedAt?: string | null;
 };
 

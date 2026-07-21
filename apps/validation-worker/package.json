@@ -17,6 +17,7 @@
     "ops:prod-preconsent-rerun": "node --enable-source-maps ./dist/apps/validation-worker/scripts/prod-preconsent-rerun.js",
     "ops:nano-signal-backfill": "node --enable-source-maps ./dist/apps/validation-worker/scripts/nano-signal-backfill.js",
     "ops:prod-db-probe": "node --enable-source-maps ./dist/apps/validation-worker/scripts/prod-ops-db-probe.js",
+    "ops:static-tranco-import": "node --enable-source-maps ./dist/apps/validation-worker/scripts/import-static-tranco-snapshot.js",
     "summarize:signal-events": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/inspect-signal-enrichment.ts --events-only",
     "summarize:signal-enrichment": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/inspect-signal-enrichment.ts --summary",
     "score:financial-homepage-confidence": "node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/score-financial-homepage-confidence.ts",
