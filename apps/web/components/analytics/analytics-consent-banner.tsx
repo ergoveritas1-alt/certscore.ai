@@ -22,7 +22,7 @@ function AnalyticsConsentPanel(input: {
         <div className="space-y-1">
           <p className="text-sm font-semibold text-slate-950">Cookie and analytics preferences</p>
           <p className="text-sm leading-6 text-slate-600">
-            We use optional analytics cookies and session-insight tools only after you allow them. You can reject optional analytics now, open cookie settings, and change this choice later from Cookie preferences.
+            We use privacy-bounded Umami for anonymous pageviews and coarse product events by default. Optional Google analytics loads only after you allow it. You can reject optional analytics now and change this choice later from Cookie preferences.
           </p>
         </div>
         <div className="mt-3 flex shrink-0 flex-wrap gap-2 md:mt-0">

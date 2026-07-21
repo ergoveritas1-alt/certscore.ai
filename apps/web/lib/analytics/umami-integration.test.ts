@@ -11,6 +11,7 @@ test("Umami loads by default with bounded production settings", () => {
     websiteId: "umami-test-id"
   });
 
+  assert.doesNotThrow(() => new Function(script));
   assert.doesNotMatch(script, /certscoreAnalyticsConsent !== 'granted' \|\| w\.certscoreUmamiLoaded/);
   assert.match(script, /certscoreLoadAnalytics/);
   assert.match(script, /certscoreLoadUmami/);

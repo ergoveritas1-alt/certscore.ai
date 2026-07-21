@@ -83,15 +83,15 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
           }
 
           var sensitiveRoutes = [
-            [/^\/preview\/[^/]+/, '/preview/:scan'],
-            [/^\/scan\/[^/]+/, '/scan/:scan'],
-            [/^\/browser-scans\/[^/]+/, '/browser-scans/:scan'],
-            [/^\/app\/scans\/[^/]+/, '/app/scans/:scan'],
-            [/^\/app\/domains\/[^/]+/, '/app/domains/:domain'],
-            [/^\/app\/admin\/scans\/[^/]+/, '/app/admin/scans/:scan'],
-            [/^\/app\/admin\/pulse\/[^/]+/, '/app/admin/pulse/:request'],
-            [/^\/monitor-site\/status\/[^/]+/, '/monitor-site/status/:token'],
-            [/^\/pulse\/[^/]+/, '/pulse/:domain']
+            [new RegExp('^/preview/[^/]+'), '/preview/:scan'],
+            [new RegExp('^/scan/[^/]+'), '/scan/:scan'],
+            [new RegExp('^/browser-scans/[^/]+'), '/browser-scans/:scan'],
+            [new RegExp('^/app/scans/[^/]+'), '/app/scans/:scan'],
+            [new RegExp('^/app/domains/[^/]+'), '/app/domains/:domain'],
+            [new RegExp('^/app/admin/scans/[^/]+'), '/app/admin/scans/:scan'],
+            [new RegExp('^/app/admin/pulse/[^/]+'), '/app/admin/pulse/:request'],
+            [new RegExp('^/monitor-site/status/[^/]+'), '/monitor-site/status/:token'],
+            [new RegExp('^/pulse/[^/]+'), '/pulse/:domain']
           ];
 
           for (var index = 0; index < sensitiveRoutes.length; index += 1) {
