@@ -41,6 +41,7 @@ declare global {
     umami?: {
       track: (eventName: string, data?: Record<string, unknown>) => unknown;
     };
+    certscoreUmamiEventQueue?: UmamiEvent[];
   }
 }
 
@@ -104,12 +105,18 @@ export function toUmamiEvent(event: CertScoreDataLayerEvent): UmamiEvent {
 }
 
 function pushUmamiEvent(event: CertScoreDataLayerEvent) {
-  if (typeof window === "undefined" || typeof window.umami?.track !== "function") {
+  if (typeof window === "undefined") {
     return;
   }
 
   const umamiEvent = toUmamiEvent(event);
-  window.umami.track(umamiEvent.eventName, umamiEvent.properties);
+  if (typeof window.umami?.track === "function") {
+    window.umami.track(umamiEvent.eventName, umamiEvent.properties);
+    return;
+  }
+
+  window.certscoreUmamiEventQueue = window.certscoreUmamiEventQueue ?? [];
+  window.certscoreUmamiEventQueue.push(umamiEvent);
 }
 
 export function pushDataLayerEvent(event: CertScoreDataLayerEvent) {

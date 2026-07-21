@@ -67,6 +67,7 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
         }
 
         w.certscoreUmamiLoaded = true;
+        w.certscoreUmamiEventQueue = w.certscoreUmamiEventQueue || [];
 
         w.certscoreBeforeUmamiSend = function(type, payload){
           if (!payload || typeof payload !== 'object') {
@@ -118,6 +119,17 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
         if (umamiDomains) {
           script.setAttribute('data-domains', umamiDomains);
         }
+        script.addEventListener('load', function(){
+          if (!w.umami || typeof w.umami.track !== 'function') {
+            return;
+          }
+
+          var queuedEvents = w.certscoreUmamiEventQueue || [];
+          w.certscoreUmamiEventQueue = [];
+          for (var eventIndex = 0; eventIndex < queuedEvents.length; eventIndex += 1) {
+            w.umami.track(queuedEvents[eventIndex].eventName, queuedEvents[eventIndex].properties);
+          }
+        });
         firstScript.parentNode.insertBefore(script, firstScript);
       }
 

@@ -51,6 +51,23 @@ test("Umami receives coarse events when optional analytics consent is denied", (
   Reflect.deleteProperty(globalThis, "window");
 });
 
+test("early Umami events queue in sanitized form until the tracker loads", () => {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      certscoreAnalyticsConsent: "denied",
+      localStorage: { getItem: () => null }
+    }
+  });
+
+  pushDataLayerEvent({ event: "mcp_light_action", action: "scan", target: "customer.example" });
+
+  assert.deepEqual(window.certscoreUmamiEventQueue, [
+    { eventName: "mcp_light_action", properties: { action: "scan" } }
+  ]);
+  Reflect.deleteProperty(globalThis, "window");
+});
+
 test("Umami events omit identifiers, destinations, paths, and free-form values", () => {
   assert.deepEqual(
     toUmamiEvent({
