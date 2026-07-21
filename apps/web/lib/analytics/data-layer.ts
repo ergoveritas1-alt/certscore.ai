@@ -59,28 +59,83 @@ function pushGoogleAnalyticsEvent(event: CertScoreDataLayerEvent, eventCallback?
   });
 }
 
+type UmamiEvent = {
+  eventName: CertScoreDataLayerEvent["event"];
+  properties?: Record<string, string>;
+};
+
+export function toUmamiEvent(event: CertScoreDataLayerEvent): UmamiEvent {
+  switch (event.event) {
+    case "contact_clicked":
+    case "sign_in_clicked":
+      return { eventName: event.event, properties: { cta_location: event.cta_location } };
+    case "guide_cta_clicked":
+      return { eventName: event.event, properties: { page_type: event.page_type, cta_type: event.cta_type } };
+    case "report_cta_clicked":
+      return { eventName: event.event, properties: { cta_type: event.cta_type } };
+    case "pricing_cta_clicked":
+      return { eventName: event.event, properties: { cta_type: event.cta_type } };
+    case "gpt_cta_clicked":
+      return { eventName: event.event, properties: { location: event.location } };
+    case "lead_form_submit_attempted":
+      return { eventName: event.event, properties: { form_type: event.form_type } };
+    case "scan_started":
+      return {
+        eventName: event.event,
+        properties: {
+          scan_source: event.scan_source,
+          scan_target_type: event.scan_target_type,
+          scan_status: event.scan_status
+        }
+      };
+    case "scan_completed":
+      return {
+        eventName: event.event,
+        properties: { scan_source: event.scan_source, scan_status: event.scan_status }
+      };
+    case "mcp_light_action":
+      return { eventName: event.event, properties: { action: event.action } };
+    case "pricing_viewed":
+    case "sample_report_viewed":
+    case "hero_book_demo_clicked":
+    case "hero_sample_report_clicked":
+      return { eventName: event.event };
+  }
+}
+
 function pushUmamiEvent(event: CertScoreDataLayerEvent) {
   if (typeof window === "undefined" || typeof window.umami?.track !== "function") {
     return;
   }
 
-  const { event: eventName, ...parameters } = event;
-  window.umami.track(eventName, parameters);
+  const umamiEvent = toUmamiEvent(event);
+  window.umami.track(umamiEvent.eventName, umamiEvent.properties);
 }
 
 export function pushDataLayerEvent(event: CertScoreDataLayerEvent) {
-  if (typeof window === "undefined" || !hasAnalyticsConsent()) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  pushUmamiEvent(event);
+
+  if (!hasAnalyticsConsent()) {
     return;
   }
 
   window.dataLayer = window.dataLayer ?? [];
   window.dataLayer.push(event);
   pushGoogleAnalyticsEvent(event);
-  pushUmamiEvent(event);
 }
 
 export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEvent, timeoutMs = 300) {
-  if (typeof window === "undefined" || !hasAnalyticsConsent()) {
+  if (typeof window === "undefined") {
+    return Promise.resolve();
+  }
+
+  pushUmamiEvent(event);
+
+  if (!hasAnalyticsConsent()) {
     return Promise.resolve();
   }
 
@@ -107,7 +162,6 @@ export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEven
     window.dataLayer = window.dataLayer ?? [];
     window.dataLayer.push(eventWithCallback);
     pushGoogleAnalyticsEvent(event, finish, timeoutMs);
-    pushUmamiEvent(event);
   });
 }
 

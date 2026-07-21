@@ -62,11 +62,50 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
       }
 
       function loadUmami(){
-        if (w.certscoreAnalyticsConsent !== 'granted' || w.certscoreUmamiLoaded || !umamiScriptUrl || !umamiWebsiteId) {
+        if (w.certscoreUmamiLoaded || !umamiScriptUrl || !umamiWebsiteId) {
           return;
         }
 
         w.certscoreUmamiLoaded = true;
+
+        w.certscoreBeforeUmamiSend = function(type, payload){
+          if (!payload || typeof payload !== 'object') {
+            return false;
+          }
+
+          var sanitized = Object.assign({}, payload);
+          var rawUrl = typeof sanitized.url === 'string' ? sanitized.url : '/';
+          var pathname = rawUrl.split('?')[0].split('#')[0] || '/';
+          try {
+            pathname = new URL(rawUrl, w.location.origin).pathname;
+          } catch (error) {
+            pathname = '/';
+          }
+
+          var sensitiveRoutes = [
+            [/^\/preview\/[^/]+/, '/preview/:scan'],
+            [/^\/scan\/[^/]+/, '/scan/:scan'],
+            [/^\/browser-scans\/[^/]+/, '/browser-scans/:scan'],
+            [/^\/app\/scans\/[^/]+/, '/app/scans/:scan'],
+            [/^\/app\/domains\/[^/]+/, '/app/domains/:domain'],
+            [/^\/app\/admin\/scans\/[^/]+/, '/app/admin/scans/:scan'],
+            [/^\/app\/admin\/pulse\/[^/]+/, '/app/admin/pulse/:request'],
+            [/^\/monitor-site\/status\/[^/]+/, '/monitor-site/status/:token'],
+            [/^\/pulse\/[^/]+/, '/pulse/:domain']
+          ];
+
+          for (var index = 0; index < sensitiveRoutes.length; index += 1) {
+            if (sensitiveRoutes[index][0].test(pathname)) {
+              pathname = pathname.replace(sensitiveRoutes[index][0], sensitiveRoutes[index][1]);
+              break;
+            }
+          }
+
+          sanitized.url = pathname;
+          delete sanitized.title;
+          delete sanitized.referrer;
+          return sanitized;
+        };
 
         var firstScript = d.getElementsByTagName('script')[0];
         var script = d.createElement('script');
@@ -75,6 +114,7 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
         script.setAttribute('data-website-id', umamiWebsiteId);
         script.setAttribute('data-do-not-track', 'true');
         script.setAttribute('data-exclude-search', 'true');
+        script.setAttribute('data-before-send', 'certscoreBeforeUmamiSend');
         if (umamiDomains) {
           script.setAttribute('data-domains', umamiDomains);
         }
@@ -83,12 +123,13 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
 
       function loadAnalytics(){
         loadGoogleTag();
-        loadUmami();
       }
 
       w.certscoreLoadGoogleTag = loadGoogleTag;
       w.certscoreLoadUmami = loadUmami;
       w.certscoreLoadAnalytics = loadAnalytics;
+
+      loadUmami();
 
       if (storedChoice === 'granted') {
         loadAnalytics();
