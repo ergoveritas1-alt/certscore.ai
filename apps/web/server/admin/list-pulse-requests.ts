@@ -14,6 +14,7 @@ import { adminNoGoSql, projectAdminNoGo, type AdminNoGoProjection } from "./admi
 import { loadAdminScanFilterOptions } from "./repository";
 import { normalizeAdminActivityFilter, parseAdminActivitySearch } from "../../lib/admin/activity-search";
 import { requirePlatformAdminContext } from "./platform-admin";
+import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
 
 export type AdminPulseRequestStatus =
   | "queued"
@@ -333,7 +334,14 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId,
     scanOutcome: typeof row.scan_outcome === "string" ? row.scan_outcome : null,
-    trancoRank: typeof row.tranco_rank === "number" ? row.tranco_rank : null,
+    trancoRank:
+      typeof row.tranco_rank === "number"
+        ? row.tranco_rank
+        : trancoRankFromScanConfig(
+            row.scan_config_json && typeof row.scan_config_json === "object" && !Array.isArray(row.scan_config_json)
+              ? row.scan_config_json as Record<string, unknown>
+              : null
+          ),
     score,
     scanFromLabel: formatScanFromLabel(scanFromValue),
     scanFromValue,

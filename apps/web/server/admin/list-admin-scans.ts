@@ -32,6 +32,7 @@ import {
 import { projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
 import { requirePlatformAdminContext } from "./platform-admin";
+import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
 
 export type AdminScanListItem = {
   accessPostureClass: AccessPostureClass | null;
@@ -263,7 +264,7 @@ export async function listAdminScansPage(
       scanFromLabel: getScanFromDisplay(scan.scan_config_json).label,
       scanFromValue: getScanFromDisplay(scan.scan_config_json).value,
       scanOutcome: snapshot?.scan_outcome ?? null,
-      trancoRank: snapshot?.tranco_rank ?? null,
+      trancoRank: snapshot?.tranco_rank ?? trancoRankFromScanConfig(scan.scan_config_json),
       source: typeof scan.scan_config_json?.source === "string" ? scan.scan_config_json.source : null,
       status: scan.status,
       createdAt: displayCreatedAt,

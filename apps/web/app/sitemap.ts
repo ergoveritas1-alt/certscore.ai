@@ -30,11 +30,6 @@ const staticPaths = [
   "/developers/mcp",
   "/mcp/light",
   "/developers/examples",
-  "/llms.txt",
-  "/llms-full.txt",
-  "/.well-known/certscore-ai.json",
-  "/api/v2/health",
-  "/api/v2/openapi.json",
   "/faq",
   "/contact",
   "/contact-sales",
@@ -83,11 +78,7 @@ const staticPaths = [
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const now = new Date();
   const findingPaths = getFindingReferenceItems().map((finding) => `/findings/${finding.id}`);
 
-  return [...staticPaths, ...findingPaths].map((path) => ({
-    url: `${SITE_URL}${path}`,
-    lastModified: now
-  }));
+  return [...staticPaths, ...findingPaths].map((path) => ({ url: `${SITE_URL}${path}` }));
 }

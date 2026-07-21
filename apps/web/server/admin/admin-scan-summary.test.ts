@@ -25,7 +25,7 @@ test("admin summary persistence retains structured no-go evidence and scan-linke
   const migrationSource = await readFile("packages/db/migrations/0144_scan_assessment_and_tranco_rank.sql", "utf8");
 
   assert.match(summarySource, /scanNoGoAssessment/);
-  assert.match(summarySource, /scanTrancoRank/);
+  assert.match(summarySource, /trancoRankFromScanConfig/);
   assert.match(repositorySource, /scan_no_go_assessment/);
   assert.match(repositorySource, /update public\.scan_runtime_artifacts/);
   assert.match(repositorySource, /tranco_rank/);
@@ -43,6 +43,7 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   assert.match(source, /scan_completed_at/);
   assert.match(source, /ss\.top_finding_count::int as top_finding_count/);
   assert.match(source, /ss\.tranco_rank/);
+  assert.match(source, /trancoRankFromScanConfig/);
   assert.match(source, /trancoRank:/);
   assert.match(source, /topFindingCount:/);
   assert.doesNotMatch(source, /materializeAdminScanSummar/);

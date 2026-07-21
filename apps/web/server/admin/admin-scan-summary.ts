@@ -4,6 +4,7 @@ import { buildPulseProjection } from "../../lib/pulse/projection";
 import { getAnonymousScanById, getScanById } from "../scans/get-scan-by-id";
 import type { PublicScanRecord } from "../scans/get-public-scan-record";
 import { materializeLocalV2DagScanDetail } from "../scans/local-v2-dag-report";
+import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
 import { persistAdminScanSummary } from "./repository";
 
 export type AdminScanSummary = {
@@ -39,12 +40,6 @@ function recordObject(record: Record<string, unknown> | null, key: string) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
-}
-
-function scanTrancoRank(scanConfig: Record<string, unknown> | null) {
-  const tranco = recordObject(recordObject(scanConfig, "siteMetadata"), "tranco");
-  const rank = tranco ? recordNumber(tranco, "rank") : null;
-  return rank && rank > 0 ? Math.trunc(rank) : null;
 }
 
 export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRecord): Promise<AdminScanSummary | null> {
@@ -99,7 +94,7 @@ export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRec
   await persistAdminScanSummary({
     scanId,
     ...summary,
-    trancoRank: scanTrancoRank(scanRecord.scan.scanConfigJson),
+    trancoRank: trancoRankFromScanConfig(scanRecord.scan.scanConfigJson),
     scanNoGoAssessment,
     visualAccessReview,
     visualEvidenceArtifacts

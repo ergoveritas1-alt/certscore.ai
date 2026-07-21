@@ -531,6 +531,19 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
     assert.match(llmsFull, new RegExp(`https://certscore\\.ai${path.replaceAll("/", "\\/")}`));
   }
 
+  const sitemapEntries = sitemap();
+  const sitemapPathSet = new Set(sitemapEntries.map((entry) => new URL(entry.url).pathname));
+  for (const technicalPath of [
+    "/llms.txt",
+    "/llms-full.txt",
+    "/.well-known/certscore-ai.json",
+    "/api/v2/health",
+    "/api/v2/openapi.json"
+  ]) {
+    assert.equal(sitemapPathSet.has(technicalPath), false, `${technicalPath} should not be a search landing page`);
+  }
+  assert.ok(sitemapEntries.every((entry) => entry.lastModified === undefined));
+
   assert.equal(aiDiscovery.aiDiscovery.developerHub, "https://certscore.ai/developers");
   assert.equal(aiDiscovery.organization.supportUrl, "https://certscore.ai/contact");
   assert.equal(aiDiscovery.organization.termsUrl, "https://certscore.ai/terms");

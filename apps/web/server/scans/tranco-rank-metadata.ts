@@ -15,6 +15,19 @@ export type TrancoRankLookupCandidates = {
   lookupRegistrableDomain: string | null;
 };
 
+function recordObject(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+export function trancoRankFromScanConfig(scanConfig: Record<string, unknown> | null | undefined) {
+  const siteMetadata = recordObject(scanConfig?.siteMetadata);
+  const tranco = recordObject(siteMetadata?.tranco);
+  const rank = tranco?.rank;
+  return typeof rank === "number" && Number.isFinite(rank) && rank > 0 ? Math.trunc(rank) : null;
+}
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
 }
