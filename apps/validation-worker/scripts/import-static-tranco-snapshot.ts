@@ -148,16 +148,18 @@ async function main() {
     }
 
     await query(
-      `begin;
-       update public.tranco_rank_snapshots
-          set row_count = $2,
-              imported_at = timezone('utc', now())
-        where list_id = $1;
-       update public.tranco_rank_settings
-          set active_list_id = $1,
+      `with activated_snapshot as (
+         update public.tranco_rank_snapshots
+            set row_count = $2,
+                imported_at = timezone('utc', now())
+          where list_id = $1
+          returning list_id
+       )
+       update public.tranco_rank_settings settings
+          set active_list_id = activated_snapshot.list_id,
               updated_at = timezone('utc', now())
-        where singleton = true;
-       commit;`,
+         from activated_snapshot
+        where settings.singleton = true`,
       [STATIC_TRANCO_LIST_ID, EXPECTED_ROW_COUNT]
     );
     imported = true;
