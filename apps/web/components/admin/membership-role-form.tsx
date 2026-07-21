@@ -1,8 +1,12 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
+import {
+  ASSIGNABLE_MEMBERSHIP_ROLES,
+  type MembershipRole
+} from "../../lib/auth/membership-role-policy";
 
-export type MembershipRole = "admin" | "advanced" | "user";
+export type { MembershipRole } from "../../lib/auth/membership-role-policy";
 
 type MembershipRoleFormProps = {
   action: (formData: FormData) => Promise<void>;
@@ -22,9 +26,8 @@ function RoleSelect({ defaultRole }: { defaultRole: MembershipRole }) {
       name="role"
       onChange={(event) => event.currentTarget.form?.requestSubmit()}
     >
-      <option value="admin">admin</option>
-      <option value="advanced">advanced</option>
-      <option value="user">user</option>
+      {defaultRole === "admin" ? <option disabled value="admin">admin (existing)</option> : null}
+      {ASSIGNABLE_MEMBERSHIP_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
     </select>
   );
 }

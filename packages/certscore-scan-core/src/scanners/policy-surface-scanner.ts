@@ -81,6 +81,7 @@ export interface PolicySurfaceScannerInput {
   normalizedUrl: string;
   scanStartedAtMs: number;
   internalBudgetMs: number;
+  absoluteDeadlineAtMs?: number;
   artifactWriter: ArtifactWriter;
   browser?: Browser;
   enableNanoPolicyAssist?: boolean;
@@ -231,6 +232,7 @@ export interface NanoTopicExtractionInput {
   title?: string;
   excerpt: string;
   deterministicTopicHits: string[];
+  signal?: AbortSignal;
 }
 
 export interface NanoTopicExtractionResult {
@@ -363,7 +365,8 @@ interface PolicyBrowserRuntime {
 export async function policySurfaceScanner(
   input: PolicySurfaceScannerInput,
 ): Promise<PolicySurfaceScannerResult> {
-  throwIfAborted(input.signal);
+  const parentSignal = input.signal;
+  throwIfAborted(parentSignal);
   const moduleStartedAtMs = Date.now();
   const moduleStartedAt = new Date(moduleStartedAtMs).toISOString();
   const timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
@@ -385,9 +388,30 @@ export async function policySurfaceScanner(
   };
   const policyBrowserRuntime = createPolicyBrowserRuntime(input.browser);
   let policyModuleDeadlineReached = false;
-  const policyModuleDeadlineMs = Math.max(1_000, input.internalBudgetMs + 5_000);
+  let externalPolicyDeadlineReached = false;
+  const hasExternalPolicyDeadline = input.absoluteDeadlineAtMs !== undefined;
+  const policyDeadlineAtMs = Math.max(
+    moduleStartedAtMs + 10,
+    Math.min(
+      input.absoluteDeadlineAtMs ?? moduleStartedAtMs + input.internalBudgetMs + 5_000,
+      moduleStartedAtMs + input.internalBudgetMs + 5_000,
+    ),
+  );
+  const policyModuleDeadlineMs = Math.max(10, policyDeadlineAtMs - moduleStartedAtMs);
+  const policyDeadlineController = new AbortController();
+  input = {
+    ...input,
+    absoluteDeadlineAtMs: input.absoluteDeadlineAtMs === undefined ? undefined : policyDeadlineAtMs,
+    signal: combineAbortSignals(parentSignal, policyDeadlineController.signal),
+  };
   const policyModuleDeadlineTimer = setTimeout(() => {
     policyModuleDeadlineReached = true;
+    if (hasExternalPolicyDeadline) {
+      externalPolicyDeadlineReached = true;
+      policyDeadlineController.abort(new Error(
+        `Policy-surface lane reached its absolute ${policyModuleDeadlineMs}ms deadline; retained evidence is coverage-limited.`,
+      ));
+    }
     void policyBrowserRuntime.close();
   }, policyModuleDeadlineMs);
   const abortPolicyRuntime = () => {
@@ -395,6 +419,19 @@ export async function policySurfaceScanner(
     void policyBrowserRuntime.close();
   };
   input.signal?.addEventListener("abort", abortPolicyRuntime, { once: true });
+  const completedPolicyModuleRun = () => {
+    if (hasExternalPolicyDeadline && Date.now() >= policyDeadlineAtMs) {
+      policyModuleDeadlineReached = true;
+      return moduleRun(
+        observations.length > 0 ? "partial" : "skipped_budget",
+        moduleStartedAt,
+        moduleStartedAtMs,
+        [`Policy-surface lane reached its absolute ${policyModuleDeadlineMs}ms deadline; retained evidence is coverage-limited.`],
+        timingBreakdown,
+      );
+    }
+    return moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown);
+  };
   const policyDocumentFetchCaches: PolicyDocumentFetchCaches = {
     browserRuntime: policyBrowserRuntime,
     diagnostics: policyFetchDiagnostics,
@@ -496,7 +533,7 @@ export async function policySurfaceScanner(
             policyFetchDiagnostics,
           }));
           return {
-            moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
+            moduleRun: completedPolicyModuleRun(),
             policySurfaceObservations: observations,
             artifactRefs,
           };
@@ -534,7 +571,7 @@ export async function policySurfaceScanner(
           policyFetchDiagnostics,
         }));
         return {
-          moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
+          moduleRun: completedPolicyModuleRun(),
           policySurfaceObservations: observations,
           artifactRefs,
         };
@@ -854,13 +891,26 @@ export async function policySurfaceScanner(
     }));
 
     return {
-      moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
+      moduleRun: completedPolicyModuleRun(),
       policySurfaceObservations: observations,
       artifactRefs,
     };
   } catch (error) {
-    const cancellation = abortReason(input.signal);
-    if (cancellation) throw cancellation;
+    const parentCancellation = abortReason(parentSignal);
+    if (parentCancellation) throw parentCancellation;
+    if (externalPolicyDeadlineReached || policyDeadlineController.signal.aborted) {
+      return {
+        moduleRun: moduleRun(
+          observations.length > 0 ? "partial" : "skipped_budget",
+          moduleStartedAt,
+          moduleStartedAtMs,
+          [`Policy-surface lane reached its absolute ${policyModuleDeadlineMs}ms deadline; retained evidence is coverage-limited.`],
+          timingBreakdown,
+        ),
+        policySurfaceObservations: observations,
+        artifactRefs,
+      };
+    }
     return {
       moduleRun: moduleRun("failed", moduleStartedAt, moduleStartedAtMs, [
         policyModuleDeadlineReached
@@ -1191,28 +1241,51 @@ function policyEvaluationCandidateKey(candidate: PolicySurfaceCandidate): string
 async function processPolicyCandidateBeforeDeadline(
   input: ProcessPolicyCandidateInput,
 ): Promise<ProcessPolicyCandidateResult> {
-  const processingPromise = processPolicyCandidate(input);
+  const absoluteRemainingMs = deadlineRemainingMs(input.input.absoluteDeadlineAtMs);
+  if (absoluteRemainingMs <= 10 || input.input.signal?.aborted) {
+    return skippedBudgetCandidateResult(input.candidate);
+  }
+  const candidateController = new AbortController();
+  const candidateSignal = combineAbortSignals(input.input.signal, candidateController.signal);
+  const candidateInput: ProcessPolicyCandidateInput = {
+    ...input,
+    input: { ...input.input, signal: candidateSignal },
+  };
+  const processingPromise = processPolicyCandidate(candidateInput);
   void processingPromise.catch(() => undefined);
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let abortListener: (() => void) | undefined;
   const deadlinePromise = new Promise<ProcessPolicyCandidateResult>((resolve) => {
+    const finishAsSkipped = () => {
+      candidateController.abort(new Error("Policy candidate processing budget exhausted."));
+      resolve(skippedBudgetCandidateResult(input.candidate));
+    };
     deadlineTimer = setTimeout(() => {
-      resolve({
-        observation: observationFromCandidate(input.candidate, {
-          status: "skipped_budget",
-          fetchFailureReason: "scan_budget_exhausted",
-          confidence: input.candidate.assisted?.confidence ?? input.candidate.deterministicScore,
-        }),
-        artifactRefs: [],
-        secondaryCandidates: [],
-      });
-    }, POLICY_CANDIDATE_PROCESSING_TIMEOUT_MS);
+      finishAsSkipped();
+    }, Math.max(1, Math.min(POLICY_CANDIDATE_PROCESSING_TIMEOUT_MS, absoluteRemainingMs)));
+    abortListener = finishAsSkipped;
+    input.input.signal?.addEventListener("abort", abortListener, { once: true });
   });
 
   try {
     return await Promise.race([processingPromise, deadlinePromise]);
   } finally {
     if (deadlineTimer) clearTimeout(deadlineTimer);
+    if (abortListener) input.input.signal?.removeEventListener("abort", abortListener);
+    candidateController.abort(new Error("Policy candidate processing settled."));
   }
+}
+
+function skippedBudgetCandidateResult(candidate: PolicySurfaceCandidate): ProcessPolicyCandidateResult {
+  return {
+    observation: observationFromCandidate(candidate, {
+      status: "skipped_budget",
+      fetchFailureReason: "scan_budget_exhausted",
+      confidence: candidate.assisted?.confidence ?? candidate.deterministicScore,
+    }),
+    artifactRefs: [],
+    secondaryCandidates: [],
+  };
 }
 
 async function processPolicyCandidate({
@@ -1394,6 +1467,8 @@ async function processPolicyCandidate({
         baseUrl: effectiveCandidate.normalizedUrl,
         surfaceType: candidate.deterministicSurfaceType,
         timeoutMs: Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
+        deadlineAtMs: input.absoluteDeadlineAtMs,
+        signal: input.signal,
       }),
     );
   const urlOnlyStubResolution = boundedAfterSoftBudget
@@ -1407,6 +1482,8 @@ async function processPolicyCandidate({
         visibleText,
         surfaceType: candidate.deterministicSurfaceType,
         timeoutMs: remainingPolicyFetchMs(input, moduleStartedAtMs),
+        deadlineAtMs: input.absoluteDeadlineAtMs,
+        signal: input.signal,
       }),
     );
   if (urlOnlyStubResolution) {
@@ -1465,6 +1542,8 @@ async function processPolicyCandidate({
           baseUrl: effectiveCandidate.normalizedUrl,
           surfaceType: effectiveCandidate.deterministicSurfaceType,
           timeoutMs: Math.max(1_000, Math.min(3_000, remainingPolicyFetchMs(input, moduleStartedAtMs))),
+          deadlineAtMs: input.absoluteDeadlineAtMs,
+          signal: input.signal,
         }),
       );
       if (shouldAdoptPolicyDocumentText(renderedVisibleText, visibleText, { allowTopicDominant: true })) {
@@ -1743,9 +1822,11 @@ async function fetchRenderedPolicyDocumentText(input: {
   timeoutMs: number;
 }): Promise<FetchTextResult> {
   let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
+  let releaseAbortContext: (() => void) | undefined;
   try {
     const browser = await input.browserRuntime.getBrowser();
     context = await browser.newContext(chromiumContextOptions());
+    releaseAbortContext = bindAbortSignalToBrowserContext(context, input.input.signal);
     const page = await context.newPage();
     const response = await page.goto(input.url, {
       waitUntil: "domcontentloaded",
@@ -1812,6 +1893,7 @@ async function fetchRenderedPolicyDocumentText(input: {
       text: "",
     };
   } finally {
+    releaseAbortContext?.();
     await context?.close().catch(() => undefined);
   }
 }
@@ -1821,7 +1903,10 @@ export async function resolvePolicyVisibleText(input: {
   baseUrl: string;
   surfaceType: PolicySurfaceObservation["surfaceType"];
   timeoutMs: number;
+  deadlineAtMs?: number;
+  signal?: AbortSignal;
 }): Promise<string> {
+  throwIfAborted(input.signal);
   const visibleText = htmlToVisibleText(input.html);
   let bestText = bestPolicyDocumentText(input.html, visibleText);
   if (shouldUseDirectPolicyDocumentText(bestText)) {
@@ -1836,6 +1921,8 @@ export async function resolvePolicyVisibleText(input: {
       baseUrl: input.baseUrl,
       timeoutMs: input.timeoutMs,
       depth: 0,
+      deadlineAtMs: input.deadlineAtMs,
+      signal: input.signal,
     }),
     shouldSpeculateCanonicalPolicyLink
       ? fetchBestCanonicalPolicyDocumentText({
@@ -1843,6 +1930,8 @@ export async function resolvePolicyVisibleText(input: {
         baseUrl: input.baseUrl,
         currentText: bestText,
         timeoutMs: input.timeoutMs,
+        deadlineAtMs: input.deadlineAtMs,
+        signal: input.signal,
       })
       : Promise.resolve(undefined),
   ]);
@@ -1861,6 +1950,8 @@ export async function resolvePolicyVisibleText(input: {
         baseUrl: input.baseUrl,
         currentText: bestText,
         timeoutMs: input.timeoutMs,
+        deadlineAtMs: input.deadlineAtMs,
+        signal: input.signal,
       });
     if (linkedPolicyText && policyTextQualityScore(linkedPolicyText) > policyTextQualityScore(bestText)) {
       bestText = linkedPolicyText;
@@ -1888,7 +1979,10 @@ async function resolveUrlOnlyPolicyStub(input: {
   visibleText: string;
   surfaceType: PolicySurfaceObservation["surfaceType"];
   timeoutMs: number;
+  deadlineAtMs?: number;
+  signal?: AbortSignal;
 }): Promise<{ url: string; html: string; visibleText: string } | undefined> {
+  throwIfAborted(input.signal);
   const targetUrl = policyUrlOnlyStubTargetUrl({
     text: input.visibleText,
     currentUrl: input.currentUrl,
@@ -1898,7 +1992,11 @@ async function resolveUrlOnlyPolicyStub(input: {
     return undefined;
   }
 
-  const fetched = await fetchText(targetUrl, Math.max(800, Math.min(2_500, input.timeoutMs)));
+  const fetched = await fetchText(
+    targetUrl,
+    deadlineBoundTimeoutMs(Math.max(800, Math.min(2_500, input.timeoutMs)), input.deadlineAtMs),
+    input.signal,
+  );
   if (!fetched.ok) {
     return undefined;
   }
@@ -1907,6 +2005,8 @@ async function resolveUrlOnlyPolicyStub(input: {
     baseUrl: targetUrl,
     surfaceType: input.surfaceType,
     timeoutMs: Math.max(800, Math.min(2_500, input.timeoutMs)),
+    deadlineAtMs: input.deadlineAtMs,
+    signal: input.signal,
   });
   if (policyUrlOnlyStubTargetUrl({
     text: visibleText,
@@ -2338,9 +2438,11 @@ async function extractRenderedCandidates(
     return [];
   }
   let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
+  let releaseAbortContext: (() => void) | undefined;
   try {
     const browser = await browserRuntime.getBrowser();
     context = await browser.newContext(chromiumContextOptions());
+    releaseAbortContext = bindAbortSignalToBrowserContext(context, input.signal);
     const page = await context.newPage();
     const navigationTimeoutMs = input.discoveryMode === "fast" ? 4_000 : 8_000;
     await page.goto(input.normalizedUrl, {
@@ -2566,8 +2668,22 @@ async function extractRenderedCandidates(
   } catch {
     return [];
   } finally {
+    releaseAbortContext?.();
     await context?.close().catch(() => undefined);
   }
+}
+
+function bindAbortSignalToBrowserContext(
+  context: { close(): Promise<void> },
+  signal: AbortSignal | undefined,
+): () => void {
+  if (!signal) return () => undefined;
+  const closeContext = () => {
+    void context.close().catch(() => undefined);
+  };
+  if (signal.aborted) closeContext();
+  else signal.addEventListener("abort", closeContext, { once: true });
+  return () => signal.removeEventListener("abort", closeContext);
 }
 
 interface RenderedPolicyDiscoveryResult {
@@ -3387,6 +3503,10 @@ async function maybeExtractTopics(
   if (!input.enableNanoPolicyAssist || !input.nanoAssistProvider?.extractTopics) {
     return undefined;
   }
+  throwIfAborted(input.signal);
+  if (deadlineRemainingMs(input.absoluteDeadlineAtMs) <= 10) {
+    return undefined;
+  }
   const assistId = `nano_policy_topics_${stableHash(candidate.normalizedUrl)}`;
   const result = await input.nanoAssistProvider.extractTopics({
     assistId,
@@ -3395,6 +3515,7 @@ async function maybeExtractTopics(
     title: facts.title,
     excerpt: facts.excerpt,
     deterministicTopicHits: facts.deterministicTopics,
+    signal: input.signal,
   });
   return {
     observedTopics: result.observedTopics,
@@ -4131,13 +4252,18 @@ async function extractOneTrustNoticeText(input: {
   baseUrl: string;
   timeoutMs: number;
   depth: number;
+  deadlineAtMs?: number;
+  signal?: AbortSignal;
 }): Promise<string | null> {
+  throwIfAborted(input.signal);
   if (input.depth > 2) {
     return null;
   }
 
   const noticeUrls = extractOneTrustNoticeUrls(input.html, input.baseUrl).slice(0, 4);
   for (let index = 0; index < noticeUrls.length; index += 2) {
+    throwIfAborted(input.signal);
+    if (deadlineRemainingMs(input.deadlineAtMs) <= 10) return null;
     const batch = noticeUrls.slice(index, index + 2);
     const results = await Promise.all(batch.map((noticeUrl) =>
       extractOneTrustNoticeTextFromUrl(input, noticeUrl)
@@ -4151,10 +4277,22 @@ async function extractOneTrustNoticeText(input: {
 }
 
 async function extractOneTrustNoticeTextFromUrl(
-  input: { html: string; baseUrl: string; timeoutMs: number; depth: number },
+  input: {
+    html: string;
+    baseUrl: string;
+    timeoutMs: number;
+    depth: number;
+    deadlineAtMs?: number;
+    signal?: AbortSignal;
+  },
   noticeUrl: string,
 ): Promise<string | null> {
-  const fetched = await fetchText(noticeUrl, input.timeoutMs);
+  throwIfAborted(input.signal);
+  const fetched = await fetchText(
+    noticeUrl,
+    deadlineBoundTimeoutMs(input.timeoutMs, input.deadlineAtMs),
+    input.signal,
+  );
   if (!fetched.ok || !fetched.text.trim()) {
     return null;
   }
@@ -4165,7 +4303,13 @@ async function extractOneTrustNoticeTextFromUrl(
 
   const policyUrls = extractOneTrustPolicyUrls(payload, noticeUrl).slice(0, 2);
   for (const policyUrl of policyUrls) {
-    const policy = await fetchText(policyUrl, input.timeoutMs);
+    throwIfAborted(input.signal);
+    if (deadlineRemainingMs(input.deadlineAtMs) <= 10) return null;
+    const policy = await fetchText(
+      policyUrl,
+      deadlineBoundTimeoutMs(input.timeoutMs, input.deadlineAtMs),
+      input.signal,
+    );
     if (!policy.ok || !policy.text.trim()) {
       continue;
     }
@@ -4175,7 +4319,13 @@ async function extractOneTrustNoticeTextFromUrl(
         .filter((nestedUrl) => nestedUrl !== policyUrl)
         .slice(0, 2);
       for (const nestedPolicyUrl of nestedPolicyUrls) {
-        const nestedPolicy = await fetchText(nestedPolicyUrl, input.timeoutMs);
+        throwIfAborted(input.signal);
+        if (deadlineRemainingMs(input.deadlineAtMs) <= 10) return null;
+        const nestedPolicy = await fetchText(
+          nestedPolicyUrl,
+          deadlineBoundTimeoutMs(input.timeoutMs, input.deadlineAtMs),
+          input.signal,
+        );
         if (!nestedPolicy.ok || !nestedPolicy.text.trim()) {
           continue;
         }
@@ -4192,6 +4342,8 @@ async function extractOneTrustNoticeTextFromUrl(
           baseUrl: nestedPolicyUrl,
           timeoutMs: input.timeoutMs,
           depth: input.depth + 1,
+          deadlineAtMs: input.deadlineAtMs,
+          signal: input.signal,
         });
         if (nestedNoticeText && nestedNoticeText.length > 500) {
           return nestedNoticeText;
@@ -4209,6 +4361,8 @@ async function extractOneTrustNoticeTextFromUrl(
       baseUrl: policyUrl,
       timeoutMs: input.timeoutMs,
       depth: input.depth + 1,
+      deadlineAtMs: input.deadlineAtMs,
+      signal: input.signal,
     });
     if (nestedText && nestedText.length > 500) {
       return nestedText;
@@ -5586,13 +5740,20 @@ async function fetchBestCanonicalPolicyDocumentText(input: {
   baseUrl: string;
   currentText: string;
   timeoutMs: number;
+  deadlineAtMs?: number;
+  signal?: AbortSignal;
 }): Promise<string | undefined> {
+  throwIfAborted(input.signal);
   const urls = canonicalPolicyDocumentUrlsFromHtml(input.html, input.baseUrl);
   let bestText: string | undefined;
   let bestScore = policyTextQualityScore(input.currentText);
   const fetchedCandidates = await Promise.all(
     urls.slice(0, MAX_CANONICAL_POLICY_LINK_FETCHES).map((url) =>
-      fetchText(url, Math.max(800, Math.min(2_000, input.timeoutMs)))
+      fetchText(
+        url,
+        deadlineBoundTimeoutMs(Math.max(800, Math.min(2_000, input.timeoutMs)), input.deadlineAtMs),
+        input.signal,
+      )
     ),
   );
 
@@ -5969,18 +6130,31 @@ function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySurfaceCa
 }
 
 function remainingMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
-  return Math.max(500, input.internalBudgetMs - (Date.now() - startedAtMs));
+  const softBudgetRemainingMs = Math.max(500, input.internalBudgetMs - (Date.now() - startedAtMs));
+  if (input.absoluteDeadlineAtMs === undefined) return softBudgetRemainingMs;
+  return Math.max(0, Math.min(softBudgetRemainingMs, input.absoluteDeadlineAtMs - Date.now()));
 }
 
 function remainingPolicyFetchMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
-  return Math.min(POLICY_FETCH_TIMEOUT_MS, remainingMs(input, startedAtMs));
+  return Math.max(1, Math.min(POLICY_FETCH_TIMEOUT_MS, remainingMs(input, startedAtMs)));
 }
 
 function remainingProtectedPolicyFetchMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
-  return Math.max(
+  const protectedRemainingMs = Math.max(
     500,
     input.internalBudgetMs + POLICY_PROTECTED_RESERVE_MS - (Date.now() - startedAtMs),
   );
+  if (input.absoluteDeadlineAtMs === undefined) return protectedRemainingMs;
+  const absoluteRemainingMs = Math.max(0, input.absoluteDeadlineAtMs - Date.now());
+  return Math.max(1, Math.min(absoluteRemainingMs, protectedRemainingMs));
+}
+
+function deadlineRemainingMs(deadlineAtMs: number | undefined): number {
+  return deadlineAtMs === undefined ? Number.POSITIVE_INFINITY : Math.max(0, deadlineAtMs - Date.now());
+}
+
+function deadlineBoundTimeoutMs(requestedTimeoutMs: number, deadlineAtMs: number | undefined): number {
+  return Math.max(1, Math.min(requestedTimeoutMs, deadlineRemainingMs(deadlineAtMs)));
 }
 
 function elapsed(scanStartedAtMs: number): number {

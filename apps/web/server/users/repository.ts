@@ -2,6 +2,7 @@ import "server-only";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
+import type { AssignableMembershipRole } from "../../lib/auth/membership-role-policy";
 
 export type AppUserProfileRow = {
   auth_provider: string | null;
@@ -142,7 +143,7 @@ export async function createOrganization(input: {
 
 export async function createOrganizationMembership(input: {
   organizationId: string;
-  role: string;
+  role: AssignableMembershipRole;
   userId: string;
 }): Promise<AppOrganizationMembershipRow> {
   try {

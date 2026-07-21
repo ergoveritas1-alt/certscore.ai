@@ -76,35 +76,6 @@ function makeChecklistGdprTransparencyConcerns(disclosureType: string) {
   });
 }
 
-test("checklist projects banner/cookie-policy purpose inconsistency as a review signal", () => {
-  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    coverageLimited: false,
-    runtimeArtifacts: {
-      firstLayerConsentChoices: {
-        layerInspected: "first_layer",
-        textSnippet: "Targeted advertising, personalization, and analytics"
-      },
-      policyDisclosureSummary: {
-        cookiePolicyPresent: true,
-        retainedCookiePolicyTextExcerpt: "We use session cookies. Third-party analysis may measure general usage."
-      }
-    },
-    scanCompleted: true,
-    snapshot: { cookie_policy_present: true }
-  });
-  const items = deriveGdprEprivacyCoverageChecklist({
-    coverageLimited: false,
-    coverageOutcomes,
-    projectedFindings: [],
-    scanCompleted: true,
-    unifiedFindings: []
-  });
-
-  const row = byId(items, "cookie_disclosure_consistency_review");
-  assert.equal(row.status, "Review signal");
-  assert.match(row.evidenceRefs.join(" "), /targeted advertising/i);
-});
-
 test("checklist consumes approved multilingual GDPR Transparency Article 13 coverage without unified findings", () => {
   const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     coverageLimited: false,
@@ -308,7 +279,7 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
   });
 
   assert.deepEqual(
-    items.slice(0, 23).map((item) => item.id),
+    items.slice(0, 22).map((item) => item.id),
     [
       "consent_surface_observed",
       "cmp_framework_signal_observed",
@@ -316,7 +287,6 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
       "accept_consent_control",
       "options_settings_preferences_control",
       "cookie_notice_policy_availability",
-      "cookie_disclosure_consistency_review",
       "pre_consent_cookies_storage",
       "pre_consent_third_party_tracking",
       "advertising_retargeting_vendor_signal_observed",
@@ -1117,7 +1087,7 @@ test("deriveGdprEprivacyCoverageChecklist renders consent choice quality as a st
   assert.equal(rejectPath.assessmentStatus, "checked");
 
   const choiceQuality = byId(items, "consent_choice_quality");
-  assert.equal(choiceQuality.label, "Consent choice quality — coverage limited");
+  assert.equal(choiceQuality.label, "Cookie banner dark pattern signal");
   assert.equal(choiceQuality.status, "Not confirmed");
   assert.equal(choiceQuality.assessmentStatus, "coverage_limitation");
   assert.equal(choiceQuality.evidenceState, "not_testable");
@@ -3181,5 +3151,5 @@ test("deriveGdprEprivacyReviewSummary excludes invalid 404 and footer excerpts f
   });
 
   const summary = deriveGdprEprivacyReviewSummary(items);
-  assert.match(summary.coverageText, /^37 of 39 in-scope rows had usable automated evidence\./);
+  assert.match(summary.coverageText, /^36 of 38 in-scope rows had usable automated evidence\./);
 });

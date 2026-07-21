@@ -15,9 +15,10 @@ import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../../lib/scans/rank-findings";
 
-test("Executive storage metric names the non-essential-only scope explicitly", () => {
+test("Executive storage metric uses the concise non-essential label", () => {
   const source = readFileSync(new URL("./executive-summary-card.tsx", import.meta.url), "utf8");
-  assert.match(source, /Non-essential pre-consent storage/);
+  assert.match(source, /Non-essential storage/);
+  assert.doesNotMatch(source, new RegExp(["Non-essential", "pre-consent storage"].join(" ")));
   assert.match(source, /Essential and unclassified storage are excluded from this metric/);
   assert.match(source, /beforeConsentStorageScope === "nonessential_only"/);
 });

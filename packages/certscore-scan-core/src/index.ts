@@ -116,6 +116,8 @@ export interface RunScanInput {
   allowedConsentFlowScenarios?: ConsentFlowScenario[];
   policyPlanningDeadlineMs?: number;
   policyOutputGraceMs?: number;
+  /** Absolute policy-lane deadline used to preserve scanner shutdown and result-publication time. */
+  policySurfaceDeadlineAtMs?: number;
   policySurfaceSeeds?: PolicySurfaceSeed[];
   preConsentScreenshotMode?: "always" | "selective" | "never";
   preConsentScreenshotTimeoutMs?: number;
@@ -300,6 +302,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       normalizedUrl,
       scanStartedAtMs: startedAtMs,
       internalBudgetMs: scanProfile.internalBudgetMs,
+      absoluteDeadlineAtMs: input.policySurfaceDeadlineAtMs,
       artifactWriter,
       browser: sharedBrowser,
       nanoAssistProvider: nanoPolicyAssistProvider,

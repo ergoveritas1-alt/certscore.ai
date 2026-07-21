@@ -1675,7 +1675,7 @@ export async function updatePolicyReviewQueueRow(input: {
 
 export async function updateAdminMembershipRole(input: {
   organizationId: string;
-  role: "admin" | "advanced" | "user";
+  role: "advanced" | "user";
   userId: string;
 }) {
   await query(

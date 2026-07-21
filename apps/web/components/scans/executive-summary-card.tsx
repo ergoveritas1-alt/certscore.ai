@@ -1947,7 +1947,7 @@ function BenchmarkMetricCard(input: {
     : benchmarkValue !== null
       ? `Expected ${benchmarkValue}.`
       : null;
-  const metricNote = input.label === "Non-essential pre-consent storage"
+  const metricNote = input.label === "Non-essential storage"
     ? [
         "Non-essential cookie/storage observations before a recorded consent action. Essential and unclassified storage are excluded from this metric.",
         input.note
@@ -4586,7 +4586,7 @@ export function ExecutiveSummaryCard(input: {
                     />
                     <BenchmarkMetricCard
                       label={input.beforeConsentStorageScope === "nonessential_only"
-                        ? "Non-essential pre-consent storage"
+                        ? "Non-essential storage"
                         : "Pre-consent storage"}
                       actualValue={runtimeMetricsReliable ? input.beforeConsentCookieCount : null}
                       benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}

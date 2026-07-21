@@ -1,4 +1,5 @@
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
+import { DEFAULT_NEW_MEMBERSHIP_ROLE } from "../lib/auth/membership-role-policy";
 import type { AuthenticatedAppUser } from "./auth-flows/types";
 import {
   createOrganization,
@@ -141,7 +142,7 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
 
     membership = (await createOrganizationMembership({
       organizationId: organization.id,
-      role: "admin",
+      role: DEFAULT_NEW_MEMBERSHIP_ROLE,
       userId: canonicalUserId
     })) as OrganizationMemberRecord;
   }

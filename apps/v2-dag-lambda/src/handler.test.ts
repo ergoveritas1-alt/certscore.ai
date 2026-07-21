@@ -13,6 +13,7 @@ import type { CanonicalEvidenceBundle, ConsentActionAttempt, ConsentFlowObservat
 import { parseLocalV2DagLambdaResultMessage } from "../../web/server/scans/local-v2-dag-lambda-dispatch";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
+  LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   artifactPointersFromS3Keys,
   buildLocalV2DagLambdaRuntimeDiagnostics,
@@ -382,6 +383,36 @@ test("handler publishes a terminal failure before the Lambda hard timeout", asyn
   assert.equal(scannerSignal?.aborted, true);
 });
 
+test("handler gives the policy lane an absolute deadline before scanner shutdown", async () => {
+  const startedAtMs = Date.now();
+  let policySurfaceDeadlineAtMs: number | undefined;
+
+  const result = await handler(validPayload(), {
+    artifactChainTimeoutMs: 45_000,
+    handlerSafetyTimeoutMs: 60_000,
+    scannerWorkTimeoutMs: 40_000,
+    runArtifactChain: async (_payload, options) => {
+      policySurfaceDeadlineAtMs = options.policySurfaceDeadlineAtMs;
+      return {
+        artifactMetadata: {},
+        artifactPointers: {},
+        phaseTimings: [],
+      };
+    },
+    sqsClient: {
+      async send() {
+        return { $metadata: {} };
+      },
+    },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.ok(policySurfaceDeadlineAtMs);
+  const expectedOffsetMs = 40_000 - LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS;
+  assert.ok(policySurfaceDeadlineAtMs >= startedAtMs + expectedOffsetMs);
+  assert.ok(policySurfaceDeadlineAtMs <= Date.now() + expectedOffsetMs);
+});
+
 test("handler uploads a bounded artifact-only failure diagnostic on scanner timeout", async () => {
   const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "failure-diagnostic-test";
@@ -389,7 +420,7 @@ test("handler uploads a bounded artifact-only failure diagnostic on scanner time
   try {
     const result = await handler(validPayload(), {
       artifactChainTimeoutMs: 30,
-      handlerSafetyTimeoutMs: 50,
+      handlerSafetyTimeoutMs: 10_000,
       scannerWorkTimeoutMs: 10,
       runArtifactChain: async () => await new Promise(() => undefined),
       s3Client: {
@@ -412,7 +443,75 @@ test("handler uploads a bounded artifact-only failure diagnostic on scanner time
     assert.equal(uploads.length, 1);
     assert.ok(uploads[0]?.body.length && uploads[0].body.length < 20_000);
     assert.match(uploads[0]?.body ?? "", /certscore\.v2_lambda_failure_diagnostic\.1/);
+    assert.match(uploads[0]?.body ?? "", /cancellationRequestedAt/);
+    assert.match(uploads[0]?.body ?? "", /terminalPublicationReserveMs/);
     assert.doesNotMatch(uploads[0]?.body ?? "", /cookieValue|documentText|requestBody|nanoReasoning/i);
+  } finally {
+    if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+  }
+});
+
+test("failure diagnostic upload errors do not suppress terminal publication", async () => {
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "failure-diagnostic-test";
+  let publicationCount = 0;
+  try {
+    const result = await handler(validPayload(), {
+      artifactChainTimeoutMs: 30,
+      handlerSafetyTimeoutMs: 10_000,
+      scannerWorkTimeoutMs: 10,
+      runArtifactChain: async () => await new Promise(() => undefined),
+      s3Client: {
+        async send() {
+          throw new Error("simulated diagnostic upload failure");
+        },
+      },
+      sqsClient: {
+        async send() {
+          publicationCount += 1;
+          return { $metadata: {} };
+        },
+      },
+    });
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.artifactPointers?.failureDiagnosticUri, undefined);
+    assert.equal(publicationCount, 1);
+  } finally {
+    if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+  }
+});
+
+test("a stalled failure diagnostic upload cannot consume the terminal publication window", async () => {
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "failure-diagnostic-test";
+  let publicationCount = 0;
+  const startedAtMs = Date.now();
+  try {
+    const result = await handler(validPayload(), {
+      artifactChainTimeoutMs: 30,
+      handlerSafetyTimeoutMs: 10_000,
+      scannerWorkTimeoutMs: 10,
+      runArtifactChain: async () => await new Promise(() => undefined),
+      s3Client: {
+        async send() {
+          return await new Promise(() => undefined);
+        },
+      },
+      sqsClient: {
+        async send() {
+          publicationCount += 1;
+          return { $metadata: {} };
+        },
+      },
+    });
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.artifactPointers?.failureDiagnosticUri, undefined);
+    assert.equal(publicationCount, 1);
+    assert.ok(Date.now() - startedAtMs < 2_500);
   } finally {
     if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
     else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;

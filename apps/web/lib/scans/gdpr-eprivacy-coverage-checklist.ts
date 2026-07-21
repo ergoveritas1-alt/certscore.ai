@@ -166,15 +166,6 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
-    id: "cookie_disclosure_consistency_review",
-    label: "Banner / cookie-policy purpose consistency",
-    explanation: "Whether retained banner purpose claims and the retained cookie-policy description appear consistent enough for purpose-level review.",
-    findingIds: [],
-    defaultFindingStatus: "Review signal",
-    notObservedText: "No purpose-level banner/cookie-policy consistency review signal was retained in this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
     id: "pre_consent_cookies_storage",
     label: "Non-essential pre-consent cookies/storage",
     explanation: "Whether non-essential cookies or browser storage were observed before a recorded consent action.",
@@ -2152,7 +2143,7 @@ function specializeChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation: "The first-layer control inventory was incomplete, so consent choice quality and dark-pattern characteristics were not confirmed from the retained evidence.",
-      label: "Consent choice quality — coverage limited",
+      label: input.definition.label,
       status: "Not confirmed" as const
     };
   }

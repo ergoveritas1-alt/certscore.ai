@@ -176,6 +176,7 @@ export function createOpenAiNanoPolicyAssistProvider(
           },
         },
         maxCompletionTokens: 1200,
+        signal: input.signal,
       });
       return normalizeTopicExtraction(input, parsed);
     },

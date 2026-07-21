@@ -1590,30 +1590,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes evaluates a substantive privacy n
   assert.equal(outcomes.dpo_contact_point_disclosure?.criticalEvidence.retainedEvidence.formalDpoDesignationConfirmed, false);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes emits a conservative banner/cookie-policy consistency review", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      firstLayerConsentChoices: {
-        layerInspected: "first_layer",
-        textSnippet: "We use cookies for targeted advertising, personalization, and analytics.",
-        defaultTogglePurposeLabels: ["Targeted advertising", "Personalization", "Analytics"]
-      },
-      policyDisclosureSummary: {
-        cookiePolicyPresent: true,
-        cookiePolicyUrls: ["https://example.test/cookies"],
-        retainedCookiePolicyTextExcerpt:
-          "We use session cookies to keep the service working. Third-party analysis may help us understand general site usage."
-      }
-    },
-    snapshot: { cookie_policy_present: true }
-  });
-
-  assert.equal(outcomes.cookie_disclosure_consistency_review?.status, "Review signal");
-  assert.match(outcomes.cookie_disclosure_consistency_review?.limitation ?? "", /not a legal conclusion/i);
-  assert.match(outcomes.cookie_disclosure_consistency_review?.evidenceRefs.join(" ") ?? "", /targeted advertising/i);
-});
-
 test("deriveGdprEprivacyCoveragePolicyOutcomes reports unsupported policy language explicitly", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

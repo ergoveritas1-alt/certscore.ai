@@ -1940,7 +1940,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     trackingClassifiedThirdPartyRequests: reportSurface.presentationSummary.thirdPartyRequestCount,
     cookiesPreConsent: cookiesBeforeConsentCount,
     nonEssentialPreConsentStorage: cookiesBeforeConsentCount,
-    storageMetricLabel: "Non-essential pre-consent storage",
+    storageMetricLabel: "Non-essential storage",
     totalStorageRecordsPresentBeforeRecordedConsent: reportSurface.runtimeCookieRows.length,
     consentPlatform: deriveConsentPlatform(input.scanRecord, reportSurface.presentationSummary),
     trackerFootprint: {

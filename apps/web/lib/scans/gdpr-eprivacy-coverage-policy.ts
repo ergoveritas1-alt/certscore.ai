@@ -2018,44 +2018,6 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
   return null;
 }
 
-function deriveCookieDisclosureConsistencyReviewOutcome(input: GdprEprivacyCoveragePolicyInput) {
-  const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
-  const policyDisclosureSummary = getPolicyDisclosureSummary(input.runtimeArtifacts);
-  const bannerEvidence = [
-    getString(firstLayerChoices, ["textSnippet", "text_snippet"]),
-    ...getStringArray(firstLayerChoices, ["defaultTogglePurposeLabels", "default_toggle_purpose_labels"]),
-    ...getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"])
-  ].filter(Boolean).join(" ");
-  const cookiePolicyText = getString(policyDisclosureSummary, [
-    "retainedCookiePolicyTextExcerpt",
-    "retained_cookie_policy_text_excerpt"
-  ]) ?? "";
-  const bannerAdvertisesOptionalPurposes =
-    /targeted advertising|personal(?:ization|isation)|analytics/i.test(bannerEvidence);
-  const policyIsGenericOrSessionOnly =
-    /session cookies?|third[- ]party (?:analysis|analytics)|analy(?:sis|tics) by third[- ]part/i.test(cookiePolicyText) &&
-    !/targeted advertising|interest[- ]based advertising|personal(?:ization|isation)|advertising cookies?/i.test(cookiePolicyText);
-
-  if (!bannerAdvertisesOptionalPurposes || !policyIsGenericOrSessionOnly) return null;
-  return makeOutcome(
-    "cookie_disclosure_consistency_review",
-    "Review signal",
-    "The retained first-layer banner described targeted advertising, personalization, or analytics purposes, while the retained cookie-policy excerpt described only session cookies or generic third-party analysis. Review the two surfaces for purpose-level consistency; this is not a legal conclusion.",
-    [
-      `Banner excerpt: ${bannerEvidence.slice(0, 320)}`,
-      `Cookie-policy excerpt: ${cookiePolicyText.slice(0, 320)}`
-    ],
-    {
-      retainedEvidence: {
-        bannerAdvertisesOptionalPurposes: true,
-        cookiePolicyPurposeCoverage: "generic_or_session_only",
-        bannerEvidence: bannerEvidence.slice(0, 500),
-        cookiePolicyEvidence: cookiePolicyText.slice(0, 500)
-      }
-    }
-  );
-}
-
 function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const preconsentTimingEvidence = getPreconsentTimingRetainedEvidence(input.runtimeArtifacts);
   const firstObservedMsRef = formatPreconsentObservedMsRef(
@@ -9048,7 +9010,6 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveConsentSurfaceOutcome(input),
     deriveCmpFrameworkSignalOutcome(input),
     deriveCookieNoticePolicyAvailabilityOutcome(input),
-    deriveCookieDisclosureConsistencyReviewOutcome(input),
     derivePreConsentCookieStorageOutcome(input),
     derivePreConsentThirdPartyTrackingOutcome(input),
     deriveAdvertisingRetargetingVendorSignalOutcome(input),

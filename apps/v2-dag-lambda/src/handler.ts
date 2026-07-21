@@ -32,6 +32,7 @@ export const LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS = 60_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS = 45_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS = 52_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS = 7_000;
+export const LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS = 2_000;
 
 export type LocalV2DagLambdaDispatchPayload = {
   artifactOnly: true;
@@ -229,7 +230,11 @@ type HandlerOptions = {
   lambdaClient?: LambdaInvokeClient;
   now?: () => Date;
   resultPublishTimeoutMs?: number;
-  runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: { artifactRoot: string; signal?: AbortSignal }) => Promise<ArtifactChainResult>;
+  runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: {
+    artifactRoot: string;
+    policySurfaceDeadlineAtMs?: number;
+    signal?: AbortSignal;
+  }) => Promise<ArtifactChainResult>;
   scannerWorkTimeoutMs?: number;
   s3GetClient?: S3GetClient;
   s3Client?: S3PutClient;
@@ -601,6 +606,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     forceAllowedScenarioPlanning?: boolean;
     phaseLabelPrefix?: string;
     preConsentScreenshotMode?: "always" | "selective" | "never";
+    policySurfaceDeadlineAtMs?: number;
     s3Client?: S3PutClient;
     signal?: AbortSignal;
     workspaceRoot?: string;
@@ -627,7 +633,8 @@ export async function runLocalV2DagLambdaArtifactChain(
     phaseTimings,
     preConsentScreenshotMode: options.preConsentScreenshotMode ?? scanTuning.preConsentScreenshotMode,
     scanTuning,
-    signal: options.signal
+    signal: options.signal,
+    policySurfaceDeadlineAtMs: options.policySurfaceDeadlineAtMs,
   });
   const [egressAvailable, bundle] = await Promise.all([egressPreflightPromise, scanBundlePromise]);
   if (!egressAvailable) {
@@ -656,6 +663,7 @@ async function runLocalV2DagLambdaScanBundle(
     phaseLabelPrefix?: string;
     phaseTimings: LocalV2DagLambdaPhaseTiming[];
     preConsentScreenshotMode?: "always" | "selective" | "never";
+    policySurfaceDeadlineAtMs?: number;
     scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
     signal?: AbortSignal;
   }
@@ -668,6 +676,7 @@ async function runLocalV2DagLambdaScanBundle(
         outDir: options.artifactRoot,
         policyOutputGraceMs: 1_000,
         policyPlanningDeadlineMs: 1_500,
+        policySurfaceDeadlineAtMs: options.policySurfaceDeadlineAtMs,
         policySurfaceSeeds: payload.policySurfaceSeeds,
         postConsentFlowsEnabled: false,
         preConsentScreenshotMode: options.preConsentScreenshotMode,
@@ -1904,10 +1913,13 @@ async function writeAndUploadFailureDiagnostic(input: {
   artifactChainTimeoutMs: number;
   artifactRoot: string;
   cancellationReason: string;
+  cancellationObservedAt: Date;
+  cancellationRequestedAt?: Date;
   handlerStartedAt: Date;
   payload: LocalV2DagLambdaDispatchPayload;
   s3Client?: S3PutClient;
   scannerWorkTimeoutMs: number;
+  terminalPublicationReserveMs: number;
 }): Promise<{ artifactMetadata: LocalV2DagLambdaArtifactMetadata; artifactPointers: LocalV2DagLambdaArtifactPointers }> {
   const phaseRecord: Record<string, unknown> = await readFile(path.join(input.artifactRoot, "V2ScanCorePhases.json"), "utf8")
     .then((value) => asRecord(JSON.parse(value)))
@@ -1934,16 +1946,26 @@ async function writeAndUploadFailureDiagnostic(input: {
     artifactOnly: true,
     artifactVersion: "certscore.v2_lambda_failure_diagnostic.1",
     cancellationReason: input.cancellationReason.slice(0, 240),
+    cancellationObservedAt: input.cancellationObservedAt.toISOString(),
+    ...(input.cancellationRequestedAt ? {
+      cancellationRequestedAt: input.cancellationRequestedAt.toISOString(),
+      cancellationObservationDelayMs: Math.max(
+        0,
+        input.cancellationObservedAt.getTime() - input.cancellationRequestedAt.getTime(),
+      ),
+    } : {}),
     configuredBudgets: {
       artifactChainTimeoutMs: input.artifactChainTimeoutMs,
       scannerWorkTimeoutMs: input.scannerWorkTimeoutMs,
     },
     generatedAt: new Date().toISOString(),
+    diagnosticUploadStartedAt: new Date().toISOString(),
     handlerElapsedMs: Date.now() - input.handlerStartedAt.getTime(),
     lastCheckpoint: checkpoints.at(-1) ?? null,
     phaseCheckpoints: checkpoints,
     productionFindingIntegration: false,
     scanId: input.payload.scanId,
+    terminalPublicationReserveMs: input.terminalPublicationReserveMs,
   })}\n`, "utf8");
   const sha256 = createHash("sha256").update(body).digest("hex");
   const bucket = requireArtifactBucket();
@@ -2296,6 +2318,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   let phaseTimings: LocalV2DagLambdaPhaseTiming[] | undefined;
   let artifactRoot: string | undefined;
   let scannerAbortController: AbortController | undefined;
+  let scannerCancellationRequestedAt: Date | undefined;
   let scannerDeadlineTimer: NodeJS.Timeout | undefined;
   let handlerSafetyTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS;
   let scannerWorkTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS;
@@ -2342,12 +2365,21 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     ));
     scannerAbortController = new AbortController();
     scannerDeadlineTimer = setTimeout(() => {
+      scannerCancellationRequestedAt = now();
       scannerAbortController?.abort(new Error(`Scanner work exceeded its ${scannerWorkTimeoutMs}ms deadline.`));
     }, scannerWorkTimeoutMs);
     const artifactResult = await withHandlerSafetyTimeout(
-      runArtifactChain(payload, { artifactRoot, signal: scannerAbortController.signal }),
+      runArtifactChain(payload, {
+        artifactRoot,
+        policySurfaceDeadlineAtMs:
+          handlerStartedAtMs + scannerWorkTimeoutMs - LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
+        signal: scannerAbortController.signal,
+      }),
       artifactChainTimeoutMs,
-      () => scannerAbortController?.abort(new Error(`Artifact chain exceeded its ${artifactChainTimeoutMs}ms deadline.`))
+      () => {
+        scannerCancellationRequestedAt ??= now();
+        scannerAbortController?.abort(new Error(`Artifact chain exceeded its ${artifactChainTimeoutMs}ms deadline.`));
+      }
     );
     clearTimeout(scannerDeadlineTimer);
     scannerDeadlineTimer = undefined;
@@ -2377,6 +2409,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     });
     return result;
   } catch (error) {
+    const cancellationObservedAt = now();
     const scannerDeadlineAborted = scannerAbortController?.signal.aborted === true;
     if (scannerDeadlineTimer) clearTimeout(scannerDeadlineTimer);
     scannerAbortController?.abort(error);
@@ -2394,17 +2427,58 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         workerLane: payload.workerLane ?? "coordinator"
       };
     }
-    const failureDiagnostic = artifactRoot && (scannerDeadlineAborted || error instanceof LocalV2DagLambdaSafetyTimeoutError)
-      ? await writeAndUploadFailureDiagnostic({
-        artifactRoot,
-        artifactChainTimeoutMs,
-        cancellationReason: error instanceof Error ? error.message : String(error),
-        handlerStartedAt,
-        payload,
-        scannerWorkTimeoutMs,
-        s3Client: options.s3Client,
-      }).catch(() => undefined)
-      : undefined;
+    const handlerDeadlineAtMs = handlerStartedAtMs + handlerSafetyTimeoutMs;
+    const terminalPublicationReserveMs = Math.max(10, resultPublishTimeoutMs);
+    const diagnosticShutdownReserveMs = Math.min(
+      2_000,
+      Math.max(10, Math.floor(handlerSafetyTimeoutMs / 10)),
+    );
+    const diagnosticBudgetAvailable =
+      handlerDeadlineAtMs - Date.now() >= terminalPublicationReserveMs + diagnosticShutdownReserveMs;
+    let failureDiagnostic: Awaited<ReturnType<typeof writeAndUploadFailureDiagnostic>> | undefined;
+    if (
+      artifactRoot &&
+      diagnosticBudgetAvailable &&
+      (scannerDeadlineAborted || error instanceof LocalV2DagLambdaSafetyTimeoutError)
+    ) {
+      const diagnosticUploadStartedAt = now();
+      console.info("[v2-lambda-terminal] failure diagnostic upload started", {
+        diagnosticUploadStartedAt: diagnosticUploadStartedAt.toISOString(),
+        scanId: payload.scanId,
+      });
+      try {
+        const diagnosticUploadTimeoutMs = Math.max(
+          10,
+          Math.min(1_500, handlerDeadlineAtMs - Date.now() - terminalPublicationReserveMs),
+        );
+        failureDiagnostic = await withHandlerSafetyTimeout(
+          writeAndUploadFailureDiagnostic({
+            artifactRoot,
+            artifactChainTimeoutMs,
+            cancellationReason: error instanceof Error ? error.message : String(error),
+            cancellationObservedAt,
+            cancellationRequestedAt: scannerCancellationRequestedAt,
+            handlerStartedAt,
+            payload,
+            scannerWorkTimeoutMs,
+            s3Client: options.s3Client,
+            terminalPublicationReserveMs,
+          }),
+          diagnosticUploadTimeoutMs,
+        );
+        console.info("[v2-lambda-terminal] failure diagnostic upload completed", {
+          diagnosticUploadCompletedAt: now().toISOString(),
+          durationMs: Math.max(0, now().getTime() - diagnosticUploadStartedAt.getTime()),
+          scanId: payload.scanId,
+        });
+      } catch (diagnosticError) {
+        console.warn("[v2-lambda-terminal] failure diagnostic upload failed", {
+          durationMs: Math.max(0, now().getTime() - diagnosticUploadStartedAt.getTime()),
+          error: diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError),
+          scanId: payload.scanId,
+        });
+      }
+    }
     const completedAt = now();
     const result = buildLocalV2DagLambdaResultMessage({
       artifactMetadata: failureDiagnostic?.artifactMetadata,
@@ -2428,12 +2502,36 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       payload,
       status: "failed"
     });
-    await sendLocalV2DagLambdaResultMessage({
-      message: result,
-      queueUrl: payload.resultQueueUrl,
-      sqsClient: options.sqsClient,
-      timeoutMs: remainingResultPublishMs()
+    const terminalPublicationStartedAt = now();
+    const terminalPublicationTimeoutMs = remainingResultPublishMs();
+    console.info("[v2-lambda-terminal] publication started", {
+      cancellationObservedAt: cancellationObservedAt.toISOString(),
+      cancellationRequestedAt: scannerCancellationRequestedAt?.toISOString() ?? null,
+      diagnosticBudgetAvailable,
+      scanId: payload.scanId,
+      terminalPublicationStartedAt: terminalPublicationStartedAt.toISOString(),
+      terminalPublicationTimeoutMs,
     });
+    try {
+      await sendLocalV2DagLambdaResultMessage({
+        message: result,
+        queueUrl: payload.resultQueueUrl,
+        sqsClient: options.sqsClient,
+        timeoutMs: terminalPublicationTimeoutMs
+      });
+      console.info("[v2-lambda-terminal] publication completed", {
+        durationMs: Math.max(0, now().getTime() - terminalPublicationStartedAt.getTime()),
+        scanId: payload.scanId,
+        terminalPublicationCompletedAt: now().toISOString(),
+      });
+    } catch (publicationError) {
+      console.error("[v2-lambda-terminal] publication failed", {
+        durationMs: Math.max(0, now().getTime() - terminalPublicationStartedAt.getTime()),
+        error: publicationError instanceof Error ? publicationError.message : String(publicationError),
+        scanId: payload.scanId,
+      });
+      throw publicationError;
+    }
     return result;
   }
 }

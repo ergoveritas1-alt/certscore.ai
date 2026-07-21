@@ -383,6 +383,41 @@ test("policySurfaceScanner fast mode stops stalled rendered discovery at the sof
   });
 });
 
+test("policySurfaceScanner honors a parent absolute deadline and returns coverage-limited evidence", async () => {
+  let contextClosed = false;
+  let rejectNavigation: ((reason?: unknown) => void) | undefined;
+  const stalledBrowser = {
+    async newContext() {
+      return {
+        async newPage() {
+          return {
+            async goto() {
+              return await new Promise<never>((_resolve, reject) => {
+                rejectNavigation = reject;
+              });
+            },
+          };
+        },
+        async close() {
+          contextClosed = true;
+          rejectNavigation?.(new Error("context closed after policy deadline"));
+        },
+      };
+    },
+  } as unknown as Browser;
+  const startedAtMs = Date.now();
+  await withPolicyScan("policy-no-links", async ({ result }) => {
+    assert.ok(["partial", "skipped_budget"].includes(result.moduleRun.status));
+    assert.match(result.moduleRun.errors.join(" "), /absolute .*deadline|coverage-limited/i);
+    assert.equal(contextClosed, true);
+    assert.ok(Date.now() - startedAtMs < 4_000);
+  }, {
+    absoluteDeadlineAtMs: Date.now() + 1_800,
+    browser: stalledBrowser,
+    internalBudgetMs: 60_000,
+  }, { expectCompleted: false });
+});
+
 test("policySurfaceScanner fast mode skips rendered discovery when static core surfaces are present", async () => {
   await withPolicyScan("policy-static-core-surfaces", async ({ result, baseUrl }) => {
     const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
