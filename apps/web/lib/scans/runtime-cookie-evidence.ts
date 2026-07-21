@@ -1,3 +1,9 @@
+import {
+  findRuntimeCookieOwner,
+  findRuntimeEntityOwner,
+  findRuntimeVendorLabelOwner
+} from "./runtime-vendor-ownership";
+
 export type RuntimeCookieEvidenceRow = {
   category: string;
   cookieName: string;
@@ -7,6 +13,7 @@ export type RuntimeCookieEvidenceRow = {
   initiatorUrl: string | null;
   initiatorVendor: string | null;
   nonEssential: boolean;
+  essentiality?: "essential" | "non_essential" | "unknown";
   party: "first_party" | "third_party" | "unknown";
   responseUrl: string | null;
   sourceRequestUrl: string | null;
@@ -14,7 +21,7 @@ export type RuntimeCookieEvidenceRow = {
   setMethod: string | null;
   timingBasis: string | null;
   evidenceGrade: string | null;
-  timingEvidence: "before_consent_cookie_write" | "initial_cookie_snapshot" | "unknown";
+  timingEvidence: "before_consent_cookie_write" | "initial_cookie_snapshot" | "periodic_cookie_snapshot" | "unknown";
 };
 
 export type PolicyCookieDisclosureRow = {
@@ -73,6 +80,9 @@ function uniqueStrings(values: Array<string | null | undefined>) {
 
 export function classifyRuntimeCookieCategory(name: string, domain: string | null = null) {
   const normalized = `${name} ${domain ?? ""}`.toLowerCase();
+  if (/^(?:cookielawinfo-checkbox-|viewed_cookie_policy$)/i.test(name)) {
+    return "consent_management";
+  }
   if (isFunctionalCookieExcludedFromTrackingEvidence(name, domain)) {
     return "necessary";
   }
@@ -88,8 +98,32 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
   if (/^wbdfch$/i.test(name)) {
     return "site_functionality";
   }
+  if (/^_dd_s$/i.test(name)) {
+    return "analytics";
+  }
+  if (/^fccdcf$/i.test(name)) {
+    return "necessary";
+  }
+  if (/^_zitok$/i.test(name)) {
+    return "analytics";
+  }
+  if (/^(?:ebEventToTrack|stableId)$/i.test(name)) {
+    return "analytics";
+  }
+  if (/^wisepops(?:_(?:visitor|visits|session))?$/i.test(name)) {
+    return "analytics";
+  }
+  if (/^AMP_MKTG_[A-Za-z0-9_-]+$/i.test(name)) {
+    return "advertising";
+  }
+  if (/^AMP_(?!MKTG_)[A-Za-z0-9_-]+$/i.test(name)) {
+    return "analytics";
+  }
+  if (/^ld_anonymous_user_key$/i.test(name)) {
+    return "personalization";
+  }
   if (
-    /(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id|ajs_user_id|analytics_session_id|heap|mp_|intercom-id|hubspotutk|__hstc|__hssc|(^|\b)s_ecid(\b|$)|(^|\b)s_sess(\b|$)|(^|\b)s_cc(\b|$)|(^|\b)s_dslv(\b|$)|(^|\b)sat_ppv(\b|$)|^_ali_s_|(^|\b)cna(\b|$)|(^|\b)sca(\b|$)|^yandex|^yuid|aliyun\.com|mmstat\.com|yandex\.(?:ru|com))/i.test(
+    /(^_ga|^_gid|^_gat|^_ym_|^_ymab_param|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id|ajs_user_id|analytics_session_id|heap|mp_|intercom-id|hubspotutk|__hstc|__hssc|(^|\b)s_ecid(\b|$)|(^|\b)s_sess(\b|$)|(^|\b)s_cc(\b|$)|(^|\b)s_dslv(\b|$)|(^|\b)sat_ppv(\b|$)|^_ali_s_|(^|\b)cna(\b|$)|(^|\b)sca(\b|$)|^yandex|^yuid|aliyun\.com|mmstat\.com|yandex\.(?:ru|com))/i.test(
       normalized
     )
   ) {
@@ -109,7 +143,7 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
     return "session_replay";
   }
   if (
-    /(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx|awsalb|awsalbcors|awsalbtg|akaalb|usp-google|bm_sz|bm_sv|bm_mi|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid|(^|\b)sid($|\b)|(^|\b)session($|\b)|optanonconsent|optanonalertboxclosed|cookieyes-consent|didomi_token|geo_country|trp-country|trp-language)/i.test(
+    /(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx|awsalb(?:tg|tgcors|app-\d+|cors)?|akaalb|usp-google|bm_sz|bm_sv|bm_mi|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid|(^|\b)sid($|\b)|(^|\b)session($|\b)|optanonconsent|optanonalertboxclosed|cookieyes-consent|didomi_token|geo_country|trp-country|trp-language)/i.test(
       normalized
     )
   ) {
@@ -120,7 +154,7 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
 
 export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | null | undefined, domain: string | null = null) {
   const normalized = `${name ?? ""} ${domain ?? ""}`.toLowerCase();
-  return /(^|\b)(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token|geo_country|trp-country|trp-language|__cf_bm|_cfuvid|cf_clearance|bigipserver|awsalb|awsalbcors|awsalbtg|akaalb|usp-google|bm_sz|bm_sv|bm_mi|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)|(^|\b)_sp_/.test(
+  return /(^|\b)(fccdcf|fcnec|optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|cookielawinfo-checkbox-[a-z0-9_-]+|viewed_cookie_policy|didomi_token|geo_country|trp-country|trp-language|__cf_bm|_cfuvid|cf_clearance|bigipserver|awsalb(?:tg|tgcors|app-\d+|cors)?|akaalb|usp-google|bm_sz|bm_sv|bm_mi|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)|(^|\b)_sp_/.test(
     normalized
   );
 }
@@ -129,13 +163,52 @@ export function isNonEssentialCookieCategory(category: string | null | undefined
   return category === "analytics" || category === "advertising" || category === "dmp" || category === "session_replay" || category === "personalization" || category === "experimentation";
 }
 
+export function isEligibleNonEssentialPreconsentStorageRow(row: RuntimeCookieEvidenceRow) {
+  return row.timingEvidence === "before_consent_cookie_write" &&
+    row.nonEssential === true &&
+    !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain);
+}
+
 function inferCookieProvider(name: string, domain: string | null = null) {
   const normalized = `${name} ${domain ?? ""}`.toLowerCase();
+  if (/^awsalb(?:tg|tgcors|app-\d+|cors)?\b/.test(normalized)) {
+    return "AWS Elastic Load Balancing";
+  }
+  if (/^(?:__cf_bm|_cfuvid|cf_clearance|cf_chl_)\b/.test(normalized)) {
+    return "Cloudflare";
+  }
+  if (/^_dd_s\b/.test(normalized)) {
+    return "Datadog";
+  }
+  if (/^_zitok\b/.test(normalized)) {
+    return "ZoomInfo";
+  }
+  if (/^wisepops(?:_(?:visitor|visits|session))?\b/.test(normalized)) {
+    return "WisePops";
+  }
+  if (/^amp_mktg_[a-z0-9_-]+\b/.test(normalized) || /^amp_(?!mktg_)[a-z0-9_-]+\b/.test(normalized)) {
+    return "Amplitude";
+  }
+  if (/^ld_anonymous_user_key\b/.test(normalized)) {
+    return "LaunchDarkly";
+  }
+  if (/^(?:cookielawinfo-checkbox-|viewed_cookie_policy\b)/.test(normalized)) {
+    return "CookieYes";
+  }
+  if (/^(?:ebeventtotrack|stableid)\b/.test(normalized)) {
+    return "Eventbrite";
+  }
   if (/^optanonconsent\b|^optanonalertboxclosed\b/.test(normalized)) {
     return "OneTrust";
   }
+  if (/^fccdcf\b|^fcnec\b/.test(normalized)) {
+    return "Google Funding Choices";
+  }
   if (/^_gcl_/.test(normalized)) {
     return "Google";
+  }
+  if (/^_ym_(?:uid|d|isad)\b|^_ymab_param\b/.test(normalized)) {
+    return "Yandex Metrica";
   }
   if (/^_ga|^_gid|^_gat|ga_|goog|gtm|doubleclick/.test(normalized)) {
     return "Google";
@@ -230,7 +303,7 @@ function inferCookieProvider(name: string, domain: string | null = null) {
   if (/xiaomi|mi\.com|xm_user_bucket|^xm_/.test(normalized)) {
     return "Xiaomi";
   }
-  if (/mixpanel|mp_/.test(normalized)) {
+  if (/mixpanel|(?:^|\s)mp_/.test(normalized)) {
     return "Mixpanel";
   }
   if (/heap/.test(normalized)) {
@@ -304,6 +377,10 @@ export function getRuntimeCookiePrimaryProvider(row: RuntimeCookieEvidenceRow) {
     hostnameFromUrl(row.sourceRequestUrl) ??
     hostnameFromUrl(row.responseUrl) ??
     normalizeAttributionHost(row.initiatorDomain);
+  const canonicalCookieOwner = findRuntimeCookieOwner(row.cookieName, sourceHost ?? row.domain);
+  if (canonicalCookieOwner) {
+    return canonicalCookieOwner.product;
+  }
   const sourceProvider = inferCookieSourceProviderFromHost(sourceHost);
   if (sourceProvider) {
     return sourceProvider;
@@ -317,22 +394,26 @@ export function getRuntimeCookiePrimaryProvider(row: RuntimeCookieEvidenceRow) {
   return row.initiatorVendor ?? row.initiatorDomain ?? row.domain ?? row.cookieName;
 }
 
-function getHybridPageHostname(hybrid: Record<string, unknown> | null) {
+function getHybridPageHostnames(hybrid: Record<string, unknown> | null) {
   const navigationSummary = getRecord(hybrid?.navigationSummary ?? hybrid?.navigation_summary);
-  const url = getString(
-    navigationSummary?.finalUrl ??
-      navigationSummary?.final_url ??
-      navigationSummary?.initialUrl ??
-      navigationSummary?.initial_url
-  );
-  if (!url) {
-    return null;
-  }
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return null;
-  }
+  const redirectChain = [
+    ...(Array.isArray(navigationSummary?.redirectChain) ? navigationSummary.redirectChain : []),
+    ...(Array.isArray(navigationSummary?.redirect_chain) ? navigationSummary.redirect_chain : [])
+  ];
+  return [
+    navigationSummary?.requestedUrl,
+    navigationSummary?.requested_url,
+    navigationSummary?.initialUrl,
+    navigationSummary?.initial_url,
+    ...redirectChain,
+    navigationSummary?.finalUrl,
+    navigationSummary?.final_url,
+    navigationSummary?.effectiveScannedPageUrl,
+    navigationSummary?.effective_scanned_page_url
+  ]
+    .map((value) => getString(value))
+    .map((value) => hostnameFromUrl(value))
+    .filter((value): value is string => Boolean(value));
 }
 
 function normalizeHostForCookieParty(value: string | null | undefined) {
@@ -369,7 +450,14 @@ function getCookiePartyType(
   domain: string | null,
   hybrid: Record<string, unknown> | null
 ): RuntimeCookieEvidenceRow["party"] {
-  if (isSameSiteCookieDomain(domain, getHybridPageHostname(hybrid))) {
+  const setterHosts = [
+    hostnameFromUrl(getString(row.sourceRequestUrl ?? row.source_request_url)),
+    hostnameFromUrl(getString(row.responseUrl ?? row.response_url)),
+    hostnameFromUrl(getString(row.initiatorUrl ?? row.initiator_url)),
+    getString(row.initiatorDomain ?? row.initiator_domain)
+  ].filter((value): value is string => Boolean(value));
+  const navigationHosts = getHybridPageHostnames(hybrid);
+  if ([...setterHosts, ...navigationHosts].some((hostname) => isSameSiteCookieDomain(domain, hostname))) {
     return "first_party";
   }
   if (row.thirdParty === true || row.third_party === true) {
@@ -384,7 +472,7 @@ function getCookiePartyType(
 
 function isPreconsentCookieWrite(row: Record<string, unknown>, hybrid: Record<string, unknown> | null) {
   const operation = getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method ?? row.operation);
-  if (/^(?:browser_snapshot|initial_cookie_snapshot)$/i.test(operation ?? "")) {
+  if (/^(?:browser_snapshot|periodic_cookie_snapshot|initial_cookie_snapshot)$/i.test(operation ?? "")) {
     return false;
   }
   if (row.beforeConsent === true || row.before_consent === true) {
@@ -417,16 +505,53 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   const domain = getString(row.domain ?? row.cookieDomain ?? row.cookie_domain)?.replace(/^\.+/, "") ?? null;
   const explicitCategory = getString(row.category ?? row.cookieCategory ?? row.cookie_category);
   const inferredCategory = classifyRuntimeCookieCategory(cookieName, domain);
-  const inferredSecurityOrNecessary = /^(?:security|necessary|functional)$/i.test(inferredCategory);
-  const category = inferredSecurityOrNecessary
+  const inferredSecurityOrNecessary = /^(?:security|necessary|functional|consent_management)$/i.test(inferredCategory);
+  const canonicalNamedCategory =
+    /^AMP_(?:MKTG_)?[A-Za-z0-9_-]+$/i.test(cookieName) ||
+    /^ld_anonymous_user_key$/i.test(cookieName);
+  const category = inferredSecurityOrNecessary || canonicalNamedCategory
     ? inferredCategory
     : explicitCategory && !/^unknown$/i.test(explicitCategory) ? explicitCategory : inferredCategory;
   const setMethod = getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method ?? row.operation);
-  const initialSnapshot = /^(?:browser_snapshot|initial_cookie_snapshot)$/i.test(setMethod ?? "");
-  const rawSetAtMs = getNumber(row.setAtMs ?? row.set_at_ms);
-  const setAtMs = !initialSnapshot && rawSetAtMs !== null && rawSetAtMs >= 0 ? rawSetAtMs : null;
+  const snapshot = /^(?:browser_snapshot|periodic_cookie_snapshot|initial_cookie_snapshot)$/i.test(setMethod ?? "");
   const rawFirstObservedAtMs = getNumber(row.firstObservedAtMs ?? row.first_observed_at_ms);
+  const initialSnapshot = /^initial_cookie_snapshot$/i.test(setMethod ?? "") ||
+    /^browser_snapshot$/i.test(setMethod ?? "") && rawFirstObservedAtMs === null;
+  const rawSetAtMs = getNumber(row.setAtMs ?? row.set_at_ms);
+  const setAtMs = !snapshot && rawSetAtMs !== null && rawSetAtMs >= 0 ? rawSetAtMs : null;
   const firstObservedAtMs = rawFirstObservedAtMs !== null && rawFirstObservedAtMs >= 0 ? rawFirstObservedAtMs : setAtMs;
+  const retainedNonEssential = getBoolean(row.nonEssential ?? row.non_essential);
+  const canonicalNonEssentialIdentifier = canonicalNamedCategory;
+  const nonEssential = inferredSecurityOrNecessary
+    ? false
+    : canonicalNonEssentialIdentifier && isNonEssentialCookieCategory(inferredCategory)
+      ? true
+    : retainedNonEssential !== null
+      ? retainedNonEssential
+      : isNonEssentialCookieCategory(category);
+  const essentiality = inferredSecurityOrNecessary
+    ? "essential" as const
+    : nonEssential
+      ? "non_essential" as const
+      : "unknown" as const;
+  const rawInitiatorVendor = getString(row.initiatorVendor ?? row.initiator_vendor ?? row.cookieInitiatorVendor ?? row.cookie_initiator_vendor);
+  const sourceHost =
+    hostnameFromUrl(getString(row.sourceRequestUrl ?? row.source_request_url ?? row.responseUrl ?? row.response_url ?? row.initiatorUrl ?? row.initiator_url)) ??
+    getString(row.initiatorDomain ?? row.initiator_domain ?? row.cookieInitiatorDomain ?? row.cookie_initiator_domain) ??
+    domain;
+  const cookieOwner = findRuntimeCookieOwner(cookieName, sourceHost ?? domain);
+  const rawInitiatorOwner = findRuntimeVendorLabelOwner(rawInitiatorVendor);
+  const sourceHostOwner = findRuntimeEntityOwner(sourceHost);
+  const inferredProviderOwner = findRuntimeVendorLabelOwner(inferCookieProvider(cookieName, domain));
+  const initiatorVendor = cookieOwner && rawInitiatorOwner
+    ? cookieOwner.entity === rawInitiatorOwner.entity ? rawInitiatorVendor : cookieOwner.product
+    : rawInitiatorOwner && inferredProviderOwner && rawInitiatorOwner.entity === inferredProviderOwner.entity
+      ? rawInitiatorVendor
+    : rawInitiatorOwner && (!sourceHostOwner || sourceHostOwner.entity !== rawInitiatorOwner.entity)
+      ? null
+      : rawInitiatorOwner
+        ? rawInitiatorVendor
+        : null;
   return {
     category,
     cookieName,
@@ -434,22 +559,23 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     firstObservedAtMs,
     initiatorDomain: getString(row.initiatorDomain ?? row.initiator_domain ?? row.cookieInitiatorDomain ?? row.cookie_initiator_domain),
     initiatorUrl: getString(row.initiatorUrl ?? row.initiator_url ?? row.cookieInitiatorUrl ?? row.cookie_initiator_url),
-    initiatorVendor: getString(row.initiatorVendor ?? row.initiator_vendor ?? row.cookieInitiatorVendor ?? row.cookie_initiator_vendor),
+    initiatorVendor,
     // Canonical cookie-name/domain classification wins over stale generic flags. In
     // particular, edge-security cookies must never be promoted as advertising or
     // other non-essential storage merely because an upstream row said `true`.
-    nonEssential: inferredSecurityOrNecessary
-      ? false
-      : getBoolean(row.nonEssential ?? row.non_essential) ?? isNonEssentialCookieCategory(category),
+    nonEssential,
+    essentiality,
     party: getCookiePartyType(row, domain, hybrid),
     responseUrl: getString(row.responseUrl ?? row.response_url),
     sourceRequestUrl: getString(row.sourceRequestUrl ?? row.source_request_url ?? row.responseUrl ?? row.response_url ?? row.initiatorUrl ?? row.initiator_url),
     setAtMs,
     setMethod,
-    timingBasis: initialSnapshot ? "initial_cookie_snapshot" : getString(row.timingBasis ?? row.timing_basis ?? row.timingEvidence ?? row.timing_evidence),
+    timingBasis: snapshot
+      ? initialSnapshot ? "initial_cookie_snapshot" : "periodic_cookie_snapshot"
+      : getString(row.timingBasis ?? row.timing_basis ?? row.timingEvidence ?? row.timing_evidence),
     evidenceGrade: getString(row.evidenceGrade ?? row.evidence_grade),
-    timingEvidence: initialSnapshot
-      ? "initial_cookie_snapshot"
+    timingEvidence: snapshot
+      ? initialSnapshot ? "initial_cookie_snapshot" : "periodic_cookie_snapshot"
       : isPreconsentCookieWrite(row, hybrid) ? "before_consent_cookie_write" : "unknown"
   };
 }
@@ -466,6 +592,9 @@ function normalizeInitialCookieRow(cookieName: string, domain: string | null): R
     initiatorUrl: null,
     initiatorVendor: null,
     nonEssential: isNonEssentialCookieCategory(category),
+    essentiality: isNonEssentialCookieCategory(category)
+      ? "non_essential"
+      : category === "necessary" ? "essential" : "unknown",
     party: "unknown",
     responseUrl: null,
     sourceRequestUrl: null,

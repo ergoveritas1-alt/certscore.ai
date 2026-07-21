@@ -53,6 +53,85 @@ test("builds a bounded review queue from repeated unresolved third-party endpoin
   });
 });
 
+test("resolves Branch endpoints and its host-bound _s cookie while preserving concrete hosts", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "request",
+      hostname: "api2.branch.io",
+      url: "https://api2.branch.io/v1/open",
+      matchSource: "network_request"
+    },
+    {
+      type: "request",
+      hostname: "app.link",
+      url: "https://app.link/_r",
+      matchSource: "network_request"
+    },
+    {
+      type: "cookie",
+      hostname: "app.link",
+      cookieName: "_s",
+      matchSource: "cookie_name"
+    }
+  ]);
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.vendor, "Branch");
+  assert.equal(observations[0]?.product, "Branch Deep Linking and Attribution");
+  assert.deepEqual(observations[0]?.matchedHostnames.sort(), ["api2.branch.io", "app.link"]);
+  assert.deepEqual(observations[0]?.matchedCookieNames, ["_s"]);
+});
+
+test("resolves WisePops runtime hosts and first-party campaign cookies consistently", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "request",
+      hostname: "wisepops.net",
+      url: "https://wisepops.net/after-two-minutes-delay/index.js",
+      matchSource: "network_request"
+    },
+    ...["wisepops", "wisepops_visitor", "wisepops_visits", "wisepops_session"].map((cookieName) => ({
+      type: "cookie" as const,
+      hostname: "ifit.com",
+      cookieName,
+      matchSource: "cookie_name" as const
+    }))
+  ]);
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.vendor, "WisePops");
+  assert.equal(observations[0]?.product, "WisePops Onsite Campaigns");
+  assert.deepEqual(observations[0]?.matchedHostnames, ["wisepops.net", "ifit.com"]);
+  assert.deepEqual(
+    observations[0]?.matchedCookieNames.sort(),
+    ["wisepops", "wisepops_session", "wisepops_visitor", "wisepops_visits"]
+  );
+});
+
+test("resolves Medal Amplitude cookies to Amplitude rather than Mixpanel", () => {
+  const observations = resolveVendorObservations([
+    { type: "cookie", hostname: "medal.tv", cookieName: "AMP_7f3d2", matchSource: "cookie_name" },
+    { type: "cookie", hostname: "medal.tv", cookieName: "AMP_MKTG_7f3d2", matchSource: "cookie_name" }
+  ]);
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.vendor, "Amplitude");
+  assert.deepEqual(observations[0]?.matchedCookieNames.sort(), ["AMP_7f3d2", "AMP_MKTG_7f3d2"]);
+});
+
+test("classifies Medal's Amplitude config endpoint as configuration rather than event ingestion", () => {
+  const observation = resolveVendorObservations([{
+    type: "request",
+    hostname: "sr-client-cfg.amplitude.com",
+    url: "https://sr-client-cfg.amplitude.com/config/abc123",
+    matchSource: "network_request"
+  }])[0];
+
+  assert.equal(observation?.vendor, "Amplitude");
+  assert.equal(observation?.product, "Amplitude Remote Configuration");
+  assert.equal(observation?.regulatoryRelevance.includes("configuration_connection"), true);
+});
+
 test("resolves the Clarity ingestion host as Microsoft Clarity", () => {
   const observations = resolveVendorObservations([{
     type: "request",
@@ -62,6 +141,30 @@ test("resolves the Clarity ingestion host as Microsoft Clarity", () => {
   }]);
   assert.equal(observations[0]?.product, "Microsoft Clarity");
   assert.equal(observations[0]?.purpose, "session_replay");
+});
+
+test("resolves Cookiebot EU hosts and Kentico cookies without cross-vendor inheritance", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "request",
+      hostname: "consent.cookiebot.eu",
+      url: "https://consent.cookiebot.eu/uc.js",
+      matchSource: "network_request"
+    },
+    {
+      type: "request",
+      hostname: "consentcdn.cookiebot.eu",
+      url: "https://consentcdn.cookiebot.eu/consentconfig/abc/settings.json",
+      matchSource: "network_request"
+    },
+    { type: "cookie", hostname: "www.aruba.it", cookieName: "CMSCsrfCookie", matchSource: "cookie_name" },
+    { type: "cookie", hostname: "www.aruba.it", cookieName: "CMSPreferredCulture", matchSource: "cookie_name" }
+  ]);
+
+  assert.ok(observations.some((row) => row.vendor === "Cookiebot" && row.purpose === "consent_management"));
+  const kentico = observations.find((row) => row.vendor === "Kentico");
+  assert.equal(kentico?.product, "Kentico Xperience CMS");
+  assert.deepEqual(kentico?.matchedCookieNames.sort(), ["CMSCsrfCookie", "CMSPreferredCulture"].sort());
 });
 
 test("resolves the pagead2 endpoint once as AdSense rather than a duplicate Ads alias", () => {
@@ -1197,6 +1300,77 @@ test("classifies LinkedIn and ZoomInfo tracking even when Cloudflare utility coo
   assert.deepEqual(cloudflare.matchedCookieNames, ["__cf_bm"]);
 });
 
+test("keeps OpenAI advertising measurement, ZoomInfo events, and Cloudflare security cookies separate", () => {
+  const observations = resolveVendorObservations([
+    request("https://bzrcdn.openai.com/sdk/oaiq.min.js", "bzrcdn.openai.com"),
+    request("https://bzr.openai.com/", "bzr.openai.com"),
+    request("https://js.zi-scripts.com/unified/v1/master/getSubscriptions", "js.zi-scripts.com"),
+    request("https://ws.zoominfo.com/pixel/abc123/", "ws.zoominfo.com"),
+    { type: "cookie", cookieName: "__cf_bm", hostname: "bzrcdn.openai.com" },
+    { type: "cookie", cookieName: "_cfuvid", hostname: "zoominfo.com" },
+  ]);
+
+  const openAi = observations.find((item) => item.product === "OpenAI advertising measurement");
+  assert.ok(openAi);
+  assert.equal(openAi.vendor, "OpenAI");
+  assert.equal(openAi.purpose, "advertising");
+  assert.deepEqual(openAi.matchedHostnames.sort(), ["bzr.openai.com", "bzrcdn.openai.com"]);
+
+  const zoomInfo = observations.find((item) => item.product === "ZoomInfo WebSights");
+  assert.ok(zoomInfo);
+  assert.deepEqual(zoomInfo.matchedHostnames.sort(), ["js.zi-scripts.com", "ws.zoominfo.com"]);
+  assert.equal(zoomInfo.matchedHostnames.some((host) => host.endsWith("openai.com")), false);
+
+  const cloudflare = observations.find((item) => item.product === "Cloudflare Bot Management");
+  assert.ok(cloudflare);
+  assert.deepEqual(cloudflare.matchedHostnames, []);
+  assert.deepEqual(cloudflare.matchedCookieNames.sort(), ["__cf_bm", "_cfuvid"]);
+});
+
+test("recognizes Transcend consent assets served through a customer CNAME", () => {
+  const observations = resolveVendorObservations([
+    request("https://cdntranscend.example.test/airgap.js", "cdntranscend.example.test"),
+  ]);
+  assertResolved(observations, "Transcend", "Transcend Consent Management", "consent_management");
+});
+
+test("keeps ambiguous ad-tech cookie names in their concrete Yandex context", () => {
+  const observations = resolveVendorObservations([
+    { type: "cookie", cookieName: "pi", hostname: "yandex.ru" },
+    { type: "cookie", cookieName: "i", hostname: "yandex.ru" },
+    { type: "cookie", cookieName: "bh", hostname: "yandex.com" },
+    { type: "cookie", cookieName: "ymex", hostname: "yandex.com" },
+    { type: "cookie", cookieName: "_yasc", hostname: "yandex.ru" },
+    { type: "cookie", cookieName: "sync_cookie_csrf", hostname: "mc.yandex.ru" },
+  ]);
+
+  assert.equal(observations.some((item) => item.vendor === "Bombora"), false);
+  assert.equal(observations.some((item) => item.vendor === "OpenX"), false);
+  assert.equal(observations.some((item) => item.vendor === "Quantcast"), false);
+  const yandex = observations.find((item) => item.product === "Yandex Ads / Metrica");
+  assert.ok(yandex);
+  assert.deepEqual(
+    yandex.matchedCookieNames.sort(),
+    ["_yasc", "bh", "i", "pi", "sync_cookie_csrf", "ymex"].sort(),
+  );
+});
+
+test("canonically assigns first-party Yandex Metrica cookie families", () => {
+  const observations = resolveVendorObservations(
+    ["_ym_uid", "_ym_d", "_ym_isad", "_ymab_param"].map((cookieName) => ({
+      type: "cookie" as const,
+      cookieName,
+      hostname: "life.ru",
+    })),
+  );
+
+  const metrica = observations.find((item) => item.product === "Yandex Metrica");
+  assert.ok(metrica);
+  assert.equal(metrica.purpose, "analytics");
+  assert.deepEqual(metrica.matchedCookieNames.sort(), ["_ym_uid", "_ym_d", "_ym_isad", "_ymab_param"].sort());
+  assert.equal(observations.some((item) => ["Bombora", "OpenX", "Quantcast"].includes(item.vendor)), false);
+});
+
 test("classifies Framer, YouTube image CDN, Statuspage, Intercom, and common CDN hosts without borrowing unrelated vendors", () => {
   const observations = resolveVendorObservations([
     request("https://events.framer.com/script?v=2", "events.framer.com"),
@@ -1253,7 +1427,7 @@ test("classifies Google reCAPTCHA as security runtime", () => {
   assert.equal(recaptcha.matchedHostnames.includes("www.google.com"), true);
 });
 
-test("keeps native ad hosts when generic cookie names also match exchange rules", () => {
+test("keeps native ad hosts without promoting host-incompatible generic exchange cookies", () => {
   const observations = resolveVendorObservations([
     request("https://content.adriver.ru/cgi-bin/erle.cgi?sid=1", "content.adriver.ru"),
     request("https://yandex.com/ads/system/context.js", "yandex.com"),
@@ -1286,9 +1460,7 @@ test("keeps native ad hosts when generic cookie names also match exchange rules"
   assert.deepEqual(criteo.matchedCookieNames, ["uid"]);
 
   const openX = observations.find((item) => item.product === "OpenX");
-  assert.ok(openX);
-  assert.deepEqual(openX.matchedHostnames, []);
-  assert.deepEqual(openX.matchedCookieNames, ["i"]);
+  assert.equal(openX, undefined);
 });
 
 test("classifies Contentful assets and VK Mail.ru ad endpoints", () => {
@@ -2292,6 +2464,14 @@ test("keeps Wave 15 publisher ownership rules bounded to retained asset paths", 
   ]);
 
   assert.equal(observations.length, 0);
+});
+
+test("resolves cookielawinfo cookies as CookieYes consent management", () => {
+  for (const cookieName of ["cookielawinfo-checkbox-analytics", "cookielawinfo-checkbox-necessary"]) {
+    const [observation] = resolveVendorObservations([{ type: "cookie", cookieName }]);
+    assert.equal(observation?.vendor, "CookieYes");
+    assert.equal(observation?.purpose, "consent_management");
+  }
 });
 
 function request(url: string, hostname: string) {

@@ -1,0 +1,23 @@
+{
+  "domain": "gamcare.org.uk",
+  "trackerRows": [
+    { "category": "infrastructure", "confidence": 0.92, "domains": ["fonts.googleapis.com", "fonts.gstatic.com"], "firstSeenMs": 1101, "label": "Google Fonts", "party": "third_party", "preConsent": true, "regulatoryRelevance": ["cdn", "font_delivery"], "vendorDisplayCategory": "CDN" },
+    { "category": "infrastructure", "confidence": 0.9, "domains": ["d1xwj6lt3k7mbz.cloudfront.net", "d1ygf46rsya1tb.cloudfront.net"], "firstSeenMs": 1108, "label": "Amazon CloudFront", "party": "third_party", "preConsent": true, "regulatoryRelevance": ["cdn", "content_delivery"], "vendorDisplayCategory": "CDN" },
+    { "category": "security", "confidence": 0.93, "domains": ["gamcare.org.uk"], "firstSeenMs": 2986, "label": "Cloudflare Bot Management", "party": "first_party", "preConsent": true, "regulatoryRelevance": ["security", "bot_detection"], "vendorDisplayCategory": "Security" }
+  ],
+  "cookieRows": [
+    { "cookieName": "cookielawinfo-checkbox-necessary", "domain": "www.gamcare.org.uk", "party": "first_party", "category": "security", "nonEssential": false, "firstObservedAtMs": 7253, "setAtMs": null, "setMethod": "browser_snapshot", "timingEvidence": "initial_cookie_snapshot" },
+    { "cookieName": "cookielawinfo-checkbox-analytics", "domain": "www.gamcare.org.uk", "party": "first_party", "category": "security", "nonEssential": false, "firstObservedAtMs": 7253, "setAtMs": null, "setMethod": "browser_snapshot", "timingEvidence": "initial_cookie_snapshot" }
+  ],
+  "policySurfaces": [
+    { "type": "privacy_policy", "url": "https://gamcare.org.uk/privacy/privacy-policy-for-fundraising-activities" },
+    { "type": "privacy_policy", "url": "https://gamcare.org.uk/privacy/privacy-policy-for-the-gamcare-east-midlands-and-lincoln-police-out-of-court-resolution-pathway-partnership" },
+    { "type": "privacy_policy", "url": "https://gamcare.org.uk/privacy/privacy-support-and-treatment-services" },
+    { "type": "privacy_policy", "url": "https://gamcare.org.uk/privacy/gamcare-account-rules" },
+    { "type": "privacy_policy", "url": "https://gamcare.org.uk/privacy/acceptable-behaviour-statement" },
+    { "type": "privacy_policy", "url": "https://gamcare.org.uk/privacy" },
+    { "type": "policy_surface", "url": "https://gamcare.org.uk/" },
+    { "type": "terms_of_service", "url": "https://gamcare.org.uk/privacy/terms-conditions" },
+    { "type": "cookie_policy", "url": "https://gamcare.org.uk/cookie-policy" }
+  ]
+}

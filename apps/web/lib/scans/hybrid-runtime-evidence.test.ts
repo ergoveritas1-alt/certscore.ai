@@ -882,7 +882,7 @@ test("builds promotion evidence from legacy baseline tracker arrays when quality
   assert.deepEqual(fallback?.consentTimeline, {
     firstCmpVisibleMs: 0,
     firstConsentActionMs: null,
-    firstNonEssentialRequestMs: 3317,
+    firstNonEssentialRequestMs: null,
     navigationStartMs: 0,
     timelineConfidence: "derived_from_hybrid_runtime"
   });
@@ -893,9 +893,9 @@ test("builds promotion evidence from legacy baseline tracker arrays when quality
       category: "tag_management",
       confidence: 0.85,
       essentiality: "non_essential",
+      evidenceSource: "baseline_url_without_event_timestamp",
       requestUrl: "https://tags-eu.tiqcdn.com/utag/example/prod/utag.js",
-      timestampMs: 3317,
-      tsMs: 3317,
+      baselineFirstRequestMs: 3317,
       vendor: "Tealium"
     }
   ]);
@@ -903,6 +903,44 @@ test("builds promotion evidence from legacy baseline tracker arrays when quality
   const merged = withHybridRuntimeArtifactFallbacks(runtimeArtifacts);
   assert.deepEqual(merged?.consentTimeline, fallback?.consentTimeline);
   assert.deepEqual(merged?.requestPurposeClassificationConfidence, fallback?.requestPurposeClassificationConfidence);
+});
+
+test("retains event-specific request timestamps when baseline URL arrays contain the same events", () => {
+  const googleUrl = "https://www.google-analytics.com/g/collect?tid=G-TEST";
+  const fullStoryUrl = "https://edge.fullstory.com/s/fs.js";
+  const fallback = buildPreconsentEvidenceQualityFallback({
+    consent_baseline_tracker_evidence_urls: [googleUrl, fullStoryUrl],
+    consent_baseline_tracker_vendor_names: ["Google Analytics", "FullStory"],
+    hybrid_runtime_evidence: {
+      requestPurposeClassificationConfidence: [
+        {
+          category: "analytics",
+          confidence: 0.98,
+          essentiality: "non_essential",
+          requestUrl: googleUrl,
+          runtimePhase: "pre_consent",
+          tsMs: 2343,
+          vendor: "Google Analytics"
+        },
+        {
+          category: "session_replay",
+          confidence: 0.98,
+          essentiality: "non_essential",
+          requestUrl: fullStoryUrl,
+          runtimePhase: "pre_consent",
+          tsMs: 4484,
+          vendor: "FullStory"
+        }
+      ],
+      timelineMarkers: { firstThirdPartyRequestMs: 2343 }
+    }
+  });
+  const rows = fallback?.requestPurposeClassificationConfidence ?? [];
+  const byUrl = new Map(rows.map((row) => [row.requestUrl, row]));
+
+  assert.equal(byUrl.get(googleUrl)?.tsMs, 2343);
+  assert.equal(byUrl.get(fullStoryUrl)?.tsMs, 4484);
+  assert.equal((byUrl.get(fullStoryUrl) as Record<string, unknown> | undefined)?.baselineFirstRequestMs, 2343);
 });
 
 test("uses runtime host inventory as fallback context without deriving pre-consent tracking", () => {

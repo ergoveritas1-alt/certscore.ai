@@ -58,7 +58,7 @@ export type KnownCmpDetectionInput = {
 
 export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
-    aliases: ["CookiePro", "Optanon", "OptanonConsent", "OptanonAlertBoxClosed", "cookielaw"],
+    aliases: ["CookiePro", "Optanon", "OptanonConsent", "OptanonAlertBoxClosed"],
     canonicalName: "OneTrust",
     cookieNames: ["OptanonConsent", "OptanonAlertBoxClosed"],
     domains: ["onetrust.com", "onetrust.io", "cookielaw.org", "cdn.cookielaw.org", "cookiepro.com", "cookie-cdn.cookiepro.com", "geolocation.onetrust.com", "optanon.blob.core.windows.net", "cookies-data.onetrust.io"],
@@ -69,7 +69,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     role: "consent management platform",
     standards: ["tcf", "gpp", "usp", "gpc", "google_consent_mode"],
     storageKeys: ["OptanonConsent", "OptanonAlertBoxClosed"],
-    urlPatterns: [/otSDKStub\.js/i, /optanon/i, /cookielaw/i]
+    urlPatterns: [/otSDKStub\.js/i, /optanon/i, /(?:^|\/)cdn\.cookielaw\.org(?:\/|$)/i]
   },
   {
     aliases: ["TRUSTe", "TrustArc Preference Manager"],
@@ -116,7 +116,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     aliases: ["Cybot", "Cookiebot by Usercentrics"],
     canonicalName: "Cookiebot",
     cookieNames: ["CookieConsent", "CookieConsentBulkTicket"],
-    domains: ["cookiebot.com", "consent.cookiebot.com"],
+    domains: ["cookiebot.com", "consent.cookiebot.com", "cookiebot.eu", "consent.cookiebot.eu", "consentcdn.cookiebot.eu"],
     domSelectors: ["#CybotCookiebotDialog", "#CookiebotWidget"],
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["Cookiebot", "CookieConsent"],
@@ -126,18 +126,18 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     urlPatterns: [/cookiebot/i]
   },
   {
-    aliases: ["CookieYes CMP", "CookieYes Consent"],
+    aliases: ["CookieYes CMP", "CookieYes Consent", "GDPR Cookie Consent plugin", "Cookie Law Info"],
     canonicalName: "CookieYes",
-    cookieNames: ["cookieyes-consent"],
+    cookieNames: ["cookieyes-consent", "cookielawinfo-checkbox-*", "viewed_cookie_policy"],
     domains: ["cookieyes.com", "cdn-cookieyes.com", "log.cookieyes.com"],
-    domSelectors: ["[id*='cookieyes' i]", "[class*='cky-' i]"],
+    domSelectors: ["[id*='cookieyes' i]", "[class*='cky-' i]", "#cookie-law-info-bar", "[class*='cli-' i]"],
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["CookieYes", "ckyConsent"],
     reopenControlHints: ["cookieyes", "cookie settings"],
     role: "consent management platform",
     standards: ["gpc", "google_consent_mode"],
-    storageKeys: ["cookieyes-consent"],
-    urlPatterns: [/cookieyes/i, /\bcky-/i]
+    storageKeys: ["cookieyes-consent", "cookielawinfo-checkbox-*", "viewed_cookie_policy"],
+    urlPatterns: [/cookieyes/i, /\bcky-/i, /cookie-law-info/i, /cookielawinfo/i]
   },
   {
     aliases: ["Borlabs Cookie", "Borlabs Cookie CMP", "BorlabsCookie"],

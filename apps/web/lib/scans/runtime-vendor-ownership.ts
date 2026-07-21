@@ -7,11 +7,12 @@ export type RuntimeVendorAttributionEvidence = {
   matchedValue: string;
 };
 
-function resolveCanonicalOwner(input: { hostname?: string; cookieName?: string }) {
+function resolveCanonicalOwner(input: { hostname?: string; cookieName?: string; url?: string }) {
   return resolveVendorObservations([{
     type: input.cookieName ? "cookie" : "request",
     hostname: input.hostname,
     cookieName: input.cookieName,
+    url: input.url,
     matchSource: input.cookieName ? "cookie_name" : "network_request"
   }])[0] ?? null;
 }
@@ -82,6 +83,47 @@ export function findRuntimeCookieNameVendor(cookieName: string | null | undefine
       signatureId: observation.basis[0] ?? "canonical_vendor_resolver",
       matchedOn: "cookie_name" as const,
       matchedValue: trimmed
+    }
+  };
+}
+
+export function findRuntimeCookieOwner(cookieName: string | null | undefined, hostname: string | null | undefined) {
+  const trimmed = cookieName?.trim();
+  const normalizedHostname = normalizeRuntimeInventoryHost(hostname);
+  if (!trimmed) return null;
+  const observation = resolveCanonicalOwner({ cookieName: trimmed, hostname: normalizedHostname ?? undefined });
+  if (!observation) return null;
+  return {
+    category: observation.purpose,
+    confidence: observation.confidence,
+    entity: observation.entity,
+    product: observation.product ?? observation.vendor,
+    regulatoryRelevance: observation.regulatoryRelevance,
+    vendor: observation.vendor,
+    attributionEvidence: {
+      signatureId: observation.basis[0] ?? "canonical_vendor_resolver",
+      matchedOn: "cookie_name" as const,
+      matchedValue: trimmed
+    }
+  };
+}
+
+export function findRuntimeRequestOwner(url: string | null | undefined) {
+  if (!url) return null;
+  const hostname = normalizeRuntimeInventoryHost(url);
+  const observation = resolveCanonicalOwner({ hostname: hostname ?? undefined, url });
+  if (!observation) return null;
+  return {
+    category: observation.purpose,
+    confidence: observation.confidence,
+    entity: observation.entity,
+    product: observation.product ?? observation.vendor,
+    regulatoryRelevance: observation.regulatoryRelevance,
+    vendor: observation.vendor,
+    attributionEvidence: {
+      signatureId: observation.basis[0] ?? "canonical_vendor_resolver",
+      matchedOn: "request_pattern" as const,
+      matchedValue: url
     }
   };
 }

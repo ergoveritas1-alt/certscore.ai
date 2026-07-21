@@ -61,7 +61,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
     consentControls: { accept: ["tout accepter", "accepter tout"], reject: ["tout refuser", "refuser tout"], options: ["paramètres des cookies", "gérer mes préférences"], necessaryOnly: ["uniquement les cookies nécessaires", "cookies nécessaires uniquement"] },
   }),
   locale("ru", {
-    privacyPolicyLabels: ["политика конфиденциальности", "уведомление о конфиденциальности"], privacyPolicyPathSlugs: ["politika-konfidencialnosti"], cookiePolicyLabels: ["политика использования файлов cookie"], cookiePolicyPathSlugs: ["politika-cookie"], cookieSettingsLabels: ["настройки файлов cookie"], termsLabels: ["условия использования"], termsPathSlugs: ["usloviya-ispolzovaniya"], contextHints: ["конфиденциальность", "персональные данные", "файлы cookie", "согласие"], tldHints: [".ru"],
+    privacyPolicyLabels: ["политика конфиденциальности", "уведомление о конфиденциальности", "обработка персональных данных", "защита персональных данных"], privacyPolicyPathSlugs: ["politika-konfidencialnosti", "persondata", "personal-data"], cookiePolicyLabels: ["политика использования файлов cookie", "использование файлов cookie"], cookiePolicyPathSlugs: ["politika-cookie"], cookieSettingsLabels: ["настройки файлов cookie"], termsLabels: ["условия использования"], termsPathSlugs: ["usloviya-ispolzovaniya"], contextHints: ["конфиденциальность", "персональные данные", "файлы cookie", "согласие"], tldHints: [".ru"],
     consentControls: { accept: ["принять все", "разрешить все"], reject: ["отклонить все", "отказаться от всех"], options: ["настройки файлов cookie", "управление настройками"], necessaryOnly: ["только необходимые", "только обязательные файлы cookie"] },
   }),
   locale("pt", {
@@ -70,7 +70,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
   }),
   locale("it", {
     privacyPolicyLabels: ["informativa sulla privacy", "politica sulla privacy"], privacyPolicyPathSlugs: ["informativa-privacy", "privacy"], cookiePolicyLabels: ["informativa sui cookie", "cookie policy"], cookiePolicyPathSlugs: ["cookie-policy"], cookieSettingsLabels: ["impostazioni cookie", "preferenze cookie"], termsLabels: ["termini e condizioni", "condizioni d'uso"], termsPathSlugs: ["termini-e-condizioni"], contextHints: ["privacy", "dati personali", "cookie", "consenso"], tldHints: [".it"],
-    consentControls: { accept: ["accetta tutto", "accetta tutti"], reject: ["rifiuta tutto", "rifiuta tutti"], options: ["impostazioni cookie", "gestisci preferenze", "personalizza le mie scelte"], necessaryOnly: ["solo cookie necessari", "solo i cookie necessari"] },
+    consentControls: { accept: ["accetta tutto", "accetta tutti"], reject: ["rifiuta tutto", "rifiuta tutti"], options: ["impostazioni cookie", "gestisci preferenze", "personalizza", "personalizza le mie scelte"], necessaryOnly: ["solo cookie necessari", "solo i cookie necessari"] },
   }),
   locale("tr", {
     privacyPolicyLabels: ["gizlilik politikası", "kişisel verilerin korunması"], privacyPolicyPathSlugs: ["gizlilik-politikasi", "kvkk"], cookiePolicyLabels: ["çerez politikası"], cookiePolicyPathSlugs: ["cerez-politikasi"], cookieSettingsLabels: ["çerez ayarları"], termsLabels: ["kullanım koşulları"], termsPathSlugs: ["kullanim-kosullari"], contextHints: ["gizlilik", "kişisel veri", "çerez", "rıza"], tldHints: [".tr"],

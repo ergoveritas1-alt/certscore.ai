@@ -1,6 +1,125 @@
 import { isMeaningfulPolicyText } from "./policy-snippet-normalization";
+import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 
 export type PolicyEnrichmentRow = Record<string, unknown>;
+export const MAX_PUBLIC_POLICY_SURFACES = 5;
+
+export type PublicPolicySurfaceProjection = {
+  type: string;
+  url: string | null;
+};
+
+export function isClearlyNonPolicySurfaceUrl(value: string | null | undefined) {
+  if (!value) return false;
+  try {
+    const pathname = new URL(value).pathname.toLowerCase().replace(/\/+$/, "") || "/";
+    return pathname === "/" || /\/(?:account-rules|acceptable-behaviou?r-statement|careers?|jobs?|news|events?|support|contact)(?:\/|$)/.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+export function meaningfulPolicySurfaceTitle(type: string, value: string | null | undefined) {
+  if (value) {
+    try {
+      const segments = new URL(value).pathname.split("/").filter(Boolean);
+      const slug = segments.at(-1)?.replace(/\.(?:html?|pdf)$/i, "");
+      if (slug && !/^(?:privacy|cookie|terms|policy)$/.test(slug)) {
+        return slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+      }
+    } catch {
+      // Fall through to the semantic type label.
+    }
+  }
+  if (/cookie/i.test(type)) return "Cookie policy";
+  if (/terms/i.test(type)) return "Terms of service";
+  return "Privacy policy";
+}
+
+function policySurfaceRegistrableDomain(value: string | null | undefined) {
+  if (!value) return null;
+  const hostname = getTldtsHostname(value.includes("://") ? value : `https://${value}`);
+  return hostname ? getTldtsDomain(hostname, { allowPrivateDomains: true }) ?? hostname : null;
+}
+
+function canonicalPolicySurfaceIdentity(value: string | null) {
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    url.hostname = url.hostname.replace(/^www\./i, "").toLowerCase();
+    url.search = "";
+    url.hash = "";
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return url.toString();
+  } catch {
+    return value.trim().toLowerCase();
+  }
+}
+
+function publicPolicySurfaceScore(surface: PublicPolicySurfaceProjection, siteDomain: string | null) {
+  const surfaceDomain = policySurfaceRegistrableDomain(surface.url);
+  const firstParty = Boolean(siteDomain && surfaceDomain && siteDomain === surfaceDomain);
+  const type = surface.type.toLowerCase();
+  const typeScore = /privacy(?:[_ ]policy| notice)/.test(type)
+    ? 40
+    : /cookie(?:[_ ]policy| notice|[_ ]settings)/.test(type)
+      ? 32
+      : /terms/.test(type)
+        ? 24
+        : /privacy_choice|consent_preferences|do_not_sell/.test(type)
+          ? 20
+          : 4;
+  const documentScore = /\.pdf(?:[?#]|$)/i.test(surface.url ?? "") ? 6 : 0;
+  let canonicalCoreDocumentScore = 0;
+  try {
+    const pathname = new URL(surface.url ?? "").pathname.toLowerCase().replace(/\/+$/, "") || "/";
+    if (/^\/(?:privacy|privacy-policy|privacy-notice)$/.test(pathname)) canonicalCoreDocumentScore = 18;
+    else if (/^\/(?:cookies?|cookie-policy|cookie-notice)$/.test(pathname)) canonicalCoreDocumentScore = 14;
+    else if (/^\/(?:terms|terms-of-service|terms-and-conditions)$/.test(pathname)) canonicalCoreDocumentScore = 10;
+  } catch {
+    canonicalCoreDocumentScore = 0;
+  }
+  return (firstParty ? 100 : 0) + typeScore + documentScore + canonicalCoreDocumentScore;
+}
+
+/**
+ * Keeps customer-facing policy cards bounded and first-party focused. External
+ * vendor notices remain in raw policy enrichment/vendor-disclosure evidence.
+ */
+export function prioritizePublicPolicySurfaces<T extends PublicPolicySurfaceProjection>(
+  surfaces: T[],
+  options: { limit?: number; siteDomain?: string | null } = {}
+) {
+  const limit = Math.max(0, options.limit ?? MAX_PUBLIC_POLICY_SURFACES);
+  const siteDomain = policySurfaceRegistrableDomain(options.siteDomain);
+  const policyOnly = surfaces.filter((surface) => !isClearlyNonPolicySurfaceUrl(surface.url));
+  const deduped = policyOnly.filter((surface, index, rows) => {
+    const identity = `${surface.type.toLowerCase()}:${canonicalPolicySurfaceIdentity(surface.url)}`;
+    return rows.findIndex((candidate) =>
+      `${candidate.type.toLowerCase()}:${canonicalPolicySurfaceIdentity(candidate.url)}` === identity
+    ) === index;
+  });
+  const firstParty = deduped.filter((surface) =>
+    Boolean(siteDomain && policySurfaceRegistrableDomain(surface.url) === siteDomain)
+  );
+  const eligible = firstParty.length > 0 ? firstParty : deduped;
+  const ranked = eligible
+    .map((surface, index) => ({ index, score: publicPolicySurfaceScore(surface, siteDomain), surface }))
+    .sort((left, right) => right.score - left.score || left.index - right.index);
+  const selected = ranked.slice(0, limit);
+  for (const pattern of [/privacy/i, /cookie/i, /terms/i]) {
+    const candidate = ranked.find((entry) => pattern.test(entry.surface.type));
+    if (!candidate || selected.includes(candidate) || selected.length === 0) continue;
+    const replaceIndex = [...selected].reverse().findIndex((entry) =>
+      selected.filter((other) => other.surface.type === entry.surface.type).length > 1
+    );
+    const actualReplaceIndex = replaceIndex < 0 ? selected.length - 1 : selected.length - 1 - replaceIndex;
+    selected.splice(actualReplaceIndex, 1, candidate);
+  }
+  return selected
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map(({ surface }) => surface);
+}
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];

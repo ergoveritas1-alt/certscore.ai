@@ -525,6 +525,12 @@ function rowHasPreconsentTimingEvidence(row: Record<string, unknown>) {
   );
 }
 
+function rowIsCookieSnapshotPresence(row: Record<string, unknown>) {
+  return /^(?:browser_snapshot|initial_cookie_snapshot|periodic_cookie_snapshot)$/i.test(
+    getString(row, ["cookieSetMethod", "cookie_set_method", "setMethod", "set_method", "operation"]) ?? ""
+  );
+}
+
 function getPreconsentCookieStorageTimingSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
   const timelineMarkers = getHybridTimelineMarkers(runtimeArtifacts);
@@ -796,8 +802,12 @@ function getFirstLayerConsentChoiceEvidence(input: GdprEprivacyCoveragePolicyInp
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
   const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
   const consentPathControlLabels = getConsentPathControlLabels(consentUiPath, rejectPath);
+  const structuredControlLabels = getStructuredFirstLayerChoiceControls(firstLayerChoices)
+    .map(getControlLabel)
+    .filter((label): label is string => Boolean(label));
   const visibleChoiceLabels = uniqueStrings([
     ...getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"]),
+    ...structuredControlLabels,
     ...consentPathControlLabels.acceptLabels,
     ...consentPathControlLabels.preferenceLabels,
     ...consentPathControlLabels.rejectLabels
@@ -1440,17 +1450,22 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const privacyChoiceSurfaceOnly =
     isPrivacyChoiceSurfaceOnly(consentControlLifecycle) ||
     (structuredContaminationDetected && !simpleCookieNoticeWithChoice && !retainedInitialCookieConsentLayerEvidence);
+  const retainedBannerTextOrControls =
+    simpleCookieNoticeEvidence.surfaceText.length > 0 ||
+    simpleCookieNoticeEvidence.visibleChoiceLabels.length > 0;
+  const scalarOrInspectionObservation =
+    getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
+    getBoolean(hybridRuntimeEvidence, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
+    getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true ||
+    getBoolean(firstLayerConsentChoices, ["capturedBeforeInteraction", "captured_before_interaction"]) === true ||
+    layerInspected === "first_layer";
   const consentSurfaceObserved =
     (!privacyChoiceSurfaceOnly || simpleCookieNoticeWithChoice || retainedInitialCookieConsentLayerEvidence) &&
     (
       simpleCookieNoticeWithChoice ||
       retainedInitialCookieConsentLayerEvidence ||
-      getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
-      getBoolean(hybridRuntimeEvidence, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
-      getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true ||
-      getBoolean(firstLayerConsentChoices, ["capturedBeforeInteraction", "captured_before_interaction"]) === true ||
       visibleChoiceLabels.length > 0 ||
-      layerInspected === "first_layer"
+      retainedBannerTextOrControls && scalarOrInspectionObservation
     );
 
   const completeNoSurfaceObservation =
@@ -1655,7 +1670,21 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
   const rawPreconsentRows = [
     ...getObjectArray(hybridRuntimeEvidence, ["cookieWriteObservations", "cookie_write_observations"]),
     ...getObjectArray(hybridRuntimeEvidence, ["preconsentCookieEvidence", "preconsent_cookie_evidence"])
-  ].filter(rowHasPreconsentTimingEvidence);
+  ].filter(rowHasPreconsentTimingEvidence).filter((row) => !rowIsCookieSnapshotPresence(row));
+  const snapshotReviewRows = [
+    ...getObjectArray(hybridRuntimeEvidence, ["cookieWriteObservations", "cookie_write_observations"]),
+    ...getObjectArray(hybridRuntimeEvidence, ["preconsentCookieEvidence", "preconsent_cookie_evidence"])
+  ].filter((row) => {
+    if (!rowIsCookieSnapshotPresence(row)) {
+      return false;
+    }
+    const cookieName = getString(row, ["cookieName", "cookie_name", "name"]);
+    const domain = getString(row, ["domain", "cookieDomain", "cookie_domain"]);
+    if (!cookieName || isFunctionalCookieExcludedFromTrackingEvidence(cookieName, domain)) {
+      return false;
+    }
+    return isNonEssentialCookieCategory(classifyRuntimeCookieCategory(cookieName, domain));
+  });
   const eligiblePreconsentRows = rawPreconsentRows.filter((row) => {
     const cookieName = getString(row, ["cookieName", "cookie_name", "name"]);
     const domain = getString(row, ["domain", "cookieDomain", "cookie_domain"]);
@@ -1665,7 +1694,11 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
     const party = getString(row, ["party", "partyContext", "party_context"]);
     const category = getString(row, ["category", "cookieCategory", "cookie_category", "purpose"]) ??
       (cookieName ? classifyRuntimeCookieCategory(cookieName, domain) : null);
-    return getBoolean(row, ["nonEssential", "non_essential"]) === true ||
+    const explicitNonEssential = getBoolean(row, ["nonEssential", "non_essential"]);
+    if (explicitNonEssential === false) {
+      return false;
+    }
+    return explicitNonEssential === true ||
       isNonEssentialCookieCategory(category) ||
       ((party === "third_party" || party === "3rd") && category !== "necessary" && category !== "essential");
   });
@@ -1702,6 +1735,29 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
           eligiblePreconsentCookieStorageRows: compactArray(eligiblePreconsentRows, 8),
           observedRuntimeSignalOnly: true,
           ...preconsentTimingEvidence,
+          storageSummaryRetained: Boolean(storageSummary)
+        }
+      }
+    );
+  }
+
+  if (snapshotReviewRows.length > 0) {
+    const cookieNames = uniqueStrings(snapshotReviewRows
+      .map((row) => getString(row, ["cookieName", "cookie_name", "name"]))
+      .filter((value): value is string => Boolean(value)));
+    return makeOutcome(
+      "pre_consent_cookies_storage",
+      "Review signal",
+      "Non-essential cookie candidates were present before recorded consent, but snapshot-only evidence does not prove they were written during the scan.",
+      cookieNames.slice(0, 6).map((cookieName) => `${cookieName}: present before recorded consent — write timing unconfirmed`),
+      {
+        retainedEvidence: {
+          cookiesBeforeConsentCount: 0,
+          cookiesSeenCount,
+          eligibleNonEssentialCookieStorageFindingProjected: false,
+          snapshotOnlyNonEssentialCookieCandidates: compactArray(snapshotReviewRows, 8),
+          snapshotOnlyNonEssentialCookieNames: cookieNames,
+          snapshotPresenceDoesNotProveWrite: true,
           storageSummaryRetained: Boolean(storageSummary)
         }
       }
@@ -1856,6 +1912,19 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
   ].filter(Boolean).join("\n");
   const policySurfaceTopics = getStringArray(policyDisclosureSummary, ["observedTopics", "observed_topics"]);
   const policySurfaceControls = getStringArray(policyDisclosureSummary, ["mentionedControls", "mentioned_controls"]);
+  const granularCookieInventoryConfirmed = getObjectArray(policyDisclosureSummary, [
+    "cookieDisclosures",
+    "cookie_disclosures",
+    "policyCookieDisclosures",
+    "policy_cookie_disclosures"
+  ]).some((row) => Boolean(
+    getString(row, ["cookieName", "cookie_name", "name"]) ||
+    getString(row, ["provider", "vendor"]) ||
+    getString(row, ["purpose", "category"])
+  ));
+  const preferenceInterfaceConfirmed =
+    policySurfaceControls.some((control) => /cookie|preferences?|settings|manage/i.test(control)) ||
+    policySurfaceUrls.some((url) => /preference|settings|manage|privacy[-_ ]?center/i.test(url));
   const policySurfaceAvailable =
     getBoolean(input.snapshot, ["cookie_policy_present", "cookiePolicyPresent"]) === true ||
     getBoolean(input.runtimeArtifacts, ["cookiePolicyPresent", "cookie_policy_present"]) === true ||
@@ -1887,15 +1956,21 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
     return makeOutcome(
       "cookie_notice_policy_availability",
       "Observed",
-      "A cookie policy, cookie notice, cookie settings, or durable cookie disclosure surface was retained in the tested context.",
+      granularCookieInventoryConfirmed || preferenceInterfaceConfirmed
+        ? "A durable cookie disclosure surface was retained in the tested context. Granular inventory and preference-interface coverage are reported separately from disclosure availability."
+        : "A durable cookie disclosure surface was retained in the tested context; a granular named-cookie inventory or preference interface was not confirmed.",
       [
         "Evidence: cookie policy or cookie disclosure surface retained",
+        granularCookieInventoryConfirmed ? "Evidence: granular cookie inventory retained" : "Not confirmed: granular named-cookie inventory",
+        preferenceInterfaceConfirmed ? "Evidence: cookie preference interface retained" : "Not confirmed: cookie preference interface",
         ...policySurfaceUrls.map((url) => `Policy URL: ${url}`).slice(0, 2)
       ],
       {
         retainedEvidence: {
           cookieNoticeObserved: true,
           cookiePolicyPresent: true,
+          granularCookieInventoryConfirmed,
+          preferenceInterfaceConfirmed,
           cookiePolicyUrls: compactArray(policySurfaceUrls, 4),
           observedPolicyControls: compactArray(policySurfaceControls, 6),
           observedPolicyTopics: compactArray(policySurfaceTopics, 6)
@@ -1941,6 +2016,44 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
   }
 
   return null;
+}
+
+function deriveCookieDisclosureConsistencyReviewOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
+  const policyDisclosureSummary = getPolicyDisclosureSummary(input.runtimeArtifacts);
+  const bannerEvidence = [
+    getString(firstLayerChoices, ["textSnippet", "text_snippet"]),
+    ...getStringArray(firstLayerChoices, ["defaultTogglePurposeLabels", "default_toggle_purpose_labels"]),
+    ...getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"])
+  ].filter(Boolean).join(" ");
+  const cookiePolicyText = getString(policyDisclosureSummary, [
+    "retainedCookiePolicyTextExcerpt",
+    "retained_cookie_policy_text_excerpt"
+  ]) ?? "";
+  const bannerAdvertisesOptionalPurposes =
+    /targeted advertising|personal(?:ization|isation)|analytics/i.test(bannerEvidence);
+  const policyIsGenericOrSessionOnly =
+    /session cookies?|third[- ]party (?:analysis|analytics)|analy(?:sis|tics) by third[- ]part/i.test(cookiePolicyText) &&
+    !/targeted advertising|interest[- ]based advertising|personal(?:ization|isation)|advertising cookies?/i.test(cookiePolicyText);
+
+  if (!bannerAdvertisesOptionalPurposes || !policyIsGenericOrSessionOnly) return null;
+  return makeOutcome(
+    "cookie_disclosure_consistency_review",
+    "Review signal",
+    "The retained first-layer banner described targeted advertising, personalization, or analytics purposes, while the retained cookie-policy excerpt described only session cookies or generic third-party analysis. Review the two surfaces for purpose-level consistency; this is not a legal conclusion.",
+    [
+      `Banner excerpt: ${bannerEvidence.slice(0, 320)}`,
+      `Cookie-policy excerpt: ${cookiePolicyText.slice(0, 320)}`
+    ],
+    {
+      retainedEvidence: {
+        bannerAdvertisesOptionalPurposes: true,
+        cookiePolicyPurposeCoverage: "generic_or_session_only",
+        bannerEvidence: bannerEvidence.slice(0, 500),
+        cookiePolicyEvidence: cookiePolicyText.slice(0, 500)
+      }
+    }
+  );
 }
 
 function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePolicyInput) {
@@ -2499,7 +2612,7 @@ function classifyEmbeddedContentPurpose(hostname: string | null | undefined, url
   if (/facebook\.com|connect\.facebook\.net|instagram\.com|tiktok\.com|analytics\.tiktok\.com|linkedin\.com|px\.ads\.linkedin\.com|twitter\.com|x\.com|platform\.twitter\.com|pinterest\.com|assets\.pinterest\.com|reddit\.com|redditstatic\.com|disqus\.com/.test(text)) {
     return "socialEmbed";
   }
-  if (/typeform\.com|calendly\.com|hubspot(?:usercontent)?\.com|chat|widget/.test(text)) {
+  if (/typeform\.com|calendly\.com|hubspot(?:usercontent)?\.com|salesforce-scrt\.com|\.my\.site\.com|embeddedservice|chat|widget/.test(text)) {
     return "formOrChatWidget";
   }
   return "otherEmbeddedContent";
@@ -2784,6 +2897,21 @@ function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
   ];
   const embeddedRows = iframeRows.filter(isKnownEmbeddedThirdPartyFrame);
   const summaryObservations = getObjectArray(embeddedSummary, ["observations"]);
+  const serviceRequestRows = [
+    ...getObjectArray(hybridRuntimeEvidence, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"]),
+    ...getObjectArray(hybridRuntimeEvidence, ["preconsentState0RequestObservations", "preconsent_state0_request_observations"])
+  ].filter((row) => {
+    const requestUrl = getString(row, ["requestUrl", "request_url", "url"]);
+    const host = getHostnameFromMaybeUrl(getString(row, ["hostname", "host", "domain"]) ?? requestUrl);
+    const category = getString(row, ["category", "vendorCategory", "vendor_category", "purpose"]);
+    const preConsent = getBoolean(row, ["preConsent", "pre_consent"]) !== false &&
+      !/post.?consent/i.test(getString(row, ["runtimePhase", "runtime_phase", "timingStatus", "timing_status"]) ?? "");
+    const observedMs = getNumber(row, ["firstSeenMs", "first_seen_ms", "observedAtMs", "observed_at_ms", "timestampMs", "timestamp_ms", "tsMs", "ts_ms"]);
+    return Boolean(
+      requestUrl && host && preConsent && observedMs !== null &&
+      (category === "customer_support" || classifyEmbeddedContentPurpose(host, requestUrl) === "formOrChatWidget")
+    );
+  });
   const eligibleSummaryObservations = summaryObservations.filter((row) => {
     const url = getString(row, ["frameUrl", "frame_url", "requestUrl", "request_url", "url"]);
     const host = getHostnameFromMaybeUrl(getString(row, ["hostname", "host", "domain"]) ?? url);
@@ -2798,12 +2926,12 @@ function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
       getHostnameFromMaybeUrl(getString(row, ["hostname"]) ?? getString(row, ["frameUrl", "frame_url", "url"]))
     ),
     ...getStringArray(embeddedSummary, ["embeddedContentHosts", "embedded_content_hosts"]),
-    ...summaryObservations.map((row) =>
+    ...[...summaryObservations, ...serviceRequestRows].map((row) =>
       getHostnameFromMaybeUrl(getString(row, ["hostname"]) ?? getString(row, ["frameUrl", "frame_url", "requestUrl", "request_url", "url"]))
     )
   ]);
   const observedMs = getSortedUniqueMs([
-    ...getRuntimeRowObservedMs([...embeddedRows, ...summaryObservations], input.runtimeArtifacts),
+    ...getRuntimeRowObservedMs([...embeddedRows, ...summaryObservations, ...serviceRequestRows], input.runtimeArtifacts),
     getRuntimeObservedMs(embeddedSummary, [
       "firstEmbeddedContentObservedMs",
       "first_embedded_content_observed_ms",
@@ -2816,7 +2944,7 @@ function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
     ], getNumber(getHybridTimelineMarkers(input.runtimeArtifacts), ["navigationStartMs", "navigation_start_ms"]))
   ]);
   const purposeBuckets = getObject(embeddedSummary, ["embeddedContentPurposeBuckets", "embedded_content_purpose_buckets"]) ??
-    buildEmbeddedContentPurposeBuckets([...embeddedRows, ...summaryObservations], embeddedHosts);
+    buildEmbeddedContentPurposeBuckets([...embeddedRows, ...summaryObservations, ...serviceRequestRows], embeddedHosts);
   const anchoredYouTubeHosts = new Set(
     [...embeddedRows, ...summaryObservations]
       .filter(hasYouTubeEmbedOrMediaAnchor)
@@ -2835,14 +2963,15 @@ function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
       .filter((entry) => isHighConfidenceThirdPartyServiceBucket(entry.bucket))
       .map((entry) => entry.host)
   );
-  const highConfidenceObservations = [...embeddedRows, ...summaryObservations].filter((row) => {
+  const highConfidenceObservations = [...embeddedRows, ...summaryObservations, ...serviceRequestRows].filter((row) => {
     const url = getString(row, ["frameUrl", "frame_url", "requestUrl", "request_url", "url"]);
     const host = getHostnameFromMaybeUrl(getString(row, ["hostname", "host", "domain"]) ?? url);
     if (!host) {
       return false;
     }
-    return isHighConfidenceThirdPartyServiceBucket(classifyEmbeddedContentPurpose(host, url)) &&
-      hasYouTubeEmbedOrMediaAnchor(row);
+    const bucket = classifyEmbeddedContentPurpose(host, url);
+    return isHighConfidenceThirdPartyServiceBucket(bucket) &&
+      (bucket === "formOrChatWidget" || hasYouTubeEmbedOrMediaAnchor(row));
   });
   return {
     embeddedHosts,
@@ -4348,14 +4477,14 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
     if (!evidence.controlInventoryComplete) {
       return makeOutcome(
         "consent_choice_quality",
-        "Review signal",
-        `The retained first-layer controls suggest a consent choice-quality concern, but the control inventory was incomplete and cannot support a dark-pattern gap.${visibleChoicePhrase}`,
+        "Not confirmed",
+        `The first-layer control inventory was incomplete, so consent choice quality and dark-pattern characteristics were not confirmed.${visibleChoicePhrase}`,
         [...evidenceRefs, "Evidence limitation: complete first-layer control inventory not retained"],
         {
           retainedEvidence: {
             ...retainedEvidence,
             directGapCandidates: directGapReasons,
-            selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "moderate"
+            selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "limited"
           }
         }
       );
@@ -5228,7 +5357,7 @@ const CONTROLLER_CONTACT_DISCLOSURE_PATTERN =
   /data controller|\bcontroller\b|privacy (?:contact|office|team|questions|rights)|data protection(?: office| officer)?|contact (?:our )?(?:privacy|data protection)|contact (?:google|us).{0,80}(?:privacy|data protection)|privacy@/i;
 
 const DEDICATED_PRIVACY_CONTACT_PATTERN =
-  /(?:privacy (?:questions?|requests?|inquiries|enquiries)|contact (?:our )?(?:privacy|data protection)|privacy (?:office|team|contact)|data protection (?:office|contact|officer)).{0,180}(?:[a-z0-9._%+-]*privacy[a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}|mailto:)|\b[a-z0-9._%+-]*privacy[a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}\b/i;
+  /(?:privacy (?:questions?|requests?|inquiries|enquiries)|contact (?:our )?(?:privacy|data protection)|(?:chief )?privacy (?:officer|office|team|contact)|data protection (?:office|contact|officer)).{0,180}(?:[a-z0-9._%+-]*privacy[a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}|mailto:)|\b[a-z0-9._%+-]*privacy[a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}\b/i;
 
 const PROCESSING_PURPOSES_DISCLOSURE_PATTERN =
   /purpose(?:s)? (?:of|for|we|to)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|provide (?:our )?services|personalize (?:content|ads|advertising|services|experience)|tailored search results|measure (?:performance|advertising)|perform analytics/i;
@@ -5327,10 +5456,10 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
   },
   {
     rowId: "dpo_contact_point_disclosure",
-    label: "DPO / privacy contact point disclosure",
+    label: "Privacy contact point / DPO designation disclosure",
     disclosureType: "dpo_contact",
     signalKeys: ["dpoContactPointDisclosureObserved", "dpo_contact_point_disclosure_observed"],
-    textPattern: /data protection officer|dpo|privacy office|privacy contact|privacy team|data protection contact/i
+    textPattern: /data protection officer|dpo|chief privacy officer|privacy officer|privacy office|privacy contact|privacy team|data protection contact/i
   },
   {
     rowId: "supervisory_authority_complaint_disclosure",
@@ -6114,7 +6243,7 @@ function policyDisclosureSectionHints(disclosureType: string): RegExp[] {
     case "international_transfers":
       return [/data transfers?/, /servers around the world/, /outside of the country where you live/, /legal frameworks relating to the transfer of data/, /data protection laws vary among countries/, /data privacy framework/, /standard contractual clauses/];
     case "dpo_contact":
-      return [/data protection officer/, /\bdpo\b/, /privacy office/, /privacy contact/, /data protection contact/];
+      return [/data protection officer/, /\bdpo\b/, /chief privacy officer/, /privacy officer/, /privacy office/, /privacy contact/, /data protection contact/];
     case "supervisory_authority":
       return [/regulatory authorities/, /local data protection authorities/, /supervisory authority/, /data protection authority/, /formal written complaints?/, /resolve any complaints?/, /complaint/];
     case "automated_decision_making_or_profiling":
@@ -6720,6 +6849,8 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
       "Observed",
       config.rowId === "international_transfers_disclosure"
         ? "International transfer disclosure evidence was retained: the excerpt describes cross-border data transfer, storage, processing, access, sharing, or transfer safeguards."
+        : config.rowId === "dpo_contact_point_disclosure"
+          ? "A privacy contact point was retained. A formal GDPR DPO designation is confirmed only when the retained excerpt expressly identifies a Data Protection Officer or DPO."
         : config.rowId === "supervisory_authority_complaint_disclosure" && supportingContactContext
           ? "Supervisory authority complaint disclosure evidence was retained: authority/regulator complaint language confirms the row, with nearby privacy contact context retained as supporting context."
         : `${config.label} evidence was retained in public policy-surface evidence.`,
@@ -6744,7 +6875,14 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
           selectedEvidenceStrength: rowSpecificSectionEvidence?.selectedEvidenceStrength ?? undefined,
           selectedPolicySectionHeading: rowSpecificSectionEvidence?.selectedPolicySectionHeading ?? undefined,
           supportSource: rowSpecificSectionEvidence?.evidenceType ?? undefined,
-          signalObserved: true
+          signalObserved: true,
+          ...(config.rowId === "dpo_contact_point_disclosure"
+            ? {
+                formalDpoDesignationConfirmed: /data protection officer|\bdpo\b/i.test(
+                  [displayTextMatchEvidence, getString(effectiveArticle13Signal, ["evidenceText", "evidence_text"])].filter(Boolean).join(" ")
+                )
+              }
+            : {})
         }
       }
     );
@@ -8910,6 +9048,7 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveConsentSurfaceOutcome(input),
     deriveCmpFrameworkSignalOutcome(input),
     deriveCookieNoticePolicyAvailabilityOutcome(input),
+    deriveCookieDisclosureConsistencyReviewOutcome(input),
     derivePreConsentCookieStorageOutcome(input),
     derivePreConsentThirdPartyTrackingOutcome(input),
     deriveAdvertisingRetargetingVendorSignalOutcome(input),

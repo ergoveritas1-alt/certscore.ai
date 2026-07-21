@@ -5,6 +5,7 @@ import {
   buildRuntimeCookieInventory,
   classifyRuntimeCookieCategory,
   getRuntimeCookiePrimaryProvider,
+  isEligibleNonEssentialPreconsentStorageRow,
   isFunctionalCookieExcludedFromTrackingEvidence
 } from "./runtime-cookie-evidence";
 import {
@@ -32,11 +33,190 @@ test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("IDE"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("_twpid", ".nvidia.com"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("rlas3"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("cookielawinfo-checkbox-analytics"), "consent_management");
   assert.equal(classifyRuntimeCookieCategory("s_ecid"), "analytics");
   assert.equal(classifyRuntimeCookieCategory("QSI_HistorySession"), "session_replay");
   assert.equal(classifyRuntimeCookieCategory("KRTBCOOKIE_452", ".pubmatic.com"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("tuuid", ".bidswitch.net"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("QSI_ReplaySession_Info_ZN_abc", ".qualtrics.com"), "session_replay");
+  assert.equal(classifyRuntimeCookieCategory("FCCDCF", ".daily.co.jp"), "necessary");
+  assert.equal(classifyRuntimeCookieCategory("_gcl_au", ".daily.co.jp"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("AMP_abc123", ".medal.tv"), "analytics");
+  assert.equal(classifyRuntimeCookieCategory("AMP_MKTG_abc123", ".medal.tv"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("ld_anonymous_user_key", ".medal.tv"), "personalization");
+});
+
+test("Medal snapshot cookies keep presence-only timing and canonical providers", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: ["AMP_abc123", "AMP_MKTG_abc123", "ld_anonymous_user_key"].map((cookieName) => ({
+        beforeConsent: true,
+        category: "Security",
+        cookieName,
+        domain: "medal.tv",
+        nonEssential: false,
+        setAtMs: null,
+        setMethod: "browser_snapshot"
+      }))
+    }
+  });
+  const rows = new Map(inventory.rows.map((row) => [row.cookieName, row]));
+
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("AMP_abc123")!), "Amplitude");
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("AMP_MKTG_abc123")!), "Amplitude");
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("ld_anonymous_user_key")!), "LaunchDarkly");
+  assert.equal(rows.get("AMP_abc123")?.category, "analytics");
+  assert.equal(rows.get("AMP_MKTG_abc123")?.category, "advertising");
+  assert.equal(rows.get("ld_anonymous_user_key")?.category, "personalization");
+  for (const row of rows.values()) {
+    assert.equal(row.setAtMs, null);
+    assert.equal(row.timingEvidence, "initial_cookie_snapshot");
+    assert.equal(row.nonEssential, true);
+    assert.equal(isEligibleNonEssentialPreconsentStorageRow(row), false);
+    assert.equal(getRuntimeCookieReviewPriority(row), "review_needed");
+  }
+});
+
+test("Daily cookies separate proven writes, snapshot presence, and Funding Choices consent state", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          beforeConsent: true,
+          cookieName: "daily-ppid",
+          domain: "www.daily.co.jp",
+          nonEssential: false,
+          setAtMs: 3_530,
+          setMethod: "set_cookie_header"
+        },
+        {
+          beforeConsent: true,
+          category: "advertising",
+          cookieName: "id5",
+          domain: "id5-sync.com",
+          nonEssential: false,
+          setAtMs: 12_259,
+          setMethod: "set_cookie_header"
+        },
+        ...["_gcl_au", "_ga", "_gid", "_ga_TF2974TV1H", "FCCDCF"].map((cookieName) => ({
+          cookieName,
+          domain: "daily.co.jp",
+          firstObservedAtMs: 15_429,
+          nonEssential: true,
+          setMethod: "browser_snapshot"
+        }))
+      ]
+    }
+  });
+  const rows = new Map(inventory.rows.map((row) => [row.cookieName, row]));
+
+  assert.equal(rows.get("daily-ppid")?.category, "unknown");
+  assert.equal(rows.get("id5")?.nonEssential, false);
+  assert.equal(isEligibleNonEssentialPreconsentStorageRow(rows.get("id5")!), false);
+  for (const name of ["_gcl_au", "_ga", "_gid", "_ga_TF2974TV1H", "FCCDCF"]) {
+    assert.equal(rows.get(name)?.setAtMs, null, name);
+    assert.equal(rows.get(name)?.timingEvidence, "periodic_cookie_snapshot", name);
+  }
+  assert.equal(rows.get("_gcl_au")?.category, "advertising");
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("FCCDCF")!), "Google Funding Choices");
+  assert.equal(rows.get("FCCDCF")?.nonEssential, false);
+});
+
+test("separates a proven Branch cookie write from late Google and WisePops snapshot presence", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          beforeConsent: true,
+          category: "unknown",
+          cookieName: "_s",
+          domain: "app.link",
+          nonEssential: false,
+          party: "third_party",
+          setAtMs: 25309,
+          setMethod: "set_cookie_header",
+          sourceRequestUrl: "https://app.link/_r"
+        },
+        {
+          category: "analytics",
+          cookieName: "_ga",
+          domain: "ifit.com",
+          firstObservedAtMs: 26951,
+          nonEssential: true,
+          party: "first_party",
+          setMethod: "browser_snapshot"
+        },
+        {
+          category: "analytics",
+          cookieName: "wisepops_visitor",
+          domain: "ifit.com",
+          firstObservedAtMs: 26951,
+          nonEssential: true,
+          party: "first_party",
+          setMethod: "browser_snapshot"
+        }
+      ]
+    }
+  });
+  const rows = new Map(inventory.rows.map((row) => [row.cookieName, row]));
+
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("_s")!), "Branch Deep Linking and Attribution");
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("wisepops_visitor")!), "WisePops");
+  assert.equal(rows.get("_ga")?.setAtMs, null);
+  assert.equal(rows.get("_ga")?.timingEvidence, "periodic_cookie_snapshot");
+  assert.equal(isEligibleNonEssentialPreconsentStorageRow(rows.get("_s")!), false);
+  assert.equal(inventory.beforeConsentRows.length, 1);
+});
+
+test("Aruba cookies use cookie-specific ownership and reject unrelated Cloudflare inheritance", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          beforeConsent: true,
+          cookieName: "CMSCsrfCookie",
+          domain: "www.aruba.it",
+          initiatorVendor: "Cloudflare",
+          nonEssential: false,
+          setAtMs: 3364,
+          sourceRequestUrl: "https://www.aruba.it/"
+        },
+        {
+          beforeConsent: true,
+          cookieName: "CMSPreferredCulture",
+          domain: "www.aruba.it",
+          initiatorVendor: "Cloudflare",
+          nonEssential: false,
+          setAtMs: 3364,
+          sourceRequestUrl: "https://www.aruba.it/"
+        },
+        {
+          beforeConsent: true,
+          cookieName: "cf_clearance",
+          domain: ".aruba.it",
+          nonEssential: false,
+          setAtMs: 3919
+        },
+        {
+          beforeConsent: true,
+          cookieName: "cookiesession1",
+          domain: "managehosting.aruba.it",
+          initiatorVendor: "Cloudflare",
+          nonEssential: false,
+          setAtMs: 3829,
+          sourceRequestUrl: "https://managehosting.aruba.it/"
+        }
+      ]
+    }
+  });
+  const rows = new Map(inventory.rows.map((row) => [row.cookieName, row]));
+
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("CMSCsrfCookie")!), "Kentico Xperience CMS");
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("CMSPreferredCulture")!), "Kentico Xperience CMS");
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("cf_clearance")!), "Cloudflare");
+  assert.equal(rows.get("cookiesession1")?.initiatorVendor, null);
+  assert.notEqual(getRuntimeCookiePrimaryProvider(rows.get("cookiesession1")!), "Cloudflare");
+  assert.equal([...rows.values()].some(isEligibleNonEssentialPreconsentStorageRow), false);
 });
 
 test("canonical security-cookie classification overrides stale advertising flags", () => {
@@ -55,7 +235,106 @@ test("canonical security-cookie classification overrides stale advertising flags
 
   assert.equal(inventory.rows[0]?.category, "necessary");
   assert.equal(inventory.rows[0]?.nonEssential, false);
+  assert.equal(inventory.rows[0]?.essentiality, "essential");
+  assert.equal(getRuntimeCookiePrimaryProvider(inventory.rows[0]!), "Cloudflare");
   assert.equal(getRuntimeCookieReviewPriority(inventory.rows[0]!), "contextual");
+});
+
+test("IMOU redirect-hop load-balancer cookies remain first-party necessary context", () => {
+  const cookieNames = ["AWSALBTG", "AWSALBTGCORS", "AWSALBAPP-0", "AWSALBAPP-1", "AWSALBAPP-2", "AWSALBAPP-3"];
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      navigationSummary: {
+        requestedUrl: "https://imoulife.com/",
+        redirectChain: ["https://imoulife.com/", "https://www.imou.com/"],
+        finalUrl: "https://www.imou.com/"
+      },
+      cookieWriteObservations: cookieNames.map((cookieName) => ({
+        beforeConsent: true,
+        category: "necessary",
+        cookieName,
+        domain: "imoulife.com",
+        nonEssential: false,
+        setAtMs: 1_258,
+        sourceRequestUrl: "https://imoulife.com/",
+        thirdParty: true
+      }))
+    }
+  });
+
+  assert.equal(inventory.rows.length, 6);
+  for (const row of inventory.rows) {
+    assert.equal(row.category, "necessary", row.cookieName);
+    assert.equal(row.nonEssential, false, row.cookieName);
+    assert.equal(row.party, "first_party", row.cookieName);
+    assert.equal(getRuntimeCookiePrimaryProvider(row), "AWS Elastic Load Balancing", row.cookieName);
+    assert.equal(getRuntimeCookieReviewPriority(row), "contextual", row.cookieName);
+    assert.equal(isEligibleNonEssentialPreconsentStorageRow(row), false, row.cookieName);
+  }
+});
+
+test("classifies named measurement identifiers and leaves unknown identifiers unclassified", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        { cookieName: "_dd_s", domain: ".example.test", category: "unknown", nonEssential: false },
+        { cookieName: "_zitok", domain: ".example.test", category: "unknown", nonEssential: false },
+        { cookieName: "ebEventToTrack", domain: ".example.test", category: "unknown", nonEssential: false },
+        { cookieName: "stableId", domain: ".example.test", category: "unknown", nonEssential: false },
+        { cookieName: "unresolved_identifier", domain: ".example.test", category: "unknown", nonEssential: false },
+      ]
+    }
+  });
+  const rows = new Map(inventory.rows.map((row) => [row.cookieName, row]));
+  for (const name of ["_dd_s", "_zitok", "ebEventToTrack", "stableId"]) {
+    assert.equal(rows.get(name)?.category, "analytics");
+    assert.equal(rows.get(name)?.essentiality, "unknown");
+    assert.equal(rows.get(name)?.nonEssential, false);
+  }
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("_dd_s")!), "Datadog");
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("_zitok")!), "ZoomInfo");
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("ebEventToTrack")!), "Eventbrite");
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("stableId")!), "Eventbrite");
+  assert.equal(rows.get("unresolved_identifier")?.category, "unknown");
+  assert.equal(rows.get("unresolved_identifier")?.essentiality, "unknown");
+  assert.equal(rows.get("unresolved_identifier")?.nonEssential, false);
+});
+
+test("repairs Life.ru Yandex cookie ownership without borrowing Bombora, OpenX, or Quantcast", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      navigationSummary: { finalUrl: "https://life.ru/" },
+      cookieWriteObservations: [
+        {
+          beforeConsent: true,
+          cookieName: "pi",
+          domain: "yandex.ru",
+          initiatorUrl: "https://yandex.ru/ads/system/header-bidding.js",
+          initiatorVendor: "Bombora Visitor Insights",
+          setAtMs: 4311,
+          setMethod: "set_cookie_header",
+          thirdParty: true,
+        },
+        ...["_ym_uid", "_ym_d", "_ym_isad", "_ymab_param"].map((cookieName) => ({
+          cookieName,
+          domain: "life.ru",
+          firstObservedAtMs: 10875,
+          setMethod: "browser_snapshot",
+        })),
+      ],
+    },
+  });
+
+  const rows = new Map(inventory.rows.map((row) => [row.cookieName, row]));
+  assert.equal(rows.get("pi")?.initiatorVendor, "Yandex Ads / Metrica");
+  assert.equal(getRuntimeCookiePrimaryProvider(rows.get("pi")!), "Yandex");
+  for (const cookieName of ["_ym_uid", "_ym_d", "_ym_isad", "_ymab_param"]) {
+    const row = rows.get(cookieName);
+    assert.equal(row?.category, "analytics", cookieName);
+    assert.equal(row?.timingEvidence, "periodic_cookie_snapshot", cookieName);
+    assert.equal(row?.setAtMs, null, cookieName);
+    assert.equal(getRuntimeCookiePrimaryProvider(row!), "Yandex Metrica", cookieName);
+  }
 });
 
 test("surfaces Segment anonymous storage as non-essential analytics evidence", () => {
@@ -96,7 +375,7 @@ test("attributes canonical Google and OneTrust cookies without borrowed initiato
   assert.equal(byName.get("JSESSIONID")?.nonEssential, false);
 });
 
-test("deduplicates cookie domain formatting and keeps browser snapshots untimed", () => {
+test("deduplicates cookie domain formatting and keeps periodic browser snapshots untimed", () => {
   const inventory = buildRuntimeCookieInventory({
     hybridRuntimeEvidence: {
       cookieWriteObservations: [
@@ -135,7 +414,7 @@ test("deduplicates cookie domain formatting and keeps browser snapshots untimed"
   assert.equal(ga?.domain, "example.test");
   assert.equal(ga?.setAtMs, null);
   assert.equal(ga?.firstObservedAtMs, 12001);
-  assert.equal(ga?.timingEvidence, "initial_cookie_snapshot");
+  assert.equal(ga?.timingEvidence, "periodic_cookie_snapshot");
 });
 
 test("keeps DoubleClick and Google Analytics cookie names as representative storage anchors", () => {

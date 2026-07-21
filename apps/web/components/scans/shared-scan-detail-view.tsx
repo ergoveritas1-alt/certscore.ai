@@ -123,11 +123,16 @@ import {
   getPolicyMentions,
   getPolicyPageType,
   getPolicyPageUrl,
-  getPolicySummaryText
+  getPolicySummaryText,
+  prioritizePublicPolicySurfaces
 } from "../../lib/scans/policy-enrichment-row";
 import { isGenericBrowserCookieHelpUrl } from "../../lib/scans/policy-surface-url-hygiene";
 import { deriveHighRiskTrackingContext } from "../../lib/scans/high-risk-tracking-context";
-import { buildRuntimeCookieInventory, type RuntimeCookieEvidenceRow } from "../../lib/scans/runtime-cookie-evidence";
+import {
+  buildRuntimeCookieInventory,
+  isEligibleNonEssentialPreconsentStorageRow,
+  type RuntimeCookieEvidenceRow
+} from "../../lib/scans/runtime-cookie-evidence";
 import {
   buildReportSurfaceVendorProjection,
   buildRuntimeInventoryGroupRows,
@@ -138,6 +143,7 @@ import {
   getInventoryGroupRowRenderKey,
   getTrackerConsentReviewPriority,
   isCmpOrFunctionalVendorDomain,
+  isTimedPreConsentInventoryRow,
   type ConsentReviewPriority,
   type InventoryConfidence,
   type InventoryGroupRow,
@@ -384,6 +390,13 @@ function formatScanTimeDurationMs(durationMs: number) {
 
 function formatFirstSeenMs(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? formatElapsedSeconds(value) : "—";
+}
+
+function formatInventoryTiming(row: InventoryGroupRow) {
+  if (row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "")) {
+    return "Present; write time unconfirmed";
+  }
+  return formatFirstSeenMs(row.firstSeenMs);
 }
 
 function formatElapsedSeconds(value: number) {
@@ -741,7 +754,7 @@ function RuntimeInventoryTable({
                         priority={row.priority}
                       />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">{formatFirstSeenMs(row.firstSeenMs)}</td>
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">
@@ -1052,13 +1065,11 @@ function firstTimelineMsFromRows(
   );
 }
 
-function firstObservedRuntimeTimelineMsFromRows(rows: Record<string, unknown>[]) {
-  return firstTimelineMsFromRows(rows, (row) => {
-    const hasObservedHostOrRequest = [
-      "host", "hostname", "domain", "scriptHost", "script_host", "requestUrl", "request_url", "url"
-    ].some((key) => typeof row[key] === "string" && (row[key] as string).trim().length > 0);
-    return hasObservedHostOrRequest;
-  });
+function firstConcreteFingerprintingTimelineMs(rows: Record<string, unknown>[]) {
+  return firstTimelineMsFromRows(rows, (row) =>
+    ["scriptHost", "script_host", "scriptUrl", "script_url", "requestUrl", "request_url", "responsibleScriptUrl"]
+      .some((key) => typeof row[key] === "string" && (row[key] as string).trim().length > 0)
+  );
 }
 
 function getTimelineVendorLabel(row: Record<string, unknown> | null | undefined) {
@@ -1127,6 +1138,17 @@ export function buildExecutiveTimelineEvents(
     ...getRecordObjectArray(hybrid, "fingerprintingRuntimeEvidence"),
     ...getRecordObjectArray(hybrid, "fingerprinting_runtime_evidence")
   ];
+  const fingerprintSummary =
+    getRecord(hybrid.fingerprintingEvidenceSummary) ?? getRecord(hybrid.fingerprinting_evidence_summary);
+  const embeddedEvidenceObserved = embeddedSummary?.embeddedContentObserved === true ||
+    embeddedSummary?.embedded_content_observed === true;
+  const concreteFingerprintMs = fingerprintSummary?.strongCorroboratorObserved === true ||
+    fingerprintSummary?.strong_corroborator_observed === true
+    ? firstConcreteFingerprintingTimelineMs(fingerprintRows)
+    : null;
+  const fingerprintCandidateMs = concreteFingerprintMs === null
+    ? firstTimelineMsFromRows(fingerprintRows, () => true)
+    : null;
   const events: ExecutiveTimelineEvent[] = [];
   const pushEvent = (event: ExecutiveTimelineEvent) => {
     if (!Number.isFinite(event.atMs) || event.atMs < 0) {
@@ -1139,7 +1161,16 @@ export function buildExecutiveTimelineEvents(
   };
 
   pushEvent({
-    atMs: firstTimelineMs(timelineMarkers?.firstCmpVisibleMs, timelineMarkers?.first_cmp_visible_ms) ?? -1,
+    atMs: firstTimelineMs(
+      timelineMarkers?.firstConsentSurfaceVisibleMs,
+      timelineMarkers?.first_consent_surface_visible_ms,
+      timelineMarkers?.firstCmpVisibleMs,
+      timelineMarkers?.first_cmp_visible_ms,
+      consentSummary?.observedAtMs,
+      consentSummary?.observed_at_ms,
+      consentSummary?.firstObservedAtMs,
+      consentSummary?.first_observed_at_ms
+    ) ?? -1,
     label: "Consent banner",
     tone: "emerald",
     vendorLabel: getTimelineVendorLabel(consentSummary)
@@ -1201,12 +1232,14 @@ export function buildExecutiveTimelineEvents(
     tone: "rose"
   });
   pushEvent({
-    atMs: firstObservedRuntimeTimelineMsFromRows(fingerprintRows) ?? -1,
-    label: "Fingerprinting",
+    atMs: concreteFingerprintMs ?? fingerprintCandidateMs ?? -1,
+    label: concreteFingerprintMs === null ? "Fingerprinting candidate" : "Fingerprinting",
     tone: "rose"
   });
   pushEvent({
-    atMs: firstTimelineMsFromRows(embeddedRows, (row) => row.preConsent !== false && row.pre_consent !== false) ?? -1,
+    atMs: embeddedEvidenceObserved
+      ? firstTimelineMsFromRows(embeddedRows, (row) => row.preConsent !== false && row.pre_consent !== false) ?? -1
+      : -1,
     label: "Embedded content",
     tone: "amber",
     vendorLabel: getTimelineVendorLabel(firstEmbeddedRow)
@@ -3397,11 +3430,18 @@ export function deriveExecutivePolicySurfaces(
       };
     })
     .filter((surface) => surface.pageUrl || surface.details.length > 0);
-  return disambiguatePolicySurfaceLabels([
+  const combinedSurfaces = [
     ...enrichedSurfaces,
     ...deriveSnapshotPolicySurfaceFallbacks(snapshot, enrichedSurfaces, runtimeArtifacts),
     ...deriveDiscoveredPrivacyPolicySurfaceFallbacks(runtimeArtifacts, enrichedSurfaces)
-  ]);
+  ];
+  const siteDomain = snapshot
+    ? getRecordString(snapshot, "registered_domain") ?? getRecordString(snapshot, "domain")
+    : null;
+  return disambiguatePolicySurfaceLabels(prioritizePublicPolicySurfaces(
+    combinedSurfaces.map((surface) => ({ ...surface, type: surface.pageLabel, url: surface.pageUrl })),
+    { siteDomain }
+  ).map(({ type: _type, url: _url, ...surface }) => surface));
 }
 
 function pushUniqueInterruption(
@@ -6869,17 +6909,22 @@ export async function SharedScanDetailView({
     executiveFingerprintCategories.length > 0 ||
     executiveFingerprintReasons.length > 0 ||
     certScoreSummary.fingerprintLabel !== "None detected";
-  const cookieInventoryRows = buildRuntimeCookieInventory({
+  const runtimeCookieInventory = buildRuntimeCookieInventory({
     hybridRuntimeEvidence,
     runtimeArtifacts
-  }).rows;
+  });
+  const cookieInventoryRows = runtimeCookieInventory.rows;
+  const eligiblePreConsentStorageRows = cookieInventoryRows.filter(isEligibleNonEssentialPreconsentStorageRow);
   const cookiesBeforeConsentCount = cookieInventoryRows.length > 0
-    ? cookieInventoryRows.length
+    ? eligiblePreConsentStorageRows.length
     : Math.max(
         getRecordNumber(hybridStorageSummary, "cookiesBeforeConsentCount") ?? 0,
         certScoreSummary.cookieNamesBeforeConsent.length,
         runtimeInitialCookieCount
       );
+  const beforeConsentStorageScope = cookieInventoryRows.length > 0
+    ? "nonessential_only" as const
+    : "all_observed" as const;
   const trackerInventoryRows = buildTrackerInventoryRows({
     domains: inventoryThirdPartyDomains,
     firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
@@ -6889,12 +6934,15 @@ export async function SharedScanDetailView({
     trackerVendors: scanRecord.trackerVendors,
     topObservedEntities: inventoryTopObservedEntities,
     unresolvedHosts: executiveUnresolvedVendorHosts
-  });
+  }).filter(isTimedPreConsentInventoryRow);
   const trackerPriorityRows = buildTrackerInventoryGroupRows(trackerInventoryRows).map((row) => ({
+    domains: row.domains,
     firstSeenMs: row.firstSeenMs,
     party: row.party,
     priority: row.priority,
     purpose: row.purpose,
+    requestCount: row.requestCount,
+    regulatoryRelevance: row.regulatoryRelevance,
     vendor: row.vendor
   }));
   const reviewSectionError: string | null = null;
@@ -7315,6 +7363,7 @@ export async function SharedScanDetailView({
                 accessibilitySignals={executiveAccessibilitySignals}
             agencyMappings={scanRecord.agencyMappings}
             beforeConsentCookieCount={cookiesBeforeConsentCount}
+            beforeConsentStorageScope={beforeConsentStorageScope}
             coverageDiagnosticIndicators={scanCalibrationSummary.coverage.diagnosticIndicators}
             coverageMicrocards={coverageMicrocards}
             coverageLevel={executiveCoverageLevel}

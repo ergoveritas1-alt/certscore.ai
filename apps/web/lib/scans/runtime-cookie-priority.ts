@@ -24,6 +24,7 @@ export type RuntimeCookiePriorityGroupRow = {
   priority: RuntimeCookieReviewPriority;
   purpose: string;
   syncedIdentifiers?: string[];
+  timingEvidence?: RuntimeCookieEvidenceRow["timingEvidence"] | "mixed";
   vendor: string;
 };
 
@@ -77,7 +78,10 @@ export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
   if (/(^|[^a-z0-9])(_ga|_gid|_gcl|_gads|_gpi|__gads|gcl_|google|googlesyndication|doubleclick|securepubads)/i.test(cookieDomainHaystack)) {
     return "Google";
   }
-  if (/(optanon|onetrust|cookielaw)/i.test(haystack)) {
+  if (/(cookielawinfo-checkbox-|viewed_cookie_policy|cookieyes)/i.test(haystack)) {
+    return "CookieYes";
+  }
+  if (/(optanon|onetrust|(?:^|\.)cookielaw\.org)/i.test(haystack)) {
     return "OneTrust";
   }
   if (/(__cf|_cfuvid|cf_clearance|cf_chl|cloudflare)/i.test(haystack)) {
@@ -151,7 +155,10 @@ export function getRuntimeCookiePurposeLabel(row: RuntimeCookieEvidenceRow) {
   if (/jsdelivr|cdn\.jsdelivr\.net/.test(label)) {
     return "CDN";
   }
-  if (/onetrust|cookielaw|optanon/.test(label)) {
+  if (/cookieyes|gdpr cookie consent/.test(label)) {
+    return "Consent management";
+  }
+  if (/onetrust|(?:^|\.)cookielaw\.org|optanon/.test(label)) {
     return "Cookie compliance";
   }
   if (/optimizely/.test(label)) {
@@ -196,7 +203,13 @@ function getRuntimeCookieSyncedIdentifiers(row: RuntimeCookieEvidenceRow, vendor
 
 export function getRuntimeCookieReviewPriority(row: RuntimeCookieEvidenceRow): RuntimeCookieReviewPriority {
   const purpose = normalizeRuntimeCookiePurpose(getRuntimeCookiePurposeLabel(row));
-  const observedPreConsent = row.timingEvidence === "before_consent_cookie_write" || row.timingEvidence === "initial_cookie_snapshot";
+  if (
+    (row.timingEvidence === "initial_cookie_snapshot" || row.timingEvidence === "periodic_cookie_snapshot") &&
+    row.nonEssential
+  ) {
+    return "review_needed";
+  }
+  const observedPreConsent = row.timingEvidence === "before_consent_cookie_write";
 
   if (/^(advertising|retargeting|audience_measurement|session_replay|fingerprinting)$/.test(purpose) && observedPreConsent) {
     return "high";
@@ -290,6 +303,7 @@ export function buildRuntimeCookiePriorityGroups(
       priority: getRuntimeCookieReviewPriority(row),
       purpose,
       syncedIdentifiers: getRuntimeCookieSyncedIdentifiers(row, vendor),
+      timingEvidence: row.timingEvidence,
       vendor
     };
     const existing = grouped.get(key);
@@ -313,7 +327,8 @@ export function buildRuntimeCookiePriorityGroups(
       priority: runtimeCookiePriorityWeight(candidate.priority) > runtimeCookiePriorityWeight(existing.priority)
         ? candidate.priority
         : existing.priority,
-      syncedIdentifiers: uniqueStrings([...(existing.syncedIdentifiers ?? []), ...(candidate.syncedIdentifiers ?? [])])
+      syncedIdentifiers: uniqueStrings([...(existing.syncedIdentifiers ?? []), ...(candidate.syncedIdentifiers ?? [])]),
+      timingEvidence: existing.timingEvidence === candidate.timingEvidence ? existing.timingEvidence : "mixed"
     });
   }
   return [...grouped.values()].sort(compareRuntimeCookiePriorityRows);

@@ -1947,12 +1947,17 @@ function BenchmarkMetricCard(input: {
     : benchmarkValue !== null
       ? `Expected ${benchmarkValue}.`
       : null;
-  const metricNote = input.label === "Pre-consent storage"
+  const metricNote = input.label === "Non-essential pre-consent storage"
     ? [
+        "Non-essential cookie/storage observations before a recorded consent action. Essential and unclassified storage are excluded from this metric.",
+        input.note
+      ].filter(Boolean).join(" ")
+    : input.label === "Pre-consent storage"
+      ? [
         "Cookie/storage observations before a recorded consent action, deduped by name and domain. This total can include essential security and consent storage; it is not a count of confirmed nonessential trackers.",
         input.note
       ].filter(Boolean).join(" ")
-    : input.note;
+      : input.note;
   const benchmarkTooltip = [benchmarkTooltipBase, metricNote].filter(Boolean).join(" ");
   const displayLabel =
     input.label === "Third-party requests"
@@ -4252,6 +4257,7 @@ export function ExecutiveSummaryCard(input: {
   } | null;
   agencyMappings?: AgencyMapping[];
   beforeConsentCookieCount: number;
+  beforeConsentStorageScope?: "all_observed" | "nonessential_only";
   coverageMicrocards?: Array<{
     label: string;
     tooltip?: string | null;
@@ -4579,7 +4585,9 @@ export function ExecutiveSummaryCard(input: {
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}
                     />
                     <BenchmarkMetricCard
-                      label="Pre-consent storage"
+                      label={input.beforeConsentStorageScope === "nonessential_only"
+                        ? "Non-essential pre-consent storage"
+                        : "Pre-consent storage"}
                       actualValue={runtimeMetricsReliable ? input.beforeConsentCookieCount : null}
                       benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}

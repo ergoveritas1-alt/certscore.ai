@@ -61,6 +61,37 @@ test("getLocalV2FinalDocumentUrl prefers retained final-page evidence after a cr
   }, "https://www.final-brand.example/home"), true);
 });
 
+test("summarizeFirstLayerConsentChoices retains IMOU banner text, controls, policy link, layer, and timestamp", async () => {
+  const { summarizeFirstLayerConsentChoices } = await loadLocalV2DagReport();
+  const summary = summarizeFirstLayerConsentChoices({
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 1_420,
+      likelyPresent: true,
+      basis: ["control:manage_preferences:Manage", "control:reject_all:Reject", "control:accept_all:Accept"],
+      textExcerpt: "We use cookies and similar technologies. You can accept, reject or manage your choices.",
+      layerInspected: "first_layer",
+      controls: [
+        { actionType: "manage_preferences", label: "Manage", visible: true, classifierReasonCodes: [] },
+        { actionType: "reject_all", label: "Reject", visible: true, classifierReasonCodes: [] },
+        { actionType: "accept_all", label: "Accept", visible: true, classifierReasonCodes: [] }
+      ],
+      evidenceRefs: [{
+        refId: "imou_banner_policy_link",
+        eventType: "consent_ui",
+        url: "https://www.imou.com/policy#privacy-policy"
+      }],
+      confidence: 0.92
+    }]
+  } as unknown as CanonicalEvidenceBundle) as Record<string, unknown> | null;
+
+  assert.equal(summary?.layerInspected, "first_layer");
+  assert.equal(summary?.observedAtMs, 1_420);
+  assert.match(String(summary?.textSnippet ?? ""), /accept, reject or manage/i);
+  assert.deepEqual(summary?.visibleChoiceLabels, ["Manage", "Reject", "Accept"]);
+  assert.deepEqual(summary?.policyLinks, ["https://www.imou.com/policy#privacy-policy"]);
+});
+
 test("policy summary distinguishes discovered-but-budget-skipped privacy notices from absent notices", async () => {
   const { summarizePolicySurfaces } = await loadLocalV2DagReport();
   const discoveredSurface = {
@@ -339,12 +370,12 @@ test("segments auxiliary authorization and callback navigation from the primary 
   assert.equal(isPrimaryAssessmentRuntimeEvent({ documentUrl: "https://www.journal.example/callback?code=redacted", cookieName: "SESSION" }, pageUrl), false);
 });
 
-test("reports distinct cookies, timed writes, and initial snapshots separately", async () => {
+test("reports distinct cookies, timed writes, periodic snapshots, and initial snapshots separately", async () => {
   const { summarizeRuntimeCookieEvidenceCounts } = await loadLocalV2DagReport();
   const counts = summarizeRuntimeCookieEvidenceCounts([
     { consentStateAtTime: "pre_consent", cookieName: "session", cookieDomain: ".example.test", cookiePath: "/", operation: "set_cookie_header" },
-    { consentStateAtTime: "pre_consent", cookieName: "session", cookieDomain: ".example.test", cookiePath: "/", operation: "browser_snapshot" },
-    { consentStateAtTime: "pre_consent", cookieName: "_gcl_au", cookieDomain: ".example.test", cookiePath: "/", operation: "browser_snapshot" },
+    { consentStateAtTime: "pre_consent", cookieName: "session", cookieDomain: ".example.test", cookiePath: "/", operation: "initial_cookie_snapshot" },
+    { consentStateAtTime: "pre_consent", cookieName: "_gcl_au", cookieDomain: ".example.test", cookiePath: "/", operation: "browser_snapshot", timestampMs: 12000 },
     { consentStateAtTime: "post_consent", cookieName: "later", cookieDomain: ".example.test", cookiePath: "/", operation: "document_cookie" }
   ]);
   assert.deepEqual(counts, {
@@ -352,8 +383,36 @@ test("reports distinct cookies, timed writes, and initial snapshots separately",
     distinctPreConsentCookieCount: 2,
     timedCookieWriteCount: 2,
     timedPreConsentCookieWriteCount: 1,
-    initialCookieSnapshotCount: 2
+    initialCookieSnapshotCount: 1,
+    periodicCookieSnapshotCount: 1
   });
+});
+
+test("requires a concrete canonical host, request, cookie, or runtime signature for retained vendor rows", async () => {
+  const { hasConcreteCanonicalVendorAnchor } = await loadLocalV2DagReport();
+
+  assert.equal(hasConcreteCanonicalVendorAnchor({
+    basis: ["canonical_product_label"],
+    confidence: 0.8,
+    entity: "bombora",
+    matchedHostnames: ["yandex.ru"],
+    matchedUrls: ["https://yandex.ru/sync_cookie_image_check"],
+    observationId: "label-only-bombora",
+    product: "Bombora Visitor Insights",
+    purpose: "advertising",
+    vendor: "Bombora"
+  } as never), false);
+  assert.equal(hasConcreteCanonicalVendorAnchor({
+    basis: ["cookie_name_match"],
+    confidence: 0.95,
+    entity: "Yandex LLC",
+    matchedCookieNames: ["_ym_uid"],
+    matchedHostnames: ["life.ru"],
+    observationId: "concrete-yandex-metrica",
+    product: "Yandex Metrica",
+    purpose: "analytics",
+    vendor: "Yandex"
+  } as never), true);
 });
 
 function syntheticPngHeader(width: number, height: number, byteSize = 1024) {
@@ -758,6 +817,46 @@ test("dedupePolicySurfaces collapses equivalent privacy URLs before report proje
       { pageUrl: "https://cnn.com/privacy", type: "privacy_policy" },
       { pageUrl: "https://cnn.com/terms", type: "terms" }
     ]
+  );
+});
+
+test("dedupePolicySurfaces rejects IMOU 404 evidence and preserves typed semantic policy fragments", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "broken-regional-policy",
+      surfaceType: "privacy_policy",
+      normalizedUrl: "https://www.imou.com/uk/404",
+      status: "fetched",
+      confidence: 0.99,
+      textExcerpt: "Ops, the page slips away. Back Home Products Support Privacy Policy Cookie Policy."
+    },
+    {
+      observationId: "canonical-privacy",
+      surfaceType: "privacy_policy",
+      normalizedUrl: "https://www.imou.com/na/policy#privacy-policy",
+      status: "fetched",
+      confidence: 0.99,
+      lastUpdatedText: "Last modified: 2022-01-19",
+      textExcerpt: "IMOU privacy policy explains how the controller processes personal data and how to contact its privacy team."
+    },
+    {
+      observationId: "canonical-cookie",
+      surfaceType: "cookie_policy",
+      normalizedUrl: "https://www.imou.com/na/policy#cookie-policy",
+      status: "fetched",
+      confidence: 0.99,
+      textExcerpt: "IMOU cookie policy explains the cookies used by the website."
+    }
+  ] as never, "https://www.imou.com/");
+
+  assert.deepEqual(surfaces.map((row) => row.pageUrl), [
+    "https://imou.com/policy#privacy-policy",
+    "https://imou.com/policy#cookie-policy"
+  ]);
+  assert.deepEqual(
+    summarizePolicySurfaces(surfaces, "imou.com").policyLastUpdatedTexts,
+    ["Last modified: 2022-01-19"]
   );
 });
 
@@ -2598,6 +2697,7 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     assert.equal(detail.accessPostureSummary.pagesScanned, 1);
     assert.equal(detail.accessPostureSummary.homepageFetchStatus, "success");
     assert.equal(detail.accessPostureSummary.stopReason, null);
+    assert.equal(detail.snapshot?.verified_public_surfaces_count, 1);
 
     assert.equal(embeddedSummary.embeddedContentObserved, true);
     assert.equal(iframeSummary.preConsentIframeCount, 2);
@@ -2896,6 +2996,144 @@ test("materializeLocalV2DagScanDetail projects retained first-layer optional tog
     } else {
       process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
     }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail reconciles canonical redirects, CMP traffic, consent evidence, and policy surfaces", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/canonical-redirect-cmp-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-07-20T18:10:31.000Z",
+      cmpRuntimeObservations: [{
+        entity: "Osano",
+        observedAtMs: 25700,
+        product: "Osano CMP",
+        signals: [{ matchedField: "script_host", matchedValueRedacted: "cmp.osano.com", signalType: "script" }],
+        vendor: "Osano"
+      }],
+      consentUiObservations: [{
+        observationId: "consent_ui_pre_consent",
+        observedAtMs: 25700,
+        likelyPresent: true,
+        basis: ["control:accept_all:Accept All", "control:reject_all:Reject Non-Essential"],
+        textExcerpt: "We use cookies for targeted advertising, personalization, and analytics.",
+        layerInspected: "first_layer",
+        defaultToggleStatesObserved: true,
+        nonEssentialDefaultsOff: true,
+        defaultTogglePurposeLabels: ["Targeted advertising", "Personalization", "Analytics"],
+        precheckedOptionalPurposeCount: 0,
+        controls: [
+          { actionType: "manage_preferences", label: "Storage Preferences", visible: true },
+          { actionType: "accept_all", label: "Accept All", visible: true },
+          { actionType: "reject_all", label: "Reject Non-Essential", visible: true }
+        ],
+        confidence: 0.95,
+        evidenceRefs: []
+      }],
+      cookieEvents: [],
+      derivedRuntimeSignals: { consentBannerLikelyPresent: true, preConsentTrackingObserved: false },
+      domSnapshots: [{
+        capturedAtMs: 26000,
+        textExcerpt: "CIRA Cybersecurity Services helps Canadian organizations improve their security posture with training, protection, and public resources.",
+        url: "https://www.cira.ca/en/cybersecurity/"
+      }],
+      iframeEvents: [],
+      modulesRun: [],
+      networkEvents: [{
+        consentStateAtTime: "pre_consent",
+        eventId: "osano-request",
+        eventType: "network_request",
+        isThirdParty: true,
+        method: "GET",
+        requestHostname: "cmp.osano.com",
+        requestId: "osano-request",
+        requestUrl: "https://cmp.osano.com/example/config.js",
+        resourceType: "script",
+        documentUrl: "https://www.cira.ca/en/cybersecurity/",
+        timestampMs: 1800,
+        url: "https://cmp.osano.com/example/config.js"
+      }],
+      normalizedUrl: "https://d-zone.ca/",
+      normalizedVendorObservations: [{
+        confidence: 0.99,
+        entity: "Osano",
+        matchedEventIds: ["osano-request"],
+        matchedHostnames: ["cmp.osano.com"],
+        observedVia: ["network_request"],
+        product: "Osano CMP",
+        purpose: "consent_management"
+      }],
+      policySurfaceObservations: [{
+        observationId: "privacy-policy",
+        surfaceType: "privacy_policy",
+        normalizedUrl: "https://www.cira.ca/en/privacy-policy/",
+        url: "https://www.cira.ca/en/privacy-policy/",
+        status: "fetched",
+        confidence: 0.95,
+        textExcerpt: "CIRA collects personal information to provide services. Service providers may process it outside Canada. You may request access or correction by contacting our Chief Privacy Officer at privacy@example.test."
+      }],
+      runtimeTimeline: [],
+      scanId: "canonical-redirect-cmp-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [{
+        artifactId: "screenshot_pre_consent",
+        capturedAtMs: 25700,
+        consentStateAtTime: "pre_consent",
+        path: "screenshots/pre-consent.png",
+        url: "https://www.cira.ca/en/cybersecurity/"
+      }],
+      startedAt: "2026-07-20T18:10:00.000Z",
+      transportSecurityObservations: [{
+        finalUrl: "https://www.cira.ca/en/cybersecurity/",
+        httpProbe: {
+          redirectChain: ["https://d-zone.ca/", "https://www.cira.ca/en/cybersecurity/"]
+        }
+      }],
+      url: "https://d-zone.ca/"
+    }, null, 2)}\n`, "utf8");
+
+    const base = makeScanRecord({
+      policyEnrichment: [
+        { pageType: "policy_surface", sourceUrl: "https://www.cira.ca/en/cybersecurity/" },
+        { pageType: "policy_surface", sourceUrl: "https://www.cira.ca/en/cybersecurity" }
+      ] as never,
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "d-zone.ca",
+        scanConfigJson: {
+          hostname: "d-zone.ca",
+          normalizedUrl: "https://d-zone.ca/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: { artifactOnly: true, localOnly: true, profile: "standard", productionFindingIntegration: false }
+          }
+        }
+      }
+    });
+    const detail = await materializeLocalV2DagScanDetail(base);
+    const hybrid = detail.runtimeArtifacts?.hybridRuntimeEvidence as Record<string, unknown>;
+    const navigation = hybrid.navigationSummary as Record<string, unknown>;
+    const network = hybrid.networkSummary as Record<string, unknown>;
+    const consent = detail.runtimeArtifacts?.consentSummary as Record<string, unknown>;
+    const choices = detail.runtimeArtifacts?.firstLayerConsentChoices as Record<string, unknown>;
+
+    assert.equal(detail.accessPostureSummary?.finalEffectiveUrl, "https://www.cira.ca/en/cybersecurity/");
+    assert.deepEqual(navigation.redirectChain, ["https://d-zone.ca/", "https://www.cira.ca/en/cybersecurity/"]);
+    assert.equal(network.thirdPartyRequestCount, 1);
+    assert.equal(detail.runtimeArtifacts?.consentPlatform, "Osano CMP");
+    assert.equal(consent.cmpName, "Osano CMP");
+    assert.equal(choices.nonEssentialDefaultsOff, true);
+    assert.deepEqual(choices.rejectLabels, ["Reject Non-Essential"]);
+    assert.equal((choices.screenshotRefs as unknown[]).length, 1);
+    assert.deepEqual(detail.policyEnrichment.map((row) => row.pageUrl), ["https://cira.ca/en/privacy-policy"]);
+  } finally {
+    if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+    else process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
     await rm(outDir, { recursive: true, force: true });
   }
 });

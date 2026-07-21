@@ -23,6 +23,17 @@ test("classifies direct consent controls across English, German, and French", ()
   assert.equal(classifyConsentControlLabel({ label: "Paramètres des cookies" }).intent, "options");
 });
 
+test("Italian discovery registry and classifier retain Personalizza as a contextual first-layer options control", () => {
+  const italian = PRIVACY_EVIDENCE_LOCALE_REGISTRY.find((entry) => entry.locale === "it");
+  assert.equal(italian?.consentControls.options.includes("personalizza"), true);
+  const classification = classifyConsentControlLabel({
+    label: "Personalizza",
+    contextText: "Questo sito utilizza cookie. Accetta tutti Rifiuta tutti Personalizza"
+  });
+  assert.equal(classification.intent, "options");
+  assert.equal(classification.matchedLocale, "it");
+});
+
 test("classifies direct accept controls across English, German, and French", () => {
   const examples = [
     ["Accept", "en"],

@@ -68,17 +68,69 @@ test("buildExecutiveTimelineEvents never labels a generic first-party request as
   assert.equal(withThirdParty.find((event) => event.label === "3P request")?.atMs, 820);
 });
 
-test("buildExecutiveTimelineEvents does not promote untethered fingerprint rows", async () => {
+test("buildExecutiveTimelineEvents labels bare browser API access as a fingerprinting candidate", async () => {
   const { buildExecutiveTimelineEvents } = await import("./shared-scan-detail-view");
   const events = buildExecutiveTimelineEvents({
     hybridRuntimeEvidence: {
       fingerprintingRuntimeEvidence: [
         { timestampMs: 21300, fingerprintingSignals: ["canvas"] },
         { timestampMs: 21400, host: "nvidia.com", fingerprintingSignals: ["webgl"] }
-      ]
+      ],
+      fingerprintingEvidenceSummary: { strongCorroboratorObserved: false }
     }
   });
-  assert.equal(events.find((event) => event.label === "Fingerprinting")?.atMs, 21400);
+  assert.equal(events.some((event) => event.label === "Fingerprinting"), false);
+  assert.equal(events.find((event) => event.label === "Fingerprinting candidate")?.atMs, 21300);
+});
+
+test("buildExecutiveTimelineEvents requires concrete corroboration for fingerprinting and retained embedded inventory", async () => {
+  const { buildExecutiveTimelineEvents } = await import("./shared-scan-detail-view");
+  const unsupported = buildExecutiveTimelineEvents({
+    hybridRuntimeEvidence: {
+      embeddedContentSummary: { embeddedContentObserved: false, observations: [] },
+      iframeSummary: { iframeEvents: [] },
+      fingerprintingRuntimeEvidence: [{ timestampMs: 24200, host: "example.test" }],
+      fingerprintingEvidenceSummary: { strongCorroboratorObserved: false }
+    }
+  });
+  assert.equal(unsupported.some((event) => event.label === "Embedded content"), false);
+  assert.equal(unsupported.some((event) => event.label === "Fingerprinting"), false);
+
+  const corroborated = buildExecutiveTimelineEvents({
+    hybridRuntimeEvidence: {
+      embeddedContentSummary: {
+        embeddedContentObserved: true,
+        observations: [{ requestUrl: "https://player.example/media", timestampMs: 4100, preConsent: true }]
+      },
+      fingerprintingRuntimeEvidence: [{ requestUrl: "https://scripts.example/fp.js", timestampMs: 3200 }],
+      fingerprintingEvidenceSummary: { strongCorroboratorObserved: true }
+    }
+  });
+  assert.equal(corroborated.find((event) => event.label === "Fingerprinting")?.atMs, 3200);
+  assert.equal(corroborated.find((event) => event.label === "Embedded content")?.atMs, 4100);
+});
+
+test("buildExecutiveTimelineEvents retains a structured custom consent-surface milestone", async () => {
+  const { buildExecutiveTimelineEvents } = await import("./shared-scan-detail-view");
+  const events = buildExecutiveTimelineEvents({
+    hybridRuntimeEvidence: {
+      timelineMarkers: { firstConsentSurfaceVisibleMs: 1_420 },
+      consentSummary: {
+        bannerPresent: true,
+        controls: ["Manage", "Reject", "Accept"],
+        firstLayer: true,
+        observedAtMs: 1_420
+      },
+      embeddedContentSummary: { embeddedContentObserved: false, observations: [] },
+      fingerprintingRuntimeEvidence: [{ timestampMs: 19_100, fingerprintingSignals: ["Navigator.plugins", "Navigator.mimeTypes"] }],
+      fingerprintingEvidenceSummary: { strongCorroboratorObserved: false }
+    }
+  });
+
+  assert.equal(events.find((event) => event.label === "Consent banner")?.atMs, 1_420);
+  assert.equal(events.some((event) => event.label === "Embedded content"), false);
+  assert.equal(events.some((event) => event.label === "Fingerprinting"), false);
+  assert.equal(events.find((event) => event.label === "Fingerprinting candidate")?.atMs, 19_100);
 });
 
 async function loadBuildScanReportUnifiedFindings() {

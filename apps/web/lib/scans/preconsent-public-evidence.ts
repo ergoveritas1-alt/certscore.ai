@@ -51,8 +51,6 @@ const PROMOTION_TRACKING_CATEGORIES = new Set([
   "retargeting",
   "sale_share",
   "session_replay",
-  "tag_manager",
-  "tag_management",
   "tracking"
 ]);
 
@@ -72,6 +70,21 @@ const SERVICE_CLASSIFICATIONS = new Set([
 
 const SERVICE_HOST_PATTERN =
   /(?:^|\.)cdn\.cookielaw\.org$|(?:^|\.)geolocation\.onetrust\.com$|(?:^|\.)transcend-cdn\.com$|(?:^|\.)privacy-center-api\.transcend\.io$|(?:^|\.)ajax\.googleapis\.com$|(?:^|\.)cdn\.jwplayer\.com$|(?:^|\.)assets\.adobedtm\.com$|(?:^|\.)m\.stripe\.network$|(?:^|\.)framerusercontent\.com$|(?:^|\.)sfdcstatic\.com$/i;
+
+function isLibraryOrConfigurationConnection(requestUrl: string | null) {
+  if (!requestUrl) return false;
+  try {
+    const parsed = new URL(requestUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname.toLowerCase();
+    return (
+      (hostname === "securepubads.g.doubleclick.net" && /\/tag\/js\/gpt\.js$/.test(pathname)) ||
+      (hostname === "sr-client-cfg.amplitude.com" && /\/config(?:\/|$)/.test(pathname))
+    );
+  } catch {
+    return false;
+  }
+}
 
 const GENERIC_VENDOR_LABELS = new Set([
   "advertising",
@@ -356,6 +369,11 @@ function getCategory(row: Record<string, unknown>) {
     normalizeToken(getString(row, ["classification", "purpose"]));
 }
 
+function sameScannedSite(left: string | null | undefined, right: string | null | undefined) {
+  if (!left || !right) return false;
+  return getUrlRegistrableDomain(left) === getUrlRegistrableDomain(right);
+}
+
 export function isPromotionGradePreconsentRequestRow(value: unknown) {
   if (!isRecord(value)) {
     return false;
@@ -367,6 +385,8 @@ export function isPromotionGradePreconsentRequestRow(value: unknown) {
   const classification = normalizeToken(getString(value, ["classification", "serviceClass", "service_class", "requestClass", "request_class"]));
   const endpointVendor = inferDirectEndpointVendorFromUrl(requestUrl);
   const hasPromotionGradeVendor = Boolean(endpointVendor || (vendor && !isGenericVendorLabel(vendor)));
+  const firstSeenMs = getRuntimeElapsedMs(value, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "tsMs", "ts_ms", "ms"]) ??
+    getRuntimeElapsedMs(value, ["timestampMs", "timestamp_ms"]);
 
   return Boolean(
     requestUrl &&
@@ -377,7 +397,9 @@ export function isPromotionGradePreconsentRequestRow(value: unknown) {
       PROMOTION_TRACKING_CATEGORIES.has(category) &&
       isNonEssential(value) &&
       isPreconsent(value) &&
+      firstSeenMs !== null &&
       isHighEnoughConfidence(confidenceValue(value)) &&
+      !isLibraryOrConfigurationConnection(requestUrl) &&
       !SERVICE_CLASSIFICATIONS.has(classification ?? "") &&
       !SERVICE_HOST_PATTERN.test(hostname)
   );
@@ -428,7 +450,10 @@ export function buildPromotionGradePreconsentRequests(input: {
       continue;
     }
     seen.add(key);
-    const scannedPageUrl = getString(row, ["scannedPageUrl", "scanned_page_url", "pageUrl", "page_url"]) ?? input.scannedPageUrl ?? null;
+    const retainedScannedPageUrl = getString(row, ["scannedPageUrl", "scanned_page_url", "pageUrl", "page_url"]);
+    const scannedPageUrl = input.scannedPageUrl && retainedScannedPageUrl && !sameScannedSite(retainedScannedPageUrl, input.scannedPageUrl)
+      ? input.scannedPageUrl
+      : retainedScannedPageUrl ?? input.scannedPageUrl ?? null;
     requests.push({
       scannedPageUrl: scannedPageUrl ? safeEvidenceUrl(scannedPageUrl) : null,
       requestUrl: safeEvidenceUrl(requestUrl),

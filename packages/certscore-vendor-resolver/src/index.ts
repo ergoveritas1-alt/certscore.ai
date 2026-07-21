@@ -6,7 +6,7 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-18-wave17-borlabs";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-20-wave19-ifit-attribution";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -141,6 +141,7 @@ interface VendorRule {
   domSelectorPatterns?: RegExp[];
   excludeHostPatterns?: RegExp[];
   requireUrlPatternMatch?: boolean;
+  requireHostPatternForCookieMatch?: boolean;
   allowUrlPatternWithoutHostMatch?: boolean;
   suppressCookieMatchedHostname?: boolean;
   basisLabel: string;
@@ -452,7 +453,14 @@ const rules: VendorRule[] = [
     confidence: 0.93,
     hostPatterns: [/\.yandex\.(?:ru|com|net)$/i, /^yandex\.(?:ru|com|net)$/i],
     urlPatterns: [/\/(?:watch|metrika|metrika_match|ads|yabs|sync|setuid)\b/i],
-    cookiePatterns: [/^yabs-sid$/i, /^sync_cookie_csrf$/i, /^yandexuid$/i, /^yuid/i],
+    cookiePatterns: [
+      /^yabs-sid$/i,
+      /^sync_cookie_csrf(?:_secondary)?$/i,
+      /^yandexuid$/i,
+      /^yuid/i,
+      /^(?:pi|i|bh|ymex|_yasc)$/i,
+    ],
+    requireHostPatternForCookieMatch: true,
     requireUrlPatternMatch: true,
     basisLabel: "yandex_ads_metrica_endpoint_or_cookie",
   },
@@ -541,6 +549,7 @@ const rules: VendorRule[] = [
     hostPatterns: [/\.openx\.net$/i],
     urlPatterns: [/\/w\/1\.0\//i, /\/sync/i],
     cookiePatterns: [/^i$/i, /^pd$/i],
+    requireHostPatternForCookieMatch: true,
     suppressCookieMatchedHostname: true,
     basisLabel: "openx_endpoint_or_cookie",
   },
@@ -858,6 +867,7 @@ const rules: VendorRule[] = [
     hostPatterns: [/\.quantserve\.com$/i, /\.quantcast\.com$/i],
     urlPatterns: [/\/pixel/i, /\/qacct/i],
     cookiePatterns: [/^mc$/i, /^d$/i],
+    requireHostPatternForCookieMatch: true,
     basisLabel: "quantcast_endpoint_or_cookie",
   },
   {
@@ -912,14 +922,25 @@ const rules: VendorRule[] = [
   {
     entity: "Amplitude, Inc.",
     vendor: "Amplitude",
+    product: "Amplitude Remote Configuration",
+    purpose: "analytics",
+    regulatoryRelevance: ["analytics", "configuration_connection"],
+    confidence: 0.96,
+    hostPatterns: [/^sr-client-cfg\.amplitude\.com$/i],
+    urlPatterns: [/^https:\/\/sr-client-cfg\.amplitude\.com\/config(?:\/|\?|$)/i],
+    basisLabel: "amplitude_remote_configuration_connection",
+  },
+  {
+    entity: "Amplitude, Inc.",
+    vendor: "Amplitude",
     product: "Amplitude",
     purpose: "analytics",
     regulatoryRelevance: ["consent", "analytics", "product_analytics"],
     confidence: 0.94,
     hostPatterns: [/\.amplitude\.com$/i],
     urlPatterns: [/\/2\/httpapi/i, /\/batch/i],
-    cookiePatterns: [/^amplitude_id_/i],
-    storageKeyPatterns: [/^amplitude_id_/i],
+    cookiePatterns: [/^amplitude_id_/i, /^AMP_(?!MKTG_)[A-Za-z0-9_-]+$/i, /^AMP_MKTG_[A-Za-z0-9_-]+$/i],
+    storageKeyPatterns: [/^amplitude_id_/i, /^AMP_(?!MKTG_)[A-Za-z0-9_-]+$/i, /^AMP_MKTG_[A-Za-z0-9_-]+$/i],
     basisLabel: "amplitude_endpoint_or_cookie",
   },
   {
@@ -1155,6 +1176,30 @@ const rules: VendorRule[] = [
     ],
     requireUrlPatternMatch: true,
     basisLabel: "salesforce_messaging_embedded_service_runtime",
+  },
+  {
+    entity: "Branch Metrics, Inc.",
+    vendor: "Branch",
+    product: "Branch Deep Linking and Attribution",
+    aliases: ["Branch.io"],
+    purpose: "analytics",
+    regulatoryRelevance: ["attribution", "deep_linking", "identifier", "third_party_runtime"],
+    confidence: 0.98,
+    hostPatterns: [/^app\.link$/i, /^api2\.branch\.io$/i],
+    cookiePatterns: [/^_s$/i],
+    requireHostPatternForCookieMatch: true,
+    basisLabel: "branch_deep_linking_attribution_runtime",
+  },
+  {
+    entity: "WisePops SAS",
+    vendor: "WisePops",
+    product: "WisePops Onsite Campaigns",
+    purpose: "analytics",
+    regulatoryRelevance: ["marketing_automation", "personalization", "analytics", "third_party_runtime"],
+    confidence: 0.98,
+    hostPatterns: [/^(?:[a-z0-9-]+\.)?wisepops\.net$/i],
+    cookiePatterns: [/^wisepops(?:_(?:visitor|visits|session))?$/i],
+    basisLabel: "wisepops_campaign_runtime_or_cookie",
   },
   {
     entity: "Webflow, Inc.",
@@ -1789,6 +1834,21 @@ const rules: VendorRule[] = [
     basisLabel: "cloudflare_bot_management_cookie",
   },
   {
+    entity: "OpenAI, L.L.C.",
+    vendor: "OpenAI",
+    product: "OpenAI advertising measurement",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising_measurement", "conversion_measurement", "event_tracking"],
+    confidence: 0.98,
+    hostPatterns: [/^bzrcdn\.openai\.com$/i, /^bzr\.openai\.com$/i],
+    urlPatterns: [
+      /^https:\/\/bzrcdn\.openai\.com\/sdk\/oaiq\.min\.js(?:[?#]|$)/i,
+      /^https:\/\/bzr\.openai\.com\/(?:[?#]|$)/i,
+      /^https:\/\/bzr\.openai\.com\/(?:event|events|collect|track)(?:[/?#]|$)/i,
+    ],
+    basisLabel: "openai_advertising_measurement_runtime",
+  },
+  {
     entity: "Comscore, Inc.",
     vendor: "ScorecardResearch / Comscore",
     product: "ScorecardResearch",
@@ -1810,6 +1870,7 @@ const rules: VendorRule[] = [
     hostPatterns: [/\.ml314\.com$/i],
     urlPatterns: [/\/taglw\.js\b/i, /\/Home\/Index\b/i],
     cookiePatterns: [/^(pi|tp|u)$/i],
+    requireHostPatternForCookieMatch: true,
     basisLabel: "bombora_ml314_visitor_insights",
   },
   {
@@ -1873,13 +1934,24 @@ const rules: VendorRule[] = [
     purpose: "consent_management",
     regulatoryRelevance: ["consent_management"],
     confidence: 0.95,
-    hostPatterns: [/\.cookiebot\.com$/i, /^consent\.cookiebot\.com$/i],
+    hostPatterns: [/\.cookiebot\.com$/i, /^consent\.cookiebot\.com$/i, /^(?:consent|consentcdn)\.cookiebot\.eu$/i],
     urlPatterns: [/\/uc\.js\b/i, /\/consentconfig\//i],
     cookiePatterns: [/^CookieConsent$/i],
     globalPatterns: [/^Cookiebot$/i],
     storageKeyPatterns: [/^CookieConsent$/i, /^CookiebotConsent$/i],
     domSelectorPatterns: [/^#CybotCookiebotDialog$/i, /^#CookiebotWidget$/i],
     basisLabel: "cookiebot_cmp_script_or_cookie",
+  },
+  {
+    entity: "Kentico Software s.r.o.",
+    vendor: "Kentico",
+    product: "Kentico Xperience CMS",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["content_management", "functional_storage"],
+    confidence: 0.98,
+    cookiePatterns: [/^CMSCsrfCookie$/i, /^CMSPreferredCulture$/i],
+    suppressCookieMatchedHostname: true,
+    basisLabel: "kentico_xperience_functional_cookie",
   },
   {
     entity: "Didomi SAS",
@@ -2009,7 +2081,7 @@ const rules: VendorRule[] = [
     confidence: 0.92,
     hostPatterns: [/\.cookieyes\.com$/i],
     urlPatterns: [/\/client_data\//i, /\/cookieyes\.js\b/i],
-    cookiePatterns: [/^cookieyes-consent$/i, /^cky-consent$/i],
+    cookiePatterns: [/^cookieyes-consent$/i, /^cky-consent$/i, /^cookielawinfo-checkbox-/i, /^viewed_cookie_policy$/i],
     globalPatterns: [/^CookieYes$/i, /^ckySettings$/i],
     storageKeyPatterns: [/^cookieyes/i, /^cky-/i],
     domSelectorPatterns: [/^\.cky-consent-container$/i, /^#cookieyes$/i],
@@ -2507,8 +2579,8 @@ const rules: VendorRule[] = [
     purpose: "consent_management",
     regulatoryRelevance: ["consent_management", "preference_tooling", "third_party_runtime"],
     confidence: 0.97,
-    hostPatterns: [/^(?:cdn\.)?transcend-cdn\.com$/i],
-    urlPatterns: [/^https:\/\/(?:cdn\.)?transcend-cdn\.com\/cm\/[A-Za-z0-9_-]+\/(?:airgap\.js|cm\.css|translations\/[A-Za-z]{2}(?:-[A-Za-z]{2})?\.json|ui\.js)(?:\?|$)/i],
+    hostPatterns: [/^(?:cdn\.)?transcend-cdn\.com$/i, /^cdntranscend\.[a-z0-9.-]+$/i],
+    urlPatterns: [/^https:\/\/(?:cdn\.)?transcend-cdn\.com\/cm\/[A-Za-z0-9_-]+\/(?:airgap\.js|cm\.css|translations\/[A-Za-z]{2}(?:-[A-Za-z]{2})?\.json|ui\.js)(?:\?|$)/i, /^https:\/\/cdntranscend\.[a-z0-9.-]+\/(?:airgap\.js|cm\.css|translations\/[A-Za-z]{2}(?:-[A-Za-z]{2})?\.json|ui\.js)(?:\?|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "transcend_consent_runtime_assets",
   },
@@ -2570,6 +2642,7 @@ const rules: VendorRule[] = [
     confidence: 0.96,
     hostPatterns: [/^mc\.yandex\.(?:com|ru)$/i, /^mc\.webvisor\.org$/i],
     urlPatterns: [/^https:\/\/(?:mc\.yandex\.(?:com|ru)|mc\.webvisor\.org)\/(?:metrika|webvisor|watch\/[A-Za-z0-9_-]+|[A-Za-z0-9_-]{4,}|sync_cookie_image_(?:check|decide|start|finish)|ytm-config)(?:[/?#]|$)/i],
+    cookiePatterns: [/^_ym_(?:uid|d|isad)$/i, /^_ymab_param$/i],
     requireUrlPatternMatch: true,
     basisLabel: "yandex_metrica_webvisor_runtime",
   },
@@ -4282,6 +4355,17 @@ export function resolveVendorObservations(
       const matchedDomSelector = domSelector
         ? matchesAny(domSelector, rule.domSelectorPatterns)
         : false;
+
+      // A cookie's Domain attribute identifies where the browser stores/sends it;
+      // it does not prove that every product associated with that host set it.
+      // Cookie observations therefore require a cookie-name signature. The source
+      // response/request remains available as separate endpoint evidence.
+      if (input.type === "cookie" && !matchedCookie) {
+        continue;
+      }
+      if (input.type === "cookie" && matchedCookie && rule.requireHostPatternForCookieMatch && !matchedHost) {
+        continue;
+      }
 
       if (
         !matchedHost &&

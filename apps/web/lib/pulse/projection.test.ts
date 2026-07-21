@@ -1,13 +1,39 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { test } from "node:test";
-import {
-  assessPulseScanRecordQuality,
-  buildPulseNoGoState,
-  hasMeaningfulPolicyAnchor,
-  isPublicPulseApiFinding
-} from "./projection";
 import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
+
+const require = createRequire(import.meta.url);
+const serverOnlyPath = require.resolve("server-only");
+(require.cache as Record<string, unknown>)[serverOnlyPath] = {
+  exports: {},
+  filename: serverOnlyPath,
+  id: serverOnlyPath,
+  isPreloading: false,
+  loaded: true,
+  path: serverOnlyPath,
+  paths: []
+};
+
+const {
+  assessPulseScanRecordQuality,
+  buildCookieEvidenceExamples,
+  buildRawHostInventory,
+  buildTrackerFootprintBreakdown,
+  buildPulseNoGoState,
+  deriveConsentPlatform,
+  getPulseExecutiveActionLabel,
+  hasMeaningfulPolicyAnchor,
+  isPublicPulseApiFinding,
+  projectedPolicySurfaceRows
+} = require("./projection") as typeof import("./projection");
+
+test("Pulse executive action label follows the same posture as the rendered report", () => {
+  assert.equal(getPulseExecutiveActionLabel("Action Needed"), "Action Needed");
+  assert.equal(getPulseExecutiveActionLabel("Watch"), "Monitor");
+  assert.equal(getPulseExecutiveActionLabel("Clear"), "Complete");
+});
 
 function pulseScanRecord(overrides: Record<string, unknown> = {}) {
   return {
@@ -35,7 +61,7 @@ function pulseScanRecord(overrides: Record<string, unknown> = {}) {
 test("Pulse projection does not cap top findings by detail level", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
-  assert.match(source, /const publicExecutiveTopFindings = executive\.topFindings\.filter\(isPublicPulseApiFinding\)/);
+  assert.match(source, /const publicExecutiveTopFindings = executive\.topFindings\.filter\(\(finding\) =>/);
   assert.match(source, /const topFindings = regulatoryGapTopFindings\.length > 0 \? regulatoryGapTopFindings : publicExecutiveTopFindings/);
   assert.match(source, /reportSurface\.topFindings\.map\(/);
   assert.doesNotMatch(source, /topFindings = executive\.topFindings\.slice\(/);
@@ -129,6 +155,25 @@ test("Pulse projection exposes explicit counts for agent summaries", () => {
   assert.match(source, /counts: base\.counts/);
 });
 
+test("Pulse policy surfaces exclude unfetched guessed aliases and retain verified canonical pages", () => {
+  const rows = projectedPolicySurfaceRows(pulseScanRecord({
+    accessPostureSummary: { finalEffectiveUrl: "https://medal.tv/" },
+    policyEnrichment: [
+      { discoveryMethod: "guessed_common_path", policy_page_type: "privacy_policy", policy_page_url: "https://medal.tv/privacy-notice", status: "failed" },
+      { discoveryMethod: "footer_link", policy_page_type: "privacy_policy", policy_page_url: "https://medal.tv/privacy", status: "fetched" },
+      { discoveryMethod: "footer_link", policy_page_type: "cookie_policy", policy_page_url: "https://medal.tv/cookie-notice", status: "fetched" },
+      { discoveryMethod: "footer_link", policy_page_type: "terms", policy_page_url: "https://medal.tv/terms", status: "fetched" }
+    ],
+    scan: { domainHostname: "medal.tv", pagesRequested: 1, pagesScanned: 1, status: "completed" }
+  }));
+
+  assert.deepEqual(rows.map((row) => row.url).sort(), [
+    "https://medal.tv/cookie-notice",
+    "https://medal.tv/privacy",
+    "https://medal.tv/terms"
+  ]);
+});
+
 test("Pulse projection exposes Summary JSON and Evidence JSON artifacts", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
   const routeSource = readFileSync(new URL("../../app/api/v1/pulse/route.ts", import.meta.url), "utf8");
@@ -149,6 +194,7 @@ test("Pulse projection exposes Summary JSON and Evidence JSON artifacts", () => 
 
 test("Pulse evidence JSON includes diagnostic metadata and projection warnings", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+  const calibrationSource = readFileSync(new URL("./calibration-context.ts", import.meta.url), "utf8");
 
   assert.match(source, /CANONICAL_VENDOR_RESOLVER_VERSION/);
   assert.match(source, /canonicalResolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION/);
@@ -164,14 +210,90 @@ test("Pulse evidence JSON includes diagnostic metadata and projection warnings",
   assert.match(source, /request_event_missing_url/);
   assert.match(source, /projectionDiagnostics/);
   assert.match(source, /calibrationContext/);
-  assert.match(source, /scannerRegion: executionProvenance\?\.lambdaAwsRegion/);
-  assert.match(source, /site_language_primary/);
+  assert.match(calibrationSource, /scannerRegion: input\.scan\.provenance\?\.lambdaAwsRegion/);
+  assert.match(calibrationSource, /site_language_primary/);
   assert.match(source, /gdprTransparencyTopicCandidateSummary/);
   assert.match(source, /domainsRejected/);
   assert.match(source, /hostsRejected/);
   assert.match(source, /policy_surface_url_recovered_from_alternate_field/);
   assert.match(source, /coverage_limited_by_scan_quality_no_go/);
   assert.match(source, /promotion_grade_preconsent_request_not_available/);
+});
+
+test("Pulse cookie findings require concrete cookie evidence and preserve snapshot timing limits", () => {
+  const rows = [
+    {
+      category: "advertising",
+      cookieName: "test_cookie",
+      domain: ".doubleclick.net",
+      firstObservedAtMs: 1500,
+      initiatorVendor: "Google Tag Manager",
+      party: "third_party",
+      provider: "Google",
+      setAtMs: 1500,
+      setMethod: "set_cookie_header",
+      sourceRequestUrl: "https://doubleclick.net/pagead/test",
+      timingBasis: "set_cookie_header",
+      timingEvidence: "before_consent_cookie_write"
+    },
+    {
+      category: "analytics",
+      cookieName: "_ym_uid",
+      domain: ".life.ru",
+      firstObservedAtMs: 10875,
+      initiatorVendor: null,
+      party: "first_party",
+      provider: "Yandex Metrica",
+      setAtMs: null,
+      setMethod: "browser_snapshot",
+      sourceRequestUrl: null,
+      timingBasis: "periodic_cookie_snapshot",
+      timingEvidence: "periodic_cookie_snapshot"
+    }
+  ] as unknown as Parameters<typeof buildCookieEvidenceExamples>[1];
+
+  assert.deepEqual(buildCookieEvidenceExamples("third_party_cookie_pre_consent", rows), [
+    {
+      category: "advertising",
+      cookieDomain: ".doubleclick.net",
+      cookieName: "test_cookie",
+      exactWriteTimeObserved: true,
+      party: "third_party",
+      phase: "pre_consent",
+      provider: "Google",
+      relatedOrInitiatingVendor: "Google Tag Manager",
+      setMethod: "set_cookie_header",
+      sourceRequestUrl: "https://doubleclick.net/pagead/test",
+      timestampMs: 1500,
+      timingBasis: "set_cookie_header",
+      type: "cookie_write"
+    }
+  ]);
+  assert.deepEqual(buildCookieEvidenceExamples("analytics_cookie_pre_consent", rows), [
+    {
+      category: "analytics",
+      cookieDomain: ".life.ru",
+      cookieName: "_ym_uid",
+      exactWriteTimeObserved: false,
+      party: "first_party",
+      phase: null,
+      provider: "Yandex Metrica",
+      relatedOrInitiatingVendor: null,
+      setMethod: "browser_snapshot",
+      sourceRequestUrl: null,
+      timestampMs: null,
+      timingBasis: "periodic_cookie_snapshot",
+      type: "cookie_snapshot"
+    }
+  ]);
+  assert.deepEqual(buildCookieEvidenceExamples("third_party_cookie_pre_consent", rows.slice(1)), []);
+});
+
+test("Pulse pre-consent totals exclude periodic and initial cookie snapshots", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+
+  assert.match(source, /row\.timingEvidence === "before_consent_cookie_write"/);
+  assert.doesNotMatch(source, /row\.timingEvidence !== "initial_cookie_snapshot"/);
 });
 
 test("Pulse evidence inventory filters display hostnames and deduplicates vendor rows", () => {
@@ -181,10 +303,94 @@ test("Pulse evidence inventory filters display hostnames and deduplicates vendor
   assert.match(source, /isInventoryDisplayHostname\(vendor\.scriptHost\)/);
   assert.match(source, /row\.domains\.filter\(isInventoryDisplayHostname\)\.slice\(0, 4\)/);
   assert.match(source, /const rows = new Map/);
-  assert.match(source, /const vendors = scanRecordVendors\(input\.scanRecord\)/);
-  assert.match(source, /total: vendors\.length/);
+  assert.match(source, /const groupedTrackerRows = buildTrackerInventoryGroupRows/);
+  assert.match(source, /classifiedTrackerVendors = groupedTrackerRows\.length/);
   assert.doesNotMatch(source, /return scanRecord\.trackerVendors\.map/);
   assert.doesNotMatch(source, /total: input\.scanRecord\.trackerVendors\.length/);
+});
+
+test("Pulse iFIT footprint separates vendor categories while preserving literal raw hosts", () => {
+  const reportSurface = {
+    runtimeCookieRows: [{ cookieName: "_ga" }, { cookieName: "wisepops_visitor" }],
+    trackerInventoryRows: [
+      {
+        category: "analytics",
+        confidence: 0.98,
+        domains: ["region1.analytics.google.com"],
+        firstSeenMs: 2_343,
+        label: "Google Analytics",
+        observedVia: ["network_request"],
+        party: "third_party",
+        preConsent: true,
+        requestCount: 1,
+        source: "runtime",
+        vendorDisplayCategory: "Analytics"
+      },
+      {
+        category: "analytics",
+        confidence: 0.98,
+        domains: ["api2.branch.io"],
+        firstSeenMs: 25_309,
+        label: "Branch Deep Linking and Attribution",
+        observedVia: ["network_request"],
+        party: "third_party",
+        preConsent: true,
+        requestCount: 1,
+        source: "runtime",
+        vendorDisplayCategory: "Analytics"
+      },
+      {
+        category: "cdn",
+        confidence: 0.95,
+        domains: ["iconcdn-res.cloudinary.com"],
+        firstSeenMs: 2_500,
+        label: "Cloudinary CDN",
+        observedVia: ["network_request"],
+        party: "third_party",
+        preConsent: true,
+        requestCount: 1,
+        source: "runtime",
+        vendorDisplayCategory: "Functional"
+      },
+      {
+        category: "analytics",
+        confidence: 0.98,
+        domains: ["wisepops.net"],
+        firstSeenMs: 7_000,
+        label: "WisePops Onsite Campaigns",
+        observedVia: ["network_request"],
+        party: "third_party",
+        preConsent: true,
+        requestCount: 1,
+        source: "runtime",
+        vendorDisplayCategory: "Analytics"
+      }
+    ]
+  } as never;
+
+  const hosts = buildRawHostInventory(reportSurface);
+  assert.deepEqual(hosts.map((row) => row.host), [
+    "api2.branch.io",
+    "iconcdn-res.cloudinary.com",
+    "region1.analytics.google.com",
+    "wisepops.net"
+  ]);
+  assert.deepEqual(buildTrackerFootprintBreakdown(reportSurface), {
+    cdns: 1,
+    consentPlatforms: 0,
+    cookies: 2,
+    displayedRows: 4,
+    domains: 4,
+    functionalServices: 0,
+    products: 4,
+    purposeCounts: { Analytics: 3, Functional: 1 },
+    priorityCounts: { contextual: 1, high: 0, medium: 3, review_needed: 0 },
+    confidenceCounts: { high: 4, low: 0, medium: 0 },
+    providerFamilies: 4,
+    rawHosts: 4,
+    trackers: 3,
+    vendors: 4
+  });
 });
 
 test("Pulse example events do not borrow vendors by list position", () => {
@@ -216,6 +422,102 @@ test("Pulse full JSON policy surfaces use all retained policy URL field shapes",
   assert.match(source, /row\.source_url/);
   assert.match(source, /row\.sourceUrl/);
   assert.doesNotMatch(source, /url:\s*typeof row\.policy_page_url === "string" \? row\.policy_page_url : null/);
+});
+
+test("Pulse policy surfaces canonicalize URLs, deduplicate aliases, and exclude an untyped effective landing page", () => {
+  const scanRecord = pulseScanRecord({
+    accessPostureSummary: { finalEffectiveUrl: "https://www.cira.ca/en/cybersecurity/" },
+    policyEnrichment: [
+      { pageType: "policy_surface", sourceUrl: "https://cira.ca/en/cybersecurity" },
+      { pageType: "policy_surface", sourceUrl: "https://www.cira.ca/en/cybersecurity/" },
+      { pageType: "privacy_policy", sourceUrl: "https://www.cira.ca/en/privacy-policy/" },
+      { policy_page_type: "privacy_policy", policy_page_url: "https://cira.ca/en/privacy-policy" }
+    ]
+  });
+
+  assert.deepEqual(
+    projectedPolicySurfaceRows(scanRecord).map(({ type, url }) => ({ type, url })),
+    [{ type: "privacy_policy", url: "https://cira.ca/en/privacy-policy" }]
+  );
+});
+
+test("Pulse policy surfaces type iFIT privacy, accessibility, and terms pages without treating the homepage as policy", () => {
+  const scanRecord = pulseScanRecord({
+    accessPostureSummary: { finalEffectiveUrl: "https://www.ifit.com/en-gb/" },
+    policyEnrichment: [
+      { pageType: "policy_surface", sourceUrl: "https://www.ifit.com/en-gb/" },
+      { pageType: "policy_surface", sourceUrl: "https://www3.ifit.com/en-gb/legal/privacy-policy/" },
+      { pageType: "policy_surface", sourceUrl: "https://www.ifit.com/en-gb/legal/consumer-health-data-privacy" },
+      { pageType: "policy_surface", sourceUrl: "https://www.ifit.com/en-gb/accessibility" },
+      { pageType: "policy_surface", sourceUrl: "https://www.ifit.com/en-gb/legal/mobile-terms-and-conditions" },
+      { pageType: "policy_surface", sourceUrl: "https://www.ifit.com/en-gb/legal/terms-of-use" }
+    ]
+  });
+
+  assert.deepEqual(
+    projectedPolicySurfaceRows(scanRecord).map(({ type, url }) => ({ type, url })),
+    [
+      { type: "privacy_policy", url: "https://www3.ifit.com/en-gb/legal/privacy-policy" },
+      { type: "privacy_policy", url: "https://ifit.com/en-gb/legal/consumer-health-data-privacy" },
+    { type: "terms_of_service", url: "https://ifit.com/en-gb/legal/mobile-terms-and-conditions" },
+    { type: "terms_of_service", url: "https://ifit.com/en-gb/legal/terms-of-use" },
+    { type: "accessibility_statement", url: "https://ifit.com/en-gb/accessibility" }
+    ]
+  );
+});
+
+test("Pulse analytics evidence names captured Google and WisePops cookies without inventing write times", () => {
+  const rows = ["_ga", "_gid", "_gat_UA-123", "wisepops_visitor"].map((cookieName) => ({
+    category: "analytics",
+    cookieName,
+    domain: "ifit.com",
+    firstObservedAtMs: 26_951,
+    initiatorVendor: null,
+    party: "first_party",
+    provider: null,
+    setAtMs: null,
+    setMethod: "browser_snapshot",
+    sourceRequestUrl: null,
+    timingBasis: "periodic_cookie_snapshot",
+    timingEvidence: "periodic_cookie_snapshot"
+  })) as unknown as Parameters<typeof buildCookieEvidenceExamples>[1];
+
+  const examples = buildCookieEvidenceExamples("analytics_cookie_pre_consent", rows);
+  assert.deepEqual(examples.map((example) => example.cookieName), ["_ga", "_gat_UA-123", "_gid", "wisepops_visitor"]);
+  assert.ok(examples.every((example) => example.timestampMs === null));
+  assert.ok(examples.every((example) => example.exactWriteTimeObserved === false));
+});
+
+test("Pulse consent platform falls back to canonical nested consent evidence", () => {
+  const scanRecord = pulseScanRecord({
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        consentSummary: {
+          cmpDetected: true,
+          cmpName: "Osano CMP"
+        }
+      }
+    }
+  });
+  assert.equal(deriveConsentPlatform(scanRecord, { topObservedEntities: [] } as never), "Osano");
+});
+
+test("Pulse evidence projection reads canonical nested runtime summaries and distinguishes all third-party requests", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+  assert.match(source, /asRecord\(recordValue\(hybrid, "consentSummary"\)\)/);
+  assert.match(source, /asRecord\(recordValue\(hybrid, "networkSummary"\)\)/);
+  assert.match(source, /trackingClassifiedThirdPartyRequests/);
+  assert.match(source, /thirdPartyRequests: allThirdPartyRequestCount/);
+  assert.match(source, /"controls"/);
+  assert.match(source, /"textSnippet"/);
+  assert.match(source, /"layerInspected"/);
+  assert.match(source, /"defaultToggleStatesObserved"/);
+  assert.match(source, /"nonEssentialDefaultsOff"/);
+  assert.match(source, /"observedAtMs"/);
+  assert.match(source, /"policyLinks"/);
+  assert.match(source, /"firstVisibleMs"/);
+  assert.match(source, /"screenshotRefs"/);
+  assert.match(source, /"redirectChain"/);
 });
 
 test("Pulse evidence digest keeps runtime basis for runtime-anchored findings", () => {

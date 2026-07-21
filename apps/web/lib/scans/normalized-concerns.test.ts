@@ -573,6 +573,90 @@ test("runtime CMP load-order evidence flows through normalized concerns and publ
   assert.equal(finding.evidenceDetails?.cmpLoadOrder?.cmpVendorName, "OneTrust");
 });
 
+test("iFIT CMP load order uses the earliest eligible Google event and actual OneTrust bootstrap", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        requestObservations: [
+          {
+            firstSeenMs: 4_482,
+            requestUrl: "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+            resourceType: "script"
+          }
+        ],
+        requestPurposeClassificationConfidence: [
+          {
+            confidence: 0.98,
+            essentiality: "non_essential",
+            firstSeenMs: 2_343,
+            requestUrl: "https://www.google-analytics.com/analytics.js",
+            runtimePhase: "pre_consent",
+            vendorCategory: "analytics",
+            vendorName: "Google Analytics"
+          },
+          {
+            confidence: 0.98,
+            essentiality: "non_essential",
+            firstSeenMs: 4_481,
+            requestUrl: "https://edge.fullstory.com/s/settings/15TFZD/v1/web",
+            runtimePhase: "pre_consent",
+            vendorCategory: "session_replay",
+            vendorName: "FullStory"
+          }
+        ]
+      }
+    },
+    validationFindings: []
+  });
+  const concern = concerns.find((candidate) => candidate.suggestedUnifiedFindingId === "consent_infrastructure__cmp_load_order");
+
+  assert.equal(concern?.evidenceBundle.rawEvidence?.firstClassifiedTrackerAtMs, 2_343);
+  assert.equal(concern?.evidenceBundle.rawEvidence?.cmpScriptLoadedAtMs, 4_482);
+  assert.equal(concern?.evidenceBundle.rawEvidence?.cmpGapMs, 2_139);
+});
+
+test("Funding Choices timing comes from its concrete event and near-simultaneous events do not prove load order", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        requestPurposeClassificationConfidence: [
+          {
+            confidence: 0.98,
+            essentiality: "non_essential",
+            firstSeenMs: 3_500,
+            requestUrl: "https://c.amazon-adsystem.com/aax2/apstag.js",
+            runtimePhase: "pre_consent",
+            vendorCategory: "advertising",
+            vendorName: "Amazon Publisher Services"
+          },
+          {
+            confidence: 0.99,
+            essentiality: "essential",
+            firstSeenMs: 3_521,
+            requestUrl: "https://fundingchoicesmessages.google.com/i/pub-123?ers=1",
+            runtimePhase: "pre_consent",
+            vendorCategory: "consent_management",
+            vendorName: "Google Funding Choices CMP"
+          }
+        ],
+        requestObservations: [{
+          firstSeenMs: 11_860,
+          requestUrl: "https://id5-sync.com/bounce",
+          resourceType: "document"
+        }]
+      }
+    },
+    validationFindings: []
+  });
+
+  assert.equal(
+    concerns.some((candidate) => candidate.suggestedUnifiedFindingId === "consent_infrastructure__cmp_load_order"),
+    false
+  );
+});
+
 test("replay policy review concerns stay internal without direct runtime evidence", () => {
   const concern = normalizeConcernFromPolicyReviewQueue({
     description: "Indirect replay-related signals may be present.",

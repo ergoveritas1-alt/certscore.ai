@@ -64,6 +64,113 @@ test("preserves scanned page URL and tsMs while excluding library-only loads", (
   assert.equal(requests[0]?.firstSeenMs, 4321);
 });
 
+test("does not let a tracker URL replace the scanned page URL", () => {
+  const requests = buildPromotionGradePreconsentRequests({
+    scannedPageUrl: "https://www.ifit.com/en-gb",
+    rows: [{
+      category: "session_replay",
+      confidence: 0.98,
+      essentiality: "non_essential",
+      firstSeenMs: 4484,
+      hostname: "edge.fullstory.com",
+      pageUrl: "https://edge.fullstory.com/s/settings/15TFZD/v1/web",
+      requestUrl: "https://edge.fullstory.com/s/fs.js",
+      runtimePhase: "pre_consent",
+      vendor: "FullStory"
+    }]
+  });
+
+  assert.equal(requests[0]?.scannedPageUrl, "https://www.ifit.com/en-gb");
+  assert.equal(requests[0]?.firstSeenMs, 4484);
+});
+
+test("does not promote a standalone Google Tag Manager bootstrap as confirmed tracking", () => {
+  const requests = buildPromotionGradePreconsentRequests({
+    scannedPageUrl: "https://www.aruba.it/",
+    rows: [{
+      category: "tag_management",
+      confidence: 0.99,
+      essentiality: "unknown",
+      firstSeenMs: 3346,
+      hostname: "www.googletagmanager.com",
+      requestUrl: "https://www.googletagmanager.com/gtm.js?id=GTM-ARUBA",
+      runtimePhase: "pre_consent",
+      vendorName: "Google Tag Manager"
+    }]
+  });
+
+  assert.deepEqual(requests, []);
+});
+
+test("keeps Medal GPT and Amplitude config loads out of confirmed tracking examples", () => {
+  const requests = buildPromotionGradePreconsentRequests({
+    scannedPageUrl: "https://medal.tv/",
+    rows: [
+      row({
+        firstSeenMs: 1670,
+        hostname: "securepubads.g.doubleclick.net",
+        url: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+        vendorName: "Google Publisher Tag"
+      }),
+      row({
+        firstSeenMs: 10515,
+        hostname: "sr-client-cfg.amplitude.com",
+        url: "https://sr-client-cfg.amplitude.com/config/abc",
+        vendorCategory: "analytics",
+        vendorName: "Amplitude"
+      }),
+      {
+        ...row({
+          hostname: "events.launchdarkly.com",
+          url: "https://events.launchdarkly.com/events/bulk/abc",
+          vendorCategory: "personalization",
+          vendorName: "LaunchDarkly"
+        }),
+        firstSeenMs: null,
+        timestampMs: null
+      }
+    ]
+  });
+
+  assert.deepEqual(requests, []);
+});
+
+test("preserves a genuine Amplitude event timestamp without borrowing the global earliest time", () => {
+  const requests = buildPromotionGradePreconsentRequests({
+    scannedPageUrl: "https://medal.tv/",
+    rows: [row({
+      firstSeenMs: 10515,
+      hostname: "api2.amplitude.com",
+      url: "https://api2.amplitude.com/2/httpapi",
+      vendorCategory: "analytics",
+      vendorName: "Amplitude"
+    })]
+  });
+
+  assert.equal(requests[0]?.firstSeenMs, 10515);
+  assert.equal(requests[0]?.scannedPageUrl, "https://medal.tv/");
+});
+
+test("does not let a Teads URL replace the scanned Daily page URL", () => {
+  const requests = buildPromotionGradePreconsentRequests({
+    scannedPageUrl: "https://www.daily.co.jp/",
+    rows: [{
+      confidence: 0.99,
+      essentiality: "non_essential",
+      firstSeenMs: 3465,
+      hostname: "at.teads.tv",
+      pageUrl: "https://at.teads.tv/fpc?redacted=1",
+      requestUrl: "https://at.teads.tv/fpc?redacted=1",
+      runtimePhase: "pre_consent",
+      vendorCategory: "advertising",
+      vendorName: "Teads Video Advertising"
+    }]
+  });
+
+  assert.equal(requests[0]?.scannedPageUrl, "https://www.daily.co.jp/");
+  assert.equal(requests[0]?.requestUrl, "https://at.teads.tv/fpc?redacted=1");
+});
+
 test("uses the transmitted DoubleClick request instead of a Google configuration library as representative advertising evidence", () => {
   const common = {
     vendorCategory: "advertising",
@@ -652,9 +759,7 @@ test("suppresses borrowed host-bound vendor labels on unresolved endpoint hosts"
   assert.equal(requests[6]?.relatedOrInitiatingVendor, "Google Analytics");
   assert.match(requests[6]?.vendorAttributionBasis ?? "", /borrowed_host_bound_vendor_suppressed/);
 
-  assert.equal(requests[7]?.vendorName, "Google Publisher Tag");
-  assert.equal(requests[7]?.vendorCategory, "advertising");
-  assert.equal(requests[7]?.relatedOrInitiatingVendor, null);
+  assert.equal(requests.some((request) => request.requestUrl.includes("/tag/js/gpt.js")), false);
 });
 
 test("does not promote generic or unknown static bundle rows as pre-consent tracking evidence", () => {
@@ -753,10 +858,7 @@ test("does not promote generic or unknown static bundle rows as pre-consent trac
     maxItems: 3
   });
 
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0]?.hostname, "securepubads.g.doubleclick.net");
-  assert.equal(requests[0]?.vendorName, "Google Publisher Tag");
-  assert.equal(requests[0]?.resolvedEndpointVendor, "Google Publisher Tag");
+  assert.deepEqual(requests, []);
 });
 
 test("canonical endpoint vendors replace leaked request-event labels", () => {

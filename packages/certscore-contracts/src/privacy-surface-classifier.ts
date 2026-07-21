@@ -382,7 +382,7 @@ function normalizePrivacySurfaceUrl(value: string | null | undefined): string {
   }
   try {
     const parsed = new URL(value);
-    const decoded = decodeURIComponent(`${parsed.pathname} ${parsed.hash}`).toLowerCase();
+    const decoded = decodeURIComponent(`${parsed.pathname} ${parsed.hash}`).toLowerCase().replace(/#/g, " ");
     return `${decoded} ${decoded.replace(/[-_/]+/g, " ")}`;
   } catch {
     return `${value.toLowerCase()} ${normalizePrivacySurfaceText(value.replace(/[-_/]+/g, " "))}`;

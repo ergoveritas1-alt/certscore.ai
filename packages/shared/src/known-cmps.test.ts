@@ -56,6 +56,12 @@ test("detects CookieYes by domains and consent cookie", () => {
   assert.equal(isKnownCmpCookieName("cookieyes-consent"), true);
 });
 
+test("detects Cookiebot European consent infrastructure", () => {
+  assert.equal(getKnownCmpVendorForHost("consent.cookiebot.eu"), "Cookiebot");
+  assert.equal(getKnownCmpVendorForHost("consentcdn.cookiebot.eu"), "Cookiebot");
+  assert.equal(isKnownCmpInfrastructureUrl("https://consentcdn.cookiebot.eu/uc.js"), true);
+});
+
 test("detects Usercentrics service domains", () => {
   assert.equal(getKnownCmpVendorForHost("app.usercentrics.eu"), "Usercentrics");
   assert.equal(getKnownCmpVendorForHost("api.usercentrics.eu"), "Usercentrics");
@@ -150,4 +156,10 @@ test("detects first-party Borlabs Cookie runtime signals", () => {
   assert.ok(detection?.matchedSignals.some((signal) => signal.source === "global"));
   assert.ok(detection?.matchedSignals.some((signal) => signal.source === "dom"));
   assert.ok(detection?.matchedSignals.some((signal) => signal.source === "script"));
+});
+
+test("attributes cookielawinfo plugin cookies to CookieYes rather than OneTrust", () => {
+  assert.equal(getKnownCmpVendorName({ cookieNames: ["cookielawinfo-checkbox-analytics"] }), "CookieYes");
+  assert.equal(getKnownCmpVendorName({ cookieNames: ["cookielawinfo-checkbox-necessary"] }), "CookieYes");
+  assert.equal(getKnownCmpVendorName({ labels: ["cookielawinfo-checkbox-analytics"] }), null);
 });

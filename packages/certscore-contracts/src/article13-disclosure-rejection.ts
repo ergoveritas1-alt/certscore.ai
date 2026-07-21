@@ -53,6 +53,20 @@ export function article13DisclosureRejectReason(
   if (text.length < 35) {
     return "low_confidence_or_ambiguous";
   }
+  if (
+    disclosureType === "international_transfers" &&
+    /\boutside (?:of )?our team\b/i.test(text) &&
+    !/\b(?:international|cross-border|third countr|outside (?:the )?(?:eea|uk|eu|european)|standard contractual clauses|adequacy|transfer safeguard)\b/i.test(text)
+  ) {
+    return "insufficient_row_specific_terms";
+  }
+  if (
+    disclosureType === "recipients_or_vendor_categories" &&
+    /\b(?:we|[a-z]+) do(?:es)? not sell\b/i.test(text) &&
+    !/\b(?:share|disclose|provide|give|send|transfer)\b.{0,120}\b(?:personal data|personal information|data|information)\b.{0,180}\b(?:service providers?|processors?|recipients?|partners?|affiliates?|third parties)\b|\b(?:service providers?|processors?|recipients?|partners?|affiliates?)\b.{0,180}\b(?:receive|access|process|handle|share|disclose)\b/i.test(text)
+  ) {
+    return "insufficient_row_specific_terms";
+  }
 
   if (mode === "multilingual_classifier") {
     return multilingualClassifierArticle13RejectReason(text, disclosureType);
@@ -77,6 +91,14 @@ export function looksLikeArticle13PageChrome(
   options: Article13DisclosureRejectReasonOptions = {},
 ) {
   const text = normalizeArticle13Whitespace(value);
+  if (/\b(?:404|page not found)\b[\s\S]{0,180}\b(?:back home|page address|not found|slips away)\b/i.test(text)) {
+    return true;
+  }
+  const productNavigationTokens = (text.match(/\b(?:products?|product categories|support|faq|downloads?|videos?|developers?|warranty policy|contact us|sign up|cookie preferences|all rights reserved|back home)\b/gi) ?? []).length;
+  const substantivePrivacyVerbs = (text.match(/\b(?:we|controller|you)\s+(?:collect|process|retain|share|transfer|disclose|provide|may|can|have|request|exercise)\b/gi) ?? []).length;
+  if (productNavigationTokens >= 6 && substantivePrivacyVerbs < 2) {
+    return true;
+  }
   if (/skip to main content|privacy policy\s+[-–]\s+privacy\s*&\s*terms|overview privacy policy terms of service technologies faq/i.test(text)) {
     return true;
   }
@@ -241,16 +263,20 @@ function assessPolicyTextQuality(
   const codeSymbolRatio = (normalized.match(/[{}[\];=<>]/g) ?? []).length / Math.max(normalized.length, 1);
   const totalTokens = normalized.split(/\s+/).filter(Boolean).length;
   const alphabeticWords = mode === "scan_core"
-    ? (normalized.match(/\b[\p{L}][\p{L}'-]{2,}\b/gu) ?? [])
+    ? (normalized.match(/[\p{L}][\p{L}'-]{2,}/gu) ?? [])
     : (normalized.match(/\b[A-Za-z][A-Za-z'-]{2,}\b/g) ?? []);
-  const alphabeticWordRatio = alphabeticWords.length / Math.max(totalTokens, 1);
-  const naturalLanguageSentenceCount = (normalized.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi) ?? []).length;
+  const cjkCharacters = normalized.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu) ?? [];
+  const alphabeticWordRatio = Math.max(
+    alphabeticWords.length / Math.max(totalTokens, 1),
+    cjkCharacters.length / Math.max(normalized.replace(/\s/g, "").length, 1)
+  );
+  const naturalLanguageSentenceCount =
+    (normalized.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi) ?? []).length +
+    (normalized.match(/[^。！？]{20,}[。！？]/gu) ?? []).length;
   const policyTermCount = uniqueStrings((lower.match(/\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\b/g) ?? [])).length;
   const escapedUrlCount = (normalized.match(/\\x2f|\\u003c|\\u003e|https?:\\\/\\\//gi) ?? []).length;
   const minifiedTokenCount = (normalized.match(/[A-Za-z_$][\w$]{0,8}\s*[=:]\s*\S{40,}/g) ?? []).length;
-  const gdprTransparencyTopicMatchCount = mode === "scan_core"
-    ? classifyGdprTransparencyTopics({ text: normalized.slice(0, 40_000) }).matches.length
-    : 0;
+  const gdprTransparencyTopicMatchCount = classifyGdprTransparencyTopics({ text: normalized.slice(0, 40_000) }).matches.length;
 
   let reason: string | undefined;
   if (/\bthis\.gbar_|\bCONFIG:\s*\[\[\[|Copyright The Closure Library|SPDX-License-Identifier/i.test(normalized)) {

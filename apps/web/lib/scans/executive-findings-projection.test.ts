@@ -2905,7 +2905,7 @@ test("keeps runtime-backed session recording in top findings when consent issues
   assert.ok(topFindingIds.includes("asymmetric_consent_ui"));
   assert.equal(
     projection.topFindings.find((finding) => finding.id === "session_recording_services_detected")?.shortSummary,
-    "Microsoft Clarity session replay service signals were observed during runtime collection."
+    "Microsoft Clarity runtime/session-replay service signals were observed; retained evidence did not demonstrate recording or data transmission."
   );
 });
 
@@ -3552,8 +3552,54 @@ test("projects concrete session replay vendor evidence into executive finding js
   assert.ok(finding?.evidencePreview.includes("Runtime vendor: Qualtrics SiteIntercept"));
   assert.equal(
     finding?.shortSummary,
-    "Qualtrics SiteIntercept session replay service signals were observed during runtime collection."
+    "Qualtrics SiteIntercept session-replay collection endpoint activity was observed during runtime collection."
   );
+});
+
+test("labels iFIT FullStory library and settings traffic as a runtime signal without claiming recording", () => {
+  const projection = projectExecutiveFindingsFromUnifiedPackets([
+    makePacket("session_replay_observed", {
+      confidenceBand: "moderate",
+      details: {
+        family: "consent_tracking",
+        kind: "session_replay_observed",
+        requestUrls: [
+          "https://edge.fullstory.com/s/settings/15TFZD/v1/web",
+          "https://edge.fullstory.com/s/fs.js"
+        ],
+        vendors: ["FullStory"]
+      },
+      evidence: {
+        counts: {},
+        entities: {
+          sessionReplayEvidenceSummary: [
+            JSON.stringify({
+              collectionEndpointObserved: false,
+              libraryOnly: true,
+              maskingOrExclusionObserved: false,
+              sensitiveSurfaceOverlap: false
+            })
+          ],
+          runtimeVendors: ["FullStory"]
+        },
+        fetchQuality: null,
+        flags: ["privacy.session_replay_runtime_detected", "privacy.session_replay_runtime_vendors"],
+        pageUrls: ["https://www.ifit.com/en-gb/"],
+        snippets: ["library_or_settings_only"],
+        sourceUrls: [
+          "https://edge.fullstory.com/s/settings/15TFZD/v1/web",
+          "https://edge.fullstory.com/s/fs.js"
+        ]
+      },
+      primaryPageUrl: "https://www.ifit.com/en-gb/",
+      summary: "FullStory runtime detected."
+    })
+  ]);
+
+  const finding = projection.topFindings.find((candidate) => candidate.id === "session_recording_services_detected");
+  assert.equal(finding?.label, "FullStory runtime/session-replay service signal");
+  assert.match(finding?.shortSummary ?? "", /did not demonstrate recording or data transmission/i);
+  assert.doesNotMatch(finding?.shortSummary ?? "", /recording was observed|data transmission was observed/i);
 });
 
 test("keeps session replay scan context on audited page and reconciles same-scan preconsent vendor timing", () => {

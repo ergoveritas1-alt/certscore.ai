@@ -126,6 +126,23 @@ test("retained rendered links recover obvious policy surfaces when the separate 
   assert.deepEqual(privacy?.observedTopics, []);
 });
 
+test("retained rendered links recover Russian personal-data fragment disclosures", () => {
+  const observations = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "footer",
+      href: "https://life.example/legacy#persondata",
+      linkText: "Обработка персональных данных",
+      pageUrl: "https://life.example/",
+    }],
+  });
+
+  const privacy = observations.find((observation) => observation.surfaceType === "privacy_policy");
+  assert.ok(privacy);
+  assert.equal(privacy.normalizedUrl, "https://life.example/legacy#persondata");
+  assert.equal(privacy.matchedLocale, "ru");
+  assert.equal(privacy.status, "observed");
+});
+
 test("retained combined privacy and cookie links produce both typed surfaces", () => {
   const observations = policySurfaceObservationsFromRetainedRenderedLinks({
     links: [{
@@ -1059,6 +1076,31 @@ test("policySurfaceScanner retries a substantive but incomplete privacy policy i
       privacy.gdprTransparencyTopicCandidates.some((candidate) => candidate.topic === "supervisory_authority"),
       true,
     );
+  });
+});
+
+test("policySurfaceScanner uses Medal's rendered policy body and retains all nine GDPR transparency topics", async () => {
+  await withPolicyScan("policy-medal-rendered-privacy", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/medal/privacy`
+    );
+    const topics = new Set(privacy?.gdprTransparencyTopicCandidates.map((candidate) => candidate.topic));
+
+    assert.ok(privacy);
+    assert.match(privacy.textExcerpt ?? "", /Medal B\.V\./i);
+    assert.deepEqual([...topics].sort(), [
+      "controller_contact",
+      "data_retention",
+      "data_subject_rights",
+      "dpo_contact",
+      "international_transfers",
+      "legal_basis",
+      "processing_purposes",
+      "recipients_or_vendor_categories",
+      "supervisory_authority"
+    ]);
   });
 });
 
@@ -2692,6 +2734,31 @@ test("retained policy excerpts directly support controller, purposes, legal basi
   assert.match(excerpt("legal_basis"), /lawful bases are performance of a contract.*legitimate interests/i);
   assert.match(excerpt("data_retention"), /retain account records only as long as necessary.*delete or anonymize/i);
   assert.match(excerpt("dpo_contact"), /Privacy Office at privacy@foundation\.example/i);
+});
+
+test("transfer excerpts prefer concrete cross-border safeguards over nearby framework complaint prose", () => {
+  const sourceUrl = "https://events.example/privacy";
+  const evidence = retainedArticle13SectionEvidenceFromSections([
+    {
+      sourceUrl,
+      heading: "International transfers",
+      textExcerpt: "We transfer personal information to service providers in other countries and protect those transfers using Standard Contractual Clauses and adequacy decisions where available.",
+      charStart: 0,
+      charEnd: 170,
+      quality: "strong",
+    },
+    {
+      sourceUrl,
+      heading: "Data Privacy Framework complaints",
+      textExcerpt: "Questions and unresolved complaints under the Data Privacy Framework may be referred to an independent dispute-resolution provider.",
+      charStart: 171,
+      charEnd: 310,
+      quality: "strong",
+    },
+  ], sourceUrl);
+  const transfer = evidence.find((row) => row.coverageArea === "international_transfers");
+  assert.match(transfer?.selectedPolicySectionExcerpt ?? "", /transfer personal information.*other countries.*Standard Contractual Clauses/i);
+  assert.doesNotMatch(transfer?.selectedPolicySectionExcerpt ?? "", /unresolved complaints|dispute-resolution/i);
 });
 
 test("policySurfaceScanner extracts late mature-policy GDPR transparency signals without promoting legal basis", async () => {

@@ -2321,7 +2321,10 @@ function buildCmpLoadOrderConcerns(
 
   const allRuntimeRequestRows = [
     ...getRuntimeObjectArray(runtimeArtifacts, ["requestObservations", "request_observations", "networkRequests", "network_requests"]),
-    ...getRuntimeObjectArray(hybridRuntimeEvidence, ["requestObservations", "request_observations", "networkRequests", "network_requests"])
+    ...getRuntimeObjectArray(hybridRuntimeEvidence, ["requestObservations", "request_observations", "networkRequests", "network_requests"]),
+    // CMP requests are classification context rather than tracker evidence, but some
+    // retained captures only carry their concrete URL/timestamp in this typed table.
+    ...requestRows
   ];
   const cmpRequestRows = allRuntimeRequestRows.flatMap((row) => {
     const requestUrl = getRuntimeString(row, ["requestUrl", "request_url", "url", "src"]);
@@ -2367,6 +2370,25 @@ function buildCmpLoadOrderConcerns(
     return [];
   }
 
+  const hasConcreteExecutionOrder = Boolean(
+    firstCmpRequest &&
+    allRuntimeRequestRows.some((row) => {
+      const requestUrl = getRuntimeString(row, ["requestUrl", "request_url", "url", "src"]);
+      if (!requestUrl || requestUrl !== firstCmpRequest.requestUrl) {
+        return false;
+      }
+      return Boolean(
+        getRuntimeString(row, ["initiatorUrl", "initiator_url", "parentRequestId", "parent_request_id", "initiatorRequestId", "initiator_request_id"]) ||
+        getRuntimeNumber(row, ["sequence", "sequenceNumber", "sequence_number", "eventSequence", "event_sequence"]) !== null
+      );
+    })
+  );
+  // Near-simultaneous browser events do not establish JavaScript execution order
+  // by timestamp alone. Retain both events in inventory, but do not promote a gap.
+  if (cmpGapMs < 100 && !hasConcreteExecutionOrder) {
+    return [];
+  }
+
   const trackerVendors = uniqueStrings(classifiedTrackerRequests.map((request) => request.vendorName)).slice(0, 8);
   const trackerHosts = uniqueStrings(classifiedTrackerRequests.map((request) => request.hostname)).slice(0, 8);
   const cmpVendorName = firstCmpRequest?.cmpVendorName ?? null;
@@ -2376,6 +2398,7 @@ function buildCmpLoadOrderConcerns(
     cmpScriptLoadedAtMs,
     cmpReadyAtMs,
     cmpGapMs,
+    executionOrderProven: hasConcreteExecutionOrder,
     cmpVendorName,
     cmpRequestHost: firstCmpRequest?.host ?? null,
     cmpRequestResourceType: firstCmpRequest?.resourceType ?? null,

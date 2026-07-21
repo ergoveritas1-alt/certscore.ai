@@ -10,6 +10,7 @@ import {
   getInventoryGroupRowRenderKey,
   getTrackerConsentReviewPriority,
   isInventoryDisplayHostname,
+  isTimedPreConsentInventoryRow,
 } from "./runtime-inventory-projection";
 
 test("projects bounded BX01 request inventory without treating unresolved hosts as violations", () => {
@@ -70,6 +71,25 @@ test("creates unique render keys for repeated vendor-purpose inventory rows", ()
   const keys = rows.map(getInventoryGroupRowRenderKey);
 
   assert.equal(new Set(keys).size, rows.length);
+});
+
+test("keeps untimed request-only rows out of the pre-consent inventory", () => {
+  const base = {
+    category: "consent_management",
+    confidence: 0.99,
+    domains: ["consent.cookiebot.eu"],
+    label: "Cookiebot",
+    observedVia: ["request"],
+    party: "third_party" as const,
+    preConsent: true,
+    requestCount: 1,
+    source: "runtime",
+    vendorDisplayCategory: "Cookie compliance"
+  };
+
+  assert.equal(isTimedPreConsentInventoryRow({ ...base, cookieNames: [], firstSeenMs: null }), false);
+  assert.equal(isTimedPreConsentInventoryRow({ ...base, cookieNames: [], firstSeenMs: 3346 }), true);
+  assert.equal(isTimedPreConsentInventoryRow({ ...base, cookieNames: ["CookieConsent"], firstSeenMs: null }), true);
 });
 
 test("derives Fable macro categories without replacing detailed purposes", () => {
@@ -160,7 +180,7 @@ test("projects canonical hostless vendor labels with known purposes and categori
   assert.equal(amazon?.attributionEvidence?.matchedOn, "vendor_label");
 });
 
-test("projects a Taboola apex-domain cookie as advertising instead of unknown", () => {
+test("projects an untimed Taboola snapshot as advertising with review-only write timing", () => {
   const groupedRows = buildRuntimeInventoryGroupRows({
     cookieRows: [{
       category: "unknown",
@@ -184,7 +204,7 @@ test("projects a Taboola apex-domain cookie as advertising instead of unknown", 
 
   assert.equal(taboola?.purpose, "Advertising");
   assert.equal(taboola?.macroCategory, "Advertising");
-  assert.equal(taboola?.priority, "high");
+  assert.equal(taboola?.priority, "review_needed");
   assert.equal(taboola?.confidence, "high");
   assert.equal(taboola?.attributionEvidence?.matchedOn, "domain");
 });
@@ -201,6 +221,8 @@ test("keeps first-party Akamai security tracker inventory contextual", () => {
         beforeConsent: true,
         confidence: 0.9,
         detectionSource: "vendor resolver",
+        matchedCookieNames: ["bm_mi"],
+        attributionSignatures: ["cookie_name_match"],
         observedVia: ["cookie"],
         scriptHost: "nvidia.com",
         vendorCategory: "security",
@@ -240,6 +262,8 @@ test("filters cookie names and cookie-domain tokens out of tracker display domai
         beforeConsent: true,
         confidence: 0.93,
         detectionSource: "vendor resolver",
+        matchedCookieNames: ["__cf_bm"],
+        attributionSignatures: ["cookie_name_match"],
         scriptHost: "__cf_bm",
         vendorCategory: "security",
         vendorName: "Cloudflare Bot Management",
@@ -299,10 +323,10 @@ test("filters cookie names and cookie-domain tokens out of tracker display domai
 
   assert.deepEqual(googleAnalytics?.domains, ["region1.google-analytics.com"]);
   assert.deepEqual(cloudflare?.domains, []);
-  assert.deepEqual(quantcastChoice?.domains, []);
-  assert.deepEqual(permutive?.domains, []);
-  assert.deepEqual(didomi?.domains, []);
-  assert.deepEqual(iubenda?.domains, []);
+  assert.equal(quantcastChoice, undefined);
+  assert.equal(permutive, undefined);
+  assert.equal(didomi, undefined);
+  assert.equal(iubenda, undefined);
   assert.equal(groupedRows.some((row) => row.type === "tracker" && row.vendor === "_ga_jkt0kkxlxe"), false);
   assert.equal(isInventoryDisplayHostname("_ga"), false);
   assert.equal(isInventoryDisplayHostname(".seel.com"), false);
@@ -484,10 +508,116 @@ test("separates cookie names from domains and preserves canonical ownership", ()
   assert.ok(groupedRows.every((row) => row.domains.every((domain) => !row.cookieNames.includes(domain))));
 });
 
+test("does not project canonically owned OpenAI hosts beside a contaminated ZoomInfo row", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: ["bzrcdn.openai.com", "js.zi-scripts.com", "ws.zoominfo.com"],
+    firstPartyDomain: "example.test",
+    preConsentVendors: ["ZoomInfo WebSights"],
+    resolvedVendors: ["ZoomInfo WebSights", "OpenAI advertising measurement"],
+    sessionReplayVendors: [],
+    trackerVendors: [{
+      beforeConsent: true,
+      confidence: 0.95,
+      detectionSource: "resolver",
+      matchedHostnames: ["bzrcdn.openai.com", "js.zi-scripts.com", "ws.zoominfo.com"],
+      scriptHost: "bzrcdn.openai.com",
+      vendorCategory: "analytics",
+      vendorName: "ZoomInfo WebSights"
+    } as never],
+    topObservedEntities: [],
+    unresolvedHosts: []
+  });
+  const zoomInfo = rows.find((row) => row.label === "ZoomInfo");
+  assert.ok(zoomInfo);
+  assert.deepEqual(zoomInfo.domains.sort(), ["js.zi-scripts.com", "ws.zoominfo.com"]);
+});
+
+test("suppresses label-only ad-tech aliases attached to concrete Yandex evidence", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: ["yandex.ru", "mc.yandex.ru"],
+    firstPartyDomain: "life.ru",
+    preConsentVendors: ["Yandex Metrica", "Bombora Visitor Insights", "OpenX", "Quantcast Measure"],
+    resolvedVendors: [],
+    sessionReplayVendors: [],
+    trackerVendors: [
+      {
+        beforeConsent: true,
+        detectionSource: "local_v2_dag_runtime",
+        matchedUrls: ["https://mc.yandex.ru/watch/34662240"],
+        attributionSignatures: ["yandex_metrica_webvisor_runtime"],
+        scriptHost: "mc.yandex.ru",
+        vendorCategory: "analytics",
+        vendorName: "Yandex Metrica",
+      },
+      ...["Bombora Visitor Insights", "OpenX", "Quantcast Measure"].map((vendorName) => ({
+        beforeConsent: true,
+        detectionSource: "local_v2_dag_runtime",
+        matchedHostnames: ["yandex.ru"],
+        attributionSignatures: ["canonical_product_label"],
+        scriptHost: "yandex.ru",
+        vendorCategory: "advertising",
+        vendorName,
+      })),
+    ] as never,
+    topObservedEntities: [],
+    unresolvedHosts: [],
+  });
+
+  assert.ok(rows.some((row) => row.label === "Yandex Metrica"));
+  assert.equal(rows.some((row) => /Bombora|OpenX|Quantcast/.test(row.label)), false);
+});
+
 test("treats publisher-owned related domains as first-party infrastructure", () => {
   const rows = buildTrackerInventoryRows({
     domains: ["a.bildstatic.de"], firstPartyDomain: "bild.de", preConsentVendors: [], resolvedVendors: [], sessionReplayVendors: [],
     trackerVendors: [], topObservedEntities: [{ category: "unknown", label: "a.bildstatic.de", requestCount: 12 }], unresolvedHosts: ["a.bildstatic.de"]
   });
   assert.deepEqual(rows, []);
+});
+
+test("preserves literal Daily raw hosts and applies multi-label PSL party classification", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: [],
+    firstPartyDomain: "www.daily.co.jp",
+    preConsentVendors: [],
+    resolvedVendors: [],
+    sessionReplayVendors: [],
+    trackerVendors: [],
+    topObservedEntities: [
+      { category: "unknown", label: "i.daily.jp", requestCount: 34 },
+      { category: "analytics", label: "region1.analytics.google.com", requestCount: 2 }
+    ],
+    unresolvedHosts: []
+  });
+  const byLabel = new Map(rows.map((row) => [row.label, row]));
+
+  assert.deepEqual(byLabel.get("i.daily.jp")?.domains, ["i.daily.jp"]);
+  assert.equal(byLabel.get("i.daily.jp")?.party, "third_party");
+  assert.deepEqual(byLabel.get("region1.analytics.google.com")?.domains, ["region1.analytics.google.com"]);
+  assert.equal(byLabel.get("region1.analytics.google.com")?.party, "third_party");
+});
+
+test("deduplicates Daily vendor aliases while retaining product labels", () => {
+  const grouped = buildTrackerInventoryGroupRows([
+    ...["Teads", "Teads Video Advertising"].map((label) => ({
+      category: "advertising", confidence: 0.98, cookieNames: [], domains: ["a.teads.tv"], firstSeenMs: 3_465,
+      label, observedVia: ["request"], party: "third_party" as const, preConsent: true,
+      requestCount: 1, source: "runtime", syncedIdentifiers: []
+    })),
+    ...["Microsoft", "Microsoft Clarity"].map((label) => ({
+      category: "session_replay", confidence: 0.98, cookieNames: [], domains: ["i.clarity.ms"], firstSeenMs: 5_013,
+      label, observedVia: ["request"], party: "third_party" as const, preConsent: true,
+      requestCount: 1, source: "runtime", syncedIdentifiers: []
+    })),
+    ...["ID5", "ID5 Identity"].map((label) => ({
+      category: "advertising", confidence: 0.98, cookieNames: ["id5"], domains: ["id5-sync.com"], firstSeenMs: 11_859,
+      label, observedVia: ["request", "cookie"], party: "third_party" as const, preConsent: true,
+      requestCount: 1, source: "runtime", syncedIdentifiers: []
+    }))
+  ]);
+
+  assert.equal(grouped.length, 3);
+  assert.deepEqual(grouped.find((row) => row.vendor === "Teads Video Advertising")?.rawProducts.sort(), ["Teads", "Teads Video Advertising"]);
+  assert.deepEqual(grouped.find((row) => row.vendor === "Microsoft Clarity")?.rawProducts.sort(), ["Microsoft", "Microsoft Clarity"]);
+  assert.deepEqual(grouped.find((row) => row.vendor === "ID5 Identity")?.rawProducts.sort(), ["ID5", "ID5 Identity"]);
 });

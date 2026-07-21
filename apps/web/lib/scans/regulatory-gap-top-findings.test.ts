@@ -169,7 +169,7 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
       "partial_rating"
     ]
   );
-  assert.equal(findings[0]?.label, "Pre-consent tracking, storage, and embedded services");
+  assert.equal(findings[0]?.label, "Pre-consent tracking and storage");
   assert.equal(
     Array.isArray(findings[0]?.evidenceDetails?.policyEvidenceDetails?.groupedRuntimeSignals),
     true,
@@ -196,6 +196,40 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
     findings.map((finding) => finding.shortSummary).join("\n"),
     /checklist potential concern/i
   );
+});
+
+test("buildRegulatoryGapTopFindings does not name embedded services when no embedded row is grouped", () => {
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [
+        {
+          assessmentStatus: "gap_observed",
+          id: "pre_consent_third_party_tracking",
+          label: "Pre-consent tracking",
+          note: "Tracking observed."
+        },
+        {
+          assessmentStatus: "review_signal",
+          id: "pre_consent_cookies_storage",
+          label: "Pre-consent storage",
+          note: "Storage observed."
+        },
+        {
+          assessmentStatus: "checked",
+          evidenceState: "not_observed",
+          id: "embedded_content_pre_consent",
+          label: "Embedded services",
+          note: "Not observed.",
+          status: "Not observed"
+        }
+      ]
+    }
+  });
+
+  assert.equal(findings[0]?.label, "Pre-consent storage");
+  assert.doesNotMatch(findings[0]?.label ?? "", /embedded/i);
 });
 
 test("buildRegulatoryGapTopFindings keeps consent-control review rows when CMP expectation is retained", () => {

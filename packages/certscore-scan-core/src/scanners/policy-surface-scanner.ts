@@ -1178,11 +1178,13 @@ function policyEvaluationCandidateKey(candidate: PolicySurfaceCandidate): string
   }
   try {
     const parsed = new URL(candidate.normalizedUrl);
-    parsed.hash = "";
+    if (parsed.hash && classifyPrivacySurface({ url: parsed.toString() }).surfaceType === "unknown") {
+      parsed.hash = "";
+    }
     parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
     return parsed.toString();
   } catch {
-    return candidate.normalizedUrl.replace(/#.*$/, "").replace(/\/+$/, "") || "/";
+    return candidate.normalizedUrl.replace(/\/+$/, "") || "/";
   }
 }
 
@@ -1363,7 +1365,7 @@ async function processPolicyCandidate({
     };
   }
 
-  const fetchedFinalUrl = successfulPolicyFetchFinalUrl(fetched, candidate.normalizedUrl);
+  let fetchedFinalUrl = successfulPolicyFetchFinalUrl(fetched, candidate.normalizedUrl);
   let effectiveCandidate = fetchedFinalUrl === candidate.normalizedUrl
     ? candidate
     : {
@@ -1466,6 +1468,15 @@ async function processPolicyCandidate({
         }),
       );
       if (shouldAdoptPolicyDocumentText(renderedVisibleText, visibleText, { allowTopicDominant: true })) {
+        fetched = renderedFetched;
+        fetchedFinalUrl = successfulPolicyFetchFinalUrl(renderedFetched, effectiveCandidate.normalizedUrl);
+        effectiveCandidate = {
+          ...effectiveCandidate,
+          url: fetchedFinalUrl,
+          normalizedUrl: fetchedFinalUrl,
+          sameOrigin: sameOrigin(input.normalizedUrl, fetchedFinalUrl),
+          fetchable: true,
+        };
         fetchedHtml = renderedFetched.text;
         secondaryCandidateHtmlInputs.push(fetchedHtml);
         title = titleFromHtml(fetchedHtml) ?? title;
@@ -5083,6 +5094,7 @@ function bestSectionExcerptForProfile(
     processing_purposes: [/we (?:collect|use|process).{0,220}(?:to|for) /i],
     legal_basis: [/(?:our )?(?:legal|lawful) bases? (?:are|include).{0,260}(?:contract|legitimate interests?|legal obligations?|consent|public task|vital interests?)/i],
     data_retention: [/we retain.{0,260}(?:as long as|period|criteria|delete|anonymi[sz]e)/i],
+    international_transfers: [/(?:we|our service providers?|our processors?) (?:transfer|store|process).{0,300}(?:outside|other countries|third countr(?:y|ies)|international).{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i, /(?:international|cross-border|third-country) transfers?.{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i],
     dpo_contact: [/(?:privacy office|data protection office|data protection officer|\bdpo\b).{0,180}(?:@|contact|email|write|telephone|phone)/i],
   };
   const directPatterns = preferredPatterns[profile.disclosureType] ?? [];
@@ -5465,8 +5477,21 @@ function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
     .length;
   const totalTokens = normalized.split(/\s+/).filter(Boolean).length;
   const alphabeticWords = normalized.match(/[\p{L}][\p{L}'-]{2,}/gu) ?? [];
-  const alphabeticWordRatio = alphabeticWords.length / Math.max(totalTokens, 1);
-  const naturalLanguageSentenceCount = (normalized.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi) ?? []).length;
+  const cjkCharacters = normalized.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu) ?? [];
+  const alphabeticWordRatio = Math.max(
+    alphabeticWords.length / Math.max(totalTokens, 1),
+    cjkCharacters.length / Math.max(normalized.replace(/\s/g, "").length, 1)
+  );
+  const cjkNaturalLanguageSentenceCount = cjkCharacters.length > 0
+    ? normalized
+      .split(/[。！？]/u)
+      .slice(0, -1)
+      .filter((sentence) => sentence.trim().length >= 20)
+      .length
+    : 0;
+  const naturalLanguageSentenceCount =
+    (normalized.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi) ?? []).length +
+    cjkNaturalLanguageSentenceCount;
   const policyTermCount = uniqueStrings((lower.match(new RegExp([
     "\\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\\b",
     "\\b(?:datenschutz|personenbezogene daten|einwilligung|verarbeitung|aufsichtsbehörde)\\b",
@@ -5788,7 +5813,12 @@ function attr(attrs: string, name: string): string | undefined {
 function normalizeUrl(href: string, baseUrl: string): string | undefined {
   try {
     const parsed = new URL(href, baseUrl);
-    parsed.hash = "";
+    if (
+      parsed.hash &&
+      classifyPrivacySurface({ url: parsed.toString() }).surfaceType === "unknown"
+    ) {
+      parsed.hash = "";
+    }
     return parsed.toString();
   } catch {
     return undefined;

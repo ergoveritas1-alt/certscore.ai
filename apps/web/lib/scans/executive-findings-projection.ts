@@ -1015,7 +1015,7 @@ function buildAsymmetricConsentUiBasis(runtimePath: Record<string, unknown> | nu
   if (choiceAsymmetry === "material" || choiceAsymmetry === "minor") {
     return `Retained consent UI path evidence classified the accept and reject paths as ${choiceAsymmetry}ly imbalanced.`;
   }
-  return "Retained consent UI path evidence showed accept and reject choices were not equivalent in visibility, prominence, or interaction cost.";
+  return "Retained consent UI path evidence showed accept and reject were not available as equivalent first-layer choices; retained evidence did not establish a visual-prominence comparison.";
 }
 
 function buildConsentUiBasis(input: {
@@ -1584,10 +1584,14 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
       ...(Array.isArray(governance.preferenceCenterUrls) ? governance.preferenceCenterUrls : [])
     ].filter((value): value is string => typeof value === "string");
     return uniqueStrings([
-      "Consent preferences and withdrawal process were not clearly explained in retained public materials.",
+      policyUrls.length > 0
+        ? "Consent preferences and withdrawal process were not clearly explained in the retained policy surface."
+        : "Consent-choice evidence was retained, but no successfully extracted policy surface was available for a policy or withdrawal assessment.",
       missingSignals.length > 0 ? `Gap signals: ${missingSignals.slice(0, 3).join(", ")}.` : null,
       policyUrls.length > 0 ? `Reviewed surface: ${policyUrls[0]}.` : null,
-      "Automated public-web observation; manual review should confirm current policy, cookie, and preference-center materials."
+      policyUrls.length > 0
+        ? "Automated public-web observation; manual review should confirm current policy, cookie, and preference-center materials."
+        : "No policy-completeness conclusion was drawn from the consent controls alone."
     ]).slice(0, 4);
   }
 
@@ -2351,10 +2355,10 @@ function buildPreConsentTrackingEvidenceDetails(
     maxItems: 8
   });
   const promotionGradeScannedPageUrl =
+    getReportFacingScannedPageUrl(packet) ??
     promotionGradePreconsentRequests
       .map((request) => normalizeReportFacingPageUrl(request.scannedPageUrl))
       .find((pageUrl): pageUrl is string => pageUrl !== null) ??
-    getReportFacingScannedPageUrl(packet) ??
     scannedPageUrl;
   const requestUrls = uniqueCaseInsensitiveStrings([
     ...promotionGradePreconsentRequests.map((request) => request.requestUrl),
@@ -2368,7 +2372,7 @@ function buildPreConsentTrackingEvidenceDetails(
     const endpointVendor = endpointVendorMatch?.vendorName ?? null;
     const displayVendor = endpointVendor ?? request.vendorName;
     const isFirstPartyProxy = request.collectionEndpointType === "first_party_collection_proxy";
-    const firstSeenMs = request.firstSeenMs ?? firstThirdPartyRequestMs;
+    const firstSeenMs = request.firstSeenMs;
     const runtimePhase = normalizeRepresentativeRuntimePhase({
       runtimePhase: request.runtimePhase,
       firstSeenMs,
@@ -2441,8 +2445,7 @@ function buildPreConsentTrackingEvidenceDetails(
       category,
       resourceType: getRecordString(matchedRow ?? {}, ["resourceType", "type"]) ?? (/\.js(?:[?#]|$)|\/gtm\.js/i.test(url) ? "script" : null),
       firstSeenMs: getRecordRuntimeElapsedMs(matchedRow ?? {}, ["firstSeenMs", "first_seen_ms", "ms"]) ??
-        getRecordRuntimeElapsedMs(matchedRow ?? {}, ["timestampMs"]) ??
-        firstThirdPartyRequestMs,
+        getRecordRuntimeElapsedMs(matchedRow ?? {}, ["timestampMs"]),
       thirdParty: true,
       preConsent: true,
       identifierLike: isLikelyIdentifierRequest(url),
@@ -2873,10 +2876,12 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
         : {}),
       basis: firstPartyProxyObserved
         ? "Session recording collection appears proxied through the scanned first-party host."
-        : "Session recording vendor or request evidence was retained during runtime collection."
+        : collectionEndpointObserved === true
+          ? "A session-replay collection endpoint was directly retained during runtime collection."
+          : "A session-replay runtime library or service endpoint was retained; recording and data transmission were not demonstrated."
     },
     inputSurfaceEvidence: { evaluated: false },
-    requestSelectionNote: "Representative session recording requests are capped examples and are not exhaustive.",
+    requestSelectionNote: "Representative session-replay runtime requests are capped examples and are not exhaustive.",
     vendors: getVendorDetails(vendors, representativeRequests),
     representativeRequests,
     identifierEvidence: buildIdentifierEvidence(representativeRequests),
@@ -2889,7 +2894,9 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     },
     limitations: [
       "Automated scan does not determine legal status.",
-      "Session recording detection identifies collection services, not the full contents captured by the vendor."
+      collectionEndpointObserved === true
+        ? "A collection endpoint indicates transmission to the service, but does not establish the full contents captured or retained."
+        : "Library or settings traffic identifies a session-replay service signal, not proof that recording or data transmission occurred."
     ],
     runtimeRequestUrls: requestUrls,
     runtimeVendors: vendors,
@@ -4850,9 +4857,11 @@ function buildExecutiveShortSummary(
 
     if (vendors.length > 0) {
       const vendorList = formatVendorList(vendors);
-      return vendors.length === 1
-        ? `${vendorList} session replay service signals were observed during runtime collection.`
-        : `${vendorList} session replay service signals were observed during runtime collection.`;
+      const collectionObserved = evidenceDetails?.sessionReplayEvidence &&
+        (evidenceDetails.sessionReplayEvidence as Record<string, unknown>).collectionEndpointObserved === true;
+      return collectionObserved
+        ? `${vendorList} session-replay collection endpoint activity was observed during runtime collection.`
+        : `${vendorList} runtime/session-replay service signals were observed; retained evidence did not demonstrate recording or data transmission.`;
     }
 
     return "Session replay service signals were observed during runtime collection.";
@@ -4980,6 +4989,11 @@ function isSpecificPolicyRuntimeContradiction(packet: UnifiedFindingDisplayPacke
 function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY) {
   const definition = CERT_SCORE_FINDING_REGISTRY[findingId]!;
   const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
+  const sessionReplayEvidence = evidenceDetails?.sessionReplayEvidence as Record<string, unknown> | undefined;
+  const sessionReplayCollectionObserved = sessionReplayEvidence?.collectionEndpointObserved === true;
+  const sessionReplayVendors = findingId === "session_recording_services_detected"
+    ? getSessionReplayVendors(packet)
+    : [];
   return {
     id: definition.id,
     label:
@@ -4989,6 +5003,8 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
           : definition.label
         : findingId === "long_lived_cookie_retention_review"
           ? evaluateCookieRetentionReview({ cookieRetentionEvidence: getEntityJsonObjects(packet, "cookieRetentionEvidence") }).label
+        : findingId === "session_recording_services_detected" && !sessionReplayCollectionObserved
+          ? `${sessionReplayVendors[0] ?? "Session replay"} runtime/session-replay service signal`
         : definition.label,
     section: definition.section,
     defaultSurfacePriority: definition.defaultSurfacePriority,

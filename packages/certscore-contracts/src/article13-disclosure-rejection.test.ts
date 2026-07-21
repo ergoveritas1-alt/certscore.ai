@@ -223,6 +223,27 @@ test("Article 13 rejection contract accepts calibrated DPO contact evidence in t
   }
 });
 
+test("Article 13 rejection contract rejects GamCare-style team and no-sale false positives", () => {
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+    assert.equal(
+      article13DisclosureRejectReason(
+        "Your personal information will not be shared outside our team unless there is a risk to you or someone else.",
+        "international_transfers",
+        { mode }
+      ),
+      "insufficient_row_specific_terms"
+    );
+    assert.equal(
+      article13DisclosureRejectReason(
+        "We respect your privacy and do not sell your personal information to any third-party individual or organisation.",
+        "recipients_or_vendor_categories",
+        { mode }
+      ),
+      "insufficient_row_specific_terms"
+    );
+  }
+});
+
 test("Article 13 rejection contract rejects generic contact and GDPR page chrome for row-specific disclosures", () => {
   const footerChrome =
     "Parents Teachers Privacy Policy Cookie Policy Terms Contact us Content Removal Upload Home New videos Search Menu";
@@ -295,5 +316,15 @@ test("Article 13 rejection contract rejects footer language, generic disclaimers
       "insufficient_row_specific_terms",
       `${mode} should reject cookie definitions as data-subject-rights evidence`,
     );
+  }
+});
+
+test("Article 13 rejection contract rejects IMOU 404 and product-footer chrome", () => {
+  const imou404 = "Policy body. Products Product categories Cameras Doorbells Smart Locks Support FAQ Downloads Videos Developers Warranty Policy Contact Us. Ops, the page slips away. Please check whether the page address you entered is correct! Back Home Privacy Policy Cookie Policy Terms of Use Cookie Preferences Copyright 2026 IMOU. All Rights Reserved.";
+  const imouFooter = "Products Cameras Doorbells Smart Locks Imou Link Imou IoT Imou Robots Accessories Support FAQ Download Videos Product Manual Warranty Policy Contact us Sign Up Privacy Policy Cookie Policy Terms of Use Cookie Preferences All Rights Reserved.";
+
+  for (const mode of ["scan_core", "retained_report"] satisfies Article13DisclosureRejectionMode[]) {
+    assert.equal(article13DisclosureRejectReason(imou404, "data_subject_rights", { mode }), "page_chrome_or_navigation");
+    assert.equal(article13DisclosureRejectReason(imouFooter, "controller_contact", { mode }), "page_chrome_or_navigation");
   }
 });

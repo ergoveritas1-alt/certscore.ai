@@ -193,6 +193,18 @@ test("uses localized URL patterns as canonical surface hints", () => {
   }
 });
 
+test("classifies Russian personal-data labels and fragment policy URLs", () => {
+  for (const input of [
+    { linkText: "Обработка персональных данных", url: "https://example.ru/legacy#persondata" },
+    { linkText: "Защита персональных данных", url: "https://example.ru/legacy" },
+    { linkText: "Правовая информация", url: "https://example.ru/legacy#persondata" },
+  ]) {
+    const classification = classifyPrivacySurface(input);
+    assert.equal(classification.surfaceType, "privacy_policy");
+    assert.equal(classification.matchedLocale, "ru");
+  }
+});
+
 test("does not use neighboring footer text as the matched surface for unrelated links", () => {
   const surroundingText = "Contacto Aviso legal Politica de privacidad Cookies Accesibilidad";
 

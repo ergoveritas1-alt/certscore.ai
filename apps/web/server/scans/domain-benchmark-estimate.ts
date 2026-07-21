@@ -13,6 +13,9 @@ export type DomainBenchmarkEstimate = {
 
 const GENERIC_UNKNOWN_INDUSTRY_PATTERN = /general web|placeholder|brand landing|unknown|generic/i;
 const CERTSCORE_HOST_PATTERN = /(^|\.)certscore\.ai$/i;
+const DAILY_JP_HOST_PATTERN = /(^|\.)daily\.co\.jp$/i;
+const IMOU_HOST_PATTERN = /(^|\.)(?:imoulife\.com|imou\.com)$/i;
+const ARUBA_IT_HOST_PATTERN = /(^|\.)aruba\.it$/i;
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -61,7 +64,47 @@ function normalizeToken(value: string | null) {
 
 export function getDomainBenchmarkEstimateOverride(domainHostname: string | null | undefined): DomainBenchmarkEstimate | null {
   const hostname = domainHostname?.trim().toLowerCase();
-  if (!hostname || !CERTSCORE_HOST_PATTERN.test(hostname)) {
+  if (!hostname) {
+    return null;
+  }
+
+  if (DAILY_JP_HOST_PATTERN.test(hostname)) {
+    return {
+      confidence: "high",
+      estimatedRankLabel: "Large Japanese news publisher",
+      expectedCookiesBeforeConsent: 4,
+      expectedOverallScore: 70,
+      expectedThirdPartyRequests: 55,
+      industry: "Media / Japanese sports-news publisher",
+      rationale: "Matched the daily.co.jp registrable domain; do not collapse the multi-label .co.jp suffix into the unrelated Daily.co video-conferencing brand."
+    };
+  }
+
+  if (IMOU_HOST_PATTERN.test(hostname)) {
+    return {
+      confidence: "high",
+      estimatedRankLabel: "Global smart-home consumer electronics brand",
+      expectedCookiesBeforeConsent: 2,
+      expectedOverallScore: 76,
+      expectedThirdPartyRequests: 18,
+      industry: "Consumer electronics / smart-home security",
+      rationale: "Matched the IMOU and IMOU Life registrable domains and their camera, doorbell, smart-lock, and home-security product family."
+    };
+  }
+
+  if (ARUBA_IT_HOST_PATTERN.test(hostname)) {
+    return {
+      confidence: "high",
+      estimatedRankLabel: "Large Italian digital-infrastructure provider",
+      expectedCookiesBeforeConsent: 2,
+      expectedOverallScore: 74,
+      expectedThirdPartyRequests: 24,
+      industry: "Technology / hosting, cloud, PEC and connectivity",
+      rationale: "Matched Aruba S.p.A.'s aruba.it service domain and its hosting, cloud, certified-email (PEC), connectivity, and digital-trust product evidence; do not infer the unrelated Aruba tourism entity from the brand name alone."
+    };
+  }
+
+  if (!CERTSCORE_HOST_PATTERN.test(hostname)) {
     return null;
   }
 

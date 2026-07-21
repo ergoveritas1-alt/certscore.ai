@@ -97,9 +97,20 @@ function clusterRelatedRuntimeTopFindings(findings: CertScoreFinding[]) {
     label: finding.label,
     shortSummary: finding.shortSummary,
   }));
+  const clusteredRowIds = new Set(clustered.map(regulatoryRowId));
+  const labelParts = [
+    [...clusteredRowIds].some((rowId) => rowId === "pre_consent_third_party_tracking" || rowId === "advertising_retargeting_vendor_signal_observed" || rowId === "retargeting_behavioral_advertising_signal_observed" || rowId === "analytics_vendor_observed")
+      ? "tracking"
+      : null,
+    clusteredRowIds.has("pre_consent_cookies_storage") ? "storage" : null,
+    clusteredRowIds.has("embedded_content_pre_consent") ? "embedded services" : null,
+  ].filter((value): value is string => Boolean(value));
+  const groupedLabel = `Pre-consent ${labelParts.length > 1
+    ? `${labelParts.slice(0, -1).join(", ")} and ${labelParts.at(-1)}`
+    : labelParts[0] ?? "runtime signals"}`;
   const groupedPrimary: CertScoreFinding = {
     ...primary,
-    label: "Pre-consent tracking, storage, and embedded services",
+    label: groupedLabel,
     shortSummary: primary.shortSummary,
     evidencePreview: [
       ...primary.evidencePreview,

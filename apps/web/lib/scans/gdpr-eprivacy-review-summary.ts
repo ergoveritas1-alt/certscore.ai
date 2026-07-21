@@ -1,3 +1,4 @@
+import { isArticle13DisclosureEvidenceUsable, type Article13DisclosureType } from "@certscore/contracts";
 import type {
   GdprEprivacyCoverageChecklistItem,
   GdprEprivacyCoverageChecklistStatus
@@ -51,6 +52,18 @@ const CUSTOMER_LABELS: Record<string, string> = {
   session_replay_disclosure_alignment: "Session replay disclosure alignment",
   session_replay_fingerprinting_review: "Session replay / behavioral analytics",
   session_replay_sensitive_surface: "Session replay on sensitive surfaces"
+};
+
+const TRANSPARENCY_ROW_DISCLOSURE_TYPES: Partial<Record<string, Article13DisclosureType>> = {
+  controller_contact_disclosure: "controller_contact",
+  processing_purposes_disclosure: "processing_purposes",
+  legal_basis_disclosure_observed: "legal_basis",
+  recipients_vendor_categories_disclosure: "recipients_or_vendor_categories",
+  retention_disclosure_observed: "data_retention",
+  data_subject_rights_disclosure: "data_subject_rights",
+  international_transfers_disclosure: "international_transfers",
+  dpo_contact_point_disclosure: "dpo_contact",
+  supervisory_authority_complaint_disclosure: "supervisory_authority"
 };
 
 const LIMITS_COPY =
@@ -156,6 +169,21 @@ function getRow(items: GdprEprivacyCoverageChecklistItem[], id: string) {
 
 function getRetainedEvidence(item: GdprEprivacyCoverageChecklistItem | null) {
   return item?.criticalEvidence.retainedEvidence ?? {};
+}
+
+function hasUsableObservedTransparencyEvidence(item: GdprEprivacyCoverageChecklistItem) {
+  const disclosureType = TRANSPARENCY_ROW_DISCLOSURE_TYPES[item.id];
+  if (!disclosureType || item.status !== "Observed") {
+    return true;
+  }
+  const article13Signal = asRecord(getRetainedEvidence(item).article13Signal);
+  const excerpt = getString(article13Signal, [
+    "selectedPolicySectionExcerpt",
+    "selected_policy_section_excerpt",
+    "evidenceText",
+    "evidence_text"
+  ]);
+  return Boolean(excerpt && isArticle13DisclosureEvidenceUsable(excerpt, disclosureType, { mode: "retained_report" }));
 }
 
 function getRetainedRecord(item: GdprEprivacyCoverageChecklistItem | null, key: string) {
@@ -597,6 +625,7 @@ export function deriveGdprEprivacyReviewSummary(
   const usableRows = inScopeRows.filter((item) =>
     item.evidenceState !== "not_testable" && item.assessmentStatus !== "coverage_limitation"
     && !extractionLimitedTransparencyRows.includes(item)
+    && hasUsableObservedTransparencyEvidence(item)
   ).length;
   const technicalLimitCount = items.filter((item) =>
     getAssessmentDirection(item) === "technical_limitation"

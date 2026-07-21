@@ -88,10 +88,13 @@ export type GdprEprivacyCoverageChecklistInput = {
   }>;
   runtimeCookieRows?: RuntimeCookieEvidenceRow[];
   runtimeTrackerPriorityRows?: Array<{
+    domains?: string[];
     firstSeenMs: number | null;
     party: string;
     priority: RuntimeCookieReviewPriority;
     purpose: string;
+    requestCount?: number | null;
+    regulatoryRelevance?: string[] | null;
     vendor: string;
   }>;
   scanCompleted: boolean;
@@ -160,6 +163,15 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     findingIds: ["cookie_policy_present"],
     defaultFindingStatus: "Observed",
     notObservedText: "No reachable cookie notice, cookie policy, or cookie-settings disclosure surface was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "cookie_disclosure_consistency_review",
+    label: "Banner / cookie-policy purpose consistency",
+    explanation: "Whether retained banner purpose claims and the retained cookie-policy description appear consistent enough for purpose-level review.",
+    findingIds: [],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No purpose-level banner/cookie-policy consistency review signal was retained in this scan context.",
     requiresPublicWebCoverage: true
   },
   {
@@ -1148,7 +1160,11 @@ function compareRuntimeCookieStorageEvidenceRows(
 
 function synthesizePreconsentThirdPartyCookieOutcome(rows: RuntimeCookieEvidenceRow[] | undefined) {
   const thirdPartyGroups = buildRuntimeCookiePriorityGroups(
-    (rows ?? []).filter((row) => row.party === "third_party")
+    (rows ?? []).filter((row) =>
+      row.party === "third_party" &&
+      row.timingEvidence === "before_consent_cookie_write" &&
+      row.nonEssential === true
+    )
   )
     .sort(compareRuntimeCookieStorageEvidenceRows);
   if (thirdPartyGroups.length === 0) {
@@ -1231,10 +1247,20 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
     .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
     .sort((left, right) => left - right)[0] ?? null;
   const vendors = selectedRows.map((row) => row.vendor);
+  const serviceConnectionOnly = thirdPartyRows.every((row) =>
+    /tag management|tag_manager|advertising library|configuration/i.test(row.purpose) ||
+    row.regulatoryRelevance?.some((value) => /advertising_library|configuration/i.test(value)) === true
+  );
+  const contextualInfrastructureOnly = thirdPartyRows.every((row) =>
+    row.priority === "contextual" &&
+    /cdn|content delivery|security|bot|fraud|infrastructure|necessary|functional/i.test(
+      `${row.purpose} ${(row.regulatoryRelevance ?? []).join(" ")}`
+    )
+  );
 
   return {
     criticalEvidence: {
-      missingOrIncompleteSourceSignals: [
+      missingOrIncompleteSourceSignals: contextualInfrastructureOnly ? [] : [
         makeSourceSignalGap(
           "CertScore.unifiedFinding.preconsent_tracking",
           "promotion-eligible normalized concern and unified finding",
@@ -1261,23 +1287,32 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
         preconsentThirdPartyTrackerGroupCount: thirdPartyRows.length,
         selectedPreconsentThirdPartyTrackingVendors: vendors,
         preconsentThirdPartyTrackingVendors: vendors,
+        contextualInfrastructureOnly,
+        serviceConnectionOnly,
+        tagManagerOnly: serviceConnectionOnly && thirdPartyRows.every((row) => /tag management|tag_manager/i.test(row.purpose)),
         trackerPriority: selectedPriority,
         trackerPriorityLabel: priorityLabel
       },
       statusBasis:
-        selectedEvidence.length > 0
+        contextualInfrastructureOnly
+          ? `Only contextual CDN/security infrastructure was retained before consent: ${selectedEvidence || vendors.join(", ")}. These rows remain neutral inventory and do not establish tracking.`
+        : serviceConnectionOnly && thirdPartyRows.every((row) => /tag management|tag_manager/i.test(row.purpose))
+          ? `A pre-consent tag-manager load was retained for review without a concrete downstream analytics/advertising request, cookie, or storage write: ${selectedEvidence || vendors.join(", ")}.`
+        : serviceConnectionOnly
+          ? `Pre-consent advertising/analytics service connections were retained for review without a concrete ad, analytics-event, identifier, or storage-write event: ${selectedEvidence || vendors.join(", ")}.`
+          : selectedEvidence.length > 0
           ? `${priorityLabel} priority pre-consent 3rd party tracking inventory was retained for review: ${selectedEvidence}.`
           : `${priorityLabel} priority pre-consent 3rd party tracking inventory was retained for review.`,
     } satisfies GdprEprivacyCoverageCriticalEvidence,
     evidenceRefs: selectedRows
-      .map((row) => `${row.vendor} ${row.purpose} tracker first seen ${formatCookiePriorityFirstSeen(row.firstSeenMs)}`)
+      .map((row) => `${row.vendor} ${row.purpose} at ${row.domains?.join(", ") || "retained request host"}, first seen ${formatCookiePriorityFirstSeen(row.firstSeenMs)}${row.requestCount ? `, ${row.requestCount} request${row.requestCount === 1 ? "" : "s"}` : ""}`)
       .slice(0, 6),
     limitation:
       selectedEvidence.length > 0
         ? `${priorityLabel} priority pre-consent 3rd party tracking evidence was retained for ${selectedEvidence}.`
         : `${priorityLabel} priority pre-consent 3rd party tracking evidence was retained.`,
     rowId: "pre_consent_third_party_tracking",
-    status
+    status: contextualInfrastructureOnly ? "Not observed" as const : status
   } satisfies GdprEprivacyCoverageOutcome;
 }
 
@@ -1290,7 +1325,9 @@ function buildChecklistItem(input: {
   limitation?: string;
   status: GdprEprivacyCoverageChecklistStatus;
 }): GdprEprivacyCoverageChecklistItem {
-  const assessmentStatus = getAssessmentStatus(input.status);
+  const assessmentStatus = input.id === "consent_choice_quality" && input.status === "Not confirmed"
+    ? "coverage_limitation"
+    : getAssessmentStatus(input.status);
   const evidenceState = getEvidenceState({
     assessmentStatus,
     id: input.id,
@@ -2108,6 +2145,18 @@ function specializeChecklistRow(input: {
     return specializeSessionReplayChecklistRow(input);
   }
 
+  if (
+    input.definition.id === "consent_choice_quality" &&
+    input.coverageOutcome?.criticalEvidence.retainedEvidence.controlInventoryComplete === false
+  ) {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: "The first-layer control inventory was incomplete, so consent choice quality and dark-pattern characteristics were not confirmed from the retained evidence.",
+      label: "Consent choice quality — coverage limited",
+      status: "Not confirmed" as const
+    };
+  }
+
   if (input.definition.id === "consent_surface_observed" && input.status === "Observed") {
     return {
       evidenceRefs: input.evidenceRefs,
@@ -2140,11 +2189,17 @@ function specializeChecklistRow(input: {
 
   if (input.definition.id === "pre_consent_third_party_tracking" && input.coverageOutcome?.criticalEvidence.retainedEvidence.trackerPriority) {
     const statusBasis = input.coverageOutcome.criticalEvidence.statusBasis;
+    const tagManagerOnly = input.coverageOutcome.criticalEvidence.retainedEvidence.tagManagerOnly === true;
+    const serviceConnectionOnly = input.coverageOutcome.criticalEvidence.retainedEvidence.serviceConnectionOnly === true;
     return {
       evidenceRefs: input.evidenceRefs,
       explanation:
         `${statusBasis} This row is limited to concrete 3rd party tracker/request evidence retained before a recorded consent choice.`,
-      label: input.definition.label,
+      label: tagManagerOnly
+        ? "Pre-consent tag-manager load"
+        : serviceConnectionOnly
+          ? "Pre-consent advertising/analytics service connections"
+          : input.definition.label,
       status: input.coverageOutcome.status
     };
   }
@@ -2341,6 +2396,18 @@ function shouldPreferCoverageOutcomeForConsentChoiceQuality(
     ]) === true &&
     (visibleChoiceLabels.length > 0 || directGapReasons.length > 0 || missingEvidenceNeeded.length > 0)
   );
+}
+
+function shouldPreferCoverageOutcomeForContextualInfrastructure(
+  rowId: string,
+  coverageOutcome: GdprEprivacyCoverageOutcome | undefined
+) {
+  if (rowId !== "pre_consent_third_party_tracking" || coverageOutcome?.status !== "Not observed") {
+    return false;
+  }
+
+  const retained = getRecordValue(coverageOutcome.criticalEvidence.retainedEvidence) ?? {};
+  return readRetainedBoolean(retained, ["contextualInfrastructureOnly", "contextual_infrastructure_only"]) === true;
 }
 
 function isFindingEligibleForCoverageRow(rowId: string, finding: UnifiedFindingDisplayPacket) {
@@ -3277,7 +3344,8 @@ export function deriveGdprEprivacyCoverageChecklist(
       coverageOutcome &&
       (
         shouldPreferCoverageOutcomeForMissingReject(definition.id, coverageOutcome) ||
-        shouldPreferCoverageOutcomeForConsentChoiceQuality(definition.id, coverageOutcome)
+        shouldPreferCoverageOutcomeForConsentChoiceQuality(definition.id, coverageOutcome) ||
+        shouldPreferCoverageOutcomeForContextualInfrastructure(definition.id, coverageOutcome)
       )
     ) {
       const specialized = specializeChecklistRow({

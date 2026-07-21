@@ -117,6 +117,7 @@ export type StaticFixturePage =
   | "policy-latimes-footer-surfaces"
   | "policy-localized-privacy-supplement"
   | "policy-mature-real-prose"
+  | "policy-medal-rendered-privacy"
   | "policy-multilingual-article13-topics"
   | "policy-multilingual-surfaces"
   | "policy-late-rendered-pl-privacy-links"
@@ -294,6 +295,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-latimes-footer-surfaces": "policy-latimes-footer-surfaces",
   "policy-localized-privacy-supplement": "policy-localized-privacy-supplement",
   "policy-mature-real-prose": "policy-mature-real-prose",
+  "policy-medal-rendered-privacy": "policy-medal-rendered-privacy",
   "policy-multilingual-article13-topics": "policy-multilingual-article13-topics",
   "policy-multilingual-surfaces": "policy-multilingual-surfaces",
   "policy-late-rendered-pl-privacy-links": "policy-late-rendered-pl-privacy-links",
@@ -675,6 +677,29 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
       <p>Our data protection officer can be reached at dpo@example.test.</p>
       <p>You have the right to lodge a complaint with a supervisory authority.</p>
       <p>${"Additional policy details explain how personal data is handled for customers and visitors. ".repeat(30)}</p>
+    </main></body></html>`);
+    return;
+  }
+
+  if (url.pathname === "/medal/privacy") {
+    if (request.headers["sec-fetch-mode"] !== "navigate") {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><head><title>Privacy Policy | Medal.tv</title></head><body><main><h1>Privacy Policy</h1><p>Loading...</p></main></body></html>`);
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><html><head><title>Privacy Policy | Medal.tv</title></head><body><main>
+      <h1>Privacy Policy</h1>
+      <p>Medal B.V. acts as the data controller and can be contacted at privacy@medal.example.</p>
+      <p>The purposes of processing personal data include providing and improving the Services.</p>
+      <p>Our legal basis for processing personal data includes consent, contract, legal obligations, and legitimate interests.</p>
+      <p>Recipients of personal data include processors, service providers, joint controllers, and analytics partners.</p>
+      <p>We retain personal data while an account is active and for no more than 24 months after last use.</p>
+      <p>You have the right to access your personal data and the right to erasure, rectification, restriction, objection, and withdrawal of consent.</p>
+      <p>International transfers of personal data rely on European Commission Standard Contractual Clauses and additional safeguards.</p>
+      <p>Our Data Protection Officer can be contacted at dpo@medal.example.</p>
+      <p>You have the right to lodge a complaint with a supervisory authority. The competent authority is the Dutch Data Protection Authority.</p>
+      <p>${"Additional policy details describe processing for the Medal platform and website. ".repeat(45)}</p>
     </main></body></html>`);
     return;
   }
@@ -1987,6 +2012,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-onetrust-notice-json": `<a href="/policies/onetrust-shell">Privacy Policy</a>`,
     "policy-rendered-article13-better": `<a href="/rendered-article13-better/privacy">Politique de confidentialité</a>`,
     "policy-rendered-incomplete-substantive": `<a href="/rendered-incomplete-substantive/privacy">Privacy Policy</a>`,
+    "policy-medal-rendered-privacy": `<a href="/medal/privacy">Privacy Policy</a> | <a href="/medal/cookie-notice">Cookie Notice</a> | <a href="/medal/terms">Terms</a>`,
     "policy-late-gdpr-sections": `<a href="/late-gdpr-sections/privacy">Privacy Policy</a>`,
     "policy-privacy-choices-link": `<a href="/privacy-choices">Your Privacy Choices</a>`,
     "policy-static-core-surfaces": [

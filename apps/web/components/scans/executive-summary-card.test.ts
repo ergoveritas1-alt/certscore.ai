@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { createElement } from "react";
@@ -13,6 +14,13 @@ import { ADA_ACCESSIBILITY_FIXTURES } from "../../lib/scans/ada-accessibility.fi
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../../lib/scans/rank-findings";
+
+test("Executive storage metric names the non-essential-only scope explicitly", () => {
+  const source = readFileSync(new URL("./executive-summary-card.tsx", import.meta.url), "utf8");
+  assert.match(source, /Non-essential pre-consent storage/);
+  assert.match(source, /Essential and unclassified storage are excluded from this metric/);
+  assert.match(source, /beforeConsentStorageScope === "nonessential_only"/);
+});
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 
 function makeFinding(

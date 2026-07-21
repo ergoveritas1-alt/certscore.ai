@@ -19,17 +19,25 @@ import {
 import { CANONICAL_VENDOR_RESOLVER_VERSION } from "@certscore/vendor-resolver";
 import {
   buildRuntimeCookieInventory,
-  getRuntimeCookiePrimaryProvider
+  getRuntimeCookiePrimaryProvider,
+  isEligibleNonEssentialPreconsentStorageRow
 } from "../scans/runtime-cookie-evidence";
 import {
   buildTrackerInventoryGroupRows,
   buildTrackerInventoryRows,
   isInventoryDisplayHostname,
+  isTimedPreConsentInventoryRow,
   suppressUnsupportedCmpAliasRows
 } from "../scans/runtime-inventory-projection";
 import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
+import { meaningfulPolicySurfaceTitle, prioritizePublicPolicySurfaces } from "../scans/policy-enrichment-row";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
-import { getKnownCmpVendorName, projectExternalScanNoGo, type ExternalScanNoGoResult } from "@website-signal-risk-scanner/shared";
+import {
+  getKnownCmpVendorForHost,
+  getKnownCmpVendorName,
+  projectExternalScanNoGo,
+  type ExternalScanNoGoResult
+} from "@website-signal-risk-scanner/shared";
 import {
   buildScanReportUnifiedFindings,
   deriveExecutiveDisplayedScore
@@ -192,6 +200,70 @@ function policySurfaceUrlRecoveredFromAlternateField(row: Record<string, unknown
   );
 }
 
+function canonicalPublicDocumentUrl(value: string | null | undefined) {
+  const safe = safeUrl(value);
+  if (!safe) return null;
+  try {
+    const parsed = new URL(safe);
+    parsed.hash = "";
+    parsed.hostname = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    parsed.pathname = parsed.pathname.replace(/\/+$/g, "") || "/";
+    return parsed.toString();
+  } catch {
+    return safe;
+  }
+}
+
+function canonicalPolicySurfaceType(url: string, retainedType: string) {
+  let pathname = "";
+  try {
+    pathname = new URL(url).pathname.toLowerCase();
+  } catch {
+    return retainedType;
+  }
+  if (/accessibility|accessibility-statement/.test(pathname)) return "accessibility_statement";
+  if (/(?:terms-of-use|terms-and-conditions|\/terms(?:\/|$))/.test(pathname)) return "terms_of_service";
+  if (/cookie(?:-policy|-notice|s)?/.test(pathname)) return "cookie_policy";
+  if (/privacy|persondata|data-protection/.test(pathname)) return "privacy_policy";
+  return retainedType;
+}
+
+export function projectedPolicySurfaceRows(scanRecord: ScanDetailResponse) {
+  const effectiveUrl = canonicalPublicDocumentUrl(scanRecord.accessPostureSummary?.finalEffectiveUrl ?? null);
+  const retained = new Map<string, { row: ScanDetailResponse["policyEnrichment"][number]; type: string; url: string }>();
+  for (const row of scanRecord.policyEnrichment) {
+    const record = row as unknown as Record<string, unknown>;
+    const discoveryMethod = typeof record.discoveryMethod === "string"
+      ? record.discoveryMethod
+      : typeof record.discovery_method === "string" ? record.discovery_method : null;
+    const fetchStatus = typeof record.status === "string"
+      ? record.status
+      : typeof record.fetchStatus === "string"
+        ? record.fetchStatus
+        : typeof record.fetch_status === "string" ? record.fetch_status : null;
+    if (discoveryMethod === "guessed_common_path" && fetchStatus !== "fetched") {
+      continue;
+    }
+    const url = canonicalPublicDocumentUrl(policySurfaceUrl(record));
+    if (!url) continue;
+    const retainedType = typeof row.policy_page_type === "string"
+      ? row.policy_page_type
+      : typeof record.pageType === "string"
+        ? record.pageType
+        : "policy_surface";
+    const type = canonicalPolicySurfaceType(url, retainedType);
+    if (url === effectiveUrl && type === "policy_surface") continue;
+    const existing = retained.get(url);
+    if (!existing || (existing.type === "policy_surface" && type !== "policy_surface")) {
+      retained.set(url, { row, type, url });
+    }
+  }
+  return prioritizePublicPolicySurfaces([...retained.values()].map((surface) => ({
+    ...surface,
+    url: surface.url
+  })), { siteDomain: scanRecord.scan.domainHostname });
+}
+
 function safeRecordSubset(record: Record<string, unknown> | null | undefined, keys: string[]) {
   const output: Record<string, unknown> = {};
   if (!record) {
@@ -208,8 +280,15 @@ function safeRecordSubset(record: Record<string, unknown> | null | undefined, ke
       output[key] = value;
     } else if (Array.isArray(value)) {
       output[key] = value
-        .filter((entry) => typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean")
-        .slice(0, 20);
+        .slice(0, 20)
+        .flatMap((entry) => {
+          if (typeof entry === "string") return [entry.slice(0, 240)];
+          if (typeof entry === "number" || typeof entry === "boolean" || entry === null) return [entry];
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+          return [safeRecordSubset(entry as Record<string, unknown>, Object.keys(entry).slice(0, 20))];
+        });
+    } else if (value && typeof value === "object") {
+      output[key] = safeRecordSubset(value as Record<string, unknown>, Object.keys(value).slice(0, 20));
     }
   }
   return output;
@@ -227,6 +306,10 @@ function riskLevelFromScore(score: number) {
     return "review_recommended";
   }
   return "monitor";
+}
+
+export function getPulseExecutiveActionLabel(posture: "Clear" | "Watch" | "Action Needed") {
+  return posture === "Action Needed" ? "Action Needed" : posture === "Clear" ? "Complete" : "Monitor";
 }
 
 function boundedScore(value: number | null) {
@@ -264,13 +347,15 @@ function buildPulseReportSurface(input: {
     trackerVendors: scanRecord.trackerVendors,
     topObservedEntities: presentationSummary.topObservedEntities,
     unresolvedHosts: presentationSummary.unresolvedVendorHosts
-  }));
+  })).filter(isTimedPreConsentInventoryRow);
   const runtimeTrackerPriorityRows = buildTrackerInventoryGroupRows(trackerInventoryRows).map((row) => ({
+    domains: row.domains,
     firstSeenMs: row.firstSeenMs,
     party: row.party,
     priority: row.priority,
     purpose: row.purpose,
     requestCount: row.requestCount ?? null,
+    regulatoryRelevance: row.regulatoryRelevance,
     vendor: row.vendor
   }));
   const runtimeArtifactNormalizedConcerns = buildNormalizedConcerns({
@@ -317,8 +402,15 @@ function buildPulseReportSurface(input: {
     }
   });
   const regulatoryGapFindingIds = new Set(regulatoryGapTopFindings.map((finding) => finding.id));
-  const publicExecutiveFindings = executive.findings.filter(isPublicPulseApiFinding);
-  const publicExecutiveTopFindings = executive.topFindings.filter(isPublicPulseApiFinding);
+  const neutralChecklistFindingIds = new Set(gdprEprivacyChecklist
+    .filter((row) => row.status === "Not observed" || row.status === "Not confirmed" || row.status === "Not testable")
+    .map((row) => `regulatory_gap__gdpr_eprivacy__${row.id}`));
+  const publicExecutiveFindings = executive.findings.filter((finding) =>
+    isPublicPulseApiFinding(finding) && !neutralChecklistFindingIds.has(finding.id)
+  );
+  const publicExecutiveTopFindings = executive.topFindings.filter((finding) =>
+    isPublicPulseApiFinding(finding) && !neutralChecklistFindingIds.has(finding.id)
+  );
   const allFindings = [
     ...regulatoryGapTopFindings,
     ...publicExecutiveFindings.filter((finding) => !regulatoryGapFindingIds.has(finding.id))
@@ -367,6 +459,56 @@ function buildPulseReportSurface(input: {
     trackerInventoryRows,
     unifiedFindingPackets
   };
+}
+
+export function buildTrackerFootprintBreakdown(reportSurface: ReturnType<typeof buildPulseReportSurface>) {
+  const grouped = buildTrackerInventoryGroupRows(reportSurface.trackerInventoryRows);
+  const rawHosts = uniqueStrings(reportSurface.trackerInventoryRows.flatMap((row) => row.domains));
+  const products = uniqueStrings(grouped.flatMap((row) => row.rawProducts));
+  const purposeCounts = Object.fromEntries([...new Set(grouped.map((row) => row.purpose))]
+    .sort()
+    .map((purpose) => [purpose, grouped.filter((row) => row.purpose === purpose).length]));
+  const priorityCounts = Object.fromEntries(["high", "medium", "review_needed", "contextual"].map((priority) => [
+    priority,
+    grouped.filter((row) => row.priority === priority).length
+  ]));
+  const confidenceCounts = Object.fromEntries(["high", "medium", "low"].map((confidence) => [
+    confidence,
+    grouped.filter((row) => row.confidence === confidence).length
+  ]));
+  const isConsentPlatform = (row: (typeof grouped)[number]) => /cookie compliance|consent|\bcmp\b/i.test(`${row.purpose} ${row.vendor}`);
+  const isCdn = (row: (typeof grouped)[number]) => /\bcdn\b|content delivery/i.test(
+    `${row.purpose} ${row.vendor} ${row.rawProducts.join(" ")}`
+  );
+  return {
+    vendors: grouped.length,
+    providerFamilies: grouped.length,
+    products: products.length,
+    displayedRows: reportSurface.trackerInventoryRows.length,
+    domains: rawHosts.length,
+    trackers: grouped.filter((row) => row.macroCategory === "Advertising" || row.macroCategory === "Analytics").length,
+    functionalServices: grouped.filter((row) => row.macroCategory === "Functional" && !isConsentPlatform(row) && !isCdn(row)).length,
+    consentPlatforms: grouped.filter(isConsentPlatform).length,
+    cdns: grouped.filter(isCdn).length,
+    rawHosts: rawHosts.length,
+    cookies: reportSurface.runtimeCookieRows.length,
+    purposeCounts,
+    priorityCounts,
+    confidenceCounts
+  };
+}
+
+export function buildRawHostInventory(reportSurface: ReturnType<typeof buildPulseReportSurface>) {
+  const hosts = new Map<string, { host: string; vendors: string[]; purposes: string[] }>();
+  for (const row of reportSurface.trackerInventoryRows) {
+    for (const host of row.domains) {
+      const existing = hosts.get(host) ?? { host, vendors: [], purposes: [] };
+      existing.vendors = uniqueStrings([...existing.vendors, row.label]);
+      existing.purposes = uniqueStrings([...existing.purposes, row.vendorDisplayCategory ?? row.category]);
+      hosts.set(host, existing);
+    }
+  }
+  return [...hosts.values()].sort((left, right) => left.host.localeCompare(right.host));
 }
 
 export function derivePulseReportScore(input: {
@@ -768,7 +910,48 @@ export function hasMeaningfulPolicyAnchor(details: Record<string, unknown>) {
     recordHasPolicyAnchorValue(policyRuntimeConflict);
 }
 
-function buildEvidence(finding: CertScoreFinding, scanId: string, options: { coverageLimitedByNoGo?: boolean } = {}) {
+export function buildCookieEvidenceExamples(findingId: string, rows: ReturnType<typeof buildRuntimeCookieInventory>["rows"]) {
+  const candidates = findingId === "third_party_cookie_pre_consent"
+    ? rows.filter((row) => row.party === "third_party" && row.timingEvidence === "before_consent_cookie_write")
+    : findingId === "analytics_cookie_pre_consent"
+      ? rows.filter((row) => row.category === "analytics" && /^(?:_ga|_gid|_gat|_ym_|_ymab_param|wisepops)/i.test(row.cookieName))
+      : [];
+  return candidates
+    .sort((left, right) => {
+      const leftTimed = left.timingEvidence === "before_consent_cookie_write" ? 0 : 1;
+      const rightTimed = right.timingEvidence === "before_consent_cookie_write" ? 0 : 1;
+      return leftTimed - rightTimed ||
+        (left.setAtMs ?? left.firstObservedAtMs ?? Number.MAX_SAFE_INTEGER) -
+          (right.setAtMs ?? right.firstObservedAtMs ?? Number.MAX_SAFE_INTEGER) ||
+        left.cookieName.localeCompare(right.cookieName);
+    })
+    .slice(0, findingId === "analytics_cookie_pre_consent" ? 8 : 3)
+    .map((row) => ({
+      type: row.timingEvidence === "before_consent_cookie_write" ? "cookie_write" : "cookie_snapshot",
+      phase: row.timingEvidence === "before_consent_cookie_write" ? "pre_consent" : null,
+      cookieName: row.cookieName,
+      cookieDomain: row.domain,
+      party: row.party,
+      category: row.category,
+      provider: getRuntimeCookiePrimaryProvider(row),
+      relatedOrInitiatingVendor: row.initiatorVendor,
+      sourceRequestUrl: safeUrl(row.sourceRequestUrl),
+      setMethod: row.setMethod,
+      timingBasis: row.timingBasis,
+      timestampMs: row.setAtMs,
+      exactWriteTimeObserved: row.setAtMs !== null
+    }));
+}
+
+function buildEvidence(
+  finding: CertScoreFinding,
+  scanId: string,
+  options: {
+    coverageLimitedByNoGo?: boolean;
+    runtimeCookieRows?: ReturnType<typeof buildRuntimeCookieInventory>["rows"];
+    scannedPageUrl?: string | null;
+  } = {}
+) {
   const details = finding.evidenceDetails ?? {};
   const regulatoryRuntimeEvidence = regulatoryRuntimeWrapperEvidence(finding.id, details);
   const representativeRequests = Array.isArray(details.representativeRequests) ? details.representativeRequests : [];
@@ -778,7 +961,7 @@ function buildEvidence(finding: CertScoreFinding, scanId: string, options: { cov
           ...(Array.isArray(details.requestClassificationAnchors) ? details.requestClassificationAnchors : []),
           ...representativeRequests
         ],
-        scannedPageUrl: details.scanContext?.pageUrl ?? null,
+        scannedPageUrl: options.scannedPageUrl ?? details.scanContext?.pageUrl ?? null,
         consentTimeline: asRecord(details.timing),
         maxItems: 3
       })
@@ -801,7 +984,9 @@ function buildEvidence(finding: CertScoreFinding, scanId: string, options: { cov
   const runtimePhase =
     (asRecord(details.policyRuntimeConflict)?.runtimeAnchor as { phase?: string } | undefined)?.phase ??
     (typeof recordValue(details.trackingEvidence, "phase") === "string" ? String(recordValue(details.trackingEvidence, "phase")) : null);
-  const allowFallbackRequestExamples = finding.id !== "pre_consent_tracking_detected";
+  const cookieExamples = buildCookieEvidenceExamples(finding.id, options.runtimeCookieRows ?? []);
+  const cookieFinding = finding.id === "third_party_cookie_pre_consent" || finding.id === "analytics_cookie_pre_consent";
+  const allowFallbackRequestExamples = finding.id !== "pre_consent_tracking_detected" && !cookieFinding;
   const fallbackExamples = allowFallbackRequestExamples
     ? [
         firstRequest
@@ -871,8 +1056,9 @@ function buildEvidence(finding: CertScoreFinding, scanId: string, options: { cov
           : null
       ].filter(Boolean).slice(0, 3)
     : [];
-  const examples = promotionGradePreconsentRequests.length > 0
-    ? promotionGradePreconsentRequests.map((request) => ({
+  const requestTimelineAnchorMs = finiteNumber(recordValue(details.timing, "firstThirdPartyTrackingRequestMs")) ??
+    finiteNumber(recordValue(details.timing, "firstRequestMs"));
+  const promotionRequestExamples = promotionGradePreconsentRequests.map((request) => ({
         type: "request",
         phase: "pre_consent",
         scannedPageUrl: request.scannedPageUrl ?? null,
@@ -901,7 +1087,22 @@ function buildEvidence(finding: CertScoreFinding, scanId: string, options: { cov
         consentSurfaceObserved: request.consentSurfaceObserved,
         consentInteractionRecorded: request.consentInteractionRecorded,
         confidence: request.confidence
-      }))
+      }));
+  const requestTimelineExample =
+    promotionRequestExamples.length > 0 &&
+    !promotionRequestExamples.some((event) => event.timestampMs !== null) &&
+    requestTimelineAnchorMs !== null
+      ? [{
+          type: "timeline_anchor",
+          phase: "pre_consent",
+          label: "First retained third-party tracking request",
+          timestampMs: requestTimelineAnchorMs
+        }]
+      : [];
+  const examples = cookieExamples.length > 0
+    ? cookieExamples
+    : promotionGradePreconsentRequests.length > 0
+    ? [...promotionRequestExamples, ...requestTimelineExample]
     : fallbackExamples.length > 0
       ? fallbackExamples
       : regulatoryRuntimeEvidence?.exampleEvents ?? [];
@@ -911,6 +1112,8 @@ function buildEvidence(finding: CertScoreFinding, scanId: string, options: { cov
     finding.id === "pre_consent_tracking_detected" && promotionGradePreconsentRequests.length === 0 && representativeRequests.length > 0
       ? "promotion_grade_preconsent_request_not_available"
       : null,
+    cookieFinding && cookieExamples.length === 0 ? "concrete_cookie_or_storage_mutation_not_available" : null,
+    ...cookieExamples.map((event) => event.exactWriteTimeObserved ? null : "cookie_snapshot_not_exact_write_time"),
     ...exampleEvents.flatMap((event) => asStringArray(event.projectionWarnings)),
     ...exampleEvents.map((event) => event.type === "request" && !stringValue(event.requestUrl) ? "request_event_missing_url" : null),
     ...(regulatoryRuntimeEvidence?.projectionWarnings ?? [])
@@ -992,7 +1195,16 @@ function safeHostname(value: string | null | undefined) {
   }
 }
 
-function toPulseFinding(finding: CertScoreFinding, scanId: string, options: { coverageLimitedByNoGo?: boolean; noGo?: ExternalScanNoGoResult | null } = {}) {
+function toPulseFinding(
+  finding: CertScoreFinding,
+  scanId: string,
+  options: {
+    coverageLimitedByNoGo?: boolean;
+    noGo?: ExternalScanNoGoResult | null;
+    runtimeCookieRows?: ReturnType<typeof buildRuntimeCookieInventory>["rows"];
+    scannedPageUrl?: string | null;
+  } = {}
+) {
   const display = getPublicReportFindingDisplay({
     confidence: finding.confidence,
     findingId: finding.id,
@@ -1007,7 +1219,9 @@ function toPulseFinding(finding: CertScoreFinding, scanId: string, options: { co
     finding.id !== "scan_quality_visual_no_go" &&
     getFindingReviewLenses(finding).includes("GDPR / ePrivacy");
   const evidence = buildEvidence(finding, scanId, {
-    coverageLimitedByNoGo: applyNoGoCoverageFraming
+    coverageLimitedByNoGo: applyNoGoCoverageFraming,
+    runtimeCookieRows: options.runtimeCookieRows,
+    scannedPageUrl: options.scannedPageUrl
   });
   const isNoGoFinding = finding.id === "scan_quality_visual_no_go" && Boolean(options.noGo);
   const plainEnglish = isNoGoFinding
@@ -1143,8 +1357,8 @@ function buildEvidenceHighlights(scanRecord: ScanDetailResponse, trackerRows?: R
   const classifiedTrackerVendors = groupedTrackerRows.length > 0
     ? groupedTrackerRows.length
     : uniqueStrings(scanRecord.trackerVendors.map((vendor) => vendor.vendorName)).length;
-  const policyRows = scanRecord.policyEnrichment ?? [];
-  const policyTypes = uniqueStrings(policyRows.map((row) => (typeof row.policy_page_type === "string" ? row.policy_page_type : null)));
+  const policyRows = projectedPolicySurfaceRows(scanRecord);
+  const policyTypes = uniqueStrings(policyRows.map((row) => row.type));
   const fingerprintIndicators =
     finiteNumber(recordValue(snapshot, "fingerprinting_indicator_count")) ??
     finiteNumber(recordValue(snapshot, "fingerprinting_signal_count")) ??
@@ -1225,8 +1439,10 @@ function buildPulseCounts(input: {
   };
 }
 
-function deriveConsentPlatform(scanRecord: ScanDetailResponse, presentationSummary: ReturnType<typeof deriveCertScoreFindings>) {
+export function deriveConsentPlatform(scanRecord: ScanDetailResponse, presentationSummary: ReturnType<typeof deriveCertScoreFindings>) {
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
+  const consentSummary = asRecord(recordValue(hybrid, "consentSummary")) ?? asRecord(recordValue(hybrid, "consent_summary"));
   const runtimePlatform =
     typeof recordValue(runtimeArtifacts, "consentPlatform") === "string"
       ? String(recordValue(runtimeArtifacts, "consentPlatform"))
@@ -1235,8 +1451,12 @@ function deriveConsentPlatform(scanRecord: ScanDetailResponse, presentationSumma
         : typeof recordValue(runtimeArtifacts, "cmpName") === "string"
           ? String(recordValue(runtimeArtifacts, "cmpName"))
           : typeof recordValue(runtimeArtifacts, "cmp_name") === "string"
-            ? String(recordValue(runtimeArtifacts, "cmp_name"))
-            : null;
+          ? String(recordValue(runtimeArtifacts, "cmp_name"))
+            : typeof recordValue(runtimeArtifacts, "cmp_vendor_name") === "string"
+              ? String(recordValue(runtimeArtifacts, "cmp_vendor_name"))
+              : typeof recordValue(consentSummary, "cmpName") === "string"
+                ? String(recordValue(consentSummary, "cmpName"))
+                : null;
   if (runtimePlatform) {
     return runtimePlatform.replace(/\s+CMP$/i, "");
   }
@@ -1249,7 +1469,12 @@ function deriveConsentPlatform(scanRecord: ScanDetailResponse, presentationSumma
   const cmpVendor = scanRecord.trackerVendors.find((vendor) =>
     /consent|cmp|cookie compliance/i.test(`${vendor.vendorCategory ?? ""} ${vendor.vendorName ?? ""}`)
   );
-  return cmpVendor?.vendorName?.replace(/\s+CMP$/i, "") ?? null;
+  if (cmpVendor?.vendorName) {
+    return cmpVendor.vendorName.replace(/\s+CMP$/i, "");
+  }
+  return scanRecord.trackerVendors
+    .map((vendor) => getKnownCmpVendorForHost(vendor.scriptHost) ?? getKnownCmpVendorForHost(vendor.vendorName))
+    .find((vendor): vendor is string => Boolean(vendor)) ?? null;
 }
 
 function buildSummaryArtifact(input: {
@@ -1305,11 +1530,16 @@ function buildEvidenceArtifact(input: {
   const scanRecord = input.scanRecord;
   const baseLinks = asRecord(input.base.links) ?? {};
   const runtimeArtifacts = asRecord(scanRecord.runtimeArtifacts);
-  const firstLayerConsentChoices = asRecord(recordValue(runtimeArtifacts, "firstLayerConsentChoices"));
-  const consentSummary = asRecord(recordValue(runtimeArtifacts, "consentSummary")) ?? asRecord(recordValue(runtimeArtifacts, "consent_summary"));
-  const networkSummary = asRecord(recordValue(runtimeArtifacts, "networkSummary")) ?? asRecord(recordValue(runtimeArtifacts, "network_summary"));
-  const storageSummary = asRecord(recordValue(runtimeArtifacts, "storageSummary")) ?? asRecord(recordValue(runtimeArtifacts, "storage_summary"));
-  const navigationSummary = asRecord(recordValue(runtimeArtifacts, "navigationSummary")) ?? asRecord(recordValue(runtimeArtifacts, "navigation_summary"));
+  const hybrid = getHybridRuntimeEvidence(scanRecord.runtimeArtifacts);
+  const firstLayerConsentChoices =
+    asRecord(recordValue(runtimeArtifacts, "firstLayerConsentChoices")) ??
+    asRecord(recordValue(hybrid, "firstLayerConsentChoices")) ??
+    asRecord(recordValue(hybrid, "first_layer_consent_choices"));
+  const consentSummary = asRecord(recordValue(runtimeArtifacts, "consentSummary")) ?? asRecord(recordValue(runtimeArtifacts, "consent_summary")) ?? asRecord(recordValue(hybrid, "consentSummary")) ?? asRecord(recordValue(hybrid, "consent_summary"));
+  const networkSummary = asRecord(recordValue(runtimeArtifacts, "networkSummary")) ?? asRecord(recordValue(runtimeArtifacts, "network_summary")) ?? asRecord(recordValue(hybrid, "networkSummary")) ?? asRecord(recordValue(hybrid, "network_summary"));
+  const storageSummary = asRecord(recordValue(runtimeArtifacts, "storageSummary")) ?? asRecord(recordValue(runtimeArtifacts, "storage_summary")) ?? asRecord(recordValue(hybrid, "storageSummary")) ?? asRecord(recordValue(hybrid, "storage_summary"));
+  const navigationSummary = asRecord(recordValue(runtimeArtifacts, "navigationSummary")) ?? asRecord(recordValue(runtimeArtifacts, "navigation_summary")) ?? asRecord(recordValue(hybrid, "navigationSummary")) ?? asRecord(recordValue(hybrid, "navigation_summary"));
+  const policySurfaceRows = projectedPolicySurfaceRows(scanRecord);
   const requestTimingRows = input.reportSurface.runtimeTrackerPriorityRows.map((row) => ({
     vendor: row.vendor,
     purpose: row.purpose,
@@ -1349,7 +1579,9 @@ function buildEvidenceArtifact(input: {
   const coverageLimitedByNoGo = input.allFindings.some((finding) => finding.id === "scan_quality_visual_no_go");
   const findings = input.allFindings.map((finding) => toPulseFinding(finding, scanRecord.scan.id, {
     coverageLimitedByNoGo,
-    noGo: projectExternalScanNoGo(scanRecord.runtimeArtifacts)?.noGo
+    noGo: projectExternalScanNoGo(scanRecord.runtimeArtifacts)?.noGo,
+    runtimeCookieRows: input.reportSurface.runtimeCookieRows,
+    scannedPageUrl: scanRecord.accessPostureSummary?.finalEffectiveUrl ?? `https://${scanRecord.scan.domainHostname}/`
   }));
   const rejectedTrackerHostRows = rejectedDisplayHostnameRows(scanRecord.trackerVendors.map((vendor) => vendor.scriptHost));
   const rejectedTrackerDomainRows = rejectedDisplayHostnameRows(input.reportSurface.trackerInventoryRows.flatMap((row) => row.domains));
@@ -1433,6 +1665,8 @@ function buildEvidenceArtifact(input: {
       150
     ),
     trackerRows: capArray(input.reportSurface.trackerInventoryRows, 150),
+    trackerFootprintBreakdown: buildTrackerFootprintBreakdown(input.reportSurface),
+    rawHostInventory: capArray(buildRawHostInventory(input.reportSurface), 150),
     cookieStorageInventory: capArray(
       input.reportSurface.runtimeCookieRows.map((row) => {
         const primaryProvider = getRuntimeCookiePrimaryProvider(row);
@@ -1473,39 +1707,71 @@ function buildEvidenceArtifact(input: {
     },
     consentSurfaceEvidence: {
       firstLayerConsentChoices: safeRecordSubset(firstLayerConsentChoices, [
-        "consentSurfaceObserved",
-        "acceptVisible",
-        "rejectVisible",
-        "optionsVisible",
+        "acceptControlObserved",
+        "acceptLabels",
+        "actionableControlInventoryRetained",
+        "capturedBeforeInteraction",
+        "controlInventoryComplete",
+        "controls",
         "defaultToggleStatesObserved",
+        "defaultTogglePurposeLabels",
+        "layerInspected",
+        "managePreferencesControlObserved",
         "nonEssentialDefaultsOff",
-        "precheckedOptionalPurposeCount"
+        "observedAtMs",
+        "policyLinks",
+        "precheckedOptionalPurposeCount",
+        "precheckedOptionalPurposeLabels",
+        "preferenceLabels",
+        "postClickEnforcementTested",
+        "rejectControlObserved",
+        "rejectLabels",
+        "screenshotRefs",
+        "textSnippet",
+        "visibleChoiceLabels"
       ]),
       consentSummary: safeRecordSubset(consentSummary, [
+        "bannerPresent",
         "cmpDetected",
+        "cmpFrameworkSignalObserved",
         "cmpName",
+        "cmpRuntimeSignalLabels",
         "consentSurfaceObserved",
+        "firstVisibleMs",
+        "postClickEnforcementTested",
         "requestsBeforeAnyConsentAction",
         "userConsentActionObserved"
       ])
     },
-    storageEvidenceSummary: safeRecordSubset(storageSummary, [
-      "cookiesBeforeConsentCount",
-      "distinctCookieCount",
-      "distinctPreConsentCookieCount",
-      "timedCookieWriteCount",
-      "timedPreConsentCookieWriteCount",
-      "initialCookieSnapshotCount",
-      "thirdPartyCookieBeforeConsentCount",
-      "localStorageBeforeConsentCount",
-      "sessionStorageBeforeConsentCount",
-      "storageTouched"
-    ]),
+    storageEvidenceSummary: {
+      ...safeRecordSubset(storageSummary, [
+        "cookiesBeforeConsentCount",
+        "distinctCookieCount",
+        "distinctPreConsentCookieCount",
+        "timedCookieWriteCount",
+        "timedPreConsentCookieWriteCount",
+        "initialCookieSnapshotCount",
+        "periodicCookieSnapshotCount",
+        "thirdPartyCookieBeforeConsentCount",
+        "localStorageBeforeConsentCount",
+        "sessionStorageBeforeConsentCount",
+        "storageTouched"
+      ]),
+      eligibleNonEssentialPreConsentStorageCount: input.reportSurface.runtimeCookieRows.filter(isEligibleNonEssentialPreconsentStorageRow).length,
+      provenTimestampedPreConsentCookieWriteCount: input.reportSurface.runtimeCookieRows.filter((row) => row.timingEvidence === "before_consent_cookie_write" && row.setAtMs !== null).length,
+      lateOrInitialSnapshotCookieCount: input.reportSurface.runtimeCookieRows.filter((row) => row.timingEvidence === "initial_cookie_snapshot" || row.timingEvidence === "periodic_cookie_snapshot").length
+    },
     policySurfaceCoverage: capArray(
-      scanRecord.policyEnrichment.map((row) => ({
-        type: typeof row.policy_page_type === "string" ? row.policy_page_type : "policy_surface",
-        url: policySurfaceUrl(row as unknown as Record<string, unknown>),
+      policySurfaceRows.map(({ row, type, url }) => ({
+        type,
+        url,
         title: typeof row.policy_page_title === "string" ? row.policy_page_title.slice(0, 160) : null,
+        lastUpdatedText:
+          typeof (row as unknown as Record<string, unknown>).lastUpdatedText === "string"
+            ? ((row as unknown as Record<string, unknown>).lastUpdatedText as string).slice(0, 160)
+            : typeof (row as unknown as Record<string, unknown>).policy_last_updated_text === "string"
+              ? ((row as unknown as Record<string, unknown>).policy_last_updated_text as string).slice(0, 160)
+              : null,
         projectionWarnings: policySurfaceUrlRecoveredFromAlternateField(row as unknown as Record<string, unknown>)
           ? ["policy_surface_url_recovered_from_alternate_field"]
           : []
@@ -1515,7 +1781,7 @@ function buildEvidenceArtifact(input: {
     coverageDiagnostics: {
       accessPosture: scanRecord.accessPostureSummary,
       interruptions: input.coverage.interruptions,
-      navigationSummary: safeRecordSubset(navigationSummary, ["finalUrl", "status", "httpStatus", "landedOnDifferentHost"])
+      navigationSummary: safeRecordSubset(navigationSummary, ["effectiveScannedPageUrl", "finalUrl", "status", "httpStatus", "landedOnDifferentHost", "redirectChain", "requestedUrl"])
     },
     links: {
       summaryJsonUrl: baseLinks.summaryJsonUrl,
@@ -1613,7 +1879,12 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const allFindings = reportSurface.allFindings;
   const score = noGoProjection ? null : reportSurface.score;
   const coverageLimitedByNoGo = allFindings.some((finding) => finding.id === "scan_quality_visual_no_go");
-  const topFindings = reportSurface.topFindings.map((finding) => toPulseFinding(finding, scan.id, { coverageLimitedByNoGo, noGo: noGoProjection?.noGo }));
+  const topFindings = reportSurface.topFindings.map((finding) => toPulseFinding(finding, scan.id, {
+    coverageLimitedByNoGo,
+    noGo: noGoProjection?.noGo,
+    runtimeCookieRows: reportSurface.runtimeCookieRows,
+    scannedPageUrl: input.scanRecord.accessPostureSummary?.finalEffectiveUrl ?? `https://${scan.domainHostname}/`
+  }));
   const benchmark = input.scanRecord.domainBenchmark
     ? `${input.scanRecord.domainBenchmark.industry} / ${input.scanRecord.domainBenchmark.estimatedRankLabel}`
     : null;
@@ -1639,33 +1910,48 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     executiveIssueCount: topFindings.length,
     topFindings
   });
-  const hybridRuntimeEvidence = asRecord(recordValue(input.scanRecord.runtimeArtifacts, "hybridRuntimeEvidence"));
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.scanRecord.runtimeArtifacts);
   const storageSummary = asRecord(recordValue(hybridRuntimeEvidence, "storageSummary"));
-  const cookiesBeforeConsentCount = finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
-    (reportSurface.runtimeCookieRows.length > 0
-    ? reportSurface.runtimeCookieRows.filter((row) => row.timingEvidence !== "initial_cookie_snapshot").length
-    : finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
+  const networkSummary = asRecord(recordValue(hybridRuntimeEvidence, "networkSummary"));
+  const cookiesBeforeConsentCount = reportSurface.runtimeCookieRows.length > 0
+    ? reportSurface.runtimeCookieRows.filter(isEligibleNonEssentialPreconsentStorageRow).length
+    : finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
+      finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
       finiteNumber(recordValue(input.scanRecord.snapshot, "initialCookieCount")) ??
-      0);
-  const policySurfaces = input.scanRecord.policyEnrichment.slice(0, 8).map((row) => ({
-    type: typeof row.policy_page_type === "string" ? row.policy_page_type : "policy_surface",
-    url: policySurfaceUrl(row as unknown as Record<string, unknown>)
+      0;
+  const policySurfaces = projectedPolicySurfaceRows(input.scanRecord).map(({ type, url }) => ({
+    type,
+    title: meaningfulPolicySurfaceTitle(type, url),
+    url
   }));
+  const allThirdPartyRequestCount = finiteNumber(recordValue(networkSummary, "thirdPartyRequestCount")) ??
+    reportSurface.presentationSummary.thirdPartyRequestCount;
+  const trackerFootprintBreakdown = buildTrackerFootprintBreakdown(reportSurface);
   const executiveSummary = {
     completionSummary: summary.completionSummary,
     domain,
     score,
     scoreLabel: score === null ? "Not available" : `${score}/100`,
     riskLevel: summary.riskLevel,
-    actionLabel: score !== null && score < 75 ? "Action Needed" : "Monitor",
+    actionLabel: getPulseExecutiveActionLabel(executive.posture),
     benchmark,
     issuesToReview: topFindings.length,
-    thirdPartyRequests: reportSurface.presentationSummary.thirdPartyRequestCount,
+    thirdPartyRequests: allThirdPartyRequestCount,
+    trackingClassifiedThirdPartyRequests: reportSurface.presentationSummary.thirdPartyRequestCount,
     cookiesPreConsent: cookiesBeforeConsentCount,
+    nonEssentialPreConsentStorage: cookiesBeforeConsentCount,
+    storageMetricLabel: "Non-essential pre-consent storage",
+    totalStorageRecordsPresentBeforeRecordedConsent: reportSurface.runtimeCookieRows.length,
     consentPlatform: deriveConsentPlatform(input.scanRecord, reportSurface.presentationSummary),
     trackerFootprint: {
-      vendors: evidenceHighlights.trackerFootprint.classifiedTrackerVendors,
-      domains: evidenceHighlights.trackerFootprint.thirdPartyDomainsObserved
+      vendors: trackerFootprintBreakdown.providerFamilies,
+      domains: trackerFootprintBreakdown.domains,
+      trackers: trackerFootprintBreakdown.trackers,
+      functionalServices: trackerFootprintBreakdown.functionalServices,
+      consentPlatforms: trackerFootprintBreakdown.consentPlatforms,
+      cdns: trackerFootprintBreakdown.cdns,
+      rawHosts: trackerFootprintBreakdown.rawHosts,
+      cookies: trackerFootprintBreakdown.cookies
     },
     policySurfaces,
     scanTimeSeconds:
@@ -1872,7 +2158,12 @@ export function buildPulseProjection(input: PulseProjectionInput) {
 
   return {
     ...standard,
-    findings: allFindings.map((finding) => toPulseFinding(finding, scan.id, { coverageLimitedByNoGo, noGo: noGoProjection?.noGo })),
+    findings: allFindings.map((finding) => toPulseFinding(finding, scan.id, {
+      coverageLimitedByNoGo,
+      noGo: noGoProjection?.noGo,
+      runtimeCookieRows: reportSurface.runtimeCookieRows,
+      scannedPageUrl: input.scanRecord.accessPostureSummary?.finalEffectiveUrl ?? `https://${scan.domainHostname}/`
+    })),
     reviewContext: {
       ...standard.reviewContext,
       lenses: standard.reviewContext.lenses.map((lens) => ({
@@ -1893,18 +2184,21 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     },
     trackerFootprint: (() => {
       const vendors = buildTrackerInventoryGroupRows(reportSurface.trackerInventoryRows).map((row) => row.vendor);
+      const breakdown = buildTrackerFootprintBreakdown(reportSurface);
       return {
         vendors: vendors.slice(0, 10),
+        breakdown,
+        rawHosts: buildRawHostInventory(reportSurface).map((row) => row.host),
         cap: { shown: Math.min(10, vendors.length), total: vendors.length, truncated: vendors.length > 10 }
       };
     })(),
-    policySurfaces: {
-      surfaces: input.scanRecord.policyEnrichment.slice(0, 10).map((row) => ({
-        type: typeof row.policy_page_type === "string" ? row.policy_page_type : "policy_surface",
-        url: policySurfaceUrl(row as unknown as Record<string, unknown>)
-      })),
-      cap: { shown: Math.min(10, input.scanRecord.policyEnrichment.length), total: input.scanRecord.policyEnrichment.length, truncated: input.scanRecord.policyEnrichment.length > 10 }
-    },
+    policySurfaces: (() => {
+      const surfaces = projectedPolicySurfaceRows(input.scanRecord);
+      return {
+        surfaces: surfaces.map(({ type, url }) => ({ type, url })),
+        cap: { shown: surfaces.length, total: surfaces.length, truncated: false }
+      };
+    })(),
     coverageDiagnostics: {
       accessPosture: input.scanRecord.accessPostureSummary,
       interruptions: coverage.interruptions

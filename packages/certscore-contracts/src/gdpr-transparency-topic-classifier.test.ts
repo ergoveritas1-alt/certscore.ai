@@ -1076,6 +1076,21 @@ test("matches Japanese and Chinese policy phrases without whitespace and preserv
   }
 });
 
+test("classifies a Japanese publisher privacy policy row by row without inventing GDPR disclosures", () => {
+  const result = classifyGdprTransparencyTopics({
+    localeHints: ["ja"],
+    text: "個人情報保護方針。株式会社デイリースポーツは個人情報取扱事業者です。個人情報の利用目的を定め、利用目的の範囲内で取り扱います。個人情報を委託先へ提供する場合および個人情報の第三者提供について説明します。本人は個人情報の開示、訂正、削除を請求できます。個人情報に関するお問い合わせは当社窓口までご連絡ください。"
+  });
+  const topics = new Set(result.matches.map((match) => match.topic));
+
+  for (const topic of ["controller_contact", "processing_purposes", "recipients_or_vendor_categories", "data_subject_rights"] as const) {
+    assert.equal(topics.has(topic), true, topic);
+  }
+  for (const topic of ["legal_basis", "data_retention", "international_transfers", "supervisory_authority", "dpo_contact"] as const) {
+    assert.equal(topics.has(topic), false, topic);
+  }
+});
+
 test("classifies reviewed regional, script, inflection, and punctuation variants for the six calibrated locales", () => {
   const cases = [
     {

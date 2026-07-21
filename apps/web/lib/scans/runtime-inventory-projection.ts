@@ -15,6 +15,8 @@ import {
 } from "./runtime-cookie-priority";
 import {
   findRuntimeEntityOwner,
+  findRuntimeCookieOwner,
+  findRuntimeRequestOwner,
   findRuntimeVendorLabelOwner,
   hostsShareRuntimeEntity,
   isLikelyCookieName,
@@ -55,6 +57,7 @@ export type CookieInventoryGroupRow = {
   priority: ConsentReviewPriority;
   purpose: string;
   syncedIdentifiers?: string[];
+  timingEvidence?: RuntimeCookieEvidenceRow["timingEvidence"] | "mixed";
   vendor: string;
 };
 
@@ -68,6 +71,7 @@ export type TrackerInventoryGroupRow = {
   party: "3rd" | "—" | "mixed";
   preConsent: boolean;
   rawProducts: string[];
+  regulatoryRelevance: string[];
   attributionSignatures: string[];
   priority: ConsentReviewPriority;
   purpose: string;
@@ -79,6 +83,13 @@ export type TrackerInventoryGroupRow = {
 export type InventoryGroupRow =
   | (CookieInventoryGroupRow & { type: "cookie" })
   | (TrackerInventoryGroupRow & { type: "tracker" });
+
+export function isTimedPreConsentInventoryRow(row: TrackerInventoryRow) {
+  if ((row.cookieNames?.length ?? 0) > 0) {
+    return true;
+  }
+  return row.preConsent === true && row.firstSeenMs !== null;
+}
 
 export function getInventoryGroupRowRenderKey(row: InventoryGroupRow, index: number) {
   return JSON.stringify([
@@ -285,6 +296,50 @@ function trackerMatchedHosts(tracker: ScanDetailResponse["trackerVendors"][numbe
   ].map(normalizeInventoryHostname));
 }
 
+function trackerOwnedMatchedHosts(tracker: ScanDetailResponse["trackerVendors"][number]) {
+  const labelOwner = findRuntimeVendorLabelOwner(tracker.vendorName);
+  return trackerMatchedHosts(tracker).filter((hostname) => {
+    const domainOwner = findRuntimeEntityOwner(hostname);
+    return !labelOwner || !domainOwner || labelOwner.entity === domainOwner.entity;
+  });
+}
+
+function trackerHasConcreteVendorAnchor(tracker: ScanDetailResponse["trackerVendors"][number]) {
+  const record = tracker as unknown as Record<string, unknown>;
+  const labelOwner = findRuntimeVendorLabelOwner(tracker.vendorName);
+  if (!labelOwner) {
+    return true;
+  }
+  const domains = trackerMatchedHosts(tracker);
+  if (domains.some((domain) => findRuntimeEntityOwner(domain)?.entity === labelOwner.entity)) {
+    return true;
+  }
+  const matchedUrls = getStringArrayFromRecord(record, [
+    "matchedUrls",
+    "matched_urls",
+    "requestUrls",
+    "request_urls",
+    "evidenceUrls",
+    "evidence_urls"
+  ]);
+  if (matchedUrls.some((url) => findRuntimeRequestOwner(url)?.entity === labelOwner.entity)) {
+    return true;
+  }
+  const cookieNames = getStringArrayFromRecord(record, ["matchedCookieNames", "matched_cookie_names", "cookieNames", "cookie_names"]);
+  if (cookieNames.some((cookieName) =>
+    (domains.length > 0 ? domains : [null]).some((domain) =>
+      findRuntimeCookieOwner(cookieName, domain)?.entity === labelOwner.entity
+    )
+  )) {
+    return true;
+  }
+  const signatures = getStringArrayFromRecord(record, ["attributionSignatures", "attribution_signatures", "basis"]);
+  return signatures.some((signature) =>
+    !/^canonical_(?:product|vendor)_label$/i.test(signature) &&
+    !/^(?:resolver|vendor_resolver)$/i.test(signature)
+  ) && (matchedUrls.length > 0 || cookieNames.length > 0 || domains.length > 0);
+}
+
 function sanitizeInventoryDomains(values: Array<string | null | undefined>) {
   return uniqueStrings(values.map((value) => {
     const host = normalizeInventoryHostname(value);
@@ -376,7 +431,7 @@ export function buildTrackerInventoryRows(input: {
   const rows = new Map<string, TrackerInventoryRow>();
   const firstPartyRegistrableDomain = inventoryRegistrableDomain(input.firstPartyDomain);
   const resolvedTrackerHosts = new Set(
-    input.trackerVendors.flatMap(trackerMatchedHosts)
+    input.trackerVendors.filter(trackerHasConcreteVendorAnchor).flatMap(trackerMatchedHosts)
   );
   const isFirstPartyHost = (value: string) => {
     const hostDomain = inventoryRegistrableDomain(value);
@@ -430,7 +485,10 @@ export function buildTrackerInventoryRows(input: {
     if (!entityHost || isFirstPartyHost(entityHost) || isCoveredByResolvedVendorHost(entityHost)) {
       continue;
     }
-    const domains = sanitizeInventoryDomains(input.domains.includes(entityHost) ? [entityHost] : []);
+    // A concrete hostname is evidence in its own right even when a summary-domain
+    // list omitted it. Preserve the literal host so PSL party classification and
+    // raw-host audit rows do not degrade to an unexplained label.
+    const domains = sanitizeInventoryDomains([entityHost]);
     const identity = resolveTrackerIdentity({ category: entity.category || "tracker", domains, source: "runtime requests", vendorName: entity.label });
     addRow({
       attributionEvidence: identity.attributionEvidence,
@@ -451,17 +509,29 @@ export function buildTrackerInventoryRows(input: {
     });
   }
   for (const tracker of input.trackerVendors) {
+    if (!trackerHasConcreteVendorAnchor(tracker)) {
+      continue;
+    }
     const record = tracker as unknown as Record<string, unknown>;
     const observedVia = tracker.observedVia && tracker.observedVia.length > 0
       ? uniqueStrings(tracker.observedVia)
       : getStringArrayFromRecord(record, ["observedVia", "observed_via"]);
-    const matchedDomains = sanitizeInventoryDomains(trackerMatchedHosts(tracker));
+    // Keep the raw tracker artifact intact, but do not project a hostname beside a
+    // named vendor when both have strong, conflicting canonical owners. This is
+    // especially important for security cookies written on another product's host.
+    const matchedDomains = sanitizeInventoryDomains(trackerOwnedMatchedHosts(tracker));
+    const matchedCookieNames = getStringArrayFromRecord(record, [
+      "matchedCookieNames",
+      "matched_cookie_names",
+      "cookieNames",
+      "cookie_names"
+    ]);
     const identity = resolveTrackerIdentity({ category: tracker.vendorCategory || "tracker", domains: matchedDomains, source: tracker.detectionSource, vendorName: tracker.vendorName });
     addRow({
       attributionEvidence: identity.attributionEvidence,
       category: identity.category,
       confidence: identity.confidence ?? (typeof tracker.confidence === "number" && Number.isFinite(tracker.confidence) ? tracker.confidence : null),
-      cookieNames: [],
+      cookieNames: matchedCookieNames,
       domains: matchedDomains,
       firstSeenMs: getNumberFromRecord(record, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]),
       label: identity.label,
@@ -485,8 +555,13 @@ export function buildTrackerInventoryRows(input: {
       source: "vendor resolver",
       vendorName: vendor
     });
+    const vendorOwner = findRuntimeVendorLabelOwner(vendor);
     const hasConcreteObservedRow = [...rows.values()].some((row) =>
-      (row.label.toLowerCase() === vendor.toLowerCase() || row.label.toLowerCase() === identity.label.toLowerCase()) &&
+      (
+        row.label.toLowerCase() === vendor.toLowerCase() ||
+        row.label.toLowerCase() === identity.label.toLowerCase() ||
+        Boolean(vendorOwner && findRuntimeVendorLabelOwner(row.label)?.entity === vendorOwner.entity)
+      ) &&
       (
         row.domains.length > 0 ||
         row.observedVia.some((value) => !/^(resolver|vendor resolver)$/i.test(value))
@@ -551,6 +626,12 @@ export function getInventoryCategoryLabel(
   regulatoryRelevance?: readonly string[] | null
 ) {
   const relevance = (regulatoryRelevance ?? []).join(" ").toLowerCase();
+  if (/\badvertising_library\b/.test(relevance)) {
+    return "Advertising library";
+  }
+  if (/\bconfiguration_connection\b/.test(relevance)) {
+    return "Analytics configuration";
+  }
   if (/\baudience_measurement\b/.test(relevance)) {
     return "Audience measurement";
   }
@@ -592,7 +673,10 @@ export function getInventoryCategoryLabel(
   if (/jsdelivr|cdn\.jsdelivr\.net/.test(label)) {
     return "CDN";
   }
-  if (/onetrust|cookielaw|optanon/.test(label)) {
+  if (/cookieyes|cookielawinfo|viewed_cookie_policy/.test(label)) {
+    return "Consent management";
+  }
+  if (/onetrust|(?:^|\.)cookielaw\.org|optanon/.test(label)) {
     return "Cookie compliance";
   }
   if (/optimizely/.test(label)) {
@@ -805,6 +889,7 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
       party: formatTrackerParty(row),
       preConsent: row.preConsent,
       rawProducts: [row.label],
+      regulatoryRelevance: row.regulatoryRelevance ?? [],
       attributionSignatures: row.attributionEvidence?.signatureId ? [row.attributionEvidence.signatureId] : [],
       priority,
       purpose,
@@ -829,6 +914,7 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
       party: mergePartyValues(existing.party, candidate.party),
       preConsent: existing.preConsent || candidate.preConsent,
       rawProducts: uniqueStrings([...existing.rawProducts, ...candidate.rawProducts]),
+      regulatoryRelevance: uniqueStrings([...existing.regulatoryRelevance, ...candidate.regulatoryRelevance]),
       attributionSignatures: uniqueStrings([...existing.attributionSignatures, ...candidate.attributionSignatures]),
       priority: priorityWeight(candidate.priority) > priorityWeight(existing.priority) ? candidate.priority : existing.priority,
       requestCount: Math.max(existing.requestCount ?? 0, candidate.requestCount ?? 0) || existing.requestCount || candidate.requestCount,

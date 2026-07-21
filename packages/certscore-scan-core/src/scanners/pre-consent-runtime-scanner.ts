@@ -2044,7 +2044,8 @@ export async function preConsentRuntimeScanner(
     const setCookieMetadata = setCookieHeaders
       .concat(fixtureSetCookieHeaders)
       .map((header) => parseSetCookieMetadata(header, hostname, firstPartyHostname))
-      .filter((metadata): metadata is SetCookieMetadata => Boolean(metadata));
+      .filter((metadata): metadata is SetCookieMetadata => Boolean(metadata))
+      .filter((metadata) => isValidSetCookieDomainForResponse(metadata.domain, hostname));
     const safeHeaders = safeResponseHeaders(headers);
     const sizes = normalizeResponseSizes(
       await response.request().sizes().catch(() => undefined),
@@ -6732,6 +6733,24 @@ export function parseSetCookieMetadata(
     firstParty,
     thirdParty,
   };
+}
+
+export function isValidSetCookieDomainForResponse(
+  cookieDomain: string | undefined,
+  responseHostname: string | undefined,
+): boolean {
+  if (!cookieDomain || !responseHostname) return true;
+  const normalizedCookieDomain = cookieDomain.replace(/^\./, "").toLowerCase();
+  const normalizedResponseHostname = responseHostname.replace(/^\./, "").toLowerCase();
+  if (
+    normalizedResponseHostname === normalizedCookieDomain ||
+    normalizedResponseHostname.endsWith(`.${normalizedCookieDomain}`)
+  ) {
+    return true;
+  }
+  const cookieRegistrableDomain = getRegistrableDomain(normalizedCookieDomain);
+  const responseRegistrableDomain = getRegistrableDomain(normalizedResponseHostname);
+  return Boolean(cookieRegistrableDomain && responseRegistrableDomain && cookieRegistrableDomain === responseRegistrableDomain);
 }
 
 export function redactSetCookieHeader(setCookieHeader: string): string {

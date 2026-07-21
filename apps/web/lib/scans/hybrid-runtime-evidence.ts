@@ -776,19 +776,24 @@ function getRequestClassificationRows(runtimeArtifacts: Record<string, unknown> 
       category,
       confidence: 0.85,
       essentiality: "non_essential",
+      evidenceSource: "baseline_url_without_event_timestamp",
       requestUrl,
-      timestampMs: firstBaselineRequestMs,
-      tsMs: firstBaselineRequestMs,
+      // A baseline-level first-request marker is not the observation time for
+      // every URL retained in that baseline. Keep it as context only so one
+      // global time cannot overwrite event-specific request timestamps.
+      baselineFirstRequestMs: firstBaselineRequestMs,
       vendor
     };
   });
 
   if (retainedRows.length > 0 || baselineRows.length > 0 || state0Rows.length > 0) {
     const byUrl = new Map<string, Record<string, unknown>>();
-    for (const row of [...retainedRows, ...baselineRows, ...state0Rows]) {
+    for (const row of [...baselineRows, ...state0Rows, ...retainedRows]) {
       const record = row as Record<string, unknown>;
       const requestUrl = getString(record.requestUrl) ?? getString(record.request_url) ?? getString(record.url);
-      byUrl.set(requestUrl ?? JSON.stringify(record), record);
+      const key = requestUrl ?? JSON.stringify(record);
+      const existing = byUrl.get(key);
+      byUrl.set(key, existing ? { ...existing, ...record } : record);
     }
     return [...byUrl.values()];
   }
