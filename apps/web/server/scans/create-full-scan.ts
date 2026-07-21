@@ -66,6 +66,7 @@ import {
   normalizeScanRequesterIpContext,
   type ScanRequesterIpContext
 } from "./requester-ip-context";
+import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
 
 export type CreateFullScanActionState = {
   error: string | null;
@@ -78,6 +79,7 @@ const initialState: CreateFullScanActionState = {
 const LOCAL_INTERRUPTED_V2_DAG_CLEANUP_MS = 90_000;
 
 type QueueFullScanInput = {
+  campaignAttribution?: CampaignAttribution | null;
   clientRequestId?: string | null;
   domainContext?: {
     activeScanExists: boolean;
@@ -490,6 +492,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     priorScanAcceleration,
     profile: planLimits.scanProfile,
     scanFrom,
+    campaignAttribution: input.campaignAttribution,
     source: input.source ?? "manual-dashboard",
     trancoRankMetadata
   });

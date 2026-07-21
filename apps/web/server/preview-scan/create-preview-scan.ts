@@ -1,5 +1,6 @@
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
 import type { ScanFrom } from "@website-signal-risk-scanner/shared";
+import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
 import type { LocalV2DagScanProfile } from "../scans/local-v2-dag-scan-config";
 import { getPreviewScanAvailability } from "./preview-scan-availability";
 import { createPreviewScanRecord, findOrCreateAnonymousPreviewDomain } from "./preview-scan-repository";
@@ -19,6 +20,7 @@ import { dispatchLocalV2DagSimulatedLambdaScan } from "../scans/local-v2-dag-lam
 
 export async function createPreviewScan(input: {
   clientRequestId?: string | null;
+  campaignAttribution?: CampaignAttribution | null;
   hostname: string;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
   localV2DagRunViaLambda?: boolean | null;
@@ -35,7 +37,8 @@ export async function createPreviewScan(input: {
     localV2DagScanProfile: input.localV2DagScanProfile,
     localV2DagRunViaLambda: input.localV2DagRunViaLambda,
     normalizedUrl: domain.normalized_url,
-    scanFrom: input.scanFrom
+    scanFrom: input.scanFrom,
+    campaignAttribution: input.campaignAttribution
   });
 
   const scanConfig = scan.scan_config_json;

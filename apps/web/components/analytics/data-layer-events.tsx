@@ -14,6 +14,11 @@ import {
   pushDataLayerEvent,
   pushDataLayerEventOnce
 } from "../../lib/analytics/data-layer";
+import {
+  captureCampaignAttribution,
+  markCampaignLandingSeen,
+  recordCampaignCompletedDomain
+} from "../../lib/attribution/campaign-attribution";
 
 const PENDING_SCAN_STARTED_KEY = "certscore:analytics:pending-scan-started";
 
@@ -60,6 +65,29 @@ function getGuidePageType(pathname: string): GuidePageType {
 export function DataLayerClickTracker() {
   const pathname = usePathname();
   const lastTrackedPathnameRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const landing = captureCampaignAttribution();
+    if (landing.isNewLanding) {
+      markCampaignLandingSeen();
+      pushDataLayerEvent({
+        event: "campaign_landing_page_viewed",
+        page_path: window.location.pathname
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (window.location.search.includes("certscore_registration=1")) {
+      pushDataLayerEventOnce("registration_completed", {
+        event: "registration_completed",
+        auth_method: "password"
+      });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("certscore_registration");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, []);
 
   useEffect(() => {
     if (pathname === lastTrackedPathnameRef.current) {
@@ -229,7 +257,13 @@ export function PendingScanStartedEvent() {
   return null;
 }
 
-export function ScanCompletedEvent({ scanSource }: { scanSource: Extract<ScanSource, "homepage" | "dashboard" | "unknown"> }) {
+export function ScanCompletedEvent({
+  scanSource,
+  domain
+}: {
+  scanSource: Extract<ScanSource, "homepage" | "dashboard" | "unknown">;
+  domain?: string | null;
+}) {
   const pathname = usePathname();
 
   useEffect(() => {
@@ -238,7 +272,21 @@ export function ScanCompletedEvent({ scanSource }: { scanSource: Extract<ScanSou
       scan_source: scanSource,
       scan_status: "completed"
     });
-  }, [pathname, scanSource]);
+    if (domain) {
+      const ordinal = recordCampaignCompletedDomain(domain);
+      if (ordinal === 1) {
+        pushDataLayerEventOnce(`first_scan_completed:${pathname}`, {
+          event: "first_scan_completed",
+          scan_source: scanSource
+        });
+      } else if (ordinal === 2) {
+        pushDataLayerEventOnce(`second_distinct_domain_scanned:${pathname}`, {
+          event: "second_distinct_domain_scanned",
+          scan_source: scanSource
+        });
+      }
+    }
+  }, [domain, pathname, scanSource]);
 
   return null;
 }

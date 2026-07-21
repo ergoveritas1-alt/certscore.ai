@@ -53,6 +53,7 @@ const MAX_CANONICAL_POLICY_LINK_FETCHES = 2;
 const MAX_POLICY_SURFACE_TEXT_ARTIFACT_CHARS = 256_000;
 const MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS = 1_000_000;
 const MAX_FETCHED_TEXT_CHARS = 500_000;
+const MAX_POLICY_TEXT_RESPONSE_BYTES = 2_500_000;
 const MAX_POLICY_PDF_BYTES = 2_500_000;
 const MAX_POLICY_PDF_PAGES = 12;
 const MAX_POLICY_PDF_TEXT_CHARS = 500_000;
@@ -923,6 +924,11 @@ export async function policySurfaceScanner(
   } finally {
     clearTimeout(policyModuleDeadlineTimer);
     input.signal?.removeEventListener("abort", abortPolicyRuntime);
+    policyDeadlineController.abort(new Error("Policy-surface lane completed; cancel remaining background work."));
+    await boundedCleanup(Promise.allSettled([
+      ...policyDocumentFetchCaches.direct.values(),
+      ...policyDocumentFetchCaches.rendered.values(),
+    ]), 500);
     await boundedCleanup(policyBrowserRuntime.close());
   }
 }
@@ -1251,7 +1257,10 @@ async function processPolicyCandidateBeforeDeadline(
     ...input,
     input: { ...input.input, signal: candidateSignal },
   };
-  const processingPromise = processPolicyCandidate(candidateInput);
+  let processingSettled = false;
+  const processingPromise = processPolicyCandidate(candidateInput).finally(() => {
+    processingSettled = true;
+  });
   void processingPromise.catch(() => undefined);
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let abortListener: (() => void) | undefined;
@@ -1273,6 +1282,9 @@ async function processPolicyCandidateBeforeDeadline(
     if (deadlineTimer) clearTimeout(deadlineTimer);
     if (abortListener) input.input.signal?.removeEventListener("abort", abortListener);
     candidateController.abort(new Error("Policy candidate processing settled."));
+    if (!processingSettled) {
+      await boundedCleanup(processingPromise, 250);
+    }
   }
 }
 
@@ -4688,8 +4700,21 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
         text: "",
       };
     }
-    const body = new Uint8Array(await response.arrayBuffer());
+    const bodyLimitBytes = isPdfResponse ? MAX_POLICY_PDF_BYTES : MAX_POLICY_TEXT_RESPONSE_BYTES;
+    const { body, truncated } = await readBoundedResponseBody(
+      response,
+      bodyLimitBytes,
+      controller.signal,
+    );
     if (isPdfResponse) {
+      if (truncated) {
+        return {
+          attempts: [{ ...attemptBase, outcome: "oversized_pdf" }],
+          ok: false,
+          status: response.status,
+          text: "",
+        };
+      }
       return {
         attempts: [{ ...attemptBase, outcome: "fetched" }],
         documentFormat: "pdf",
@@ -4723,6 +4748,53 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
     clearTimeout(timeout);
     parentSignal?.removeEventListener("abort", abortFromParent);
   }
+}
+
+export async function readBoundedResponseBody(
+  response: Response,
+  maxBytes: number,
+  signal?: AbortSignal,
+): Promise<{ body: Uint8Array; truncated: boolean }> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return { body: new Uint8Array(), truncated: false };
+  }
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  let truncated = false;
+  try {
+    while (totalBytes < maxBytes) {
+      throwIfAborted(signal);
+      const next = await reader.read();
+      if (next.done) break;
+      const remainingBytes = maxBytes - totalBytes;
+      if (next.value.byteLength > remainingBytes) {
+        chunks.push(next.value.subarray(0, remainingBytes));
+        totalBytes += remainingBytes;
+        truncated = true;
+        break;
+      }
+      chunks.push(next.value);
+      totalBytes += next.value.byteLength;
+      if (totalBytes === maxBytes) {
+        truncated = true;
+        break;
+      }
+    }
+  } finally {
+    if (truncated) {
+      await boundedCleanup(reader.cancel(), 100);
+    } else {
+      reader.releaseLock();
+    }
+  }
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { body, truncated };
 }
 
 function combineAbortSignals(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {

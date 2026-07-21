@@ -40,6 +40,7 @@ import {
   normalizeScanRequesterIpContext,
   type ScanRequesterIpContext
 } from "./requester-ip-context";
+import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
 
 type ScanQueueProvenance = {
   githubActor?: string | null;
@@ -54,6 +55,7 @@ type ScanQueueProvenance = {
 
 export async function createAnonymousFullScan(input: {
   bypassRecentScanReuse?: boolean;
+  campaignAttribution?: CampaignAttribution | null;
   clientRequestId?: string | null;
   coveragePlanCode?: PlanCode;
   countAnonymousQuota?: boolean;
@@ -222,6 +224,7 @@ export async function createAnonymousFullScan(input: {
     profile: planLimits.scanProfile,
     scanFrom,
     source: input.provenance?.source ?? "marketing-anonymous-full-scan",
+    campaignAttribution: input.campaignAttribution,
     trancoRankMetadata
   });
   const scanConfig = input.clientRequestId

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
 import { CERTSCORE_CHROME_EXTENSION_STORE_URL } from "../../lib/browser-extension";
+import { captureCampaignAttribution } from "../../lib/attribution/campaign-attribution";
 import {
   clearActiveScanSession,
   clearPendingScanSession,
@@ -681,7 +682,9 @@ export function DomainScanForm({
       }
 
       const requestId = recoveredRequestId ?? createRequestId();
+      const campaignAttribution = captureCampaignAttribution().attribution;
       savePendingScanSession({
+        campaignAttribution: campaignAttribution ?? undefined,
         domain: submittedDomain,
         mode,
         requestId,
@@ -691,6 +694,7 @@ export function DomainScanForm({
       const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
         body: JSON.stringify({
           domain: submittedDomain,
+          campaignAttribution,
           forceNewScan: showFreshRescanOption ? freshRescan : false,
           localV2ScanProfile,
           localV2RunViaLambda:
@@ -762,6 +766,7 @@ export function DomainScanForm({
 
       if (payload.scanId) {
         saveActiveScanSession({
+          campaignAttribution: campaignAttribution ?? undefined,
           destination: nextDestination,
           domain: submittedDomain,
           scanId: payload.scanId,

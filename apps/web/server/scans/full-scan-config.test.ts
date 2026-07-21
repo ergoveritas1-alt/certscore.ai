@@ -40,6 +40,27 @@ test("queued full-scan config keeps anonymous and organization-owned scanner con
   ));
 });
 
+test("queued full-scan config preserves validated campaign attribution for scan association", () => {
+  const config = buildQueuedFullScanConfig({
+    campaignAttribution: {
+      utm_campaign: "privacy_agency_test",
+      utm_medium: "newsletter",
+      utm_source: "theadminbar"
+    },
+    hostname: "example.com",
+    maxPages: 1,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    source: "homepage-anonymous"
+  });
+
+  assert.deepEqual(config.campaignAttribution, {
+    utm_campaign: "privacy_agency_test",
+    utm_medium: "newsletter",
+    utm_source: "theadminbar"
+  });
+});
+
 test("queued full-scan config carries prior scan acceleration only as execution metadata", () => {
   const config = buildQueuedFullScanConfig({
     hostname: "example.com",
@@ -192,6 +213,11 @@ test("localhost scan configs use the local v2 planned-parallel DAG processor onl
     policyOutputGraceMs: 1000,
     policyPlanningDeadlineMs: 1500,
     productionFindingIntegration: false,
+    wc01ProductionProjection: {
+      approved: true,
+      pipeline: "normalized_concern_policy_unified_finding",
+      version: "wc01.normalized-concern-policy.v1"
+    },
     profile: "standard",
     scenarioConcurrency: 2,
     scenarioPlanningMode: "planned_parallel",

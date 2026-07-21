@@ -19,6 +19,7 @@ import {
   lookupTrancoRankMetadata,
   withTrancoRankMetadata
 } from "../scans/tranco-rank-metadata";
+import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
 
 export type PreviewDomainRow = {
   id: string;
@@ -63,6 +64,7 @@ type ScanConfig = SharedScanConfig & {
 };
 
 export function buildPreviewScanInitialConfig(input: {
+  campaignAttribution?: CampaignAttribution | null;
   env?: LocalV2DagScanEnv;
   hostname: string;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
@@ -72,6 +74,7 @@ export function buildPreviewScanInitialConfig(input: {
 }): SharedScanConfig {
   return applyLocalV2DagScanConfig({
     hostname: input.hostname,
+    ...(input.campaignAttribution ? { campaignAttribution: input.campaignAttribution } : {}),
     normalizedUrl: input.normalizedUrl,
     post403Policy: {
       maxHomepageRetriesAfter403: 0,
@@ -265,6 +268,7 @@ export async function insertPreviewScanEvent(input: {
 
 export async function createPreviewScanRecord(input: {
   clientRequestId?: string | null;
+  campaignAttribution?: CampaignAttribution | null;
   domainId: string;
   hostname: string;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
@@ -287,7 +291,8 @@ export async function createPreviewScanRecord(input: {
     localV2DagScanProfile: input.localV2DagScanProfile,
     localV2DagRunViaLambda: input.localV2DagRunViaLambda,
     normalizedUrl: input.normalizedUrl,
-    scanFrom: input.scanFrom
+    scanFrom: input.scanFrom,
+    campaignAttribution: input.campaignAttribution
   }), trancoRankMetadata);
   const scanConfig = input.clientRequestId
     ? { ...initialConfig, clientRequestId: input.clientRequestId }

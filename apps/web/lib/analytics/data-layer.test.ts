@@ -7,6 +7,7 @@ import {
   pushDataLayerEventBeforeNavigation,
   pushDataLayerEventOnce
 } from "./data-layer";
+import { CAMPAIGN_ATTRIBUTION_STORAGE_KEY } from "../attribution/campaign-attribution";
 
 type MockWindow = {
   certscoreAnalyticsConsent?: "granted" | "denied";
@@ -96,6 +97,35 @@ test("data-layer events dispatch after analytics consent is granted", () => {
     }
   ]);
   assert.deepEqual(gtagCalls, [["event", "contact_clicked", { cta_location: "header" }]]);
+});
+
+test("consented events include retained first-touch campaign attribution", () => {
+  const mockWindow = installWindow({ certscoreAnalyticsConsent: "granted", dataLayer: [] });
+  storage.set(
+    CAMPAIGN_ATTRIBUTION_STORAGE_KEY,
+    JSON.stringify({
+      utm_campaign: "privacy_agency_test",
+      utm_medium: "newsletter",
+      utm_source: "theadminbar"
+    })
+  );
+
+  pushDataLayerEvent({
+    event: "campaign_landing_page_viewed",
+    page_path: "/"
+  });
+
+  assert.deepEqual(mockWindow.dataLayer, [
+    {
+      campaign_attribution: {
+        utm_campaign: "privacy_agency_test",
+        utm_medium: "newsletter",
+        utm_source: "theadminbar"
+      },
+      event: "campaign_landing_page_viewed",
+      page_path: "/"
+    }
+  ]);
 });
 
 test("report CTA events dispatch after analytics consent is granted", () => {

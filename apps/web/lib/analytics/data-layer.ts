@@ -1,6 +1,7 @@
 "use client";
 
 import { hasAnalyticsConsent } from "./consent";
+import { getStoredCampaignAttribution, type CampaignAttribution } from "../attribution/campaign-attribution";
 
 export type CtaLocation = "header" | "homepage" | "footer" | "unknown";
 export type GptCtaLocation = "footer" | "api_pulse" | "guides_findings" | "homepage";
@@ -27,9 +28,17 @@ export type CertScoreDataLayerEvent =
   | { event: "lead_form_submit_attempted"; form_type: LeadFormType }
   | { event: "scan_started"; scan_source: ScanSource; scan_target_type: ScanTargetType; scan_status: "queued" }
   | { event: "scan_completed"; scan_source: Extract<ScanSource, "homepage" | "dashboard" | "unknown">; scan_status: "completed" }
+  | { event: "campaign_landing_page_viewed"; page_path: string }
+  | { event: "registration_completed"; auth_method: "password" | "google" | "unknown" }
+  | { event: "first_scan_completed"; scan_source: Extract<ScanSource, "homepage" | "dashboard" | "unknown"> }
+  | { event: "second_distinct_domain_scanned"; scan_source: Extract<ScanSource, "homepage" | "dashboard" | "unknown"> }
   | { event: "mcp_light_action"; action: McpLightAction; target: string };
 
-type CertScoreDataLayerNavigationEvent = CertScoreDataLayerEvent & {
+export type CampaignAttributedDataLayerEvent = CertScoreDataLayerEvent & {
+  campaign_attribution?: CampaignAttribution;
+};
+
+type CertScoreDataLayerNavigationEvent = CampaignAttributedDataLayerEvent & {
   eventCallback?: () => void;
   eventTimeout?: number;
 };
@@ -47,7 +56,12 @@ declare global {
 
 const pushedEventKeys = new Set<string>();
 
-function pushGoogleAnalyticsEvent(event: CertScoreDataLayerEvent, eventCallback?: () => void, eventTimeout?: number) {
+function withCampaignAttribution(event: CertScoreDataLayerEvent): CampaignAttributedDataLayerEvent {
+  const attribution = getStoredCampaignAttribution();
+  return attribution ? { ...event, campaign_attribution: attribution } : event;
+}
+
+function pushGoogleAnalyticsEvent(event: CampaignAttributedDataLayerEvent, eventCallback?: () => void, eventTimeout?: number) {
   if (typeof window === "undefined" || typeof window.gtag !== "function") {
     return;
   }
@@ -94,12 +108,18 @@ export function toUmamiEvent(event: CertScoreDataLayerEvent): UmamiEvent {
         eventName: event.event,
         properties: { scan_source: event.scan_source, scan_status: event.scan_status }
       };
+    case "registration_completed":
+      return { eventName: event.event, properties: { auth_method: event.auth_method } };
+    case "first_scan_completed":
+    case "second_distinct_domain_scanned":
+      return { eventName: event.event, properties: { scan_source: event.scan_source } };
     case "mcp_light_action":
       return { eventName: event.event, properties: { action: event.action } };
     case "pricing_viewed":
     case "sample_report_viewed":
     case "hero_book_demo_clicked":
     case "hero_sample_report_clicked":
+    case "campaign_landing_page_viewed":
       return { eventName: event.event };
   }
 }
@@ -131,8 +151,9 @@ export function pushDataLayerEvent(event: CertScoreDataLayerEvent) {
   }
 
   window.dataLayer = window.dataLayer ?? [];
-  window.dataLayer.push(event);
-  pushGoogleAnalyticsEvent(event);
+  const attributedEvent = withCampaignAttribution(event);
+  window.dataLayer.push(attributedEvent);
+  pushGoogleAnalyticsEvent(attributedEvent);
 }
 
 export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEvent, timeoutMs = 300) {
@@ -157,8 +178,9 @@ export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEven
       resolve();
     };
     const timeout = window.setTimeout(finish, timeoutMs);
+    const attributedEvent = withCampaignAttribution(event);
     const eventWithCallback: CertScoreDataLayerNavigationEvent = {
-      ...event,
+      ...attributedEvent,
       eventCallback: () => {
         window.clearTimeout(timeout);
         finish();
@@ -168,7 +190,7 @@ export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEven
 
     window.dataLayer = window.dataLayer ?? [];
     window.dataLayer.push(eventWithCallback);
-    pushGoogleAnalyticsEvent(event, finish, timeoutMs);
+    pushGoogleAnalyticsEvent(attributedEvent, finish, timeoutMs);
   });
 }
 

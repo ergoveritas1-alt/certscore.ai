@@ -26,6 +26,7 @@ import { shouldBypassDnsValidationForProductionLoadTest } from "./load-test-inta
 import { findScanByClientRequestId } from "../../../server/scans/client-request";
 import { isAnonymousScanQuotaError } from "../../../server/pulse/anonymous-scan-quota";
 import { getScanRequesterIpContext } from "../../../server/scans/requester-ip-context";
+import { normalizeCampaignAttribution } from "../../../lib/attribution/campaign-attribution";
 
 function isPublicFullScanAvailabilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -109,6 +110,7 @@ function boundedDebugInteger(value: unknown, min: number, max: number): number |
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+    const campaignAttribution = normalizeCampaignAttribution(payload?.campaignAttribution);
     const forceNewScan = parseForceNewScan(payload?.forceNewScan);
     const localV2DagScanProfile = normalizeLocalV2DagScanProfile(payload?.localV2ScanProfile ?? payload?.v2ScanProfile);
     const scanFrom = normalizePublicScanFrom(payload?.scanFrom ?? payload?.geo);
@@ -228,7 +230,8 @@ export async function POST(request: Request) {
         normalizedUrl: firstDomain.normalizedUrl,
         provenance: anonymousProvenance,
         requesterIpContext,
-        scanFrom: publicScanFrom
+        scanFrom: publicScanFrom,
+        campaignAttribution
       }).catch(async (error) => {
         const message = error instanceof Error ? error.message : String(error);
 
@@ -302,7 +305,8 @@ export async function POST(request: Request) {
           localV2DagRunViaLambda,
           provenance,
           requesterIpContext,
-          scanFrom
+          scanFrom,
+          campaignAttribution
         })
       )
     );

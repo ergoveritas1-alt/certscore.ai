@@ -63,6 +63,8 @@ export type SharedSiteMetadataConfig = {
   [key: string]: unknown;
 };
 
+export type SharedCampaignAttribution = Partial<Record<"utm_source" | "utm_medium" | "utm_campaign" | "utm_content" | "utm_term", string>>;
+
 export type SharedCaliforniaPrivacyScanConfig = {
   exercisePrivacyChoicePath?: boolean;
   forceGpcVerification?: boolean;
@@ -75,6 +77,7 @@ export type SharedScanExecutionConfig = {
 } & Record<string, unknown>;
 
 export type SharedScanConfig = {
+  campaignAttribution?: SharedCampaignAttribution;
   californiaPrivacy?: SharedCaliforniaPrivacyScanConfig;
   crawlerIdentity?: SharedCrawlerIdentityConfig;
   execution?: SharedScanExecutionConfig;
@@ -94,6 +97,7 @@ export type SharedScanConfig = {
 };
 
 type BuildSharedFullScanConfigInput = {
+  campaignAttribution?: SharedCampaignAttribution;
   californiaPrivacy?: SharedCaliforniaPrivacyScanConfig;
   crawlerIdentity?: SharedCrawlerIdentityConfig;
   execution?: SharedScanExecutionConfig;
@@ -114,6 +118,7 @@ type BuildSharedFullScanConfigInput = {
 
 export function buildSharedFullScanConfig(input: BuildSharedFullScanConfigInput): SharedScanConfig {
   return {
+    ...(input.campaignAttribution ? { campaignAttribution: input.campaignAttribution } : {}),
     ...(input.californiaPrivacy ? { californiaPrivacy: input.californiaPrivacy } : {}),
     ...(input.crawlerIdentity ? { crawlerIdentity: input.crawlerIdentity } : {}),
     ...(input.execution ? { execution: input.execution } : {}),

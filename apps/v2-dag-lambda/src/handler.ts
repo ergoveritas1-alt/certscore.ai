@@ -33,6 +33,8 @@ export const LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS = 45_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS = 52_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS = 7_000;
 export const LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS = 2_000;
+const LOCAL_V2_DAG_LAMBDA_PRECONSENT_SHUTDOWN_RESERVE_MS = 10_000;
+const LOCAL_V2_DAG_LAMBDA_POST_FALLBACK_RESERVE_MS = 4_000;
 
 export type LocalV2DagLambdaDispatchPayload = {
   artifactOnly: true;
@@ -231,8 +233,12 @@ type HandlerOptions = {
   now?: () => Date;
   resultPublishTimeoutMs?: number;
   runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: {
+    artifactSignal?: AbortSignal;
     artifactRoot: string;
+    onScanCoreComplete?: () => void;
     policySurfaceDeadlineAtMs?: number;
+    preConsentModuleDeadlineMs?: number;
+    preConsentVisualFallbackDeadlineMs?: number;
     signal?: AbortSignal;
   }) => Promise<ArtifactChainResult>;
   scannerWorkTimeoutMs?: number;
@@ -601,12 +607,16 @@ export async function runLocalV2DagLambdaArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
     allowedConsentFlowScenarios?: ConsentFlowScenario[];
+    artifactSignal?: AbortSignal;
     artifactRoot: string;
     externalBaselinePlanning?: "enrich" | "reuse_only";
     forceAllowedScenarioPlanning?: boolean;
+    onScanCoreComplete?: () => void;
     phaseLabelPrefix?: string;
     preConsentScreenshotMode?: "always" | "selective" | "never";
     policySurfaceDeadlineAtMs?: number;
+    preConsentModuleDeadlineMs?: number;
+    preConsentVisualFallbackDeadlineMs?: number;
     s3Client?: S3PutClient;
     signal?: AbortSignal;
     workspaceRoot?: string;
@@ -632,6 +642,9 @@ export async function runLocalV2DagLambdaArtifactChain(
     phaseLabelPrefix: options.phaseLabelPrefix,
     phaseTimings,
     preConsentScreenshotMode: options.preConsentScreenshotMode ?? scanTuning.preConsentScreenshotMode,
+    preConsentModuleDeadlineMs: options.preConsentModuleDeadlineMs,
+    preConsentVisualFallbackDeadlineMs: options.preConsentVisualFallbackDeadlineMs,
+    onScanCoreComplete: options.onScanCoreComplete,
     scanTuning,
     signal: options.signal,
     policySurfaceDeadlineAtMs: options.policySurfaceDeadlineAtMs,
@@ -652,7 +665,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     phaseTimings,
     s3Client: options.s3Client,
     scanTuning,
-    signal: options.signal
+    signal: options.artifactSignal ?? options.signal
   });
 }
 
@@ -660,10 +673,13 @@ async function runLocalV2DagLambdaScanBundle(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
     artifactRoot: string;
+    onScanCoreComplete?: () => void;
     phaseLabelPrefix?: string;
     phaseTimings: LocalV2DagLambdaPhaseTiming[];
     preConsentScreenshotMode?: "always" | "selective" | "never";
     policySurfaceDeadlineAtMs?: number;
+    preConsentModuleDeadlineMs?: number;
+    preConsentVisualFallbackDeadlineMs?: number;
     scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
     signal?: AbortSignal;
   }
@@ -671,7 +687,7 @@ async function runLocalV2DagLambdaScanBundle(
   return timeLambdaPhase(options.phaseTimings, phaseLabel(options.phaseLabelPrefix, "scan"), async () => {
     const resourceSampler = startRuntimeResourceSampler();
     try {
-      return await runScan({
+      const bundle = await runScan({
         browserReuseMode: "per_module",
         outDir: options.artifactRoot,
         policyOutputGraceMs: 1_000,
@@ -679,15 +695,19 @@ async function runLocalV2DagLambdaScanBundle(
         policySurfaceDeadlineAtMs: options.policySurfaceDeadlineAtMs,
         policySurfaceSeeds: payload.policySurfaceSeeds,
         postConsentFlowsEnabled: false,
+        preConsentModuleDeadlineMs: options.preConsentModuleDeadlineMs,
         preConsentScreenshotMode: options.preConsentScreenshotMode,
         preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
-        preConsentVisualFallbackDeadlineMs: options.scanTuning.preConsentVisualFallbackDeadlineMs,
+        preConsentVisualFallbackDeadlineMs:
+          options.preConsentVisualFallbackDeadlineMs ?? options.scanTuning.preConsentVisualFallbackDeadlineMs,
         profile: payload.profile,
         scenarioPlanningMode: "planned_parallel",
         scenarioResourceMode: effectiveScenarioResourceMode(payload, options.scanTuning),
         signal: options.signal,
         url: payload.targetUrl
       });
+      options.onScanCoreComplete?.();
+      return bundle;
     } finally {
       const telemetry = await resourceSampler.stop();
       await writeJson(path.join(options.artifactRoot, "V2RuntimeResourceTelemetry.json"), {
@@ -2317,7 +2337,9 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   let artifactChainCompletedAt: Date | undefined;
   let phaseTimings: LocalV2DagLambdaPhaseTiming[] | undefined;
   let artifactRoot: string | undefined;
+  let artifactAbortController: AbortController | undefined;
   let scannerAbortController: AbortController | undefined;
+  let scannerCoreCompleted = false;
   let scannerCancellationRequestedAt: Date | undefined;
   let scannerDeadlineTimer: NodeJS.Timeout | undefined;
   let handlerSafetyTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS;
@@ -2363,6 +2385,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       options.resultPublishTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS,
       Math.max(10, handlerSafetyTimeoutMs - artifactChainTimeoutMs)
     ));
+    artifactAbortController = new AbortController();
     scannerAbortController = new AbortController();
     scannerDeadlineTimer = setTimeout(() => {
       scannerCancellationRequestedAt = now();
@@ -2370,15 +2393,41 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     }, scannerWorkTimeoutMs);
     const artifactResult = await withHandlerSafetyTimeout(
       runArtifactChain(payload, {
+        artifactSignal: artifactAbortController.signal,
         artifactRoot,
+        onScanCoreComplete: () => {
+          if (scannerCoreCompleted) return;
+          scannerCoreCompleted = true;
+          if (scannerDeadlineTimer) {
+            clearTimeout(scannerDeadlineTimer);
+            scannerDeadlineTimer = undefined;
+          }
+          console.info("[v2-lambda-phase] scan core completed; artifact handoff reserve activated", {
+            elapsedMs: Math.max(0, Date.now() - handlerStartedAtMs),
+            scanId: payload?.scanId,
+          });
+        },
         policySurfaceDeadlineAtMs:
           handlerStartedAtMs + scannerWorkTimeoutMs - LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
+        preConsentModuleDeadlineMs: Math.max(
+          1_000,
+          scannerWorkTimeoutMs - LOCAL_V2_DAG_LAMBDA_PRECONSENT_SHUTDOWN_RESERVE_MS,
+        ),
+        preConsentVisualFallbackDeadlineMs: Math.max(
+          1_000,
+          Math.min(
+            LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS,
+            LOCAL_V2_DAG_LAMBDA_PRECONSENT_SHUTDOWN_RESERVE_MS -
+              LOCAL_V2_DAG_LAMBDA_POST_FALLBACK_RESERVE_MS,
+          ),
+        ),
         signal: scannerAbortController.signal,
       }),
       artifactChainTimeoutMs,
       () => {
         scannerCancellationRequestedAt ??= now();
         scannerAbortController?.abort(new Error(`Artifact chain exceeded its ${artifactChainTimeoutMs}ms deadline.`));
+        artifactAbortController?.abort(new Error(`Artifact chain exceeded its ${artifactChainTimeoutMs}ms deadline.`));
       }
     );
     clearTimeout(scannerDeadlineTimer);
@@ -2413,6 +2462,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     const scannerDeadlineAborted = scannerAbortController?.signal.aborted === true;
     if (scannerDeadlineTimer) clearTimeout(scannerDeadlineTimer);
     scannerAbortController?.abort(error);
+    artifactAbortController?.abort(error);
     if (!payload) {
       throw error;
     }

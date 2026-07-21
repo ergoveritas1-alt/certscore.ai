@@ -27,6 +27,16 @@ function deriveDisplayName(email: string) {
     .join(" ");
 }
 
+function getRegistrationCompletionRedirect(nextPath: string) {
+  try {
+    const url = new URL(nextPath, "https://certscore.ai");
+    url.searchParams.set("certscore_registration", "1");
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return nextPath;
+  }
+}
+
 function getBetterAuthErrorCode(error: unknown) {
   if (!error || typeof error !== "object") {
     return null;
@@ -129,7 +139,7 @@ export async function submitCredentialsAction(
         fullName: response.user.name ?? null,
         id: response.user.id
       });
-      redirect(values.next);
+      redirect(getRegistrationCompletionRedirect(values.next));
     }
 
     const response = await getAuth().api.signInEmail({

@@ -1,0 +1,36 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readBoundedResponseBody } from "./scanners/policy-surface-scanner.js";
+
+test("policy response reads retain a bounded prefix and cancel the remaining stream", async () => {
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelled = true;
+    },
+    start(controller) {
+      controller.enqueue(new Uint8Array(80).fill(1));
+      controller.enqueue(new Uint8Array(80).fill(2));
+      controller.enqueue(new Uint8Array(80).fill(3));
+    },
+  });
+  const response = new Response(stream, {
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
+
+  const result = await readBoundedResponseBody(response, 100);
+
+  assert.equal(result.body.byteLength, 100);
+  assert.equal(result.truncated, true);
+  assert.equal(cancelled, true);
+  assert.deepEqual([...result.body.slice(0, 80)], new Array(80).fill(1));
+  assert.deepEqual([...result.body.slice(80)], new Array(20).fill(2));
+});
+
+test("policy response reads preserve complete bodies below the cap", async () => {
+  const body = new TextEncoder().encode("bounded policy text");
+  const result = await readBoundedResponseBody(new Response(body), 100);
+
+  assert.equal(result.truncated, false);
+  assert.equal(new TextDecoder().decode(result.body), "bounded policy text");
+});

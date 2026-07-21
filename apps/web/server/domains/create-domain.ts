@@ -26,6 +26,7 @@ import {
   restrictScanFromForUser
 } from "../scans/restricted-scan-options";
 import { getScanRequesterIpContext, type ScanRequesterIpContext } from "../scans/requester-ip-context";
+import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
 
 export type CreateDomainActionState = {
   error: string | null;
@@ -48,6 +49,7 @@ function getLocalAwareScanThrottleMs(userEmail: string): number | undefined {
 export async function createOrQueueDomainScan(input: {
   allowExistingDomainRescan?: boolean;
   bypassRecentScanReuse?: boolean;
+  campaignAttribution?: CampaignAttribution | null;
   clientRequestId?: string | null;
   domain: string;
   localV2DagLambdaDebugOverrides?: import("../scans/local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
@@ -134,6 +136,7 @@ export async function createOrQueueDomainScan(input: {
       localV2DagScanProfile: input.localV2DagScanProfile,
       localV2DagRunViaLambda,
       scanFrom: defaultScanFrom,
+      campaignAttribution: input.campaignAttribution,
       scanThrottleMs: getLocalAwareScanThrottleMs(dashboardContext.user.email),
       source: "marketing-full-scan"
     });
@@ -205,6 +208,7 @@ export async function createOrQueueDomainScan(input: {
     provenance: input.provenance,
     requesterIpContext: input.requesterIpContext,
     scanFrom: defaultScanFrom,
+    campaignAttribution: input.campaignAttribution,
     scanThrottleMs: getLocalAwareScanThrottleMs(dashboardContext.user.email),
     source: "new-domain-overview"
   });

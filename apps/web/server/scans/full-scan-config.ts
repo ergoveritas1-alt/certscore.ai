@@ -15,6 +15,7 @@ import {
   type LocalV2DagScanEnv,
   type LocalV2DagScanProfile
 } from "./local-v2-dag-scan-config";
+import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
 
 export const QUEUED_FULL_SCAN_PROCESSOR = "queued-full-scan-v1";
 export const QUEUED_FULL_SCAN_MAX_REQUESTED_TIER = "tier5_full_scan";
@@ -28,6 +29,7 @@ export const QUEUED_FULL_SCAN_POST_403_POLICY = {
 };
 
 export type BuildQueuedFullScanConfigInput = {
+  campaignAttribution?: CampaignAttribution | null;
   env?: LocalV2DagScanEnv;
   hostname: string;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
@@ -108,6 +110,7 @@ export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput)
     profile: input.profile,
     requestedGeo: scanFromDefinition.requestedGeo,
     scanFrom,
+    ...(input.campaignAttribution ? { campaignAttribution: input.campaignAttribution } : {}),
     ...(input.trancoRankMetadata
       ? {
           siteMetadata: {

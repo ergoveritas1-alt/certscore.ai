@@ -386,6 +386,8 @@ test("handler publishes a terminal failure before the Lambda hard timeout", asyn
 test("handler gives the policy lane an absolute deadline before scanner shutdown", async () => {
   const startedAtMs = Date.now();
   let policySurfaceDeadlineAtMs: number | undefined;
+  let preConsentModuleDeadlineMs: number | undefined;
+  let preConsentVisualFallbackDeadlineMs: number | undefined;
 
   const result = await handler(validPayload(), {
     artifactChainTimeoutMs: 45_000,
@@ -393,6 +395,8 @@ test("handler gives the policy lane an absolute deadline before scanner shutdown
     scannerWorkTimeoutMs: 40_000,
     runArtifactChain: async (_payload, options) => {
       policySurfaceDeadlineAtMs = options.policySurfaceDeadlineAtMs;
+      preConsentModuleDeadlineMs = options.preConsentModuleDeadlineMs;
+      preConsentVisualFallbackDeadlineMs = options.preConsentVisualFallbackDeadlineMs;
       return {
         artifactMetadata: {},
         artifactPointers: {},
@@ -411,6 +415,43 @@ test("handler gives the policy lane an absolute deadline before scanner shutdown
   const expectedOffsetMs = 40_000 - LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS;
   assert.ok(policySurfaceDeadlineAtMs >= startedAtMs + expectedOffsetMs);
   assert.ok(policySurfaceDeadlineAtMs <= Date.now() + expectedOffsetMs);
+  assert.equal(preConsentModuleDeadlineMs, 30_000);
+  assert.equal(preConsentVisualFallbackDeadlineMs, 6_000);
+});
+
+test("a late partial scan can use artifact handoff reserve after scanner cancellation", async () => {
+  let scannerSignal: AbortSignal | undefined;
+  let artifactSignal: AbortSignal | undefined;
+  const result = await handler(validPayload(), {
+    artifactChainTimeoutMs: 1_000,
+    handlerSafetyTimeoutMs: 20_000,
+    resultPublishTimeoutMs: 100,
+    scannerWorkTimeoutMs: 10,
+    runArtifactChain: async (_payload, options) => {
+      scannerSignal = options.signal;
+      artifactSignal = options.artifactSignal;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      assert.equal(options.signal?.aborted, true);
+      options.onScanCoreComplete?.();
+      if (options.artifactSignal?.aborted) {
+        throw options.artifactSignal.reason;
+      }
+      return {
+        artifactMetadata: {},
+        artifactPointers: {},
+        phaseTimings: [{ durationMs: 25, label: "artifact_handoff", status: "completed" }],
+      };
+    },
+    sqsClient: {
+      async send() {
+        return { $metadata: {} };
+      },
+    },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(scannerSignal?.aborted, true);
+  assert.equal(artifactSignal?.aborted, false);
 });
 
 test("handler uploads a bounded artifact-only failure diagnostic on scanner timeout", async () => {

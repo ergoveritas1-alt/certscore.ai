@@ -7265,7 +7265,9 @@ export async function SharedScanDetailView({
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
-      {scanRecord.scan.status === "completed" ? <ScanCompletedEvent scanSource={analyticsScanSource} /> : null}
+      {scanRecord.scan.status === "completed" ? (
+        <ScanCompletedEvent scanSource={analyticsScanSource} domain={scanRecord.scan.domainHostname ?? null} />
+      ) : null}
       <script
         type="application/json"
         data-testid="scan-calibration-summary"

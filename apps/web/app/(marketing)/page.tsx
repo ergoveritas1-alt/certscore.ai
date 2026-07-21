@@ -176,7 +176,7 @@ export default async function MarketingHomePage() {
                 Scan for consent behavior, cookies, trackers, and privacy disclosures with evidence retained behind every finding.
               </p>
               <p className="mt-2 text-sm font-semibold text-sky-400">
-                Built for GDPR and ePrivacy review
+                Built for developers and agencies reviewing client websites for GDPR and ePrivacy concerns.
               </p>
             </div>
             <div id="homepage-scan" className="max-w-[650px] scroll-mt-24 pt-2">

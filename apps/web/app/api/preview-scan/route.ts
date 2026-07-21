@@ -11,10 +11,12 @@ import {
   restrictLocalV2RunViaLambdaForUser,
   restrictScanFromForUser
 } from "../../../server/scans/restricted-scan-options";
+import { normalizeCampaignAttribution } from "../../../lib/attribution/campaign-attribution";
 
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+    const campaignAttribution = normalizeCampaignAttribution(payload?.campaignAttribution);
     const result = previewScanRequestSchema.safeParse(payload);
 
     if (!result.success) {
@@ -69,7 +71,8 @@ export async function POST(request: Request) {
       localV2DagScanProfile,
       localV2DagRunViaLambda,
       normalizedUrl: result.data.normalizedUrl,
-      scanFrom
+      scanFrom,
+      campaignAttribution
     });
 
     return NextResponse.json(

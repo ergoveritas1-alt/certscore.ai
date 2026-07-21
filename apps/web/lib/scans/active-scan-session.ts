@@ -1,8 +1,11 @@
+import type { CampaignAttribution } from "../attribution/campaign-attribution";
+
 const ACTIVE_SCAN_SESSION_KEY = "certscore.active-scan-session.v1";
 const PENDING_SCAN_SESSION_KEY = "certscore.pending-scan-session.v1";
 const ACTIVE_SCAN_SESSION_MAX_AGE_MS = 2 * 60 * 60 * 1_000;
 
 export type ActiveScanSession = {
+  campaignAttribution?: CampaignAttribution;
   destination: string;
   domain: string;
   scanId: string;
@@ -10,6 +13,7 @@ export type ActiveScanSession = {
 };
 
 export type PendingScanSession = {
+  campaignAttribution?: CampaignAttribution;
   domain: string;
   mode: "full" | "preview";
   requestId: string;
