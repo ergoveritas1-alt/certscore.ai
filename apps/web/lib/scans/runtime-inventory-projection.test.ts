@@ -3,9 +3,12 @@ import test from "node:test";
 import {
   buildBrowserExtensionRequestInventoryRows,
   buildRuntimeInventoryGroupRows,
+  buildTrackerInventoryGroupRows,
+  suppressUnsupportedCmpAliasRows,
   buildTrackerInventoryRows,
   deriveInventoryMacroCategory,
   getInventoryGroupRowRenderKey,
+  getTrackerConsentReviewPriority,
   isInventoryDisplayHostname,
 } from "./runtime-inventory-projection";
 
@@ -77,6 +80,27 @@ test("derives Fable macro categories without replacing detailed purposes", () =>
   assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "jQuery CDN" }), "Essential");
   assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "Instagram CDN" }), "Functional");
   assert.equal(deriveInventoryMacroCategory({ purpose: "Unknown", priority: "review_needed", vendor: "unresolved.example" }), "Unknown");
+});
+
+test("classifies audience measurement as analytics unless advertising evidence is retained", () => {
+  assert.equal(
+    deriveInventoryMacroCategory({ purpose: "Audience measurement", priority: "medium", vendor: "Publisher analytics" }),
+    "Analytics"
+  );
+  assert.equal(getTrackerConsentReviewPriority({
+    category: "analytics",
+    confidence: 0.94,
+    domains: ["cdn.publisher-analytics.example"],
+    firstSeenMs: 2160,
+    label: "Publisher Analytics",
+    observedVia: ["script"],
+    party: "third_party",
+    preConsent: true,
+    regulatoryRelevance: ["analytics", "audience_measurement"],
+    requestCount: 1,
+    source: "runtime requests",
+    vendorDisplayCategory: "Analytics"
+  }), "medium");
 });
 
 test("projects Adobe Launch host as tag management instead of unknown tracker", () => {
@@ -327,6 +351,107 @@ test("deduplicates tracker inventory rows by vendor host and purpose", () => {
   assert.deepEqual(groupedRows[0]?.domains, ["snap.licdn.com"]);
   assert.equal(groupedRows[0]?.purpose, "Advertising");
   assert.equal(groupedRows[0]?.macroCategory, "Advertising");
+});
+
+test("deduplicates product aliases while retaining their raw domains and cookies", () => {
+  const groupedRows = buildTrackerInventoryGroupRows([
+    {
+      attributionEvidence: {
+        signatureId: "twitter_pixel_request",
+        matchedOn: "request_pattern",
+        matchedValue: "t.co/i/adsct"
+      },
+      category: "advertising",
+      confidence: 0.95,
+      cookieNames: ["personalization_id"],
+      domains: ["t.co"],
+      firstSeenMs: 210,
+      label: "Twitter Pixel",
+      observedVia: ["request"],
+      party: "third_party",
+      preConsent: true,
+      requestCount: 1,
+      source: "vendor resolver"
+    },
+    {
+      attributionEvidence: {
+        signatureId: "x_analytics_request",
+        matchedOn: "domain",
+        matchedValue: "analytics.twitter.com"
+      },
+      category: "advertising",
+      confidence: 0.9,
+      cookieNames: ["guest_id_ads"],
+      domains: ["analytics.twitter.com"],
+      firstSeenMs: 220,
+      label: "X/Twitter",
+      observedVia: ["script"],
+      party: "third_party",
+      preConsent: true,
+      requestCount: 2,
+      source: "runtime requests"
+    }
+  ]);
+
+  assert.equal(groupedRows.length, 1);
+  assert.equal(groupedRows[0]?.vendor, "X/Twitter");
+  assert.deepEqual(groupedRows[0]?.rawProducts, ["Twitter Pixel", "X/Twitter"]);
+  assert.deepEqual(groupedRows[0]?.attributionSignatures, ["twitter_pixel_request", "x_analytics_request"]);
+  assert.deepEqual(groupedRows[0]?.domains, ["t.co", "analytics.twitter.com"]);
+  assert.deepEqual(groupedRows[0]?.cookieNames, ["personalization_id", "guest_id_ads"]);
+});
+
+test("consolidates common runtime aliases and suppresses unsupported CMP identities", () => {
+  const rows = suppressUnsupportedCmpAliasRows([
+    {
+      category: "consent_management", confidence: 0.96, domains: ["cmp.inmobi.com"], firstSeenMs: 1039,
+      label: "InMobi Choice CMP", observedVia: ["request"], party: "third_party", preConsent: true,
+      requestCount: 4, source: "runtime", cookieNames: []
+    },
+    {
+      category: "consent_management", confidence: 0.93, domains: [], firstSeenMs: null,
+      label: "Quantcast Choice CMP", observedVia: ["resolver"], party: "unknown", preConsent: true,
+      requestCount: null, source: "vendor resolver", cookieNames: []
+    },
+    {
+      category: "session_replay", confidence: 0.95, domains: ["www.clarity.ms"], firstSeenMs: 1044,
+      label: "Microsoft", observedVia: ["request"], party: "third_party", preConsent: true,
+      requestCount: 1, source: "runtime", cookieNames: []
+    },
+    {
+      category: "session_replay", confidence: 0.95, domains: ["i.clarity.ms"], firstSeenMs: 1050,
+      label: "Microsoft Clarity", observedVia: ["request"], party: "third_party", preConsent: true,
+      requestCount: 4, source: "runtime", cookieNames: []
+    },
+    {
+      category: "infrastructure", confidence: 0.9, domains: ["cdn.jsdelivr.net"], firstSeenMs: 1018,
+      label: "jsDelivr", observedVia: ["script"], party: "third_party", preConsent: true,
+      requestCount: 1, source: "runtime", cookieNames: []
+    },
+    {
+      category: "infrastructure", confidence: 0.92, domains: ["cdn.jsdelivr.net"], firstSeenMs: 1018,
+      label: "jsDelivr CDN", observedVia: ["request"], party: "third_party", preConsent: true,
+      requestCount: 1, source: "resolver", cookieNames: []
+    },
+    {
+      category: "advertising", confidence: 0.95, domains: ["securepubads.g.doubleclick.net"], firstSeenMs: 1018,
+      label: "Google Publisher Tag", observedVia: ["script"], party: "third_party", preConsent: true,
+      requestCount: 1, source: "runtime", cookieNames: []
+    },
+    {
+      category: "advertising", confidence: 0.96, domains: ["securepubads.g.doubleclick.net"], firstSeenMs: 2013,
+      label: "Google Ads / DoubleClick", observedVia: ["request", "cookie"], party: "third_party", preConsent: true,
+      requestCount: 2, source: "resolver", cookieNames: ["test_cookie"]
+    }
+  ]);
+  assert.equal(rows.some((row) => row.label === "Quantcast Choice CMP"), false);
+  const grouped = buildTrackerInventoryGroupRows(rows);
+  assert.equal(grouped.filter((row) => row.vendor === "Microsoft Clarity").length, 1);
+  assert.equal(grouped.filter((row) => row.vendor === "jsDelivr CDN").length, 1);
+  const googleAds = grouped.filter((row) => row.vendor === "Google Ads / DoubleClick");
+  assert.equal(googleAds.length, 1);
+  assert.deepEqual(googleAds[0]?.rawProducts, ["Google Publisher Tag", "Google Ads / DoubleClick"]);
+  assert.deepEqual(googleAds[0]?.cookieNames, ["test_cookie"]);
 });
 
 test("separates cookie names from domains and preserves canonical ownership", () => {

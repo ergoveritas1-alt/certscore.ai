@@ -24,7 +24,8 @@ import {
 import {
   buildTrackerInventoryGroupRows,
   buildTrackerInventoryRows,
-  isInventoryDisplayHostname
+  isInventoryDisplayHostname,
+  suppressUnsupportedCmpAliasRows
 } from "../scans/runtime-inventory-projection";
 import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
@@ -254,7 +255,7 @@ function buildPulseReportSurface(input: {
     hybridRuntimeEvidence,
     runtimeArtifacts: scanRecord.runtimeArtifacts
   }).rows;
-  const trackerInventoryRows = buildTrackerInventoryRows({
+  const trackerInventoryRows = suppressUnsupportedCmpAliasRows(buildTrackerInventoryRows({
     domains: uniqueStrings(scanRecord.trackerVendors.map((vendor) => vendor.scriptHost)),
     firstPartyDomain: scanRecord.scan.domainHostname ?? presentationSummary.requestedHost,
     preConsentVendors: presentationSummary.preConsentVendorNames,
@@ -263,7 +264,7 @@ function buildPulseReportSurface(input: {
     trackerVendors: scanRecord.trackerVendors,
     topObservedEntities: presentationSummary.topObservedEntities,
     unresolvedHosts: presentationSummary.unresolvedVendorHosts
-  });
+  }));
   const runtimeTrackerPriorityRows = buildTrackerInventoryGroupRows(trackerInventoryRows).map((row) => ({
     firstSeenMs: row.firstSeenMs,
     party: row.party,
@@ -690,6 +691,9 @@ function regulatoryRuntimeWrapperEvidence(findingId: string, details: Record<str
     (Array.isArray(findingEntities?.vendors) && findingEntities.vendors.length > 0) ||
     sourceHasVendorAnchor;
   const effectiveHasTimingAnchor = hasTimingAnchor || sourceHasTimingAnchor;
+  const retainedServiceExamples = Array.isArray(retainedEvidence.serviceConnectionExamples)
+    ? retainedEvidence.serviceConnectionExamples.map(asRecord).filter((row): row is Record<string, unknown> => Boolean(row)).slice(0, 3)
+    : [];
 
   if (!effectiveHasTimingAnchor && !hasVendorAnchor) {
     return null;
@@ -701,6 +705,14 @@ function regulatoryRuntimeWrapperEvidence(findingId: string, details: Record<str
       : null,
     hasTimingAnchor: effectiveHasTimingAnchor,
     hasVendorAnchor,
+    exampleEvents: retainedServiceExamples.map((row) => ({
+      type: "request",
+      phase: "pre_consent",
+      requestUrl: safeUrl(row.requestUrl),
+      urlHost: stringValue(row.host),
+      initiatorType: stringValue(row.initiatorType),
+      timestampMs: finiteNumber(row.firstSeenMs)
+    })),
     pointer: {
       retainedEvidencePath: "policyEvidenceDetails.retainedEvidence",
       rowId: effectiveRowId,
@@ -890,7 +902,9 @@ function buildEvidence(finding: CertScoreFinding, scanId: string, options: { cov
         consentInteractionRecorded: request.consentInteractionRecorded,
         confidence: request.confidence
       }))
-    : fallbackExamples;
+    : fallbackExamples.length > 0
+      ? fallbackExamples
+      : regulatoryRuntimeEvidence?.exampleEvents ?? [];
   const exampleEvents = examples as Array<Record<string, unknown>>;
   const projectionWarnings = boundedStrings([
     options.coverageLimitedByNoGo ? "coverage_limited_by_scan_quality_no_go" : null,
@@ -1118,13 +1132,17 @@ function buildCmpLoadOrderHighlight(scanRecord: ScanDetailResponse) {
   };
 }
 
-function buildEvidenceHighlights(scanRecord: ScanDetailResponse) {
+function buildEvidenceHighlights(scanRecord: ScanDetailResponse, trackerRows?: ReturnType<typeof buildTrackerInventoryRows>) {
   const snapshot = scanRecord.snapshot;
-  const thirdPartyDomainsObserved =
-    finiteNumber(recordValue(snapshot, "third_party_request_domain_count")) ??
-    finiteNumber(recordValue(snapshot, "third_party_domain_count")) ??
-    uniqueStrings(scanRecord.trackerVendors.map((vendor) => vendor.scriptHost)).length;
-  const classifiedTrackerVendors = uniqueStrings(scanRecord.trackerVendors.map((vendor) => vendor.vendorName)).length;
+  const groupedTrackerRows = trackerRows ? buildTrackerInventoryGroupRows(trackerRows) : [];
+  const thirdPartyDomainsObserved = groupedTrackerRows.length > 0
+    ? uniqueStrings(groupedTrackerRows.flatMap((row) => row.domains)).length
+    : finiteNumber(recordValue(snapshot, "third_party_request_domain_count")) ??
+      finiteNumber(recordValue(snapshot, "third_party_domain_count")) ??
+      uniqueStrings(scanRecord.trackerVendors.map((vendor) => vendor.scriptHost)).length;
+  const classifiedTrackerVendors = groupedTrackerRows.length > 0
+    ? groupedTrackerRows.length
+    : uniqueStrings(scanRecord.trackerVendors.map((vendor) => vendor.vendorName)).length;
   const policyRows = scanRecord.policyEnrichment ?? [];
   const policyTypes = uniqueStrings(policyRows.map((row) => (typeof row.policy_page_type === "string" ? row.policy_page_type : null)));
   const fingerprintIndicators =
@@ -1134,8 +1152,8 @@ function buildEvidenceHighlights(scanRecord: ScanDetailResponse) {
   const probableFingerprintingDetected =
     recordValue(snapshot, "probable_fingerprinting_detected") === true ||
     recordValue(snapshot, "fingerprinting_probable") === true;
-  const categories = scanRecord.trackerVendors.reduce<Record<string, number>>((accumulator, vendor) => {
-    const key = vendor.vendorCategory || "uncategorized";
+  const categories = (groupedTrackerRows.length > 0 ? groupedTrackerRows : scanRecord.trackerVendors).reduce<Record<string, number>>((accumulator, vendor) => {
+    const key = "purpose" in vendor ? vendor.purpose : vendor.vendorCategory || "uncategorized";
     accumulator[key] = (accumulator[key] ?? 0) + 1;
     return accumulator;
   }, {});
@@ -1399,12 +1417,18 @@ function buildEvidenceArtifact(input: {
       }
     },
     trackerVendorInventory: capArray(
-      scanRecordVendors(scanRecord).map((vendor) => ({
-        name: vendor.name,
-        category: vendor.category,
-        host: vendor.host,
-        beforeConsent: vendor.beforeConsent,
-        confidence: vendor.confidence
+      buildTrackerInventoryGroupRows(input.reportSurface.trackerInventoryRows).map((vendor) => ({
+        name: vendor.vendor,
+        category: vendor.purpose,
+        host: vendor.domains[0] ?? null,
+        domains: vendor.domains,
+        cookieNames: vendor.cookieNames,
+        rawProducts: vendor.rawProducts,
+        attributionSignatures: vendor.attributionSignatures,
+        beforeConsent: vendor.preConsent,
+        firstSeenMs: vendor.firstSeenMs,
+        confidence: vendor.confidence,
+        attributionEvidence: vendor.attributionEvidence ?? null
       })),
       150
     ),
@@ -1467,6 +1491,11 @@ function buildEvidenceArtifact(input: {
     },
     storageEvidenceSummary: safeRecordSubset(storageSummary, [
       "cookiesBeforeConsentCount",
+      "distinctCookieCount",
+      "distinctPreConsentCookieCount",
+      "timedCookieWriteCount",
+      "timedPreConsentCookieWriteCount",
+      "initialCookieSnapshotCount",
       "thirdPartyCookieBeforeConsentCount",
       "localStorageBeforeConsentCount",
       "sessionStorageBeforeConsentCount",
@@ -1603,18 +1632,21 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     summary.riskLevel = "unknown";
   }
   const topFindingCount = topFindings.length;
-  const evidenceHighlights = buildEvidenceHighlights(input.scanRecord);
+  const evidenceHighlights = buildEvidenceHighlights(input.scanRecord, reportSurface.trackerInventoryRows);
   const counts = buildPulseCounts({
     allFindingCount: allFindings.length,
     evidenceHighlights,
     executiveIssueCount: topFindings.length,
     topFindings
   });
-  const cookiesBeforeConsentCount = reportSurface.runtimeCookieRows.length > 0
-    ? reportSurface.runtimeCookieRows.length
+  const hybridRuntimeEvidence = asRecord(recordValue(input.scanRecord.runtimeArtifacts, "hybridRuntimeEvidence"));
+  const storageSummary = asRecord(recordValue(hybridRuntimeEvidence, "storageSummary"));
+  const cookiesBeforeConsentCount = finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
+    (reportSurface.runtimeCookieRows.length > 0
+    ? reportSurface.runtimeCookieRows.filter((row) => row.timingEvidence !== "initial_cookie_snapshot").length
     : finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
       finiteNumber(recordValue(input.scanRecord.snapshot, "initialCookieCount")) ??
-      0;
+      0);
   const policySurfaces = input.scanRecord.policyEnrichment.slice(0, 8).map((row) => ({
     type: typeof row.policy_page_type === "string" ? row.policy_page_type : "policy_surface",
     url: policySurfaceUrl(row as unknown as Record<string, unknown>)
@@ -1860,7 +1892,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       }))
     },
     trackerFootprint: (() => {
-      const vendors = scanRecordVendors(input.scanRecord);
+      const vendors = buildTrackerInventoryGroupRows(reportSurface.trackerInventoryRows).map((row) => row.vendor);
       return {
         vendors: vendors.slice(0, 10),
         cap: { shown: Math.min(10, vendors.length), total: vendors.length, truncated: vendors.length > 10 }

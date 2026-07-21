@@ -231,18 +231,26 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("dpo_contact", "responsabile della protezione dei dati"),
     equivalent("dpo_contact", "contatto dpo"),
     direct("processing_purposes", "finalità del trattamento dei dati personali"),
+    direct("processing_purposes", "finalità del trattamento"),
     equivalent("processing_purposes", "tratta i tuoi dati per le seguenti finalità"),
     direct("legal_basis", "base giuridica del trattamento dei dati personali"),
+    direct("legal_basis", "base giuridica", "requires_privacy_context"),
     equivalent("legal_basis", "legittimo interesse per trattare dati personali"),
     direct("recipients_or_vendor_categories", "destinatari dei dati personali"),
     equivalent("recipients_or_vendor_categories", "destinatari dei tuoi dati"),
     equivalent("recipients_or_vendor_categories", "categorie di destinatari dei dati personali"),
     equivalent("recipients_or_vendor_categories", "fornitori di servizi che trattano dati personali"),
+    equivalent("recipients_or_vendor_categories", "responsabili del trattamento"),
     direct("data_retention", "periodo di conservazione dei dati personali"),
+    equivalent("data_retention", "periodo di conservazione", "requires_privacy_context"),
+    equivalent("data_retention", "conservazione dei dati"),
     equivalent("data_retention", "conserviamo dati personali"),
+    direct("data_subject_rights", "diritti degli interessati"),
     direct("data_subject_rights", "diritto di accesso ai dati personali"),
     equivalent("data_subject_rights", "diritto alla cancellazione dei dati personali"),
     direct("international_transfers", "trasferimenti internazionali di dati personali"),
+    equivalent("international_transfers", "trasferimenti extra ue"),
+    equivalent("international_transfers", "paesi extra ue"),
     equivalent("international_transfers", "dati personali fuori dallo spazio economico europeo"),
     direct("supervisory_authority", "diritto di proporre reclamo all'autorità di controllo"),
     equivalent("supervisory_authority", "proporre reclamo all'autorità di controllo"),
@@ -1092,8 +1100,8 @@ const COMMON_HTML_ENTITY_REPLACEMENTS: Record<string, string> = {
   uuml: "ü",
 };
 
-function direct(topic: GdprTransparencyTopic, phrase: string): PhraseInput {
-  return { phrase, strength: "direct", topic };
+function direct(topic: GdprTransparencyTopic, phrase: string, variant?: string): PhraseInput {
+  return { phrase, strength: "direct", topic, variant };
 }
 
 function equivalent(topic: GdprTransparencyTopic, phrase: string, variant?: string): PhraseInput {
@@ -1105,7 +1113,14 @@ function phraseScore(term: GdprTransparencyTopicPhrase, normalizedText: string):
   if (!phrase || !phraseIncludes(normalizedText, phrase)) {
     return 0;
   }
+  if (term.variant === "requires_privacy_context" && !hasPrivacyDisclosureContext(normalizedText)) {
+    return 0;
+  }
   return 600 + phrase.length + strengthRank(term.strength) * 80;
+}
+
+function hasPrivacyDisclosureContext(normalizedText: string) {
+  return /\b(?:privacy|gdpr|dati personali|protezione dei dati|titolare del trattamento|responsabili? del trattamento|diritti degli interessati|articolo (?:6|13|28|44))\b/i.test(normalizedText);
 }
 
 function paddedIncludes(normalizedValue: string, phrase: string) {

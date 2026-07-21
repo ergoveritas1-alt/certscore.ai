@@ -633,7 +633,7 @@ test("GdprEprivacyCoverageChecklistCard summarizes the top two highest-priority 
 
   assert.match(
     html,
-    /Pre-consent 3rd party tracking evidence was retained before consent: Bombora Visitor Insights \(Advertising\) and ScorecardResearch \(Audience measurement\); first seen 3.27s after scan start; no consent action was recorded first\./
+    /Pre-consent 3rd party tracking evidence was retained before consent: Bombora Visitor Insights \(Advertising\) and ScorecardResearch \(Audience measurement\); 1 additional eligible tracker retained in expandable evidence; first seen 3.27s after scan start; no consent action was recorded first\./
   );
   assert.doesNotMatch(html, /Optimizely \(A\/B Testing\)/);
   assert.doesNotMatch(html, /Quantcast Measure \(Audience measurement\)/);

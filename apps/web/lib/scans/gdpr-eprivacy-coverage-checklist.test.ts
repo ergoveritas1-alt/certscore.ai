@@ -688,6 +688,11 @@ test("deriveGdprEprivacyCoverageChecklist keeps high-priority tracker inventory 
   assert.equal(row.assessmentStatus, "review_signal");
   assert.equal(row.criticalEvidence.retainedEvidence.trackerPriority, "high");
   assert.equal(row.criticalEvidence.missingOrIncompleteSourceSignals.length, 1);
+  assert.equal(row.criticalEvidence.retainedEvidence.preconsentThirdPartyTrackerGroupCount, 2);
+  assert.deepEqual(
+    (row.criticalEvidence.retainedEvidence.preconsentThirdPartyTrackerGroups as Array<{ vendor: string }>).map((group) => group.vendor),
+    ["Google Ads / DoubleClick", "Optimizely"]
+  );
   assert.match(row.explanation, /Google Ads \/ DoubleClick - Advertising \(0.386s\)/);
   assert.match(row.criticalEvidence.statusBasis, /High priority.*Advertising/);
 });
@@ -3029,6 +3034,7 @@ test("deriveGdprEprivacyReviewSummary reports thin privacy policy text as a tech
   assert.doesNotMatch(renderedSummary, /Policy text extraction limited transparency review/);
   assert.doesNotMatch(renderedSummary, /Policy text extraction/);
   assert.match(summary.coverageText, /technical limit/);
+  assert.match(summary.coverageText, /Privacy surfaces were reachable, but substantive policy content was not retained; 1 transparency row remains unconfirmed\./);
   assert.doesNotMatch(summary.priorityReviewText, /partial concern/);
   assert.doesNotMatch(renderedSummary, /legal violation|violates GDPR/i);
 });

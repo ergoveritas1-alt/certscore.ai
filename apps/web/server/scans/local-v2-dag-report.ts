@@ -537,6 +537,34 @@ export function isThirdPartyRuntimeEventForDocument(
   return event.thirdParty === true || event.isThirdParty === true;
 }
 
+export function isAuxiliaryNavigationContextUrl(value: string | null | undefined) {
+  if (!value) return false;
+  try {
+    const { pathname } = new URL(value);
+    return /(?:^|\/)(?:callback|oauth2?\/callback|signin-oidc|authorize|authorization\.oauth2)(?:\/|$)/i.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+export function isPrimaryAssessmentRuntimeEvent(
+  event: Record<string, unknown>,
+  documentUrl: string | null | undefined,
+) {
+  const contextUrl = firstString(event.documentUrl, event.topLevelUrl);
+  const documentHost = hostnameFromUrl(documentUrl);
+  if (contextUrl) {
+    return sameSite(hostnameFromUrl(contextUrl), documentHost) && !isAuxiliaryNavigationContextUrl(contextUrl);
+  }
+  const eventUrl = firstString(event.url, event.requestUrl);
+  const resourceType = firstString(event.resourceType, event.initiatorType);
+  if (isAuxiliaryNavigationContextUrl(eventUrl)) return false;
+  if (/^(?:document|navigation|main_frame)$/i.test(resourceType ?? "") && eventUrl) {
+    return sameSite(hostnameFromUrl(eventUrl), documentHost);
+  }
+  return true;
+}
+
 function purposeToCategory(value: string | null | undefined) {
   switch (value) {
     case "advertising":
@@ -683,7 +711,7 @@ function cookieName(row: Record<string, unknown>) {
 function cookieIdentity(row: Record<string, unknown>) {
   const name = cookieName(row);
   if (!name) return null;
-  const domain = firstString(row.cookieDomain, row.domain, row.hostname)?.toLowerCase() ?? "unknown-domain";
+  const domain = firstString(row.cookieDomain, row.domain, row.hostname)?.replace(/^\.+/, "").toLowerCase() ?? "unknown-domain";
   const cookiePath = firstString(row.cookiePath, row.path) ?? "/";
   return `${domain}|${cookiePath}|${name}`;
 }
@@ -698,6 +726,20 @@ function networkEventIdentity(row: Record<string, unknown>) {
 
 export function countCanonicalCookieObservations(rows: Array<Record<string, unknown>>) {
   return uniqueStrings(rows.map((row) => cookieIdentity(row))).length;
+}
+
+export function summarizeRuntimeCookieEvidenceCounts(rows: Array<Record<string, unknown>>) {
+  const preConsentRows = rows.filter((row) => firstString(row.consentStateAtTime, row.consent_state_at_time) === "pre_consent");
+  const timedWriteRows = rows.filter((row) => !/^(?:browser_snapshot|initial_cookie_snapshot)$/i.test(firstString(row.operation, row.setMethod, row.set_method) ?? ""));
+  const timedPreConsentWriteRows = timedWriteRows.filter((row) => firstString(row.consentStateAtTime, row.consent_state_at_time) === "pre_consent");
+  const initialSnapshotRows = rows.filter((row) => /^(?:browser_snapshot|initial_cookie_snapshot)$/i.test(firstString(row.operation, row.setMethod, row.set_method) ?? ""));
+  return {
+    distinctCookieCount: countCanonicalCookieObservations(rows),
+    distinctPreConsentCookieCount: countCanonicalCookieObservations(preConsentRows),
+    timedCookieWriteCount: countCanonicalCookieObservations(timedWriteRows),
+    timedPreConsentCookieWriteCount: countCanonicalCookieObservations(timedPreConsentWriteRows),
+    initialCookieSnapshotCount: countCanonicalCookieObservations(initialSnapshotRows),
+  };
 }
 
 export function countCanonicalNetworkEvents(rows: Array<Record<string, unknown>>) {
@@ -1586,7 +1628,7 @@ function classifyEmbeddedContentPurpose(hostname: string | null | undefined, url
   if (/imasdk\.googleapis\.com|ima3\.js|googletagservices\.com|gampad|doubleclick\.net|googleads\.g\.doubleclick\.net|brightline\.tv|freewheel|ad[-.]tech|video.*ad|ad.*video/.test(text)) {
     return "videoAdSdk";
   }
-  if (/fonts\.googleapis\.com|fonts\.gstatic\.com|typekit\.net|use\.typekit\.net/.test(text)) {
+  if (/fonts\.googleapis\.com|fonts\.gstatic\.com|typekit\.net|use\.typekit\.net|ajax\.googleapis\.com|unpkg\.com|cdn\.jsdelivr\.net/.test(text)) {
     return "fontStaticResource";
   }
   if (/youtube(?:-nocookie)?\.com|youtu\.be|vimeo\.com|spotify\.com|soundcloud\.com/.test(text)) {
@@ -1663,6 +1705,12 @@ function summarizeEmbeddedContentEvidence(
   const networkObservations = (preconsentRequests ?? [])
     .filter((event) => event.thirdParty === true || event.isThirdParty === true)
     .filter((event) => isKnownEmbeddedContentUrl(requestUrl(event), event.hostname ?? null))
+    .filter((event) => {
+      const url = requestUrl(event);
+      const host = event.hostname ?? hostnameFromUrl(url);
+      if (!/(?:^|\.)youtube(?:-nocookie)?\.com$/i.test(host ?? "")) return true;
+      return /\/embed(?:\/|\?|$)/i.test(url ?? "") || /^(?:iframe|media|subdocument|video)$/i.test(event.resourceType ?? event.initiatorType ?? "");
+    })
     .map((event) => ({
       evidenceType: "network_request",
       hostname: event.hostname ?? hostnameFromUrl(requestUrl(event)),
@@ -2285,10 +2333,21 @@ function selectArticle13PrivacySurfaces(
 ) {
   const generalPrivacySurfaces = privacySurfaces.filter((row) => !isCookieSpecificPrivacySurface(row));
   const canonicalPrivacyNotices = generalPrivacySurfaces.filter(isCanonicalPrivacyNoticeSurface);
+  const prioritizeGeneralScope = (rows: typeof generalPrivacySurfaces) => rows
+    .map((row, index) => ({ index, row }))
+    .sort((left, right) =>
+      Number(isExplicitGeneralPrivacyNotice(right.row)) - Number(isExplicitGeneralPrivacyNotice(left.row)) ||
+      left.index - right.index
+    )
+    .map(({ row }) => row);
   if (canonicalPrivacyNotices.length > 0) {
-    return generalPrivacySurfaces.filter((row) => !isPrivacyServiceMarketingSurface(row));
+    return prioritizeGeneralScope(generalPrivacySurfaces.filter((row) => !isPrivacyServiceMarketingSurface(row)));
   }
-  return generalPrivacySurfaces.length > 0 ? generalPrivacySurfaces : privacySurfaces;
+  return prioritizeGeneralScope(generalPrivacySurfaces.length > 0 ? generalPrivacySurfaces : privacySurfaces);
+}
+
+function isExplicitGeneralPrivacyNotice(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
+  return (row.surface.classifierReasonCodes ?? []).includes("variant_general_scope");
 }
 
 function isPrivacyServiceMarketingSurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
@@ -2721,6 +2780,26 @@ export function firstPromotionGradePreconsentRequestMs(rows: Array<Record<string
   );
 }
 
+export function classifyRetainedRequestActivity(input: {
+  category: string;
+  collectionEndpointObserved: boolean;
+  regulatoryRelevance?: string[];
+  url?: string | null;
+}) {
+  const relevance = (input.regulatoryRelevance ?? []).join(" ").toLowerCase();
+  const url = input.url ?? "";
+  if (/identifier_sync|identity_resolution|cookie_sync/.test(relevance) || /(?:user|id|cookie)[_-]?sync|sync(?:\.gif|\/)|setuid|getuid/i.test(url)) {
+    return "identifier_synchronization";
+  }
+  if (input.collectionEndpointObserved && /advertising|adtech|retargeting|marketing/i.test(input.category)) {
+    return "ad_request";
+  }
+  if (input.collectionEndpointObserved) {
+    return "tracker_beacon";
+  }
+  return "library";
+}
+
 const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
   /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|protected by kasada|x-kpsdk|detected unusual behaviour[^.]{0,180}(?:bot|browser)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot/i;
 const LOCAL_V2_VERCEL_SECURITY_CHALLENGE_PATTERN =
@@ -2938,17 +3017,31 @@ function buildMaterializedLocalV2Detail(
 ): ScanDetailResponse {
   const requestedHost = scanRecord.scan.domainHostname ?? hostnameFromUrl(bundle.normalizedUrl ?? bundle.url);
   const finalDocumentUrl = getLocalV2FinalDocumentUrl(bundle);
-  const canonicalDocumentUrl = safeLocalV2DocumentUrl(
-    finalDocumentUrl,
+  const requestedDocumentUrl = safeLocalV2DocumentUrl(
     bundle.normalizedUrl,
     bundle.url,
     requestedHost ? `https://${requestedHost}/` : null
   );
+  const canonicalDocumentUrl = safeLocalV2DocumentUrl(
+    finalDocumentUrl &&
+      sameSite(hostnameFromUrl(finalDocumentUrl), hostnameFromUrl(requestedDocumentUrl)) &&
+      !isAuxiliaryNavigationContextUrl(finalDocumentUrl)
+      ? finalDocumentUrl
+      : null,
+    requestedDocumentUrl,
+    requestedHost ? `https://${requestedHost}/` : null
+  );
   const documentHost = hostnameFromUrl(canonicalDocumentUrl) ?? requestedHost;
   const rootDomain = registrableDomain(documentHost);
-  const networkEvents = bundle.networkEvents ?? [];
-  const networkResponseEvents = bundle.networkResponseEvents ?? [];
-  const cookieEvents = bundle.cookieEvents ?? [];
+  const networkEvents = (bundle.networkEvents ?? []).filter((event) =>
+    isPrimaryAssessmentRuntimeEvent(event, canonicalDocumentUrl)
+  );
+  const networkResponseEvents = (bundle.networkResponseEvents ?? []).filter((event) =>
+    isPrimaryAssessmentRuntimeEvent(event, canonicalDocumentUrl)
+  );
+  const cookieEvents = (bundle.cookieEvents ?? []).filter((event) =>
+    isPrimaryAssessmentRuntimeEvent(event, canonicalDocumentUrl)
+  );
   const allVendorRows = buildVendorEvidence(bundle);
   const vendorRows = allVendorRows.filter((vendor) => vendor.vendorCategory !== "cmp");
   const thirdPartyRequests = networkEvents.filter((event) =>
@@ -2962,6 +3055,8 @@ function buildMaterializedLocalV2Detail(
   const preconsentCookieNames = uniqueStrings(preconsentCookies.map((event) => cookieName(event)));
   const cookieIdentityCount = countCanonicalCookieObservations(cookieEvents);
   const preconsentCookieIdentityCount = countCanonicalCookieObservations(preconsentCookies);
+  const cookieEvidenceCounts = summarizeRuntimeCookieEvidenceCounts(cookieEvents);
+  const initialSnapshotCookieEvents = cookieEvents.filter((event) => /^(?:browser_snapshot|initial_cookie_snapshot)$/i.test(event.operation ?? ""));
   const iframeEvents = sanitizeIframeEvents(bundle, rootDomain);
   const preconsentIframeEvents = iframeEvents.filter((event) => event.preConsent);
   const cmp = bundle.cmpRuntimeObservations?.[0] ?? null;
@@ -3061,10 +3156,26 @@ function buildMaterializedLocalV2Detail(
     screenshots: bundle.screenshots,
     visualCapture: bundle.visualCapture,
   });
+  const primaryAssessmentEventIds = new Set([
+    ...networkEvents.map((event) => event.eventId),
+    ...cookieEvents.map((event) => event.eventId),
+  ]);
+  const primaryAssessmentHosts = new Set(uniqueStrings([
+    ...networkEvents.map((event) => event.hostname ?? hostnameFromUrl(event.url)),
+    ...cookieEvents.map((event) => event.hostname ?? event.cookieDomain),
+  ]));
+  const vendorRowsForPrimaryContext = (rows: typeof vendorRows) => rows.filter((vendor) => {
+    if ([...vendor.matchedEventIds].some((eventId) => primaryAssessmentEventIds.has(eventId))) return true;
+    if (vendor.matchedEventIds.size > 0) return false;
+    if (!vendor.scriptHost) return true;
+    return [...primaryAssessmentHosts].some((host) =>
+      host === vendor.scriptHost || host.endsWith(`.${vendor.scriptHost}`) || vendor.scriptHost?.endsWith(`.${host}`)
+    );
+  });
   const vendorEvidenceReportable = runtimeEvidenceReportable ||
     (!localV2NoGo && preConsentRuntimeReliable && runtimeCoverageStatus === null && meaningfulRuntimeSignalsRetained);
-  const reportableVendorRows = vendorEvidenceReportable ? vendorRows : [];
-  const inventoryVendorRows = vendorEvidenceReportable ? allVendorRows : [];
+  const reportableVendorRows = vendorEvidenceReportable ? vendorRowsForPrimaryContext(vendorRows) : [];
+  const inventoryVendorRows = vendorEvidenceReportable ? vendorRowsForPrimaryContext(allVendorRows) : [];
   const advertisingVendors = vendorRowsForAdvertisingInfrastructure(reportableVendorRows);
   const retargetingBehavioralAdvertisingVendors = vendorRowsForBehavioralAdvertising(reportableVendorRows);
   const advertisingRetargetingVendors = uniqueVendorRows([
@@ -3089,6 +3200,13 @@ function buildMaterializedLocalV2Detail(
     rejectControlObserved: false,
     rejectLabels: [],
     visibleChoiceLabels: []
+  };
+  const completeFirstLayerConsentChoices = {
+    ...retainedFirstLayerConsentChoices,
+    controlInventoryComplete:
+      consentSurfaceInspection.inspectionCompleted === true &&
+      retainedFirstLayerConsentChoices.layerInspected === "first_layer" &&
+      retainedFirstLayerConsentChoices.actionableControlInventoryRetained === true
   };
   const policySurfaces = dedupePolicySurfaces(
     bundle.policySurfaceObservations ?? [],
@@ -3118,6 +3236,17 @@ function buildMaterializedLocalV2Detail(
     row.surface.surfaceType === "cookie_policy" ||
     row.surface.surfaceType === "cookie_settings"
   );
+  const findObservedVendor = (
+    event: (typeof networkEvents)[number] | (typeof cookieEvents)[number],
+    candidates = reportableVendorRows,
+  ) =>
+    candidates.find((vendor) => vendor.matchedEventIds.has(event.eventId)) ??
+    candidates.find((vendor) => {
+      const host = hostnameFromUrl(event.hostname ?? event.url);
+      return Boolean(host && vendor.matchedHostnames.some((matchedHost) =>
+        host === matchedHost || host.endsWith(`.${matchedHost}`)
+      ));
+    }) ?? null;
   const thirdPartyRequestCount = countCanonicalNetworkEvents(thirdPartyRequests);
   // Customer-facing cookie totals use canonical domain + path + name identity.
   // Raw Set-Cookie and browser-snapshot events remain available as evidence.
@@ -3128,25 +3257,28 @@ function buildMaterializedLocalV2Detail(
   }, {});
   const requestPurposeRows = (preconsentRequests
     .map((event) => {
-      const matchedVendor = reportableVendorRows.find((vendor) => vendor.matchedEventIds.has(event.eventId)) ??
-        reportableVendorRows.find((vendor) => {
-          const host = hostnameFromUrl(event.hostname ?? event.url);
-          return Boolean(host && vendor.matchedHostnames.some((matchedHost) =>
-            host === matchedHost || host.endsWith(`.${matchedHost}`)
-          ));
-        }) ?? null;
+      const matchedVendor = findObservedVendor(event);
       const url = requestUrl(event);
       const hostname = event.hostname ?? hostnameFromUrl(url);
       return matchedVendor && url && hostname
         ? {
             category: matchedVendor.vendorCategory,
-            classification: "tracking",
+            classification: classifyRetainedRequestActivity({
+              category: matchedVendor.vendorCategory,
+              collectionEndpointObserved: event.collectionEndpointObserved === true,
+              regulatoryRelevance: matchedVendor.regulatoryRelevance,
+              url
+            }),
             classificationBasis: "local_v2_dag_runtime_vendor_observation",
+            collectionEndpointObserved: event.collectionEndpointObserved === true,
+            collectionEndpointType: matchedVendor.collectionEndpointType,
             confidence: matchedVendor.confidence,
             essentiality: "non_essential",
             firstPartyOrThirdParty: sameSite(hostname, rootDomain) ? "first_party" : "third_party",
             hostname,
             initiatorType: event.initiatorType ?? event.resourceType,
+            matchedSignatureId: matchedVendor.matchedSignatureId,
+            pageUrl: safeLocalV2DocumentUrl(event.documentUrl, event.topLevelUrl, canonicalDocumentUrl),
             pageUrlSharedViaReferrer: typeof event.requestHeaders?.referer === "string" &&
               Boolean(hostnameFromUrl(event.topLevelUrl) && event.requestHeaders.referer.includes(hostnameFromUrl(event.topLevelUrl) ?? "")),
             referrerSent: Boolean(event.requestHeaders?.referer),
@@ -3161,7 +3293,7 @@ function buildMaterializedLocalV2Detail(
         : null;
     })
     .filter((row) => row !== null) as Array<Record<string, unknown>>);
-  const boundedRequestPurposeRows = selectBoundedPreconsentRequestPurposeRows(requestPurposeRows, 25);
+  const boundedRequestPurposeRows = selectBoundedPreconsentRequestPurposeRows(requestPurposeRows, 50);
   const promotionGradeRequestPurposeRows = boundedRequestPurposeRows.filter(isPromotionGradePreconsentRequestRow);
   const promotionGradePreconsentRequestUrls = uniqueStrings(
     promotionGradeRequestPurposeRows.map((row) => firstString(row.requestUrl)).filter(Boolean)
@@ -3222,23 +3354,36 @@ function buildMaterializedLocalV2Detail(
   const fingerprintingRuntimeEvidence = browserApiAccessRows(bundle);
   const fingerprintingEvidenceSummary = summarizeFingerprintingEvidence(bundle);
   const sessionReplayEvidenceSummary = summarizeSessionReplayEvidence(reportableVendorRows, preconsentRequests, boundedRequestPurposeRows);
-  const cookieWriteObservations = cookieEvents.map((event) => ({
-    beforeConsent: event.consentStateAtTime === "pre_consent",
-    category: event.cookiePurpose ?? "unknown",
-    cookieName: event.cookieName,
-    domain: event.cookieDomain ?? event.hostname,
-    firstObservedAtMs: event.timestampMs,
-    initiatorDomain: event.hostname,
-    initiatorUrl: event.url,
-    initiatorVendor: reportableVendorRows[0]?.vendorName ?? null,
-    nonEssential: event.cookiePurpose !== "security",
-    party: event.cookieParty ?? (event.thirdParty ? "third_party" : "first_party"),
-    setAtMs: event.timestampMs,
-    setMethod: event.operation ?? "cookie_event",
-    thirdParty: event.thirdParty === true || event.cookieParty === "third_party",
-    timestampMs: event.timestampMs,
-    timingEvidence: event.consentStateAtTime === "pre_consent" ? "before_consent_cookie_write" : "observed_cookie_write"
-  }));
+  const cookieWriteObservations = cookieEvents.map((event) => {
+    const matchedVendor = findObservedVendor(event, inventoryVendorRows);
+    const initialSnapshot = /^(?:browser_snapshot|initial_cookie_snapshot)$/i.test(event.operation ?? "");
+    const eventHost = hostnameFromUrl(event.url) ?? event.hostname ?? event.cookieDomain ?? null;
+    const matchedVendorHostAligned = Boolean(matchedVendor && eventHost && matchedVendor.matchedHostnames.some((matchedHost) =>
+      eventHost === matchedHost || eventHost.endsWith(`.${matchedHost}`) || matchedHost.endsWith(`.${eventHost}`)
+    ));
+    const category = event.cookiePurpose && event.cookiePurpose !== "unknown"
+      ? event.cookiePurpose
+      : matchedVendor?.vendorCategory ?? "unknown";
+    return {
+      beforeConsent: event.consentStateAtTime === "pre_consent",
+      category,
+      cookieName: event.cookieName,
+      domain: (event.cookieDomain ?? event.hostname)?.replace(/^\.+/, ""),
+      firstObservedAtMs: event.timestampMs,
+      initiatorDomain: event.hostname,
+      initiatorUrl: event.url,
+      initiatorVendor: initialSnapshot || !matchedVendorHostAligned ? null : matchedVendor?.vendorName ?? null,
+      nonEssential: /^(?:advertising|analytics|fingerprinting|marketing|measurement|personalization|session_replay)$/i.test(category),
+      party: event.cookieParty ?? (event.thirdParty ? "third_party" : "first_party"),
+      setAtMs: initialSnapshot ? null : event.timestampMs,
+      setMethod: event.operation ?? "cookie_event",
+      thirdParty: event.thirdParty === true || event.cookieParty === "third_party",
+      timestampMs: event.timestampMs,
+      timingEvidence: initialSnapshot
+        ? "initial_cookie_snapshot"
+        : event.consentStateAtTime === "pre_consent" ? "before_consent_cookie_write" : "observed_cookie_write"
+    };
+  });
   const hybridRuntimeEvidence = {
     consentSummary: {
       bannerPresent: assessedConsentSurfaceObserved,
@@ -3253,8 +3398,8 @@ function buildMaterializedLocalV2Detail(
     cmpFrameworkSignalObserved: Boolean(cmpVendorName),
     cmpRuntimeSignalLabels: cmpSignalLabels,
     ...(consentRuntimeEvidenceReportable ? {
-      firstLayerConsentChoices: retainedFirstLayerConsentChoices,
-      first_layer_consent_choices: retainedFirstLayerConsentChoices
+      firstLayerConsentChoices: completeFirstLayerConsentChoices,
+      first_layer_consent_choices: completeFirstLayerConsentChoices
     } : {}),
     cookieWriteObservations,
     networkSummary: {
@@ -3310,6 +3455,7 @@ function buildMaterializedLocalV2Detail(
       metricBasis: "unique_cookie_domain_path_name_identity",
       cookiesBeforeConsentCount,
       cookiesSeenCount: cookieIdentityCount,
+      ...cookieEvidenceCounts,
       retainedCookieEventCount: cookieEvents.length,
       thirdPartyCookieBeforeConsentCount: uniqueStrings(preconsentCookies
         .filter((event) => event.cookieParty === "third_party" || event.thirdParty === true)
@@ -3391,31 +3537,31 @@ function buildMaterializedLocalV2Detail(
       cmp_vendor_name: cmpVendorName
     } : {}),
     ...(consentRuntimeEvidenceReportable ? {
-      firstLayerConsentChoices: retainedFirstLayerConsentChoices,
-      first_layer_consent_choices: retainedFirstLayerConsentChoices,
+      firstLayerConsentChoices: completeFirstLayerConsentChoices,
+      first_layer_consent_choices: completeFirstLayerConsentChoices,
       rejectPathDepthAndAvailability: {
-        completeRejectPathAvailable: retainedFirstLayerConsentChoices.rejectControlObserved,
-        completeRejectPathDetected: retainedFirstLayerConsentChoices.rejectControlObserved,
+        completeRejectPathAvailable: completeFirstLayerConsentChoices.rejectControlObserved,
+        completeRejectPathDetected: completeFirstLayerConsentChoices.rejectControlObserved,
         firstLayerCookieConsentBannerObserved: firstLayerConsentControlInventoryRetained,
-        firstLayerConsentChoices: retainedFirstLayerConsentChoices,
+        firstLayerConsentChoices: completeFirstLayerConsentChoices,
         gdprEprivacyConsentSurfaceObserved: firstLayerConsentControlInventoryRetained ? "confirmed" : "unconfirmed",
-        layerInspected: retainedFirstLayerConsentChoices.layerInspected,
-        rejectAvailableOnFirstLayer: retainedFirstLayerConsentChoices.rejectControlObserved,
-        rejectEquivalentFound: retainedFirstLayerConsentChoices.rejectControlObserved,
-        rejectControlObserved: retainedFirstLayerConsentChoices.rejectControlObserved,
-        visibleRejectLabels: retainedFirstLayerConsentChoices.rejectLabels
+        layerInspected: completeFirstLayerConsentChoices.layerInspected,
+        rejectAvailableOnFirstLayer: completeFirstLayerConsentChoices.rejectControlObserved,
+        rejectEquivalentFound: completeFirstLayerConsentChoices.rejectControlObserved,
+        rejectControlObserved: completeFirstLayerConsentChoices.rejectControlObserved,
+        visibleRejectLabels: completeFirstLayerConsentChoices.rejectLabels
       },
       reject_path_depth_and_availability: {
-        complete_reject_path_available: retainedFirstLayerConsentChoices.rejectControlObserved,
-        complete_reject_path_detected: retainedFirstLayerConsentChoices.rejectControlObserved,
+        complete_reject_path_available: completeFirstLayerConsentChoices.rejectControlObserved,
+        complete_reject_path_detected: completeFirstLayerConsentChoices.rejectControlObserved,
         first_layer_cookie_consent_banner_observed: firstLayerConsentControlInventoryRetained,
-        first_layer_consent_choices: retainedFirstLayerConsentChoices,
+        first_layer_consent_choices: completeFirstLayerConsentChoices,
         gdpr_eprivacy_consent_surface_observed: firstLayerConsentControlInventoryRetained ? "confirmed" : "unconfirmed",
-        layer_inspected: retainedFirstLayerConsentChoices.layerInspected,
-        reject_available_on_first_layer: retainedFirstLayerConsentChoices.rejectControlObserved,
-        reject_equivalent_found: retainedFirstLayerConsentChoices.rejectControlObserved,
-        reject_control_observed: retainedFirstLayerConsentChoices.rejectControlObserved,
-        visible_reject_labels: retainedFirstLayerConsentChoices.rejectLabels
+        layer_inspected: completeFirstLayerConsentChoices.layerInspected,
+        reject_available_on_first_layer: completeFirstLayerConsentChoices.rejectControlObserved,
+        reject_equivalent_found: completeFirstLayerConsentChoices.rejectControlObserved,
+        reject_control_observed: completeFirstLayerConsentChoices.rejectControlObserved,
+        visible_reject_labels: completeFirstLayerConsentChoices.rejectLabels
       }
     } : {}),
     consentTimeline: hybridRuntimeEvidence.timelineMarkers,
@@ -3449,9 +3595,9 @@ function buildMaterializedLocalV2Detail(
     hybrid_runtime_evidence: hybridRuntimeEvidence,
     iframeEvents,
     iframe_events: iframeEvents,
-    initial_cookie_count: cookieIdentityCount,
-    initial_cookie_domains: uniqueStrings(cookieEvents.map((event) => event.cookieDomain ?? event.hostname)),
-    initial_cookie_names: cookieNames,
+    initial_cookie_count: cookieEvidenceCounts.initialCookieSnapshotCount,
+    initial_cookie_domains: uniqueStrings(initialSnapshotCookieEvents.map((event) => event.cookieDomain ?? event.hostname)),
+    initial_cookie_names: uniqueStrings(initialSnapshotCookieEvents.map((event) => cookieName(event))),
     cookies_before_consent_count: cookiesBeforeConsentCount,
     cookieWriteObservations,
     cookie_write_observations: cookieWriteObservations,
@@ -3665,6 +3811,24 @@ function buildMaterializedLocalV2Detail(
 
   return {
     ...scanRecord,
+    accessPostureSummary: !localV2NoGo
+      ? {
+          ...scanRecord.accessPostureSummary,
+          accessPostureClass: "tolerant",
+          blockPageClassification: null,
+          blockVendorGuess: null,
+          homepageFetchStatus: "success",
+          pagesScanned: Math.max(scanRecord.scan.pagesScanned, 1),
+          finalEffectiveUrl: canonicalDocumentUrl,
+          stopTier: null,
+          stopOutcomeTitle: null,
+          stopReason: null,
+          stopReviewTitle: null,
+          whatThisMeans: [],
+          interruptionLabel: null,
+          interruptionReason: null
+        }
+      : scanRecord.accessPostureSummary,
     pageEvidence: scanRecord.pageEvidence,
     policyEnrichment: [...scanRecord.policyEnrichment, ...policyEnrichmentRows],
     preconsentViolations: runtimeEvidenceReportable

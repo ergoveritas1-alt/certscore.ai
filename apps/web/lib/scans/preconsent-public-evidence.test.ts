@@ -40,6 +40,66 @@ function row(input: {
   };
 }
 
+test("preserves scanned page URL and tsMs while excluding library-only loads", () => {
+  const common = {
+    hostname: "api.segment.io",
+    vendorName: "Segment",
+    vendorCategory: "analytics",
+    essentiality: "non_essential",
+    runtimePhase: "pre_consent",
+    confidence: 0.95,
+    pageUrl: "https://www.example.test/",
+    tsMs: 4321
+  };
+  const requests = buildPromotionGradePreconsentRequests({
+    rows: [
+      { ...common, requestUrl: "https://cdn.segment.com/analytics.js", classification: "library" },
+      { ...common, requestUrl: "https://api.segment.io/v1/p", classification: "tracking", collectionEndpointObserved: true }
+    ]
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.requestUrl, "https://api.segment.io/v1/p");
+  assert.equal(requests[0]?.scannedPageUrl, "https://www.example.test/");
+  assert.equal(requests[0]?.firstSeenMs, 4321);
+});
+
+test("uses the transmitted DoubleClick request instead of a Google configuration library as representative advertising evidence", () => {
+  const common = {
+    vendorCategory: "advertising",
+    essentiality: "non_essential",
+    runtimePhase: "pre_consent",
+    confidence: 0.95,
+    pageUrl: "https://www.example.test/"
+  };
+  const requests = buildPromotionGradePreconsentRequests({
+    rows: [
+      {
+        ...common,
+        hostname: "www.googletagmanager.com",
+        requestUrl: "https://www.googletagmanager.com/gtm.js?id=GTM-TEST",
+        vendorName: "Google Tag Manager",
+        classification: "library",
+        tsMs: 1000
+      },
+      {
+        ...common,
+        hostname: "ad.doubleclick.net",
+        requestUrl: "https://ad.doubleclick.net/activity;src=123;type=test",
+        vendorName: "Google Ads",
+        classification: "tracking",
+        collectionEndpointObserved: true,
+        tsMs: 2461
+      }
+    ]
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.vendorName, "DoubleClick Floodlight");
+  assert.equal(requests[0]?.requestUrl, "https://ad.doubleclick.net/activity;src=123;type=test");
+  assert.equal(requests[0]?.firstSeenMs, 2461);
+});
+
 test("uses canonical endpoint attribution for retained pre-consent example requests", () => {
   const requests = buildPromotionGradePreconsentRequests({
     rows: [

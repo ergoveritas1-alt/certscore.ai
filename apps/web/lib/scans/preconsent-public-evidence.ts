@@ -485,7 +485,7 @@ export function buildPromotionGradePreconsentRequests(input: {
       collectionEndpointType: getString(row, ["collectionEndpointType", "collection_endpoint_type"]),
       firstPartyOrThirdParty: getString(row, ["firstPartyOrThirdParty", "first_party_or_third_party", "party"]),
       matchedSignatureId: getString(row, ["matchedSignatureId", "matched_signature_id"]),
-      firstSeenMs: getRuntimeElapsedMs(row, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "ms"]) ??
+      firstSeenMs: getRuntimeElapsedMs(row, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "tsMs", "ts_ms", "ms"]) ??
         getRuntimeElapsedMs(row, ["timestampMs", "timestamp_ms"]),
       consentActionMs,
       noConsentActionObserved: consentActionMs === null,

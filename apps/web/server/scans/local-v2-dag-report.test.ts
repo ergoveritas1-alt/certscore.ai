@@ -271,6 +271,10 @@ test("canonical report counters dedupe repeated cookie writes and request rows",
     { cookieDomain: ".example.test", cookiePath: "/", cookieName: "session", operation: "browser_snapshot" },
     { cookieDomain: ".example.test", cookiePath: "/account", cookieName: "session", operation: "set_cookie_header" }
   ]), 2);
+  assert.equal(countCanonicalCookieObservations([
+    { cookieDomain: ".example.test", cookiePath: "/", cookieName: "cf_clearance", operation: "set_cookie_header" },
+    { cookieDomain: "example.test", cookiePath: "/", cookieName: "cf_clearance", operation: "browser_snapshot" }
+  ]), 1, "leading-dot domain formatting must not create a second cookie identity");
   assert.equal(countCanonicalNetworkEvents([
     { eventId: "net-1", requestUrl: "https://vendor.test/a" },
     { eventId: "net-1", requestUrl: "https://vendor.test/a" },
@@ -305,6 +309,51 @@ test("canonical report counters dedupe repeated cookie writes and request rows",
     privacyPolicyPresent: false,
     rawPrivacyPolicyCandidateCount: 0
   }), true, "a completed bounded negative search remains complete coverage");
+});
+
+test("classifies script loading, ad collection, and identifier synchronization separately", async () => {
+  const { classifyRetainedRequestActivity } = await loadLocalV2DagReport();
+  assert.equal(classifyRetainedRequestActivity({
+    category: "advertising",
+    collectionEndpointObserved: false,
+    url: "https://securepubads.g.doubleclick.net/tag/js/gpt.js"
+  }), "library");
+  assert.equal(classifyRetainedRequestActivity({
+    category: "advertising",
+    collectionEndpointObserved: true,
+    url: "https://securepubads.g.doubleclick.net/gampad/ads"
+  }), "ad_request");
+  assert.equal(classifyRetainedRequestActivity({
+    category: "advertising",
+    collectionEndpointObserved: true,
+    regulatoryRelevance: ["identifier_sync"],
+    url: "https://sync.example.test/user_sync"
+  }), "identifier_synchronization");
+});
+
+test("segments auxiliary authorization and callback navigation from the primary page assessment", async () => {
+  const { isPrimaryAssessmentRuntimeEvent } = await loadLocalV2DagReport();
+  const pageUrl = "https://journal.example/";
+  assert.equal(isPrimaryAssessmentRuntimeEvent({ topLevelUrl: pageUrl, requestUrl: "https://ad.doubleclick.net/activity" }, pageUrl), true);
+  assert.equal(isPrimaryAssessmentRuntimeEvent({ topLevelUrl: "https://id.publisher.example/as/authorization.oauth2", requestUrl: "https://cdn.example/sdk.js" }, pageUrl), false);
+  assert.equal(isPrimaryAssessmentRuntimeEvent({ documentUrl: "https://www.journal.example/callback?code=redacted", cookieName: "SESSION" }, pageUrl), false);
+});
+
+test("reports distinct cookies, timed writes, and initial snapshots separately", async () => {
+  const { summarizeRuntimeCookieEvidenceCounts } = await loadLocalV2DagReport();
+  const counts = summarizeRuntimeCookieEvidenceCounts([
+    { consentStateAtTime: "pre_consent", cookieName: "session", cookieDomain: ".example.test", cookiePath: "/", operation: "set_cookie_header" },
+    { consentStateAtTime: "pre_consent", cookieName: "session", cookieDomain: ".example.test", cookiePath: "/", operation: "browser_snapshot" },
+    { consentStateAtTime: "pre_consent", cookieName: "_gcl_au", cookieDomain: ".example.test", cookiePath: "/", operation: "browser_snapshot" },
+    { consentStateAtTime: "post_consent", cookieName: "later", cookieDomain: ".example.test", cookiePath: "/", operation: "document_cookie" }
+  ]);
+  assert.deepEqual(counts, {
+    distinctCookieCount: 3,
+    distinctPreConsentCookieCount: 2,
+    timedCookieWriteCount: 2,
+    timedPreConsentCookieWriteCount: 1,
+    initialCookieSnapshotCount: 2
+  });
 });
 
 function syntheticPngHeader(width: number, height: number, byteSize = 1024) {
@@ -975,6 +1024,42 @@ test("summarizePolicySurfaces retains a legitimate externally hosted brand priva
   assert.equal(summary.privacyPolicyPresent, true);
   assert.equal(summary.privacyPolicyDiscovered, true);
   assert.deepEqual(summary.privacyPolicyUrls, ["https://privacy.example-cdn.test/acme/privacy-policy"]);
+});
+
+test("summarizePolicySurfaces prioritizes an explicitly general notice ahead of product-specific privacy material", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "product-policy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/products/learning/privacy",
+      normalizedUrl: "https://example.test/products/learning/privacy",
+      linkText: "Learning product privacy",
+      status: "fetched",
+      documentEvaluationState: "usable",
+      confidence: 0.9,
+      textExcerpt: "Product-specific privacy material for the learning application."
+    },
+    {
+      observationId: "general-policy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy-policy-generale",
+      normalizedUrl: "https://example.test/privacy-policy-generale",
+      linkText: "Privacy Policy Generale",
+      classifierReasonCodes: ["matched_privacy_policy", "variant_general_scope"],
+      status: "fetched",
+      documentEvaluationState: "usable",
+      confidence: 0.95,
+      textExcerpt: "General controller-level privacy notice with Article 13 transparency information."
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+  assert.match(summary.retainedPrivacyPolicyTextExcerpt, /^General controller-level privacy notice/);
+  assert.deepEqual(summary.privacyPolicyUrls, [
+    "https://example.test/privacy-policy-generale",
+    "https://example.test/products/learning/privacy"
+  ]);
 });
 
 test("summarizePolicySurfaces does not credit an external challenge-provider policy on a no-go homepage", async () => {
@@ -2498,17 +2583,25 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     assert.ok(detail.runtimeArtifacts);
     const hybrid = detail.runtimeArtifacts.hybridRuntimeEvidence as Record<string, Record<string, unknown>>;
     const embeddedSummary = hybrid.embeddedContentSummary;
+    const iframeSummary = hybrid.iframeSummary;
     const sessionReplaySummary = hybrid.sessionReplayEvidenceSummary;
     const fingerprintingSummary = hybrid.fingerprintingEvidenceSummary;
     const firstLayerConsentChoices = hybrid.firstLayerConsentChoices as Record<string, unknown>;
     const rejectPath = detail.runtimeArtifacts.rejectPathDepthAndAvailability as Record<string, unknown>;
     assert.ok(embeddedSummary);
+    assert.ok(iframeSummary);
     assert.ok(sessionReplaySummary);
     assert.ok(fingerprintingSummary);
     assert.ok(firstLayerConsentChoices);
     assert.ok(rejectPath);
+    assert.equal(detail.scan.pagesScanned, 1);
+    assert.equal(detail.accessPostureSummary.pagesScanned, 1);
+    assert.equal(detail.accessPostureSummary.homepageFetchStatus, "success");
+    assert.equal(detail.accessPostureSummary.stopReason, null);
 
     assert.equal(embeddedSummary.embeddedContentObserved, true);
+    assert.equal(iframeSummary.preConsentIframeCount, 2);
+    assert.equal(iframeSummary.thirdPartyPreConsentIframeCount, 2);
     assert.deepEqual(embeddedSummary.embeddedContentHosts, ["youtube.com", "google.com", "connect.facebook.net"]);
     assert.deepEqual(embeddedSummary.embeddedContentPurposeBuckets, {
       fontStaticResource: [],

@@ -1947,9 +1947,9 @@ function BenchmarkMetricCard(input: {
     : benchmarkValue !== null
       ? `Expected ${benchmarkValue}.`
       : null;
-  const metricNote = input.label === "Cookies pre-consent"
+  const metricNote = input.label === "Pre-consent storage"
     ? [
-        "Cookie/storage groups pre-consent, deduped by cookie/storage name and domain.",
+        "Cookie/storage observations before a recorded consent action, deduped by name and domain. This total can include essential security and consent storage; it is not a count of confirmed nonessential trackers.",
         input.note
       ].filter(Boolean).join(" ")
     : input.note;
@@ -4579,7 +4579,7 @@ export function ExecutiveSummaryCard(input: {
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}
                     />
                     <BenchmarkMetricCard
-                      label="Cookies pre-consent"
+                      label="Pre-consent storage"
                       actualValue={runtimeMetricsReliable ? input.beforeConsentCookieCount : null}
                       benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}

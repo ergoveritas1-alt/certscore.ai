@@ -547,6 +547,10 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats supervisory contact email 
   assert.match(outcome?.criticalEvidence.statusBasis ?? "", /supporting context/i);
   assert.equal(retainedArticle13Signal(outcome!)?.supportingContactContext, "wbdprivacy@wbd.com");
   assert.equal(
+    outcome?.evidenceRefs.some((ref) => /right to contact your data protection authority/i.test(ref)),
+    true
+  );
+  assert.equal(
     outcome?.evidenceRefs.includes("Supporting contact context: wbdprivacy@wbd.com"),
     true
   );
@@ -1248,6 +1252,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats essential-only first-layer
         completeRejectPathAvailable: true,
         firstLayerConsentChoices: {
           acceptControlObserved: true,
+          controlInventoryComplete: true,
           capturedBeforeInteraction: true,
           layerInspected: "first_layer",
           rejectControlObserved: true,
@@ -1481,6 +1486,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats thin policy extraction as 
   });
 
   assert.equal(outcomes.privacy_notice_availability?.status, "Observed");
+  assert.match(outcomes.privacy_notice_availability?.limitation ?? "", /link or page surface was reachable.*substantive notice content was not available/i);
   assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
   assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
   assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
@@ -1490,6 +1496,31 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats thin policy extraction as 
     "errored"
   );
   assert.match(outcomes.legal_basis_disclosure_observed?.limitation ?? "", /did not extract enough usable policy text/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes recognizes a dedicated privacy email in a thin reachable policy shell", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 260,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt:
+          "Additional privacy information. Privacy questions can be submitted by email to privacy.department@example.test. Footer links.",
+        policyTextExtractionHealth: {
+          extractedTextLength: 260,
+          policyTextExtractionStatus: "thin"
+        }
+      }
+    },
+    snapshot: { privacy_policy_present: true }
+  });
+
+  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Observed");
+  assert.match(outcomes.dpo_contact_point_disclosure?.evidenceRefs.join(" ") ?? "", /privacy\.department@example\.test/i);
+  assert.equal(outcomes.dpo_contact_point_disclosure?.criticalEvidence.retainedEvidence.formalDpoDesignationConfirmed, false);
+  assert.equal(outcomes.controller_contact_disclosure?.status, "Not confirmed");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes reports unsupported policy language explicitly", () => {
@@ -2023,8 +2054,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained consent and runti
     }
   });
 
-  assert.equal(outcomes.pre_consent_cookies_storage?.status, "Observed");
-  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /observed runtime signal/i);
+  assert.equal(outcomes.pre_consent_cookies_storage?.status, "Review signal");
+  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /aggregate count alone/i);
   assert.equal(outcomes.reject_all_path_availability?.status, "Insufficient evidence");
   assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /complete reject-all control/i);
   assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
@@ -2761,6 +2792,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks direct poor consent choice 
       hybridRuntimeEvidence: {
         firstLayerConsentChoices: {
           acceptControlObserved: true,
+          controlInventoryComplete: true,
           defaultToggleStatesObserved: true,
           nonEssentialDefaultsOff: false,
           rejectControlObserved: false,
@@ -2786,6 +2818,36 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks direct poor consent choice 
     "non_essential_toggles_default_on"
   ]);
   assert.equal(outcomes.cookie_banner_preticked_or_implied_consent, undefined);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps incomplete first-layer control inventory at review", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        firstLayerConsentChoices: {
+          acceptControlObserved: true,
+          controlInventoryComplete: false,
+          defaultToggleStatesObserved: true,
+          nonEssentialDefaultsOff: false,
+          rejectControlObserved: false,
+          visibleChoiceLabels: ["Accept all"]
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: true,
+        gdprEprivacyConsentSurfaceObserved: true,
+        rejectAvailableOnFirstLayer: false
+      }
+    }
+  });
+
+  assert.equal(outcomes.consent_choice_quality?.status, "Review signal");
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /control inventory was incomplete/i);
+  assert.deepEqual(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.directGapCandidates, [
+    "accept_without_same_layer_reject",
+    "non_essential_toggles_default_on"
+  ]);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes demotes footer privacy choices from GDPR consent surface observation", () => {
@@ -2977,7 +3039,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not infer missing reject fro
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained before-consent storage inventory as observed runtime evidence", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps aggregate-only before-consent storage inventory in review", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -2991,11 +3053,9 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained before-consent st
   });
 
   const outcome = outcomes.pre_consent_cookies_storage;
-  assert.equal(outcome?.status, "Observed");
+  assert.equal(outcome?.status, "Review signal");
   assert.deepEqual(outcome?.evidenceRefs, [
-    "Pre-consent cookie/storage observed in initial inventory; exact observation/write time not retained",
-    "Observed before-consent cookie/storage count: 3",
-    "Evidence: hybrid runtime storage summary"
+    "Aggregate before-consent cookie/storage count: 3"
   ]);
   assert.deepEqual(outcome?.criticalEvidence.missingOrIncompleteSourceSignals, []);
   assert.equal(outcome?.criticalEvidence.pipeline.projectionStage, "coverage_policy");
@@ -3003,8 +3063,54 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained before-consent st
     outcome?.criticalEvidence.retainedEvidence.eligibleNonEssentialCookieStorageFindingProjected,
     false
   );
-  assert.equal(outcome?.criticalEvidence.retainedEvidence.observedRuntimeSignalOnly, true);
-  assert.match(outcome?.criticalEvidence.statusBasis ?? "", /observed runtime signal/i);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.rowLevelEssentialityEvidenceRetained, false);
+  assert.match(outcome?.criticalEvidence.statusBasis ?? "", /aggregate count alone/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes excludes essential first-party consent cookies from the pre-consent storage row", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [{
+          beforeConsent: true,
+          category: "necessary",
+          cookieName: "OptanonConsent",
+          domain: "example.test",
+          nonEssential: false,
+          party: "first_party"
+        }],
+        storageSummary: { cookiesBeforeConsentCount: 1, cookiesSeenCount: 1 }
+      }
+    }
+  });
+
+  assert.equal(outcomes.pre_consent_cookies_storage?.status, "Not observed");
+  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /essential or excluded first-party consent\/functional cookies/i);
+  assert.equal(outcomes.pre_consent_cookies_storage?.criticalEvidence.retainedEvidence.eligibleNonEssentialCookieStorageFindingProjected, false);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes retains non-essential analytics cookies in the pre-consent storage row", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [{
+          beforeConsent: true,
+          category: "analytics",
+          cookieName: "_ga",
+          domain: "example.test",
+          nonEssential: true,
+          party: "first_party"
+        }],
+        storageSummary: { cookiesBeforeConsentCount: 1, cookiesSeenCount: 1 }
+      }
+    }
+  });
+
+  assert.equal(outcomes.pre_consent_cookies_storage?.status, "Observed");
+  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /non-essential or 3rd party/i);
+  assert.equal(outcomes.pre_consent_cookies_storage?.criticalEvidence.retainedEvidence.eligibleNonEssentialCookieStorageFindingProjected, true);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats banner-only cookie notice evidence as partial review", () => {
@@ -3482,7 +3588,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat Akamai security or
   assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Insufficient evidence");
   assert.match(
     outcomes.device_identification_fingerprinting_signal_observed?.limitation ?? "",
-    /contextual evidence/i
+    /fingerprinting candidate.*contextual evidence/i
   );
 });
 
@@ -3615,7 +3721,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
     }
   });
 
-  assert.equal(embeddedOutcomes.embedded_content_pre_consent?.status, "Observed");
+  assert.equal(embeddedOutcomes.embedded_content_pre_consent?.status, "Review signal");
+  assert.match(embeddedOutcomes.embedded_content_pre_consent?.limitation ?? "", /potentially concerning runtime behavior/i);
   assert.equal(embeddedOutcomes.third_party_service_connection_pre_consent?.status, "Gap observed");
   assert.equal(embeddedOutcomes.third_party_iframe_pre_consent?.status, "Gap observed");
   assert.deepEqual(
@@ -3650,7 +3757,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
     }
   });
 
-  assert.equal(mixedPurposeEmbeddedOutcomes.embedded_content_pre_consent?.status, "Observed");
+  assert.equal(mixedPurposeEmbeddedOutcomes.embedded_content_pre_consent?.status, "Review signal");
   assert.equal(mixedPurposeEmbeddedOutcomes.third_party_service_connection_pre_consent?.status, "Gap observed");
   assert.deepEqual(
     mixedPurposeEmbeddedOutcomes.third_party_service_connection_pre_consent?.criticalEvidence.retainedEvidence.embeddedContentHosts,
@@ -3731,9 +3838,17 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
     }
   });
 
-  assert.equal(highConfidenceEmbeddedOutcomes.embedded_content_pre_consent?.status, "Observed");
+  assert.equal(highConfidenceEmbeddedOutcomes.embedded_content_pre_consent?.status, "Review signal");
   assert.equal(highConfidenceEmbeddedOutcomes.third_party_service_connection_pre_consent?.status, "Gap observed");
   assert.equal(highConfidenceEmbeddedOutcomes.third_party_iframe_pre_consent?.status, "Gap observed");
+  assert.deepEqual(
+    highConfidenceEmbeddedOutcomes.third_party_service_connection_pre_consent?.criticalEvidence.retainedEvidence.serviceConnectionExamples,
+    [
+      { host: "google.com", requestUrl: "https://www.google.com/maps/embed", firstSeenMs: 210, initiatorType: null },
+      { host: "facebook.com", requestUrl: "https://www.facebook.com/plugins/page.php", firstSeenMs: 230, initiatorType: null },
+      { host: "calendly.com", requestUrl: "https://calendly.com/example/demo", firstSeenMs: 250, initiatorType: null }
+    ]
+  );
   assert.deepEqual(
     highConfidenceEmbeddedOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.embeddedContentPurposeBuckets,
     {
@@ -3792,6 +3907,12 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
               hostname: "fonts.googleapis.com",
               requestUrl: "https://fonts.googleapis.com/css2?family=Inter",
               timestampMs: 430
+            },
+            {
+              hostname: "ajax.googleapis.com",
+              initiatorType: "script",
+              requestUrl: "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js",
+              timestampMs: 440
             }
           ]
         }
@@ -3889,6 +4010,31 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes classifies social and media embed
     }
   });
   assert.equal(postConsentRequestObservationOutcomes.social_media_embed_pre_consent?.status, "Not observed");
+
+  const youtubeLibraryOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        embeddedContentSummary: {
+          coverageRetained: true,
+          embeddedContentObserved: true,
+          observations: [
+            {
+              hostname: "www.youtube.com",
+              initiatorType: "script",
+              preConsent: true,
+              requestUrl: "https://www.youtube.com/s/player/abcd/base.js",
+              thirdParty: true,
+              timestampMs: 700
+            }
+          ]
+        }
+      }
+    }
+  });
+  assert.equal(youtubeLibraryOutcomes.social_media_embed_pre_consent?.status, "Not observed");
+  assert.equal(youtubeLibraryOutcomes.embedded_content_pre_consent?.status, "Not observed");
+  assert.equal(youtubeLibraryOutcomes.third_party_service_connection_pre_consent?.status, "Not observed");
 
   const youtubeOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -4043,6 +4189,20 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes classifies social and media embed
             requestUrl: "https://cdn.gladly.com/chat-sdk/widget.js",
             tsMs: 1170,
             vendor: "Gladly"
+          },
+          {
+            category: "marketing_automation",
+            initiatorType: "script",
+            requestUrl: "https://js-eu1.hubspot.com/web-interactives-embed.js",
+            tsMs: 1180,
+            vendor: "HubSpot Web Interactives"
+          },
+          {
+            category: "customer_support",
+            initiatorType: "xhr",
+            requestUrl: "https://api.hubspot.com/livechat-public/v1/message",
+            tsMs: 1190,
+            vendor: "HubSpot Live Chat"
           }
         ],
         embeddedContentSummary: {
@@ -5844,6 +6004,27 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks transport-security gaps fro
   assert.equal(outcomes.transport_security_http_redirect?.status, "Gap observed");
   assert.equal(outcomes.transport_security_mixed_content?.status, "Gap observed");
   assert.equal(outcomes.transport_security_form_transport?.status, "Gap observed");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not turn TLS probe operations failures into certificate gaps", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      transportSecuritySummary: {
+        evidenceRetained: true,
+        evidenceRefs: ["ref_transport_security"],
+        pageHttpsObserved: true,
+        validTlsCertificate: false,
+        tlsProbeErrorCategory: "timeout",
+        httpRedirectsToHttps: true,
+        mixedContentObserved: false,
+        insecureFormTransportObserved: false,
+      }
+    }
+  });
+
+  assert.equal(outcomes.transport_security_tls_certificate?.status, "Not testable");
+  assert.match(outcomes.transport_security_tls_certificate?.criticalEvidence.statusBasis ?? "", /operational error.*timeout/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks transport-security rows not testable without typed evidence", () => {

@@ -2,6 +2,7 @@ import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure"
 import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
 import { classifyConsentControlLabel } from "@certscore/contracts";
 import type { NormalizedConcern } from "./normalized-concerns";
+import { classifyRuntimeCookieCategory, isFunctionalCookieExcludedFromTrackingEvidence, isNonEssentialCookieCategory } from "./runtime-cookie-evidence";
 
 export type GdprEprivacyCoverageOutcomeStatus =
   | "Gap observed"
@@ -1304,16 +1305,29 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
       trueText: "The scanned page was served over HTTPS in the retained transport observation.",
       value: getBoolean(summary, ["pageHttpsObserved", "page_https_observed"]),
     }),
-    transportOutcomeFromBoolean({
-      falseStatus: "Gap observed",
-      falseText: "The strict TLS probe did not verify a valid certificate for the HTTPS origin.",
-      nullText: "The strict TLS probe was not retained or did not complete.",
-      retainedEvidence,
-      rowId: "transport_security_tls_certificate",
-      trueStatus: "Observed",
-      trueText: "The strict TLS probe verified the HTTPS origin certificate.",
-      value: getBoolean(summary, ["validTlsCertificate", "valid_tls_certificate"]),
-    }),
+    (() => {
+      const validTlsCertificate = getBoolean(summary, ["validTlsCertificate", "valid_tls_certificate"]);
+      const tlsProbeErrorCategory = getString(summary, ["tlsProbeErrorCategory", "tls_probe_error_category"]);
+      if (validTlsCertificate === false && tlsProbeErrorCategory && tlsProbeErrorCategory !== "tls_or_certificate_failure") {
+        return makeOutcome(
+          "transport_security_tls_certificate",
+          "Not testable",
+          `The TLS probe encountered an operational error (${tlsProbeErrorCategory}); this does not establish a certificate defect.`,
+          transportEvidenceRef(summary),
+          { retainedEvidence }
+        );
+      }
+      return transportOutcomeFromBoolean({
+        falseStatus: "Gap observed",
+        falseText: "The strict TLS probe did not verify a valid certificate for the HTTPS origin.",
+        nullText: "The strict TLS probe was not retained or did not complete.",
+        retainedEvidence,
+        rowId: "transport_security_tls_certificate",
+        trueStatus: "Observed",
+        trueText: "The strict TLS probe verified the HTTPS origin certificate.",
+        value: validTlsCertificate,
+      });
+    })(),
     transportOutcomeFromBoolean({
       falseStatus: "Gap observed",
       falseText: "The explicit HTTP-origin probe did not redirect to HTTPS.",
@@ -1637,6 +1651,24 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
 
 function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const storageSummary = getHybridStorageSummary(input.runtimeArtifacts);
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const rawPreconsentRows = [
+    ...getObjectArray(hybridRuntimeEvidence, ["cookieWriteObservations", "cookie_write_observations"]),
+    ...getObjectArray(hybridRuntimeEvidence, ["preconsentCookieEvidence", "preconsent_cookie_evidence"])
+  ].filter(rowHasPreconsentTimingEvidence);
+  const eligiblePreconsentRows = rawPreconsentRows.filter((row) => {
+    const cookieName = getString(row, ["cookieName", "cookie_name", "name"]);
+    const domain = getString(row, ["domain", "cookieDomain", "cookie_domain"]);
+    if (isFunctionalCookieExcludedFromTrackingEvidence(cookieName, domain)) {
+      return false;
+    }
+    const party = getString(row, ["party", "partyContext", "party_context"]);
+    const category = getString(row, ["category", "cookieCategory", "cookie_category", "purpose"]) ??
+      (cookieName ? classifyRuntimeCookieCategory(cookieName, domain) : null);
+    return getBoolean(row, ["nonEssential", "non_essential"]) === true ||
+      isNonEssentialCookieCategory(category) ||
+      ((party === "third_party" || party === "3rd") && category !== "necessary" && category !== "essential");
+  });
   const preconsentTimingEvidence = getPreconsentTimingRetainedEvidence(input.runtimeArtifacts);
   const firstObservedMsRef = formatPreconsentObservedMsRef(
     "First pre-consent cookie/storage observation",
@@ -1652,23 +1684,64 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
     getNumber(storageSummary, ["cookiesSeenCount", "cookies_seen_count"]) ??
     getNumber(input.snapshot, ["cookie_count_total"]);
 
-  if (cookiesBeforeConsentCount !== null && cookiesBeforeConsentCount > 0) {
+  if (eligiblePreconsentRows.length > 0) {
     return makeOutcome(
       "pre_consent_cookies_storage",
       "Observed",
-      "Cookie/storage inventory retained before-consent observations. CertScore.ai reports this as an observed runtime signal; whether the storage is essential or creates a regulatory gap remains review context.",
+      "Non-essential or 3rd party cookie/storage evidence was retained before a recorded consent action. Essential first-party consent-state cookies are excluded from this row.",
       [
         firstObservedMsRef,
-        `Observed before-consent cookie/storage count: ${cookiesBeforeConsentCount}`,
+        `Eligible before-consent cookie/storage count: ${eligiblePreconsentRows.length}`,
         "Evidence: hybrid runtime storage summary"
       ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          cookiesBeforeConsentCount: eligiblePreconsentRows.length,
+          cookiesSeenCount,
+          eligibleNonEssentialCookieStorageFindingProjected: true,
+          eligiblePreconsentCookieStorageRows: compactArray(eligiblePreconsentRows, 8),
+          observedRuntimeSignalOnly: true,
+          ...preconsentTimingEvidence,
+          storageSummaryRetained: Boolean(storageSummary)
+        }
+      }
+    );
+  }
+
+  if (rawPreconsentRows.length > 0 && cookiesBeforeConsentCount !== null && cookiesBeforeConsentCount > 0) {
+    return makeOutcome(
+      "pre_consent_cookies_storage",
+      "Not observed",
+      "Before-consent storage was retained, but the observed rows were limited to essential or excluded first-party consent/functional cookies. No eligible non-essential or 3rd party cookie/storage row was retained.",
+      [
+        `Excluded essential/functional before-consent rows: ${rawPreconsentRows.length}`,
+        "Evidence: hybrid runtime cookie observations"
+      ],
       {
         retainedEvidence: {
           cookiesBeforeConsentCount,
           cookiesSeenCount,
           eligibleNonEssentialCookieStorageFindingProjected: false,
-          observedRuntimeSignalOnly: true,
-          ...preconsentTimingEvidence,
+          excludedEssentialOrFunctionalRows: compactArray(rawPreconsentRows, 8),
+          runtimeCaptureCompleted: hasRuntimeCapture(input),
+          storageSummaryRetained: Boolean(storageSummary)
+        }
+      }
+    );
+  }
+
+  if (cookiesBeforeConsentCount !== null && cookiesBeforeConsentCount > 0) {
+    return makeOutcome(
+      "pre_consent_cookies_storage",
+      "Review signal",
+      "A before-consent storage count was retained without row-level party and essentiality evidence. The aggregate count alone does not establish non-essential or 3rd party storage.",
+      [`Aggregate before-consent cookie/storage count: ${cookiesBeforeConsentCount}`],
+      {
+        retainedEvidence: {
+          cookiesBeforeConsentCount,
+          cookiesSeenCount,
+          eligibleNonEssentialCookieStorageFindingProjected: false,
+          rowLevelEssentialityEvidenceRetained: false,
           storageSummaryRetained: Boolean(storageSummary)
         }
       }
@@ -2414,7 +2487,7 @@ function classifyEmbeddedContentPurpose(hostname: string | null | undefined, url
   if (/imasdk\.googleapis\.com|ima3\.js|googletagservices\.com|gampad|doubleclick\.net|googleads\.g\.doubleclick\.net|brightline\.tv|freewheel|ad[-.]tech|video.*ad|ad.*video/.test(text)) {
     return "videoAdSdk";
   }
-  if (/fonts\.googleapis\.com|fonts\.gstatic\.com|typekit\.net|use\.typekit\.net/.test(text)) {
+  if (/fonts\.googleapis\.com|fonts\.gstatic\.com|typekit\.net|use\.typekit\.net|ajax\.googleapis\.com|unpkg\.com|cdn\.jsdelivr\.net/.test(text)) {
     return "fontStaticResource";
   }
   if (/youtube(?:-nocookie)?\.com|youtu\.be|ytimg\.com|vimeo\.com|spotify\.com|soundcloud\.com/.test(text)) {
@@ -2442,6 +2515,29 @@ function isStaticSocialMediaAssetInitiator(initiatorType: string | null) {
 
 function isStrongSocialMediaEmbedInitiator(initiatorType: string | null) {
   return Boolean(initiatorType && /^(?:iframe|script|embed|object|pixel|beacon|fetch|xhr|xmlhttprequest|subdocument)$/i.test(initiatorType));
+}
+
+function isYouTubeRuntimeHost(host: string | null) {
+  return Boolean(
+    host &&
+      (hostMatchesSocialMediaProvider(host, "youtube.com") ||
+        hostMatchesSocialMediaProvider(host, "youtube-nocookie.com") ||
+        hostMatchesSocialMediaProvider(host, "youtu.be") ||
+        hostMatchesSocialMediaProvider(host, "ytimg.com"))
+  );
+}
+
+function hasYouTubeEmbedOrMediaAnchor(row: Record<string, unknown>) {
+  const host = getRuntimeObservationHost(row);
+  if (!isYouTubeRuntimeHost(host)) {
+    return true;
+  }
+  const url = getRuntimeObservationUrl(row) ?? "";
+  const initiatorType = getRuntimeObservationInitiatorType(row);
+  return (
+    /\/embed(?:\/|[?#]|$)|\/videoplayback(?:[/?#]|$)/i.test(url) ||
+    Boolean(initiatorType && /^(?:iframe|subdocument|media|video|audio|embed|object)$/i.test(initiatorType))
+  );
 }
 
 function getRuntimeObservationUrl(row: Record<string, unknown>) {
@@ -2539,6 +2635,9 @@ function buildSocialMediaEmbedObservation(row: Record<string, unknown>, source: 
   }
   const provider = getSocialMediaProviderName(host);
   if (!provider) {
+    return null;
+  }
+  if (!hasYouTubeEmbedOrMediaAnchor(row)) {
     return null;
   }
   const providerCategory = rowHasSocialMediaPixelPurpose(row)
@@ -2652,6 +2751,19 @@ function getEmbeddedPurposeBucketEntries(buckets: Record<string, unknown> | null
     );
 }
 
+function boundedRuntimeEvidenceUrl(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (!/^https?:$/.test(url.protocol)) return null;
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 function isHighConfidenceThirdPartyServiceBucket(bucket: string) {
   return [
     "formOrChatWidget",
@@ -2675,7 +2787,8 @@ function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
   const eligibleSummaryObservations = summaryObservations.filter((row) => {
     const url = getString(row, ["frameUrl", "frame_url", "requestUrl", "request_url", "url"]);
     const host = getHostnameFromMaybeUrl(getString(row, ["hostname", "host", "domain"]) ?? url);
-    return classifyEmbeddedContentPurpose(host, url) !== "fontStaticResource";
+    return classifyEmbeddedContentPurpose(host, url) !== "fontStaticResource" &&
+      hasYouTubeEmbedOrMediaAnchor(row);
   });
   const preConsentIframeCount =
     getNumber(iframeSummary, ["preConsentIframeCount", "pre_consent_iframe_count"]) ??
@@ -2704,8 +2817,15 @@ function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
   ]);
   const purposeBuckets = getObject(embeddedSummary, ["embeddedContentPurposeBuckets", "embedded_content_purpose_buckets"]) ??
     buildEmbeddedContentPurposeBuckets([...embeddedRows, ...summaryObservations], embeddedHosts);
+  const anchoredYouTubeHosts = new Set(
+    [...embeddedRows, ...summaryObservations]
+      .filter(hasYouTubeEmbedOrMediaAnchor)
+      .map(getRuntimeObservationHost)
+      .filter((host): host is string => Boolean(host))
+  );
   const contentPurposeEntries = getEmbeddedPurposeBucketEntries(purposeBuckets)
-    .filter((entry) => entry.bucket !== "fontStaticResource");
+    .filter((entry) => entry.bucket !== "fontStaticResource")
+    .filter((entry) => !isYouTubeRuntimeHost(entry.host) || anchoredYouTubeHosts.has(entry.host));
   const summaryObserved = embeddedRows.length > 0 ||
     eligibleSummaryObservations.length > 0 ||
     contentPurposeEntries.length > 0;
@@ -2721,7 +2841,8 @@ function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
     if (!host) {
       return false;
     }
-    return isHighConfidenceThirdPartyServiceBucket(classifyEmbeddedContentPurpose(host, url));
+    return isHighConfidenceThirdPartyServiceBucket(classifyEmbeddedContentPurpose(host, url)) &&
+      hasYouTubeEmbedOrMediaAnchor(row);
   });
   return {
     embeddedHosts,
@@ -2929,8 +3050,8 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
   if (embeddedRows.length > 0 || summaryObserved) {
     return makeOutcome(
       "embedded_content_pre_consent",
-      "Observed",
-      "Concrete 3rd party embedded content was retained before consent in iframe/runtime evidence.",
+      "Review signal",
+      "Review signal: concrete 3rd party embedded content was retained before consent in iframe/runtime evidence. This is potentially concerning runtime behavior, not a positive compliance result.",
       [
         `Embedded 3rd party content observations: ${Math.max(embeddedRows.length, eligibleSummaryObservations.length)}`,
         ...embeddedHosts.map((host) => `Embedded host: ${host}`).slice(0, 5),
@@ -3064,6 +3185,15 @@ function deriveThirdPartyServiceConnectionPreConsentOutcome(input: GdprEprivacyC
   const observedCount = evidence.highConfidenceObservations.length;
 
   if (observedCount > 0) {
+    const serviceConnectionExamples = evidence.highConfidenceObservations.slice(0, 8).map((row) => {
+      const requestUrl = getString(row, ["requestUrl", "request_url", "frameUrl", "frame_url", "url"]);
+      return {
+        host: getHostnameFromMaybeUrl(getString(row, ["hostname", "host", "domain"]) ?? requestUrl),
+        requestUrl: boundedRuntimeEvidenceUrl(requestUrl),
+        firstSeenMs: getNumber(row, ["firstSeenMs", "first_seen_ms", "observedAtMs", "observed_at_ms", "timestampMs", "timestamp_ms", "tsMs", "ts_ms"]),
+        initiatorType: getString(row, ["initiatorType", "initiator_type", "resourceType", "resource_type"]),
+      };
+    });
     return makeOutcome(
       "third_party_service_connection_pre_consent",
       "Gap observed",
@@ -3079,7 +3209,8 @@ function deriveThirdPartyServiceConnectionPreConsentOutcome(input: GdprEprivacyC
           embeddedContentObservedMs: compactArray(evidence.observedMs, 6),
           embeddedContentPurposeBuckets: evidence.purposeBuckets,
           firstEmbeddedContentObservedMs: evidence.observedMs[0] ?? null,
-          serviceConnectionObservationCount: observedCount
+          serviceConnectionObservationCount: observedCount,
+          serviceConnectionExamples
         }
       }
     );
@@ -4064,10 +4195,13 @@ function getConsentChoiceQualityEvidence(input: GdprEprivacyCoveragePolicyInput)
     getString(firstLayerChoices, ["selectedEvidenceStrength", "selected_evidence_strength"]) ??
     getString(rejectPath, ["selectedEvidenceStrength", "selected_evidence_strength"]) ??
     getString(lifecycle, ["selectedEvidenceStrength", "selected_evidence_strength"]);
+  const controlInventoryComplete =
+    getBoolean(firstLayerChoices, ["controlInventoryComplete", "control_inventory_complete"]) === true;
 
   return {
     acceptControlObserved,
     acceptRejectProminenceComparison,
+    controlInventoryComplete,
     defaultTogglePurposeLabels: compactArray(defaultTogglePurposeLabels, 8),
     defaultToggleStatesObserved,
     firstLayerCookieConsentBannerObserved,
@@ -4211,6 +4345,21 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
         ? "retained visual evidence suggested accept was materially more prominent than reject"
         : null
     ].filter((value): value is string => Boolean(value));
+    if (!evidence.controlInventoryComplete) {
+      return makeOutcome(
+        "consent_choice_quality",
+        "Review signal",
+        `The retained first-layer controls suggest a consent choice-quality concern, but the control inventory was incomplete and cannot support a dark-pattern gap.${visibleChoicePhrase}`,
+        [...evidenceRefs, "Evidence limitation: complete first-layer control inventory not retained"],
+        {
+          retainedEvidence: {
+            ...retainedEvidence,
+            directGapCandidates: directGapReasons,
+            selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "moderate"
+          }
+        }
+      );
+    }
     return makeOutcome(
       "consent_choice_quality",
       "Gap observed",
@@ -5078,6 +5227,9 @@ const RECIPIENT_DISCLOSURE_VERBS =
 const CONTROLLER_CONTACT_DISCLOSURE_PATTERN =
   /data controller|\bcontroller\b|privacy (?:contact|office|team|questions|rights)|data protection(?: office| officer)?|contact (?:our )?(?:privacy|data protection)|contact (?:google|us).{0,80}(?:privacy|data protection)|privacy@/i;
 
+const DEDICATED_PRIVACY_CONTACT_PATTERN =
+  /(?:privacy (?:questions?|requests?|inquiries|enquiries)|contact (?:our )?(?:privacy|data protection)|privacy (?:office|team|contact)|data protection (?:office|contact|officer)).{0,180}(?:[a-z0-9._%+-]*privacy[a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}|mailto:)|\b[a-z0-9._%+-]*privacy[a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}\b/i;
+
 const PROCESSING_PURPOSES_DISCLOSURE_PATTERN =
   /purpose(?:s)? (?:of|for|we|to)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|provide (?:our )?services|personalize (?:content|ads|advertising|services|experience)|tailored search results|measure (?:performance|advertising)|perform analytics/i;
 
@@ -5104,6 +5256,9 @@ const INTERNATIONAL_TRANSFERS_DISCLOSURE_PATTERN =
 
 const SUPERVISORY_AUTHORITY_DISCLOSURE_PATTERN =
   /supervisory authority|data protection authority|local data protection authorit(?:y|ies)|lodge a complaint|formal written complaints?|resolve any complaints?|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority|regulatory authorities|regulators?|ico|cnil|dpc/i;
+
+const SUPERVISORY_AUTHORITY_COMPLAINT_RIGHT_PATTERN =
+  /right to (?:contact|lodge|make|file|submit|complain to) (?:your )?(?:local )?(?:supervisory|data protection) authority|lodge a complaint|present(?:ing)? a complaint|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority/i;
 
 const AUTOMATED_DECISION_PROFILING_DISCLOSURE_PATTERN =
   /automated decision(?:-making| making)?|solely automated (?:processing|decision)|automated systems?|meaningful information about the logic involved|legal or similarly significant effects|similarly significant effects|\bprofiling\b|personalized ads|personalized advertising|customized search results|tailored search results|tailored|algorithms?|recognize patterns/i;
@@ -6482,6 +6637,25 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
         }
       );
     }
+    if (config.rowId === "privacy_notice_availability" && policySurfaceIsThinOrErrored(summary)) {
+      return makeOutcome(
+        config.rowId,
+        "Observed",
+        "A privacy-notice link or page surface was reachable, but substantive notice content was not available in the retained rendered text. Row-specific transparency disclosures remain unconfirmed.",
+        [
+          "Evidence: privacy notice link/surface retained",
+          "Limitation: substantive policy body not retained",
+          ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
+        ],
+        {
+          retainedEvidence: {
+            policyTextExtractionHealth: extractionHealth,
+            policySurfaceSummary: summary,
+            signalObserved: "surface_only_substantive_content_unavailable"
+          }
+        }
+      );
+    }
     const effectiveTextMatchEvidence = config.rowId === "automated_decision_making_profiling_disclosure"
       ? automatedArticle22TextMatchEvidence
       : rowSpecificSectionEvidence?.evidenceText ?? textMatchEvidence;
@@ -6493,6 +6667,13 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
           status: "observed"
         }
       : null);
+    const displayTextMatchEvidence = config.rowId === "supervisory_authority_complaint_disclosure"
+      ? policyTextMatchEvidence(
+          getString(effectiveArticle13Signal, ["evidenceText", "evidence_text"]) ?? effectiveTextMatchEvidence ?? text,
+          SUPERVISORY_AUTHORITY_COMPLAINT_RIGHT_PATTERN,
+          config.disclosureType
+        ) ?? effectiveTextMatchEvidence
+      : effectiveTextMatchEvidence;
     const supportingContactContext = config.rowId === "supervisory_authority_complaint_disclosure"
       ? (
           getString(effectiveArticle13Signal, ["supportingContactContext", "supporting_contact_context"]) ??
@@ -6550,7 +6731,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
             : config.rowId === "supervisory_authority_complaint_disclosure"
               ? "Evidence: authority/regulator complaint language"
             : `Evidence: ${config.label}`,
-        effectiveTextMatchEvidence ? `Excerpt: ${effectiveTextMatchEvidence}` : null,
+        displayTextMatchEvidence ? `Excerpt: ${displayTextMatchEvidence}` : null,
         supportingContactContext ? `Supporting contact context: ${supportingContactContext}` : null,
         supportingTransferSafeguardsContext ? `Supporting transfer safeguards context: ${supportingTransferSafeguardsContext}` : null,
         ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
@@ -6691,6 +6872,31 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
         }
       }
     );
+  }
+
+  if (config.rowId === "dpo_contact_point_disclosure") {
+    const dedicatedPrivacyContact = policyTextMatchEvidence(text, DEDICATED_PRIVACY_CONTACT_PATTERN, "dpo_contact");
+    if (dedicatedPrivacyContact) {
+      return makeOutcome(
+        config.rowId,
+        "Observed",
+        "A dedicated privacy contact point was retained. This confirms a privacy-contact path but does not by itself establish that the contact is a formally designated DPO.",
+        [
+          "Evidence: dedicated privacy contact point",
+          `Excerpt: ${dedicatedPrivacyContact}`,
+          ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
+        ],
+        {
+          retainedEvidence: {
+            policyTextExtractionHealth: extractionHealth,
+            policySurfaceSummary: summary,
+            privacyContactEvidence: dedicatedPrivacyContact,
+            signalObserved: true,
+            formalDpoDesignationConfirmed: false
+          }
+        }
+      );
+    }
   }
 
   if (policySurfaceIsThinOrErrored(summary)) {
@@ -7915,7 +8121,7 @@ function deriveDeviceFingerprintingSignalOutcome(input: GdprEprivacyCoveragePoli
     return makeOutcome(
       "device_identification_fingerprinting_signal_observed",
       "Insufficient evidence",
-      "Browser API access was retained as contextual evidence, but no transmission, identifier linkage, known fingerprinting library, or device-data-like request corroborated a fingerprinting signal.",
+      "Fingerprinting candidate: browser API access was retained as contextual evidence, but no transmission, identifier linkage, known fingerprinting library, or device-data-like request corroborated a fingerprinting signal.",
       [
         "Context: browser API access retained",
         ...getStringArray(browserDeviceEntropyEvidence, ["browserApiSignals", "browser_api_signals", "highEntropySignals", "high_entropy_signals"])

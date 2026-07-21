@@ -7,22 +7,59 @@ import type { Browser } from "playwright";
 import { classifyPrivacySurface } from "@certscore/contracts";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
+  canonicalWwwPolicyUrlVariant,
   countRecoveredPolicySurfaceObservations,
+  extractPolicySections,
   gdprTransparencyTopicCandidatesFromRetainedPolicySections,
   isFetchablePolicyCandidateForPolicySurface,
   isFetchablePolicyHrefForPolicySurface,
   isFetchablePolicyUrlForPolicySurface,
+  isGdprNoticeSupplementLink,
   mergePolicySurfaceObservations,
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
   policySurfaceObservationsFromRetainedRenderedLinks,
   retainedArticle13SectionEvidenceFromSections,
   resolvePolicyVisibleText,
   shouldUseDirectPolicyDocumentText,
+  stripConsentSurfacePreambleFromPolicyText,
   type PolicyNanoAssistProvider,
   policySurfaceScanner,
   wwwFallbackUrlForPolicyFetch,
 } from "./scanners/policy-surface-scanner.js";
 import { startStaticFixtureServer, type StaticFixturePage } from "./test-fixtures/static-server.js";
+
+test("builds a bounded canonical www retry for apex-host policy notices", () => {
+  assert.equal(canonicalWwwPolicyUrlVariant("https://publisher.example/legal/privacy-policy"), "https://www.publisher.example/legal/privacy-policy");
+  assert.equal(canonicalWwwPolicyUrlVariant("https://www.publisher.example/legal/privacy-policy"), null);
+  assert.equal(canonicalWwwPolicyUrlVariant("http://publisher.example/legal/privacy-policy"), null);
+});
+
+test("removes consent-banner preambles before policy topic extraction", () => {
+  const text = stripConsentSurfacePreambleFromPolicyText(
+    "We value your privacy. We and our partners store and access information on a device using cookies. MORE OPTIONS AGREE Privacy Policy This Privacy Policy explains how we collect, use, retain, and share personal data."
+  );
+  assert.equal(text.startsWith("Privacy Policy This Privacy Policy explains"), true);
+  assert.doesNotMatch(text, /MORE OPTIONS|AGREE/);
+  assert.equal(
+    stripConsentSurfacePreambleFromPolicyText("Our Privacy Policy explains how we process personal data and your rights."),
+    "Our Privacy Policy explains how we process personal data and your rights."
+  );
+});
+
+test("policySurfaceScanner recognizes bounded GDPR notice links from EU/EEA context", () => {
+  assert.equal(
+    isGdprNoticeSupplementLink(
+      "Click here",
+      "https://caltech.example/gdpr-notice",
+      "For European Economic Area residents, additional rights and protections are described; click here for the GDPR notice."
+    ),
+    true,
+  );
+  assert.equal(
+    isGdprNoticeSupplementLink("About us", "https://example.test/about", "Learn more about our team."),
+    false,
+  );
+});
 
 test("substantive direct policy text avoids supplemental policy resolution", async () => {
   const server = await startStaticFixtureServer();
@@ -673,6 +710,51 @@ test("policySurfaceScanner derives diagnostic GDPR Transparency candidates from 
     ),
     true
   );
+});
+
+test("policy section extraction preserves structured table rows for canonical multilingual Article 13 evidence", () => {
+  const sourceUrl = "https://example.test/informativa-privacy-generale";
+  const html = `
+    <main>
+      <h1>Privacy Policy Generale</h1>
+      <table>
+        <tr>
+          <th>Finalità del trattamento</th>
+          <th>Base giuridica</th>
+          <th>Destinatari e responsabili del trattamento</th>
+          <th>Periodo di conservazione</th>
+          <th>Diritti degli interessati</th>
+          <th>Trasferimenti extra UE</th>
+        </tr>
+        <tr>
+          <td>Gestione del rapporto contrattuale e delle richieste degli utenti</td>
+          <td>Articolo 6, paragrafo 1, lettere a, b e f del GDPR</td>
+          <td>Dipendenti, società affiliate, fornitori informatici e responsabili ex articolo 28</td>
+          <td>Due anni, sei mesi o dieci anni secondo la finalità</td>
+          <td>Accesso, rettifica, cancellazione, limitazione, portabilità e opposizione</td>
+          <td>Paesi extra UE con le garanzie degli articoli 44 e seguenti</td>
+        </tr>
+      </table>
+    </main>`;
+  const sections = extractPolicySections({ html, sourceUrl, visibleText: "Privacy Policy Generale" });
+  const tableRow = sections.find((section) => /Base giuridica: Articolo 6/i.test(section.textExcerpt));
+  assert.ok(tableRow);
+  assert.match(tableRow.textExcerpt, /Periodo di conservazione: Due anni/i);
+  assert.match(tableRow.textExcerpt, /Trasferimenti extra UE: Paesi extra UE/i);
+
+  const evidence = gdprTransparencyTopicCandidatesFromRetainedPolicySections(sections);
+  assert.deepEqual(
+    new Set(evidence.map((row) => row.topic)),
+    new Set([
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers"
+    ])
+  );
+  assert.equal(evidence.every((row) => row.status === "diagnostic_only" && row.productionCredit === false), true);
 });
 
 test("policySurfaceScanner derives all canonical GDPR Transparency candidates for the twenty-one expansion locales", () => {
@@ -2582,6 +2664,34 @@ test("retained policy sections prefer controller identity over DPO service marke
   assert.equal(transfers?.signalObserved, "observed");
   assert.match(transfers?.selectedPolicySectionExcerpt ?? "", /Art\. 45 GDPR|Art\. 46 GDPR/i);
   assert.doesNotMatch(transfers?.selectedPolicySectionExcerpt ?? "", /vendor\.example/i);
+});
+
+test("retained policy excerpts directly support controller, purposes, legal basis, retention, and privacy contact rows", () => {
+  const sourceUrl = "https://foundation.example/privacy";
+  const textExcerpt = [
+    "Some service providers act as independent data controllers.",
+    "Foundation Example is the controller for personal data described in this notice and can be contacted at privacy@foundation.example.",
+    "We process account and event information to provide services, secure accounts, and communicate requested updates.",
+    "Our lawful bases are performance of a contract, legitimate interests, legal obligations, and consent where required.",
+    "We retain account records only as long as necessary for these purposes and then delete or anonymize them.",
+    "Questions about privacy may be sent to our Privacy Office at privacy@foundation.example."
+  ].join(" ");
+  const evidence = retainedArticle13SectionEvidenceFromSections([{
+    sourceUrl,
+    heading: "Privacy information",
+    textExcerpt,
+    charStart: 0,
+    charEnd: textExcerpt.length,
+    quality: "strong"
+  }], sourceUrl);
+  const excerpt = (area: string) => evidence.find((row) => row.coverageArea === area)?.selectedPolicySectionExcerpt ?? "";
+
+  assert.match(excerpt("controller_contact"), /Foundation Example is the controller.*privacy@foundation\.example/i);
+  assert.doesNotMatch(excerpt("controller_contact"), /service providers act as independent/i);
+  assert.match(excerpt("processing_purposes"), /process account and event information to provide services/i);
+  assert.match(excerpt("legal_basis"), /lawful bases are performance of a contract.*legitimate interests/i);
+  assert.match(excerpt("data_retention"), /retain account records only as long as necessary.*delete or anonymize/i);
+  assert.match(excerpt("dpo_contact"), /Privacy Office at privacy@foundation\.example/i);
 });
 
 test("policySurfaceScanner extracts late mature-policy GDPR transparency signals without promoting legal basis", async () => {

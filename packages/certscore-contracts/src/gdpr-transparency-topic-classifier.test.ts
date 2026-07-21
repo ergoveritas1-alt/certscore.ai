@@ -152,6 +152,32 @@ test("classifies representative GDPR Transparency snippets across supported loca
   }
 });
 
+test("classifies structured Italian Article 13 table headings and scope language", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["it"],
+    text: [
+      "Finalità del trattamento: gestione del rapporto contrattuale.",
+      "Base giuridica: articolo 6, paragrafo 1, lettera b.",
+      "Destinatari e responsabili del trattamento: fornitori di servizi informatici.",
+      "Periodo di conservazione: due anni.",
+      "Diritti degli interessati: accesso, rettifica, cancellazione, limitazione, portabilità e opposizione.",
+      "Trasferimenti extra UE: garanzie previste dagli articoli 44 e seguenti."
+    ].join(" ")
+  });
+
+  assert.deepEqual(
+    new Set(classification.matches.map((match) => match.topic)),
+    new Set([
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers"
+    ])
+  );
+});
+
 test("classifies French Article 13 wording for retention, recipients, purposes, and legal basis", () => {
   const classification = classifyGdprTransparencyTopics({
     text: [

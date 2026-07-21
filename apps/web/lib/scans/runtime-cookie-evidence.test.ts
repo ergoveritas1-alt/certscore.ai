@@ -17,6 +17,7 @@ test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("analytics_session_id", ".example.com"), "analytics");
   assert.equal(classifyRuntimeCookieCategory("_hjSession_123", ".example.com"), "session_replay");
   assert.equal(classifyRuntimeCookieCategory("__cf_bm", ".example.com"), "necessary");
+  assert.equal(classifyRuntimeCookieCategory("_cfuvid", ".hsforms.com"), "necessary");
   assert.equal(classifyRuntimeCookieCategory("c_code", "nvidia.com"), "geolocation");
   assert.equal(classifyRuntimeCookieCategory("bm_sv", ".nvidia.com"), "necessary");
   assert.equal(classifyRuntimeCookieCategory("bm_mi", "nvidia.com"), "necessary");
@@ -38,6 +39,128 @@ test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("QSI_ReplaySession_Info_ZN_abc", ".qualtrics.com"), "session_replay");
 });
 
+test("canonical security-cookie classification overrides stale advertising flags", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [{
+        beforeConsent: true,
+        category: "advertising",
+        cookieName: "_cfuvid",
+        domain: ".forms.example.test",
+        nonEssential: true,
+        party: "third_party"
+      }]
+    }
+  });
+
+  assert.equal(inventory.rows[0]?.category, "necessary");
+  assert.equal(inventory.rows[0]?.nonEssential, false);
+  assert.equal(getRuntimeCookieReviewPriority(inventory.rows[0]!), "contextual");
+});
+
+test("surfaces Segment anonymous storage as non-essential analytics evidence", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [{
+        beforeConsent: true,
+        category: "unknown",
+        cookieName: "ajs_anonymous_id",
+        domain: ".example.test",
+        nonEssential: true,
+        party: "first_party"
+      }]
+    }
+  });
+
+  assert.equal(inventory.rows[0]?.category, "analytics");
+  assert.equal(inventory.rows[0]?.nonEssential, true);
+  assert.equal(getRuntimeCookiePrimaryProvider(inventory.rows[0]!), "Segment");
+  assert.equal(getRuntimeCookieReviewPriority(inventory.rows[0]!), "medium");
+});
+
+test("attributes canonical Google and OneTrust cookies without borrowed initiators", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        { beforeConsent: true, category: "advertising", cookieName: "_gcl_au", domain: ".example.test", nonEssential: true, party: "first_party", initiatorVendor: "Unrelated CDN" },
+        { beforeConsent: true, category: "consent_management", cookieName: "OptanonConsent", domain: ".example.test", nonEssential: true, party: "first_party", initiatorVendor: "Unrelated CDN" },
+        { beforeConsent: true, category: "necessary", cookieName: "JSESSIONID", domain: ".example.test", nonEssential: true, party: "first_party" }
+      ]
+    }
+  });
+  const byName = new Map(inventory.rows.map((row) => [row.cookieName, row]));
+  assert.equal(getRuntimeCookiePrimaryProvider(byName.get("_gcl_au")!), "Google");
+  assert.equal(getRuntimeCookieReviewPriority(byName.get("_gcl_au")!), "high");
+  assert.equal(getRuntimeCookiePrimaryProvider(byName.get("OptanonConsent")!), "OneTrust");
+  assert.equal(byName.get("OptanonConsent")?.nonEssential, false);
+  assert.equal(byName.get("JSESSIONID")?.nonEssential, false);
+});
+
+test("deduplicates cookie domain formatting and keeps browser snapshots untimed", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          beforeConsent: true,
+          category: "security",
+          cookieName: "cf_clearance",
+          domain: "example.test",
+          firstObservedAtMs: 100,
+          setAtMs: 100,
+          setMethod: "set_cookie_header"
+        },
+        {
+          beforeConsent: true,
+          category: "security",
+          cookieName: "cf_clearance",
+          domain: ".example.test",
+          firstObservedAtMs: 12000,
+          setAtMs: 12000,
+          setMethod: "browser_snapshot"
+        },
+        {
+          beforeConsent: true,
+          category: "analytics",
+          cookieName: "_ga",
+          domain: ".example.test",
+          firstObservedAtMs: 12001,
+          setAtMs: 12001,
+          setMethod: "browser_snapshot"
+        }
+      ]
+    }
+  });
+  assert.equal(inventory.rows.filter((row) => row.cookieName === "cf_clearance").length, 1);
+  const ga = inventory.rows.find((row) => row.cookieName === "_ga");
+  assert.equal(ga?.domain, "example.test");
+  assert.equal(ga?.setAtMs, null);
+  assert.equal(ga?.firstObservedAtMs, 12001);
+  assert.equal(ga?.timingEvidence, "initial_cookie_snapshot");
+});
+
+test("keeps DoubleClick and Google Analytics cookie names as representative storage anchors", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          beforeConsent: true, category: "advertising", cookieName: "test_cookie", domain: "doubleclick.net",
+          firstObservedAtMs: 2013, setAtMs: 2013, setMethod: "set_cookie_header", timingEvidence: "before_consent_cookie_write"
+        },
+        ...["_ga", "_gid", "_gat"].map((cookieName, index) => ({
+          beforeConsent: true, category: "analytics", cookieName, domain: ".example.test",
+          firstObservedAtMs: 12000 + index, setAtMs: 12000 + index, setMethod: "browser_snapshot"
+        }))
+      ]
+    }
+  });
+  const groups = buildRuntimeCookiePriorityGroups(inventory.rows);
+  const advertising = groups.find((row) => row.purpose === "Advertising");
+  const analytics = groups.find((row) => row.purpose === "Analytics");
+  assert.deepEqual(advertising?.cookieNames, ["test_cookie"]);
+  assert.equal(advertising?.firstSeenMs, 2013);
+  assert.deepEqual(analytics?.cookieNames, ["_ga", "_gid", "_gat"]);
+});
+
 test("filters consent security and infrastructure cookies from tracking evidence", () => {
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("OptanonConsent", ".webmd.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("OptanonAlertBoxClosed", ".webmd.com"), true);
@@ -48,6 +171,7 @@ test("filters consent security and infrastructure cookies from tracking evidence
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("euconsent-v2", ".example.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("notice_preferences", ".example.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("__cf_bm", ".example.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("_cfuvid", ".hsforms.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("bm_sv", ".nvidia.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("bm_mi", "nvidia.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("BIGipServerpool", ".example.com"), true);
@@ -277,13 +401,13 @@ test("normalizes retained first-party analytics pre-consent cookie evidence", ()
     }
   });
 
-  const row = inventory.beforeConsentRows.find((entry) => entry.cookieName === "_ga");
+  const row = inventory.rows.find((entry) => entry.cookieName === "_ga");
   assert.ok(row);
   assert.equal(row.category, "analytics");
   assert.equal(row.initiatorVendor, "Google Analytics");
   assert.equal(row.party, "first_party");
-  assert.equal(row.timingEvidence, "before_consent_cookie_write");
-  assert.equal(row.timingBasis, "initial_cookie_snapshot_with_visible_cmp");
+  assert.equal(row.timingEvidence, "initial_cookie_snapshot");
+  assert.equal(row.timingBasis, "initial_cookie_snapshot");
   assert.equal(row.evidenceGrade, "moderate");
 });
 

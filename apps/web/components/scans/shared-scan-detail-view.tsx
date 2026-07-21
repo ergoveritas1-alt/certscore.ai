@@ -1052,6 +1052,15 @@ function firstTimelineMsFromRows(
   );
 }
 
+function firstObservedRuntimeTimelineMsFromRows(rows: Record<string, unknown>[]) {
+  return firstTimelineMsFromRows(rows, (row) => {
+    const hasObservedHostOrRequest = [
+      "host", "hostname", "domain", "scriptHost", "script_host", "requestUrl", "request_url", "url"
+    ].some((key) => typeof row[key] === "string" && (row[key] as string).trim().length > 0);
+    return hasObservedHostOrRequest;
+  });
+}
+
 function getTimelineVendorLabel(row: Record<string, unknown> | null | undefined) {
   if (!row) return null;
   for (const key of ["vendorName", "vendor_name", "vendor", "productName", "product_name", "ownerName", "owner_name", "host", "domain"]) {
@@ -1192,7 +1201,7 @@ export function buildExecutiveTimelineEvents(
     tone: "rose"
   });
   pushEvent({
-    atMs: firstTimelineMsFromRows(fingerprintRows, () => true) ?? -1,
+    atMs: firstObservedRuntimeTimelineMsFromRows(fingerprintRows) ?? -1,
     label: "Fingerprinting",
     tone: "rose"
   });

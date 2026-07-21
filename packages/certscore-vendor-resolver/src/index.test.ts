@@ -53,6 +53,28 @@ test("builds a bounded review queue from repeated unresolved third-party endpoin
   });
 });
 
+test("resolves the Clarity ingestion host as Microsoft Clarity", () => {
+  const observations = resolveVendorObservations([{
+    type: "request",
+    hostname: "i.clarity.ms",
+    url: "https://i.clarity.ms/collect",
+    matchSource: "network_request"
+  }]);
+  assert.equal(observations[0]?.product, "Microsoft Clarity");
+  assert.equal(observations[0]?.purpose, "session_replay");
+});
+
+test("resolves the pagead2 endpoint once as AdSense rather than a duplicate Ads alias", () => {
+  const observations = resolveVendorObservations([
+    request("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", "pagead2.googlesyndication.com")
+  ]);
+  const googleAdvertising = observations.filter((row) => row.vendor === "Google" && row.purpose === "advertising");
+
+  assert.equal(googleAdvertising.length, 1);
+  assert.equal(googleAdvertising[0]?.product, "Google AdSense");
+  assert.ok(googleAdvertising[0]?.matchedHostnames.includes("pagead2.googlesyndication.com"));
+});
+
 test("does not create candidates from known, first-party, host-only, or lookalike observations", () => {
   const queue = buildUnknownVendorCandidateQueue([
     {
@@ -130,7 +152,7 @@ test("resolves the audited evidence-backed promotion batch with bounded paths", 
   assertResolved(observations, "Permutive", "Permutive", "advertising");
   assertResolved(observations, "Font Awesome", "Font Awesome Kits CDN", "infrastructure");
   assertResolved(observations, "Microsoft", "Microsoft Clarity", "session_replay");
-  assertResolved(observations, "YouTube", "YouTube Embedded Player", "infrastructure");
+  assertResolved(observations, "YouTube", "YouTube Player Runtime Library", "infrastructure");
 
   const lookalikes = resolveVendorObservations([
     request("https://cdn.parsely.example/keys/example.com/p.js", "cdn.parsely.example"),
@@ -531,6 +553,15 @@ test("resolves the first evidence-backed candidate promotion wave", () => {
   ] as const) {
     assertResolved(observations, vendor, product, purpose);
   }
+});
+
+test("keeps Cloudflare Web Analytics in analytics display category rather than advertising", () => {
+  assert.equal(resolveVendorDisplayCategory({
+    vendor: "Cloudflare",
+    product: "Cloudflare Web Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "audience_measurement", "third_party_runtime"]
+  }), "Analytics");
 });
 
 test("keeps candidate promotion rules bounded and product-specific", () => {
@@ -1111,6 +1142,26 @@ test("classifies LinkedIn Insight Tag, Ads Pixel, and cookies as advertising", (
   assert.equal(insight.matchedCookieNames.includes("li_sugr"), true);
 });
 
+test("keeps X/Twitter identifier cookies distinct from LinkedIn and ZoomInfo", () => {
+  const observations = resolveVendorObservations([
+    { type: "cookie", cookieName: "personalization_id", hostname: "nvidia.com" },
+    { type: "cookie", cookieName: "guest_id_ads", hostname: "nvidia.com" },
+    { type: "cookie", cookieName: "guest_id", hostname: "nvidia.com" },
+    { type: "cookie", cookieName: "muc_ads", hostname: "nvidia.com" },
+    { type: "cookie", cookieName: "bm_mi", hostname: "nvidia.com" },
+  ]);
+
+  const twitter = observations.find((item) => item.vendor === "X/Twitter");
+  assert.ok(twitter);
+  assert.deepEqual(twitter.matchedCookieNames.sort(), ["guest_id", "guest_id_ads", "muc_ads", "personalization_id"]);
+  assert.equal(observations.some((item) => item.vendor === "LinkedIn" && item.matchedCookieNames.includes("personalization_id")), false);
+  assert.equal(observations.some((item) => item.vendor === "ZoomInfo" && item.matchedCookieNames.includes("guest_id_ads")), false);
+
+  const akamai = observations.find((item) => item.product === "Akamai Bot Manager / Edge");
+  assert.ok(akamai);
+  assert.equal(akamai.matchedCookieNames.includes("bm_mi"), true);
+});
+
 test("classifies LinkedIn and ZoomInfo tracking even when Cloudflare utility cookies are written", () => {
   const observations = resolveVendorObservations([
     request("https://snap.licdn.com/li.lms-analytics/insight.min.js", "snap.licdn.com"),
@@ -1316,6 +1367,7 @@ test("classifies VWO and Claydar marketing analytics endpoints", () => {
 test("classifies HubSpot runtime families without collapsing consent tooling into marketing", () => {
   const observations = resolveVendorObservations([
     request("https://js.hsadspixel.net/fb.js", "js.hsadspixel.net"),
+    request("https://js-eu1.hsadspixel.net/collect", "js-eu1.hsadspixel.net"),
     request("https://js-eu1.hs-scripts.com/123456.js", "js-eu1.hs-scripts.com"),
     request("https://forms-eu1.hscollectedforms.net/collected-forms/v1/config/json", "forms-eu1.hscollectedforms.net"),
     request("https://api-eu1.hubapi.com/collector/v3/events", "api-eu1.hubapi.com"),
@@ -1323,6 +1375,7 @@ test("classifies HubSpot runtime families without collapsing consent tooling int
     request("https://js-eu1.hs-analytics.net/analytics/123456.js", "js-eu1.hs-analytics.net"),
   ]);
 
+  assertResolved(observations, "HubSpot", "HubSpot Ads Pixel Library", "advertising");
   assertResolved(observations, "HubSpot", "HubSpot Ads Pixel", "advertising");
   assertResolved(observations, "HubSpot", "HubSpot Scripts", "analytics");
   assertResolved(observations, "HubSpot", "HubSpot Forms", "analytics");
@@ -1332,18 +1385,35 @@ test("classifies HubSpot runtime families without collapsing consent tooling int
 
   const banner = observations.find((item) => item.product === "HubSpot Banner");
   const scripts = observations.find((item) => item.product === "HubSpot Scripts");
+  const adsPixelLibrary = observations.find((item) => item.product === "HubSpot Ads Pixel Library");
   const adsPixel = observations.find((item) => item.product === "HubSpot Ads Pixel");
 
   assert.ok(banner);
   assert.equal(resolveVendorDisplayCategory(banner), "Cookie compliance");
   assert.ok(scripts);
   assert.equal(resolveVendorDisplayCategory(scripts), "Marketing automation");
+  assert.ok(adsPixelLibrary);
+  assert.equal(resolveVendorDisplayCategory(adsPixelLibrary), "Advertising");
   assert.ok(adsPixel);
   assert.equal(resolveVendorDisplayCategory(adsPixel), "Advertising");
 
   const analytics = observations.find((item) => item.product === "HubSpot Analytics");
   assert.ok(analytics);
   assert.equal(resolveVendorDisplayCategory(analytics), "Analytics");
+});
+
+test("attributes Cloudflare rate-limiting cookies to security without borrowing the protected host", () => {
+  const observations = resolveVendorObservations([{
+    type: "cookie",
+    cookieName: "_cfuvid",
+    hostname: "forms-eu1.hsforms.com",
+  }]);
+
+  const cloudflare = observations.find((item) => item.product === "Cloudflare Bot Management");
+  assert.ok(cloudflare);
+  assert.equal(cloudflare.purpose, "security");
+  assert.deepEqual(cloudflare.matchedHostnames, []);
+  assert.deepEqual(cloudflare.matchedCookieNames, ["_cfuvid"]);
 });
 
 test("classifies PostHog EU assets and first-party PostHog cookies as product analytics", () => {
@@ -1853,7 +1923,7 @@ test("resolves the 1600-scan deterministic residual batch", () => {
 
   for (const [vendor, product, purpose] of [
     ["Cloudflare", "Cloudflare Turnstile", "security"],
-    ["YouTube", "YouTube Embedded Player", "infrastructure"],
+    ["YouTube", "YouTube Player Runtime Library", "infrastructure"],
     ["Yandex", "Yandex Advertising Network", "advertising"],
     ["Blockthrough", "Blockthrough Ad Recovery", "advertising"],
     ["Amazon", "Amazon Publisher Services", "advertising"],

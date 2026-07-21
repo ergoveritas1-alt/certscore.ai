@@ -231,9 +231,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     const hosts = uniqueStrings([
       ...getStringArrayFromEvidenceKeys(evidence, [
         "socialMediaEmbedDomains",
-        "social_media_embed_domains",
-        "embeddedContentHosts",
-        "embedded_content_hosts"
+        "social_media_embed_domains"
       ]),
       ...getNestedRecordStrings(evidence.socialMediaEmbedObservations, ["domain", "host", "hostname"]),
       ...getNestedRecordStrings(evidence.social_media_embed_observations, ["domain", "host", "hostname"])
@@ -599,12 +597,13 @@ function getCanonicalRuntimeEvidenceSummary(input: {
   const entries = getCanonicalRuntimeEvidenceEntries(input.item);
   const matchingEntries = entries.filter((entry) => canonicalEntryMatchesKind(entry, input.rowKind));
   const thirdPartyMatchingEntries = matchingEntries.filter(isThirdPartyCanonicalRuntimeEvidenceEntry);
-  const primaryEntries = (
+  const candidateEntries = (
     input.rowKind === "tracking" && thirdPartyMatchingEntries.length > 0 ? thirdPartyMatchingEntries.sort(compareCanonicalRuntimeEvidenceEntries) :
       input.rowKind === "tracking" ? matchingEntries.sort(compareCanonicalRuntimeEvidenceEntries) :
       matchingEntries.length > 0 ? matchingEntries :
         entries
-  ).slice(0, input.maxEntries ?? 4);
+  );
+  const primaryEntries = candidateEntries.slice(0, input.maxEntries ?? 4);
   if (primaryEntries.length === 0) {
     return null;
   }
@@ -613,8 +612,10 @@ function getCanonicalRuntimeEvidenceSummary(input: {
     ...primaryEntries.map((entry) => entry.firstSeenMs)
   ]);
   const preConsentObserved = primaryEntries.some((entry) => entry.preConsent === true) || getPreConsentQualifier(input.item) !== null;
+  const omittedCount = Math.max(candidateEntries.length - primaryEntries.length, 0);
   return joinRationaleParts([
     `${input.lead}${preConsentObserved ? " before consent" : ""}: ${formatCanonicalRuntimeEvidenceEntries(primaryEntries, { includeTiming: firstSeenMs === null })}`,
+    omittedCount > 0 ? `${omittedCount} additional eligible tracker${omittedCount === 1 ? "" : "s"} retained in expandable evidence` : null,
     formatFirstSeenPhrase(firstSeenMs),
     preConsentObserved ? "no consent action was recorded first" : null
   ]);

@@ -273,7 +273,8 @@ test("policy behavior contradiction contract rejects boilerplate or fallback pol
   for (const snippet of [
     "Privacy Policy",
     "Terms of Use",
-    "Insufficient policy content fetched for semantic review."
+    "Insufficient policy content fetched for semantic review.",
+    "We value your privacy. We and our partners store and access information on a device and process personal data. MORE OPTIONS AGREE"
   ]) {
     const evidence = makePolicyBehaviorContradictionEvidence();
     (evidence.contradictionEvidence.policyAnchor as Record<string, unknown>).snippet = snippet;

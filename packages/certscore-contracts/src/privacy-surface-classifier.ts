@@ -62,8 +62,11 @@ const pl = (terms: PhraseInput[]) => terms.map((term): PrivacySurfacePhrase => (
 
 export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
   ...en([
+    direct("privacy_policy", "general privacy policy", "general_scope"),
+    direct("privacy_policy", "general privacy notice", "general_scope"),
     direct("privacy_policy", "privacy policy"),
     direct("privacy_policy", "privacy notice"),
+    direct("privacy_policy", "gdpr notice"),
     direct("privacy_policy", "privacy statement"),
     equivalent("privacy_policy", "privacy"),
     direct("cookie_policy", "cookie policy"),
@@ -151,6 +154,9 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
     direct("terms", "condiciones de uso"),
   ]),
   ...it([
+    direct("privacy_policy", "privacy policy generale", "general_scope"),
+    direct("privacy_policy", "informativa generale sulla privacy", "general_scope"),
+    direct("privacy_policy", "informativa privacy generale", "general_scope"),
     direct("privacy_policy", "informativa sulla privacy"),
     direct("privacy_policy", "politica sulla privacy"),
     equivalent("privacy_policy", "privacy"),
@@ -383,8 +389,8 @@ function normalizePrivacySurfaceUrl(value: string | null | undefined): string {
   }
 }
 
-function direct(surfaceType: Exclude<PrivacySurfaceType, "unknown">, phrase: string): PhraseInput {
-  return { phrase, strength: "direct", surfaceType };
+function direct(surfaceType: Exclude<PrivacySurfaceType, "unknown">, phrase: string, variant?: string): PhraseInput {
+  return { phrase, strength: "direct", surfaceType, variant };
 }
 
 function equivalent(surfaceType: Exclude<PrivacySurfaceType, "unknown">, phrase: string, variant?: string): PhraseInput {

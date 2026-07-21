@@ -68,6 +68,19 @@ test("buildExecutiveTimelineEvents never labels a generic first-party request as
   assert.equal(withThirdParty.find((event) => event.label === "3P request")?.atMs, 820);
 });
 
+test("buildExecutiveTimelineEvents does not promote untethered fingerprint rows", async () => {
+  const { buildExecutiveTimelineEvents } = await import("./shared-scan-detail-view");
+  const events = buildExecutiveTimelineEvents({
+    hybridRuntimeEvidence: {
+      fingerprintingRuntimeEvidence: [
+        { timestampMs: 21300, fingerprintingSignals: ["canvas"] },
+        { timestampMs: 21400, host: "nvidia.com", fingerprintingSignals: ["webgl"] }
+      ]
+    }
+  });
+  assert.equal(events.find((event) => event.label === "Fingerprinting")?.atMs, 21400);
+});
+
 async function loadBuildScanReportUnifiedFindings() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule = (

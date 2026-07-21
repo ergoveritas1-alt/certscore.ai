@@ -342,6 +342,19 @@ interface PolicyFetchDiagnosticsCollector {
   seenFailureKeys: Set<string>;
 }
 
+export function canonicalWwwPolicyUrlVariant(value: string) {
+  try {
+    const variant = new URL(value);
+    if (variant.protocol !== "https:" || variant.hostname.startsWith("www.") || variant.hostname.split(".").length !== 2) {
+      return null;
+    }
+    variant.hostname = `www.${variant.hostname}`;
+    return variant.toString();
+  } catch {
+    return null;
+  }
+}
+
 interface PolicyBrowserRuntime {
   close(): Promise<void>;
   getBrowser(): Promise<Browser>;
@@ -1279,6 +1292,28 @@ async function processPolicyCandidate({
     result: fetched,
     candidate,
   });
+  if (!fetched.ok) {
+    const canonicalHostVariant = canonicalWwwPolicyUrlVariant(candidate.normalizedUrl);
+    if (canonicalHostVariant) {
+      const variantFetched = await recordPolicyTiming(
+        timingBreakdown,
+        `policy canonical host retry ${candidateIndex + 1}`,
+        `Retry the retained policy candidate through its canonical www host variant.`,
+        () => fetchPolicyDocumentSingleFlight(
+          fetchCaches.direct,
+          canonicalHostVariant!,
+          remainingPolicyFetchMs(input, moduleStartedAtMs),
+          input.signal,
+        ),
+      );
+      recordPolicyFetchDiagnostic(fetchCaches.diagnostics, {
+        stage: "candidate_direct",
+        result: variantFetched,
+        candidate,
+      });
+      if (variantFetched.ok) fetched = variantFetched;
+    }
+  }
   if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch({
     candidate,
     candidateIndex,
@@ -2095,7 +2130,7 @@ async function warmPolicyDocumentFetchCache(input: {
   );
 }
 
-function extractCandidates(baseUrl: string, html: string, visibleText: string): PolicySurfaceCandidate[] {
+function extractCandidates(baseUrl: string, html: string, visibleText: string, allowGdprNoticeSupplement = false): PolicySurfaceCandidate[] {
   const candidates: PolicySurfaceCandidate[] = [];
   const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
   let match: RegExpExecArray | null;
@@ -2115,11 +2150,21 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string): 
     }
     const surroundingTextExcerpt = surroundingText(visibleText, linkText);
     const domLocation = domLocationFor(html, match.index);
-    const deterministic = classifySurface({
+    const deterministicBase = classifySurface({
       linkText: candidateText,
       url: normalizedUrl,
       surroundingText: surroundingTextExcerpt,
     });
+    const deterministic = allowGdprNoticeSupplement && isGdprNoticeSupplementLink(candidateText, normalizedUrl, surroundingTextExcerpt ?? "")
+      ? {
+          ...deterministicBase,
+          surfaceType: "privacy_policy" as const,
+          score: Math.max(deterministicBase.score, 0.78),
+          keywords: [...deterministicBase.keywords, "gdpr_notice_link", "one_hop_privacy_supplement"],
+          matchedConcept: "GDPR notice",
+          classifierReasonCodes: [...deterministicBase.classifierReasonCodes, "gdpr_notice_link", "one_hop_privacy_supplement"],
+        }
+      : deterministicBase;
     if (isExternalUrlOnlyPolicyCandidate(baseUrl, normalizedUrl, candidateText, deterministic.surfaceType)) {
       continue;
     }
@@ -2961,6 +3006,10 @@ function policyCandidateQualityScore(candidate: PolicySurfaceCandidate): number 
   const value = `${candidate.linkText} ${candidate.normalizedUrl}`.toLowerCase();
   let score = 0;
 
+  if (candidate.deterministicClassifierReasonCodes.includes("variant_general_scope")) {
+    score += 6;
+  }
+
   if (/privacy-policy|privacy-notice|cookie-policy|terms-of-service|terms-and-conditions/.test(value)) {
     score += 4;
   }
@@ -3195,12 +3244,19 @@ function highValueSecondaryCandidatesFromPolicyPage(
   visibleText: string,
 ): PolicySurfaceCandidate[] {
   return dedupeCandidates([
-    ...extractCandidates(baseUrl, html, visibleText),
+    ...extractCandidates(baseUrl, html, visibleText, true),
     ...extractControlCandidates(baseUrl, html, visibleText),
   ]).filter((candidate) =>
     isHighValuePolicySupplement(candidate) &&
     isSameOriginPolicyPageSupplement(baseUrl, candidate)
   );
+}
+
+export function isGdprNoticeSupplementLink(linkText: string, normalizedUrl: string, surroundingTextExcerpt: string): boolean {
+  const evidence = `${linkText} ${normalizedUrl} ${surroundingTextExcerpt}`;
+  const explicitNotice = /\b(?:gdpr|eu|eea|european\s+economic\s+area)\b.{0,80}\b(?:privacy|notice|rights|protections?)\b|\b(?:privacy|notice|rights|protections?)\b.{0,80}\b(?:gdpr|eu|eea|european\s+economic\s+area)\b/i.test(evidence);
+  const contextualClickThrough = /\b(?:additional\s+(?:rights|protections?)|eu(?:ropean)?\s+(?:residents?|users?)|international\s+users?)\b.{0,140}\bclick\s+here\b/i.test(evidence);
+  return explicitNotice || contextualClickThrough;
 }
 
 function isSameOriginPolicyPageSupplement(baseUrl: string, candidate: PolicySurfaceCandidate): boolean {
@@ -3726,11 +3782,23 @@ const ARTICLE13_SECTION_PROFILES: Array<{
     partialPattern: /Google LLC|Google Ireland Limited|contact Google|questions about this policy|privacy office|data protection office/i,
   },
   {
+    disclosureType: "processing_purposes",
+    headingPatterns: [/processing purposes?/i, /purposes? of processing/i, /why we (?:collect|use|process)/i],
+    textPatterns: [/purposes?/i, /why we (?:collect|use|process)/i, /we (?:collect|use|process).{0,120}(?:to|for)/i],
+    observedPattern: /purposes? of processing|processing purposes?|why we (?:collect|use|process)|we (?:collect|use|process).{0,120}(?:to|for)/i,
+  },
+  {
     disclosureType: "legal_basis",
     headingPatterns: [/legal basis/i, /lawful basis/i, /European requirements/i],
     textPatterns: [/Article 6/i, /legitimate interests/i, /consent/i, /contract/i, /legal obligation/i, /public task/i, /vital interests/i, /required by law/i],
     observedPattern: /legal basis|lawful basis|Article 6|legitimate interests?|performance of (?:a )?contract|contractual necessity|legal obligation|public task|vital interests/i,
     partialPattern: /required by law|consent/i,
+  },
+  {
+    disclosureType: "recipients_or_vendor_categories",
+    headingPatterns: [/recipients?/i, /service providers?/i, /processors?/i, /sharing/i],
+    textPatterns: [/recipients?/i, /service providers?/i, /processors?/i, /affiliates?/i, /third parties/i],
+    observedPattern: /recipients? of (?:personal )?(?:data|information)|categories of recipients?|service providers?.{0,160}(?:process|receive|access)|processors?.{0,160}(?:personal )?(?:data|information)|share.{0,160}(?:affiliates?|third parties|service providers?)/i,
   },
   {
     disclosureType: "automated_decision_making_or_profiling",
@@ -4730,20 +4798,45 @@ function bestPolicyDocumentText(html: string, fallbackVisibleText: string): stri
     ...extractPolicyBodyCandidateTexts(html),
     htmlToVisibleText(stripPageChromeHtml(html)),
     fallbackVisibleText,
-  ].filter((text) => text.length > 0);
+  ].map(stripConsentSurfacePreambleFromPolicyText).filter((text) => text.length > 0);
   return candidates.reduce((best, candidate) =>
     shouldAdoptPolicyDocumentText(candidate, best) ? candidate : best,
   candidates[0] ?? fallbackVisibleText);
 }
 
-function extractPolicySections(input: {
+export function stripConsentSurfacePreambleFromPolicyText(value: string): string {
+  const text = normalizeWhitespace(value);
+  const heading = /\b(?:privacy policy|privacy notice|data protection notice|data privacy notice)\b/i.exec(text);
+  if (!heading || heading.index < 40 || heading.index > 1_500) {
+    return text;
+  }
+  const prefix = text.slice(0, heading.index);
+  const consentSignals = [
+    /\bconsent(?:ing)?\b/i,
+    /\bcookie(?:s)?\b/i,
+    /\b(?:agree|accept all|reject all|more options|manage preferences|privacy choices)\b/i,
+    /\bpartners?\b.{0,120}\b(?:store|access|process)\b/i,
+    /\bIAB(?:GPP|TCF)?\b/i
+  ].filter((pattern) => pattern.test(prefix)).length;
+  return consentSignals >= 2 ? text.slice(heading.index) : text;
+}
+
+export function extractPolicySections(input: {
   html: string;
   sourceUrl: string;
   visibleText: string;
-}): RetainedPolicySection[] {
+}): PolicySurfaceObservation["retainedPolicySections"] {
   const htmlSections = extractPolicySectionsFromHtml(input.html, input.sourceUrl);
+  const tableSections = extractPolicyTableRowsFromHtml(input.html, input.sourceUrl);
   const fallbackSections = extractPolicySectionsFromVisibleText(input.visibleText, input.sourceUrl);
-  const sections = htmlSections.length >= 3 ? htmlSections : fallbackSections;
+  const baseSections = htmlSections.length >= 3 ? htmlSections : fallbackSections;
+  const sections = [...tableSections, ...baseSections].filter((section, index, all) =>
+    all.findIndex((candidate) =>
+      candidate.sourceUrl === section.sourceUrl &&
+      normalizeWhitespace(candidate.heading) === normalizeWhitespace(section.heading) &&
+      normalizeWhitespace(candidate.textExcerpt) === normalizeWhitespace(section.textExcerpt)
+    ) === index
+  );
   return sections
     .map((section) => ({
       ...section,
@@ -4752,6 +4845,50 @@ function extractPolicySections(input: {
     }))
     .filter((section) => section.textExcerpt.length >= 80)
     .slice(0, 80);
+}
+
+function extractPolicyTableRowsFromHtml(html: string, sourceUrl: string): RetainedPolicySection[] {
+  const cleanHtml = stripPageChromeHtml(html);
+  return Array.from(cleanHtml.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)).flatMap((tableMatch, tableIndex) => {
+    const tableHtml = tableMatch[1] ?? "";
+    const rows = Array.from(tableHtml.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)).map((rowMatch) => {
+      const rowHtml = rowMatch[1] ?? "";
+      const cells = Array.from(rowHtml.matchAll(/<(th|td)\b[^>]*>([\s\S]*?)<\/(?:th|td)>/gi)).map((cellMatch) => ({
+        isHeader: (cellMatch[1] ?? "").toLowerCase() === "th",
+        text: htmlToVisibleText(cellMatch[2] ?? "")
+      })).filter((cell) => cell.text.length > 0);
+      return { cells };
+    }).filter((row) => row.cells.length > 0);
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const firstRow = rows[0];
+    const firstRowLooksLikeHeader = firstRow !== undefined && (
+      firstRow.cells.some((cell) => cell.isHeader) ||
+      firstRow.cells.length > 1 && firstRow.cells.every((cell) => cell.text.length <= 100)
+    );
+    const headers = firstRowLooksLikeHeader ? firstRow?.cells.map((cell) => cell.text) ?? [] : [];
+    const dataRows = firstRowLooksLikeHeader ? rows.slice(1) : rows;
+
+    return dataRows.map((row, rowIndex) => {
+      const mappedCells = row.cells.map((cell, cellIndex) => {
+        const header = headers[cellIndex];
+        return header ? `${header}: ${cell.text}` : cell.text;
+      });
+      const textExcerpt = normalizeWhitespace(mappedCells.join(". "));
+      const firstValue = row.cells[0]?.text ?? `row ${rowIndex + 1}`;
+      const headingPrefix = headers.length > 0 ? headers.join(" | ") : `Table ${tableIndex + 1}`;
+      return {
+        sourceUrl,
+        heading: normalizeWhitespace(`${headingPrefix} — ${firstValue}`).slice(0, 160),
+        textExcerpt,
+        charStart: (tableMatch.index ?? 0),
+        charEnd: (tableMatch.index ?? 0) + tableMatch[0].length,
+        quality: textExcerpt.length >= 120 ? "partial" as const : "limited" as const,
+      };
+    });
+  });
 }
 
 function extractPolicySectionsFromHtml(html: string, sourceUrl: string): RetainedPolicySection[] {
@@ -4879,9 +5016,17 @@ function bestSectionForProfile(
   profile: (typeof ARTICLE13_SECTION_PROFILES)[number],
 ): RetainedPolicySection | undefined {
   let best: { section: RetainedPolicySection; score: number } | undefined;
-  for (const section of sections) {
+  const controllerSpecificSections = profile.disclosureType === "controller_contact"
+    ? sections.filter((section) => !/(?:third parties?|service providers?).{0,100}(?:independent )?(?:data )?controllers?/i.test(section.textExcerpt))
+    : sections;
+  const candidateSections = controllerSpecificSections.length > 0 ? controllerSpecificSections : sections;
+  for (const section of candidateSections) {
     const haystack = `${section.heading}\n${section.textExcerpt}`;
+    const canonicalTopicMatch = canonicalSectionTopicMatch(section, profile.disclosureType);
     let score = 0;
+    if (canonicalTopicMatch) {
+      score += canonicalTopicMatch.matchStrength === "direct" ? 8 : canonicalTopicMatch.matchStrength === "equivalent" ? 7 : 3;
+    }
     for (const pattern of profile.headingPatterns) {
       if (pattern.test(section.heading)) score += 6;
       pattern.lastIndex = 0;
@@ -4933,6 +5078,36 @@ function bestSectionExcerptForProfile(
   profile: (typeof ARTICLE13_SECTION_PROFILES)[number],
 ): string {
   const text = normalizeWhitespace(section.textExcerpt);
+  const preferredPatterns: Partial<Record<Article13DisclosureType, RegExp[]>> = {
+    controller_contact: [/(?:we|our organization|[A-Z][A-Za-z ]{2,80}) (?:is|are) the (?:data )?controller.{0,220}(?:contact|privacy@|data protection)/i],
+    processing_purposes: [/we (?:collect|use|process).{0,220}(?:to|for) /i],
+    legal_basis: [/(?:our )?(?:legal|lawful) bases? (?:are|include).{0,260}(?:contract|legitimate interests?|legal obligations?|consent|public task|vital interests?)/i],
+    data_retention: [/we retain.{0,260}(?:as long as|period|criteria|delete|anonymi[sz]e)/i],
+    dpo_contact: [/(?:privacy office|data protection office|data protection officer|\bdpo\b).{0,180}(?:@|contact|email|write|telephone|phone)/i],
+  };
+  const directPatterns = preferredPatterns[profile.disclosureType] ?? [];
+  for (const pattern of directPatterns) {
+    pattern.lastIndex = 0;
+    const match = pattern.exec(text);
+    pattern.lastIndex = 0;
+    if (!match || match.index === undefined) continue;
+    const matchStart = match.index;
+    const matchEnd = matchStart + match[0].length;
+    const sentenceStartCandidates = [text.lastIndexOf(". ", matchStart), text.lastIndexOf("? ", matchStart), text.lastIndexOf("! ", matchStart)];
+    const sentenceStart = Math.max(...sentenceStartCandidates) + (Math.max(...sentenceStartCandidates) >= 0 ? 2 : 0);
+    const sentenceEndCandidates = [text.indexOf(". ", matchEnd), text.indexOf("? ", matchEnd), text.indexOf("! ", matchEnd)]
+      .filter((index) => index >= matchEnd + 40)
+      .filter((index) => !/\b(?:Art|No|Mr|Ms|Dr)\.$/i.test(text.slice(Math.max(0, index - 8), index + 1)));
+    const sentenceEnd = sentenceEndCandidates.length > 0 ? Math.min(...sentenceEndCandidates) + 1 : Math.min(text.length, matchEnd + 320);
+    const sentenceExcerpt = text.slice(Math.max(0, sentenceStart), Math.min(text.length, sentenceEnd));
+    if (sentenceExcerpt.length >= 20) {
+      return normalizeWhitespace(`${section.heading}. ${sentenceExcerpt}`).slice(0, 1_200);
+    }
+  }
+  const canonicalTopicMatch = canonicalSectionTopicMatch(section, profile.disclosureType);
+  if (canonicalTopicMatch) {
+    return normalizeWhitespace(`${section.heading}. ${canonicalTopicMatch.evidenceExcerpt}`).slice(0, 1_200);
+  }
   const patterns = [
     profile.observedPattern,
     ...(profile.partialPattern ? [profile.partialPattern] : []),
@@ -4948,6 +5123,12 @@ function sectionEvidenceStatus(
   profile: (typeof ARTICLE13_SECTION_PROFILES)[number],
   excerpt: string,
 ): RetainedArticle13SectionEvidence["signalObserved"] {
+  const localizedClassifierMatch = classifyGdprTransparencyTopics({ text: excerpt }).matches.find((match) =>
+    match.topic === profile.disclosureType && match.matchedLocale !== "en"
+  );
+  if (localizedClassifierMatch) {
+    return "not_confirmed";
+  }
   if (profile.observedPattern.test(excerpt) && isArticle13DisclosureEvidenceUsable(excerpt, profile.disclosureType)) {
     profile.observedPattern.lastIndex = 0;
     return "observed";
@@ -4962,6 +5143,26 @@ function sectionEvidenceStatus(
   }
   if (profile.partialPattern) profile.partialPattern.lastIndex = 0;
   return "not_confirmed";
+}
+
+function canonicalSectionTopicMatch(section: RetainedPolicySection, disclosureType: Article13DisclosureType) {
+  if (!isCanonicalSectionCreditTopic(disclosureType)) {
+    return null;
+  }
+  return classifyGdprTransparencyTopics({
+    text: `${section.heading}\n${section.textExcerpt}`
+  }).matches.find((match) => match.topic === disclosureType) ?? null;
+}
+
+function isCanonicalSectionCreditTopic(disclosureType: Article13DisclosureType) {
+  return [
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers"
+  ].includes(disclosureType);
 }
 
 function dataSubjectRightsKeywordCount(value: string): number {
@@ -5090,14 +5291,15 @@ async function renderedPolicySemanticTextCandidates(page: Page): Promise<string[
 }
 
 function bestRenderedPolicyDocumentText(html: string, textCandidates: string[]): string {
-  const bodyText = textCandidates.find((text) => normalizeWhitespace(text).length > 0) ?? "";
+  const sanitizedTextCandidates = textCandidates.map(stripConsentSurfacePreambleFromPolicyText);
+  const bodyText = sanitizedTextCandidates.find((text) => normalizeWhitespace(text).length > 0) ?? "";
   if (!html) {
     return bodyText;
   }
   const candidates = [
-    ...textCandidates,
+    ...sanitizedTextCandidates,
     htmlToVisibleText(stripPageChromeHtml(html)),
-  ].map(normalizeWhitespace).filter((text) => text.length > 0);
+  ].map(stripConsentSurfacePreambleFromPolicyText).map(normalizeWhitespace).filter((text) => text.length > 0);
   if (candidates.length === 0) {
     return html;
   }

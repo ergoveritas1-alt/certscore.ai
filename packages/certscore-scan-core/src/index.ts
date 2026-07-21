@@ -1006,7 +1006,7 @@ export function compactCanonicalEvidenceBundleForRetention(
     networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 140),
     networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 100),
     scriptEvents: retainPriorityEvents(compacted.scriptEvents, referencedEventIds, 80),
-    iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 40),
+    iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 60),
     runtimeTimeline: retainPriorityEvents(compacted.runtimeTimeline, referencedEventIds, 80),
   });
 
@@ -1019,7 +1019,7 @@ export function compactCanonicalEvidenceBundleForRetention(
     networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 80),
     networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 60),
     scriptEvents: retainPriorityEvents(compacted.scriptEvents, referencedEventIds, 40),
-    iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 20),
+    iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 40),
     runtimeTimeline: retainPriorityEvents(compacted.runtimeTimeline, referencedEventIds, 40),
   });
 }
@@ -1199,6 +1199,13 @@ function retentionPriorityScore(
   }
   if (event.eventType === "cookie") {
     score += 90;
+  }
+  if (event.eventType === "iframe") {
+    score += 130;
+  }
+  const eventUrl = "url" in event && typeof event.url === "string" ? event.url : "";
+  if (/(?:user|id|cookie)[_-]?sync|sync(?:\.gif|\/)|setuid|getuid/i.test(eventUrl)) {
+    score += 140;
   }
   if (index < 12 || index >= total - 6) {
     score += 10;

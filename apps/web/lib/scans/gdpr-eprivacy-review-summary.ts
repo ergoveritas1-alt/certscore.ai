@@ -591,8 +591,12 @@ export function deriveGdprEprivacyReviewSummary(
   }
 
   const inScopeRows = items.filter((item) => item.assessmentStatus !== "not_applicable");
+  const extractionLimitedTransparencyRows = inScopeRows.filter((item) =>
+    getString(getRetainedEvidence(item), ["signalObserved", "signal_observed"]) === "not_confirmed_extraction_limited"
+  );
   const usableRows = inScopeRows.filter((item) =>
     item.evidenceState !== "not_testable" && item.assessmentStatus !== "coverage_limitation"
+    && !extractionLimitedTransparencyRows.includes(item)
   ).length;
   const technicalLimitCount = items.filter((item) =>
     getAssessmentDirection(item) === "technical_limitation"
@@ -610,7 +614,7 @@ export function deriveGdprEprivacyReviewSummary(
 
   return {
     bullets,
-    coverageText: `${usableRows} of ${inScopeRows.length} in-scope rows had usable automated evidence.${technicalLimitCount > 0 ? ` ${technicalLimitCount} technical limit${technicalLimitCount === 1 ? "" : "s"} recorded.` : ""}`,
+    coverageText: `${usableRows} of ${inScopeRows.length} in-scope rows had usable automated evidence.${technicalLimitCount > 0 ? ` ${technicalLimitCount} technical limit${technicalLimitCount === 1 ? "" : "s"} recorded.` : ""}${extractionLimitedTransparencyRows.length > 0 ? ` Privacy surfaces were reachable, but substantive policy content was not retained; ${extractionLimitedTransparencyRows.length} transparency row${extractionLimitedTransparencyRows.length === 1 ? " remains" : "s remain"} unconfirmed.` : ""}`,
     evidenceCards,
     limits: SUMMARY_LIMITS_COPY,
     priorityReviewText: formatPriorityReviewText({ gapCount, partialConcernCount, reviewSignalCount }),

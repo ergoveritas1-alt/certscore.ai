@@ -66,6 +66,9 @@ export type TrackerInventoryGroupRow = {
   firstSeenMs: number | null;
   macroCategory: InventoryMacroCategory;
   party: "3rd" | "—" | "mixed";
+  preConsent: boolean;
+  rawProducts: string[];
+  attributionSignatures: string[];
   priority: ConsentReviewPriority;
   purpose: string;
   requestCount: number | null;
@@ -189,6 +192,29 @@ export function buildReportSurfaceVendorProjection(input: ReportVendorSurfacePro
 
 function normalizeInventoryLabel(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function canonicalTrackerGroupLabel(value: string, purpose: string, domains: string[]) {
+  const normalized = value.trim().toLowerCase();
+  if (/^(x\/twitter|twitter pixel|twitter social widgets)$/.test(normalized)) {
+    return "X/Twitter";
+  }
+  if (/clarity/.test(normalized) || (normalized === "microsoft" && /session replay/i.test(purpose)) || domains.some((domain) => /(?:^|\.)clarity\.ms$/i.test(domain))) {
+    return "Microsoft Clarity";
+  }
+  if (/^jsdelivr(?: cdn)?$/.test(normalized)) {
+    return "jsDelivr CDN";
+  }
+  if (/^cloudflare(?: bot management)?$/.test(normalized)) {
+    return "Cloudflare Bot Management";
+  }
+  if (/^(?:google publisher tag|google ads \/ doubleclick|doubleclick|google ads)$/.test(normalized) && /advertising/i.test(purpose)) {
+    return "Google Ads / DoubleClick";
+  }
+  if (/^inmobi(?: choice)?(?: cmp)?$/.test(normalized)) {
+    return "InMobi Choice CMP";
+  }
+  return findRuntimeVendorLabelOwner(value)?.product ?? value;
 }
 
 function getNumberFromRecord(row: Record<string, unknown>, keys: string[]) {
@@ -600,10 +626,10 @@ export function deriveInventoryMacroCategory(input: {
   const purpose = normalizeInventoryPurpose(input.purpose);
   const vendor = (input.vendor ?? "").toLowerCase();
 
-  if (/^(advertising|advertising_measurement|audience_measurement|retargeting|fingerprinting|marketing_automation)$/.test(purpose)) {
+  if (/^(advertising|advertising_measurement|retargeting|fingerprinting|marketing_automation)$/.test(purpose)) {
     return "Advertising";
   }
-  if (/^(analytics|session_replay|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics|a_b_testing|experimentation)$/.test(purpose)) {
+  if (/^(analytics|audience_measurement|session_replay|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics|a_b_testing|experimentation)$/.test(purpose)) {
     return "Analytics";
   }
   if (/^(security|necessary|payment|payment_processors|authentication|cookie_compliance|consent|consent_management)$/.test(purpose)) {
@@ -640,13 +666,13 @@ export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): Conse
   if (isLinkedInAdsPixel) {
     return row.preConsent ? "high" : "review_needed";
   }
-  if (/^(advertising|advertising_measurement|retargeting|audience_measurement|session_replay|fingerprinting)$/.test(purpose)) {
+  if (/^(advertising|advertising_measurement|retargeting|session_replay|fingerprinting)$/.test(purpose)) {
     return row.preConsent ? "high" : "medium";
   }
   if (/^(personalization|personalisation)$/.test(purpose) && confidence === "low") {
     return "review_needed";
   }
-  if (/^(analytics|experimentation|personalization|personalisation|a_b_testing|embedded_content|tag_management|tag_manager|marketing_automation)$/.test(purpose)) {
+  if (/^(analytics|audience_measurement|experimentation|personalization|personalisation|a_b_testing|embedded_content|tag_management|tag_manager|marketing_automation)$/.test(purpose)) {
     return row.preConsent ? "medium" : "contextual";
   }
   if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics)$/.test(purpose)) {
@@ -763,7 +789,8 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
   for (const row of rows) {
     const purpose = getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance);
     const priority = getTrackerConsentReviewPriority(row);
-    const key = `${row.label.toLowerCase()}\u0000${purpose.toLowerCase()}`;
+    const canonicalLabel = canonicalTrackerGroupLabel(row.label, purpose, row.domains);
+    const key = `${canonicalLabel.toLowerCase()}\u0000${purpose.toLowerCase()}`;
     const candidate: TrackerInventoryGroupRow = {
       attributionEvidence: row.attributionEvidence ?? null,
       confidence: getTrackerInventoryConfidence(row),
@@ -776,11 +803,14 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
         vendor: row.label
       }),
       party: formatTrackerParty(row),
+      preConsent: row.preConsent,
+      rawProducts: [row.label],
+      attributionSignatures: row.attributionEvidence?.signatureId ? [row.attributionEvidence.signatureId] : [],
       priority,
       purpose,
       requestCount: row.requestCount,
       syncedIdentifiers: row.syncedIdentifiers,
-      vendor: row.label
+      vendor: canonicalLabel
     };
     const existing = grouped.get(key);
     if (!existing) {
@@ -797,12 +827,43 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
           ? Math.min(existing.firstSeenMs, candidate.firstSeenMs)
           : existing.firstSeenMs ?? candidate.firstSeenMs,
       party: mergePartyValues(existing.party, candidate.party),
+      preConsent: existing.preConsent || candidate.preConsent,
+      rawProducts: uniqueStrings([...existing.rawProducts, ...candidate.rawProducts]),
+      attributionSignatures: uniqueStrings([...existing.attributionSignatures, ...candidate.attributionSignatures]),
       priority: priorityWeight(candidate.priority) > priorityWeight(existing.priority) ? candidate.priority : existing.priority,
       requestCount: Math.max(existing.requestCount ?? 0, candidate.requestCount ?? 0) || existing.requestCount || candidate.requestCount,
       syncedIdentifiers: uniqueStrings([...(existing.syncedIdentifiers ?? []), ...(candidate.syncedIdentifiers ?? [])])
     });
   }
   return [...grouped.values()].sort(compareInventoryPriorityRows);
+}
+
+export function suppressUnsupportedCmpAliasRows(rows: TrackerInventoryRow[]) {
+  const isCmpRow = (row: TrackerInventoryRow) =>
+    /^(?:cmp|consent|consent_management|cookie_compliance)$/i.test(normalizeInventoryPurpose(row.category)) ||
+    /\bcmp\b|choice|consent management|cookie compliance/i.test(row.label);
+  const concreteCmpRows = rows.filter((row) =>
+    isCmpRow(row) &&
+    row.domains.length > 0 &&
+    row.observedVia.some((source) => !/^(?:resolver|vendor resolver)$/i.test(source))
+  );
+  if (concreteCmpRows.length === 0) {
+    return rows;
+  }
+  const concreteCmpLabels = new Set(concreteCmpRows.map((row) =>
+    canonicalTrackerGroupLabel(row.label, getInventoryCategoryLabel(row.label, row.category, row.regulatoryRelevance), row.domains)
+  ));
+  return rows.filter((row) => {
+    if (!isCmpRow(row) || row.domains.length > 0) {
+      return true;
+    }
+    const canonicalLabel = canonicalTrackerGroupLabel(
+      row.label,
+      getInventoryCategoryLabel(row.label, row.category, row.regulatoryRelevance),
+      row.domains
+    );
+    return concreteCmpLabels.has(canonicalLabel);
+  });
 }
 
 export function buildRuntimeInventoryGroupRows(input: {
@@ -834,7 +895,7 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
     hybridRuntimeEvidence,
     runtimeArtifacts
   }).rows;
-  const canonicalTrackerRows = buildTrackerInventoryRows({
+  const canonicalTrackerRows = suppressUnsupportedCmpAliasRows(buildTrackerInventoryRows({
     domains: vendorSurfaceProjection.evidenceInventory.thirdPartyDomains,
     firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
     preConsentVendors: certScoreSummary.preConsentVendorNames,
@@ -843,7 +904,7 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
     trackerVendors: scanRecord.trackerVendors,
     topObservedEntities: vendorSurfaceProjection.evidenceInventory.topObservedEntities,
     unresolvedHosts: vendorSurfaceProjection.evidenceInventory.unresolvedVendorHosts
-  });
+  }));
   const browserExtensionRequestRows = buildBrowserExtensionRequestInventoryRows(hybridRuntimeEvidence);
   const trackerRows = browserExtensionRequestRows.length > 0 ? browserExtensionRequestRows : canonicalTrackerRows;
 

@@ -164,7 +164,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "pre_consent_cookies_storage",
-    label: "Pre-consent 3rd party cookies/storage",
+    label: "Non-essential pre-consent cookies/storage",
     explanation: "Whether non-essential cookies or browser storage were observed before a recorded consent action.",
     findingIds: [
       "adtech_cookie_pre_consent",
@@ -342,8 +342,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "privacy_notice_availability",
-    label: "Privacy notice availability",
-    explanation: "Whether a reachable privacy notice or privacy policy surface was retained for the scanned site.",
+    label: "Privacy notice link/surface discovered",
+    explanation: "Whether a reachable privacy notice or privacy policy link/surface was retained. This row does not by itself confirm that substantive notice content was available.",
     findingIds: ["privacy_policy_present"],
     defaultFindingStatus: "Observed",
     notObservedText: "No reachable privacy notice or privacy policy finding was surfaced in this scan context.",
@@ -1180,7 +1180,7 @@ function synthesizePreconsentThirdPartyCookieOutcome(rows: RuntimeCookieEvidence
         cookieStoragePriority: selectedPriority,
         cookieStoragePriorityLabel: priorityLabel,
         firstPreconsentThirdPartyCookieOrStorageObservedMs: firstSeenMs,
-        preconsentThirdPartyCookieStorageGroups: selectedRows.map((row) => ({
+        preconsentThirdPartyCookieStorageGroups: thirdPartyGroups.slice(0, 24).map((row) => ({
           firstSeenMs: row.firstSeenMs,
           party: row.party,
           priority: row.priority,
@@ -1188,6 +1188,7 @@ function synthesizePreconsentThirdPartyCookieOutcome(rows: RuntimeCookieEvidence
           vendor: row.vendor
         })),
         preconsentThirdPartyCookieStorageGroupCount: thirdPartyGroups.length,
+        selectedPreconsentThirdPartyCookieStorageVendors: vendors,
         preconsentThirdPartyCookieStorageVendors: vendors
       },
       statusBasis:
@@ -1250,7 +1251,7 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
       projectedFindings: [],
       retainedEvidence: {
         firstPreconsentThirdPartyTrackingObservedMs: firstSeenMs,
-        preconsentThirdPartyTrackerGroups: selectedRows.map((row) => ({
+        preconsentThirdPartyTrackerGroups: thirdPartyRows.slice(0, 24).map((row) => ({
           firstSeenMs: row.firstSeenMs,
           party: row.party,
           priority: row.priority,
@@ -1258,6 +1259,7 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
           vendor: row.vendor
         })),
         preconsentThirdPartyTrackerGroupCount: thirdPartyRows.length,
+        selectedPreconsentThirdPartyTrackingVendors: vendors,
         preconsentThirdPartyTrackingVendors: vendors,
         trackerPriority: selectedPriority,
         trackerPriorityLabel: priorityLabel
@@ -2192,7 +2194,7 @@ function specializeChecklistRow(input: {
       evidenceRefs: input.evidenceRefs,
       explanation:
         input.coverageOutcome?.limitation ??
-        "Browser/device entropy, fingerprinting, or identifier-like device collection evidence was retained for review.",
+        "Fingerprinting candidate: browser/device entropy or identifier-like device collection evidence was retained for review; the retained record is not sufficient to confirm fingerprinting.",
       label: input.definition.label,
       status: "Review signal" as const
     };

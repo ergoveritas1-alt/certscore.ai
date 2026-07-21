@@ -29,6 +29,22 @@ test("classifies canonical privacy-policy surfaces across supported locales", ()
   }
 });
 
+test("classifies a dedicated GDPR notice as a privacy-policy surface", () => {
+  const classification = classifyPrivacySurface({ linkText: "GDPR Notice" });
+  assert.equal(classification.surfaceType, "privacy_policy");
+  assert.equal(classification.matchStrength, "direct");
+  assert.equal(classification.matchedTerm, "gdpr notice");
+});
+
+test("marks explicitly general privacy notices with canonical scope provenance", () => {
+  for (const linkText of ["General Privacy Policy", "Privacy Policy Generale", "Informativa generale sulla privacy"]) {
+    const classification = classifyPrivacySurface({ linkText });
+    assert.equal(classification.surfaceType, "privacy_policy", linkText);
+    assert.equal(classification.variant, "general_scope", linkText);
+    assert.equal(classification.reasonCodes.includes("variant_general_scope"), true, linkText);
+  }
+});
+
 test("classifies canonical policy labels and localized paths across all 40 locales", () => {
   assert.equal(PRIVACY_EVIDENCE_LOCALE_REGISTRY.length, 40);
   for (const entry of PRIVACY_EVIDENCE_LOCALE_REGISTRY) {

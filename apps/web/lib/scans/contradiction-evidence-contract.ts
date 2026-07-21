@@ -458,6 +458,12 @@ export function isSpecificPolicyBehaviorPolicySnippet(
   if (/^(?:privacy policy|cookie policy|terms of use|terms and conditions|legal|privacy center)$/i.test(snippet)) {
     return false;
   }
+  if (
+    /\bwe (?:and|&) our partners? (?:store|access|process)\b/i.test(snippet) &&
+    /\b(?:agree|accept all|more options|manage (?:choices|preferences)|consent choices?)\b/i.test(snippet)
+  ) {
+    return false;
+  }
 
   const lower = snippet.toLowerCase();
   const claimTerms =
@@ -967,7 +973,7 @@ export function evaluatePolicyBehaviorContradictionEvidence(
     negativeEvidenceFlags.add("missing_policy_side_evidence");
   }
   if (policyAnchor.snippet && !policySnippetSpecific) {
-    negativeEvidenceFlags.add(/insufficient policy content fetched|^(privacy policy|terms of use)$/i.test(policyAnchor.snippet.trim())
+    negativeEvidenceFlags.add(/insufficient policy content fetched|^(privacy policy|terms of use)$|we (?:and|&) our partners? (?:store|access|process).*(?:more options|agree|accept all)/i.test(policyAnchor.snippet.trim())
       ? "boilerplate_policy_anchor"
       : "weak_policy_anchor");
   }

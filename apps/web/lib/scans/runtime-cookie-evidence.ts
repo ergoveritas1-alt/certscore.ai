@@ -120,7 +120,7 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
 
 export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | null | undefined, domain: string | null = null) {
   const normalized = `${name ?? ""} ${domain ?? ""}`.toLowerCase();
-  return /(^|\b)(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token|geo_country|trp-country|trp-language|__cf_bm|cf_clearance|bigipserver|awsalb|awsalbcors|awsalbtg|akaalb|usp-google|bm_sz|bm_sv|bm_mi|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)|(^|\b)_sp_/.test(
+  return /(^|\b)(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token|geo_country|trp-country|trp-language|__cf_bm|_cfuvid|cf_clearance|bigipserver|awsalb|awsalbcors|awsalbtg|akaalb|usp-google|bm_sz|bm_sv|bm_mi|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)|(^|\b)_sp_/.test(
     normalized
   );
 }
@@ -131,6 +131,12 @@ export function isNonEssentialCookieCategory(category: string | null | undefined
 
 function inferCookieProvider(name: string, domain: string | null = null) {
   const normalized = `${name} ${domain ?? ""}`.toLowerCase();
+  if (/^optanonconsent\b|^optanonalertboxclosed\b/.test(normalized)) {
+    return "OneTrust";
+  }
+  if (/^_gcl_/.test(normalized)) {
+    return "Google";
+  }
   if (/^_ga|^_gid|^_gat|ga_|goog|gtm|doubleclick/.test(normalized)) {
     return "Google";
   }
@@ -377,6 +383,10 @@ function getCookiePartyType(
 }
 
 function isPreconsentCookieWrite(row: Record<string, unknown>, hybrid: Record<string, unknown> | null) {
+  const operation = getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method ?? row.operation);
+  if (/^(?:browser_snapshot|initial_cookie_snapshot)$/i.test(operation ?? "")) {
+    return false;
+  }
   if (row.beforeConsent === true || row.before_consent === true) {
     return true;
   }
@@ -404,12 +414,17 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   if (!cookieName) {
     return null;
   }
-  const domain = getString(row.domain ?? row.cookieDomain ?? row.cookie_domain);
+  const domain = getString(row.domain ?? row.cookieDomain ?? row.cookie_domain)?.replace(/^\.+/, "") ?? null;
   const explicitCategory = getString(row.category ?? row.cookieCategory ?? row.cookie_category);
   const inferredCategory = classifyRuntimeCookieCategory(cookieName, domain);
-  const category = explicitCategory && !/^unknown$/i.test(explicitCategory) ? explicitCategory : inferredCategory;
+  const inferredSecurityOrNecessary = /^(?:security|necessary|functional)$/i.test(inferredCategory);
+  const category = inferredSecurityOrNecessary
+    ? inferredCategory
+    : explicitCategory && !/^unknown$/i.test(explicitCategory) ? explicitCategory : inferredCategory;
+  const setMethod = getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method ?? row.operation);
+  const initialSnapshot = /^(?:browser_snapshot|initial_cookie_snapshot)$/i.test(setMethod ?? "");
   const rawSetAtMs = getNumber(row.setAtMs ?? row.set_at_ms);
-  const setAtMs = rawSetAtMs !== null && rawSetAtMs >= 0 ? rawSetAtMs : null;
+  const setAtMs = !initialSnapshot && rawSetAtMs !== null && rawSetAtMs >= 0 ? rawSetAtMs : null;
   const rawFirstObservedAtMs = getNumber(row.firstObservedAtMs ?? row.first_observed_at_ms);
   const firstObservedAtMs = rawFirstObservedAtMs !== null && rawFirstObservedAtMs >= 0 ? rawFirstObservedAtMs : setAtMs;
   return {
@@ -420,24 +435,32 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     initiatorDomain: getString(row.initiatorDomain ?? row.initiator_domain ?? row.cookieInitiatorDomain ?? row.cookie_initiator_domain),
     initiatorUrl: getString(row.initiatorUrl ?? row.initiator_url ?? row.cookieInitiatorUrl ?? row.cookie_initiator_url),
     initiatorVendor: getString(row.initiatorVendor ?? row.initiator_vendor ?? row.cookieInitiatorVendor ?? row.cookie_initiator_vendor),
-    nonEssential: getBoolean(row.nonEssential ?? row.non_essential) ?? isNonEssentialCookieCategory(category),
+    // Canonical cookie-name/domain classification wins over stale generic flags. In
+    // particular, edge-security cookies must never be promoted as advertising or
+    // other non-essential storage merely because an upstream row said `true`.
+    nonEssential: inferredSecurityOrNecessary
+      ? false
+      : getBoolean(row.nonEssential ?? row.non_essential) ?? isNonEssentialCookieCategory(category),
     party: getCookiePartyType(row, domain, hybrid),
     responseUrl: getString(row.responseUrl ?? row.response_url),
     sourceRequestUrl: getString(row.sourceRequestUrl ?? row.source_request_url ?? row.responseUrl ?? row.response_url ?? row.initiatorUrl ?? row.initiator_url),
     setAtMs,
-    setMethod: getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method),
-    timingBasis: getString(row.timingBasis ?? row.timing_basis ?? row.timingEvidence ?? row.timing_evidence),
+    setMethod,
+    timingBasis: initialSnapshot ? "initial_cookie_snapshot" : getString(row.timingBasis ?? row.timing_basis ?? row.timingEvidence ?? row.timing_evidence),
     evidenceGrade: getString(row.evidenceGrade ?? row.evidence_grade),
-    timingEvidence: isPreconsentCookieWrite(row, hybrid) ? "before_consent_cookie_write" : "unknown"
+    timingEvidence: initialSnapshot
+      ? "initial_cookie_snapshot"
+      : isPreconsentCookieWrite(row, hybrid) ? "before_consent_cookie_write" : "unknown"
   };
 }
 
 function normalizeInitialCookieRow(cookieName: string, domain: string | null): RuntimeCookieEvidenceRow {
-  const category = classifyRuntimeCookieCategory(cookieName, domain);
+  const normalizedDomain = domain?.replace(/^\.+/, "") ?? null;
+  const category = classifyRuntimeCookieCategory(cookieName, normalizedDomain);
   return {
     category,
     cookieName,
-    domain,
+    domain: normalizedDomain,
     firstObservedAtMs: null,
     initiatorDomain: null,
     initiatorUrl: null,

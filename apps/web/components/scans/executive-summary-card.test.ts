@@ -2894,7 +2894,8 @@ test("ExecutiveSummaryCard explains executive and finding cookie count differenc
     })
   );
 
-  assert.match(html, /Cookies pre-consent/);
+  assert.match(html, /Pre-consent storage/);
+  assert.match(html, /not a count of confirmed nonessential trackers/i);
   assert.doesNotMatch(html, /Cookies before consent/);
   assert.doesNotMatch(html, /15 cookies before consent/);
   assert.match(html, /Executive metric includes all retained cookie timing records; this finding shows the subset attributed to tracking\/storage evidence\./);

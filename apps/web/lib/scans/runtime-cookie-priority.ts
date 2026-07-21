@@ -80,7 +80,7 @@ export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
   if (/(optanon|onetrust|cookielaw)/i.test(haystack)) {
     return "OneTrust";
   }
-  if (/(__cf|cf_clearance|cf_chl|cloudflare)/i.test(haystack)) {
+  if (/(__cf|_cfuvid|cf_clearance|cf_chl|cloudflare)/i.test(haystack)) {
     return "Cloudflare";
   }
   if (/(ak_bmsc|bm_sz|bm_sv|bm_mi|_abck|akamai)/i.test(haystack)) {
@@ -130,7 +130,7 @@ export function getRuntimeCookiePurposeLabel(row: RuntimeCookieEvidenceRow) {
   if (/stripe/.test(label)) {
     return "Payment processors";
   }
-  if (/cloudflare bot management|cf_chl|cf_clearance|__cf_bm|cloudflare/.test(label)) {
+  if (/cloudflare bot management|cf_chl|cf_clearance|__cf_bm|_cfuvid|cloudflare/.test(label)) {
     return "Security";
   }
   if (/akamai bot manager|akamai/.test(label)) {
@@ -279,7 +279,7 @@ export function buildRuntimeCookiePriorityGroups(
     const purpose = getRuntimeCookiePurposeLabel(row);
     const domain = sanitizeCookieDomain(row.domain);
     const cookieName = sanitizeCookieName(row.cookieName);
-    const key = `${vendor.toLowerCase()}\u0000${purpose.toLowerCase()}\u0000${domain ?? "no-domain"}\u0000${cookieName ?? "no-cookie"}`;
+    const key = `${vendor.toLowerCase()}\u0000${purpose.toLowerCase()}\u0000${domain ?? "no-domain"}`;
     const candidate: RuntimeCookiePriorityGroupRow = {
       attributionEvidence: attribution.attributionEvidence,
       confidence: getRuntimeCookieInventoryConfidence(row),
