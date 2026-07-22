@@ -3825,7 +3825,7 @@ function getCookieCountMismatchNote(input: {
     return null;
   }
 
-  return "Executive metric includes all retained cookie timing records; this finding shows the subset attributed to tracking/storage evidence.";
+  return "Executive metric includes non-essential cookies explicitly observed in the pre-consent runtime; this finding shows the subset with promotion-grade write timing.";
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

@@ -4,7 +4,9 @@ import {
   buildCookieDisclosureGapEvidence,
   buildRuntimeCookieInventory,
   classifyRuntimeCookieCategory,
+  countEligibleNonEssentialPreconsentStorageMetricRows,
   getRuntimeCookiePrimaryProvider,
+  isEligibleNonEssentialPreconsentStorageMetricRow,
   isEligibleNonEssentialPreconsentStorageRow,
   isFunctionalCookieExcludedFromTrackingEvidence
 } from "./runtime-cookie-evidence";
@@ -166,6 +168,60 @@ test("separates a proven Branch cookie write from late Google and WisePops snaps
   assert.equal(rows.get("_ga")?.timingEvidence, "periodic_cookie_snapshot");
   assert.equal(isEligibleNonEssentialPreconsentStorageRow(rows.get("_s")!), false);
   assert.equal(inventory.beforeConsentRows.length, 1);
+});
+
+test("counts explicitly pre-consent periodic analytics snapshots in descriptive storage metrics without upgrading finding-grade timing", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: ["_ga", "_ga_RQ01XR0F1E"].map((cookieName) => ({
+        beforeConsent: true,
+        category: "analytics",
+        cookieName,
+        domain: "uanl.mx",
+        firstObservedAtMs: 11_575,
+        nonEssential: true,
+        setMethod: "browser_snapshot"
+      }))
+    }
+  });
+
+  assert.equal(inventory.rows.length, 2);
+  assert.equal(countEligibleNonEssentialPreconsentStorageMetricRows(inventory.rows), 2);
+  for (const row of inventory.rows) {
+    assert.equal(row.timingEvidence, "periodic_cookie_snapshot");
+    assert.equal(row.observedBeforeConsent, true);
+    assert.equal(isEligibleNonEssentialPreconsentStorageMetricRow(row), true);
+    assert.equal(isEligibleNonEssentialPreconsentStorageRow(row), false);
+  }
+});
+
+test("does not promote periodic or initial snapshots without explicit pre-consent context into descriptive storage metrics", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          category: "analytics",
+          cookieName: "_ga_periodic_unknown",
+          domain: "example.com",
+          firstObservedAtMs: 12_000,
+          nonEssential: true,
+          setMethod: "browser_snapshot"
+        },
+        {
+          beforeConsent: true,
+          category: "analytics",
+          cookieName: "_ga_initial",
+          domain: "example.com",
+          nonEssential: true,
+          setMethod: "browser_snapshot"
+        }
+      ]
+    }
+  });
+  const rows = new Map(inventory.rows.map((row) => [row.cookieName, row]));
+
+  assert.equal(isEligibleNonEssentialPreconsentStorageMetricRow(rows.get("_ga_periodic_unknown")!), false);
+  assert.equal(isEligibleNonEssentialPreconsentStorageMetricRow(rows.get("_ga_initial")!), false);
 });
 
 test("Aruba cookies use cookie-specific ownership and reject unrelated Cloudflare inheritance", () => {

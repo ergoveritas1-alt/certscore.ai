@@ -289,11 +289,12 @@ test("Pulse cookie findings require concrete cookie evidence and preserve snapsh
   assert.deepEqual(buildCookieEvidenceExamples("third_party_cookie_pre_consent", rows.slice(1)), []);
 });
 
-test("Pulse pre-consent totals exclude periodic and initial cookie snapshots", () => {
+test("Pulse descriptive storage totals include explicit pre-consent observations without weakening promotion-grade timing", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
-  assert.match(source, /row\.timingEvidence === "before_consent_cookie_write"/);
-  assert.doesNotMatch(source, /row\.timingEvidence !== "initial_cookie_snapshot"/);
+  assert.match(source, /eligibleNonEssentialPreConsentStorageCount: input\.reportSurface\.runtimeCookieRows\.filter\(isEligibleNonEssentialPreconsentStorageRow\)\.length/);
+  assert.match(source, /observedNonEssentialPreConsentStorageCount: countEligibleNonEssentialPreconsentStorageMetricRows/);
+  assert.match(source, /cookiesBeforeConsentCount = reportSurface\.runtimeCookieRows\.length > 0\s+\? countEligibleNonEssentialPreconsentStorageMetricRows/);
 });
 
 test("Pulse evidence inventory filters display hostnames and deduplicates vendor rows", () => {

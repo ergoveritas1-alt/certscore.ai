@@ -22,6 +22,14 @@ test("Executive storage metric uses the concise non-essential label", () => {
   assert.match(source, /Essential and unclassified storage are excluded from this metric/);
   assert.match(source, /beforeConsentStorageScope === "nonessential_only"/);
 });
+
+test("report projection keeps descriptive pre-consent storage separate from promotion-grade regulatory counts", () => {
+  const source = readFileSync(new URL("./shared-scan-detail-view.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /eligiblePreConsentStorageRows = cookieInventoryRows\.filter\(isEligibleNonEssentialPreconsentStorageMetricRow\)/);
+  assert.match(source, /promotionGradePreConsentStorageCount = cookieInventoryRows\.filter\(isEligibleNonEssentialPreconsentStorageRow\)\.length/);
+  assert.match(source, /beforeConsentCookieCount: promotionGradePreConsentStorageCount/);
+});
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 
 function makeFinding(

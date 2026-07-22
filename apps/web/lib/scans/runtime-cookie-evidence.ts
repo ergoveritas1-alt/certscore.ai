@@ -13,6 +13,7 @@ export type RuntimeCookieEvidenceRow = {
   initiatorUrl: string | null;
   initiatorVendor: string | null;
   nonEssential: boolean;
+  observedBeforeConsent?: boolean;
   essentiality?: "essential" | "non_essential" | "unknown";
   party: "first_party" | "third_party" | "unknown";
   responseUrl: string | null;
@@ -167,6 +168,24 @@ export function isEligibleNonEssentialPreconsentStorageRow(row: RuntimeCookieEvi
   return row.timingEvidence === "before_consent_cookie_write" &&
     row.nonEssential === true &&
     !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain);
+}
+
+/**
+ * Descriptive report metric: includes non-essential storage explicitly observed
+ * during the pre-consent runtime, even when the retained artifact is a snapshot
+ * rather than promotion-grade write evidence.
+ */
+export function isEligibleNonEssentialPreconsentStorageMetricRow(row: RuntimeCookieEvidenceRow) {
+  const retainedPreConsentObservation =
+    row.timingEvidence === "before_consent_cookie_write" ||
+    (row.timingEvidence === "periodic_cookie_snapshot" && row.observedBeforeConsent === true);
+  return retainedPreConsentObservation &&
+    row.nonEssential === true &&
+    !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain);
+}
+
+export function countEligibleNonEssentialPreconsentStorageMetricRows(rows: RuntimeCookieEvidenceRow[]) {
+  return rows.filter(isEligibleNonEssentialPreconsentStorageMetricRow).length;
 }
 
 function inferCookieProvider(name: string, domain: string | null = null) {
@@ -564,6 +583,10 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     // particular, edge-security cookies must never be promoted as advertising or
     // other non-essential storage merely because an upstream row said `true`.
     nonEssential,
+    observedBeforeConsent:
+      row.beforeConsent === true ||
+      row.before_consent === true ||
+      getString(row.consentStateAtTime ?? row.consent_state_at_time) === "pre_consent",
     essentiality,
     party: getCookiePartyType(row, domain, hybrid),
     responseUrl: getString(row.responseUrl ?? row.response_url),
@@ -592,6 +615,7 @@ function normalizeInitialCookieRow(cookieName: string, domain: string | null): R
     initiatorUrl: null,
     initiatorVendor: null,
     nonEssential: isNonEssentialCookieCategory(category),
+    observedBeforeConsent: false,
     essentiality: isNonEssentialCookieCategory(category)
       ? "non_essential"
       : category === "necessary" ? "essential" : "unknown",

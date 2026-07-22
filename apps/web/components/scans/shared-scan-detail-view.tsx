@@ -130,6 +130,7 @@ import { isGenericBrowserCookieHelpUrl } from "../../lib/scans/policy-surface-ur
 import { deriveHighRiskTrackingContext } from "../../lib/scans/high-risk-tracking-context";
 import {
   buildRuntimeCookieInventory,
+  isEligibleNonEssentialPreconsentStorageMetricRow,
   isEligibleNonEssentialPreconsentStorageRow,
   type RuntimeCookieEvidenceRow
 } from "../../lib/scans/runtime-cookie-evidence";
@@ -6914,7 +6915,8 @@ export async function SharedScanDetailView({
     runtimeArtifacts
   });
   const cookieInventoryRows = runtimeCookieInventory.rows;
-  const eligiblePreConsentStorageRows = cookieInventoryRows.filter(isEligibleNonEssentialPreconsentStorageRow);
+  const eligiblePreConsentStorageRows = cookieInventoryRows.filter(isEligibleNonEssentialPreconsentStorageMetricRow);
+  const promotionGradePreConsentStorageCount = cookieInventoryRows.filter(isEligibleNonEssentialPreconsentStorageRow).length;
   const cookiesBeforeConsentCount = cookieInventoryRows.length > 0
     ? eligiblePreConsentStorageRows.length
     : Math.max(
@@ -7211,7 +7213,7 @@ export async function SharedScanDetailView({
     verifiedPublicSurfacesCount: getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)
   });
   const regulatoryLensCounts = {
-    beforeConsentCookieCount: cookiesBeforeConsentCount,
+    beforeConsentCookieCount: promotionGradePreConsentStorageCount,
     thirdPartyRequestCount: executiveThirdPartyRequestCount
   };
   const regulatoryLensOptions = {
