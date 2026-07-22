@@ -85,3 +85,23 @@ export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V1_MODEL = {
   minimumCoverageRatioForNoFindingPostureScore: 0.9,
   version: "gdpr-eprivacy-shadow.candidate-v1.pending-luna"
 } as const satisfies CanonicalShadowScoreModel;
+
+export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL = {
+  ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V1_MODEL,
+  criticalPostureCaps: [
+    ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V1_MODEL.criticalPostureCaps,
+    {
+      capId: "high-sensitive-data-cap",
+      family: "sensitive_data",
+      maxPostureScore: 49,
+      minimumSeverity: "high"
+    }
+  ],
+  familyMaximumRiskPoints: {
+    consent_tracking: 40,
+    contradiction: 35,
+    rights_gap: 25,
+    sensitive_data: 35
+  },
+  version: "gdpr-eprivacy-shadow.candidate-v2.pending-luna"
+} as const satisfies CanonicalShadowScoreModel;

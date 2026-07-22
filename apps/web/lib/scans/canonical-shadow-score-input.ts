@@ -8,8 +8,8 @@ import type {
 export const GDPR_EPRIVACY_SHADOW_SCORE_ELIGIBLE_FAMILIES = [
   "consent_tracking",
   "contradiction",
-  "policy_extraction",
-  "rights_gap"
+  "rights_gap",
+  "sensitive_data"
 ] as const;
 
 export const GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_REGISTRY = [

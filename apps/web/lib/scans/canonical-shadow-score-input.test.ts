@@ -42,6 +42,8 @@ test("canonical score input accepts only already-surfaced unified findings and t
       packet({ family: "consent_tracking", findingId: "pre_consent_tracking_detected", reportable: true, status: "surface" }),
       packet({ family: "accessibility", findingId: "wcag_contrast", reportable: true, status: "surface" }),
       packet({ family: "contradiction", findingId: "audit_only_contradiction", reportable: true, status: "audit_only" }),
+      packet({ family: "policy_extraction", findingId: "low_confidence_policy_extraction", reportable: true, status: "surface" }),
+      packet({ family: "sensitive_data", findingId: "sensitive_data_collection_with_third_party_tracking_present", reportable: true, status: "surface" }),
       packet({ family: "sensitive_data", findingId: "suppressed_sensitive_context", reportable: false, status: "suppress" })
     ]
   });
@@ -52,11 +54,18 @@ test("canonical score input accepts only already-surfaced unified findings and t
     evidenceState: "observed",
     rowId: "privacy_notice_availability"
   });
-  assert.deepEqual(input.findings, [{
-    family: "consent_tracking",
-    findingId: "pre_consent_tracking_detected",
-    severity: "high"
-  }]);
+  assert.deepEqual(input.findings, [
+    {
+      family: "consent_tracking",
+      findingId: "pre_consent_tracking_detected",
+      severity: "high"
+    },
+    {
+      family: "sensitive_data",
+      findingId: "sensitive_data_collection_with_third_party_tracking_present",
+      severity: "high"
+    }
+  ]);
 });
 
 test("the score coverage registry exactly covers canonical GDPR/ePrivacy checklist definitions", () => {
