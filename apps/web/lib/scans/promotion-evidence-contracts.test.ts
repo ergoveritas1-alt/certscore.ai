@@ -856,7 +856,19 @@ test("consent-gated tracking conflict contract accepts complete policy, runtime 
       conflictBridge: {
         conflictType: "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired",
         reasoning: "The policy claim says only necessary cookies run before choice, but an analytics request fired pre-consent.",
-        supportsPromotion: true
+        supportsPromotion: true,
+        provenance: {
+          bridgeRuleId: "policy_behavior_contradiction:only_necessary_cookies_before_choice:analytics_vendor_fired_pre_consent",
+          generatedBy: "wc01.test_fixture",
+          mappingType: "deterministic_policy_runtime_mapping",
+          mappingVersion: "policy_behavior_conflict_map:v1",
+          policyAnchorRef: "https://example.com/privacy",
+          runtimeAnchorRef: "https://www.google-analytics.com/g/collect?v=2",
+          sourceEvidenceIds: [
+            "https://example.com/privacy",
+            "https://www.google-analytics.com/g/collect?v=2"
+          ]
+        }
       },
       evidenceSufficiency: {
         conflictBridgePresent: true,
@@ -909,7 +921,19 @@ test("consent-gated tracking conflict contract accepts cookie-choice policy anch
       conflictBridge: {
         conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
         reasoning: "Choice-control policy evidence is paired with concrete pre-consent runtime request URLs.",
-        supportsPromotion: true
+        supportsPromotion: true,
+        provenance: {
+          bridgeRuleId: "policy_behavior_contradiction:cookie_preferences_available:marketing_vendor_fired_pre_consent",
+          generatedBy: "wc01.test_fixture",
+          mappingType: "deterministic_policy_runtime_mapping",
+          mappingVersion: "policy_behavior_conflict_map:v1",
+          policyAnchorRef: "https://example.com/cookie-policy",
+          runtimeAnchorRef: "https://js.hs-scripts.com/example.js",
+          sourceEvidenceIds: [
+            "https://example.com/cookie-policy",
+            "https://js.hs-scripts.com/example.js"
+          ]
+        }
       },
       evidenceSufficiency: {
         conflictBridgePresent: true,

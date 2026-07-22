@@ -2364,10 +2364,16 @@ function getSamePageOrFlowReplayLinkage(row: Record<string, unknown>) {
 }
 
 function hasSensitiveReplaySamePageOrFlowLinkage(rawEvidence: Record<string, unknown> | null | undefined) {
-  return getSensitivePayloadRows(rawEvidence).some((row) =>
-    hasConcreteSensitiveSessionReplayArtifact({ sensitivePayloadViolations: [row] }) &&
-    getSamePageOrFlowReplayLinkage(row)
-  );
+  return getSensitivePayloadRows(rawEvidence).some((row) => {
+    if (!hasConcreteSensitiveSessionReplayArtifact({ sensitivePayloadViolations: [row] })) {
+      return false;
+    }
+    return (
+      getSamePageOrFlowReplayLinkage(row) ||
+      row.evidenceSource === "sensitive_field_session_replay_correlation" ||
+      row.evidence_source === "sensitive_field_session_replay_correlation"
+    );
+  });
 }
 
 function payloadExposureObservedInSensitiveRow(row: Record<string, unknown>) {
@@ -2595,10 +2601,27 @@ export function evaluatePolicyBehaviorConflictContract(rawEvidence: Record<strin
       };
     }
 
+    const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
+    const negativeEvidenceFlags = new Set(recomputedDecision.negativeEvidenceFlags);
+    if (contradictionEvidence) {
+      if (!contradictionEvidence.conflictBridge.conflictType || !contradictionEvidence.conflictBridge.supportsPromotion) {
+        negativeEvidenceFlags.add("missing_explicit_contradiction_basis");
+      }
+      if (
+        contradictionEvidence.runtimeAnchor.vendors.length === 0 &&
+        contradictionEvidence.runtimeAnchor.requests.length === 0 &&
+        contradictionEvidence.runtimeAnchor.cookies.length === 0 &&
+        contradictionEvidence.runtimeEvidenceArtifacts.length === 0
+      ) {
+        negativeEvidenceFlags.add("runtime_tracking_review_incomplete");
+      }
+      negativeEvidenceFlags.add("possible_policy_runtime_mismatch");
+    }
+
     return {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",
-      negativeEvidenceFlags: recomputedDecision.negativeEvidenceFlags,
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "internal_only"
     };
   }
@@ -2711,10 +2734,24 @@ export function evaluatePolicyBehaviorConflictContract(rawEvidence: Record<strin
 export function evaluateConsentGatedTrackingConflictContract(rawEvidence: Record<string, unknown> | null | undefined): ContractDecision | null {
   const recomputedDecision = evaluatePolicyBehaviorContradictionEvidence(rawEvidence);
   if (!recomputedDecision.eligible) {
+    const contradictionEvidence = getContradictionEvidenceBundle(rawEvidence);
+    const negativeEvidenceFlags = new Set(recomputedDecision.negativeEvidenceFlags);
+    if (contradictionEvidence) {
+      if (
+        contradictionEvidence.runtimeAnchor.requests.length === 0 &&
+        !hasConcreteSanitizedNetworkEvidence(rawEvidence, { runtimePhase: "pre_consent" })
+      ) {
+        negativeEvidenceFlags.add("missing_runtime_request_url_evidence");
+      }
+      if (contradictionEvidence.runtimeAnchor.vendors.length > 0 && contradictionEvidence.runtimeAnchor.storageArtifacts.length > 0) {
+        negativeEvidenceFlags.delete("missing_behavior_side_evidence");
+        negativeEvidenceFlags.delete("missing_specific_runtime_anchor");
+      }
+    }
     return {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",
-      negativeEvidenceFlags: recomputedDecision.negativeEvidenceFlags,
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "internal_only"
     };
   }

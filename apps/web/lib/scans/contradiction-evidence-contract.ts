@@ -483,7 +483,7 @@ export function isSpecificPolicyBehaviorPolicySnippet(
     case "cookie_preferences_available":
     case "privacy_choice_or_opt_out_disclosure":
     case "only_necessary_cookies_before_choice":
-      return /\b(?:consent|choice|choose|preferences?|control|manage|reject|decline|opt[- ]?in|opt[- ]?out|disable|strictly necessary|essential cookies?)\b/i.test(lower);
+      return /\b(?:consent|choice|choose|settings?|preferences?|control|manage|reject|decline|opt[- ]?in|opt[- ]?out|disable|strictly necessary|essential cookies?)\b/i.test(lower);
     case "targeted_advertising_disclosure":
       return /\b(?:targeted|personalized|interest[- ]?based|cross[- ]context behavioral)\b/i.test(lower) && /\b(?:advertis(?:e|ing)|ads?|marketing|tracking|cookies?)\b/i.test(lower);
     case "third_party_advertising_disclosure":
@@ -493,7 +493,7 @@ export function isSpecificPolicyBehaviorPolicySnippet(
     case "no_marketing_tracking_before_consent":
       return /\b(?:marketing|advertis(?:e|ing)|tracking)\b/i.test(lower) && /\b(?:consent|permission|opt[- ]?in|before|until|without)\b/i.test(lower);
     case "tracking_disabled_after_reject":
-      return /\b(?:reject|decline|refuse|opt[- ]?out)\b/i.test(lower) && /\b(?:disable|stop|block|turn off|necessary cookies?)\b/i.test(lower);
+      return /\b(?:reject|decline|refuse|opt[- ]?out)\b/i.test(lower) && /\b(?:disable(?:d)?|stop|block|turn off|necessary cookies?)\b/i.test(lower);
     case "no_sale_share_without_opt_out_or_consent":
       return /\b(?:do not sell|do not share|sell or share|sale\/share|opt[- ]?out|consent)\b/i.test(lower);
     case "no_third_party_advertising_tracking":
