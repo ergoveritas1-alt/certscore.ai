@@ -19,6 +19,20 @@ This is a calibration hypothesis. It remains internal, read-only, and ineligible
 cutover until the governed public sample is available and Luna approves expected
 bands, weights, caps, and thresholds.
 
+## Deterministic benchmark blocker
+
+The twelve-lane candidate-v2 benchmark has complete structural lane coverage and
+passes deterministic cross-region and Lambda/browser-extension equivalence. It also
+exposes one cutover blocker: a supported high-severity `rights_gap` finding contributes
+the family maximum of 25 points, producing `75 / Clear / Monitor`, and no critical cap
+applies. This is misleadingly strong for the retained input and must not be approved by
+changing only the expected label. Luna must decide a revised family maximum, severity
+penalty, critical cap, or posture threshold and rerun every lane and cohort.
+
+Accessibility, transport/security, and consumer-protection cases are explicitly
+outside the GDPR/ePrivacy candidate. Their presence does not alter this domain score,
+and the benchmark records the cross-domain overall score as withheld.
+
 ## Production coverage-semantics contradiction
 
 Production comparison schema v3 now keeps two explicitly named measurements:
@@ -74,10 +88,13 @@ inclusion before candidate-v2 can advance.
 
 ## Public calibration status
 
-The required central contact ledger export succeeded on 2026-07-21. The canonical
-selector failed closed because zero of the 50 registered public targets were eligible:
+The required central contact ledger export was refreshed successfully on 2026-07-22
+at `07:44:51Z`. The canonical selector again failed closed because zero of the 50
+registered public targets were eligible:
 47 were in cooldown, one was blocked, and two were `do_not_calibrate`. No public
-target was hand-picked and no cooldown was bypassed.
+target was hand-picked and no cooldown was bypassed. The earliest current cooldown
+expiry is 2026-07-24 at `01:51:27Z`; expiry alone does not authorize a run because the
+selector must still return all 10 required targets from a fresh central export.
 
 ## Remaining gates
 
@@ -85,7 +102,8 @@ target was hand-picked and no cooldown was bypassed.
 2. Review the exact recurring limited rows on current owned canaries.
 3. Fix missing current-production evidence mappings before changing the model denominator.
 4. Complete Luna labels for every required expected-band lane.
-5. Repeat retained and passive shadow comparisons under candidate-v2.
-6. Run the ledger-selected public cohort only when at least 10 targets are eligible.
-7. Record Luna corpus, parameter, and final sign-off artifacts in the machine-readable decision packet.
-8. Pass `pnpm score:luna-cutover-gate` before any customer-facing cutover.
+5. Resolve the high-severity rights-gap `Clear` contradiction through a Luna-approved model revision.
+6. Repeat retained and passive shadow comparisons under the revised candidate.
+7. Run the ledger-selected public cohort only when at least 10 targets are eligible.
+8. Record Luna corpus, parameter, and final sign-off artifacts in the machine-readable decision packet.
+9. Pass `pnpm score:luna-cutover-gate` before any customer-facing cutover.

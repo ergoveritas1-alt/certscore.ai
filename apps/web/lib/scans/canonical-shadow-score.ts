@@ -123,6 +123,14 @@ function capMatchesFinding(
   );
 }
 
+function requireCoverageRowWeight(model: CanonicalShadowScoreModel, rowId: string) {
+  const weight = model.coverageRowWeights[rowId];
+  if (weight === undefined) {
+    throw new Error(`Canonical shadow score coverage row is not configured: ${rowId}`);
+  }
+  return weight;
+}
+
 export function auditCanonicalShadowScoreModel(input: {
   model: CanonicalShadowScoreModel;
   scoreEligibleCoverageRowIds: string[];
@@ -226,11 +234,11 @@ export function deriveCanonicalShadowScore(input: {
   const coveredRows = applicableRows.filter((row) => !isCoverageLimited(row));
   const limitedRows = applicableRows.filter(isCoverageLimited);
   const applicableCoverageWeight = applicableRows.reduce(
-    (total, row) => total + (input.model.coverageRowWeights[row.rowId] ?? 0),
+    (total, row) => total + requireCoverageRowWeight(input.model, row.rowId),
     0
   );
   const coveredCoverageWeight = coveredRows.reduce(
-    (total, row) => total + (input.model.coverageRowWeights[row.rowId] ?? 0),
+    (total, row) => total + requireCoverageRowWeight(input.model, row.rowId),
     0
   );
   const coverageRatio = applicableCoverageWeight === 0
@@ -254,12 +262,16 @@ export function deriveCanonicalShadowScore(input: {
     .filter(([family]) => input.model.familyMaximumRiskPoints[family] !== undefined)
     .map(([family, findings]) => {
       const strongest = strongestSeverity(findings);
+      const familyMaximum = input.model.familyMaximumRiskPoints[family];
+      if (familyMaximum === undefined) {
+        throw new Error(`Canonical shadow score family is not configured: ${family}`);
+      }
       return {
         family,
         findingIds: [...new Set(findings.map((finding) => finding.findingId))].sort(),
         riskPoints: Math.min(
           input.model.severityRiskPoints[strongest],
-          input.model.familyMaximumRiskPoints[family] ?? 0
+          familyMaximum
         ),
         strongestSeverity: strongest
       };
@@ -342,7 +354,7 @@ export function deriveCanonicalShadowScore(input: {
         assessmentStatus: row.assessmentStatus,
         evidenceState: row.evidenceState,
         rowId: row.rowId,
-        weight: input.model.coverageRowWeights[row.rowId] ?? 0
+        weight: requireCoverageRowWeight(input.model, row.rowId)
       })),
       notApplicableRowIds: boundedCoverageRows
         .filter((row) => row.assessmentStatus === "not_applicable")

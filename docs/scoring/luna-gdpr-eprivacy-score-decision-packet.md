@@ -21,13 +21,14 @@ authorize legal-compliance claims.
 
 1. **Coverage semantics:** select one customer-facing metric and attach the decision evidence.
 2. **Benchmark corpus:** approve the retained replay, owned canaries, and the canonical selector's governed public sample. The central contact-history export and selector artifacts are mandatory; live selection fails closed when unavailable or ineligible.
-3. **Expected bands:** label all eight required lanes: low signal, strong consent controls, pre-consent tracking/storage, policy gaps, session replay/fingerprinting, sensitive contexts, access-limited/no-go, and source/region equivalence.
+3. **Expected bands:** label all twelve required lanes: low signal, strong consent controls, pre-consent tracking/storage, policy gaps, session replay/fingerprinting, sensitive contexts, accessibility, transport/security, consumer protection, access-limited/no-go, cross-region equivalence, and Lambda/browser-extension source equivalence.
 4. **Model parameters:** approve or revise family boundaries, weights, severity points, family maximums, critical caps, score-withholding thresholds, posture bands, and contradiction thresholds.
 5. **Final sign-off:** identify the approver, timestamp the decision, and attach the final evidence artifact for the exact model version.
 
 ## Acceptance evidence
 
 - Deterministic invariants and exact report-row projection tests pass.
+- The deterministic candidate-v2 benchmark currently blocks approval because a supported high-severity rights gap produces `75 / Clear / Monitor`. Luna must approve a model change that removes this contradiction; changing only an expected label is insufficient.
 - Retained replay has no projection failures or unexplained contradictions.
 - Owned canaries cover the required behavioral lanes.
 - At least 10 public targets are selected by the canonical cooldown-aware selector; no target is hand-picked and no cooldown is bypassed.
@@ -36,6 +37,15 @@ authorize legal-compliance claims.
 - Web report, dashboard, Pulse, exports, and admin agree on kind, version, value, posture, and both named coverage measurements.
 - Public methodology describes observed risk and evidence coverage without implying certification or a legal conclusion.
 - The machine-readable packet passes `pnpm score:luna-cutover-gate`.
+
+Generate the bounded deterministic lane artifact with:
+
+```bash
+node --import tsx apps/web/scripts/run-canonical-shadow-score-benchmark.ts
+```
+
+The artifact always withholds an overall score because accessibility, transport/security,
+and consumer protection do not yet have approved contributions to a cross-domain model.
 
 ## Cutover and rollback
 

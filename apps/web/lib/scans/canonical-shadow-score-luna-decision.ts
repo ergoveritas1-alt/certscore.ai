@@ -1,15 +1,7 @@
 import decisionJson from "./gdpr-eprivacy-shadow-luna-decision.json";
+import { LUNA_EXPECTED_BAND_LANE_IDS } from "./canonical-shadow-score-benchmark-lanes";
 
-export const LUNA_EXPECTED_BAND_LANE_IDS = [
-  "access_limited_no_go",
-  "low_signal",
-  "policy_gaps",
-  "pre_consent_tracking_storage",
-  "sensitive_contexts",
-  "session_replay_fingerprinting",
-  "source_region_equivalence",
-  "strong_consent_controls"
-] as const;
+export { LUNA_EXPECTED_BAND_LANE_IDS } from "./canonical-shadow-score-benchmark-lanes";
 
 export const LUNA_COVERAGE_METRIC_IDS = [
   "model_eligibility_coverage",

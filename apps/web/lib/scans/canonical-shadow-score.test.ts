@@ -197,6 +197,17 @@ test("unconfigured finding families fail closed", () => {
   assert.deepEqual(result.withheldReasons, ["unconfigured_finding_families:new_unreviewed_family"]);
 });
 
+test("unconfigured coverage rows fail closed without a fallback weight", () => {
+  assert.throws(
+    () => deriveCanonicalShadowScore({
+      coverageRows: [{ assessmentStatus: "checked", evidenceState: "observed", rowId: "unknown_row" }],
+      findings: [],
+      model: MODEL
+    }),
+    /coverage row is not configured: unknown_row/
+  );
+});
+
 test("a pending Luna model can generate shadow artifacts but cannot become cutover eligible", () => {
   const result = deriveCanonicalShadowScore({ coverageRows: COVERAGE_ROWS, findings: [], model: MODEL });
 

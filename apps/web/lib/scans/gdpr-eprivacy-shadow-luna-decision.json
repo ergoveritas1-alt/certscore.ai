@@ -36,8 +36,12 @@
     { "laneId": "policy_gaps", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
     { "laneId": "session_replay_fingerprinting", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
     { "laneId": "sensitive_contexts", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
+    { "laneId": "accessibility", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
+    { "laneId": "transport_security", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
+    { "laneId": "consumer_protection", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
     { "laneId": "access_limited_no_go", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "source_region_equivalence", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null }
+    { "laneId": "cross_region_equivalence", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
+    { "laneId": "source_equivalence", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null }
   ],
   "modelParameters": {
     "status": "pending_luna",
