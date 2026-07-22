@@ -81,6 +81,22 @@ verification gate. Deterministic lifecycle and repository tests already cover th
 non-empty forward path; do not manufacture a public consent violation solely to
 exercise it.
 
+## Candidate-v3 production shadow verification
+
+Production revision `1fde59d3d7d2f048c296b96f6f2ea367d2412262` deployed the
+disabled-by-default selector, immutable shadow assessment lifecycle, comparison
+monitoring table, and rollback path. The web migration and ECS rollout completed
+successfully. The production task does not set
+`CERTSCORE_GDPR_EPRIVACY_SCORE_MODE`, so runtime selection resolves to legacy.
+
+Replaying the completed lifecycle for owned canary
+`52d2ca2e-5913-428a-8f5d-f162c68eca0d` retained its immutable legacy assessment
+(94, coverage 1.0), persisted the candidate-v3 shadow assessment (100, model
+eligibility coverage 0.92308), and persisted a comparison row with delta +6 and no
+unresolved contradictions or withholding reasons. No `gdpr_eprivacy_posture`
+assessment exists for the scan, which proves the pending Luna decision fails closed
+in production. These observations verify deployment mechanics, not model approval.
+
 ## Coverage-denominator finding
 
 The retained 11-scan cohort exposed four rows that are frequently or structurally
