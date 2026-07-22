@@ -33,6 +33,8 @@ test("completed Lambda and browser scans persist the immutable legacy assessment
   assert.match(lifecycle, /buildCanonicalGdprEprivacyShadowProjection/);
   assert.match(lifecycle, /buildLegacyGdprEprivacyVersionedAssessmentInput/);
   assert.match(lifecycle, /persistVersionedScoreAssessment/);
+  assert.match(lifecycle, /historical_scan_not_backfilled/);
+  assert.match(lifecycle, /score_time_missing_or_invalid/);
   assert.match(lambdaPoller, /persistCompletedLegacyGdprEprivacyAssessment/);
   assert.match(browserRepository, /persistCompletedLegacyGdprEprivacyAssessment/);
   assert.match(statusRoute, /projection\.status !== "completed" \|\| !projection\.reportReady/);

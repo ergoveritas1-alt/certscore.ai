@@ -11,12 +11,22 @@ import {
   hasVersionedScoreAssessment,
   persistVersionedScoreAssessment
 } from "./score-assessment-repository";
+import { classifyVersionedScoreLifecycleTime } from "./score-assessment-lifecycle-policy";
 
 export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
   organizationId: string | null;
   scanId: string;
   scoredAt?: string | null;
 }) {
+  if (input.scoredAt) {
+    const disposition = classifyVersionedScoreLifecycleTime(input.scoredAt);
+    if (disposition === "historical") {
+      return { inserted: false, reason: "historical_scan_not_backfilled" as const };
+    }
+    if (disposition === "missing_or_invalid") {
+      return { inserted: false, reason: "score_time_missing_or_invalid" as const };
+    }
+  }
   if (await hasVersionedScoreAssessment({
     scanId: input.scanId,
     scoreKind: "gdpr_eprivacy_evidence",
@@ -31,9 +41,20 @@ export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
     return { inserted: false, reason: "scan_not_completed_or_missing" as const };
   }
 
+  const scoredAt = input.scoredAt ?? rawRecord.scan.completedAt;
+  if (!scoredAt) {
+    return { inserted: false, reason: "score_time_missing_or_invalid" as const };
+  }
+  const disposition = classifyVersionedScoreLifecycleTime(scoredAt);
+  if (disposition === "historical") {
+    return { inserted: false, reason: "historical_scan_not_backfilled" as const };
+  }
+  if (disposition === "missing_or_invalid") {
+    return { inserted: false, reason: "score_time_missing_or_invalid" as const };
+  }
+
   const scanRecord = await materializeLocalV2DagScanDetail(rawRecord);
   const projection = buildCanonicalGdprEprivacyShadowProjection(scanRecord);
-  const scoredAt = input.scoredAt ?? scanRecord.scan.completedAt ?? new Date().toISOString();
   const persisted = await persistVersionedScoreAssessment(buildLegacyGdprEprivacyVersionedAssessmentInput({
     assessment: projection.legacyScoreAssessment,
     checklistRows: projection.checklistRows,
