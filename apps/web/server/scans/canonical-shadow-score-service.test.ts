@@ -13,4 +13,5 @@ test("production, passive cohort, and retained replay use the exact customer-rep
   assert.match(service, exactReportCoveragePipeline);
   assert.match(cohortRunner, exactReportCoveragePipeline);
   assert.match(retainedRunner, exactReportCoveragePipeline);
+  assert.match(retainedRunner, /GDPR_EPRIVACY_SHADOW_MODEL_PROPOSALS/);
 });

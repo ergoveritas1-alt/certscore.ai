@@ -29,6 +29,13 @@ applies. This is misleadingly strong for the retained input and must not be appr
 changing only the expected label. Luna must decide a revised family maximum, severity
 penalty, critical cap, or posture threshold and rerun every lane and cohort.
 
+Three pending-Luna alternatives are now machine-checkable: rights-family maximum 30
+(`70 / Watch`), high-rights cap 54 (`54 / Watch`), and high-rights cap 49
+(`49 / Action Needed`). The review packet recommends the family-maximum change as the
+next calibration hypothesis because it preserves the shared high-severity value. The
+retained 11-scan corpus contains no surfaced rights-gap family input, so all three
+produce the same retained summary and the corpus cannot select between them.
+
 Accessibility, transport/security, and consumer-protection cases are explicitly
 outside the GDPR/ePrivacy candidate. Their presence does not alter this domain score,
 and the benchmark records the cross-domain overall score as withheld.

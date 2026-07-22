@@ -12,6 +12,7 @@ import { runCanonicalShadowScore } from "../apps/web/lib/scans/canonical-shadow-
 import type { CanonicalShadowScoreModel } from "../apps/web/lib/scans/canonical-shadow-score";
 import { deriveGdprEprivacyUsableCoverageSummary } from "../apps/web/lib/scans/gdpr-eprivacy-review-summary";
 import { getReportableGdprEprivacyCoverageItems } from "../apps/web/lib/scans/gdpr-eprivacy-reportable-rows";
+import { GDPR_EPRIVACY_SHADOW_MODEL_PROPOSALS } from "../apps/web/lib/scans/canonical-shadow-score-model-proposals";
 
 type JsonObject = Record<string, unknown>;
 
@@ -123,10 +124,17 @@ function scanRecord(bundle: JsonObject, outDir: string, index: number): JsonObje
 async function main() {
   const inputPath = path.resolve(argumentValue("--input") ?? "artifacts/v2-scan-quality-calibration/consent-retention-06d7e04f-20260718/passive");
   const modelPath = path.resolve(argumentValue("--model") ?? "docs/scoring/gdpr-eprivacy-shadow-candidate-v2.json");
+  const modelProposalId = argumentValue("--model-proposal");
   const outputPath = path.resolve(argumentValue("--out") ?? "artifacts/scoring/gdpr-eprivacy-shadow-retained-candidate-v2.json");
   const requestedLimit = Number(argumentValue("--limit") ?? "100");
   const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(100, Math.floor(requestedLimit))) : 100;
-  const model = JSON.parse(await readFile(modelPath, "utf8")) as CanonicalShadowScoreModel;
+  const modelProposal = modelProposalId
+    ? GDPR_EPRIVACY_SHADOW_MODEL_PROPOSALS.find((entry) => entry.proposalId === modelProposalId)
+    : null;
+  if (modelProposalId && !modelProposal) {
+    throw new Error(`Unknown canonical shadow score model proposal: ${modelProposalId}`);
+  }
+  const model = modelProposal?.model ?? JSON.parse(await readFile(modelPath, "utf8")) as CanonicalShadowScoreModel;
   const bundlePaths = (await walk(inputPath)).slice(0, limit);
   if (bundlePaths.length === 0) throw new Error(`No retained evidence bundles found under ${inputPath}.`);
 

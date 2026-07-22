@@ -2,6 +2,7 @@ import {
   deriveCanonicalShadowScore,
   type CanonicalShadowCoverageRow,
   type CanonicalShadowScoreFinding,
+  type CanonicalShadowScoreModel,
   type CanonicalShadowScoreResult
 } from "./canonical-shadow-score";
 import {
@@ -192,7 +193,10 @@ function resultSignature(result: CanonicalShadowScoreResult) {
   });
 }
 
-export function buildCanonicalShadowScoreBenchmarkArtifact(generatedAt: string) {
+export function buildCanonicalShadowScoreBenchmarkArtifact(
+  generatedAt: string,
+  model: CanonicalShadowScoreModel = GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL
+) {
   const boundedCases = GDPR_EPRIVACY_SHADOW_BENCHMARK_CASES.slice(0, CANONICAL_SHADOW_MAX_BENCHMARK_CASES);
   const cases = boundedCases.map((benchmarkCase) => ({
     caseId: benchmarkCase.caseId,
@@ -207,7 +211,7 @@ export function buildCanonicalShadowScoreBenchmarkArtifact(generatedAt: string) 
     result: deriveCanonicalShadowScore({
       coverageRows: benchmarkCase.rows,
       findings: benchmarkCase.findings,
-      model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL
+      model
     }),
     scanSource: benchmarkCase.scanSource
   }));
@@ -239,7 +243,7 @@ export function buildCanonicalShadowScoreBenchmarkArtifact(generatedAt: string) 
   ).sort();
   const lunaApproved = isLunaScoreDecisionApprovedForModel(
     GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
-    GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL.version
+    model.version
   );
 
   return {
@@ -255,8 +259,8 @@ export function buildCanonicalShadowScoreBenchmarkArtifact(generatedAt: string) 
       sourceEquivalent
     },
     lunaLaneDecisions,
-    modelApprovalStatus: GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL.approvalStatus,
-    modelVersion: GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL.version,
+    modelApprovalStatus: model.approvalStatus,
+    modelVersion: model.version,
     overallScoreStatus: "withheld_unmodeled_domains" as const,
     schemaVersion: CANONICAL_SHADOW_BENCHMARK_SCHEMA_VERSION
   };
