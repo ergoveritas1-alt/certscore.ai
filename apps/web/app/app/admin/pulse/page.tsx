@@ -6,7 +6,6 @@ import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import { ADMIN_API_ROUTES, type AdminApiRoute } from "../../../../lib/admin/api-route";
 import { getAdminAuthenticatedScanHref } from "../../../../server/admin/admin-scan-links";
-import { materializeAdminScanSummaries } from "../../../../server/admin/admin-scan-summary";
 import { countAdminPulseRequests, getAdminPulseFilterOptions, getAdminPulseOverviewCounts, listAdminPulseRequests, type AdminPulseRequestStatus } from "../../../../server/admin/list-pulse-requests";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminReportLink } from "../scans/admin-scan-actions";
@@ -107,30 +106,15 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const activeScanFrom = SCAN_FROM_VALUES.includes(resolved.scanFrom as typeof SCAN_FROM_VALUES[number]) ? resolved.scanFrom as typeof SCAN_FROM_VALUES[number] : "any";
   const activeTimeSpan = normalizeOption(resolved.timeSpan, timeSpans, "all") as typeof timeSpans[number];
   const hasFilters = Boolean(activeQuery) || Boolean(activeStatus) || Boolean(activeRoute) || activeFreshness !== "any" || activeAccess !== "any" || Boolean(activeOutcome) || Boolean(activeLanguage) || Boolean(activeIndustry) || activeScanFrom !== "any" || activeTimeSpan !== "all";
-  const [counts, filterOptions] = await Promise.all([
-    getAdminPulseOverviewCounts(),
-    getAdminPulseFilterOptions()
-  ]);
   const pageSize = normalizePageSize(resolved.perPage);
   const page = normalizePage(resolved.page);
   const requestListInput = { limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan };
-  const [filteredTotal, initialRequests] = await withServerTiming("app.admin.api_activity", () => Promise.all([
+  const [counts, filterOptions, filteredTotal, requests] = await withServerTiming("app.admin.api_activity", () => Promise.all([
+    getAdminPulseOverviewCounts(),
+    getAdminPulseFilterOptions(),
     countAdminPulseRequests({ query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan }),
     listAdminPulseRequests(requestListInput)
   ]));
-  const staleSummaryScans = Array.from(new Map(initialRequests
-    .filter((request) => request.scanId && ["completed", "completed_limited"].includes(request.status) && (
-      !request.adminSummaryGeneratedAt ||
-      Boolean(request.completedAt && new Date(request.adminSummaryGeneratedAt).getTime() < new Date(request.completedAt).getTime())
-    ))
-    .map((request) => [request.scanId as string, { organizationId: null, scanId: request.scanId as string }])).values())
-    .slice(0, 8);
-  if (staleSummaryScans.length > 0) {
-    await withServerTiming("app.admin.api_activity.summary_repair", () => materializeAdminScanSummaries(staleSummaryScans));
-  }
-  const requests = staleSummaryScans.length > 0
-    ? await listAdminPulseRequests(requestListInput)
-    : initialRequests;
   const pageCount = Math.max(1, Math.ceil(filteredTotal / pageSize));
 
   return (
@@ -168,6 +152,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           pageCount={pageCount}
           pageSize={pageSize}
           searchParams={{ q: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan }}
+          showPageJump
           totalCount={filteredTotal}
           visibleCount={requests.length}
         />

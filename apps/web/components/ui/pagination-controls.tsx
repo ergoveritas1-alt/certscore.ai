@@ -24,6 +24,7 @@ type PaginationControlsProps = {
   pageSize: number;
   perPageParamName?: string;
   searchParams?: Record<string, string | null | undefined>;
+  showPageJump?: boolean;
   totalCount?: number;
   visibleCount: number;
 };
@@ -65,6 +66,7 @@ export function PaginationControls({
   pageSize,
   perPageParamName = "perPage",
   searchParams,
+  showPageJump = false,
   totalCount,
   visibleCount
 }: PaginationControlsProps) {
@@ -104,6 +106,28 @@ export function PaginationControls({
             Apply
           </Button>
         </form>
+        {showPageJump && normalizedPageCount !== null ? (
+          <form action={basePath} className="flex items-center gap-2">
+            {Object.entries(searchParams ?? {}).map(([key, value]) =>
+              key === pageParamName || key === perPageParamName || value === null || value === undefined || value === "" ? null : (
+                <input key={key} name={key} type="hidden" value={value} />
+              )
+            )}
+            {pageSize !== DEFAULT_PAGE_SIZE ? <input name={perPageParamName} type="hidden" value={pageSize} /> : null}
+            <label className="sr-only" htmlFor={`${pageParamName}-jump`}>Go to page</label>
+            <input
+              className="h-9 w-20 rounded-full border border-slate-300 bg-white px-3 text-center text-sm text-slate-700"
+              defaultValue={page}
+              id={`${pageParamName}-jump`}
+              inputMode="numeric"
+              max={Math.max(1, normalizedPageCount)}
+              min={1}
+              name={pageParamName}
+              type="number"
+            />
+            <Button size="sm" type="submit" variant="secondary">Go</Button>
+          </form>
+        ) : null}
         <Button asChild disabled={page <= 1} size="sm" variant="secondary">
           {page <= 1 ? (
             <span className="cursor-not-allowed text-slate-400">Previous</span>

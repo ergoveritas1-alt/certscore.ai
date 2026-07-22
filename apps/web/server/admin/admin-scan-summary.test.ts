@@ -51,16 +51,15 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   assert.doesNotMatch(source, /getAnonymousScanById/);
 });
 
-test("API activity repairs bounded missing or stale canonical summaries outside the list query", async () => {
+test("API activity navigation is read-only and does not repair summaries", async () => {
   const listSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
   const pageSource = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
 
   assert.match(listSource, /ss\.admin_summary_generated_at/);
   assert.doesNotMatch(listSource, /materializeAdminScanSummar/);
-  assert.match(pageSource, /materializeAdminScanSummaries/);
-  assert.match(pageSource, /slice\(0, 8\)/);
-  assert.match(pageSource, /adminSummaryGeneratedAt/);
-  assert.match(pageSource, /request\.completedAt/);
+  assert.doesNotMatch(pageSource, /materializeAdminScanSummaries/);
+  assert.doesNotMatch(pageSource, /summary_repair/);
+  assert.match(pageSource, /Promise\.all\(\[/);
   assert.match(pageSource, /listAdminPulseRequests\(requestListInput\)/);
 });
 
@@ -87,14 +86,26 @@ test("completion materialization persists the admin summary before acknowledging
   assert.match(source, /Admin scan summary persistence was incomplete/);
 });
 
-test("Admin Scans repairs bounded stale summaries and Score Shadow has no admin surface", async () => {
+test("Admin Scans navigation is read-only and Score Shadow has no admin surface", async () => {
   const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
   const layoutSource = await readFile("apps/web/app/app/admin/layout.tsx", "utf8");
 
-  assert.match(pageSource, /materializeAdminScanSummaries/);
-  assert.match(pageSource, /slice\(0, 8\)/);
-  assert.match(pageSource, /adminSummaryGeneratedAt/);
+  assert.doesNotMatch(pageSource, /materializeAdminScanSummaries/);
+  assert.doesNotMatch(pageSource, /summary_repair/);
+  assert.match(pageSource, /Promise\.all\(\[/);
   assert.doesNotMatch(layoutSource, /scoring-shadow/);
+});
+
+test("Admin activity pagination supports a direct page jump", async () => {
+  const controls = await readFile("apps/web/components/ui/pagination-controls.tsx", "utf8");
+  const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+
+  assert.match(controls, /showPageJump/);
+  assert.match(controls, /Go to page/);
+  assert.match(controls, /max=\{Math\.max\(1, normalizedPageCount\)\}/);
+  assert.match(scansPage, /showPageJump/);
+  assert.match(pulsePage, /showPageJump/);
 });
 
 test("API activity presents a persisted clear-access summary consistently with its access filter", async () => {
