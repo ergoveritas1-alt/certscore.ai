@@ -155,7 +155,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
     aliases: ["Sourcepoint CMP", "Sourcepoint Dialogue"],
     canonicalName: "Sourcepoint",
-    cookieNames: ["_sp_"],
+    cookieNames: ["_sp_su", "_sp_v1_*", "_sp_user_consent", "_sp_user_consent_*", "_sp_local_state", "_sp_non_keyed_local_state", "_sp_enable_dfp_personalized_ads", "sp_choice"],
     domains: ["privacy-mgmt.com", "cdn.privacy-mgmt.com", "sourcepoint.mgr.consensu.org", "cmp-cdn.privacy-mgmt.com"],
     domSelectors: ["[id*='sp_message_container' i]", "iframe[id*='sp_message_iframe' i]"],
     evidenceTreatment: "cmp_infrastructure",
@@ -163,6 +163,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     reopenControlHints: ["sourcepoint", "privacy manager"],
     role: "consent management platform",
     standards: ["tcf", "gpp", "usp"],
+    storageKeys: ["_sp_su", "_sp_v1_*", "_sp_user_consent", "_sp_user_consent_*", "_sp_local_state", "_sp_non_keyed_local_state", "_sp_enable_dfp_personalized_ads", "sp_choice"],
     urlPatterns: [/privacy-mgmt/i, /sourcepoint/i, /sp_message/i]
   },
   {

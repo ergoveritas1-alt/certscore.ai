@@ -81,6 +81,9 @@ function uniqueStrings(values: Array<string | null | undefined>) {
 
 export function classifyRuntimeCookieCategory(name: string, domain: string | null = null) {
   const normalized = `${name} ${domain ?? ""}`.toLowerCase();
+  if (/^_sp_(?:id|ses)\./i.test(name)) {
+    return "analytics";
+  }
   if (/^(?:cookielawinfo-checkbox-|viewed_cookie_policy$)/i.test(name)) {
     return "consent_management";
   }
@@ -155,9 +158,8 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
 
 export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | null | undefined, domain: string | null = null) {
   const normalized = `${name ?? ""} ${domain ?? ""}`.toLowerCase();
-  return /(^|\b)(fccdcf|fcnec|optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|cookielawinfo-checkbox-[a-z0-9_-]+|viewed_cookie_policy|didomi_token|geo_country|trp-country|trp-language|__cf_bm|_cfuvid|cf_clearance|bigipserver|awsalb(?:tg|tgcors|app-\d+|cors)?|akaalb|usp-google|bm_sz|bm_sv|bm_mi|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)|(^|\b)_sp_/.test(
-    normalized
-  );
+  return /(^|\b)(fccdcf|fcnec|optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|cookielawinfo-checkbox-[a-z0-9_-]+|viewed_cookie_policy|didomi_token|geo_country|trp-country|trp-language|__cf_bm|_cfuvid|cf_clearance|bigipserver|awsalb(?:tg|tgcors|app-\d+|cors)?|akaalb|usp-google|bm_sz|bm_sv|bm_mi|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)/.test(normalized) ||
+    /(^|\b)(_sp_su|_sp_v1_[a-z0-9_-]+|_sp_user_consent(?:_[a-z0-9_-]+)?|_sp_local_state|_sp_non_keyed_local_state|_sp_enable_dfp_personalized_ads)(\b|$)/.test(normalized);
 }
 
 export function isNonEssentialCookieCategory(category: string | null | undefined) {
@@ -210,6 +212,9 @@ function inferCookieProvider(name: string, domain: string | null = null) {
   }
   if (/^ld_anonymous_user_key\b/.test(normalized)) {
     return "LaunchDarkly";
+  }
+  if (/^_sp_(?:id|ses)\./.test(normalized)) {
+    return "Snowplow Analytics";
   }
   if (/^(?:cookielawinfo-checkbox-|viewed_cookie_policy\b)/.test(normalized)) {
     return "CookieYes";
@@ -527,7 +532,8 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   const inferredSecurityOrNecessary = /^(?:security|necessary|functional|consent_management)$/i.test(inferredCategory);
   const canonicalNamedCategory =
     /^AMP_(?:MKTG_)?[A-Za-z0-9_-]+$/i.test(cookieName) ||
-    /^ld_anonymous_user_key$/i.test(cookieName);
+    /^ld_anonymous_user_key$/i.test(cookieName) ||
+    /^_sp_(?:id|ses)\./i.test(cookieName);
   const category = inferredSecurityOrNecessary || canonicalNamedCategory
     ? inferredCategory
     : explicitCategory && !/^unknown$/i.test(explicitCategory) ? explicitCategory : inferredCategory;

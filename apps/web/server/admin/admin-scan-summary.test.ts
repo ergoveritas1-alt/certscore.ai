@@ -136,7 +136,8 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
 
   assert.match(scansSource, /projectAdminNoGo/);
-  assert.match(scansSource, /runtimeAssessment: runtimeArtifact\?\.scan_no_go_assessment/);
+  assert.match(scansSource, /runtimeAssessment: runtimeArtifact\?\.scan_no_go_assessment \?\? snapshot\?\.scan_no_go_assessment/);
+  assert.match(scansSource, /visualAccessReview: runtimeArtifact\?\.visual_access_review \?\? snapshot\?\.visual_access_review/);
   assert.match(pulseSource, /SCAN_NO_GO_SNAPSHOT_OUTCOMES/);
   assert.match(pulseSource, /PULSE_NO_GO_SQL/);
   assert.match(repositorySource, /scan_no_go_assessment/);

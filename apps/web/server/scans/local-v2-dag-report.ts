@@ -2063,7 +2063,17 @@ export function summarizePolicySurfaces(
     .filter(Boolean)
     .join("\n");
   const discoveredPrivacySurfaces = (options.discoveredPolicySurfaces ?? [])
-    .filter((surface) => surface.surfaceType === "privacy_policy");
+    .filter((surface) => surface.surfaceType === "privacy_policy")
+    .filter((surface) => {
+      const observedLink = surface.linkObservationState === "observed";
+      if (surface.discoveryMethod === "guessed_common_path" && !observedLink) {
+        return false;
+      }
+      if (surface.status === "failed" && !observedLink) {
+        return false;
+      }
+      return true;
+    });
   const targetRelevantDiscoveredPrivacySurfaces = discoveredPrivacySurfaces.filter((surface) =>
     !isGenericThirdPartyPrivacySurface({
       pageUrl: canonicalPolicySurfaceUrl(surface, null),

@@ -1071,10 +1071,25 @@ test("dedupePolicySurfaces suppresses failed common-path privacy guesses", async
   ] as never, "https://caltech.edu/");
 
   assert.deepEqual(surfaces, []);
-  const summary = summarizePolicySurfaces(surfaces, "caltech.edu");
+  const summary = summarizePolicySurfaces(surfaces, "caltech.edu", {
+    discoveredPolicySurfaces: [
+      {
+        observationId: "caltech-privacy",
+        surfaceType: "privacy_policy",
+        url: "/privacy",
+        normalizedUrl: "https://caltech.edu/privacy",
+        discoveryMethod: "guessed_common_path",
+        status: "failed",
+        fetchable: true,
+        confidence: 0.58
+      }
+    ] as never
+  });
   assert.equal(summary.policySurfaceCount, 0);
   assert.equal(summary.privacyPolicyPresent, false);
+  assert.equal(summary.privacyPolicyDiscovered, false);
   assert.deepEqual(summary.privacyPolicyUrls, []);
+  assert.deepEqual(summary.discoveredPrivacyPolicyUrls, []);
 });
 
 test("dedupePolicySurfaces keeps the strongest fetched privacy document over weaker candidates", async () => {

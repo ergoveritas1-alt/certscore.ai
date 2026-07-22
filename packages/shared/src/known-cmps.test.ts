@@ -158,6 +158,14 @@ test("detects first-party Borlabs Cookie runtime signals", () => {
   assert.ok(detection?.matchedSignals.some((signal) => signal.source === "script"));
 });
 
+test("keeps Snowplow analytics identifiers separate from Sourcepoint consent identifiers", () => {
+  assert.equal(isKnownCmpCookieName("_sp_id.498b"), false);
+  assert.equal(isKnownCmpCookieName("_sp_ses.498b"), false);
+  assert.equal(isKnownCmpCookieName("_sp_su"), true);
+  assert.equal(isKnownCmpCookieName("_sp_v1_data"), true);
+  assert.equal(getKnownCmpVendorName({ cookieNames: ["_sp_user_consent_123"] }), "Sourcepoint");
+});
+
 test("attributes cookielawinfo plugin cookies to CookieYes rather than OneTrust", () => {
   assert.equal(getKnownCmpVendorName({ cookieNames: ["cookielawinfo-checkbox-analytics"] }), "CookieYes");
   assert.equal(getKnownCmpVendorName({ cookieNames: ["cookielawinfo-checkbox-necessary"] }), "CookieYes");

@@ -1162,6 +1162,25 @@ test("does not identify a specific CMP vendor from generic CMP APIs alone", () =
   assert.equal(observations.length, 0);
 });
 
+test("does not attribute Snowplow analytics cookies to Sourcepoint", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "cookie",
+      cookieName: "_sp_id.498b",
+      hostname: "buienradar.nl",
+      matchSource: "cookie_name"
+    },
+    {
+      type: "cookie",
+      cookieName: "_sp_ses.498b",
+      hostname: "buienradar.nl",
+      matchSource: "cookie_name"
+    }
+  ]);
+
+  assert.equal(observations.some((observation) => observation.vendor === "Sourcepoint"), false);
+});
+
 test("resolves session replay libraries by product-specific evidence", () => {
   const observations = resolveVendorObservations([
     {

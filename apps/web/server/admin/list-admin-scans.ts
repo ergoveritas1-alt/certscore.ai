@@ -249,9 +249,9 @@ export async function listAdminScansPage(
       accessPostureClass: normalizedAccessPosture.accessPostureClass,
       blockedFlag: snapshot?.blocked_flag,
       captchaFlag: snapshot?.captcha_flag,
-      runtimeAssessment: runtimeArtifact?.scan_no_go_assessment,
+      runtimeAssessment: runtimeArtifact?.scan_no_go_assessment ?? snapshot?.scan_no_go_assessment,
       snapshotOutcome: snapshot?.scan_outcome,
-      visualAccessReview: runtimeArtifact?.visual_access_review
+      visualAccessReview: runtimeArtifact?.visual_access_review ?? snapshot?.visual_access_review
     });
     const scoreSelection = selectConfiguredCustomerGdprEprivacyScore({
       candidateAssessment: candidateScoreAssessmentMap.get(scan.id) ?? null,

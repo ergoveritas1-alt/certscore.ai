@@ -195,6 +195,32 @@ test("counts explicitly pre-consent periodic analytics snapshots in descriptive 
   }
 });
 
+test("counts Snowplow analytics cookies without mistaking them for Sourcepoint consent storage", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: ["_sp_id.498b", "_sp_ses.498b"].map((cookieName) => ({
+        beforeConsent: true,
+        category: "consent_management",
+        cookieName,
+        domain: "buienradar.nl",
+        firstObservedAtMs: 14_459,
+        nonEssential: false,
+        setMethod: "browser_snapshot"
+      }))
+    }
+  });
+
+  assert.equal(countEligibleNonEssentialPreconsentStorageMetricRows(inventory.rows), 2);
+  for (const row of inventory.rows) {
+    assert.equal(row.category, "analytics", row.cookieName);
+    assert.equal(row.nonEssential, true, row.cookieName);
+    assert.equal(isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain), false, row.cookieName);
+    assert.equal(getRuntimeCookiePrimaryProvider(row), "Snowplow Analytics", row.cookieName);
+  }
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("_sp_su"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("_sp_v1_data"), true);
+});
+
 test("does not promote periodic or initial snapshots without explicit pre-consent context into descriptive storage metrics", () => {
   const inventory = buildRuntimeCookieInventory({
     hybridRuntimeEvidence: {
