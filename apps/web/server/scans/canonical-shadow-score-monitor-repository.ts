@@ -17,6 +17,8 @@ type StoredRow = {
   coverage_projection_fingerprint: string | null;
   coverage_projection_row_count: number | null;
   contradiction_types: string[];
+  deliberate_pair_key: string | null;
+  deliberate_pair_source_family: "lambda" | "browser_extension" | null;
   generated_at: string;
   input_projection_fingerprint: string | null;
   finding_projection_fingerprint: string | null;
@@ -164,30 +166,39 @@ export async function loadCanonicalShadowScoreMonitoringMetrics(input: {
     throw new Error("windowHours must be a whole number between 1 and 2160.");
   }
   const result = await query<StoredRow>(
-    `select scan_id::text,
-            model_version,
-            candidate_score,
-            legacy_score,
-            score_delta,
-            candidate_coverage_ratio,
-            legacy_coverage_ratio,
-            report_usable_evidence_ratio,
-            contradiction_types,
-            withholding_reasons,
-            scanner_region,
-            scan_source,
-            comparison_group_key,
-            comparison_target_key,
-            input_projection_fingerprint,
-            coverage_projection_fingerprint,
-            coverage_projection_row_count,
-            finding_projection_fingerprint,
-            finding_projection_count,
-            generated_at::text
-       from public.scan_score_shadow_comparisons
-      where model_version = $1
-        and generated_at >= timezone('utc', now()) - ($2::integer * interval '1 hour')
-      order by generated_at desc
+    `select comparison.scan_id::text,
+            comparison.model_version,
+            comparison.candidate_score,
+            comparison.legacy_score,
+            comparison.score_delta,
+            comparison.candidate_coverage_ratio,
+            comparison.legacy_coverage_ratio,
+            comparison.report_usable_evidence_ratio,
+            comparison.contradiction_types,
+            pair.pair_key as deliberate_pair_key,
+            member.source_family as deliberate_pair_source_family,
+            comparison.withholding_reasons,
+            comparison.scanner_region,
+            comparison.scan_source,
+            comparison.comparison_group_key,
+            comparison.comparison_target_key,
+            comparison.input_projection_fingerprint,
+            comparison.coverage_projection_fingerprint,
+            comparison.coverage_projection_row_count,
+            comparison.finding_projection_fingerprint,
+            comparison.finding_projection_count,
+            comparison.generated_at::text
+       from public.scan_score_shadow_comparisons comparison
+       left join public.score_shadow_collection_pair_members member
+         on member.scan_id = comparison.scan_id
+        and member.model_version = comparison.model_version
+       left join public.score_shadow_collection_pairs pair
+         on pair.pair_key = member.pair_key
+        and pair.model_version = member.model_version
+        and pair.state = 'active'
+      where comparison.model_version = $1
+        and comparison.generated_at >= timezone('utc', now()) - ($2::integer * interval '1 hour')
+      order by comparison.generated_at desc
       limit ${MAX_MONITOR_ROWS}`,
     [boundedText(input.modelVersion, "modelVersion", 120), windowHours],
     { readOnly: true }
@@ -200,6 +211,8 @@ export async function loadCanonicalShadowScoreMonitoringMetrics(input: {
     coverageProjectionFingerprint: row.coverage_projection_fingerprint,
     coverageProjectionRowCount: row.coverage_projection_row_count,
     contradictionTypes: row.contradiction_types,
+    deliberatePairKey: row.deliberate_pair_key,
+    deliberatePairSourceFamily: row.deliberate_pair_source_family,
     generatedAt: row.generated_at,
     inputProjectionFingerprint: row.input_projection_fingerprint,
     findingProjectionFingerprint: row.finding_projection_fingerprint,

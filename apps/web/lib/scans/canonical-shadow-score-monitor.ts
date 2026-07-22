@@ -8,6 +8,8 @@ export type StoredCanonicalShadowComparisonMetric = {
   coverageProjectionFingerprint: string | null;
   coverageProjectionRowCount: number | null;
   contradictionTypes: string[];
+  deliberatePairKey: string | null;
+  deliberatePairSourceFamily: "lambda" | "browser_extension" | null;
   generatedAt: string;
   inputProjectionFingerprint: string | null;
   findingProjectionFingerprint: string | null;
@@ -43,7 +45,13 @@ export function summarizeStoredCanonicalShadowComparisons(
   const regionGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
   const sourceGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
   const equivalentInputSourceGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
+  const deliberatePairGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
   for (const metric of metrics) {
+    if (metric.deliberatePairKey && metric.deliberatePairSourceFamily) {
+      const pairRows = deliberatePairGroups.get(metric.deliberatePairKey) ?? [];
+      pairRows.push(metric);
+      deliberatePairGroups.set(metric.deliberatePairKey, pairRows);
+    }
     if (!metric.comparisonGroupKey || !metric.comparisonTargetKey || !metric.scanSource || metric.candidateScore === null) continue;
     const sourceFamily = canonicalShadowScoreSourceFamily(metric.scanSource);
     if (metric.inputProjectionFingerprint) {
@@ -107,6 +115,40 @@ export function summarizeStoredCanonicalShadowComparisons(
       sourceCount: sourceFamilies.size
     }];
   }).sort((left, right) => right.range - left.range || left.comparisonGroupKey.localeCompare(right.comparisonGroupKey));
+  const deliberatePairs = [...deliberatePairGroups.entries()].flatMap(([pairKey, rows]) => {
+    const sourceFamilies = new Set(rows.flatMap((row) => row.deliberatePairSourceFamily ?? []));
+    const targetKeys = new Set(rows.flatMap((row) => row.comparisonTargetKey ?? []));
+    const modelVersions = new Set(rows.map((row) => row.modelVersion));
+    if (rows.length !== 2 || sourceFamilies.size !== 2 || targetKeys.size !== 1 || modelVersions.size !== 1) return [];
+    const scores = rows.flatMap((row) => row.candidateScore ?? []);
+    const inputFingerprints = rows.flatMap((row) => row.inputProjectionFingerprint ?? []);
+    const coverageFingerprints = rows.flatMap((row) => row.coverageProjectionFingerprint ?? []);
+    const findingFingerprints = rows.flatMap((row) => row.findingProjectionFingerprint ?? []);
+    const lambdaRows = rows.filter((row) => row.deliberatePairSourceFamily === "lambda");
+    const browserRows = rows.filter((row) => row.deliberatePairSourceFamily === "browser_extension");
+    return [{
+      browserRegionUnknown: browserRows.every((row) => row.region === null),
+      coverageProjectionMatched: coverageFingerprints.length === 2 && new Set(coverageFingerprints).size === 1,
+      coverageRowCounts: rows.map((row) => ({
+        count: row.coverageProjectionRowCount,
+        sourceFamily: row.deliberatePairSourceFamily!
+      })).sort((left, right) => left.sourceFamily.localeCompare(right.sourceFamily)),
+      exactInputMatched: inputFingerprints.length === 2 && new Set(inputFingerprints).size === 1,
+      findingCounts: rows.map((row) => ({
+        count: row.findingProjectionCount,
+        sourceFamily: row.deliberatePairSourceFamily!
+      })).sort((left, right) => left.sourceFamily.localeCompare(right.sourceFamily)),
+      findingProjectionMatched: findingFingerprints.length === 2 && new Set(findingFingerprints).size === 1,
+      lambdaRegions: [...new Set(lambdaRows.flatMap((row) => row.region ?? []))].sort(),
+      maxScore: scores.length === 2 ? Math.max(...scores) : null,
+      minScore: scores.length === 2 ? Math.min(...scores) : null,
+      pairKey,
+      range: scores.length === 2 ? Math.max(...scores) - Math.min(...scores) : null,
+      scanIds: rows.map((row) => row.scanId).sort(),
+      sourceFamilies: [...sourceFamilies].sort(),
+      withheldCount: rows.length - scores.length
+    }];
+  }).sort((left, right) => (right.range ?? -1) - (left.range ?? -1) || left.pairKey.localeCompare(right.pairKey));
 
   return {
     comparison: {
@@ -128,6 +170,11 @@ export function summarizeStoredCanonicalShadowComparisons(
       comparedGroupCount: sourceRanges.length,
       maximumScoreRange: sourceRanges[0]?.range ?? null,
       ranges: sourceRanges.slice(0, 100)
+    },
+    deliberateCrossSourcePairs: {
+      exactInputMatchCount: deliberatePairs.filter((pair) => pair.exactInputMatched).length,
+      pairCount: deliberatePairs.length,
+      pairs: deliberatePairs.slice(0, 100)
     },
     equivalentInputCrossSource: {
       comparedGroupCount: equivalentInputSourceRanges.length,

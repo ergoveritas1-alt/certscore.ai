@@ -5,10 +5,13 @@ import { evaluateCanonicalShadowScoreMonitoring } from "../../../../lib/scans/ca
 import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL } from "../../../../lib/scans/canonical-shadow-score-model";
 import { buildStoredScanCanonicalShadowScore } from "../../../../server/scans/canonical-shadow-score-service";
 import { loadCanonicalShadowScoreMonitoringMetrics } from "../../../../server/scans/canonical-shadow-score-monitor-repository";
+import { registerScoreShadowPair } from "../../../../server/admin/register-score-shadow-pair";
 
 type ScoringShadowPageProps = {
   searchParams?: Promise<{
     scanId?: string | string[];
+    pairKey?: string;
+    pairStatus?: string;
   }>;
 };
 
@@ -26,6 +29,12 @@ function normalizeScanIds(value: string | string[] | undefined) {
 export default async function AdminScoringShadowPage({ searchParams }: ScoringShadowPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const scanIds = normalizeScanIds(resolvedSearchParams.scanId);
+  const pairStatus = resolvedSearchParams.pairStatus === "registered" || resolvedSearchParams.pairStatus === "failed"
+    ? resolvedSearchParams.pairStatus
+    : undefined;
+  const pairKey = /^sha256:[a-f0-9]{64}$/.test(resolvedSearchParams.pairKey ?? "")
+    ? resolvedSearchParams.pairKey
+    : undefined;
 
   if (scanIds === null) {
     return <StatusCard message={`Provide no more than ${MAX_SCANS_PER_REVIEW} unique UUID scanId parameters.`} title="Invalid review request" />;
@@ -50,6 +59,7 @@ export default async function AdminScoringShadowPage({ searchParams }: ScoringSh
     return (
       <div className="space-y-6">
         <MonitoringCard monitoring={monitoring} />
+        <PairRegistrationCard pairKey={pairKey} pairStatus={pairStatus} />
         <StatusCard message="Add one or more scanId query parameters to run a read-only shadow comparison." title="No scans selected" />
       </div>
     );
@@ -80,6 +90,7 @@ export default async function AdminScoringShadowPage({ searchParams }: ScoringSh
   return (
     <div className="space-y-6">
       <MonitoringCard monitoring={monitoring} />
+      <PairRegistrationCard pairKey={pairKey} pairStatus={pairStatus} />
       <Card className="border-slate-200 bg-white">
         <CardHeader>
           <CardTitle>GDPR/ePrivacy scoring shadow</CardTitle>
@@ -138,6 +149,43 @@ function MonitoringCard({
             Monitoring data is not available yet. {monitoring.reason}
           </p>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PairRegistrationCard({ pairKey, pairStatus }: { pairKey?: string; pairStatus?: string }) {
+  return (
+    <Card className="border-slate-200 bg-white">
+      <CardHeader>
+        <CardTitle>Register deliberate Lambda/browser pair</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm text-slate-600">
+        <p>
+          Internal diagnostic only. Registration requires completed schema-v6 shadow rows for the same exact requested URL and model. It never makes mismatched inputs equivalent or changes a customer score.
+        </p>
+        {pairStatus === "registered" ? (
+          <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
+            Pair registered: {pairKey}
+          </p>
+        ) : pairStatus === "failed" ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+            Pair registration failed closed. Verify the scan IDs, exact target, source families, model version, and component fingerprints.
+          </p>
+        ) : null}
+        <form action={registerScoreShadowPair} className="grid gap-3 md:grid-cols-2">
+          <label className="space-y-1">
+            <span className="font-medium text-slate-800">Lambda scan ID</span>
+            <input className="w-full rounded-lg border border-slate-300 px-3 py-2" name="lambdaScanId" required type="text" />
+          </label>
+          <label className="space-y-1">
+            <span className="font-medium text-slate-800">Browser-extension scan ID</span>
+            <input className="w-full rounded-lg border border-slate-300 px-3 py-2" name="browserScanId" required type="text" />
+          </label>
+          <button className="rounded-lg bg-slate-950 px-4 py-2 font-semibold text-white md:col-span-2" type="submit">
+            Register diagnostic pair
+          </button>
+        </form>
       </CardContent>
     </Card>
   );

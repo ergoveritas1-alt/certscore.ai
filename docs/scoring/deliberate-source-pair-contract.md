@@ -1,6 +1,6 @@
 # Deliberate Lambda/browser score-pair contract
 
-Status: **approved implementation direction; not yet implemented**. This contract supports
+Status: **implemented locally; production migration and owned pair pending**. This contract supports
 the active Luna scoring goal. It does not approve candidate-v3 or customer cutover.
 
 ## Purpose
@@ -88,3 +88,12 @@ subject to the calibration registry, central contact ledger, cooldowns, and Luna
 - Production migration and one owned pair are verified read-only after deployment.
 - The governed rotating public sample and Luna monitoring-baseline approval remain separate
   mandatory gates before cutover.
+
+## Local implementation evidence
+
+Migration 0151, fail-closed pair registration, the platform-admin registration control, and
+the `deliberateCrossSourcePairs` monitor projection are implemented. Focused tests prove the
+diagnostic/exact-input separation. A disposable PostgreSQL integration run applied the
+migration, registered the same pair twice idempotently, loaded two members, reported equal
+coverage/finding components with different whole-input fingerprints, and kept the exact-input
+cross-source count at zero. Production deployment and a real owned pair remain required.

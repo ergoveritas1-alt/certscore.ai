@@ -14,6 +14,8 @@ function metric(overrides: Partial<StoredCanonicalShadowComparisonMetric>): Stor
     coverageProjectionFingerprint: "sha256:coverage",
     coverageProjectionRowCount: 39,
     contradictionTypes: [],
+    deliberatePairKey: null,
+    deliberatePairSourceFamily: null,
     generatedAt: "2026-07-22T00:00:00.000Z",
     inputProjectionFingerprint: "sha256:input",
     findingProjectionFingerprint: "sha256:findings",
@@ -122,6 +124,62 @@ test("persisted monitor never calls different canonical inputs source-equivalent
   ]);
 
   assert.equal(summary.equivalentInputCrossSource.comparedGroupCount, 0);
+});
+
+test("deliberate mismatched inputs stay diagnostic and never become source-equivalent", () => {
+  const summary = summarizeStoredCanonicalShadowComparisons([
+    metric({
+      deliberatePairKey: "sha256:pair",
+      deliberatePairSourceFamily: "lambda",
+      inputProjectionFingerprint: "sha256:lambda-input",
+      scanId: "scan-lambda",
+      scanSource: "eu_ie"
+    }),
+    metric({
+      candidateScore: 70,
+      coverageProjectionFingerprint: "sha256:other-coverage",
+      deliberatePairKey: "sha256:pair",
+      deliberatePairSourceFamily: "browser_extension",
+      inputProjectionFingerprint: "sha256:browser-input",
+      region: null,
+      scanId: "scan-browser",
+      scanSource: "local_extension"
+    })
+  ]);
+
+  assert.equal(summary.deliberateCrossSourcePairs.pairCount, 1);
+  assert.equal(summary.deliberateCrossSourcePairs.exactInputMatchCount, 0);
+  assert.equal(summary.deliberateCrossSourcePairs.pairs[0]?.exactInputMatched, false);
+  assert.equal(summary.deliberateCrossSourcePairs.pairs[0]?.coverageProjectionMatched, false);
+  assert.equal(summary.deliberateCrossSourcePairs.pairs[0]?.findingProjectionMatched, true);
+  assert.equal(summary.deliberateCrossSourcePairs.pairs[0]?.browserRegionUnknown, true);
+  assert.equal(summary.equivalentInputCrossSource.comparedGroupCount, 0);
+});
+
+test("an exact-input deliberate pair enters both lanes without inventing browser geography", () => {
+  const summary = summarizeStoredCanonicalShadowComparisons([
+    metric({
+      deliberatePairKey: "sha256:pair",
+      deliberatePairSourceFamily: "lambda",
+      inputProjectionFingerprint: "sha256:identical",
+      scanId: "scan-lambda",
+      scanSource: "eu_ie"
+    }),
+    metric({
+      deliberatePairKey: "sha256:pair",
+      deliberatePairSourceFamily: "browser_extension",
+      inputProjectionFingerprint: "sha256:identical",
+      region: null,
+      scanId: "scan-browser",
+      scanSource: "local_extension"
+    })
+  ]);
+
+  assert.equal(summary.deliberateCrossSourcePairs.exactInputMatchCount, 1);
+  assert.deepEqual(summary.deliberateCrossSourcePairs.pairs[0]?.lambdaRegions, ["eu-west-1"]);
+  assert.equal(summary.deliberateCrossSourcePairs.pairs[0]?.browserRegionUnknown, true);
+  assert.equal(summary.equivalentInputCrossSource.comparedGroupCount, 1);
+  assert.equal(summary.equivalentInputCrossSource.ranges[0]?.hasUnknownRegion, true);
 });
 
 test("persisted monitor never compares different requested URLs on the same hostname", () => {
