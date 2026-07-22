@@ -57,6 +57,24 @@ cutover-ineligible. The recommended Luna decision is to use report usable eviden
 for customer-facing coverage and retain model eligibility coverage as a clearly
 named internal score-withholding input.
 
+## Forward finding-lineage verification
+
+Production revision `d2c002b4` corrects the score projection to recognize the
+canonical presentation status `surface`. The previous check used the nonexistent
+value `surfaced`, which could silently omit promoted finding IDs from newly persisted
+score provenance. Existing immutable score rows were intentionally not rewritten.
+
+Owned canary `52d2ca2e-5913-428a-8f5d-f162c68eca0d` completed after the deployment.
+Its report had zero promoted findings, and its immutable score row persisted score 94,
+an empty `input_finding_ids` array, and projection fingerprint
+`sha256:071dcac08f932c0b68f465c50945c41ac008aa593cd6911a6a73f917193e2310`.
+This proves the live empty-lineage case agrees with the report projection. A bounded
+read-only query found no naturally occurring post-deploy score row with non-empty
+finding lineage at the time of review, so the live non-empty case remains an explicit
+verification gate. Deterministic lifecycle and repository tests already cover the
+non-empty forward path; do not manufacture a public consent violation solely to
+exercise it.
+
 ## Coverage-denominator finding
 
 The retained 11-scan cohort exposed four rows that are frequently or structurally

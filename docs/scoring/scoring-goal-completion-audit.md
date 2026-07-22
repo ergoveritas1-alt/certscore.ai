@@ -1,7 +1,7 @@
 # Scoring redesign goal completion audit
 
 Status: **incomplete; goal remains active**. Last audited 2026-07-22 against the
-current repository and production revision `1419a90a`.
+current repository and production revision `d2c002b4`.
 
 This audit separates proved implementation from remaining cutover work. A green test
 or deployed shadow endpoint is not evidence that the replacement has been approved or
@@ -23,7 +23,7 @@ made customer-facing.
 | Versioned bounded shadow comparisons | Schema v3 artifacts are bounded, versioned, read-only, carry projection fingerprints, both coverage meanings, deltas, and contradictions. | Proved |
 | Deterministic fixtures | Twelve required lanes are represented; structural, cross-region, and source-equivalence invariants run. Expected bands remain unlabeled by Luna. | Partial |
 | Retained replay | 11/11 bundles projected; 7 scored, 4 withheld, 0 projection failures; all 11 exposed legacy/report coverage divergence. | Proved for current retained corpus, not Luna-approved corpus |
-| Owned canaries | Production org and anonymous canaries verified legacy persistence and Pulse/report consistency; exact report coverage is 27/30 and 28/30. | Proved for current canaries, not Luna-approved benchmark |
+| Owned canaries | Production org and anonymous canaries verified legacy persistence and Pulse/report consistency; exact report coverage is 27/30 and 28/30. A post-lineage-fix owned canary (`52d2ca2e-5913-428a-8f5d-f162c68eca0d`) persisted score 94, an empty finding-ID set matching its zero promoted findings, and a stable projection fingerprint. No post-deploy production row with non-empty finding lineage existed at the audit time, so the non-empty live case remains unproved. | Empty-lineage case proved forward; non-empty live case pending |
 | Governed rotating public sample | Central export refreshed successfully at `2026-07-22T07:44:51Z`; selector failed closed with 0/10 eligible targets (47 cooldown, 1 blocked, 2 do-not-calibrate). Earliest current cooldown expiry is `2026-07-24T01:51:27Z`. | **Incomplete** |
 | Luna corpus, bands, weights, caps, thresholds, and sign-off | Machine-readable gate requires all evidence and exact model-version sign-off. Packet remains `pending_luna`. | **Incomplete** |
 | Accessibility, transport/security, and consumer protection | Deterministic cases prove these do not silently enter the GDPR/ePrivacy candidate and overall score remains withheld. They do not yet have approved domain-score contracts for an overall model. | Partial; overall appropriately withheld |
