@@ -1,10 +1,10 @@
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 
 export type ScanDisplayStateInput = {
-  completed_at: string | null;
-  created_at: string;
+  completed_at: string | Date | null;
+  created_at: string | Date;
   scan_type: string;
-  started_at: string | null;
+  started_at: string | Date | null;
   status: string;
 };
 
@@ -16,34 +16,48 @@ export type ScanDisplayStateEvent = {
   metadataJson?: unknown;
 };
 
-function parseTimestamp(value: string | null) {
+function normalizeTimestamp(value: string | Date | null) {
   if (!value) {
     return null;
   }
 
-  const parsed = Date.parse(value);
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+  }
+
+  return value;
+}
+
+function parseTimestamp(value: string | Date | null) {
+  const normalized = normalizeTimestamp(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Date.parse(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
 export function deriveDisplayCreatedAt(input: {
-  completedAt: string | null;
-  createdAt: string;
-  startedAt: string | null;
+  completedAt: string | Date | null;
+  createdAt: string | Date;
+  startedAt: string | Date | null;
 }) {
-  const trustedLifecycleAt = input.startedAt ?? input.completedAt;
+  const createdAt = normalizeTimestamp(input.createdAt) ?? String(input.createdAt);
+  const trustedLifecycleAt = normalizeTimestamp(input.startedAt ?? input.completedAt);
   if (!trustedLifecycleAt) {
-    return input.createdAt;
+    return createdAt;
   }
 
-  const createdAtMs = parseTimestamp(input.createdAt);
+  const createdAtMs = parseTimestamp(createdAt);
   const trustedLifecycleAtMs = parseTimestamp(trustedLifecycleAt);
   if (createdAtMs === null || trustedLifecycleAtMs === null) {
-    return input.createdAt;
+    return createdAt;
   }
 
   const displayToleranceMs = 60 * 1000;
   if (createdAtMs <= trustedLifecycleAtMs + displayToleranceMs) {
-    return input.createdAt;
+    return createdAt;
   }
 
   return trustedLifecycleAt;
@@ -63,39 +77,42 @@ function getEventTimestampBounds(events: ScanDisplayStateEvent[], eventTypes: st
 }
 
 export function deriveScanDisplayState(scan: ScanDisplayStateInput, events: ScanDisplayStateEvent[]) {
+  const completedAt = normalizeTimestamp(scan.completed_at);
+  const startedAt = normalizeTimestamp(scan.started_at);
+  const createdAt = normalizeTimestamp(scan.created_at) ?? String(scan.created_at);
   if (scan.scan_type !== "preview") {
     return {
-      completedAt: scan.completed_at,
-      startedAt: scan.started_at,
+      completedAt,
+      startedAt,
       status: scan.status
     };
   }
 
-  const startedAt =
-    scan.started_at ??
+  const previewStartedAt =
+    startedAt ??
     getEventTimestampBounds(events, [
       SCAN_EVENT_TYPES.previewStarted
     ]).earliest;
-  const completedAt =
-    scan.completed_at ??
+  const previewCompletedAt =
+    completedAt ??
     getEventTimestampBounds(events, [
       SCAN_EVENT_TYPES.previewCompleted
     ]).latest;
   const failedAt =
     scan.status === "failed"
-      ? scan.completed_at ?? scan.started_at ?? scan.created_at
+      ? completedAt ?? startedAt ?? createdAt
       : getEventTimestampBounds(events, [
           SCAN_EVENT_TYPES.previewFailed
         ]).latest;
   const status =
     failedAt ? "failed" :
-    completedAt ? "completed" :
-    startedAt ? "running" :
+    previewCompletedAt ? "completed" :
+    previewStartedAt ? "running" :
     scan.status;
 
   return {
-    completedAt,
-    startedAt,
+    completedAt: previewCompletedAt,
+    startedAt: previewStartedAt,
     status
   };
 }

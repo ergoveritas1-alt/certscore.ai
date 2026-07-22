@@ -98,3 +98,19 @@ test("leaves non-preview scan status untouched", () => {
   assert.equal(displayState.startedAt, null);
   assert.equal(displayState.completedAt, null);
 });
+
+test("normalizes PostgreSQL Date timestamps before scan detail reaches score persistence", () => {
+  const displayState = deriveScanDisplayState(
+    {
+      completed_at: new Date("2026-07-22T20:12:34.000Z"),
+      created_at: new Date("2026-07-22T20:11:00.000Z"),
+      scan_type: "full",
+      started_at: new Date("2026-07-22T20:11:05.000Z"),
+      status: "completed"
+    },
+    []
+  );
+
+  assert.equal(displayState.startedAt, "2026-07-22T20:11:05.000Z");
+  assert.equal(displayState.completedAt, "2026-07-22T20:12:34.000Z");
+});
