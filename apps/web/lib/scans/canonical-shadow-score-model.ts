@@ -1,4 +1,8 @@
 import type { CanonicalShadowScoreModel } from "./canonical-shadow-score";
+import {
+  GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
+  isLunaScoreDecisionApprovedForModel
+} from "./canonical-shadow-score-luna-decision";
 
 const GDPR_EPRIVACY_SHADOW_COVERAGE_ROW_WEIGHTS = {
   accessibility_consent_controls: 1,
@@ -88,6 +92,10 @@ export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V1_MODEL = {
 
 export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL = {
   ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V1_MODEL,
+  approvalStatus: isLunaScoreDecisionApprovedForModel(
+    GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
+    "gdpr-eprivacy-shadow.candidate-v2.pending-luna"
+  ) ? "approved_by_luna" : "pending_luna",
   criticalPostureCaps: [
     ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V1_MODEL.criticalPostureCaps,
     {

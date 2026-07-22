@@ -12,7 +12,7 @@ The shadow score accepts only:
 
 1. GDPR/ePrivacy checklist rows produced by the existing WC01 concern, policy, and checklist projection.
 2. Unified findings that the canonical surfacing policy already marks reportable and surfaced.
-3. The explicit GDPR/ePrivacy score-family registry: `consent_tracking`, `contradiction`, `policy_extraction`, and `rights_gap`.
+3. The explicit candidate-v2 GDPR/ePrivacy score-family registry: `consent_tracking`, `contradiction`, `rights_gap`, and `sensitive_data`.
 
 It does not consume raw scanner signals, raw v2 review artifacts, display-only inferences, repair output, or unrelated accessibility and financial findings.
 
@@ -20,8 +20,10 @@ It does not consume raw scanner signals, raw v2 review artifacts, display-only i
 
 - `observedRiskIndex` records supported risk even when coverage is inadequate.
 - `postureScore` is withheld when coverage, registry completeness, input bounds, or model configuration fails.
-- `coverageRatio` and `coverageConfidence` remain separate from risk.
-- Version 2 comparison artifacts retain a bounded coverage breakdown with explicit
+- `modelEligibilityCoverageRatio` is the internal, weighted score-withholding input.
+- `reportUsableEvidenceRatio` is calculated from the exact customer-report GDPR/ePrivacy row projection and is the recommended customer-facing coverage meaning, pending Luna approval.
+- These metrics are deliberately not aliases. A material difference is recorded as a contradiction and makes the comparison ineligible for cutover.
+- Version 3 comparison artifacts retain both named coverage measurements and a bounded model-coverage breakdown with explicit
   covered, limited, and not-applicable row IDs and their configured weights so Luna
   can review why a score was withheld without consulting raw scanner evidence.
 - Finding siblings are deduplicated at the configured family boundary; the strongest supported severity contributes once per family.
@@ -41,7 +43,9 @@ The latest scans and fixed public domain lists are diagnostic inputs only, never
 
 ## Luna decisions required
 
-Luna must approve the corpus, family boundaries, weights, penalties, caps, coverage thresholds, posture bands, expected bands, contradiction thresholds, and final cutover. Candidate JSON files are calibration hypotheses, not approved models. Candidate-v1 adds a stricter 0.90 coverage requirement when no eligible surfaced finding anchors the result; the general risk-anchored threshold remains 0.70.
+Luna must approve the corpus, customer-facing coverage meaning, family boundaries, weights, penalties, caps, coverage thresholds, posture bands, expected bands, contradiction thresholds, and final cutover. Candidate JSON files are calibration hypotheses, not approved models. Candidate-v1 adds a stricter 0.90 coverage requirement when no eligible surfaced finding anchors the result; the general risk-anchored threshold remains 0.70.
+
+The machine-readable decision packet is `apps/web/lib/scans/gdpr-eprivacy-shadow-luna-decision.json`. A single approval flag is insufficient: the gate also requires a selected coverage meaning, governed corpus artifacts, all required expected-band lanes, model-parameter evidence, and named/date-stamped final sign-off tied to the exact model version.
 
 Cutover remains blocked until all of the following are true:
 
@@ -67,3 +71,15 @@ pnpm score:shadow:production-cohort -- --input cohort.json --out artifacts/scori
 ```
 
 The retained replay runner is the first calibration command and does not issue public requests.
+
+Validate the decision packet while it is pending:
+
+```bash
+pnpm score:luna-decision-check
+```
+
+Require complete Luna approval at cutover:
+
+```bash
+pnpm score:luna-cutover-gate
+```

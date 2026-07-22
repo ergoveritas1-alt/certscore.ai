@@ -57,6 +57,6 @@ The versioned lifecycle has a hard activation cutoff of `2026-07-22T06:30:00.000
 4. Consent-control accessibility needs actual retained accessibility issue evidence; accessibility-tree discovery alone does not prove accessibility quality.
 5. The governed public calibration selector correctly failed closed: all registry targets are currently unavailable because of cooldown or exclusion. No fixed-site or latest-scan substitute is permitted.
 6. Luna must approve the corpus, benchmarks, bands, weights, penalties, caps, thresholds, expected-band review, and production cutover.
-7. Legacy scorer input coverage and report usable-evidence coverage are distinct calculations and can diverge (the production canary measured `1.0` versus `28/30`). Shadow comparison schema v3 records both and treats any divergence as a cutover-blocking contradiction; Luna must approve one canonical coverage meaning before cutover.
+7. Legacy scorer input coverage and report usable-evidence coverage are distinct calculations and can diverge (production canaries measured `1.0` versus `27/30` and `28/30`). Shadow comparison schema v3 records both over the exact customer-report row projection and treats any divergence as a cutover-blocking contradiction; Luna must approve one canonical coverage meaning before cutover.
 
 Until all gates pass, candidate-v2 remains internal shadow output. If calibration cannot support an overall score, CertScore will continue to expose separate domain scores and coverage confidence and will withhold an overall score.

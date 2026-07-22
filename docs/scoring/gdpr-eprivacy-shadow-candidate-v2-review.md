@@ -19,6 +19,23 @@ This is a calibration hypothesis. It remains internal, read-only, and ineligible
 cutover until the governed public sample is available and Luna approves expected
 bands, weights, caps, and thresholds.
 
+## Production coverage-semantics contradiction
+
+Production comparison schema v3 now keeps two explicitly named measurements:
+
+- model eligibility coverage, used only to decide whether the candidate model has
+  enough testable score inputs; and
+- report usable evidence, calculated from the exact 30-row customer-report
+  GDPR/ePrivacy projection.
+
+Fresh production canaries exposed a material mismatch: the legacy score metadata
+reported `1.0` coverage while the customer report showed 27/30 usable rows for the
+organization canary and 28/30 for the anonymous canary. The comparison records
+`legacy_score_coverage_diverges_from_report_usable_evidence` and remains
+cutover-ineligible. The recommended Luna decision is to use report usable evidence
+for customer-facing coverage and retain model eligibility coverage as a clearly
+named internal score-withholding input.
+
 ## Coverage-denominator finding
 
 The retained 11-scan cohort exposed four rows that are frequently or structurally
@@ -59,9 +76,11 @@ target was hand-picked and no cooldown was bypassed.
 
 ## Remaining gates
 
-1. Review the exact recurring limited rows on current owned canaries.
-2. Fix missing current-production evidence mappings before changing the denominator.
-3. Add deterministic sensitive-data and policy-extraction separation fixtures.
-4. Repeat retained and passive shadow comparisons under candidate-v2.
-5. Run the ledger-selected public cohort only when at least 10 targets are eligible.
-6. Obtain Luna approval before any customer-facing cutover.
+1. Luna selects the customer-facing coverage meaning and records its evidence artifact.
+2. Review the exact recurring limited rows on current owned canaries.
+3. Fix missing current-production evidence mappings before changing the model denominator.
+4. Complete Luna labels for every required expected-band lane.
+5. Repeat retained and passive shadow comparisons under candidate-v2.
+6. Run the ledger-selected public cohort only when at least 10 targets are eligible.
+7. Record Luna corpus, parameter, and final sign-off artifacts in the machine-readable decision packet.
+8. Pass `pnpm score:luna-cutover-gate` before any customer-facing cutover.

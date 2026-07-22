@@ -12,6 +12,7 @@ import { summarizeCanonicalShadowScoreCohort } from "../lib/scans/canonical-shad
 import { runCanonicalShadowScore } from "../lib/scans/canonical-shadow-score-run";
 import type { CanonicalShadowScoreModel } from "../lib/scans/canonical-shadow-score";
 import { deriveGdprEprivacyUsableCoverageSummary } from "../lib/scans/gdpr-eprivacy-review-summary";
+import { getReportableGdprEprivacyCoverageItems } from "../lib/scans/gdpr-eprivacy-reportable-rows";
 
 const MAX_COHORT_SCANS = 100;
 
@@ -130,7 +131,9 @@ async function main() {
         checklistRows: projection.checklistRows,
         unifiedFindings: projection.unifiedFindings
       });
-      const reportUsableCoverage = deriveGdprEprivacyUsableCoverageSummary(projection.checklistRows);
+      const reportUsableCoverage = deriveGdprEprivacyUsableCoverageSummary(
+        getReportableGdprEprivacyCoverageItems(projection.checklistRows)
+      );
       artifacts.push(runCanonicalShadowScore({
         context: {
           comparisonGroupKey: scan.comparisonGroupKey,

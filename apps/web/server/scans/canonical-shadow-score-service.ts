@@ -10,6 +10,7 @@ import {
 import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL } from "../../lib/scans/canonical-shadow-score-model";
 import { runCanonicalShadowScore } from "../../lib/scans/canonical-shadow-score-run";
 import { deriveGdprEprivacyUsableCoverageSummary } from "../../lib/scans/gdpr-eprivacy-review-summary";
+import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
 import { getPublicScanByIdForReadOnlyAnalysis } from "./get-scan-by-id";
 import { materializeLocalV2DagScanDetail } from "./local-v2-dag-report";
 
@@ -36,7 +37,9 @@ export async function buildStoredScanCanonicalShadowScore(scanId: string, genera
     checklistRows: projection.checklistRows,
     unifiedFindings: projection.unifiedFindings
   });
-  const reportUsableCoverage = deriveGdprEprivacyUsableCoverageSummary(projection.checklistRows);
+  const reportUsableCoverage = deriveGdprEprivacyUsableCoverageSummary(
+    getReportableGdprEprivacyCoverageItems(projection.checklistRows)
+  );
   const domainKey = materializedRecord.scan.domainHostname
     ? hash(materializedRecord.scan.domainHostname.toLowerCase())
     : null;
