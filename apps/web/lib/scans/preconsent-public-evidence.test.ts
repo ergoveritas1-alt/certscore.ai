@@ -471,6 +471,14 @@ test("resolves Batch 3 through 6 endpoint hosts through the canonical vendor res
     }
   );
   assert.deepEqual(
+    inferDirectEndpointVendorFromUrl("https://gateway.umami.is/api/send"),
+    {
+      vendorName: "Umami Analytics",
+      vendorCategory: "analytics",
+      basis: "canonical_vendor_resolver"
+    }
+  );
+  assert.deepEqual(
     inferDirectEndpointVendorFromUrl("https://cdn.privacy-mgmt.com/wrapperMessagingWithoutDetection.js"),
     {
       vendorName: "Sourcepoint CMP",

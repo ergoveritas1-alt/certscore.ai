@@ -672,16 +672,17 @@ test("keeps Cloudflare Web Analytics in analytics display category rather than a
 test("keeps Umami Cloud matching bounded to its analytics runtime", () => {
   const observations = resolveVendorObservations([
     { type: "request", url: "https://cloud.umami.is/script.js", hostname: "cloud.umami.is" },
-    { type: "request", url: "https://cloud.umami.is/api/send", hostname: "cloud.umami.is" },
+    { type: "request", url: "https://gateway.umami.is/api/send", hostname: "gateway.umami.is" },
     { type: "request", url: "https://cloud.umami.is/docs", hostname: "cloud.umami.is" },
+    { type: "request", url: "https://gateway.umami.is/docs", hostname: "gateway.umami.is" },
   ]);
 
   const umami = observations.find((item) => item.product === "Umami Analytics");
   assert.ok(umami);
   assert.equal(umami.purpose, "analytics");
   assert.deepEqual(umami.matchedUrls.sort(), [
-    "https://cloud.umami.is/api/send",
-    "https://cloud.umami.is/script.js"
+    "https://cloud.umami.is/script.js",
+    "https://gateway.umami.is/api/send"
   ]);
 });
 

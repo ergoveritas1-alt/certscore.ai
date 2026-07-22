@@ -8,6 +8,7 @@ import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
+import { buildCanonicalGdprEprivacyShadowProjection } from "../../lib/pulse/projection";
 import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 import type { ScanDetailResponse } from "./get-scan-by-id";
@@ -490,6 +491,18 @@ test("classifies script loading, ad collection, and identifier synchronization s
     regulatoryRelevance: ["identifier_sync"],
     url: "https://sync.example.test/user_sync"
   }), "identifier_synchronization");
+  assert.equal(classifyRetainedRequestActivity({
+    category: "analytics",
+    collectionEndpointObserved: false,
+    resourceType: "script",
+    url: "https://cloud.umami.is/script.js"
+  }), "library", "loading the bounded analytics library is not collection evidence");
+  assert.equal(classifyRetainedRequestActivity({
+    category: "analytics",
+    collectionEndpointObserved: false,
+    resourceType: "fetch",
+    url: "https://gateway.umami.is/api/send"
+  }), "tracker_beacon", "a canonical vendor fetch endpoint is collection evidence");
 });
 
 test("segments auxiliary authorization and callback navigation from the primary page assessment", async () => {
@@ -3013,6 +3026,162 @@ test("materializeLocalV2DagScanDetail keeps unknown third-party requests and lon
     });
     assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Insufficient evidence");
     assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Insufficient evidence");
+  } finally {
+    process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail promotes a canonical Umami gateway fetch into report and score findings", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/umami-gateway-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-07-22T09:48:26.000Z",
+      consentUiObservations: [],
+      cookieEvents: [],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: false,
+        preConsentTrackingObserved: true
+      },
+      modulesRun: [{
+        completedAt: "2026-07-22T09:48:26.000Z",
+        durationMs: 12000,
+        errors: [],
+        evidenceRefs: [],
+        moduleName: "preConsentRuntimeScanner",
+        startedAt: "2026-07-22T09:48:14.000Z",
+        status: "completed",
+        timingBreakdown: []
+      }],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "umami_script",
+          eventType: "network_request",
+          evidenceRefs: [],
+          hostname: "cloud.umami.is",
+          requestUrl: "https://cloud.umami.is/script.js",
+          resourceType: "script",
+          sourceScanner: "pre_consent_runtime",
+          thirdParty: true,
+          timestampMs: 6400,
+          url: "https://cloud.umami.is/script.js"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "umami_send",
+          eventType: "network_request",
+          evidenceRefs: [],
+          hostname: "gateway.umami.is",
+          requestUrl: "https://gateway.umami.is/api/send",
+          resourceType: "fetch",
+          sourceScanner: "pre_consent_runtime",
+          thirdParty: true,
+          timestampMs: 6550,
+          url: "https://gateway.umami.is/api/send"
+        }
+      ],
+      normalizedUrl: "https://example.test/",
+      normalizedVendorObservations: [{
+        basis: ["umami_cloud_analytics_runtime", "hostname_match", "url_pattern_match"],
+        confidence: 0.9,
+        entity: "Umami Software, Inc.",
+        matchedCookieNames: [],
+        matchedEvidenceIds: ["umami_script", "umami_send"],
+        matchedEvidenceRefs: [
+          { eventId: "umami_script", eventType: "network_request", refId: "ref_umami_script", url: "https://cloud.umami.is/script.js" },
+          { eventId: "umami_send", eventType: "network_request", refId: "ref_umami_send", url: "https://gateway.umami.is/api/send" }
+        ],
+        matchedHostnames: ["cloud.umami.is", "gateway.umami.is"],
+        matchedUrls: ["https://cloud.umami.is/script.js", "https://gateway.umami.is/api/send"],
+        observationId: "vendor_umami",
+        product: "Umami Analytics",
+        purpose: "analytics",
+        regulatoryRelevance: ["consent", "analytics", "audience_measurement", "third_party_runtime"],
+        vendor: "Umami"
+      }],
+      policySurfaceObservations: [],
+      runtimeCoverage: {
+        coverageStatus: "complete",
+        fallbackModesUsed: [],
+        limitationKeys: [],
+        notes: [],
+        observationCounts: {
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          networkEvents: 2,
+          normalizedVendors: 1,
+          observedJourneys: 0,
+          thirdPartyRequests: 2
+        },
+        silentEmpty: false
+      },
+      scanId: "umami-gateway-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      startedAt: "2026-07-22T09:48:14.000Z",
+      url: "https://example.test/"
+    }, null, 2)}\n`, "utf8");
+
+    const base = makeScanRecord();
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...base.scan,
+        domainHostname: "example.test",
+        scanConfigJson: {
+          hostname: "example.test",
+          normalizedUrl: "https://example.test/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: { artifactOnly: true, localOnly: true, productionFindingIntegration: false }
+          }
+        }
+      }
+    }));
+
+    assert.equal(detail.snapshot?.preconsent_tracking_detected, true);
+    assert.equal(detail.runtimeArtifacts?.consent_preconsent_violation_count, 1);
+    assert.deepEqual(detail.runtimeArtifacts?.consent_baseline_tracker_vendor_names, ["Umami Analytics"]);
+    assert.equal(detail.preconsentViolations.some((row) => row.vendorName === "Umami Analytics"), true);
+    const reportFindings = buildScanReportUnifiedFindingsForScan(detail as unknown as Record<string, unknown>);
+    assert.equal(reportFindings.some((finding) => finding.unifiedFindingId === "preconsent_tracking"), true);
+    const scoreProjection = buildCanonicalGdprEprivacyShadowProjection(detail);
+    assert.equal(scoreProjection.unifiedFindings.some((finding) => finding.unifiedFindingId === "preconsent_tracking"), true);
+  } finally {
+    process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail fails closed when scoring requires a missing evidence bundle", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/missing-required-bundle-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    const base = makeScanRecord();
+    const scanRecord = makeScanRecord({
+      scan: {
+        ...base.scan,
+        scanConfigJson: {
+          hostname: "example.test",
+          normalizedUrl: "https://example.test/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: { artifactOnly: true, localOnly: true, productionFindingIntegration: false }
+          }
+        }
+      }
+    });
+
+    await assert.rejects(
+      materializeLocalV2DagScanDetail(scanRecord, { requireBundle: true }),
+      /Required local v2 DAG evidence bundle was unavailable/
+    );
   } finally {
     process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
     await rm(outDir, { recursive: true, force: true });

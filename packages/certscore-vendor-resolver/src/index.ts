@@ -2368,7 +2368,7 @@ const rules: VendorRule[] = [
     purpose: "analytics",
     regulatoryRelevance: ["consent", "analytics", "audience_measurement", "third_party_runtime"],
     confidence: 0.9,
-    hostPatterns: [/^cloud\.umami\.is$/i],
+    hostPatterns: [/^(?:cloud|gateway)\.umami\.is$/i],
     urlPatterns: [/\/script\.js(?:\?|$)/i, /\/api\/send(?:\?|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "umami_cloud_analytics_runtime",

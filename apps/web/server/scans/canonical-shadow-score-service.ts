@@ -44,7 +44,7 @@ export async function buildStoredScanCanonicalShadowScore(scanId: string, genera
   const storedRecord = await getPublicScanByIdForReadOnlyAnalysis(scanId);
   if (!storedRecord) return null;
 
-  const materializedRecord = await materializeLocalV2DagScanDetail(storedRecord).catch(() => storedRecord);
+  const materializedRecord = await materializeLocalV2DagScanDetail(storedRecord, { requireBundle: true });
   return buildMaterializedScanCanonicalShadowScore(materializedRecord, generatedAt);
 }
 

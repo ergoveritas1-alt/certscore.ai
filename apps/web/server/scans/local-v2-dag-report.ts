@@ -29,7 +29,10 @@ import {
   normalizeGdprTransparencyProductionEvidenceProfile,
   type GdprTransparencyProductionEvidenceProfile
 } from "../../lib/scans/gdpr-transparency-production-profile";
-import { isPromotionGradePreconsentRequestRow } from "../../lib/scans/preconsent-public-evidence";
+import {
+  inferDirectEndpointVendorFromUrl,
+  isPromotionGradePreconsentRequestRow
+} from "../../lib/scans/preconsent-public-evidence";
 import { guessPrimaryLanguage } from "../../lib/scans/primary-language";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import {
@@ -3072,17 +3075,23 @@ export function classifyRetainedRequestActivity(input: {
   category: string;
   collectionEndpointObserved: boolean;
   regulatoryRelevance?: string[];
+  resourceType?: string | null;
   url?: string | null;
 }) {
   const relevance = (input.regulatoryRelevance ?? []).join(" ").toLowerCase();
   const url = input.url ?? "";
+  const canonicalVendorEndpointObserved = Boolean(
+    inferDirectEndpointVendorFromUrl(url) &&
+    /^(?:beacon|fetch|xhr)$/i.test(input.resourceType ?? "")
+  );
+  const collectionEndpointObserved = input.collectionEndpointObserved || canonicalVendorEndpointObserved;
   if (/identifier_sync|identity_resolution|cookie_sync/.test(relevance) || /(?:user|id|cookie)[_-]?sync|sync(?:\.gif|\/)|setuid|getuid/i.test(url)) {
     return "identifier_synchronization";
   }
-  if (input.collectionEndpointObserved && /advertising|adtech|retargeting|marketing/i.test(input.category)) {
+  if (collectionEndpointObserved && /advertising|adtech|retargeting|marketing/i.test(input.category)) {
     return "ad_request";
   }
-  if (input.collectionEndpointObserved) {
+  if (collectionEndpointObserved) {
     return "tracker_beacon";
   }
   return "library";
@@ -3566,6 +3575,7 @@ function buildMaterializedLocalV2Detail(
               category: matchedVendor.vendorCategory,
               collectionEndpointObserved: event.collectionEndpointObserved === true,
               regulatoryRelevance: matchedVendor.regulatoryRelevance,
+              resourceType: event.resourceType,
               url
             }),
             classificationBasis: "local_v2_dag_runtime_vendor_observation",
@@ -4210,7 +4220,10 @@ function buildMaterializedLocalV2Detail(
   };
 }
 
-export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResponse): Promise<ScanDetailResponse> {
+export async function materializeLocalV2DagScanDetail(
+  scanRecord: ScanDetailResponse,
+  options: { requireBundle?: boolean } = {}
+): Promise<ScanDetailResponse> {
   const input = getLocalV2DagReportInput(scanRecord);
   if (!input || scanRecord.scan.status !== "completed") {
     return scanRecord;
@@ -4243,6 +4256,9 @@ export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResp
   const consentControlGeometryEvidence = localGeometryEvidence ?? (geometryArtifact
     ? await readLocalV2ConsentControlGeometryFromS3(geometryArtifact)
     : null);
+  if (!bundle && options.requireBundle) {
+    throw new Error(`Required local v2 DAG evidence bundle was unavailable for scan ${scanRecord.scan.id}.`);
+  }
   return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle, {
     consentControlGeometryEvidence,
     gdprTransparencyEvidenceProfile: input.gdprTransparencyEvidenceProfile,
