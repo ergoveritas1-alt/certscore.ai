@@ -190,18 +190,22 @@ export function countEligibleNonEssentialPreconsentStorageMetricRows(rows: Runti
   return rows.filter(isEligibleNonEssentialPreconsentStorageMetricRow).length;
 }
 
-/**
- * A zero count is only conclusive when every retained pre-consent storage row
- * has a resolved category and essentiality classification.
- */
-export function hasUnresolvedNonEssentialPreconsentStorageEvidence(rows: RuntimeCookieEvidenceRow[]) {
-  return rows.some((row) => {
+export function countUnclassifiedNonEssentialPreconsentStorageRows(rows: RuntimeCookieEvidenceRow[]) {
+  return rows.filter((row) => {
     const retainedPreConsentObservation =
       row.timingEvidence === "before_consent_cookie_write" ||
       (row.timingEvidence === "periodic_cookie_snapshot" && row.observedBeforeConsent === true);
     return retainedPreConsentObservation &&
       (row.category === "unknown" || row.essentiality === "unknown");
-  });
+  }).length;
+}
+
+/**
+ * A zero count is only conclusive when every retained pre-consent storage row
+ * has a resolved category and essentiality classification.
+ */
+export function hasUnresolvedNonEssentialPreconsentStorageEvidence(rows: RuntimeCookieEvidenceRow[]) {
+  return countUnclassifiedNonEssentialPreconsentStorageRows(rows) > 0;
 }
 
 function inferCookieProvider(name: string, domain: string | null = null) {

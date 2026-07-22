@@ -20,6 +20,7 @@ import { CANONICAL_VENDOR_RESOLVER_VERSION } from "@certscore/vendor-resolver";
 import {
   buildRuntimeCookieInventory,
   countEligibleNonEssentialPreconsentStorageMetricRows,
+  countUnclassifiedNonEssentialPreconsentStorageRows,
   hasUnresolvedNonEssentialPreconsentStorageEvidence,
   getRuntimeCookiePrimaryProvider,
   isEligibleNonEssentialPreconsentStorageRow
@@ -1931,11 +1932,10 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const observedNonEssentialPreConsentStorageCount = hasClassifiedRuntimeStorageRows
     ? countEligibleNonEssentialPreconsentStorageMetricRows(reportSurface.runtimeCookieRows)
     : null;
-  const nonEssentialStorageEvidenceUnresolved = hasUnresolvedNonEssentialPreconsentStorageEvidence(reportSurface.runtimeCookieRows);
-  const nonEssentialPreConsentStorageCount =
-    nonEssentialStorageEvidenceUnresolved
-      ? null
-      : observedNonEssentialPreConsentStorageCount;
+  const nonEssentialPreConsentStorageCount = observedNonEssentialPreConsentStorageCount;
+  const unclassifiedPreConsentStorageCount = hasClassifiedRuntimeStorageRows
+    ? countUnclassifiedNonEssentialPreconsentStorageRows(reportSurface.runtimeCookieRows)
+    : 0;
   const cookiesBeforeConsentCount = hasClassifiedRuntimeStorageRows
     ? nonEssentialPreConsentStorageCount
     : finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
@@ -1985,6 +1985,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     trackingClassifiedThirdPartyRequests: reportSurface.presentationSummary.thirdPartyRequestCount,
     cookiesPreConsent: cookiesBeforeConsentCount,
     nonEssentialPreConsentStorage: nonEssentialPreConsentStorageCount,
+    unclassifiedPreConsentStorageCount,
     storageMetricLabel: hasClassifiedRuntimeStorageRows ? "Non-essential storage" : "Pre-consent storage",
     storageMetricScope: hasClassifiedRuntimeStorageRows ? "nonessential_only" : "all_observed",
     totalStorageRecordsPresentBeforeRecordedConsent: reportSurface.runtimeCookieRows.length,

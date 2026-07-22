@@ -309,6 +309,7 @@ test("Pulse descriptive storage totals include explicit pre-consent observations
   assert.match(source, /hasUnresolvedNonEssentialPreconsentStorageEvidence/);
   assert.match(source, /nonEssentialPreConsentStorageCount =/);
   assert.match(source, /nonEssentialPreConsentStorage: nonEssentialPreConsentStorageCount/);
+  assert.match(source, /unclassifiedPreConsentStorageCount/);
   assert.match(source, /const cookiesBeforeConsentCount = hasClassifiedRuntimeStorageRows/);
   assert.doesNotMatch(source, /const cookiesBeforeConsentCount = nonEssentialPreConsentStorageCount \?\?/);
   assert.match(source, /hasClassifiedRuntimeStorageRows \? "Non-essential storage" : "Pre-consent storage"/);

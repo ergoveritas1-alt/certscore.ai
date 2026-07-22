@@ -5,6 +5,7 @@ import {
   buildRuntimeCookieInventory,
   classifyRuntimeCookieCategory,
   countEligibleNonEssentialPreconsentStorageMetricRows,
+  countUnclassifiedNonEssentialPreconsentStorageRows,
   hasUnresolvedNonEssentialPreconsentStorageEvidence,
   getRuntimeCookiePrimaryProvider,
   isEligibleNonEssentialPreconsentStorageMetricRow,
@@ -275,6 +276,42 @@ test("does not report confirmed zero when pre-consent storage classification is 
 
   assert.equal(countEligibleNonEssentialPreconsentStorageMetricRows([row]), 0);
   assert.equal(hasUnresolvedNonEssentialPreconsentStorageEvidence([row]), true);
+});
+
+test("keeps confirmed non-essential count visible alongside unclassified pre-consent storage", () => {
+  const confirmed = {
+    cookieName: "_ga",
+    domain: "example.com",
+    firstObservedAtMs: 100,
+    initiatorDomain: null,
+    initiatorUrl: null,
+    initiatorVendor: null,
+    category: "analytics",
+    nonEssential: true,
+    essentiality: "non_essential",
+    observedBeforeConsent: true,
+    party: "first_party",
+    responseUrl: null,
+    sourceRequestUrl: null,
+    setAtMs: null,
+    setMethod: "browser_snapshot",
+    timingBasis: "periodic_cookie_snapshot",
+    evidenceGrade: "descriptive",
+    timingEvidence: "periodic_cookie_snapshot"
+  } as const;
+  const unknown = {
+    ...confirmed,
+    cookieName: "unknown_cookie",
+    category: "unknown",
+    nonEssential: false,
+    essentiality: "unknown",
+    observedBeforeConsent: true,
+    timingEvidence: "periodic_cookie_snapshot"
+  } as const;
+
+  assert.equal(countEligibleNonEssentialPreconsentStorageMetricRows([confirmed, unknown]), 1);
+  assert.equal(countUnclassifiedNonEssentialPreconsentStorageRows([confirmed, unknown]), 1);
+  assert.equal(hasUnresolvedNonEssentialPreconsentStorageEvidence([confirmed, unknown]), true);
 });
 
 test("Aruba cookies use cookie-specific ownership and reject unrelated Cloudflare inheritance", () => {

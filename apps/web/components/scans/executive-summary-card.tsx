@@ -3708,16 +3708,20 @@ function getFindingCookieWriteCount(finding: CertScoreFinding) {
 function getCookieCountMismatchNote(input: {
   beforeConsentCookieCount: number;
   findings: CertScoreFinding[];
+  unclassifiedPreConsentStorageCount?: number;
 }) {
   const findingCount = input.findings
     .map(getFindingCookieWriteCount)
     .find((count): count is number => typeof count === "number" && count >= 0);
 
-  if (typeof findingCount !== "number" || findingCount === input.beforeConsentCookieCount) {
-    return null;
+  const notes: string[] = [];
+  if (typeof findingCount === "number" && findingCount !== input.beforeConsentCookieCount) {
+    notes.push("Executive metric includes non-essential cookies explicitly observed in the pre-consent runtime; this finding shows the subset with promotion-grade write timing.");
   }
-
-  return "Executive metric includes non-essential cookies explicitly observed in the pre-consent runtime; this finding shows the subset with promotion-grade write timing.";
+  if ((input.unclassifiedPreConsentStorageCount ?? 0) > 0) {
+    notes.push(`${input.unclassifiedPreConsentStorageCount} additional pre-consent storage record${input.unclassifiedPreConsentStorageCount === 1 ? " remains" : "s remain"} unclassified.`);
+  }
+  return notes.length > 0 ? notes.join(" ") : null;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -4151,6 +4155,7 @@ export function ExecutiveSummaryCard(input: {
   beforeConsentCookieCount: number;
   beforeConsentStorageMetricAvailable?: boolean;
   beforeConsentStorageScope?: "all_observed" | "nonessential_only";
+  unclassifiedPreConsentStorageCount?: number;
   coverageMicrocards?: Array<{
     label: string;
     tooltip?: string | null;
@@ -4227,7 +4232,8 @@ export function ExecutiveSummaryCard(input: {
     Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
   const cookieCountMismatchNote = getCookieCountMismatchNote({
     beforeConsentCookieCount: input.beforeConsentCookieCount,
-    findings: regulatoryFindingInput
+    findings: regulatoryFindingInput,
+    unclassifiedPreConsentStorageCount: input.unclassifiedPreConsentStorageCount
   });
   const executiveHeadlineFindings = displayedTopFindings.slice(0, 3).map((finding) => {
     const display = getPublicReportFindingDisplayForCertFinding(finding);
