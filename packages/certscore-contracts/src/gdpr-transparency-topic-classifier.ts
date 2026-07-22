@@ -993,17 +993,27 @@ export function classifyGdprTransparencyTopics(
   }
 
   const localeHints = new Set(input.localeHints ?? []);
-  const phrases = localeHints.size > 0
-    ? GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY.filter((term) => localeHints.has(term.locale))
-    : GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY;
-  const matches = phrases
-    .map((term) => ({ term, score: phraseScore(term, normalizedText) }))
+  const privacyDisclosureContext = hasPrivacyDisclosureContext(normalizedText);
+  const matches = matchedGdprTransparencyPhraseIndexes(normalizedText)
+    .map((index) => NORMALIZED_GDPR_TRANSPARENCY_TOPIC_PHRASES[index])
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    .filter(({ term }) => localeHints.size === 0 || localeHints.has(term.locale))
+    .map(({ normalizedPhrase, term }) => ({
+      term,
+      score: phraseScore({
+        normalizedPhrase,
+        privacyDisclosureContext,
+        term,
+      }),
+    }))
     .filter((entry) => entry.score > 0)
     .sort((left, right) =>
       right.score - left.score ||
       strengthRank(right.term.strength) - strengthRank(left.term.strength) ||
       right.term.phrase.length - left.term.phrase.length
     );
+  const evidenceSourceText = matches.length > 0 ? decodedEvidenceText(input.text ?? "") : "";
+  const evidenceSearchIndex = evidenceSourceText ? buildEvidenceSearchIndex(evidenceSourceText) : undefined;
 
   const selected = new Map<GdprTransparencyTopic, GdprTransparencyTopicMatch>();
   for (const { term } of matches) {
@@ -1013,7 +1023,7 @@ export function classifyGdprTransparencyTopics(
     selected.set(term.topic, {
       classifierProvenance: "gdpr_transparency_topic_classifier.v1",
       confidence: confidenceFor(term),
-      evidenceExcerpt: boundedEvidenceExcerpt(input.text ?? "", term.phrase),
+      evidenceExcerpt: boundedEvidenceExcerptFromIndex(evidenceSourceText, evidenceSearchIndex, term.phrase),
       matchedLocale: term.locale,
       matchedTerm: term.phrase,
       matchStrength: term.strength,
@@ -1113,33 +1123,37 @@ function equivalent(topic: GdprTransparencyTopic, phrase: string, variant?: stri
   return { phrase, strength: "equivalent", topic, variant };
 }
 
-function phraseScore(term: GdprTransparencyTopicPhrase, normalizedText: string): number {
-  const phrase = normalizeGdprTransparencyText(term.phrase);
-  if (!phrase || !phraseIncludes(normalizedText, phrase)) {
+const NORMALIZED_GDPR_TRANSPARENCY_TOPIC_PHRASES = GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY.map((term) => {
+  const normalizedPhrase = normalizeGdprTransparencyText(term.phrase);
+  return {
+    boundarylessScript: usesBoundarylessScript(normalizedPhrase),
+    normalizedPhrase,
+    term,
+    usesArabic: usesArabicScript(normalizedPhrase),
+  };
+});
+
+type GdprTransparencyPhraseTrieNode = {
+  failure: number;
+  next: Map<string, number>;
+  outputs: number[];
+};
+
+const GDPR_TRANSPARENCY_PHRASE_TRIE = buildGdprTransparencyPhraseTrie();
+
+function phraseScore(input: {
+  normalizedPhrase: string;
+  privacyDisclosureContext: boolean;
+  term: GdprTransparencyTopicPhrase;
+}): number {
+  if (input.term.variant === "requires_privacy_context" && !input.privacyDisclosureContext) {
     return 0;
   }
-  if (term.variant === "requires_privacy_context" && !hasPrivacyDisclosureContext(normalizedText)) {
-    return 0;
-  }
-  return 600 + phrase.length + strengthRank(term.strength) * 80;
+  return 600 + input.normalizedPhrase.length + strengthRank(input.term.strength) * 80;
 }
 
 function hasPrivacyDisclosureContext(normalizedText: string) {
   return /\b(?:privacy|gdpr|dati personali|protezione dei dati|titolare del trattamento|responsabili? del trattamento|diritti degli interessati|articolo (?:6|13|28|44))\b/i.test(normalizedText);
-}
-
-function paddedIncludes(normalizedValue: string, phrase: string) {
-  return ` ${normalizedValue} `.includes(` ${phrase} `);
-}
-
-function phraseIncludes(normalizedValue: string, phrase: string) {
-  if (usesBoundarylessScript(phrase)) {
-    return [...phrase].length >= 4 && normalizedValue.includes(phrase);
-  }
-  if (usesArabicScript(phrase)) {
-    return paddedIncludes(normalizedValue, phrase) || arabicCliticIndex(normalizedValue, phrase) >= 0;
-  }
-  return paddedIncludes(normalizedValue, phrase);
 }
 
 function usesBoundarylessScript(value: string) {
@@ -1150,14 +1164,101 @@ function usesArabicScript(value: string) {
   return /\p{Script=Arabic}/u.test(value);
 }
 
-function arabicCliticIndex(normalizedValue: string, phrase: string) {
-  if ([...phrase].length < 8) {
-    return -1;
+function buildGdprTransparencyPhraseTrie(): GdprTransparencyPhraseTrieNode[] {
+  const nodes: GdprTransparencyPhraseTrieNode[] = [{ failure: 0, next: new Map(), outputs: [] }];
+  NORMALIZED_GDPR_TRANSPARENCY_TOPIC_PHRASES.forEach(({ normalizedPhrase }, phraseIndex) => {
+    if (!normalizedPhrase) return;
+    let nodeIndex = 0;
+    for (const character of normalizedPhrase) {
+      let nextIndex = nodes[nodeIndex]?.next.get(character);
+      if (nextIndex === undefined) {
+        nextIndex = nodes.length;
+        nodes[nodeIndex]?.next.set(character, nextIndex);
+        nodes.push({ failure: 0, next: new Map(), outputs: [] });
+      }
+      nodeIndex = nextIndex;
+    }
+    nodes[nodeIndex]?.outputs.push(phraseIndex);
+  });
+
+  const queue: number[] = [];
+  for (const childIndex of nodes[0]?.next.values() ?? []) {
+    queue.push(childIndex);
   }
+  for (let queueIndex = 0; queueIndex < queue.length; queueIndex += 1) {
+    const nodeIndex = queue[queueIndex];
+    const node = nodeIndex === undefined ? undefined : nodes[nodeIndex];
+    if (!node) continue;
+    for (const [character, childIndex] of node.next) {
+      queue.push(childIndex);
+      let failureIndex = node.failure;
+      while (failureIndex !== 0 && !nodes[failureIndex]?.next.has(character)) {
+        failureIndex = nodes[failureIndex]?.failure ?? 0;
+      }
+      const fallback = nodes[failureIndex]?.next.get(character);
+      nodes[childIndex]!.failure = fallback !== undefined && fallback !== childIndex ? fallback : 0;
+      nodes[childIndex]!.outputs.push(...(nodes[nodes[childIndex]!.failure]?.outputs ?? []));
+    }
+  }
+  return nodes;
+}
+
+function matchedGdprTransparencyPhraseIndexes(normalizedText: string): number[] {
+  const matched = new Set<number>();
+  let nodeIndex = 0;
+  let codeUnitOffset = 0;
+  for (const character of normalizedText) {
+    while (nodeIndex !== 0 && !GDPR_TRANSPARENCY_PHRASE_TRIE[nodeIndex]?.next.has(character)) {
+      nodeIndex = GDPR_TRANSPARENCY_PHRASE_TRIE[nodeIndex]?.failure ?? 0;
+    }
+    nodeIndex = GDPR_TRANSPARENCY_PHRASE_TRIE[nodeIndex]?.next.get(character) ?? 0;
+    const matchEnd = codeUnitOffset + character.length;
+    for (const phraseIndex of GDPR_TRANSPARENCY_PHRASE_TRIE[nodeIndex]?.outputs ?? []) {
+      const entry = NORMALIZED_GDPR_TRANSPARENCY_TOPIC_PHRASES[phraseIndex];
+      if (!entry) continue;
+      const matchStart = matchEnd - entry.normalizedPhrase.length;
+      if (gdprTransparencyPhraseBoundaryMatches(normalizedText, matchStart, matchEnd, entry)) {
+        matched.add(phraseIndex);
+      }
+    }
+    codeUnitOffset = matchEnd;
+  }
+  return [...matched];
+}
+
+function gdprTransparencyPhraseBoundaryMatches(
+  normalizedText: string,
+  matchStart: number,
+  matchEnd: number,
+  entry: (typeof NORMALIZED_GDPR_TRANSPARENCY_TOPIC_PHRASES)[number],
+): boolean {
+  if (entry.boundarylessScript) {
+    return [...entry.normalizedPhrase].length >= 4;
+  }
+  const afterMatches = matchEnd === normalizedText.length || normalizedText[matchEnd] === " ";
+  if (!afterMatches) return false;
+  if (matchStart === 0 || normalizedText[matchStart - 1] === " ") return true;
+  if (!entry.usesArabic || [...entry.normalizedPhrase].length < 8) return false;
+  const precedingCharacter = normalizedText[matchStart - 1];
+  return precedingCharacter !== undefined &&
+    ["و", "ف", "ب", "ك", "ل"].includes(precedingCharacter) &&
+    (matchStart === 1 || normalizedText[matchStart - 2] === " ");
+}
+
+function arabicCliticIndex(normalizedValue: string, phrase: string): number {
+  if ([...phrase].length < 8) return -1;
   for (const clitic of ["و", "ف", "ب", "ك", "ل"]) {
-    const index = ` ${normalizedValue} `.indexOf(` ${clitic}${phrase} `);
-    if (index >= 0) {
-      return Math.max(0, index);
+    const cliticPhrase = `${clitic}${phrase}`;
+    let index = normalizedValue.indexOf(cliticPhrase);
+    while (index >= 0) {
+      const afterIndex = index + cliticPhrase.length;
+      if (
+        (index === 0 || normalizedValue[index - 1] === " ") &&
+        (afterIndex === normalizedValue.length || normalizedValue[afterIndex] === " ")
+      ) {
+        return index;
+      }
+      index = normalizedValue.indexOf(cliticPhrase, index + 1);
     }
   }
   return -1;
@@ -1185,13 +1286,15 @@ function strengthRank(strength: GdprTransparencyTopicMatchStrength) {
   }
 }
 
-function boundedEvidenceExcerpt(text: string, phrase: string): string {
+function boundedEvidenceExcerptFromIndex(
+  sourceText: string,
+  searchIndex: ReturnType<typeof buildEvidenceSearchIndex> | undefined,
+  phrase: string,
+): string {
   const normalizedPhrase = normalizeGdprTransparencyText(phrase);
-  const sourceText = decodedEvidenceText(text);
-  if (!sourceText) {
+  if (!sourceText || !searchIndex) {
     return "";
   }
-  const searchIndex = buildEvidenceSearchIndex(sourceText);
   const matchIndex = normalizedPhrase ? paddedIndexOf(searchIndex.normalized, normalizedPhrase) : -1;
   if (matchIndex < 0) {
     return sourceText.slice(0, MAX_EXCERPT_CHARS);
@@ -1212,7 +1315,9 @@ function decodedEvidenceText(text: string): string {
 }
 
 function buildEvidenceSearchIndex(sourceText: string) {
-  let normalized = "";
+  const normalizedChunks: string[] = [];
+  let normalizedLength = 0;
+  let lastNormalizedCharacter = "";
   const sourceIndexes: number[] = [];
 
   const append = (value: string, sourceIndex: number) => {
@@ -1230,10 +1335,12 @@ function buildEvidenceSearchIndex(sourceText: string) {
       }
       for (const outputChar of normalizedChar) {
         const collapsedOutput = /\s/u.test(outputChar) ? " " : outputChar;
-        if (collapsedOutput === " " && (normalized.length === 0 || normalized.endsWith(" "))) {
+        if (collapsedOutput === " " && (normalizedLength === 0 || lastNormalizedCharacter === " ")) {
           continue;
         }
-        normalized += collapsedOutput;
+        normalizedChunks.push(collapsedOutput);
+        normalizedLength += collapsedOutput.length;
+        lastNormalizedCharacter = collapsedOutput;
         sourceIndexes.push(sourceIndex);
       }
     }
@@ -1245,12 +1352,12 @@ function buildEvidenceSearchIndex(sourceText: string) {
     index += char.length;
   }
 
-  if (normalized.endsWith(" ")) {
-    normalized = normalized.slice(0, -1);
+  if (lastNormalizedCharacter === " ") {
+    normalizedChunks.pop();
     sourceIndexes.pop();
   }
 
-  return { normalized, sourceIndexes };
+  return { normalized: normalizedChunks.join(""), sourceIndexes };
 }
 
 function paddedIndexOf(normalizedValue: string, phrase: string) {

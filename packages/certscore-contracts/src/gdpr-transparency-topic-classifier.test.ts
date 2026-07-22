@@ -48,6 +48,27 @@ test("classifies canonical GDPR Transparency topics with bounded provenance", ()
   }
 });
 
+test("classifies a large retained policy once while preserving bounded topic excerpts", () => {
+  const text = [
+    "navigation and service copy ".repeat(12_000),
+    "The data controller can be contacted through our privacy form.",
+    "Our data protection officer may be reached through the DPO contact channel.",
+    "The retention period for personal data is described below.",
+    "additional policy provisions ".repeat(6_000),
+  ].join(" ");
+  const startedAt = Date.now();
+  const classification = classifyGdprTransparencyTopics({ text });
+  const durationMs = Date.now() - startedAt;
+  const byTopic = new Map(classification.matches.map((match) => [match.topic, match]));
+
+  assert.ok(byTopic.has("controller_contact"));
+  assert.ok(byTopic.has("dpo_contact"));
+  assert.ok(byTopic.has("data_retention"));
+  assert.match(byTopic.get("dpo_contact")?.evidenceExcerpt ?? "", /data protection officer/i);
+  assert.ok(classification.matches.every((match) => match.evidenceExcerpt.length <= 360));
+  assert.ok(durationMs < 2_000, `large policy classification took ${durationMs}ms`);
+});
+
 test("classifies Article 13 wording from controller/operator and processor-focused privacy notices", () => {
   const classification = classifyGdprTransparencyTopics({
     localeHints: ["en"],

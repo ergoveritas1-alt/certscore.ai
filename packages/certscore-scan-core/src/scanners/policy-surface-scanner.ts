@@ -1618,20 +1618,30 @@ async function processPolicyCandidate({
     };
   }
   const policySections = textQuality.usable
-    ? extractPolicySections({
+    ? await recordPolicyTiming(
+      timingBreakdown,
+      `policy section extraction ${candidateIndex + 1}`,
+      `Extract bounded retained sections from ${effectiveCandidate.deterministicSurfaceType}.`,
+      async () => extractPolicySections({
         html: fetchedHtml,
         sourceUrl: effectiveCandidate.normalizedUrl,
         visibleText,
-      })
+      }),
+    )
     : [];
   const allowLegacyArticle13Extraction = fetched.documentFormat !== "pdf";
   const sectionEvidence = textQuality.usable && allowLegacyArticle13Extraction && effectiveCandidate.deterministicSurfaceType === "privacy_policy"
     ? retainedArticle13SectionEvidenceFromSections(policySections, effectiveCandidate.normalizedUrl)
     : [];
   const deterministic = textQuality.usable
-    ? policyFactsForFetchedDocument(extractPolicyFacts(visibleText), sectionEvidence, {
+    ? await recordPolicyTiming(
+      timingBreakdown,
+      `policy deterministic analysis ${candidateIndex + 1}`,
+      `Classify bounded deterministic facts for ${effectiveCandidate.deterministicSurfaceType}.`,
+      async () => policyFactsForFetchedDocument(extractPolicyFacts(visibleText), sectionEvidence, {
         allowLegacyArticle13Extraction,
-      })
+      }),
+    )
     : emptyPolicyFacts();
   const finalGdprTransparencyTopicCandidates = effectiveCandidate.deterministicSurfaceType === "privacy_policy"
     ? mergeGdprTransparencyTopicCandidates(
