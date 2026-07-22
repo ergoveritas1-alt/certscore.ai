@@ -306,7 +306,10 @@ test("Pulse descriptive storage totals include explicit pre-consent observations
 
   assert.match(source, /eligibleNonEssentialPreConsentStorageCount: input\.reportSurface\.runtimeCookieRows\.filter\(isEligibleNonEssentialPreconsentStorageRow\)\.length/);
   assert.match(source, /observedNonEssentialPreConsentStorageCount: countEligibleNonEssentialPreconsentStorageMetricRows/);
-  assert.match(source, /cookiesBeforeConsentCount = reportSurface\.runtimeCookieRows\.length > 0\s+\? countEligibleNonEssentialPreconsentStorageMetricRows/);
+  assert.match(source, /nonEssentialPreConsentStorageCount = hasClassifiedRuntimeStorageRows\s+\? countEligibleNonEssentialPreconsentStorageMetricRows/);
+  assert.match(source, /nonEssentialPreConsentStorage: nonEssentialPreConsentStorageCount/);
+  assert.match(source, /hasClassifiedRuntimeStorageRows \? "Non-essential storage" : "Pre-consent storage"/);
+  assert.match(source, /hasClassifiedRuntimeStorageRows \? "nonessential_only" : "all_observed"/);
 });
 
 test("Pulse evidence inventory filters display hostnames and deduplicates vendor rows", () => {

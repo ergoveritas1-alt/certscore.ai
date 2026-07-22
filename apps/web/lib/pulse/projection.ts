@@ -1922,12 +1922,15 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.scanRecord.runtimeArtifacts);
   const storageSummary = asRecord(recordValue(hybridRuntimeEvidence, "storageSummary"));
   const networkSummary = asRecord(recordValue(hybridRuntimeEvidence, "networkSummary"));
-  const cookiesBeforeConsentCount = reportSurface.runtimeCookieRows.length > 0
+  const hasClassifiedRuntimeStorageRows = reportSurface.runtimeCookieRows.length > 0;
+  const nonEssentialPreConsentStorageCount = hasClassifiedRuntimeStorageRows
     ? countEligibleNonEssentialPreconsentStorageMetricRows(reportSurface.runtimeCookieRows)
-    : finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
-      finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
-      finiteNumber(recordValue(input.scanRecord.snapshot, "initialCookieCount")) ??
-      0;
+    : null;
+  const cookiesBeforeConsentCount = nonEssentialPreConsentStorageCount ??
+    finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
+    finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
+    finiteNumber(recordValue(input.scanRecord.snapshot, "initialCookieCount")) ??
+    0;
   const policySurfaces = projectedPolicySurfaceRows(input.scanRecord).map(({ type, url }) => ({
     type,
     title: meaningfulPolicySurfaceTitle(type, url),
@@ -1970,8 +1973,9 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     thirdPartyRequests: allThirdPartyRequestCount,
     trackingClassifiedThirdPartyRequests: reportSurface.presentationSummary.thirdPartyRequestCount,
     cookiesPreConsent: cookiesBeforeConsentCount,
-    nonEssentialPreConsentStorage: cookiesBeforeConsentCount,
-    storageMetricLabel: "Non-essential storage",
+    nonEssentialPreConsentStorage: nonEssentialPreConsentStorageCount,
+    storageMetricLabel: hasClassifiedRuntimeStorageRows ? "Non-essential storage" : "Pre-consent storage",
+    storageMetricScope: hasClassifiedRuntimeStorageRows ? "nonessential_only" : "all_observed",
     totalStorageRecordsPresentBeforeRecordedConsent: reportSurface.runtimeCookieRows.length,
     consentPlatform: deriveConsentPlatform(input.scanRecord, reportSurface.presentationSummary),
     trackerFootprint: {
