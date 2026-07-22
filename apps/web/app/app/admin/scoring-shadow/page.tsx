@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { summarizeCanonicalShadowScoreCohort } from "../../../../lib/scans/canonical-shadow-score-cohort";
 import { summarizeStoredCanonicalShadowComparisons } from "../../../../lib/scans/canonical-shadow-score-monitor";
+import { evaluateCanonicalShadowScoreMonitoring } from "../../../../lib/scans/canonical-shadow-score-monitor-alerts";
 import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL } from "../../../../lib/scans/canonical-shadow-score-model";
 import { buildStoredScanCanonicalShadowScore } from "../../../../server/scans/canonical-shadow-score-service";
 import { loadCanonicalShadowScoreMonitoringMetrics } from "../../../../server/scans/canonical-shadow-score-monitor-repository";
@@ -33,10 +34,14 @@ export default async function AdminScoringShadowPage({ searchParams }: ScoringSh
   const monitoring = await loadCanonicalShadowScoreMonitoringMetrics({
     modelVersion: GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL.version,
     windowHours: 168
-  }).then((metrics) => ({
-    available: true as const,
-    summary: summarizeStoredCanonicalShadowComparisons(metrics)
-  })).catch((error) => ({
+  }).then((metrics) => {
+    const summary = summarizeStoredCanonicalShadowComparisons(metrics);
+    return {
+      alertEvaluation: evaluateCanonicalShadowScoreMonitoring(summary),
+      available: true as const,
+      summary
+    };
+  }).catch((error) => ({
     available: false as const,
     reason: error instanceof Error ? error.message : String(error)
   }));
@@ -107,7 +112,11 @@ function MonitoringCard({
   monitoring
 }: {
   monitoring:
-    | { available: true; summary: ReturnType<typeof summarizeStoredCanonicalShadowComparisons> }
+    | {
+      alertEvaluation: ReturnType<typeof evaluateCanonicalShadowScoreMonitoring>;
+      available: true;
+      summary: ReturnType<typeof summarizeStoredCanonicalShadowComparisons>;
+    }
     | { available: false; reason: string };
 }) {
   return (
@@ -122,7 +131,7 @@ function MonitoringCard({
         </p>
         {monitoring.available ? (
           <pre className="max-h-[45vh] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-4 text-xs text-slate-100">
-            {JSON.stringify(monitoring.summary, null, 2)}
+            {JSON.stringify({ alertEvaluation: monitoring.alertEvaluation, summary: monitoring.summary }, null, 2)}
           </pre>
         ) : (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "gdpr-eprivacy-shadow-luna-decision.v1",
+  "schemaVersion": "gdpr-eprivacy-shadow-luna-decision.v2",
   "modelVersion": "gdpr-eprivacy-shadow.candidate-v3-rights-max-30.pending-luna",
   "decisionStatus": "pending_luna",
   "coverageSemantics": {
@@ -47,6 +47,21 @@
     "status": "pending_luna",
     "approvedModelArtifact": null,
     "decisionEvidenceArtifact": null
+  },
+  "monitoringBaselines": {
+    "status": "pending_luna",
+    "decisionEvidenceArtifact": null,
+    "thresholds": {
+      "minimumSampleCount": null,
+      "minimumComparableCount": null,
+      "minimumCrossRegionGroupCount": null,
+      "minimumCrossSourceGroupCount": null,
+      "maximumAbsoluteScoreDeltaP95": null,
+      "maximumContradictionRate": null,
+      "maximumWithheldRate": null,
+      "maximumCrossRegionScoreRange": null,
+      "maximumCrossSourceScoreRange": null
+    }
   },
   "signOff": {
     "status": "pending_luna",

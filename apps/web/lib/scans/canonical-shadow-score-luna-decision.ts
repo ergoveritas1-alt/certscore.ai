@@ -15,7 +15,7 @@ type LunaDecisionStatus = "pending_luna" | "approved_by_luna";
 type LunaExpectedPostureBand = "Action Needed" | "Clear" | "Watch" | "Withheld";
 
 export type CanonicalShadowScoreLunaDecision = {
-  schemaVersion: "gdpr-eprivacy-shadow-luna-decision.v1";
+  schemaVersion: "gdpr-eprivacy-shadow-luna-decision.v2";
   modelVersion: string;
   decisionStatus: LunaDecisionStatus;
   coverageSemantics: {
@@ -45,6 +45,21 @@ export type CanonicalShadowScoreLunaDecision = {
     approvedModelArtifact: string | null;
     decisionEvidenceArtifact: string | null;
   };
+  monitoringBaselines: {
+    status: LunaDecisionStatus;
+    decisionEvidenceArtifact: string | null;
+    thresholds: {
+      minimumSampleCount: number | null;
+      minimumComparableCount: number | null;
+      minimumCrossRegionGroupCount: number | null;
+      minimumCrossSourceGroupCount: number | null;
+      maximumAbsoluteScoreDeltaP95: number | null;
+      maximumContradictionRate: number | null;
+      maximumWithheldRate: number | null;
+      maximumCrossRegionScoreRange: number | null;
+      maximumCrossSourceScoreRange: number | null;
+    };
+  };
   signOff: {
     status: LunaDecisionStatus;
     approvedBy: string | null;
@@ -66,7 +81,7 @@ export function auditLunaScoreDecision(
   const laneIds = decision.expectedBandLanes.map((lane) => lane.laneId).sort();
   const validStatuses = new Set<LunaDecisionStatus>(["pending_luna", "approved_by_luna"]);
 
-  if (decision.schemaVersion !== "gdpr-eprivacy-shadow-luna-decision.v1") errors.push("schemaVersion");
+  if (decision.schemaVersion !== "gdpr-eprivacy-shadow-luna-decision.v2") errors.push("schemaVersion");
   if (decision.modelVersion !== expectedModelVersion) errors.push("modelVersion");
   if (!validStatuses.has(decision.decisionStatus)) errors.push("decisionStatus");
   if (new Set(metricIds).size !== metricIds.length) errors.push("coverageSemantics.duplicateMetricId");
@@ -93,6 +108,44 @@ export function auditLunaScoreDecision(
       errors.push(`expectedBandLanes.${lane.laneId}.expectedPostureBand`);
     }
     if (!populated(lane.evidenceArtifact)) errors.push(`expectedBandLanes.${lane.laneId}.evidenceArtifact`);
+  }
+
+  if (!validStatuses.has(decision.monitoringBaselines.status)) errors.push("monitoringBaselines.status");
+  const monitoringThresholds = decision.monitoringBaselines.thresholds;
+  const wholeNumberThresholds = [
+    "minimumSampleCount",
+    "minimumComparableCount",
+    "minimumCrossRegionGroupCount",
+    "minimumCrossSourceGroupCount"
+  ] as const;
+  const scoreThresholds = [
+    "maximumAbsoluteScoreDeltaP95",
+    "maximumCrossRegionScoreRange",
+    "maximumCrossSourceScoreRange"
+  ] as const;
+  const rateThresholds = ["maximumContradictionRate", "maximumWithheldRate"] as const;
+  if (decision.monitoringBaselines.status === "approved_by_luna") {
+    if (!populated(decision.monitoringBaselines.decisionEvidenceArtifact)) {
+      errors.push("monitoringBaselines.decisionEvidenceArtifact");
+    }
+    for (const field of wholeNumberThresholds) {
+      const value = monitoringThresholds[field];
+      if (!Number.isInteger(value) || (value ?? 0) < 1 || (value ?? 0) > 5_000) {
+        errors.push(`monitoringBaselines.thresholds.${field}`);
+      }
+    }
+    for (const field of scoreThresholds) {
+      const value = monitoringThresholds[field];
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) {
+        errors.push(`monitoringBaselines.thresholds.${field}`);
+      }
+    }
+    for (const field of rateThresholds) {
+      const value = monitoringThresholds[field];
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+        errors.push(`monitoringBaselines.thresholds.${field}`);
+      }
+    }
   }
 
   if (decision.decisionStatus === "approved_by_luna") {
@@ -122,6 +175,7 @@ export function auditLunaScoreDecision(
     if (decision.modelParameters.status !== "approved_by_luna") errors.push("modelParameters.status");
     if (!populated(decision.modelParameters.approvedModelArtifact)) errors.push("modelParameters.approvedModelArtifact");
     if (!populated(decision.modelParameters.decisionEvidenceArtifact)) errors.push("modelParameters.decisionEvidenceArtifact");
+    if (decision.monitoringBaselines.status !== "approved_by_luna") errors.push("monitoringBaselines.status");
     if (decision.signOff.status !== "approved_by_luna") errors.push("signOff.status");
     if (!populated(decision.signOff.approvedBy)) errors.push("signOff.approvedBy");
     if (!populated(decision.signOff.approvedAt) || Number.isNaN(Date.parse(decision.signOff.approvedAt ?? ""))) {

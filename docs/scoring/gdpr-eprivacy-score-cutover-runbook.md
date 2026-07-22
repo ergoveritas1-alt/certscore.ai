@@ -28,7 +28,8 @@ the report, Pulse exports, dashboard/history, and admin scan summaries.
 3. Run `pnpm score:luna-cutover-gate`; it must pass without an override.
 4. Confirm the seven-day persisted monitor has enough representative rows to review
    score drift, contradiction rate, withholding rate, and comparable cross-region
-   ranges.
+   and cross-source ranges. Its `alertEvaluation` must be
+   `within_approved_baseline`; `withheld` and `pause_rollout` are cutover blockers.
 5. Verify the same stored candidate kind, version, score, and coverage on report,
    Pulse Summary/Evidence JSON, dashboard/history, and admin surfaces.
 
@@ -48,7 +49,7 @@ runtime. This changes only selection; it does not rewrite or delete candidate,
 legacy, or monitoring rows. Verify report, Pulse, dashboard, and admin all return the
 legacy `gdpr_eprivacy_evidence` kind/version again.
 
-Rollback is required if any Luna-approved limit is exceeded, if consumer surfaces
+Rollback is required if any Luna-approved limit is exceeded, if the monitor becomes
+undersampled, if alert evaluation is withheld or invalid, if consumer surfaces
 disagree, if the exact approved version is unavailable, or if a withheld candidate is
-replaced by a legacy value. Monitoring thresholds remain baseline-only until Luna
-records their approved values in the decision evidence.
+replaced by a legacy value.

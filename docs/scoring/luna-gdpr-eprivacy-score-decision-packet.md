@@ -27,7 +27,8 @@ authorize legal-compliance claims.
 2. **Benchmark corpus:** approve the retained replay, owned canaries, and the canonical selector's governed public sample. The central contact-history export and selector artifacts are mandatory; live selection fails closed when unavailable or ineligible.
 3. **Expected bands:** label all twelve required lanes: low signal, strong consent controls, pre-consent tracking/storage, policy gaps, session replay/fingerprinting, sensitive contexts, accessibility, transport/security, consumer protection, access-limited/no-go, cross-region equivalence, and Lambda/browser-extension source equivalence.
 4. **Model parameters:** approve or revise family boundaries, weights, severity points, family maximums, critical caps, score-withholding thresholds, posture bands, and contradiction thresholds.
-5. **Final sign-off:** identify the approver, timestamp the decision, and attach the final evidence artifact for the exact model version.
+5. **Monitoring baselines:** approve minimum seven-day sample, comparable-scan, cross-region-group, and cross-source-group counts plus maximum score-drift p95, contradiction rate, withholding rate, cross-region range, and cross-source range. No alert judgment is made while these values remain pending.
+6. **Final sign-off:** identify the approver, timestamp the decision, and attach the final evidence artifact for the exact model version.
 
 ## Luna expected-band labels
 
@@ -62,6 +63,7 @@ deterministic benchmark while their decision status remains `pending_luna`.
 - Equivalent source/region score variance is within Luna's labeled tolerance.
 - Formal cross-source evidence must preserve geography. Matching browser-extension and Lambda scores are useful parity evidence, but an extension scan with unknown geography cannot be relabeled as a Lambda region or counted as a same-region equivalence sample.
 - Withholding, score drift, band distribution, and contradiction rates are reviewed.
+- Machine-readable monitoring baselines are approved for the exact candidate; undersampling or any exceeded approved limit produces a rollout-pause result.
 - Web report, dashboard, Pulse, exports, and admin agree on kind, version, value, posture, and both named coverage measurements.
 - Public methodology describes observed risk and evidence coverage without implying certification or a legal conclusion.
 - The machine-readable packet passes `pnpm score:luna-cutover-gate`.

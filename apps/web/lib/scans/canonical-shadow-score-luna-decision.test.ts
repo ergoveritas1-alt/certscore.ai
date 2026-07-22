@@ -38,6 +38,21 @@ function approvedDecision(): CanonicalShadowScoreLunaDecision {
       approvedModelArtifact: "docs/scoring/gdpr-eprivacy-shadow-candidate-v3.json",
       decisionEvidenceArtifact: "artifacts/scoring/luna/model-parameters.json"
     },
+    monitoringBaselines: {
+      status: "approved_by_luna",
+      decisionEvidenceArtifact: "artifacts/scoring/luna/monitoring-baselines.json",
+      thresholds: {
+        minimumSampleCount: 50,
+        minimumComparableCount: 30,
+        minimumCrossRegionGroupCount: 5,
+        minimumCrossSourceGroupCount: 5,
+        maximumAbsoluteScoreDeltaP95: 25,
+        maximumContradictionRate: 0.02,
+        maximumWithheldRate: 0.25,
+        maximumCrossRegionScoreRange: 5,
+        maximumCrossSourceScoreRange: 5
+      }
+    },
     signOff: {
       status: "approved_by_luna",
       approvedBy: "Luna",
@@ -52,6 +67,7 @@ test("the checked-in Luna decision packet is valid, explicit, and still pending"
   assert.equal(GDPR_EPRIVACY_SHADOW_LUNA_DECISION.coverageSemantics.recommendedCustomerFacingMetric, "report_usable_evidence");
   assert.equal(GDPR_EPRIVACY_SHADOW_LUNA_DECISION.coverageSemantics.status, "approved_by_luna");
   assert.equal(GDPR_EPRIVACY_SHADOW_LUNA_DECISION.coverageSemantics.selectedCustomerFacingMetric, "report_usable_evidence");
+  assert.equal(GDPR_EPRIVACY_SHADOW_LUNA_DECISION.monitoringBaselines.status, "pending_luna");
   assert.equal(isLunaScoreDecisionApprovedForModel(
     GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
     GDPR_EPRIVACY_SHADOW_LUNA_DECISION.modelVersion
@@ -94,6 +110,18 @@ test("an approval flag without evidence cannot pass the Luna gate", () => {
   assert.equal(isLunaScoreDecisionApprovedForModel(incomplete, incomplete.modelVersion), false);
   assert.ok(auditLunaScoreDecision(incomplete).includes("signOff.approvedBy"));
   assert.ok(auditLunaScoreDecision(incomplete).includes("benchmarkCorpus.governedPublicSampleArtifact"));
+  assert.ok(auditLunaScoreDecision(incomplete).includes("monitoringBaselines.status"));
+});
+
+test("approved monitoring baselines require every bounded threshold and evidence", () => {
+  const incomplete = approvedDecision();
+  incomplete.monitoringBaselines.thresholds.maximumWithheldRate = null;
+  incomplete.monitoringBaselines.decisionEvidenceArtifact = null;
+
+  const errors = auditLunaScoreDecision(incomplete);
+  assert.ok(errors.includes("monitoringBaselines.thresholds.maximumWithheldRate"));
+  assert.ok(errors.includes("monitoringBaselines.decisionEvidenceArtifact"));
+  assert.equal(isLunaScoreDecisionApprovedForModel(incomplete, incomplete.modelVersion), false);
 });
 
 test("a complete version-matched Luna decision passes the gate", () => {
