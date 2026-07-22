@@ -4765,6 +4765,7 @@ export async function requestBoundedPolicyResponse(
 
   return await new Promise<BoundedPolicyResponse>((resolve, reject) => {
     let settled = false;
+    let activeResponse: import("node:http").IncomingMessage | undefined;
     const finishReject = (error: unknown) => {
       if (settled) return;
       settled = true;
@@ -4790,6 +4791,7 @@ export async function requestBoundedPolicyResponse(
       port: parsed.port || undefined,
       servername: parsed.hostname,
     }, (incoming) => {
+      activeResponse = incoming;
       const status = incoming.statusCode ?? 0;
       const location = incoming.headers.location;
       if (status >= 300 && status < 400 && location && redirectsRemaining > 0) {
@@ -4843,6 +4845,7 @@ export async function requestBoundedPolicyResponse(
       const reason = abortReason(signal);
       const error = new Error(reason?.message ?? "Policy HTTP request aborted.", { cause: reason ?? undefined });
       error.name = "AbortError";
+      activeResponse?.destroy(error);
       request.destroy(error);
     };
     const cleanup = () => signal.removeEventListener("abort", abortRequest);

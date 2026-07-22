@@ -44,6 +44,30 @@ test("policy HTTP transport destroys a socket stalled before response headers", 
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 });
 
+test("policy HTTP transport destroys a response stream stalled after headers", async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.write("<html><body>partial policy");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const controller = new AbortController();
+  const startedAtMs = Date.now();
+  const pending = requestBoundedPolicyResponse(
+    `http://127.0.0.1:${address.port}/half-open-policy`,
+    controller.signal,
+  );
+
+  setTimeout(() => controller.abort(new Error("policy response deadline reached")), 20);
+
+  await assert.rejects(pending, /policy response deadline reached/);
+  assert.ok(Date.now() - startedAtMs < 250);
+  server.closeAllConnections();
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+});
+
 test("policy response reads retain a bounded prefix and cancel the remaining stream", async () => {
   let cancelled = false;
   const stream = new ReadableStream<Uint8Array>({
