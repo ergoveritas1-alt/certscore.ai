@@ -682,6 +682,7 @@ async function loadScanDetailRecord(input: {
   anonymousOnly?: boolean;
   publicAccess?: boolean;
   includeUrlscanSupplement?: boolean;
+  includeDomainBenchmark?: boolean;
   viewerEmail?: string | null;
 }) {
   const scanCore = await loadScanCoreRecord(input).catch((error) => {
@@ -1378,14 +1379,16 @@ async function loadScanDetailRecord(input: {
     scanStatus: displayState.status,
     scannerSignalCount: scannerSignalPopulations.length + hybridRuntimeSignalPopulations.length
   });
-  const domainBenchmark = await resolveDomainBenchmarkEstimate({
-    currentEvents: normalizedEvents,
-    domainHostname,
-    domainId: scanRow.domain_id,
-    macroEnrichment: macroEnrichment as Record<string, unknown> | null,
-    organizationId: scanOrganizationId,
-    scanId: input.scanId
-  });
+  const domainBenchmark = input.includeDomainBenchmark === false
+    ? null
+    : await resolveDomainBenchmarkEstimate({
+        currentEvents: normalizedEvents,
+        domainHostname,
+        domainId: scanRow.domain_id,
+        macroEnrichment: macroEnrichment as Record<string, unknown> | null,
+        organizationId: scanOrganizationId,
+        scanId: input.scanId
+      });
 
   return {
     accessPostureSummary: {
@@ -1531,6 +1534,16 @@ export async function getAnonymousScanById(scanId: string) {
 
 export async function getPublicScanById(scanId: string) {
   return loadScanDetailRecord({
+    includeUrlscanSupplement: false,
+    organizationId: null,
+    publicAccess: true,
+    scanId
+  });
+}
+
+export async function getPublicScanByIdForReadOnlyAnalysis(scanId: string) {
+  return loadScanDetailRecord({
+    includeDomainBenchmark: false,
     includeUrlscanSupplement: false,
     organizationId: null,
     publicAccess: true,

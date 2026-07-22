@@ -39,7 +39,7 @@ import {
   projectExternalScanNoGo,
   type ExternalScanNoGoResult
 } from "@website-signal-risk-scanner/shared";
-import { buildScanReportUnifiedFindings } from "../../components/scans/shared-scan-detail-view";
+import { buildScanReportUnifiedFindingsForScan as buildScanReportUnifiedFindings } from "../scans/scan-report-unified-findings";
 import { absoluteUrl } from "../seo";
 import {
   PULSE_API_VERSION,
@@ -444,6 +444,23 @@ function buildPulseReportSurface(input: {
     topFindings,
     trackerInventoryRows,
     unifiedFindingPackets
+  };
+}
+
+export function buildCanonicalGdprEprivacyShadowProjection(scanRecord: ScanDetailResponse) {
+  const coverage = deriveCoverage(scanRecord);
+  const unifiedFindingPackets = buildScanReportUnifiedFindings(scanRecord);
+  const surface = buildPulseReportSurface({
+    coverageLimited: coverage.status !== "complete",
+    scanRecord,
+    unifiedFindingPackets
+  });
+
+  return {
+    checklistRows: surface.gdprEprivacyChecklist,
+    coverageStatus: coverage.status,
+    legacyScoreAssessment: surface.gdprEprivacyScoreAssessment,
+    unifiedFindings: surface.unifiedFindingPackets
   };
 }
 
