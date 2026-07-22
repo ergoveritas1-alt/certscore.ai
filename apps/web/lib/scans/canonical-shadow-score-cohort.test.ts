@@ -25,6 +25,7 @@ function artifact(input: {
   legacyScore: number;
   region: string;
   scanId: string;
+  scanSource?: string;
   severity?: "high" | "medium" | "low";
 }) {
   const candidate = deriveCanonicalShadowScore({
@@ -38,7 +39,7 @@ function artifact(input: {
   });
   return buildCanonicalShadowScoreComparisonArtifact({
     candidate,
-    context: { comparisonGroupKey: "sha256:same-target", region: input.region, scanSource: "lambda" },
+    context: { comparisonGroupKey: "sha256:same-target", region: input.region, scanSource: input.scanSource ?? "lambda" },
     generatedAt: "2026-07-22T00:00:00.000Z",
     inputProjectionFingerprint: `sha256:${input.scanId}`,
     legacy: {
@@ -70,5 +71,32 @@ test("cohort summary reports score drift, withholding, contradictions, and cross
   assert.equal(summary.comparison.comparableCount, 2);
   assert.equal(summary.crossRegion.comparedGroupCount, 1);
   assert.equal(summary.crossRegion.maximumScoreRange, 15);
+  assert.equal(summary.crossRegion.ranges[0]?.regionCount, 2);
+  assert.equal(summary.crossRegion.ranges[0]?.scanSource, "lambda");
+  assert.equal(summary.crossSource.comparedGroupCount, 0);
   assert.equal(summary.cutoverEligibleCount, 0);
+});
+
+test("cohort summary does not label same-region repeats as cross-region evidence", () => {
+  const summary = summarizeCanonicalShadowScoreCohort([
+    artifact({ legacyScore: 72, region: "eu-west-1", scanId: "scan-a", severity: "medium" }),
+    artifact({ legacyScore: 80, region: "eu-west-1", scanId: "scan-b", severity: "high" })
+  ]);
+
+  assert.equal(summary.crossRegion.comparedGroupCount, 0);
+  assert.equal(summary.crossRegion.maximumScoreRange, null);
+  assert.deepEqual(summary.crossRegion.ranges, []);
+});
+
+test("cohort summary separates cross-source variance from cross-region variance", () => {
+  const summary = summarizeCanonicalShadowScoreCohort([
+    artifact({ legacyScore: 72, region: "eu-west-1", scanId: "scan-a", scanSource: "lambda", severity: "medium" }),
+    artifact({ legacyScore: 80, region: "eu-west-1", scanId: "scan-b", scanSource: "browser_extension", severity: "high" })
+  ]);
+
+  assert.equal(summary.crossRegion.comparedGroupCount, 0);
+  assert.equal(summary.crossSource.comparedGroupCount, 1);
+  assert.equal(summary.crossSource.maximumScoreRange, 15);
+  assert.equal(summary.crossSource.ranges[0]?.region, "eu-west-1");
+  assert.equal(summary.crossSource.ranges[0]?.sourceCount, 2);
 });

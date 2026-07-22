@@ -10,6 +10,7 @@ export type StoredCanonicalShadowComparisonMetric = {
   region: string | null;
   reportUsableEvidenceRatio: number;
   scanId: string;
+  scanSource: string | null;
   scoreDelta: number | null;
   withholdingReasons: string[];
 };
@@ -31,24 +32,45 @@ export function summarizeStoredCanonicalShadowComparisons(
   const deltas = metrics.flatMap((metric) => metric.scoreDelta ?? []);
   const contradicted = metrics.filter((metric) => metric.contradictionTypes.length > 0);
   const withheld = metrics.filter((metric) => metric.candidateScore === null);
-  const grouped = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
+  const regionGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
+  const sourceGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
   for (const metric of metrics) {
-    if (!metric.comparisonGroupKey || !metric.region || metric.candidateScore === null) continue;
-    const rows = grouped.get(metric.comparisonGroupKey) ?? [];
-    rows.push(metric);
-    grouped.set(metric.comparisonGroupKey, rows);
+    if (!metric.comparisonGroupKey || !metric.region || !metric.scanSource || metric.candidateScore === null) continue;
+    const regionKey = `${metric.comparisonGroupKey}\u0000${metric.scanSource}`;
+    const regionRows = regionGroups.get(regionKey) ?? [];
+    regionRows.push(metric);
+    regionGroups.set(regionKey, regionRows);
+    const sourceKey = `${metric.comparisonGroupKey}\u0000${metric.region}`;
+    const sourceRows = sourceGroups.get(sourceKey) ?? [];
+    sourceRows.push(metric);
+    sourceGroups.set(sourceKey, sourceRows);
   }
-  const regionRanges = [...grouped.entries()].flatMap(([comparisonGroupKey, rows]) => {
+  const regionRanges = [...regionGroups.values()].flatMap((rows) => {
     const regions = new Set(rows.map((row) => row.region));
     const scores = rows.flatMap((row) => row.candidateScore ?? []);
     if (regions.size < 2 || scores.length < 2) return [];
     return [{
-      comparisonGroupKey,
+      comparisonGroupKey: rows[0]!.comparisonGroupKey!,
       maxScore: Math.max(...scores),
       minScore: Math.min(...scores),
       range: Math.max(...scores) - Math.min(...scores),
       regionCount: regions.size,
+      scanSource: rows[0]!.scanSource!,
       sampleCount: scores.length
+    }];
+  }).sort((left, right) => right.range - left.range || left.comparisonGroupKey.localeCompare(right.comparisonGroupKey));
+  const sourceRanges = [...sourceGroups.values()].flatMap((rows) => {
+    const scanSources = new Set(rows.map((row) => row.scanSource));
+    const scores = rows.flatMap((row) => row.candidateScore ?? []);
+    if (scanSources.size < 2 || scores.length < 2) return [];
+    return [{
+      comparisonGroupKey: rows[0]!.comparisonGroupKey!,
+      maxScore: Math.max(...scores),
+      minScore: Math.min(...scores),
+      range: Math.max(...scores) - Math.min(...scores),
+      region: rows[0]!.region!,
+      sampleCount: scores.length,
+      sourceCount: scanSources.size
     }];
   }).sort((left, right) => right.range - left.range || left.comparisonGroupKey.localeCompare(right.comparisonGroupKey));
 
@@ -67,6 +89,11 @@ export function summarizeStoredCanonicalShadowComparisons(
       comparedGroupCount: regionRanges.length,
       maximumScoreRange: regionRanges[0]?.range ?? null,
       ranges: regionRanges.slice(0, 100)
+    },
+    crossSource: {
+      comparedGroupCount: sourceRanges.length,
+      maximumScoreRange: sourceRanges[0]?.range ?? null,
+      ranges: sourceRanges.slice(0, 100)
     },
     modelVersions: [...new Set(metrics.map((metric) => metric.modelVersion))].sort(),
     sampleCount: metrics.length,

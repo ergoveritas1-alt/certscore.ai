@@ -15,6 +15,16 @@ import { getReportableGdprEprivacyCoverageItems } from "../apps/web/lib/scans/gd
 import { GDPR_EPRIVACY_SHADOW_MODEL_PROPOSALS } from "../apps/web/lib/scans/canonical-shadow-score-model-proposals";
 
 type JsonObject = Record<string, unknown>;
+type ReplayProvenance = {
+  region: string | null;
+  scanId: string | null;
+  scanSource: string;
+};
+type ReplayProvenanceMapValue = string | {
+  region?: string | null;
+  scanId?: string | null;
+  scanSource?: string | null;
+};
 
 async function walk(root: string): Promise<string[]> {
   const entries = await readdir(root, { withFileTypes: true });
@@ -68,10 +78,10 @@ function loadServerModules() {
   });
 }
 
-function scanRecord(bundle: JsonObject, outDir: string, index: number): JsonObject {
+function scanRecord(bundle: JsonObject, outDir: string, index: number, provenance: ReplayProvenance): JsonObject {
   const url = typeof bundle.url === "string" ? bundle.url : "https://unknown.invalid/";
   const domainHostname = hostname(url);
-  const scanId = typeof bundle.scanId === "string" ? bundle.scanId : `retained-shadow-${index}`;
+  const scanId = provenance.scanId ?? (typeof bundle.scanId === "string" ? bundle.scanId : `retained-shadow-${index}`);
   const now = "2026-01-01T00:00:00.000Z";
   return {
     accessPostureSummary: {},
@@ -114,10 +124,41 @@ function scanRecord(bundle: JsonObject, outDir: string, index: number): JsonObje
       startedAt: bundle.startedAt ?? now,
       status: "completed",
       provenance: {
-        lambdaAwsRegion: typeof bundle.region === "string" ? bundle.region : null,
+        lambdaAwsRegion: provenance.region,
         requestedScanFromValue: "retained_replay"
       }
     }
+  };
+}
+
+function optionalString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function resolveReplayProvenance(input: {
+  bundle: JsonObject;
+  bundlePath: string;
+  inputPath: string;
+  map: Record<string, ReplayProvenanceMapValue>;
+}): ReplayProvenance {
+  const keys = [
+    path.relative(input.inputPath, input.bundlePath),
+    path.basename(path.dirname(input.bundlePath)),
+    optionalString(input.bundle.scanId),
+    optionalString(input.bundle.url)
+  ].filter((value): value is string => Boolean(value));
+  const mapped = keys.map((key) => input.map[key]).find((value) => value !== undefined);
+  if (typeof mapped === "string") {
+    return {
+      region: optionalString(mapped),
+      scanId: null,
+      scanSource: "retained_evidence_replay"
+    };
+  }
+  return {
+    region: optionalString(mapped?.region) ?? optionalString(input.bundle.region),
+    scanId: optionalString(mapped?.scanId),
+    scanSource: optionalString(mapped?.scanSource) ?? "retained_evidence_replay"
   };
 }
 
@@ -126,6 +167,7 @@ async function main() {
   const modelPath = path.resolve(argumentValue("--model") ?? "docs/scoring/gdpr-eprivacy-shadow-candidate-v3.json");
   const modelProposalId = argumentValue("--model-proposal");
   const outputPath = path.resolve(argumentValue("--out") ?? "artifacts/scoring/gdpr-eprivacy-shadow-retained-candidate-v3.json");
+  const provenanceMapPath = argumentValue("--provenance-map");
   const requestedLimit = Number(argumentValue("--limit") ?? "100");
   const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(100, Math.floor(requestedLimit))) : 100;
   const modelProposal = modelProposalId
@@ -135,6 +177,9 @@ async function main() {
     throw new Error(`Unknown canonical shadow score model proposal: ${modelProposalId}`);
   }
   const model = modelProposal?.model ?? JSON.parse(await readFile(modelPath, "utf8")) as CanonicalShadowScoreModel;
+  const provenanceMap = provenanceMapPath
+    ? JSON.parse(await readFile(path.resolve(provenanceMapPath), "utf8")) as Record<string, ReplayProvenanceMapValue>
+    : {};
   const bundlePaths = (await walk(inputPath)).slice(0, limit);
   if (bundlePaths.length === 0) throw new Error(`No retained evidence bundles found under ${inputPath}.`);
 
@@ -151,6 +196,7 @@ async function main() {
     const bundlePath = bundlePaths[index]!;
     try {
       const bundle = JSON.parse(await readFile(bundlePath, "utf8")) as JsonObject;
+      const replayProvenance = resolveReplayProvenance({ bundle, bundlePath, inputPath, map: provenanceMap });
       const localOutDir = path.dirname(bundlePath);
       const mirrorDir = path.join(mirrorRoot, String(index).padStart(3, "0"));
       try {
@@ -158,7 +204,7 @@ async function main() {
       } catch {
         // Existing deterministic mirrors are safe to reuse.
       }
-      const detail = await materializeLocalV2DagScanDetail(scanRecord(bundle, mirrorDir, index) as never);
+      const detail = await materializeLocalV2DagScanDetail(scanRecord(bundle, mirrorDir, index, replayProvenance) as never);
       const projection = buildCanonicalGdprEprivacyShadowProjection(detail);
       const scoreInput = buildCanonicalShadowScoreInput({
         checklistRows: projection.checklistRows,
@@ -167,12 +213,12 @@ async function main() {
       const reportUsableCoverage = deriveGdprEprivacyUsableCoverageSummary(
         getReportableGdprEprivacyCoverageItems(projection.checklistRows)
       );
-      const scanId = typeof bundle.scanId === "string" ? bundle.scanId : `retained-shadow-${index}`;
+      const scanId = replayProvenance.scanId ?? (typeof bundle.scanId === "string" ? bundle.scanId : `retained-shadow-${index}`);
       artifacts.push(runCanonicalShadowScore({
         context: {
           comparisonGroupKey: hash(hostname(bundle.url)),
-          region: typeof bundle.region === "string" ? bundle.region : null,
-          scanSource: "retained_evidence_replay"
+          region: replayProvenance.region,
+          scanSource: replayProvenance.scanSource
         },
         coverageRows: scoreInput.coverageRows,
         findings: scoreInput.findings,

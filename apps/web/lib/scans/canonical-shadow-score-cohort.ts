@@ -20,25 +20,70 @@ export function summarizeCanonicalShadowScoreCohort(
     artifact.candidate.contradictions.length > 0 || artifact.comparison.contradictions.length > 0
   );
   const deltas = artifacts.flatMap((artifact) => artifact.comparison.delta ?? []);
-  const groupScores = new Map<string, number[]>();
+  const regionGroups = new Map<string, {
+    comparisonGroupKey: string;
+    regions: Set<string>;
+    scanSource: string;
+    scores: number[];
+  }>();
+  const sourceGroups = new Map<string, {
+    comparisonGroupKey: string;
+    region: string;
+    scanSources: Set<string>;
+    scores: number[];
+  }>();
 
   for (const artifact of scored) {
     const groupKey = artifact.context.comparisonGroupKey;
+    const region = artifact.context.region;
+    const scanSource = artifact.context.scanSource;
     const score = artifact.candidate.postureScore;
-    if (!groupKey || score === null) continue;
-    const values = groupScores.get(groupKey) ?? [];
-    values.push(score);
-    groupScores.set(groupKey, values);
+    if (!groupKey || !region || !scanSource || score === null) continue;
+    const regionGroupKey = `${groupKey}\u0000${scanSource}`;
+    const regionValues = regionGroups.get(regionGroupKey) ?? {
+      comparisonGroupKey: groupKey,
+      regions: new Set<string>(),
+      scanSource,
+      scores: []
+    };
+    regionValues.regions.add(region);
+    regionValues.scores.push(score);
+    regionGroups.set(regionGroupKey, regionValues);
+
+    const sourceGroupKey = `${groupKey}\u0000${region}`;
+    const sourceValues = sourceGroups.get(sourceGroupKey) ?? {
+      comparisonGroupKey: groupKey,
+      region,
+      scanSources: new Set<string>(),
+      scores: []
+    };
+    sourceValues.scanSources.add(scanSource);
+    sourceValues.scores.push(score);
+    sourceGroups.set(sourceGroupKey, sourceValues);
   }
 
-  const crossRegionRanges = [...groupScores.entries()].flatMap(([comparisonGroupKey, scores]) => {
-    if (scores.length < 2) return [];
+  const crossRegionRanges = [...regionGroups.values()].flatMap((values) => {
+    if (values.regions.size < 2 || values.scores.length < 2) return [];
     return [{
-      comparisonGroupKey,
-      maxScore: Math.max(...scores),
-      minScore: Math.min(...scores),
-      range: Math.max(...scores) - Math.min(...scores),
-      sampleCount: scores.length
+      comparisonGroupKey: values.comparisonGroupKey,
+      maxScore: Math.max(...values.scores),
+      minScore: Math.min(...values.scores),
+      range: Math.max(...values.scores) - Math.min(...values.scores),
+      regionCount: values.regions.size,
+      scanSource: values.scanSource,
+      sampleCount: values.scores.length
+    }];
+  }).sort((left, right) => right.range - left.range || left.comparisonGroupKey.localeCompare(right.comparisonGroupKey));
+  const crossSourceRanges = [...sourceGroups.values()].flatMap((values) => {
+    if (values.scanSources.size < 2 || values.scores.length < 2) return [];
+    return [{
+      comparisonGroupKey: values.comparisonGroupKey,
+      maxScore: Math.max(...values.scores),
+      minScore: Math.min(...values.scores),
+      range: Math.max(...values.scores) - Math.min(...values.scores),
+      region: values.region,
+      sampleCount: values.scores.length,
+      sourceCount: values.scanSources.size
     }];
   }).sort((left, right) => right.range - left.range || left.comparisonGroupKey.localeCompare(right.comparisonGroupKey));
 
@@ -69,6 +114,11 @@ export function summarizeCanonicalShadowScoreCohort(
       comparedGroupCount: crossRegionRanges.length,
       maximumScoreRange: crossRegionRanges[0]?.range ?? null,
       ranges: crossRegionRanges.slice(0, 100)
+    },
+    crossSource: {
+      comparedGroupCount: crossSourceRanges.length,
+      maximumScoreRange: crossSourceRanges[0]?.range ?? null,
+      ranges: crossSourceRanges.slice(0, 100)
     },
     cutoverEligibleCount: artifacts.filter((artifact) => artifact.cutoverEligible).length,
     modelVersions: [...new Set(artifacts.map((artifact) => artifact.candidate.modelVersion))].sort(),

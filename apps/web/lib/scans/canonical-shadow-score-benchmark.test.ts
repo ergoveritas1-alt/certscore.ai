@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   buildCanonicalShadowScoreBenchmarkArtifact,
@@ -66,4 +67,24 @@ test("equivalent regions and Lambda/browser-extension projections are identical"
   assert.equal(artifact.invariants.sourceEquivalent, true);
   assert.equal(new Set(lane("cross_region_equivalence").map((entry) => entry.result.postureScore)).size, 1);
   assert.equal(new Set(lane("source_equivalence").map((entry) => entry.result.postureScore)).size, 1);
+});
+
+test("owned cross-region evidence is bounded, genuinely multi-region, and version-matched", async () => {
+  const evidence = JSON.parse(await readFile(
+    "docs/scoring/owned-cross-region-candidate-v3-20260722.json",
+    "utf8"
+  )) as {
+    modelVersion?: unknown;
+    rows?: Array<{ region?: unknown; scanSource?: unknown; unresolvedContradictions?: unknown }>;
+    summary?: { candidateScoreRange?: unknown; regionCount?: unknown; sampleCount?: unknown };
+  };
+
+  assert.equal(evidence.modelVersion, artifact.modelVersion);
+  assert.equal(evidence.summary?.sampleCount, 4);
+  assert.equal(evidence.summary?.regionCount, 2);
+  assert.equal(evidence.summary?.candidateScoreRange, 0);
+  assert.equal(evidence.rows?.length, 4);
+  assert.equal(new Set(evidence.rows?.map((row) => row.region)).size, 2);
+  assert.ok(evidence.rows?.every((row) => row.scanSource === "lambda"));
+  assert.ok(evidence.rows?.every((row) => Array.isArray(row.unresolvedContradictions) && row.unresolvedContradictions.length === 0));
 });

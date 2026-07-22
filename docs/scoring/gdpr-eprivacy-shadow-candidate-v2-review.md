@@ -97,6 +97,24 @@ unresolved contradictions or withholding reasons. No `gdpr_eprivacy_posture`
 assessment exists for the scan, which proves the pending Luna decision fails closed
 in production. These observations verify deployment mechanics, not model approval.
 
+## Candidate-v3 owned cross-region replay
+
+Four retained production CertScore owned-canary bundles from July 22 were replayed
+through the exact candidate-v3 projection: two from `eu-central-1` and two from
+`eu-west-1`. All four projected successfully, emitted score 100 with observed-risk
+index 0, and had no unresolved contradictions. The candidate score range across the
+two regions was 0 even though the legacy scores ranged from 83 to 94 and report-usable
+coverage ranged from approximately 0.71 to 0.90. The bounded evidence packet is
+`docs/scoring/owned-cross-region-candidate-v3-20260722.json`.
+
+The replay initially exposed a verifier defect: same-target repeats were labeled
+cross-region without requiring distinct region values, and retained bundles carried
+`local` rather than the production Lambda provenance held by WC01. The cohort
+summarizer now requires at least two distinct non-empty regions, and the replay runner
+accepts a bounded provenance map so production scan IDs, regions, and source labels
+are preserved. The runs were not simultaneous, so this evidence remains subject to
+Luna review and does not satisfy Lambda/browser-extension source equivalence.
+
 ## Coverage-denominator finding
 
 The retained 11-scan cohort exposed four rows that are frequently or structurally

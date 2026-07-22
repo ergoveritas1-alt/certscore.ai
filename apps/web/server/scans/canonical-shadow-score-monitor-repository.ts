@@ -20,6 +20,7 @@ type StoredRow = {
   model_version: string;
   report_usable_evidence_ratio: string | number;
   scan_id: string;
+  scan_source: string | null;
   scanner_region: string | null;
   score_delta: number | null;
   withholding_reasons: string[];
@@ -127,6 +128,7 @@ export async function loadCanonicalShadowScoreMonitoringMetrics(input: {
             contradiction_types,
             withholding_reasons,
             scanner_region,
+            scan_source,
             comparison_group_key,
             generated_at::text
        from public.scan_score_shadow_comparisons
@@ -149,6 +151,7 @@ export async function loadCanonicalShadowScoreMonitoringMetrics(input: {
     region: row.scanner_region,
     reportUsableEvidenceRatio: Number(row.report_usable_evidence_ratio),
     scanId: row.scan_id,
+    scanSource: row.scan_source,
     scoreDelta: row.score_delta,
     withholdingReasons: row.withholding_reasons
   }));

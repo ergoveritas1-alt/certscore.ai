@@ -117,7 +117,7 @@ function MonitoringCard({
       </CardHeader>
       <CardContent className="space-y-3 text-sm text-slate-600">
         <p>
-          Passive candidate metrics only: score drift, contradictions, withholding, and comparable cross-region repeats.
+          Passive candidate metrics only: score drift, contradictions, withholding, comparable cross-region repeats, and comparable cross-source repeats.
           Customer reports remain on the legacy score until Luna approves the exact model and the controlled flag is enabled.
         </p>
         {monitoring.available ? (

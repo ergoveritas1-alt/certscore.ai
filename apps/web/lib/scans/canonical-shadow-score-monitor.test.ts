@@ -18,6 +18,7 @@ function metric(overrides: Partial<StoredCanonicalShadowComparisonMetric>): Stor
     region: "eu-west-1",
     reportUsableEvidenceRatio: 1,
     scanId: "scan-1",
+    scanSource: "lambda",
     scoreDelta: 5,
     withholdingReasons: [],
     ...overrides
@@ -44,6 +45,8 @@ test("persisted monitor summarizes drift, contradictions, withholding, and cross
   assert.equal(summary.contradictions.rate, 0.3333);
   assert.equal(summary.comparison.absoluteDeltaP95, 5);
   assert.equal(summary.crossRegion.maximumScoreRange, 10);
+  assert.equal(summary.crossRegion.ranges[0]?.scanSource, "lambda");
+  assert.equal(summary.crossSource.comparedGroupCount, 0);
   assert.deepEqual(summary.withholdingReasons, ["coverage_below_threshold"]);
 });
 
@@ -55,4 +58,17 @@ test("persisted monitor does not compare repeats from only one region", () => {
 
   assert.equal(summary.crossRegion.comparedGroupCount, 0);
   assert.equal(summary.crossRegion.maximumScoreRange, null);
+});
+
+test("persisted monitor reports source variance without calling it region variance", () => {
+  const summary = summarizeStoredCanonicalShadowComparisons([
+    metric({ scanId: "scan-1" }),
+    metric({ candidateScore: 70, scanId: "scan-2", scanSource: "browser_extension" })
+  ]);
+
+  assert.equal(summary.crossRegion.comparedGroupCount, 0);
+  assert.equal(summary.crossSource.comparedGroupCount, 1);
+  assert.equal(summary.crossSource.maximumScoreRange, 10);
+  assert.equal(summary.crossSource.ranges[0]?.region, "eu-west-1");
+  assert.equal(summary.crossSource.ranges[0]?.sourceCount, 2);
 });
