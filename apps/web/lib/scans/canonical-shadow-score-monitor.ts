@@ -5,9 +5,13 @@ export type StoredCanonicalShadowComparisonMetric = {
   candidateScore: number | null;
   comparisonGroupKey: string | null;
   comparisonTargetKey: string | null;
+  coverageProjectionFingerprint: string | null;
+  coverageProjectionRowCount: number | null;
   contradictionTypes: string[];
   generatedAt: string;
   inputProjectionFingerprint: string | null;
+  findingProjectionFingerprint: string | null;
+  findingProjectionCount: number | null;
   legacyCoverageRatio: number;
   legacyScore: number | null;
   modelVersion: string;

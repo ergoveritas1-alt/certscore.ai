@@ -19,6 +19,13 @@ const MODEL: CanonicalShadowScoreModel = {
   version: "test.pending-luna"
 };
 
+const INPUT_PROJECTION_COMPONENTS = {
+  coverageProjectionFingerprint: `sha256:${"a".repeat(64)}`,
+  coverageRowCount: 1,
+  findingProjectionFingerprint: `sha256:${"b".repeat(64)}`,
+  findingCount: 1
+};
+
 test("comparison artifact preserves version provenance and a bounded score delta", () => {
   const candidate = deriveCanonicalShadowScore({
     coverageRows: [{ assessmentStatus: "checked", evidenceState: "observed", rowId: "privacy_notice_availability" }],
@@ -35,6 +42,7 @@ test("comparison artifact preserves version provenance and a bounded score delta
     },
     generatedAt: "2026-07-22T00:00:00.000Z",
     inputProjectionFingerprint: "sha256:fixture",
+    inputProjectionComponents: INPUT_PROJECTION_COMPONENTS,
     legacy: {
       coverageConfidence: "high",
       coverageRatio: 1,
@@ -65,7 +73,8 @@ test("comparison artifact preserves version provenance and a bounded score delta
     delta: 13,
     status: "candidate_higher"
   });
-  assert.equal(artifact.schemaVersion, "canonical-shadow-score-comparison.v5");
+  assert.equal(artifact.schemaVersion, "canonical-shadow-score-comparison.v6");
+  assert.deepEqual(artifact.inputProjectionComponents, INPUT_PROJECTION_COMPONENTS);
   assert.equal(artifact.context.region, "eu-west-1");
   assert.equal(artifact.context.comparisonTargetKey, "sha256:example-url");
   assert.equal(artifact.legacy.scoreVersion, "gdpr-eprivacy-evidence.legacy-v1");
@@ -77,6 +86,7 @@ test("comparison artifact distinguishes a withheld candidate from a numerical de
     candidate,
     generatedAt: "2026-07-22T00:00:00.000Z",
     inputProjectionFingerprint: "sha256:fixture",
+    inputProjectionComponents: INPUT_PROJECTION_COMPONENTS,
     legacy: {
       coverageConfidence: "high",
       coverageRatio: 1,
@@ -106,6 +116,7 @@ test("comparison artifact distinguishes an accepted coverage migration differenc
     candidate: approvedCandidate,
     generatedAt: "2026-07-22T00:00:00.000Z",
     inputProjectionFingerprint: "sha256:fixture",
+    inputProjectionComponents: INPUT_PROJECTION_COMPONENTS,
     legacy: {
       coverageConfidence: "high",
       coverageRatio: 1,
@@ -139,6 +150,7 @@ test("an unapproved coverage difference remains cutover blocking", () => {
     candidate: approvedCandidate,
     generatedAt: "2026-07-22T00:00:00.000Z",
     inputProjectionFingerprint: "sha256:fixture",
+    inputProjectionComponents: INPUT_PROJECTION_COMPONENTS,
     legacy: {
       coverageConfidence: "high",
       coverageRatio: 1,

@@ -14,9 +14,13 @@ type StoredRow = {
   candidate_score: number | null;
   comparison_group_key: string | null;
   comparison_target_key: string | null;
+  coverage_projection_fingerprint: string | null;
+  coverage_projection_row_count: number | null;
   contradiction_types: string[];
   generated_at: string;
   input_projection_fingerprint: string | null;
+  finding_projection_fingerprint: string | null;
+  finding_projection_count: number | null;
   legacy_coverage_ratio: string | number;
   legacy_score: number | null;
   model_version: string;
@@ -81,6 +85,14 @@ export async function persistCanonicalShadowScoreComparison(
     artifact.inputProjectionFingerprint,
     "inputProjectionFingerprint"
   );
+  const coverageProjectionFingerprint = canonicalSha256Fingerprint(
+    artifact.inputProjectionComponents.coverageProjectionFingerprint,
+    "coverageProjectionFingerprint"
+  );
+  const findingProjectionFingerprint = canonicalSha256Fingerprint(
+    artifact.inputProjectionComponents.findingProjectionFingerprint,
+    "findingProjectionFingerprint"
+  );
   const inserted = await queryOne<InsertedRow>(
     `insert into public.scan_score_shadow_comparisons (
        scan_id,
@@ -101,11 +113,16 @@ export async function persistCanonicalShadowScoreComparison(
        comparison_target_key,
        scan_source,
        input_projection_fingerprint,
+       coverage_projection_fingerprint,
+       coverage_projection_row_count,
+       finding_projection_fingerprint,
+       finding_projection_count,
        generated_at
      ) values (
        $1::uuid, $2, $3, $4, $5, $6::integer, $7::integer, $8::integer,
        $9::numeric, $10::numeric, $11::numeric, $12::text[], $13::text[],
-       $14, $15, $16, $17, $18, $19::timestamptz
+       $14, $15, $16, $17, $18, $19, $20::integer, $21, $22::integer,
+       $23::timestamptz
      )
      on conflict (scan_id, model_version) do nothing
      returning id`,
@@ -128,6 +145,10 @@ export async function persistCanonicalShadowScoreComparison(
       comparisonTargetKey,
       boundedOptionalText(artifact.context.scanSource, "scanSource", 80),
       inputProjectionFingerprint,
+      coverageProjectionFingerprint,
+      artifact.inputProjectionComponents.coverageRowCount,
+      findingProjectionFingerprint,
+      artifact.inputProjectionComponents.findingCount,
       boundedText(artifact.generatedAt, "generatedAt", 80)
     ]
   );
@@ -158,6 +179,10 @@ export async function loadCanonicalShadowScoreMonitoringMetrics(input: {
             comparison_group_key,
             comparison_target_key,
             input_projection_fingerprint,
+            coverage_projection_fingerprint,
+            coverage_projection_row_count,
+            finding_projection_fingerprint,
+            finding_projection_count,
             generated_at::text
        from public.scan_score_shadow_comparisons
       where model_version = $1
@@ -172,9 +197,13 @@ export async function loadCanonicalShadowScoreMonitoringMetrics(input: {
     candidateScore: row.candidate_score,
     comparisonGroupKey: row.comparison_group_key,
     comparisonTargetKey: row.comparison_target_key,
+    coverageProjectionFingerprint: row.coverage_projection_fingerprint,
+    coverageProjectionRowCount: row.coverage_projection_row_count,
     contradictionTypes: row.contradiction_types,
     generatedAt: row.generated_at,
     inputProjectionFingerprint: row.input_projection_fingerprint,
+    findingProjectionFingerprint: row.finding_projection_fingerprint,
+    findingProjectionCount: row.finding_projection_count,
     legacyCoverageRatio: Number(row.legacy_coverage_ratio),
     legacyScore: row.legacy_score,
     modelVersion: row.model_version,

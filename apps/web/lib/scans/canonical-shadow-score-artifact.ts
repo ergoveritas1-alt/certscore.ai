@@ -1,6 +1,7 @@
 import type { CanonicalShadowScoreResult } from "./canonical-shadow-score";
+import type { CanonicalShadowScoreProjectionComponents } from "./canonical-shadow-score-projection-fingerprint";
 
-export const CANONICAL_SHADOW_SCORE_COMPARISON_SCHEMA_VERSION = "canonical-shadow-score-comparison.v5";
+export const CANONICAL_SHADOW_SCORE_COMPARISON_SCHEMA_VERSION = "canonical-shadow-score-comparison.v6";
 
 type LegacyScoreReference = {
   coverageConfidence: string;
@@ -47,6 +48,7 @@ export function buildCanonicalShadowScoreComparisonArtifact(input: {
   };
   generatedAt: string;
   inputProjectionFingerprint: string;
+  inputProjectionComponents: CanonicalShadowScoreProjectionComponents;
   legacy: LegacyScoreReference;
   scanId: string;
 }) {
@@ -121,6 +123,24 @@ export function buildCanonicalShadowScoreComparisonArtifact(input: {
     },
     generatedAt: boundedText(input.generatedAt, 80),
     inputProjectionFingerprint: boundedText(input.inputProjectionFingerprint, 160),
+    inputProjectionComponents: {
+      coverageProjectionFingerprint: boundedText(
+        input.inputProjectionComponents.coverageProjectionFingerprint,
+        160
+      ),
+      coverageRowCount: boundedRowCount(
+        input.inputProjectionComponents.coverageRowCount,
+        "coverage projection row count"
+      ),
+      findingProjectionFingerprint: boundedText(
+        input.inputProjectionComponents.findingProjectionFingerprint,
+        160
+      ),
+      findingCount: boundedRowCount(
+        input.inputProjectionComponents.findingCount,
+        "finding projection count"
+      )
+    },
     legacy: {
       coverageConfidence: boundedText(input.legacy.coverageConfidence, 40),
       coverageRatio: legacyCoverageRatio,

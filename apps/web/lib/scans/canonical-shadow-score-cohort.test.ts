@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCanonicalShadowScoreComparisonArtifact } from "./canonical-shadow-score-artifact";
 import { summarizeCanonicalShadowScoreCohort } from "./canonical-shadow-score-cohort";
-import { deriveCanonicalShadowScore, type CanonicalShadowScoreModel } from "./canonical-shadow-score";
+import {
+  deriveCanonicalShadowScore,
+  type CanonicalShadowCoverageRow,
+  type CanonicalShadowScoreFinding,
+  type CanonicalShadowScoreModel
+} from "./canonical-shadow-score";
+import { buildCanonicalShadowScoreProjectionComponents } from "./canonical-shadow-score-projection-fingerprint";
 
 const MODEL: CanonicalShadowScoreModel = {
   approvalStatus: "pending_luna",
@@ -29,13 +35,15 @@ function artifact(input: {
   scanSource?: string;
   severity?: "high" | "medium" | "low";
 }) {
-  const candidate = deriveCanonicalShadowScore({
-    coverageRows: input.coverageLimited
+  const coverageRows: CanonicalShadowCoverageRow[] = input.coverageLimited
       ? [{ assessmentStatus: "coverage_limitation", evidenceState: "not_testable", rowId: "privacy_notice_availability" }]
-      : [{ assessmentStatus: "checked", evidenceState: "observed", rowId: "privacy_notice_availability" }],
-    findings: input.severity
+      : [{ assessmentStatus: "checked", evidenceState: "observed", rowId: "privacy_notice_availability" }];
+  const findings: CanonicalShadowScoreFinding[] = input.severity
       ? [{ family: "contradiction", findingId: `finding_${input.scanId}`, severity: input.severity }]
-      : [],
+      : [];
+  const candidate = deriveCanonicalShadowScore({
+    coverageRows,
+    findings,
     model: MODEL
   });
   return buildCanonicalShadowScoreComparisonArtifact({
@@ -48,6 +56,7 @@ function artifact(input: {
     },
     generatedAt: "2026-07-22T00:00:00.000Z",
     inputProjectionFingerprint: input.inputProjectionFingerprint ?? `sha256:${input.scanId}`,
+    inputProjectionComponents: buildCanonicalShadowScoreProjectionComponents({ coverageRows, findings }),
     legacy: {
       coverageConfidence: "high",
       coverageRatio: 1,

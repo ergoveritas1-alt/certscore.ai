@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCanonicalShadowScoreComparisonArtifact } from "../../lib/scans/canonical-shadow-score-artifact";
 import { deriveCanonicalShadowScore, type CanonicalShadowScoreModel } from "../../lib/scans/canonical-shadow-score";
+import { buildCanonicalShadowScoreProjectionComponents } from "../../lib/scans/canonical-shadow-score-projection-fingerprint";
 import {
   GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
   type CanonicalShadowScoreLunaDecision
@@ -38,14 +39,16 @@ const shadowModel: CanonicalShadowScoreModel = {
 };
 
 function shadowArtifact(coverageRows: Parameters<typeof deriveCanonicalShadowScore>[0]["coverageRows"]) {
+  const findings = [{ family: "contradiction" as const, findingId: "finding-shadow", severity: "medium" as const }];
   return buildCanonicalShadowScoreComparisonArtifact({
     candidate: deriveCanonicalShadowScore({
       coverageRows,
-      findings: [{ family: "contradiction", findingId: "finding-shadow", severity: "medium" }],
+      findings,
       model: shadowModel
     }),
     generatedAt: "2026-07-22T00:00:00.000Z",
     inputProjectionFingerprint: "sha256:shadow-fixture",
+    inputProjectionComponents: buildCanonicalShadowScoreProjectionComponents({ coverageRows, findings }),
     legacy: {
       coverageConfidence: "high",
       coverageRatio: 1,
@@ -82,6 +85,23 @@ function approvedDecision(): CanonicalShadowScoreLunaDecision {
       approvedModelArtifact: "docs/scoring/gdpr-eprivacy-shadow-candidate-v3.json",
       decisionEvidenceArtifact: "artifacts/model-decision.json",
       status: "approved_by_luna"
+    },
+    monitoringBaselines: {
+      status: "approved_by_luna",
+      decisionEvidenceArtifact: "artifacts/monitoring-baselines.json",
+      thresholds: {
+        minimumSampleCount: 1,
+        minimumComparableCount: 1,
+        minimumCrossRegionGroupCount: 1,
+        minimumCrossSourceGroupCount: 1,
+        minimumEquivalentInputCrossSourceGroupCount: 1,
+        maximumAbsoluteScoreDeltaP95: 10,
+        maximumContradictionRate: 0.1,
+        maximumWithheldRate: 0.1,
+        maximumCrossRegionScoreRange: 5,
+        maximumCrossSourceScoreRange: 5,
+        maximumEquivalentInputCrossSourceScoreRange: 5
+      }
     },
     signOff: {
       approvalEvidenceArtifact: "artifacts/final-signoff.json",
@@ -188,11 +208,15 @@ test("shadow assessment persists withheld candidates without substituting a lega
 
 test("approved posture assessment uses Luna-selected report coverage semantics", () => {
   const decision = approvedDecision();
+  const coverageRows = [
+    { assessmentStatus: "checked" as const, evidenceState: "observed" as const, rowId: "privacy_notice_availability" }
+  ];
+  const findings = [
+    { family: "contradiction" as const, findingId: "finding-shadow", severity: "medium" as const }
+  ];
   const candidate = deriveCanonicalShadowScore({
-    coverageRows: [
-      { assessmentStatus: "checked", evidenceState: "observed", rowId: "privacy_notice_availability" }
-    ],
-    findings: [{ family: "contradiction", findingId: "finding-shadow", severity: "medium" }],
+    coverageRows,
+    findings,
     model: { ...shadowModel, approvalStatus: "approved_by_luna", version: decision.modelVersion }
   });
   const artifact = buildCanonicalShadowScoreComparisonArtifact({
@@ -200,6 +224,7 @@ test("approved posture assessment uses Luna-selected report coverage semantics",
     candidate,
     generatedAt: "2026-07-22T00:00:00.000Z",
     inputProjectionFingerprint: "sha256:approved",
+    inputProjectionComponents: buildCanonicalShadowScoreProjectionComponents({ coverageRows, findings }),
     legacy: {
       coverageConfidence: "high",
       coverageRatio: 1,
