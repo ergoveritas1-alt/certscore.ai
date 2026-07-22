@@ -15,6 +15,8 @@ import { loadAdminScanFilterOptions } from "./repository";
 import { normalizeAdminActivityFilter, parseAdminActivitySearch } from "../../lib/admin/activity-search";
 import { requirePlatformAdminContext } from "./platform-admin";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
+import { selectConfiguredCustomerGdprEprivacyScore } from "../scans/customer-score-cutover-server";
+import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
 
 export type AdminPulseRequestStatus =
   | "queued"
@@ -167,9 +169,14 @@ const PULSE_API_ROUTE_SQL = adminApiRouteSql({
   requestSource: "coalesce(pr.request_context ->> 'source', pr.request_context ->> 'channel')"
 });
 
+const PULSE_EFFECTIVE_STATUS_SQL = `case
+  when s.status in ('completed', 'failed') and pr.status in ('queued', 'running', 'finalizing') then s.status
+  else pr.status
+end`;
+
 const PULSE_ACTIVITY_FILTER_SQL = `
   where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
-    and ($1::text is null or ($1 = 'no_go' and ${PULSE_NO_GO_SQL}) or ($1 <> 'no_go' and pr.status = $1))
+    and ($1::text is null or ($1 = 'no_go' and ${PULSE_NO_GO_SQL}) or ($1 <> 'no_go' and ${PULSE_EFFECTIVE_STATUS_SQL} = $1))
     and (
       $2::text is null
       or pr.public_id ilike '%' || $2 || '%'
@@ -372,6 +379,28 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
   };
 }
 
+async function applyConfiguredScores(items: AdminPulseRequestListItem[]) {
+  const scanIds = [...new Set(items.flatMap((item) => item.scanId ? [item.scanId] : []))];
+  if (scanIds.length === 0) return items;
+  const [legacyScores, postureScores] = await Promise.all([
+    loadLatestVersionedScoreAssessments({ scanIds, scoreKind: "gdpr_eprivacy_evidence" }),
+    loadLatestVersionedScoreAssessments({ scanIds, scoreKind: "gdpr_eprivacy_posture" })
+  ]);
+  return items.map((item) => {
+    if (!item.scanId) return item;
+    const selection = selectConfiguredCustomerGdprEprivacyScore({
+      candidateAssessment: postureScores.get(item.scanId) ?? null,
+      legacyAssessment: legacyScores.get(item.scanId) ?? null
+    });
+    if (!selection.assessment) return item;
+    return {
+      ...item,
+      score: selection.assessment.scoreValue,
+      topFindingCount: selection.assessment.scoreValue === null ? null : item.topFindingCount
+    };
+  });
+}
+
 function buildDisplayResponseSummary(input: {
   base: AdminPulseRequestListItem;
   raw: unknown;
@@ -404,13 +433,16 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
     total: number;
   }>(
     `with logical_pulse_requests as (
-       select pr.* from pulse_requests pr where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
+       select pr.*, ${PULSE_EFFECTIVE_STATUS_SQL} as effective_status
+         from pulse_requests pr
+         left join scans s on s.id = pr.scan_id
+        where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
      )
      select
        count(*)::int as total,
-       count(*) filter (where status in ('completed', 'completed_limited'))::int as completed,
-       count(*) filter (where status in ('queued', 'running', 'finalizing'))::int as queued_or_running,
-       count(*) filter (where status = 'rate_limited')::int as rate_limited,
+       count(*) filter (where effective_status in ('completed', 'completed_limited'))::int as completed,
+       count(*) filter (where effective_status in ('queued', 'running', 'finalizing'))::int as queued_or_running,
+       count(*) filter (where effective_status = 'rate_limited')::int as rate_limited,
        (select count(*)::int from pulse_feedback)::int as feedback,
        (select count(*)::int from pulse_artifact_downloads where artifact_type = 'summary_json')::int as summary_json_downloads,
        (select count(*)::int from pulse_artifact_downloads where artifact_type = 'evidence_json')::int as evidence_json_downloads
@@ -541,7 +573,7 @@ export async function listAdminPulseRequests(input: {
     { readOnly: true }
   );
 
-  return rows.rows.map((row) => mapPulseRequestRow(row));
+  return applyConfiguredScores(rows.rows.map((row) => mapPulseRequestRow(row)));
 }
 
 export async function countAdminPulseRequests(input: {
@@ -723,7 +755,8 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
     return null;
   }
 
-  const base = mapPulseRequestRow(request);
+  const [base] = await applyConfiguredScores([mapPulseRequestRow(request)]);
+  if (!base) return null;
   return {
     ...base,
     apiVersion: String(request.api_version),
@@ -835,5 +868,5 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
     { readOnly: true }
   );
 
-  return rows.rows.map((row) => mapPulseRequestRow(row));
+  return applyConfiguredScores(rows.rows.map((row) => mapPulseRequestRow(row)));
 }

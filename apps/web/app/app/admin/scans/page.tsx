@@ -10,6 +10,7 @@ import { withServerTiming } from "../../../../server/performance/log-server-timi
 import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
 import { AdminScansFilterForm } from "./admin-scans-filter-form";
+import { materializeAdminScanSummaries } from "../../../../server/admin/admin-scan-summary";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -119,7 +120,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
     withServerTiming("app.admin.scans.metrics", () => getAdminScanOverviewMetrics()),
     withServerTiming("app.admin.scans.filter-options", () => getAdminScanFilterOptions())
   ]);
-  const scanPage = await withServerTiming("app.admin.scans.list", () => listAdminScansPage(pageSize, (currentPage - 1) * pageSize, {
+  let scanPage = await withServerTiming("app.admin.scans.list", () => listAdminScansPage(pageSize, (currentPage - 1) * pageSize, {
     query: activeQuery || null,
     status: activeStatus,
     freshness: activeFreshness,
@@ -130,6 +131,27 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
     scanFrom: activeScanFrom === "any" ? null : activeScanFrom,
     timeSpan: activeTimeSpan
   }));
+  const staleSummaryScans = scanPage.items
+    .filter((scan) => scan.rowKind === "scan" && scan.status === "completed" && (
+      !scan.adminSummaryGeneratedAt ||
+      Boolean(scan.completedAt && new Date(scan.adminSummaryGeneratedAt).getTime() < new Date(scan.completedAt).getTime())
+    ))
+    .slice(0, 8)
+    .map((scan) => ({ organizationId: scan.organizationId, scanId: scan.scanId }));
+  if (staleSummaryScans.length > 0) {
+    await withServerTiming("app.admin.scans.summary_repair", () => materializeAdminScanSummaries(staleSummaryScans));
+    scanPage = await withServerTiming("app.admin.scans.list_after_summary_repair", () => listAdminScansPage(pageSize, (currentPage - 1) * pageSize, {
+      query: activeQuery || null,
+      status: activeStatus,
+      freshness: activeFreshness,
+      access: activeAccess,
+      outcome: activeOutcome || null,
+      language: activeLanguage || null,
+      industry: activeIndustry || null,
+      scanFrom: activeScanFrom === "any" ? null : activeScanFrom,
+      timeSpan: activeTimeSpan
+    }));
+  }
   const totalCount = scanPage.totalCount;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const normalizedPage = Math.min(currentPage, totalPages);

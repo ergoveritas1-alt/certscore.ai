@@ -5,6 +5,7 @@ import {
   recordScoreMaterializationRequestError
 } from "../../../../server/scans/score-materialization-request-repository";
 import { persistCompletedLegacyGdprEprivacyAssessment } from "../../../../server/scans/score-assessment-lifecycle";
+import { materializeAdminScanSummary } from "../../../../server/admin/admin-scan-summary";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -41,6 +42,10 @@ export async function POST(request: Request) {
         `Score persistence incomplete (legacy=${result.reason}, shadow=${"shadowReason" in result ? result.shadowReason : "missing"}).`
       );
     }
+    const adminSummary = await materializeAdminScanSummary(scanId, authorization.organizationId);
+    if (!adminSummary) {
+      throw new Error("Admin scan summary persistence was incomplete.");
+    }
     await completeScoreMaterializationRequest(scanId);
     return NextResponse.json({
       complete: true,
@@ -59,4 +64,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Score materialization failed." }, { status: 503 });
   }
 }
-

@@ -798,6 +798,16 @@ export async function recordLocalV2DagLambdaResult(
       parsedMessage.error?.message ?? null
     ]
   );
+  await query(
+    `update pulse_requests
+        set status = case when $3 = 'failed' then 'failed' else 'completed' end,
+            phase = case when $3 = 'failed' then 'failed' else 'completed' end,
+            completed_at = coalesce(completed_at, $2::timestamptz),
+            elapsed_seconds = greatest(0, extract(epoch from (coalesce(completed_at, $2::timestamptz) - requested_at))::int)
+      where scan_id = $1::uuid
+        and status in ('queued', 'running', 'finalizing')`,
+    [parsedMessage.scanId, parsedMessage.completedAt, parsedMessage.status]
+  );
   if (artifactMirror) {
     await mirrorLocalV2DagLambdaAuxiliaryArtifacts({
       mirror: artifactMirror,

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { queryOne } from "@website-signal-risk-scanner/db";
 import { buildPulseProjection } from "../../lib/pulse/projection";
 import { getAnonymousScanById, getScanById } from "../scans/get-scan-by-id";
 import type { PublicScanRecord } from "../scans/get-public-scan-record";
@@ -103,8 +104,13 @@ export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRec
 }
 
 async function buildAndPersistAdminScanSummary(scanId: string, organizationId: string | null): Promise<AdminScanSummary | null> {
-  const rawRecord = organizationId
-    ? await getScanById({ organizationId, scanId })
+  const resolvedOrganizationId = organizationId ?? (await queryOne<{ organization_id: string | null }>(
+    "select organization_id::text from scans where id = $1::uuid limit 1",
+    [scanId],
+    { readOnly: true }
+  ))?.organization_id ?? null;
+  const rawRecord = resolvedOrganizationId
+    ? await getScanById({ organizationId: resolvedOrganizationId, scanId })
     : await getAnonymousScanById(scanId);
   const scanRecord = rawRecord ? await materializeLocalV2DagScanDetail(rawRecord) : null;
   return scanRecord ? persistAdminScanSummaryForRecord(scanRecord) : null;

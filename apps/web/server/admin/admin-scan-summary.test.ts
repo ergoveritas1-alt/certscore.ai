@@ -51,7 +51,7 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   assert.doesNotMatch(source, /getAnonymousScanById/);
 });
 
-test("API activity repairs bounded missing canonical summaries outside the list query", async () => {
+test("API activity repairs bounded missing or stale canonical summaries outside the list query", async () => {
   const listSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
   const pageSource = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
 
@@ -59,7 +59,42 @@ test("API activity repairs bounded missing canonical summaries outside the list 
   assert.doesNotMatch(listSource, /materializeAdminScanSummar/);
   assert.match(pageSource, /materializeAdminScanSummaries/);
   assert.match(pageSource, /slice\(0, 8\)/);
+  assert.match(pageSource, /adminSummaryGeneratedAt/);
+  assert.match(pageSource, /request\.completedAt/);
   assert.match(pageSource, /listAdminPulseRequests\(requestListInput\)/);
+});
+
+test("API activity derives terminal state and score from canonical scan records", async () => {
+  const source = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
+
+  assert.match(source, /PULSE_EFFECTIVE_STATUS_SQL/);
+  assert.match(source, /when s\.status in \('completed', 'failed'\)/);
+  assert.match(source, /effective_status in \('completed', 'completed_limited'\)/);
+  assert.match(source, /loadLatestVersionedScoreAssessments/);
+  assert.match(source, /selectConfiguredCustomerGdprEprivacyScore/);
+  assert.match(source, /score: selection\.assessment\.scoreValue/);
+});
+
+test("completion materialization persists the admin summary before acknowledging success", async () => {
+  const source = await readFile("apps/web/app/api/internal/scan-score-materialization/route.ts", "utf8");
+  const scoreIndex = source.indexOf("persistCompletedLegacyGdprEprivacyAssessment");
+  const summaryIndex = source.indexOf("materializeAdminScanSummary", scoreIndex);
+  const completeIndex = source.indexOf("completeScoreMaterializationRequest", summaryIndex);
+
+  assert.ok(scoreIndex >= 0);
+  assert.ok(summaryIndex > scoreIndex);
+  assert.ok(completeIndex > summaryIndex);
+  assert.match(source, /Admin scan summary persistence was incomplete/);
+});
+
+test("Admin Scans repairs bounded stale summaries and Score Shadow has no admin surface", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const layoutSource = await readFile("apps/web/app/app/admin/layout.tsx", "utf8");
+
+  assert.match(pageSource, /materializeAdminScanSummaries/);
+  assert.match(pageSource, /slice\(0, 8\)/);
+  assert.match(pageSource, /adminSummaryGeneratedAt/);
+  assert.doesNotMatch(layoutSource, /scoring-shadow/);
 });
 
 test("API activity groups SDK and MCP result retrieval under the initiating logical request", async () => {

@@ -117,15 +117,17 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
     countAdminPulseRequests({ query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan }),
     listAdminPulseRequests(requestListInput)
   ]));
-  const missingSummaryScans = Array.from(new Set(initialRequests
-    .filter((request) => request.scanId && !request.adminSummaryGeneratedAt && ["completed", "completed_limited"].includes(request.status))
-    .map((request) => request.scanId as string)))
-    .slice(0, 8)
-    .map((scanId) => ({ organizationId: null, scanId }));
-  if (missingSummaryScans.length > 0) {
-    await withServerTiming("app.admin.api_activity.summary_repair", () => materializeAdminScanSummaries(missingSummaryScans));
+  const staleSummaryScans = Array.from(new Map(initialRequests
+    .filter((request) => request.scanId && ["completed", "completed_limited"].includes(request.status) && (
+      !request.adminSummaryGeneratedAt ||
+      Boolean(request.completedAt && new Date(request.adminSummaryGeneratedAt).getTime() < new Date(request.completedAt).getTime())
+    ))
+    .map((request) => [request.scanId as string, { organizationId: null, scanId: request.scanId as string }])).values())
+    .slice(0, 8);
+  if (staleSummaryScans.length > 0) {
+    await withServerTiming("app.admin.api_activity.summary_repair", () => materializeAdminScanSummaries(staleSummaryScans));
   }
-  const requests = missingSummaryScans.length > 0
+  const requests = staleSummaryScans.length > 0
     ? await listAdminPulseRequests(requestListInput)
     : initialRequests;
   const pageCount = Math.max(1, Math.ceil(filteredTotal / pageSize));

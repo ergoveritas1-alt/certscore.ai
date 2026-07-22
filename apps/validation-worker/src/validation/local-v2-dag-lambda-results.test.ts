@@ -169,6 +169,19 @@ test("validation worker persists completion scores before acknowledging a Lambda
   assert.match(source, /completedScanScoresExist/);
 });
 
+test("validation worker synchronizes linked API activity before acknowledging a Lambda result", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+  const pulseUpdateIndex = source.indexOf("update pulse_requests");
+  const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted");
+  const deleteIndex = source.indexOf("new DeleteMessageCommand", scoreIndex);
+
+  assert.ok(pulseUpdateIndex >= 0, "expected linked API activity synchronization");
+  assert.ok(scoreIndex > pulseUpdateIndex, "score materialization must observe synchronized terminal activity");
+  assert.ok(deleteIndex > scoreIndex, "SQS acknowledgement must follow API activity and score persistence");
+  assert.match(source, /status in \('queued', 'running', 'finalizing'\)/);
+  assert.match(source, /elapsed_seconds = greatest/);
+});
+
 test("validation worker continuously reconciles accepted scans without terminal Lambda results", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
