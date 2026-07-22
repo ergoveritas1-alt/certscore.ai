@@ -20,13 +20,13 @@ type ChecklistRow = {
 };
 
 type UnifiedFindingPacket = {
-  presentationDecision?: { status?: unknown } | null;
+  presentationDecision?: { status?: "surface" | "audit_only" | "suppress" } | null;
   unifiedFindingId?: unknown;
 };
 
 function boundedFindingIds(packets: UnifiedFindingPacket[]) {
   return [...new Set(packets.flatMap((packet) => {
-    if (packet.presentationDecision?.status !== "surfaced") return [];
+    if (packet.presentationDecision?.status !== "surface") return [];
     const id = packet.unifiedFindingId;
     return typeof id === "string" && id.trim() ? [id.trim().slice(0, 200)] : [];
   }))].sort().slice(0, 256);

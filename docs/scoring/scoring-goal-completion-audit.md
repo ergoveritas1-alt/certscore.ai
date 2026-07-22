@@ -10,7 +10,7 @@ made customer-facing.
 | Goal requirement | Current evidence | Status |
 | --- | --- | --- |
 | Stop report/admin reads from overwriting scores | Score persistence occurs in completion lifecycle; repository and lifecycle tests enforce idempotency and the historical cutoff. Production canary repeat reads retained one immutable assessment. | Proved for current legacy evidence score |
-| Separate score, coverage, source, version, and time | `scan_score_assessments` migration and repository store separate typed fields; report, Pulse, dashboard, and admin projections retain metadata. | Proved for current legacy evidence score |
+| Separate score, coverage, source, version, time, and finding lineage | `scan_score_assessments` stores separate typed fields; report, Pulse, dashboard, and admin projections retain metadata. The forward projection now uses canonical presentation status `surface`; the former `surfaced` typo could omit finding IDs from already-immutable provenance rows, which remain unmodified. | Proved forward; historical rows preserved rather than rewritten |
 | Preserve historical meaning | Pre-cutoff records remain `Legacy scan score`; version identity is immutable by scan/kind/version. | Proved |
 | Precisely label current headline | Current headline is `GDPR/ePrivacy evidence`, not overall CertScore. | Proved in current surfaces |
 | Remove AI domain-name expected overall score | Domain benchmark prompt explicitly forbids estimating CertScore/overall score; repository search finds no expected-overall-score comparison. | Proved |

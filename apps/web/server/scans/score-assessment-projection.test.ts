@@ -21,9 +21,9 @@ test("versioned legacy assessment retains only surfaced finding ids and bounded 
     scanId: "00000000-0000-4000-8000-000000000001",
     scoredAt: "2026-07-21T12:00:00.000Z",
     unifiedFindings: [
-      { presentationDecision: { status: "surfaced" }, unifiedFindingId: "finding-b" },
+      { presentationDecision: { status: "surface" }, unifiedFindingId: "finding-b" },
       { presentationDecision: { status: "audit_only" }, unifiedFindingId: "finding-hidden" },
-      { presentationDecision: { status: "surfaced" }, unifiedFindingId: "finding-a" }
+      { presentationDecision: { status: "surface" }, unifiedFindingId: "finding-a" }
     ]
   });
 
@@ -56,8 +56,8 @@ test("projection fingerprint is stable across input ordering", () => {
     scanId: "00000000-0000-4000-8000-000000000003",
     scoredAt: "2026-07-21T12:00:00.000Z",
     unifiedFindings: [
-      { presentationDecision: { status: "surfaced" }, unifiedFindingId: "b" },
-      { presentationDecision: { status: "surfaced" }, unifiedFindingId: "a" }
+      { presentationDecision: { status: "surface" }, unifiedFindingId: "b" },
+      { presentationDecision: { status: "surface" }, unifiedFindingId: "a" }
     ]
   });
   const second = buildLegacyGdprEprivacyVersionedAssessmentInput({
@@ -69,8 +69,8 @@ test("projection fingerprint is stable across input ordering", () => {
     scanId: "00000000-0000-4000-8000-000000000003",
     scoredAt: "2026-07-21T12:00:00.000Z",
     unifiedFindings: [
-      { presentationDecision: { status: "surfaced" }, unifiedFindingId: "a" },
-      { presentationDecision: { status: "surfaced" }, unifiedFindingId: "b" }
+      { presentationDecision: { status: "surface" }, unifiedFindingId: "a" },
+      { presentationDecision: { status: "surface" }, unifiedFindingId: "b" }
     ]
   });
 

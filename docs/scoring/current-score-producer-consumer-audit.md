@@ -38,6 +38,13 @@ Risk and coverage are separate. Coverage can withhold a risk score, but missing 
 
 Completion-time persistence is best-effort for scan availability: persistence failure is logged and monitored but does not convert a completed scan into a failed scan. Lambda scans finalize from the lightweight status lifecycle only after both the terminal result and canonical report-readiness event exist; report rendering and admin-summary reads remain write-free. Reprocessing the same version is idempotent and repeat polls use a cheap exact-version existence check.
 
+Persisted finding lineage uses the canonical unified-finding presentation status
+`surface`. An earlier projection typo checked the nonexistent value `surfaced`, which
+could omit finding IDs from the immutable provenance row while leaving the score and
+checklist fingerprint otherwise intact. The forward path is corrected and regression
+tested. Existing version rows are not overwritten or silently repaired; a future
+meaning change still requires a new score version.
+
 The versioned lifecycle has a hard activation cutoff of `2026-07-22T06:30:00.000Z`. Scans completed before that instant are never backfilled or relabeled by status polling, report reads, or admin reads; they continue to display their original snapshot as `Legacy scan score`. Missing or invalid completion times fail closed without creating an assessment.
 
 ## Candidate-v2 corrections
