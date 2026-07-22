@@ -33,7 +33,12 @@ async function materializeCompletedScoreAssessment(projection: ScanStatusProject
       inserted: result.inserted,
       reason: result.reason,
       scanId: projection.id,
-      scoreVersion: "gdpr-eprivacy-evidence.legacy-v1"
+      scoreVersion: "gdpr-eprivacy-evidence.legacy-v1",
+      postureInserted: "postureInserted" in result ? result.postureInserted : false,
+      postureReason: "postureReason" in result ? result.postureReason : null,
+      shadowInserted: "shadowInserted" in result ? result.shadowInserted : false,
+      shadowModelVersion: "shadowModelVersion" in result ? result.shadowModelVersion : null,
+      shadowReason: "shadowReason" in result ? result.shadowReason : null
     }));
   } catch (error) {
     console.error("[score-assessment] status-finalization persistence failed", {

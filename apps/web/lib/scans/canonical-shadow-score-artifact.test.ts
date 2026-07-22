@@ -51,6 +51,7 @@ test("comparison artifact preserves version provenance and a bounded score delta
   assert.equal(artifact.candidate.postureScore, 85);
   assert.deepEqual(artifact.comparison, {
     absoluteDelta: 13,
+    acceptedDifferences: [],
     contradictions: [],
     coverage: {
       absoluteDelta: 0,
@@ -63,7 +64,7 @@ test("comparison artifact preserves version provenance and a bounded score delta
     delta: 13,
     status: "candidate_higher"
   });
-  assert.equal(artifact.schemaVersion, "canonical-shadow-score-comparison.v3");
+  assert.equal(artifact.schemaVersion, "canonical-shadow-score-comparison.v4");
   assert.equal(artifact.context.region, "eu-west-1");
   assert.equal(artifact.legacy.scoreVersion, "gdpr-eprivacy-evidence.legacy-v1");
 });
@@ -92,7 +93,41 @@ test("comparison artifact distinguishes a withheld candidate from a numerical de
   assert.equal(artifact.comparison.status, "candidate_withheld");
 });
 
-test("comparison artifact blocks cutover when legacy and report coverage semantics diverge", () => {
+test("comparison artifact distinguishes an accepted coverage migration difference from an unresolved contradiction", () => {
+  const approvedCandidate = deriveCanonicalShadowScore({
+    coverageRows: [{ assessmentStatus: "checked", evidenceState: "observed", rowId: "privacy_notice_availability" }],
+    findings: [],
+    model: { ...MODEL, approvalStatus: "approved_by_luna" }
+  });
+  const artifact = buildCanonicalShadowScoreComparisonArtifact({
+    acceptedComparisonDifferences: ["legacy_score_coverage_diverges_from_report_usable_evidence"],
+    candidate: approvedCandidate,
+    generatedAt: "2026-07-22T00:00:00.000Z",
+    inputProjectionFingerprint: "sha256:fixture",
+    legacy: {
+      coverageConfidence: "high",
+      coverageRatio: 1,
+      reportInScopeRowCount: 30,
+      reportUsableEvidenceRatio: 28 / 30,
+      reportUsableRowCount: 28,
+      score: 85,
+      scoreKind: "gdpr_eprivacy_evidence",
+      scoreSource: "wc01.regulatory-coverage-score",
+      scoreVersion: "gdpr-eprivacy-evidence.legacy-v1"
+    },
+    scanId: "00000000-0000-4000-8000-000000000001"
+  });
+
+  assert.equal(approvedCandidate.cutoverEligible, true);
+  assert.equal(artifact.cutoverEligible, true);
+  assert.deepEqual(artifact.comparison.acceptedDifferences, [
+    "legacy_score_coverage_diverges_from_report_usable_evidence"
+  ]);
+  assert.deepEqual(artifact.comparison.contradictions, []);
+  assert.equal(artifact.comparison.coverage.status, "diverged_accepted");
+});
+
+test("an unapproved coverage difference remains cutover blocking", () => {
   const approvedCandidate = deriveCanonicalShadowScore({
     coverageRows: [{ assessmentStatus: "checked", evidenceState: "observed", rowId: "privacy_notice_availability" }],
     findings: [],
@@ -116,10 +151,10 @@ test("comparison artifact blocks cutover when legacy and report coverage semanti
     scanId: "00000000-0000-4000-8000-000000000001"
   });
 
-  assert.equal(approvedCandidate.cutoverEligible, true);
   assert.equal(artifact.cutoverEligible, false);
+  assert.deepEqual(artifact.comparison.acceptedDifferences, []);
   assert.deepEqual(artifact.comparison.contradictions, [
     "legacy_score_coverage_diverges_from_report_usable_evidence"
   ]);
-  assert.equal(artifact.comparison.coverage.status, "diverged");
+  assert.equal(artifact.comparison.coverage.status, "diverged_unresolved");
 });

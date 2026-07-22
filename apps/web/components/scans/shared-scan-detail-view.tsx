@@ -6985,8 +6985,11 @@ export async function SharedScanDetailView({
     scanRecord.snapshot,
     "critical_coverage_complete",
   );
+  const storedCustomerGdprEprivacyAssessment = scanRecord.customerGdprEprivacyScoreSelection?.assessment ?? null;
   const executiveDisplayedScore = browserCoverageSufficient && criticalCoverageComplete !== false
-    ? gdprEprivacyCoverageScore.score
+    ? storedCustomerGdprEprivacyAssessment
+      ? storedCustomerGdprEprivacyAssessment.scoreValue
+      : gdprEprivacyCoverageScore.score
     : null;
   const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {
@@ -7216,6 +7219,7 @@ export async function SharedScanDetailView({
             regulatoryRisk={scanRecord.regulatoryRisk}
             resolvedVendorNames={executiveResolvedVendorNames}
             score={executiveDisplayedScore}
+            scoreLabel={`${scanRecord.customerGdprEprivacyScoreSelection?.label ?? "GDPR/ePrivacy evidence"} score`}
             scanDurationMs={scanDurationMs}
             scanOutcome={typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null}
             scanTimelineEvents={executiveTimelineEvents}

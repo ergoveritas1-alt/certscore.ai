@@ -411,7 +411,11 @@ function buildPulseReportSurface(input: {
     rows: reportableGdprRows
   });
   const gdprEprivacyScore = gdprEprivacyScoreAssessment.score;
-  const score = boundedScore(gdprEprivacyScore);
+  const storedCustomerScoreAssessment = input.scanRecord.customerGdprEprivacyScoreSelection?.assessment ?? null;
+  const customerScoreAssessment = storedCustomerScoreAssessment ?? gdprEprivacyScoreAssessment;
+  const score = boundedScore(storedCustomerScoreAssessment
+    ? storedCustomerScoreAssessment.scoreValue
+    : gdprEprivacyScore);
   const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerInventoryRows);
   const preConsentTrackerRows = groupedTrackerRows
     .filter((row) => row.firstSeenMs !== null)
@@ -431,6 +435,7 @@ function buildPulseReportSurface(input: {
 
   return {
     allFindings,
+    customerScoreAssessment,
     executive,
     gdprEprivacyChecklist,
     gdprEprivacyScore,
@@ -1931,17 +1936,32 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const allThirdPartyRequestCount = finiteNumber(recordValue(networkSummary, "thirdPartyRequestCount")) ??
     reportSurface.presentationSummary.thirdPartyRequestCount;
   const trackerFootprintBreakdown = buildTrackerFootprintBreakdown(reportSurface);
+  const selectedScoreStatus = "scoreStatus" in reportSurface.customerScoreAssessment
+    ? reportSurface.customerScoreAssessment.scoreStatus
+    : score === null
+      ? "withheld"
+      : "scored";
+  const selectedWithholdingReason = "withholdingReason" in reportSurface.customerScoreAssessment
+    ? reportSurface.customerScoreAssessment.withholdingReason
+    : score === null
+      ? "evidence_score_withheld"
+      : null;
   const executiveSummary = {
     completionSummary: summary.completionSummary,
     domain,
     score,
     scoreLabel: score === null ? "Not available" : `${score}/100`,
-    scoreMetadata: score === null ? null : {
-      coverageConfidence: reportSurface.gdprEprivacyScoreAssessment.coverageConfidence,
-      coverageRatio: reportSurface.gdprEprivacyScoreAssessment.coverageRatio,
-      kind: reportSurface.gdprEprivacyScoreAssessment.scoreKind,
-      source: reportSurface.gdprEprivacyScoreAssessment.scoreSource,
-      version: reportSurface.gdprEprivacyScoreAssessment.scoreVersion
+    scoreMetadata: {
+      coverageConfidence: reportSurface.customerScoreAssessment.coverageConfidence,
+      coverageRatio: reportSurface.customerScoreAssessment.coverageRatio,
+      kind: reportSurface.customerScoreAssessment.scoreKind,
+      metricLabel: reportSurface.customerScoreAssessment.scoreKind === "gdpr_eprivacy_posture"
+        ? "GDPR/ePrivacy posture"
+        : "GDPR/ePrivacy evidence",
+      source: reportSurface.customerScoreAssessment.scoreSource,
+      status: selectedScoreStatus,
+      version: reportSurface.customerScoreAssessment.scoreVersion,
+      withholdingReason: selectedWithholdingReason
     },
     riskLevel: summary.riskLevel,
     actionLabel: getPulseExecutiveActionLabel(executive.posture),

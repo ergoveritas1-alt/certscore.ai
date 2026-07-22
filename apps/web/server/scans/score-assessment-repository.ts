@@ -8,7 +8,7 @@ export type VersionedScoreAssessmentInput = {
   inputFindingIds: string[];
   inputProjectionFingerprint?: string | null;
   scanId: string;
-  scoreKind: "california_evidence" | "gdpr_eprivacy_evidence";
+  scoreKind: "california_evidence" | "gdpr_eprivacy_evidence" | "gdpr_eprivacy_posture" | "gdpr_eprivacy_risk_shadow";
   scoreSource: string;
   scoreValue: number | null;
   scoreVersion: string;

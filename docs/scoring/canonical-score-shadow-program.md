@@ -4,7 +4,7 @@
 
 The current customer headline is a versioned **GDPR/ePrivacy evidence score**, not an overall CertScore. An overall score remains withheld because CertScore does not yet have equivalent typed coverage contracts for accessibility, consumer protection, financial claims, and the other product domains.
 
-The replacement implemented here is therefore `gdpr_eprivacy_risk_shadow`. It is internal-only and cannot become cutover-eligible while its model has `approvalStatus: pending_luna`.
+The replacement implemented here is therefore `gdpr_eprivacy_risk_shadow`. It is internal-only and cannot become cutover-eligible while its model has `approvalStatus: pending_luna`. A disabled-by-default selector is wired across report, Pulse exports, dashboard/history, and admin consumers, but it cannot select a customer posture assessment until the exact Luna packet is approved.
 
 ## Allowed inputs
 
@@ -22,14 +22,15 @@ It does not consume raw scanner signals, raw v2 review artifacts, display-only i
 - `postureScore` is withheld when coverage, registry completeness, input bounds, or model configuration fails.
 - `modelEligibilityCoverageRatio` is the internal, weighted score-withholding input.
 - `reportUsableEvidenceRatio` is calculated from the exact customer-report GDPR/ePrivacy row projection and is the recommended customer-facing coverage meaning, pending Luna approval.
-- These metrics are deliberately not aliases. A material difference is recorded as a contradiction and makes the comparison ineligible for cutover.
-- Version 3 comparison artifacts retain both named coverage measurements and a bounded model-coverage breakdown with explicit
+- These metrics are deliberately not aliases. Their difference is always retained. Luna's selected report-usable customer meaning classifies the known legacy semantic divergence as an accepted migration difference; any difference not explicitly accepted for the exact model remains an unresolved contradiction and blocks cutover.
+- Version 4 comparison artifacts retain both named coverage measurements, distinguish Luna-accepted migration differences from unresolved contradictions, and include a bounded model-coverage breakdown with explicit
   covered, limited, and not-applicable row IDs and their configured weights so Luna
   can review why a score was withheld without consulting raw scanner evidence.
 - Finding siblings are deduplicated at the configured family boundary; the strongest supported severity contributes once per family.
 - Critical caps prevent configured high-severity core findings from coexisting with a misleadingly strong posture score.
 - Posture and action labels are selected from the same score bands.
 - Every comparison artifact records model version, source, score kind, input fingerprint, legacy score metadata, and score delta.
+- Completed scans persist an immutable shadow assessment and a separate bounded monitoring row. Monitoring rows contain score/coverage metrics, contradiction types, region, scan source, and a SHA-256 grouping key; they contain no domain name or raw evidence.
 
 ## Calibration order
 
@@ -83,3 +84,6 @@ Require complete Luna approval at cutover:
 ```bash
 pnpm score:luna-cutover-gate
 ```
+
+The production selector and rollback procedure are documented in
+`docs/scoring/gdpr-eprivacy-score-cutover-runbook.md`.

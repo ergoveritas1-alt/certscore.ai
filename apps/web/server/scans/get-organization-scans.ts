@@ -10,6 +10,7 @@ import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homep
 import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveDisplayCreatedAt } from "./display-state";
+import { selectConfiguredCustomerGdprEprivacyScore } from "./customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
 import {
   loadOrganizationScanPageData,
@@ -35,7 +36,7 @@ export type OrganizationScanListItem = {
   certscoreOverall: number | null;
   scoreCoverageConfidence: "high" | "medium" | "low" | "insufficient" | null;
   scoreCoverageRatio: number | null;
-  scoreLabel: "GDPR/ePrivacy evidence" | "Legacy scan score" | null;
+  scoreLabel: "GDPR/ePrivacy evidence" | "GDPR/ePrivacy posture" | "Legacy scan score" | null;
   scoreScoredAt: string | null;
   scoreSource: string | null;
   scoreVersion: string | null;
@@ -377,10 +378,16 @@ async function loadOrganizationScans(
     signalCountMap,
     summaryScanIds
   } = await loadOrganizationScanPageData(organizationId, input);
-  const scoreAssessmentMap = await loadLatestVersionedScoreAssessments({
-    scanIds: scanRows.map((scan) => scan.id),
-    scoreKind: "gdpr_eprivacy_evidence"
-  });
+  const [legacyScoreAssessmentMap, candidateScoreAssessmentMap] = await Promise.all([
+    loadLatestVersionedScoreAssessments({
+      scanIds: scanRows.map((scan) => scan.id),
+      scoreKind: "gdpr_eprivacy_evidence"
+    }),
+    loadLatestVersionedScoreAssessments({
+      scanIds: scanRows.map((scan) => scan.id),
+      scoreKind: "gdpr_eprivacy_posture"
+    })
+  ]);
 
   const domainMap = new Map(domains.map((domain) => [domain.id, domain]));
   const domainLastCompletedAtMap = new Map<string, string>();
@@ -502,7 +509,11 @@ async function loadOrganizationScans(
       startedAt: scan.started_at
     });
     const scanFromDisplay = getScanFromDisplay(scan.scan_config_json);
-    const scoreAssessment = scoreAssessmentMap.get(scan.id) ?? null;
+    const scoreSelection = selectConfiguredCustomerGdprEprivacyScore({
+      candidateAssessment: candidateScoreAssessmentMap.get(scan.id) ?? null,
+      legacyAssessment: legacyScoreAssessmentMap.get(scan.id) ?? null
+    });
+    const scoreAssessment = scoreSelection.assessment;
     const displayedScore = scoreAssessment
       ? scoreAssessment.scoreValue
       : snapshot?.certscore_overall ?? null;
@@ -518,7 +529,7 @@ async function loadOrganizationScans(
         scoreCoverageConfidence: scoreAssessment?.coverageConfidence ?? null,
         scoreCoverageRatio: scoreAssessment?.coverageRatio ?? null,
         scoreLabel: scoreAssessment
-          ? "GDPR/ePrivacy evidence"
+          ? scoreSelection.label
           : displayedScore !== null
             ? "Legacy scan score"
             : null,

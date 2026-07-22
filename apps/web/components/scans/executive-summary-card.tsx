@@ -1885,7 +1885,7 @@ function BenchmarkMetricCard(input: {
   maxValue?: number;
   note?: string | null;
 }) {
-  const isScoreMetric = input.label === "Overall score" || input.label === "GDPR/ePrivacy evidence score";
+  const isScoreMetric = input.label === "Overall score" || input.label === "GDPR/ePrivacy evidence score" || input.label === "GDPR/ePrivacy posture score";
   const actualValue = typeof input.actualValue === "number" ? input.actualValue : null;
   const benchmarkValue = typeof input.benchmarkValue === "number" ? input.benchmarkValue : null;
   const dynamicScaleBase = Math.max(actualValue ?? 0, benchmarkValue ?? 0, 1);
@@ -4173,6 +4173,7 @@ export function ExecutiveSummaryCard(input: {
   regulatoryRisk?: RegulatoryRiskAssessment | null;
   resolvedVendorNames: string[];
   score: number | null;
+  scoreLabel?: "GDPR/ePrivacy evidence score" | "GDPR/ePrivacy posture score";
   scanDurationMs?: number | null;
   scanOutcome?: string | null;
   scanTimelineEvents?: ExecutiveTimelineEvent[] | null;
@@ -4464,7 +4465,7 @@ export function ExecutiveSummaryCard(input: {
                 <div className="space-y-2">
                   <div className="grid gap-2 sm:grid-cols-3">
                     <BenchmarkMetricCard
-                      label="GDPR/ePrivacy evidence score"
+                      label={input.scoreLabel ?? "GDPR/ePrivacy evidence score"}
                       actualValue={input.score}
                       benchmarkValue={null}
                       maxValue={100}

@@ -8,6 +8,9 @@ export const LUNA_COVERAGE_METRIC_IDS = [
   "report_usable_evidence"
 ] as const;
 
+export const LEGACY_REPORT_COVERAGE_DIVERGENCE =
+  "legacy_score_coverage_diverges_from_report_usable_evidence";
+
 type LunaDecisionStatus = "pending_luna" | "approved_by_luna";
 type LunaExpectedPostureBand = "Action Needed" | "Clear" | "Watch" | "Withheld";
 
@@ -135,6 +138,17 @@ export function isLunaScoreDecisionApprovedForModel(
   modelVersion: string
 ) {
   return decision.decisionStatus === "approved_by_luna" && auditLunaScoreDecision(decision, modelVersion).length === 0;
+}
+
+export function getLunaAcceptedScoreComparisonDifferences(
+  decision: CanonicalShadowScoreLunaDecision,
+  modelVersion: string
+) {
+  return decision.modelVersion === modelVersion &&
+    decision.coverageSemantics.status === "approved_by_luna" &&
+    decision.coverageSemantics.selectedCustomerFacingMetric === "report_usable_evidence"
+    ? [LEGACY_REPORT_COVERAGE_DIVERGENCE]
+    : [];
 }
 
 export const GDPR_EPRIVACY_SHADOW_LUNA_DECISION = decisionJson as CanonicalShadowScoreLunaDecision;

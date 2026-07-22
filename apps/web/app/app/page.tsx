@@ -84,7 +84,7 @@ export default async function DashboardPage() {
   const websitesNeedingReview = latestByWebsite.filter(
     (scan) =>
       (scan.topFindingCount ?? 0) > 0 ||
-      (scan.scoreLabel === "GDPR/ePrivacy evidence" && scan.certscoreOverall !== null && scan.certscoreOverall < 75) ||
+      ((scan.scoreLabel === "GDPR/ePrivacy evidence" || scan.scoreLabel === "GDPR/ePrivacy posture") && scan.certscoreOverall !== null && scan.certscoreOverall < 75) ||
       Boolean(scan.interruptionLabel)
   ).length;
   const websitesWithPrivacyPolicy = latestByWebsite.filter((scan) => scan.privacyPolicyPresent === true).length;

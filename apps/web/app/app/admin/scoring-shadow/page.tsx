@@ -1,6 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { summarizeCanonicalShadowScoreCohort } from "../../../../lib/scans/canonical-shadow-score-cohort";
+import { summarizeStoredCanonicalShadowComparisons } from "../../../../lib/scans/canonical-shadow-score-monitor";
+import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL } from "../../../../lib/scans/canonical-shadow-score-model";
 import { buildStoredScanCanonicalShadowScore } from "../../../../server/scans/canonical-shadow-score-service";
+import { loadCanonicalShadowScoreMonitoringMetrics } from "../../../../server/scans/canonical-shadow-score-monitor-repository";
 
 type ScoringShadowPageProps = {
   searchParams?: Promise<{
@@ -27,8 +30,24 @@ export default async function AdminScoringShadowPage({ searchParams }: ScoringSh
     return <StatusCard message={`Provide no more than ${MAX_SCANS_PER_REVIEW} unique UUID scanId parameters.`} title="Invalid review request" />;
   }
 
+  const monitoring = await loadCanonicalShadowScoreMonitoringMetrics({
+    modelVersion: GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL.version,
+    windowHours: 168
+  }).then((metrics) => ({
+    available: true as const,
+    summary: summarizeStoredCanonicalShadowComparisons(metrics)
+  })).catch((error) => ({
+    available: false as const,
+    reason: error instanceof Error ? error.message : String(error)
+  }));
+
   if (scanIds.length === 0) {
-    return <StatusCard message="Add one or more scanId query parameters to run a read-only shadow comparison." title="No scans selected" />;
+    return (
+      <div className="space-y-6">
+        <MonitoringCard monitoring={monitoring} />
+        <StatusCard message="Add one or more scanId query parameters to run a read-only shadow comparison." title="No scans selected" />
+      </div>
+    );
   }
 
   const generatedAt = new Date().toISOString();
@@ -55,6 +74,7 @@ export default async function AdminScoringShadowPage({ searchParams }: ScoringSh
 
   return (
     <div className="space-y-6">
+      <MonitoringCard monitoring={monitoring} />
       <Card className="border-slate-200 bg-white">
         <CardHeader>
           <CardTitle>GDPR/ePrivacy scoring shadow</CardTitle>
@@ -80,6 +100,37 @@ export default async function AdminScoringShadowPage({ searchParams }: ScoringSh
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function MonitoringCard({
+  monitoring
+}: {
+  monitoring:
+    | { available: true; summary: ReturnType<typeof summarizeStoredCanonicalShadowComparisons> }
+    | { available: false; reason: string };
+}) {
+  return (
+    <Card className="border-slate-200 bg-white">
+      <CardHeader>
+        <CardTitle>Seven-day scoring monitor</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm text-slate-600">
+        <p>
+          Passive candidate metrics only: score drift, contradictions, withholding, and comparable cross-region repeats.
+          Customer reports remain on the legacy score until Luna approves the exact model and the controlled flag is enabled.
+        </p>
+        {monitoring.available ? (
+          <pre className="max-h-[45vh] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-4 text-xs text-slate-100">
+            {JSON.stringify(monitoring.summary, null, 2)}
+          </pre>
+        ) : (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+            Monitoring data is not available yet. {monitoring.reason}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

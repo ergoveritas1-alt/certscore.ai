@@ -38,6 +38,11 @@ export const PUBLIC_METHODOLOGY_SECTIONS = [
       "Confidence is assigned by deterministic rules based on evidence type count, repeatability, and the presence or absence of contradictory signals. Severity reflects the materiality of the observed gap on tested flows, not a legal penalty estimate or official score."
   },
   {
+    heading: "How scores and coverage are presented",
+    body:
+      "When a report shows a GDPR/ePrivacy score, it is a versioned domain assessment based only on the report's projected GDPR/ePrivacy evidence and findings. Coverage confidence is shown separately and can cause the score to be withheld when the tested evidence is insufficient. It is not an overall CertScore, a compliance determination, or a certification; accessibility, consumer-protection, security, and other domains remain separate until each has an approved scoring and coverage contract."
+  },
+  {
     heading: "What “not detected” means",
     body:
       "Not detected means the expected public surface or behavior was not evident under the tested conditions. It does not mean the capability is absent in every environment, account state, jurisdiction, or page state."

@@ -6,6 +6,10 @@ import {
   type CanonicalShadowScoreModel
 } from "./canonical-shadow-score";
 import { buildCanonicalShadowScoreComparisonArtifact } from "./canonical-shadow-score-artifact";
+import {
+  GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
+  getLunaAcceptedScoreComparisonDifferences
+} from "./canonical-shadow-score-luna-decision";
 
 export type CanonicalShadowScoreRunInput = {
   context?: {
@@ -51,6 +55,10 @@ export function runCanonicalShadowScore(input: CanonicalShadowScoreRunInput) {
     model: input.model
   });
   return buildCanonicalShadowScoreComparisonArtifact({
+    acceptedComparisonDifferences: getLunaAcceptedScoreComparisonDifferences(
+      GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
+      input.model.version
+    ),
     candidate,
     context: input.context,
     generatedAt: input.generatedAt,

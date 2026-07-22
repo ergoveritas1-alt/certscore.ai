@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   auditLunaScoreDecision,
+  getLunaAcceptedScoreComparisonDifferences,
   GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
   isLunaScoreDecisionApprovedForModel,
   type CanonicalShadowScoreLunaDecision
@@ -58,6 +59,23 @@ test("the checked-in Luna decision packet is valid, explicit, and still pending"
   assert.ok(GDPR_EPRIVACY_SHADOW_LUNA_DECISION.expectedBandLanes.every(
     (lane) => lane.expectedPostureBand !== null && lane.evidenceArtifact !== null
   ));
+});
+
+test("Luna's approved coverage semantic accepts only the exact model's legacy migration difference", () => {
+  assert.deepEqual(
+    getLunaAcceptedScoreComparisonDifferences(
+      GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
+      GDPR_EPRIVACY_SHADOW_LUNA_DECISION.modelVersion
+    ),
+    ["legacy_score_coverage_diverges_from_report_usable_evidence"]
+  );
+  assert.deepEqual(
+    getLunaAcceptedScoreComparisonDifferences(
+      GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
+      "different-model"
+    ),
+    []
+  );
 });
 
 test("pending final approval cannot erase Luna's selected lane labels", () => {

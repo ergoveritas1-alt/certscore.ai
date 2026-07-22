@@ -85,6 +85,8 @@ import {
   buildScanExecutionProvenance,
   type ScanExecutionProvenanceRecord
 } from "./scan-execution-provenance";
+import { selectConfiguredCustomerGdprEprivacyScore } from "./customer-score-cutover-server";
+import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
 
 function normalizeTrackerScriptHostForDisplay(value: unknown) {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -1389,8 +1391,23 @@ async function loadScanDetailRecord(input: {
         organizationId: scanOrganizationId,
         scanId: input.scanId
       });
+  const [legacyScoreAssessmentMap, candidateScoreAssessmentMap] = await Promise.all([
+    loadLatestVersionedScoreAssessments({
+      scanIds: [input.scanId],
+      scoreKind: "gdpr_eprivacy_evidence"
+    }),
+    loadLatestVersionedScoreAssessments({
+      scanIds: [input.scanId],
+      scoreKind: "gdpr_eprivacy_posture"
+    })
+  ]);
+  const customerGdprEprivacyScoreSelection = selectConfiguredCustomerGdprEprivacyScore({
+    candidateAssessment: candidateScoreAssessmentMap.get(input.scanId) ?? null,
+    legacyAssessment: legacyScoreAssessmentMap.get(input.scanId) ?? null
+  });
 
   return {
+    customerGdprEprivacyScoreSelection,
     accessPostureSummary: {
       accessPostureClass: accessPostureSummary.accessPostureClass,
       highestSuccessfulTier,

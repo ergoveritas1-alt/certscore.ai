@@ -32,6 +32,13 @@ export async function buildStoredScanCanonicalShadowScore(scanId: string, genera
   if (!storedRecord) return null;
 
   const materializedRecord = await materializeLocalV2DagScanDetail(storedRecord).catch(() => storedRecord);
+  return buildMaterializedScanCanonicalShadowScore(materializedRecord, generatedAt);
+}
+
+export function buildMaterializedScanCanonicalShadowScore(
+  materializedRecord: Awaited<ReturnType<typeof materializeLocalV2DagScanDetail>>,
+  generatedAt: string
+) {
   const projection = buildCanonicalGdprEprivacyShadowProjection(materializedRecord);
   const scoreInput = buildCanonicalShadowScoreInput({
     checklistRows: projection.checklistRows,
@@ -66,7 +73,7 @@ export async function buildStoredScanCanonicalShadowScore(scanId: string, genera
       scoreVersion: projection.legacyScoreAssessment.scoreVersion
     },
     model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL,
-    scanId,
+    scanId: materializedRecord.scan.id,
     scoreEligibleCoverageRowIds: [...GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_IDS],
     scoreEligibleFamilies: [...GDPR_EPRIVACY_SHADOW_SCORE_ELIGIBLE_FAMILIES]
   });

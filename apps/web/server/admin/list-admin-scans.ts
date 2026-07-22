@@ -33,6 +33,7 @@ import { projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
 import { requirePlatformAdminContext } from "./platform-admin";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
+import { selectConfiguredCustomerGdprEprivacyScore } from "../scans/customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
 
 export type AdminScanListItem = {
@@ -48,7 +49,7 @@ export type AdminScanListItem = {
   certscoreOverall: number | null;
   scoreCoverageConfidence: "high" | "medium" | "low" | "insufficient" | null;
   scoreCoverageRatio: number | null;
-  scoreLabel: "GDPR/ePrivacy evidence" | "Legacy scan score" | null;
+  scoreLabel: "GDPR/ePrivacy evidence" | "GDPR/ePrivacy posture" | "Legacy scan score" | null;
   scoreScoredAt: string | null;
   scoreSource: string | null;
   scoreVersion: string | null;
@@ -166,11 +167,15 @@ export async function listAdminScansPage(
     runtimeArtifacts,
     scanRows
   } = scanPageData;
-  const [pulseAttributionRows, scoreAssessmentMap] = await Promise.all([
+  const [pulseAttributionRows, legacyScoreAssessmentMap, candidateScoreAssessmentMap] = await Promise.all([
     loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id), null),
     loadLatestVersionedScoreAssessments({
       scanIds: scanRows.map((scan) => scan.id),
       scoreKind: "gdpr_eprivacy_evidence"
+    }),
+    loadLatestVersionedScoreAssessments({
+      scanIds: scanRows.map((scan) => scan.id),
+      scoreKind: "gdpr_eprivacy_posture"
     })
   ]);
   const pulseAttributionMap = new Map(pulseAttributionRows.map((row) => [row.scan_id, row] as const));
@@ -248,7 +253,11 @@ export async function listAdminScansPage(
       snapshotOutcome: snapshot?.scan_outcome,
       visualAccessReview: runtimeArtifact?.visual_access_review
     });
-    const scoreAssessment = scoreAssessmentMap.get(scan.id) ?? null;
+    const scoreSelection = selectConfiguredCustomerGdprEprivacyScore({
+      candidateAssessment: candidateScoreAssessmentMap.get(scan.id) ?? null,
+      legacyAssessment: legacyScoreAssessmentMap.get(scan.id) ?? null
+    });
+    const scoreAssessment = scoreSelection.assessment;
     const displayedScore = scoreAssessment
       ? scoreAssessment.scoreValue
       : snapshot?.certscore_overall ?? null;
@@ -299,7 +308,7 @@ export async function listAdminScansPage(
       scoreCoverageConfidence: scoreAssessment?.coverageConfidence ?? null,
       scoreCoverageRatio: scoreAssessment?.coverageRatio ?? null,
       scoreLabel: scoreAssessment
-        ? "GDPR/ePrivacy evidence"
+        ? scoreSelection.label
         : displayedScore !== null
           ? "Legacy scan score"
           : null,

@@ -1,6 +1,6 @@
 import type { CanonicalShadowScoreResult } from "./canonical-shadow-score";
 
-export const CANONICAL_SHADOW_SCORE_COMPARISON_SCHEMA_VERSION = "canonical-shadow-score-comparison.v3";
+export const CANONICAL_SHADOW_SCORE_COMPARISON_SCHEMA_VERSION = "canonical-shadow-score-comparison.v4";
 
 type LegacyScoreReference = {
   coverageConfidence: string;
@@ -37,6 +37,7 @@ function boundedRowCount(value: number, label: string) {
 }
 
 export function buildCanonicalShadowScoreComparisonArtifact(input: {
+  acceptedComparisonDifferences?: string[];
   candidate: CanonicalShadowScoreResult;
   context?: {
     comparisonGroupKey?: string | null;
@@ -77,16 +78,20 @@ export function buildCanonicalShadowScoreComparisonArtifact(input: {
           ? "candidate_higher"
           : "candidate_lower";
   const legacyCoverageDelta = legacyCoverageRatio - reportUsableEvidenceRatio;
-  const comparisonContradictions = [
+  const comparisonDifferences = [
     ...(Math.abs(legacyCoverageDelta) > 0.000_001
       ? ["legacy_score_coverage_diverges_from_report_usable_evidence"]
       : [])
   ];
+  const acceptedDifferenceSet = new Set(input.acceptedComparisonDifferences ?? []);
+  const acceptedDifferences = comparisonDifferences.filter((difference) => acceptedDifferenceSet.has(difference));
+  const comparisonContradictions = comparisonDifferences.filter((difference) => !acceptedDifferenceSet.has(difference));
 
   return {
     candidate: input.candidate,
     comparison: {
       absoluteDelta: delta === null ? null : Math.abs(delta),
+      acceptedDifferences,
       contradictions: comparisonContradictions,
       coverage: {
         absoluteDelta: Math.abs(legacyCoverageDelta),
@@ -94,7 +99,11 @@ export function buildCanonicalShadowScoreComparisonArtifact(input: {
         reportInScopeRowCount,
         reportUsableEvidenceRatio,
         reportUsableRowCount,
-        status: comparisonContradictions.length === 0 ? "aligned" : "diverged"
+        status: comparisonDifferences.length === 0
+          ? "aligned"
+          : comparisonContradictions.length === 0
+            ? "diverged_accepted"
+            : "diverged_unresolved"
       },
       delta,
       status: comparisonStatus
