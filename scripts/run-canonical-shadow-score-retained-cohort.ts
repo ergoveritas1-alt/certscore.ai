@@ -217,6 +217,7 @@ async function main() {
       artifacts.push(runCanonicalShadowScore({
         context: {
           comparisonGroupKey: hash(hostname(bundle.url)),
+          comparisonTargetKey: hash(new URL(bundle.url).toString()),
           region: replayProvenance.region,
           scanSource: replayProvenance.scanSource
         },

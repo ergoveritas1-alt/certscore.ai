@@ -2362,6 +2362,18 @@ const rules: VendorRule[] = [
     basisLabel: "matomo_cloud_analytics_runtime",
   },
   {
+    entity: "Umami Software, Inc.",
+    vendor: "Umami",
+    product: "Umami Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "audience_measurement", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^cloud\.umami\.is$/i],
+    urlPatterns: [/\/script\.js(?:\?|$)/i, /\/api\/send(?:\?|$)/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "umami_cloud_analytics_runtime",
+  },
+  {
     entity: "Cloudflare, Inc.",
     vendor: "Cloudflare",
     product: "Cloudflare Web Analytics",

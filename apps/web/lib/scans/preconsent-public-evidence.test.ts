@@ -463,6 +463,14 @@ test("uses canonical endpoint attribution for retained pre-consent example reque
 
 test("resolves Batch 3 through 6 endpoint hosts through the canonical vendor resolver", () => {
   assert.deepEqual(
+    inferDirectEndpointVendorFromUrl("https://cloud.umami.is/script.js"),
+    {
+      vendorName: "Umami Analytics",
+      vendorCategory: "analytics",
+      basis: "canonical_vendor_resolver"
+    }
+  );
+  assert.deepEqual(
     inferDirectEndpointVendorFromUrl("https://cdn.privacy-mgmt.com/wrapperMessagingWithoutDetection.js"),
     {
       vendorName: "Sourcepoint CMP",

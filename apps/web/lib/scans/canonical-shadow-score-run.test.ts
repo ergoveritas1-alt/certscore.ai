@@ -4,7 +4,12 @@ import { runCanonicalShadowScore, type CanonicalShadowScoreRunInput } from "./ca
 
 function input(): CanonicalShadowScoreRunInput {
   return {
-    context: { comparisonGroupKey: "sha256:target", region: "eu-west-1", scanSource: "lambda" },
+    context: {
+      comparisonGroupKey: "sha256:target",
+      comparisonTargetKey: "sha256:requested-url",
+      region: "eu-west-1",
+      scanSource: "lambda"
+    },
     coverageRows: [{ assessmentStatus: "checked", evidenceState: "observed", rowId: "privacy_notice_availability" }],
     findings: [{ family: "contradiction", findingId: "policy_behavior_contradiction_detected", severity: "medium" }],
     generatedAt: "2026-07-22T00:00:00.000Z",

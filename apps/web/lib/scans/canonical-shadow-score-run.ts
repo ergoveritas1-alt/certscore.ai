@@ -14,6 +14,7 @@ import {
 export type CanonicalShadowScoreRunInput = {
   context?: {
     comparisonGroupKey?: string | null;
+    comparisonTargetKey?: string | null;
     region?: string | null;
     scanSource?: string | null;
   };

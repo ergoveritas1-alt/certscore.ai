@@ -18,6 +18,19 @@ function hash(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function comparisonTargetKey(scanConfig: Record<string, unknown> | null | undefined) {
+  const rawUrl = typeof scanConfig?.normalizedUrl === "string" ? scanConfig.normalizedUrl.trim() : "";
+  if (!rawUrl) return null;
+  try {
+    const url = new URL(rawUrl);
+    url.hash = "";
+    if (url.pathname === "") url.pathname = "/";
+    return hash(url.toString());
+  } catch {
+    return null;
+  }
+}
+
 function projectionFingerprint(input: ReturnType<typeof buildCanonicalShadowScoreInput>) {
   return hash(JSON.stringify({
     coverageRows: [...input.coverageRows].sort((left, right) => left.rowId.localeCompare(right.rowId)),
@@ -54,6 +67,7 @@ export function buildMaterializedScanCanonicalShadowScore(
   return runCanonicalShadowScore({
     context: {
       comparisonGroupKey: domainKey,
+      comparisonTargetKey: comparisonTargetKey(materializedRecord.scan.scanConfigJson),
       region: materializedRecord.scan.provenance.lambdaAwsRegion,
       scanSource: materializedRecord.scan.scanFromValue
     },

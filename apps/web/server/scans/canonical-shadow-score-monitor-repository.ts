@@ -13,6 +13,7 @@ type StoredRow = {
   candidate_coverage_ratio: string | number;
   candidate_score: number | null;
   comparison_group_key: string | null;
+  comparison_target_key: string | null;
   contradiction_types: string[];
   generated_at: string;
   legacy_coverage_ratio: string | number;
@@ -51,8 +52,16 @@ export async function persistCanonicalShadowScoreComparison(
     "comparisonGroupKey",
     160
   );
+  const comparisonTargetKey = boundedOptionalText(
+    artifact.context.comparisonTargetKey,
+    "comparisonTargetKey",
+    160
+  );
   if (comparisonGroupKey && !/^(?:sha256:)?[a-f0-9]{64}$/i.test(comparisonGroupKey)) {
     throw new Error("comparisonGroupKey must be a SHA-256 digest, never a domain name.");
+  }
+  if (comparisonTargetKey && !/^(?:sha256:)?[a-f0-9]{64}$/i.test(comparisonTargetKey)) {
+    throw new Error("comparisonTargetKey must be a SHA-256 digest, never a URL.");
   }
   const contradictionTypes = boundedArray([
     ...artifact.candidate.contradictions,
@@ -76,12 +85,13 @@ export async function persistCanonicalShadowScoreComparison(
        withholding_reasons,
        scanner_region,
        comparison_group_key,
+       comparison_target_key,
        scan_source,
        generated_at
      ) values (
        $1::uuid, $2, $3, $4, $5, $6::integer, $7::integer, $8::integer,
        $9::numeric, $10::numeric, $11::numeric, $12::text[], $13::text[],
-       $14, $15, $16, $17::timestamptz
+       $14, $15, $16, $17, $18::timestamptz
      )
      on conflict (scan_id, model_version) do nothing
      returning id`,
@@ -101,6 +111,7 @@ export async function persistCanonicalShadowScoreComparison(
       withholdingReasons,
       boundedOptionalText(artifact.context.region, "scannerRegion", 80),
       comparisonGroupKey,
+      comparisonTargetKey,
       boundedOptionalText(artifact.context.scanSource, "scanSource", 80),
       boundedText(artifact.generatedAt, "generatedAt", 80)
     ]
@@ -130,6 +141,7 @@ export async function loadCanonicalShadowScoreMonitoringMetrics(input: {
             scanner_region,
             scan_source,
             comparison_group_key,
+            comparison_target_key,
             generated_at::text
        from public.scan_score_shadow_comparisons
       where model_version = $1
@@ -143,6 +155,7 @@ export async function loadCanonicalShadowScoreMonitoringMetrics(input: {
     candidateCoverageRatio: Number(row.candidate_coverage_ratio),
     candidateScore: row.candidate_score,
     comparisonGroupKey: row.comparison_group_key,
+    comparisonTargetKey: row.comparison_target_key,
     contradictionTypes: row.contradiction_types,
     generatedAt: row.generated_at,
     legacyCoverageRatio: Number(row.legacy_coverage_ratio),

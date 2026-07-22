@@ -29,6 +29,7 @@ test("comparison artifact preserves version provenance and a bounded score delta
     candidate,
     context: {
       comparisonGroupKey: "sha256:example-domain",
+      comparisonTargetKey: "sha256:example-url",
       region: "eu-west-1",
       scanSource: "lambda"
     },
@@ -64,8 +65,9 @@ test("comparison artifact preserves version provenance and a bounded score delta
     delta: 13,
     status: "candidate_higher"
   });
-  assert.equal(artifact.schemaVersion, "canonical-shadow-score-comparison.v4");
+  assert.equal(artifact.schemaVersion, "canonical-shadow-score-comparison.v5");
   assert.equal(artifact.context.region, "eu-west-1");
+  assert.equal(artifact.context.comparisonTargetKey, "sha256:example-url");
   assert.equal(artifact.legacy.scoreVersion, "gdpr-eprivacy-evidence.legacy-v1");
 });
 

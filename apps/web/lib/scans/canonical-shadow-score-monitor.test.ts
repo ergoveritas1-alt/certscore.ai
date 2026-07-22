@@ -10,6 +10,7 @@ function metric(overrides: Partial<StoredCanonicalShadowComparisonMetric>): Stor
     candidateCoverageRatio: 1,
     candidateScore: 80,
     comparisonGroupKey: "sha256:group",
+    comparisonTargetKey: "sha256:target",
     contradictionTypes: [],
     generatedAt: "2026-07-22T00:00:00.000Z",
     legacyCoverageRatio: 1,
@@ -71,4 +72,14 @@ test("persisted monitor reports source variance without calling it region varian
   assert.equal(summary.crossSource.maximumScoreRange, 10);
   assert.equal(summary.crossSource.ranges[0]?.region, "eu-west-1");
   assert.equal(summary.crossSource.ranges[0]?.sourceCount, 2);
+});
+
+test("persisted monitor never compares different requested URLs on the same hostname", () => {
+  const summary = summarizeStoredCanonicalShadowComparisons([
+    metric({ scanId: "scan-1" }),
+    metric({ candidateScore: 70, comparisonTargetKey: "sha256:other-target", region: "us-west-2", scanId: "scan-2" })
+  ]);
+
+  assert.equal(summary.crossRegion.comparedGroupCount, 0);
+  assert.equal(summary.crossSource.comparedGroupCount, 0);
 });

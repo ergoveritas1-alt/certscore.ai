@@ -11,6 +11,7 @@ test("production, passive cohort, and retained replay use the exact customer-rep
   const exactReportCoveragePipeline = /deriveGdprEprivacyUsableCoverageSummary\(\s*getReportableGdprEprivacyCoverageItems\(projection\.checklistRows\)\s*\)/s;
 
   assert.match(service, exactReportCoveragePipeline);
+  assert.match(service, /comparisonTargetKey\(materializedRecord\.scan\.scanConfigJson\)/);
   assert.match(cohortRunner, exactReportCoveragePipeline);
   assert.match(retainedRunner, exactReportCoveragePipeline);
   assert.match(retainedRunner, /GDPR_EPRIVACY_SHADOW_MODEL_PROPOSALS/);

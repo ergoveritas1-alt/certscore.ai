@@ -636,6 +636,7 @@ test("resolves the first evidence-backed candidate promotion wave", () => {
     { type: "request", url: "https://static.chartbeat.com/chartbeat.js", hostname: "static.chartbeat.com" },
     { type: "request", url: "https://js.hcaptcha.com/1/api.js", hostname: "js.hcaptcha.com" },
     { type: "request", url: "https://kubiobuilder.matomo.cloud/matomo.js", hostname: "kubiobuilder.matomo.cloud" },
+    { type: "request", url: "https://cloud.umami.is/script.js", hostname: "cloud.umami.is" },
     { type: "request", url: "https://static.cloudflareinsights.com/beacon.min.js", hostname: "static.cloudflareinsights.com" },
     { type: "request", url: "https://challenges.cloudflare.com/turnstile/v0/api.js", hostname: "challenges.cloudflare.com" },
     { type: "request", url: "https://player.vimeo.com/video/123456789", hostname: "player.vimeo.com" },
@@ -649,6 +650,7 @@ test("resolves the first evidence-backed candidate promotion wave", () => {
     ["Chartbeat", "Chartbeat Publisher Analytics", "analytics"],
     ["hCaptcha", "hCaptcha", "security"],
     ["Matomo", "Matomo Analytics", "analytics"],
+    ["Umami", "Umami Analytics", "analytics"],
     ["Cloudflare", "Cloudflare Web Analytics", "analytics"],
     ["Cloudflare", "Cloudflare Turnstile", "security"],
     ["Vimeo", "Vimeo Embedded Player", "infrastructure"],
@@ -665,6 +667,22 @@ test("keeps Cloudflare Web Analytics in analytics display category rather than a
     purpose: "analytics",
     regulatoryRelevance: ["consent", "analytics", "audience_measurement", "third_party_runtime"]
   }), "Analytics");
+});
+
+test("keeps Umami Cloud matching bounded to its analytics runtime", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", url: "https://cloud.umami.is/script.js", hostname: "cloud.umami.is" },
+    { type: "request", url: "https://cloud.umami.is/api/send", hostname: "cloud.umami.is" },
+    { type: "request", url: "https://cloud.umami.is/docs", hostname: "cloud.umami.is" },
+  ]);
+
+  const umami = observations.find((item) => item.product === "Umami Analytics");
+  assert.ok(umami);
+  assert.equal(umami.purpose, "analytics");
+  assert.deepEqual(umami.matchedUrls.sort(), [
+    "https://cloud.umami.is/api/send",
+    "https://cloud.umami.is/script.js"
+  ]);
 });
 
 test("keeps candidate promotion rules bounded and product-specific", () => {

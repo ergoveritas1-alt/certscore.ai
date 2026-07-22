@@ -105,7 +105,10 @@ through the exact candidate-v3 projection: two from `eu-central-1` and two from
 index 0, and had no unresolved contradictions. The candidate score range across the
 two regions was 0 even though the legacy scores ranged from 83 to 94 and report-usable
 coverage ranged from approximately 0.71 to 0.90. The bounded evidence packet is
-`docs/scoring/owned-cross-region-candidate-v3-20260722.json`.
+`docs/scoring/owned-cross-region-candidate-v3-20260722.json`. This artifact was
+subsequently withdrawn when URL-level review showed that hostname grouping had
+mixed the homepage with a calibration path. It is retained as an audit record,
+not acceptance evidence.
 
 The replay initially exposed a verifier defect: same-target repeats were labeled
 cross-region without requiring distinct region values, and retained bundles carried

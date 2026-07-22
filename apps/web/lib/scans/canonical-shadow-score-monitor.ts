@@ -2,6 +2,7 @@ export type StoredCanonicalShadowComparisonMetric = {
   candidateCoverageRatio: number;
   candidateScore: number | null;
   comparisonGroupKey: string | null;
+  comparisonTargetKey: string | null;
   contradictionTypes: string[];
   generatedAt: string;
   legacyCoverageRatio: number;
@@ -35,12 +36,12 @@ export function summarizeStoredCanonicalShadowComparisons(
   const regionGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
   const sourceGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
   for (const metric of metrics) {
-    if (!metric.comparisonGroupKey || !metric.region || !metric.scanSource || metric.candidateScore === null) continue;
-    const regionKey = `${metric.comparisonGroupKey}\u0000${metric.scanSource}`;
+    if (!metric.comparisonGroupKey || !metric.comparisonTargetKey || !metric.region || !metric.scanSource || metric.candidateScore === null) continue;
+    const regionKey = `${metric.comparisonGroupKey}\u0000${metric.comparisonTargetKey}\u0000${metric.scanSource}`;
     const regionRows = regionGroups.get(regionKey) ?? [];
     regionRows.push(metric);
     regionGroups.set(regionKey, regionRows);
-    const sourceKey = `${metric.comparisonGroupKey}\u0000${metric.region}`;
+    const sourceKey = `${metric.comparisonGroupKey}\u0000${metric.comparisonTargetKey}\u0000${metric.region}`;
     const sourceRows = sourceGroups.get(sourceKey) ?? [];
     sourceRows.push(metric);
     sourceGroups.set(sourceKey, sourceRows);

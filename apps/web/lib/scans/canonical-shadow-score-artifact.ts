@@ -1,6 +1,6 @@
 import type { CanonicalShadowScoreResult } from "./canonical-shadow-score";
 
-export const CANONICAL_SHADOW_SCORE_COMPARISON_SCHEMA_VERSION = "canonical-shadow-score-comparison.v4";
+export const CANONICAL_SHADOW_SCORE_COMPARISON_SCHEMA_VERSION = "canonical-shadow-score-comparison.v5";
 
 type LegacyScoreReference = {
   coverageConfidence: string;
@@ -41,6 +41,7 @@ export function buildCanonicalShadowScoreComparisonArtifact(input: {
   candidate: CanonicalShadowScoreResult;
   context?: {
     comparisonGroupKey?: string | null;
+    comparisonTargetKey?: string | null;
     region?: string | null;
     scanSource?: string | null;
   };
@@ -111,6 +112,9 @@ export function buildCanonicalShadowScoreComparisonArtifact(input: {
     context: {
       comparisonGroupKey: input.context?.comparisonGroupKey
         ? boundedText(input.context.comparisonGroupKey, 160)
+        : null,
+      comparisonTargetKey: input.context?.comparisonTargetKey
+        ? boundedText(input.context.comparisonTargetKey, 160)
         : null,
       region: input.context?.region ? boundedText(input.context.region, 80) : null,
       scanSource: input.context?.scanSource ? boundedText(input.context.scanSource, 80) : null

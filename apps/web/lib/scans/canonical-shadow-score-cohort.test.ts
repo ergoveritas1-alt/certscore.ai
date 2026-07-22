@@ -39,7 +39,12 @@ function artifact(input: {
   });
   return buildCanonicalShadowScoreComparisonArtifact({
     candidate,
-    context: { comparisonGroupKey: "sha256:same-target", region: input.region, scanSource: input.scanSource ?? "lambda" },
+    context: {
+      comparisonGroupKey: "sha256:same-hostname",
+      comparisonTargetKey: "sha256:same-requested-url",
+      region: input.region,
+      scanSource: input.scanSource ?? "lambda"
+    },
     generatedAt: "2026-07-22T00:00:00.000Z",
     inputProjectionFingerprint: `sha256:${input.scanId}`,
     legacy: {
@@ -99,4 +104,14 @@ test("cohort summary separates cross-source variance from cross-region variance"
   assert.equal(summary.crossSource.maximumScoreRange, 15);
   assert.equal(summary.crossSource.ranges[0]?.region, "eu-west-1");
   assert.equal(summary.crossSource.ranges[0]?.sourceCount, 2);
+});
+
+test("cohort summary does not compare different requested URLs on the same hostname", () => {
+  const first = artifact({ legacyScore: 72, region: "eu-west-1", scanId: "scan-a", severity: "medium" });
+  const second = artifact({ legacyScore: 80, region: "us-west-2", scanId: "scan-b", severity: "high" });
+  second.context.comparisonTargetKey = "sha256:other-requested-url";
+
+  const summary = summarizeCanonicalShadowScoreCohort([first, second]);
+  assert.equal(summary.crossRegion.comparedGroupCount, 0);
+  assert.equal(summary.crossSource.comparedGroupCount, 0);
 });

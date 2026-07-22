@@ -35,11 +35,12 @@ export function summarizeCanonicalShadowScoreCohort(
 
   for (const artifact of scored) {
     const groupKey = artifact.context.comparisonGroupKey;
+    const targetKey = artifact.context.comparisonTargetKey;
     const region = artifact.context.region;
     const scanSource = artifact.context.scanSource;
     const score = artifact.candidate.postureScore;
-    if (!groupKey || !region || !scanSource || score === null) continue;
-    const regionGroupKey = `${groupKey}\u0000${scanSource}`;
+    if (!groupKey || !targetKey || !region || !scanSource || score === null) continue;
+    const regionGroupKey = `${groupKey}\u0000${targetKey}\u0000${scanSource}`;
     const regionValues = regionGroups.get(regionGroupKey) ?? {
       comparisonGroupKey: groupKey,
       regions: new Set<string>(),
@@ -50,7 +51,7 @@ export function summarizeCanonicalShadowScoreCohort(
     regionValues.scores.push(score);
     regionGroups.set(regionGroupKey, regionValues);
 
-    const sourceGroupKey = `${groupKey}\u0000${region}`;
+    const sourceGroupKey = `${groupKey}\u0000${targetKey}\u0000${region}`;
     const sourceValues = sourceGroups.get(sourceGroupKey) ?? {
       comparisonGroupKey: groupKey,
       region,

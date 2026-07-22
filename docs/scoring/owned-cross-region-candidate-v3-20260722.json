@@ -3,6 +3,7 @@
   "generatedAt": "2026-07-22T08:57:09.445Z",
   "modelVersion": "gdpr-eprivacy-shadow.candidate-v3-rights-max-30.pending-luna",
   "productionScanEvidence": true,
+  "acceptanceStatus": "withdrawn_target_url_identity_not_proved",
   "replayCreatedLiveTraffic": false,
   "comparisonGroupKey": "sha256:23758e8edb1a1f4306e64a6edc1138829a60030fb2edcfec6a13f4019ba67e77",
   "rows": [
@@ -68,6 +69,7 @@
     "unresolvedContradictionCount": 0
   },
   "limitations": [
+    "WITHDRAWN: the rows were grouped by hostname without proving the same normalized requested URL. At least scan 52d2ca2e-5913-428a-8f5d-f162c68eca0d targeted https://certscore.ai/calibration/gdpr-transparency/pt rather than the homepage, so the score range cannot establish cross-region equivalence.",
     "The four production scans were not simultaneous, so temporal site changes remain a possible confounder.",
     "This is an owned low-signal canary and does not replace the governed rotating public sample.",
     "This artifact does not establish Lambda/browser-extension source equivalence."

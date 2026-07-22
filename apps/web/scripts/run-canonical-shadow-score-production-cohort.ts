@@ -99,6 +99,19 @@ function projectionFingerprint(input: ReturnType<typeof buildCanonicalShadowScor
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
+function comparisonTargetKey(scanConfig: Record<string, unknown> | null | undefined) {
+  const rawUrl = typeof scanConfig?.normalizedUrl === "string" ? scanConfig.normalizedUrl.trim() : "";
+  if (!rawUrl) return null;
+  try {
+    const url = new URL(rawUrl);
+    url.hash = "";
+    if (url.pathname === "") url.pathname = "/";
+    return createHash("sha256").update(url.toString()).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   const inputPath = argumentValue("--input");
   const outputPath = argumentValue("--out");
@@ -137,6 +150,7 @@ async function main() {
       artifacts.push(runCanonicalShadowScore({
         context: {
           comparisonGroupKey: scan.comparisonGroupKey,
+          comparisonTargetKey: comparisonTargetKey(materializedRecord.scan.scanConfigJson),
           region: scan.region,
           scanSource: scan.scanSource
         },
