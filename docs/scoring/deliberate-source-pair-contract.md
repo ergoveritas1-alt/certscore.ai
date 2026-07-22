@@ -1,7 +1,7 @@
 # Deliberate Lambda/browser score-pair contract
 
-Status: **implemented locally; production migration and owned pair pending**. This contract supports
-the active Luna scoring goal. It does not approve candidate-v3 or customer cutover.
+Status: **deployed; production migration verified; owned browser member pending**. This contract
+supports the active Luna scoring goal. It does not approve candidate-v3 or customer cutover.
 
 ## Purpose
 
@@ -89,11 +89,19 @@ subject to the calibration registry, central contact ledger, cooldowns, and Luna
 - The governed rotating public sample and Luna monitoring-baseline approval remain separate
   mandatory gates before cutover.
 
-## Local implementation evidence
+## Implementation evidence
 
 Migration 0151, fail-closed pair registration, the platform-admin registration control, and
 the `deliberateCrossSourcePairs` monitor projection are implemented. Focused tests prove the
 diagnostic/exact-input separation. A disposable PostgreSQL integration run applied the
 migration, registered the same pair twice idempotently, loaded two members, reported equal
 coverage/finding components with different whole-input fingerprints, and kept the exact-input
-cross-source count at zero. Production deployment and a real owned pair remain required.
+cross-source count at zero. The production deployment is complete; the real owned pair still
+requires its browser-extension member.
+
+Production release `d71c692f` was verified on the ECS web runtime and all three approved
+Lambda scanner regions on 2026-07-22. A read-only production check confirmed both migration
+0151 tables. Owned EU-IR scan `804cfab7-cf12-48bf-956c-bd528343d87c` persisted a schema-v6
+comparison row for `https://certscore.ai/` with 38 coverage rows, one eligible finding,
+legacy score 79, candidate score 54, and all three canonical fingerprints. The matching
+browser-extension scan and immutable pair registration remain pending.
