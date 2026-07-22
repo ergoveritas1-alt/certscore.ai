@@ -14,6 +14,10 @@ import {
   type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
 import { chromium, type Browser, type Page } from "playwright";
+import { Resolver } from "node:dns/promises";
+import { isIP } from "node:net";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
@@ -4656,26 +4660,18 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
   else parentSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(), Math.max(500, timeoutMs));
   try {
-    const response = await awaitAbortablePolicyOperation(fetch(url, {
-      headers: {
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,*/*;q=0.7",
-        "accept-language": "en-US,en;q=0.8,de;q=0.7,fr;q=0.7,es;q=0.7,it;q=0.7,nl;q=0.7,pl;q=0.7",
-        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
-      },
-      signal: controller.signal,
-      redirect: "follow",
-    }), controller.signal, "Policy fetch aborted before response headers were received.");
+    const response = await requestBoundedPolicyResponse(url, controller.signal);
     const contentType = response.headers.get("content-type") ?? "";
     const attemptBase = {
       mode: "direct" as const,
       requestedUrl: url,
-      finalUrl: response.url || url,
+      finalUrl: response.finalUrl,
       httpStatus: response.status,
       ...(contentType ? { contentType } : {}),
     };
     const isTextResponse = /text|html|json/i.test(contentType);
     const isPdfResponse = isPdfPolicyResponse(url, contentType) && !isTextResponse;
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       return {
         attempts: [{ ...attemptBase, outcome: "http_error" }],
         ok: false,
@@ -4701,11 +4697,7 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
       };
     }
     const bodyLimitBytes = isPdfResponse ? MAX_POLICY_PDF_BYTES : MAX_POLICY_TEXT_RESPONSE_BYTES;
-    const { body, truncated } = await readBoundedResponseBody(
-      response,
-      bodyLimitBytes,
-      controller.signal,
-    );
+    const { body, truncated } = response;
     if (isPdfResponse) {
       if (truncated) {
         return {
@@ -4747,6 +4739,145 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
   } finally {
     clearTimeout(timeout);
     parentSignal?.removeEventListener("abort", abortFromParent);
+  }
+}
+
+type BoundedPolicyResponse = {
+  body: Uint8Array;
+  finalUrl: string;
+  headers: Headers;
+  status: number;
+  truncated: boolean;
+};
+
+export async function requestBoundedPolicyResponse(
+  url: string,
+  signal: AbortSignal,
+  redirectsRemaining = 5,
+): Promise<BoundedPolicyResponse> {
+  throwIfAborted(signal);
+  const parsed = new URL(url);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Unsupported policy URL protocol: ${parsed.protocol}`);
+  }
+  const address = await resolvePolicyHostname(parsed.hostname, signal);
+  throwIfAborted(signal);
+
+  return await new Promise<BoundedPolicyResponse>((resolve, reject) => {
+    let settled = false;
+    const finishReject = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const finishResolve = (value: BoundedPolicyResponse) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const request = (parsed.protocol === "https:" ? httpsRequest : httpRequest)({
+      headers: {
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,*/*;q=0.7",
+        "accept-language": "en-US,en;q=0.8,de;q=0.7,fr;q=0.7,es;q=0.7,it;q=0.7,nl;q=0.7,pl;q=0.7",
+        host: parsed.host,
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+      },
+      hostname: address,
+      method: "GET",
+      path: `${parsed.pathname}${parsed.search}`,
+      port: parsed.port || undefined,
+      servername: parsed.hostname,
+    }, (incoming) => {
+      const status = incoming.statusCode ?? 0;
+      const location = incoming.headers.location;
+      if (status >= 300 && status < 400 && location && redirectsRemaining > 0) {
+        incoming.resume();
+        const redirectedUrl = new URL(location, parsed).toString();
+        void requestBoundedPolicyResponse(redirectedUrl, signal, redirectsRemaining - 1)
+          .then(finishResolve, finishReject);
+        return;
+      }
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(incoming.headers)) {
+        if (Array.isArray(value)) {
+          for (const item of value) headers.append(name, item);
+        } else if (value !== undefined) {
+          headers.set(name, value);
+        }
+      }
+      const chunks: Buffer[] = [];
+      let sizeBytes = 0;
+      let truncated = false;
+      incoming.on("data", (chunk: Buffer) => {
+        if (settled || truncated) return;
+        const remaining = MAX_POLICY_TEXT_RESPONSE_BYTES - sizeBytes;
+        if (chunk.byteLength > remaining) {
+          if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
+          sizeBytes += Math.max(0, remaining);
+          truncated = true;
+          incoming.destroy();
+          finishResolve({
+            body: Buffer.concat(chunks, sizeBytes),
+            finalUrl: parsed.toString(),
+            headers,
+            status,
+            truncated: true,
+          });
+          return;
+        }
+        chunks.push(chunk);
+        sizeBytes += chunk.byteLength;
+      });
+      incoming.once("end", () => finishResolve({
+        body: Buffer.concat(chunks, sizeBytes),
+        finalUrl: parsed.toString(),
+        headers,
+        status,
+        truncated,
+      }));
+      incoming.once("error", finishReject);
+    });
+    const abortRequest = () => {
+      const reason = abortReason(signal);
+      const error = new Error(reason?.message ?? "Policy HTTP request aborted.", { cause: reason ?? undefined });
+      error.name = "AbortError";
+      request.destroy(error);
+    };
+    const cleanup = () => signal.removeEventListener("abort", abortRequest);
+    signal.addEventListener("abort", abortRequest, { once: true });
+    request.once("error", finishReject);
+    request.end();
+  });
+}
+
+async function resolvePolicyHostname(hostname: string, signal: AbortSignal): Promise<string> {
+  if (isIP(hostname)) return hostname;
+  const resolver = new Resolver();
+  const cancelResolution = () => resolver.cancel();
+  signal.addEventListener("abort", cancelResolution, { once: true });
+  try {
+    try {
+      const addresses = await awaitAbortablePolicyOperation(
+        resolver.resolve4(hostname),
+        signal,
+        "Policy hostname resolution aborted.",
+      );
+      if (addresses[0]) return addresses[0];
+    } catch (error) {
+      throwIfAborted(signal);
+      const addresses = await awaitAbortablePolicyOperation(
+        resolver.resolve6(hostname),
+        signal,
+        "Policy hostname resolution aborted.",
+      );
+      if (addresses[0]) return addresses[0];
+      throw error;
+    }
+    throw new Error(`Policy hostname did not resolve: ${hostname}`);
+  } finally {
+    signal.removeEventListener("abort", cancelResolution);
   }
 }
 

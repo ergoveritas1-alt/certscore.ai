@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import { createServer } from "node:http";
 import test from "node:test";
 import {
   awaitAbortablePolicyOperation,
   readBoundedResponseBody,
+  requestBoundedPolicyResponse,
 } from "./scanners/policy-surface-scanner.js";
 
 test("policy operations stop when transport work ignores abort before response headers", async () => {
@@ -18,6 +21,27 @@ test("policy operations stop when transport work ignores abort before response h
 
   await assert.rejects(pending, /policy fetch deadline reached/);
   assert.ok(Date.now() - startedAtMs < 250);
+});
+
+test("policy HTTP transport destroys a socket stalled before response headers", async () => {
+  const server = createServer(() => undefined);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const controller = new AbortController();
+  const startedAtMs = Date.now();
+  const pending = requestBoundedPolicyResponse(
+    `http://127.0.0.1:${address.port}/stalled-policy`,
+    controller.signal,
+  );
+
+  setTimeout(() => controller.abort(new Error("policy socket deadline reached")), 20);
+
+  await assert.rejects(pending, /policy socket deadline reached/);
+  assert.ok(Date.now() - startedAtMs < 250);
+  server.closeAllConnections();
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 });
 
 test("policy response reads retain a bounded prefix and cancel the remaining stream", async () => {
