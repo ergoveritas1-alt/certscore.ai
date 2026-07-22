@@ -53,6 +53,7 @@ function bootstrapValidationWorker() {
       env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL,
       env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL
     ],
+    webBaseUrl: env.CERTSCORE_WEB_BASE_URL,
     targetEnvironment: env.CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV
   });
   void startValidationDispatcher({

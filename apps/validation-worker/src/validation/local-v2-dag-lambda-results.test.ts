@@ -146,13 +146,27 @@ test("validation worker Lambda result poller retains leases and bounds result co
 
   assert.match(source, /ChangeMessageVisibilityCommand/);
   assert.match(source, /VisibilityTimeout:\s*0/);
-  assert.match(source, /RESULT_VISIBILITY_TIMEOUT_SECONDS\s*=\s*60/);
+  assert.match(source, /RESULT_VISIBILITY_TIMEOUT_SECONDS\s*=\s*180/);
   assert.match(source, /RESULT_BATCH_CONCURRENCY\s*=\s*3/);
   assert.match(source, /MaxNumberOfMessages:\s*RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /mapWithConcurrency\(messages, RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /async function loopQueue\(queueUrl: string\)/);
   assert.match(source, /for \(const queueUrl of queueUrls\)/);
   assert.doesNotMatch(source, /Promise\.all\(queueUrls\.map/);
+});
+
+test("validation worker persists completion scores before acknowledging a Lambda result", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+  const ensureIndex = source.indexOf("await ensureCompletedScanScoresPersisted");
+  const deleteIndex = source.indexOf("new DeleteMessageCommand", ensureIndex);
+
+  assert.ok(ensureIndex >= 0, "expected completion-time score persistence");
+  assert.ok(deleteIndex > ensureIndex, "SQS acknowledgement must follow score persistence");
+  assert.match(source, /randomBytes\(32\)/);
+  assert.match(source, /createHash\("sha256"\)/);
+  assert.match(source, /scan_score_materialization_requests/);
+  assert.match(source, /result\.complete !== true/);
+  assert.match(source, /completedScanScoresExist/);
 });
 
 test("validation worker continuously reconciles accepted scans without terminal Lambda results", async () => {

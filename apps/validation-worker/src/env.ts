@@ -59,6 +59,7 @@ const workerEnvSchema = z.object({
     emptyStringToUndefined,
     z.coerce.number().int().min(1).max(300).default(2)
   ),
+  CERTSCORE_WEB_BASE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   WORKER_CONCURRENCY: z.preprocess(emptyStringToUndefined, z.coerce.number().int().min(1).max(10).default(1)),
   PLAYWRIGHT_BROWSERS_PATH: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
   WORKER_BROWSER_REAPER_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional()).transform((value) => value !== "0"),

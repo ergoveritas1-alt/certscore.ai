@@ -12,7 +12,7 @@ import {
   type Message
 } from "@aws-sdk/client-sqs";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -22,7 +22,7 @@ const RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 const RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
 const RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
 const RESULT_BATCH_CONCURRENCY = 3;
-const RESULT_VISIBILITY_TIMEOUT_SECONDS = 60;
+const RESULT_VISIBILITY_TIMEOUT_SECONDS = 180;
 // The Lambda handler has a 60s safety deadline plus a bounded result-publish
 // window. Reconcile a missing terminal result after a small handoff margin,
 // and poll frequently enough that the user-facing failure does not drift into
@@ -82,7 +82,73 @@ export type LocalV2DagLambdaResultPollerOptions = {
   queueUrl?: string;
   queueUrls?: Array<string | null | undefined>;
   targetEnvironment: LambdaTargetEnvironment;
+  webBaseUrl?: string;
 };
+
+async function completedScanScoresExist(scanId: string) {
+  const row = await queryOne<{ legacy_exists: boolean; shadow_exists: boolean }>(
+    `select exists (
+              select 1 from public.scan_score_assessments
+               where scan_id = $1::uuid
+                 and score_kind = 'gdpr_eprivacy_evidence'
+                 and score_version = 'gdpr-eprivacy-evidence.legacy-v1'
+            ) as legacy_exists,
+            exists (
+              select 1 from public.scan_score_assessments
+               where scan_id = $1::uuid
+                 and score_kind = 'gdpr_eprivacy_risk_shadow'
+            ) as shadow_exists`,
+    [scanId],
+    { readOnly: true }
+  );
+  return row?.legacy_exists === true && row.shadow_exists === true;
+}
+
+export async function ensureCompletedScanScoresPersisted(input: {
+  fetchImpl?: typeof fetch;
+  scanId: string;
+  targetEnvironment: LambdaTargetEnvironment;
+  webBaseUrl?: string;
+}) {
+  if (await completedScanScoresExist(input.scanId)) return { alreadyPersisted: true };
+  const token = randomBytes(32).toString("base64url");
+  const tokenSha256 = createHash("sha256").update(token).digest("hex");
+  await query(
+    `insert into public.scan_score_materialization_requests (
+       scan_id, token_sha256, status, attempt_count, requested_at, completed_at, last_error
+     ) values ($1::uuid, $2, 'pending', 1, now(), null, null)
+     on conflict (scan_id) do update
+       set token_sha256 = excluded.token_sha256,
+           status = 'pending',
+           attempt_count = public.scan_score_materialization_requests.attempt_count + 1,
+           requested_at = now(),
+           completed_at = null,
+           last_error = null
+       where public.scan_score_materialization_requests.status <> 'completed'`,
+    [input.scanId, tokenSha256]
+  );
+  if (await completedScanScoresExist(input.scanId)) return { alreadyPersisted: true };
+
+  const baseUrl = input.webBaseUrl?.trim() ||
+    (input.targetEnvironment === "production" ? "https://certscore.ai" : "http://localhost:3000");
+  const response = await (input.fetchImpl ?? fetch)(
+    new URL("/api/internal/scan-score-materialization", baseUrl),
+    {
+      body: JSON.stringify({ scanId: input.scanId, token }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+      signal: AbortSignal.timeout(150_000)
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`Score materialization endpoint returned HTTP ${response.status}.`);
+  }
+  const result = await response.json() as { complete?: unknown };
+  if (result.complete !== true || !(await completedScanScoresExist(input.scanId))) {
+    throw new Error("Score materialization endpoint did not confirm persisted legacy and shadow assessments.");
+  }
+  return { alreadyPersisted: false };
+}
 
 type LambdaResultConsumerMetadata = {
   approximateReceiveCount: number | null;
@@ -785,6 +851,7 @@ async function pollOnce(input: {
   queueUrl: string;
   queueRegion: string;
   targetEnvironment: LambdaTargetEnvironment;
+  webBaseUrl?: string;
 }) {
   const response = await input.client.send(new ReceiveMessageCommand({
     MessageSystemAttributeNames: [
@@ -823,6 +890,13 @@ async function pollOnce(input: {
           sqsMessageId: message.MessageId ?? null
         }
       });
+      if (parsed.status === "completed") {
+        await ensureCompletedScanScoresPersisted({
+          scanId: parsed.scanId,
+          targetEnvironment: parsed.targetEnvironment,
+          webBaseUrl: input.webBaseUrl
+        });
+      }
       await input.client.send(new DeleteMessageCommand({
         QueueUrl: input.queueUrl,
         ReceiptHandle: receiptHandle(message)
@@ -992,7 +1066,8 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
           client,
           queueRegion,
           queueUrl,
-          targetEnvironment: options.targetEnvironment
+          targetEnvironment: options.targetEnvironment,
+          webBaseUrl: options.webBaseUrl
         });
       } catch (error) {
         console.error("[validation-worker] v2 DAG Lambda result poll failed", {

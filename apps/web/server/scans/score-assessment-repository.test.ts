@@ -56,10 +56,13 @@ test("shadow comparison monitoring is immutable, bounded, and domain-safe", asyn
 });
 
 test("completed Lambda and browser scans persist immutable legacy and observational shadow assessments", async () => {
+  const materializationMigration = await readFile("packages/db/migrations/0152_scan_score_materialization_requests.sql", "utf8");
   const lifecycle = await readFile("apps/web/server/scans/score-assessment-lifecycle.ts", "utf8");
   const lambdaPoller = await readFile("apps/web/server/scans/local-v2-dag-lambda-result-poller.ts", "utf8");
+  const workerPoller = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
   const browserRepository = await readFile("apps/web/server/browser-scans/repository.ts", "utf8");
   const statusRoute = await readFile("apps/web/app/api/scan-status/[scanId]/route.ts", "utf8");
+  const materializationRoute = await readFile("apps/web/app/api/internal/scan-score-materialization/route.ts", "utf8");
 
   assert.match(lifecycle, /buildCanonicalGdprEprivacyShadowProjection/);
   assert.match(lifecycle, /buildLegacyGdprEprivacyVersionedAssessmentInput/);
@@ -71,13 +74,18 @@ test("completed Lambda and browser scans persist immutable legacy and observatio
   assert.match(lifecycle, /score_time_missing_or_invalid/);
   assert.match(lambdaPoller, /persistCompletedLegacyGdprEprivacyAssessment/);
   assert.match(browserRepository, /persistCompletedLegacyGdprEprivacyAssessment/);
-  assert.match(statusRoute, /projection\.status !== "completed" \|\| !projection\.reportReady/);
-  assert.match(statusRoute, /persistCompletedLegacyGdprEprivacyAssessment/);
+  assert.match(workerPoller, /ensureCompletedScanScoresPersisted/);
+  assert.match(workerPoller, /scan_score_materialization_requests/);
   assert.ok(
-    statusRoute.indexOf("await materializeCompletedScoreAssessment(projection)") <
-      statusRoute.indexOf("if (!includeFindings)"),
-    "lightweight completion polling must run score finalization before returning"
+    workerPoller.indexOf("await ensureCompletedScanScoresPersisted") < workerPoller.indexOf("new DeleteMessageCommand", workerPoller.indexOf("await ensureCompletedScanScoresPersisted")),
+    "the Lambda result must not be acknowledged before completion-time score persistence"
   );
+  assert.match(materializationRoute, /persistCompletedLegacyGdprEprivacyAssessment/);
+  assert.match(materializationMigration, /token_sha256 text not null/);
+  assert.match(materializationMigration, /scan_id uuid primary key/);
+  assert.doesNotMatch(materializationMigration, /raw_token|token text/i);
+  assert.doesNotMatch(statusRoute, /persistCompletedLegacyGdprEprivacyAssessment/);
+  assert.doesNotMatch(statusRoute, /materializeCompletedScoreAssessment/);
   assert.match(lambdaPoller, /catch \(error\)/);
   assert.match(browserRepository, /catch \(error\)/);
 });

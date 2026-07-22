@@ -4,8 +4,7 @@ import {
 } from "../../../../server/scans/ops-status";
 import {
   buildLightweightScanStatusResponse,
-  getPublicScanStatusProjection,
-  type ScanStatusProjection
+  getPublicScanStatusProjection
 } from "../../../../server/scans/scan-status-projection";
 
 export const dynamic = "force-dynamic";
@@ -16,38 +15,6 @@ type ScanStatusRouteContext = {
     scanId: string;
   }>;
 };
-
-async function materializeCompletedScoreAssessment(projection: ScanStatusProjection) {
-  if (projection.status !== "completed" || !projection.reportReady) return;
-  try {
-    const { persistCompletedLegacyGdprEprivacyAssessment } = await import(
-      "../../../../server/scans/score-assessment-lifecycle"
-    );
-    const result = await persistCompletedLegacyGdprEprivacyAssessment({
-      organizationId: projection.organizationId,
-      scanId: projection.id,
-      scoredAt: projection.completedAt
-    });
-    console.info(JSON.stringify({
-      event: "scan.score_assessment.lifecycle",
-      inserted: result.inserted,
-      reason: result.reason,
-      scanId: projection.id,
-      scoreVersion: "gdpr-eprivacy-evidence.legacy-v1",
-      postureInserted: "postureInserted" in result ? result.postureInserted : false,
-      postureReason: "postureReason" in result ? result.postureReason : null,
-      shadowInserted: "shadowInserted" in result ? result.shadowInserted : false,
-      shadowModelVersion: "shadowModelVersion" in result ? result.shadowModelVersion : null,
-      shadowReason: "shadowReason" in result ? result.shadowReason : null
-    }));
-  } catch (error) {
-    console.error("[score-assessment] status-finalization persistence failed", {
-      error: error instanceof Error ? error.message : String(error),
-      scanId: projection.id,
-      scoreVersion: "gdpr-eprivacy-evidence.legacy-v1"
-    });
-  }
-}
 
 export async function GET(request: Request, context: ScanStatusRouteContext) {
   const { scanId } = await context.params;
@@ -73,8 +40,6 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
       { status: 404 }
     );
   }
-
-  await materializeCompletedScoreAssessment(projection);
 
   if (!includeFindings) {
     console.info(JSON.stringify({
