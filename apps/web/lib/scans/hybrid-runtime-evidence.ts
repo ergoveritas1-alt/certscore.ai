@@ -861,10 +861,23 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
   const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
   const hybridConsentSummary = getRecord(hybrid?.consentSummary);
   const timelineMarkers = getRecord(hybrid?.timelineMarkers);
+  const baselineEvidenceUrls = getExistingArray(runtimeArtifacts ?? {}, [
+    "consentBaselineTrackerEvidenceUrls",
+    "consent_baseline_tracker_evidence_urls"
+  ]);
+  const baselineVendorNames = getExistingArray(runtimeArtifacts ?? {}, [
+    "consentBaselineTrackerVendorNames",
+    "consent_baseline_tracker_vendor_names"
+  ]);
   const retainedTimeline =
     getNestedObject(runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
     getNestedObject(hybrid, ["consentTimeline", "consent_timeline"]);
   const requestClassifications = getRequestClassificationRows(runtimeArtifacts, hybrid);
+  const baselineFirstRequestMs = getNumber(
+    requestClassifications
+      .map((row) => getNumber((row as Record<string, unknown>).baselineFirstRequestMs))
+      .find((value): value is number => typeof value === "number" && Number.isFinite(value))
+  ) ?? getNumber(timelineMarkers?.firstThirdPartyRequestMs) ?? getNumber(timelineMarkers?.firstRequestMs);
   const state0RequestRows = getNestedObjectArray(hybrid, [
     "preconsentState0RequestObservations",
     "preconsent_state0_request_observations"
@@ -876,13 +889,14 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
     return essentiality === "non_essential" && (confidence ?? 0) >= 0.7 && Boolean(requestUrl && /^https?:\/\//i.test(requestUrl));
   });
 
-  const firstNonEssentialRequestMs = getNumber(
-    retainedTimeline?.firstNonEssentialRequestMs ?? retainedTimeline?.first_non_essential_request_ms
-  ) ?? Math.min(
+  const firstObservedRequestMs = Math.min(
     ...nonEssentialRequestRows
       .map((row) => getRowNumber(row, ["tsMs", "ts_ms", "timestampMs", "timestamp_ms"]))
       .filter((value): value is number => value !== null)
   );
+  const firstNonEssentialRequestMs =
+    getNumber(retainedTimeline?.firstNonEssentialRequestMs ?? retainedTimeline?.first_non_essential_request_ms) ??
+    (Number.isFinite(firstObservedRequestMs) ? firstObservedRequestMs : baselineFirstRequestMs);
   const normalizedFirstNonEssentialRequestMs = Number.isFinite(firstNonEssentialRequestMs) ? firstNonEssentialRequestMs : null;
   const preconsentTrackingCookieRows = buildRuntimeCookieInventory({ hybridRuntimeEvidence: hybrid, runtimeArtifacts }).rows.filter(
     (row) =>
@@ -937,16 +951,19 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
     requestPurposeClassificationConfidence: requestClassifications,
     runtimeRequestUrls: uniqueStrings([
       ...nonEssentialRequestRows.flatMap((row) => getRowString(row, ["requestUrl", "request_url", "url"])),
-      ...state0RequestUrls
+      ...state0RequestUrls,
+      ...baselineEvidenceUrls
     ]),
     preconsent_tracker_evidence_urls: uniqueStrings([
       ...nonEssentialRequestRows.flatMap((row) => getRowString(row, ["requestUrl", "request_url", "url"])),
-      ...state0TrackerRequestUrls
+      ...state0TrackerRequestUrls,
+      ...baselineEvidenceUrls
     ]),
     preconsent_state0_request_observations: state0RequestRows,
     preconsent_tracker_vendors: uniqueStrings([
       ...nonEssentialRequestRows.flatMap((row) => getString(row.vendor)),
-      ...state0Vendors
+      ...state0Vendors,
+      ...baselineVendorNames
     ]),
     runtimeEvidenceQuality:
       nonEssentialRequestRows.length > 0 || preconsentTrackingCookieRows.length > 0 ? "timeline_and_classification" : "state0_material_incomplete",

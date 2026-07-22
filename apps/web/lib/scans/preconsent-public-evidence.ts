@@ -383,10 +383,17 @@ export function isPromotionGradePreconsentRequestRow(value: unknown) {
   const vendor = getString(value, ["vendorName", "vendor_name", "vendor", "matchedVendorName", "matched_vendor_name", "name"]);
   const category = getCategory(value);
   const classification = normalizeToken(getString(value, ["classification", "serviceClass", "service_class", "requestClass", "request_class"]));
+  const phase = normalizeToken(getString(value, ["runtimePhase", "runtime_phase", "phase", "timingStatus", "timing_status", "timingEvidence", "timing_evidence"]));
   const endpointVendor = inferDirectEndpointVendorFromUrl(requestUrl);
+  const classificationBasis = normalizeToken(getString(value, ["classificationBasis", "classification_basis", "evidenceSource", "evidence_source"]));
   const hasPromotionGradeVendor = Boolean(endpointVendor || (vendor && !isGenericVendorLabel(vendor)));
   const firstSeenMs = getRuntimeElapsedMs(value, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "tsMs", "ts_ms", "ms"]) ??
     getRuntimeElapsedMs(value, ["timestampMs", "timestamp_ms"]);
+  const explicitPreconsentTrackingClassification =
+    isNonEssential(value) &&
+    (phase === "pre_consent" || phase === "before_consent" || phase === "before_consent_request") &&
+    PROMOTION_TRACKING_CATEGORIES.has(category ?? "") &&
+    (classificationBasis === "tracker_signature" || classificationBasis === "consent_audit_tracker_evidence_url");
 
   return Boolean(
     requestUrl &&
@@ -399,7 +406,7 @@ export function isPromotionGradePreconsentRequestRow(value: unknown) {
       isPreconsent(value) &&
       firstSeenMs !== null &&
       isHighEnoughConfidence(confidenceValue(value)) &&
-      !isLibraryOrConfigurationConnection(requestUrl) &&
+      (!isLibraryOrConfigurationConnection(requestUrl) || explicitPreconsentTrackingClassification) &&
       !SERVICE_CLASSIFICATIONS.has(classification ?? "") &&
       !SERVICE_HOST_PATTERN.test(hostname)
   );

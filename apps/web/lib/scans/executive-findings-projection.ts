@@ -1283,6 +1283,7 @@ function getThirdPartyCookiePreConsentRows(packet: UnifiedFindingDisplayPacket) 
     const beforeConsent =
       timingEvidence === "before_consent_cookie_write" ||
       timingEvidence === "initial_cookie_snapshot_with_visible_cmp" ||
+      row.explicitPreconsentEvidence === true ||
       (timingEvidence === null && (row.beforeConsent === true || row.before_consent === true));
     return (
       beforeConsent &&

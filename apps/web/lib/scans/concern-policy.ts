@@ -12,6 +12,7 @@ import { classifyConsentControlLabel } from "@certscore/contracts";
 import { evaluateCookieRetentionReview } from "./cookie-retention-review";
 import { evaluateConsentControlLifecycleEvidence } from "./consent-control-lifecycle";
 import { evaluateConsentGovernanceDisclosureEvidence } from "./consent-governance-disclosure";
+import { evaluateRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import {
   evaluateFinancialJudgeInput,
   getFinancialValidationEvidenceBundle,
@@ -2390,6 +2391,15 @@ export function deriveConcernPolicy(input: {
     };
   }
   if (suggestedUnifiedFindingId === "policy_behavior_conflict" || suggestedUnifiedFindingId === "policy_behavior_contradiction_detected") {
+    const runtimeVendorDisclosureReview = evaluateRuntimeVendorDisclosureEvidence(input.rawEvidence, "policy_behavior_conflict");
+    if (runtimeVendorDisclosureReview.disposition === "eligible") {
+      return {
+        allowedNarrativeTier: runtimeVendorDisclosureReview.confidence === "strong" ? "strong" : "moderate",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: runtimeVendorDisclosureReview.negativeEvidenceFlags as NormalizedConcernNegativeEvidenceFlag[],
+        promotionEligibility: "eligible"
+      };
+    }
     const contractDecision = evaluatePolicyBehaviorConflictContract(input.rawEvidence);
     if (contractDecision?.promotionEligibility === "eligible") {
       return {

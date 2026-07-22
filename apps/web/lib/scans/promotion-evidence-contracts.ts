@@ -1197,6 +1197,7 @@ function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, u
     const beforeConsent =
       timingEvidence === "before_consent_cookie_write" ||
       timingEvidence === "initial_cookie_snapshot_with_visible_cmp" ||
+      row.explicitPreconsentEvidence === true ||
       (timingEvidence === null && row.beforeConsent === true) ||
       (timingEvidence === null && row.before_consent === true);
     const namedEvidence = Boolean(cookieName);
@@ -1385,11 +1386,24 @@ export function hasStrongPreconsentRuntimeEvidence(rawEvidence: Record<string, u
     "sourceUrls"
   ]).filter(isConcreteHttpEvidenceUrl);
   const classifiedNonEssentialRequests = getPreconsentClassifiedNonEssentialRequests(rawEvidence, { minConfidence: 0.7 });
+  const preconsentViolationEvidence = getObjectArrayValuesFromEvidenceAndEntities(rawEvidence, [
+    "preconsent_violation_evidence",
+    "preconsentViolationEvidence"
+  ]);
 
   return (
     hasPromotionGradePreconsentCookieEvidence(rawEvidence) ||
     (
       classifiedNonEssentialRequests.length > 0 &&
+      hasPreconsentSequenceEvidence(rawEvidence)
+    ) ||
+    (
+      preconsentViolationEvidence.length > 0 &&
+      hasPreconsentSequenceEvidence(rawEvidence)
+    ) ||
+    (
+      vendors.length > 0 &&
+      urls.length > 0 &&
       hasPreconsentSequenceEvidence(rawEvidence)
     )
   );

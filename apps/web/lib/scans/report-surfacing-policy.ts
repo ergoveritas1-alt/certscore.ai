@@ -67,6 +67,7 @@ export type SurfacingPolicyRuleId =
   | "evidence.preconsent.material_incomplete"
   | "evidence.consent_behavior.confirmed_specific_runtime_failure"
   | "evidence.consent_behavior.review_runtime_without_effect_evidence"
+  | "evidence.runtime_vendor_disclosure.review_when_eligible"
   | "evidence.consent_behavior.review_interface_or_design"
   | "evidence.consent_behavior.suppress_low_confidence_interface_context"
   | "evidence.consent_behavior.support_only_tracking_context"
@@ -1413,6 +1414,22 @@ function policyRuntimeAlignmentReviewOverride(packet: UnifiedFindingPacket): {
   };
 }
 
+function hasEligibleRuntimeVendorDisclosureEvidence(packet: UnifiedFindingPacket) {
+  if (packet.unifiedFindingId !== "policy_behavior_conflict") {
+    return false;
+  }
+  const findingSubtypes = getEvidenceEntityValuesForKeys(packet, ["findingSubtype", "finding_subtype"]);
+  const unmatchedVendors = getEvidenceEntityValuesForKeys(packet, ["unmatchedRuntimeVendors", "unmatched_runtime_vendors"]);
+  return (
+    findingSubtypes.includes("runtime_vendor_not_disclosed") &&
+    unmatchedVendors.length > 0 &&
+    packet.concernContext?.externalSurfacingEligibilities.includes("eligible") === true &&
+    !packet.concernContext.negativeEvidenceFlags.some((flag) =>
+      /missing|insufficient|blocked|incomplete/i.test(flag)
+    )
+  );
+}
+
 function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
   if (packet.unifiedFindingId !== "preconsent_tracking" || packet.details?.family !== "consent_tracking") {
     return false;
@@ -1906,6 +1923,18 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     contractDecision?.externalSurfacingEligibility === "audit_only" &&
     !hasSpecificPreconsentRuntimeEvidence
   ) {
+    if (hasEligibleRuntimeVendorDisclosureEvidence(packet)) {
+      overrideDecision(decision, {
+        state: "review",
+        lane: "main",
+        tier: decision.surfaceTier,
+        reason:
+          "Retained runtime vendor disclosure evidence identified an observed vendor that was not clearly matched in the reviewed policy surfaces, so the issue is surfaced as a review signal.",
+        ruleId: "evidence.runtime_vendor_disclosure.review_when_eligible"
+      });
+      return;
+    }
+
     const policyRuntimeAlignmentOverride = policyRuntimeAlignmentReviewOverride(packet);
     if (policyRuntimeAlignmentOverride) {
       overrideDecision(decision, {

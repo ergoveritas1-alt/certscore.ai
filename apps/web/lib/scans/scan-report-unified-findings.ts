@@ -57,6 +57,7 @@ import {
 } from "./scan-report-review-findings";
 import { groupSnapshotFieldsByPrimaryCategory } from "./signal-taxonomy";
 import { buildRuntimeCookieInventory, type RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
+import { evaluateRuntimeVendorDisclosureEvidence, getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 
 export type ScanReportUnifiedFindingSectionDraft = {
   categories?: Array<{
@@ -338,7 +339,11 @@ function compactPreconsentCookieEvidenceRow(row: RuntimeCookieEvidenceRow) {
     setMethod: row.setMethod,
     timingBasis: row.timingBasis,
     evidenceGrade: row.evidenceGrade,
-    timingEvidence: row.timingEvidence
+    explicitPreconsentEvidence: row.explicitPreconsentEvidence === true,
+    timingEvidence:
+      row.explicitPreconsentEvidence === true && row.timingEvidence === "initial_cookie_snapshot"
+        ? "initial_cookie_snapshot_with_visible_cmp"
+        : row.timingEvidence
   };
 }
 
@@ -794,7 +799,7 @@ function deriveRuntimeArtifactPreconsentViolationRows(runtimeArtifacts: Record<s
     const essentiality = getRecordString(row, ["essentiality"]);
     const runtimePhase = getRecordString(row, ["runtimePhase", "runtime_phase", "timingStatus", "timing_status"]);
 
-    if (!isPromotionGradePreconsentRequestRow({
+    const promotionGrade = isPromotionGradePreconsentRequestRow({
       ...row,
       category: vendorCategory,
       confidence,
@@ -802,7 +807,8 @@ function deriveRuntimeArtifactPreconsentViolationRows(runtimeArtifacts: Record<s
       requestUrl,
       runtimePhase,
       vendor: vendorName
-    })) {
+    });
+    if (!promotionGrade) {
       return [];
     }
     const concreteRequestUrl = requestUrl ?? "";
@@ -1454,6 +1460,48 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     });
   }
 
+  const runtimeVendorDisclosureEvidence = getRuntimeVendorDisclosureEvidence(input.runtimeArtifacts);
+  const runtimeVendorDisclosureReview = evaluateRuntimeVendorDisclosureEvidence(
+    input.runtimeArtifacts,
+    "policy_behavior_conflict"
+  );
+  if (runtimeVendorDisclosureReview.disposition === "eligible" && runtimeVendorDisclosureReview.evidence.length > 0) {
+    const policyUrls = uniqueStrings(
+      runtimeVendorDisclosureReview.evidence.flatMap((row) =>
+        row.policySurfacesSearched.map((surface) => surface.url ?? null)
+      )
+    );
+    const runtimeVendors = uniqueStrings(
+      runtimeVendorDisclosureReview.evidence.flatMap((row) => row.observedRuntimeVendors)
+    );
+    candidates.push({
+      categoryId: "policy_clarity_consistency_review",
+      description:
+        "Retained policy-search evidence did not clearly match observed runtime vendors or domains, creating a policy/runtime disclosure alignment review signal.",
+      fallbackEvidence: {
+        runtime_vendor_disclosure_evidence: runtimeVendorDisclosureEvidence,
+        consentRelevantTrackingObserved: true,
+        observedTrackingVendors: runtimeVendors,
+        policyUrls,
+        policyPageReviewed: policyUrls.length > 0,
+        findingSubtype: ["runtime_vendor_not_disclosed"],
+        signalKey: "context.policy_behavior_conflict_detected",
+        signalLabel: "Runtime vendor disclosure mismatch",
+        signalValue: true,
+        unifiedFindingId: "policy_behavior_conflict"
+      },
+      id: "runtime-derived-signal-context.policy_behavior_conflict_detected.vendor_disclosure",
+      linkedValidationFinding: null,
+      observedValue: runtimeVendors.join(", ") || "Runtime vendor disclosure mismatch",
+      severity: "medium",
+      signalKey: "context.policy_behavior_conflict_detected",
+      signalLabel: "Runtime vendor disclosure mismatch",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Runtime vendor disclosure mismatch"
+    });
+  }
+
   const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
   const preconsentEvidenceRecord = preconsentEvidenceQuality as Record<string, unknown> | null;
   const hybridRuntimeEvidenceRecord = getRuntimeObject(input.runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]);
@@ -1466,7 +1514,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   });
   const preconsentCookieEvidenceRows = runtimeCookieInventory.beforeConsentRows.map(compactPreconsentCookieEvidenceRow);
   const preconsentViolationEvidenceRows = input.preconsentViolations.map(compactPreconsentViolationEvidenceRow);
-  const directConsentTimeline = getRuntimeObject(input.runtimeArtifacts, ["consentTimeline", "consent_timeline"]);
+  const directConsentTimeline =
+    getRuntimeObject(input.runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
+    getRuntimeObject(hybridRuntimeEvidenceRecord, ["consentTimeline", "consent_timeline"]);
   const derivedConsentTimeline = getRuntimeObject(preconsentEvidenceRecord, ["consentTimeline", "consent_timeline"]);
   const consentTimeline: Record<string, unknown> | null = directConsentTimeline || derivedConsentTimeline
     ? {
@@ -1528,10 +1578,16 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         )
       }
     : null;
-  const directRequestClassifications = getRuntimeObjectArray(input.runtimeArtifacts, [
-    "requestPurposeClassificationConfidence",
-    "request_purpose_classification_confidence"
-  ]);
+  const directRequestClassifications = [
+    ...getRuntimeObjectArray(input.runtimeArtifacts, [
+      "requestPurposeClassificationConfidence",
+      "request_purpose_classification_confidence"
+    ]),
+    ...getRuntimeObjectArray(hybridRuntimeEvidenceRecord, [
+      "requestPurposeClassificationConfidence",
+      "request_purpose_classification_confidence"
+    ])
+  ];
   const fallbackRequestClassifications = getRuntimeObjectArray(preconsentEvidenceRecord, [
     "requestPurposeClassificationConfidence",
     "request_purpose_classification_confidence"
@@ -1623,7 +1679,16 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     ) ||
     rejectPath?.forcedActionRequired === true ||
     rejectPath?.forced_action_required === true;
-  const nonEssentialRequestRows = requestClassifications.filter(isPromotionGradePreconsentRequestRow);
+  const requestClassificationsWithDerivedTiming = requestClassifications.map((row) => {
+    const rowRecord = row as Record<string, unknown>;
+    const hasTiming = ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "tsMs", "ts_ms", "timestampMs", "timestamp_ms", "ms"]
+      .some((key) => typeof rowRecord[key] === "number" && Number.isFinite(rowRecord[key]));
+    if (hasTiming || firstNonEssentialRequestMs === null) {
+      return row;
+    }
+    return { ...row, tsMs: firstNonEssentialRequestMs };
+  });
+  const nonEssentialRequestRows = requestClassificationsWithDerivedTiming.filter(isPromotionGradePreconsentRequestRow);
   const retainedPreconsentEvidenceUrls = Array.isArray(preconsentEvidenceRecord?.preconsent_tracker_evidence_urls)
     ? (preconsentEvidenceRecord.preconsent_tracker_evidence_urls as unknown[]).filter(
         (value): value is string => typeof value === "string" && /^https?:\/\//i.test(value)
@@ -1677,7 +1742,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     (nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null) ||
     retainedState0RequestRows.length > 0 ||
     preconsentCookieEvidenceRows.length > 0 ||
-    preconsentViolationEvidenceRows.length > 0
+    preconsentViolationEvidenceRows.length > 0 ||
+    retainedPreconsentEvidenceUrls.length > 0
   ) {
     const hasPromotionReadyRequestEvidence = nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null;
     candidates.push({
@@ -1697,7 +1763,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         consentSurfaceInspection,
         consentActionableChoiceObserved,
         consentSurfaceObserved,
-        requestPurposeClassificationConfidence: requestClassifications,
+        requestPurposeClassificationConfidence: requestClassificationsWithDerivedTiming,
         runtimeRequestUrls: uniqueStrings([...concretePreconsentRuntimeUrls, ...retainedState0RequestUrls]),
         preconsent_tracker_evidence_urls: concretePreconsentRuntimeUrls,
         preconsent_tracker_vendors: nonEssentialRequestRows

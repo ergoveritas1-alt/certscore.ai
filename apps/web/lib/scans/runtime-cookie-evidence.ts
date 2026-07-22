@@ -14,6 +14,7 @@ export type RuntimeCookieEvidenceRow = {
   initiatorVendor: string | null;
   nonEssential: boolean;
   observedBeforeConsent?: boolean;
+  explicitPreconsentEvidence?: boolean;
   essentiality?: "essential" | "non_essential" | "unknown";
   party: "first_party" | "third_party" | "unknown";
   responseUrl: string | null;
@@ -513,15 +514,18 @@ function getCookiePartyType(
 }
 
 function isPreconsentCookieWrite(row: Record<string, unknown>, hybrid: Record<string, unknown> | null) {
+  const timingEvidence = getString(row.timingEvidence ?? row.timing_evidence);
   const operation = getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method ?? row.operation);
   if (/^(?:browser_snapshot|periodic_cookie_snapshot|initial_cookie_snapshot)$/i.test(operation ?? "")) {
+    return false;
+  }
+  if (timingEvidence === "initial_cookie_snapshot_with_visible_cmp") {
     return false;
   }
   if (row.beforeConsent === true || row.before_consent === true) {
     return true;
   }
-  const timingEvidence = getString(row.timingEvidence ?? row.timing_evidence);
-  if (timingEvidence === "before_consent_cookie_write" || timingEvidence === "initial_cookie_snapshot_with_visible_cmp") {
+  if (timingEvidence === "before_consent_cookie_write") {
     return true;
   }
   const setAtMs = getNumber(row.setAtMs ?? row.set_at_ms ?? row.firstObservedAtMs ?? row.first_observed_at_ms);
@@ -612,6 +616,7 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
       row.before_consent === true ||
       getString(row.consentStateAtTime ?? row.consent_state_at_time) === "pre_consent",
     essentiality,
+    explicitPreconsentEvidence: false,
     party: getCookiePartyType(row, domain, hybrid),
     responseUrl: getString(row.responseUrl ?? row.response_url),
     sourceRequestUrl: getString(row.sourceRequestUrl ?? row.source_request_url ?? row.responseUrl ?? row.response_url ?? row.initiatorUrl ?? row.initiator_url),
@@ -621,9 +626,11 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
       ? initialSnapshot ? "initial_cookie_snapshot" : "periodic_cookie_snapshot"
       : getString(row.timingBasis ?? row.timing_basis ?? row.timingEvidence ?? row.timing_evidence),
     evidenceGrade: getString(row.evidenceGrade ?? row.evidence_grade),
-    timingEvidence: snapshot
-      ? initialSnapshot ? "initial_cookie_snapshot" : "periodic_cookie_snapshot"
-      : isPreconsentCookieWrite(row, hybrid) ? "before_consent_cookie_write" : "unknown"
+    timingEvidence: isPreconsentCookieWrite(row, hybrid)
+      ? "before_consent_cookie_write"
+      : snapshot
+        ? initialSnapshot ? "initial_cookie_snapshot" : "periodic_cookie_snapshot"
+        : "unknown"
   };
 }
 
@@ -650,7 +657,8 @@ function normalizeInitialCookieRow(cookieName: string, domain: string | null): R
     setMethod: "initial_cookie_snapshot",
     timingBasis: "initial_cookie_snapshot",
     evidenceGrade: null,
-    timingEvidence: "initial_cookie_snapshot"
+    timingEvidence: "initial_cookie_snapshot",
+    explicitPreconsentEvidence: false
   };
 }
 
@@ -666,8 +674,11 @@ export function buildRuntimeCookieInventory(input: {
     .map((row) => normalizeCookieWriteRow(row, hybrid))
     .filter((row): row is RuntimeCookieEvidenceRow => Boolean(row));
   const explicitPreconsentRows = getObjectArray(hybrid?.preconsentCookieEvidence ?? hybrid?.preconsent_cookie_evidence)
-    .map((row) => normalizeCookieWriteRow({ ...row, beforeConsent: true }, hybrid))
-    .filter((row): row is RuntimeCookieEvidenceRow => Boolean(row));
+    .map((row) => {
+      const normalized = normalizeCookieWriteRow({ ...row, beforeConsent: true }, hybrid);
+      return normalized ? { ...normalized, explicitPreconsentEvidence: true } : null;
+    })
+    .filter((row) => Boolean(row)) as RuntimeCookieEvidenceRow[];
   const initialCookieNames = getStringArray(runtimeArtifacts?.initial_cookie_names ?? runtimeArtifacts?.initialCookieNames);
   const initialCookieDomains = getStringArray(runtimeArtifacts?.initial_cookie_domains ?? runtimeArtifacts?.initialCookieDomains);
   const initialRows = initialCookieNames.map((cookieName, index) => normalizeInitialCookieRow(cookieName, initialCookieDomains[index] ?? null));
@@ -688,7 +699,10 @@ export function buildRuntimeCookieInventory(input: {
     }
   }
   const rows = [...rowsByKey.values()];
-  const beforeConsentRows = rows.filter((row) => row.timingEvidence === "before_consent_cookie_write");
+  const beforeConsentRows = rows.filter((row) =>
+    row.timingEvidence === "before_consent_cookie_write" ||
+    (row.explicitPreconsentEvidence === true && row.nonEssential)
+  );
   const nonEssentialRows = rows.filter((row) => row.nonEssential);
   const runtimePolicyReconciliationRows = getObjectArray(
     hybrid?.runtimePolicyReconciliations ?? hybrid?.runtime_policy_reconciliations

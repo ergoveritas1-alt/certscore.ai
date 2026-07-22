@@ -67,6 +67,7 @@ import {
   REJECT_TRACKING_CONFIRMATION_MIN_MS,
   REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL
 } from "./reject-tracking-policy";
+import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
@@ -2450,6 +2451,7 @@ export function buildReviewFindings(input: {
         fallbackEvidence: {
           endpointJurisdictionEvidence: transferReviewEndpointRows,
           endpoint_jurisdiction_evidence: transferReviewEndpointRows,
+          runtime_vendor_disclosure_evidence: getRuntimeVendorDisclosureEvidence(input.runtimeArtifacts),
           endpointJurisdictionRows: endpointJurisdictionRows.length,
           endpointTransferReviewHosts: endpointHosts,
           endpointTransferReviewRegions: endpointRegions,
