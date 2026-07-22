@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -10,6 +11,11 @@ import {
 } from "./gdpr-eprivacy-coverage-checklist-card";
 import { getAssessmentDirection, getEvidenceLabel } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
+
+test("GDPR Transparency grouping includes every emitted Article 13 checklist row", () => {
+  const source = readFileSync(new URL("./gdpr-eprivacy-coverage-checklist-card.tsx", import.meta.url), "utf8");
+  assert.match(source, /title: "GDPR Transparency"[\s\S]*automated_decision_making_profiling_disclosure/);
+});
 
 function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
   return {

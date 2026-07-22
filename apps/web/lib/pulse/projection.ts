@@ -1933,14 +1933,15 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     : null;
   const nonEssentialStorageEvidenceUnresolved = hasUnresolvedNonEssentialPreconsentStorageEvidence(reportSurface.runtimeCookieRows);
   const nonEssentialPreConsentStorageCount =
-    nonEssentialStorageEvidenceUnresolved && observedNonEssentialPreConsentStorageCount === 0
+    nonEssentialStorageEvidenceUnresolved
       ? null
       : observedNonEssentialPreConsentStorageCount;
-  const cookiesBeforeConsentCount = nonEssentialPreConsentStorageCount ??
-    finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
-    finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
-    finiteNumber(recordValue(input.scanRecord.snapshot, "initialCookieCount")) ??
-    0;
+  const cookiesBeforeConsentCount = hasClassifiedRuntimeStorageRows
+    ? nonEssentialPreConsentStorageCount
+    : finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
+      finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
+      finiteNumber(recordValue(input.scanRecord.snapshot, "initialCookieCount")) ??
+      0;
   const policySurfaces = projectedPolicySurfaceRows(input.scanRecord).map(({ type, url }) => ({
     type,
     title: meaningfulPolicySurfaceTitle(type, url),

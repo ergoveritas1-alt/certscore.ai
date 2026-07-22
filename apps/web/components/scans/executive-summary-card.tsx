@@ -4149,6 +4149,7 @@ export function ExecutiveSummaryCard(input: {
   } | null;
   agencyMappings?: AgencyMapping[];
   beforeConsentCookieCount: number;
+  beforeConsentStorageMetricAvailable?: boolean;
   beforeConsentStorageScope?: "all_observed" | "nonessential_only";
   coverageMicrocards?: Array<{
     label: string;
@@ -4481,7 +4482,9 @@ export function ExecutiveSummaryCard(input: {
                       label={input.beforeConsentStorageScope === "nonessential_only"
                         ? "Non-essential storage"
                         : "Pre-consent storage"}
-                      actualValue={runtimeMetricsReliable ? input.beforeConsentCookieCount : null}
+                      actualValue={runtimeMetricsReliable && input.beforeConsentStorageMetricAvailable !== false
+                        ? input.beforeConsentCookieCount
+                        : null}
                       benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}
                       note={cookieCountMismatchNote}

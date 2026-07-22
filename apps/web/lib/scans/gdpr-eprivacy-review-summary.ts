@@ -63,7 +63,8 @@ const TRANSPARENCY_ROW_DISCLOSURE_TYPES: Partial<Record<string, Article13Disclos
   data_subject_rights_disclosure: "data_subject_rights",
   international_transfers_disclosure: "international_transfers",
   dpo_contact_point_disclosure: "dpo_contact",
-  supervisory_authority_complaint_disclosure: "supervisory_authority"
+  supervisory_authority_complaint_disclosure: "supervisory_authority",
+  automated_decision_making_profiling_disclosure: "automated_decision_making_or_profiling"
 };
 
 const LIMITS_COPY =

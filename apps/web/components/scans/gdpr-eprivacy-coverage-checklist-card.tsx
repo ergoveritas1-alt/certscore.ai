@@ -142,7 +142,8 @@ const REPORT_ROW_GROUPS = [
       "data_subject_rights_disclosure",
       "international_transfers_disclosure",
       "dpo_contact_point_disclosure",
-      "supervisory_authority_complaint_disclosure"
+      "supervisory_authority_complaint_disclosure",
+      "automated_decision_making_profiling_disclosure"
     ]
   },
   {

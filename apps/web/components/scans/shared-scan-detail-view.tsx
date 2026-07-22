@@ -129,6 +129,7 @@ import { isGenericBrowserCookieHelpUrl } from "../../lib/scans/policy-surface-ur
 import { deriveHighRiskTrackingContext } from "../../lib/scans/high-risk-tracking-context";
 import {
   buildRuntimeCookieInventory,
+  hasUnresolvedNonEssentialPreconsentStorageEvidence,
   isEligibleNonEssentialPreconsentStorageMetricRow,
   isEligibleNonEssentialPreconsentStorageRow,
   type RuntimeCookieEvidenceRow
@@ -6763,6 +6764,7 @@ export async function SharedScanDetailView({
   });
   const cookieInventoryRows = runtimeCookieInventory.rows;
   const eligiblePreConsentStorageRows = cookieInventoryRows.filter(isEligibleNonEssentialPreconsentStorageMetricRow);
+  const beforeConsentStorageClassificationUnresolved = hasUnresolvedNonEssentialPreconsentStorageEvidence(cookieInventoryRows);
   const promotionGradePreConsentStorageCount = cookieInventoryRows.filter(isEligibleNonEssentialPreconsentStorageRow).length;
   const cookiesBeforeConsentCount = cookieInventoryRows.length > 0
     ? eligiblePreConsentStorageRows.length
@@ -7199,6 +7201,7 @@ export async function SharedScanDetailView({
                 accessibilitySignals={executiveAccessibilitySignals}
             agencyMappings={scanRecord.agencyMappings}
             beforeConsentCookieCount={cookiesBeforeConsentCount}
+            beforeConsentStorageMetricAvailable={!beforeConsentStorageClassificationUnresolved}
             beforeConsentStorageScope={beforeConsentStorageScope}
             coverageDiagnosticIndicators={scanCalibrationSummary.coverage.diagnosticIndicators}
             coverageMicrocards={coverageMicrocards}
