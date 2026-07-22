@@ -61,6 +61,18 @@ test("persisted monitor does not compare repeats from only one region", () => {
   assert.equal(summary.crossRegion.maximumScoreRange, null);
 });
 
+test("persisted monitor compares regional Lambda scan-from values as one source family", () => {
+  const summary = summarizeStoredCanonicalShadowComparisons([
+    metric({ region: "eu-central-1", scanId: "scan-1", scanSource: "eu_de" }),
+    metric({ region: "eu-west-1", scanId: "scan-2", scanSource: "eu_ie" })
+  ]);
+
+  assert.equal(summary.crossRegion.comparedGroupCount, 1);
+  assert.equal(summary.crossRegion.maximumScoreRange, 0);
+  assert.equal(summary.crossRegion.ranges[0]?.scanSource, "lambda");
+  assert.equal(summary.crossSource.comparedGroupCount, 0);
+});
+
 test("persisted monitor reports source variance without calling it region variance", () => {
   const summary = summarizeStoredCanonicalShadowComparisons([
     metric({ scanId: "scan-1" }),

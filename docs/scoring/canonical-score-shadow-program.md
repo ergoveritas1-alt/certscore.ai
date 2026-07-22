@@ -23,7 +23,7 @@ It does not consume raw scanner signals, raw v2 review artifacts, display-only i
 - `modelEligibilityCoverageRatio` is the internal, weighted score-withholding input.
 - `reportUsableEvidenceRatio` is calculated from the exact customer-report GDPR/ePrivacy row projection and is the recommended customer-facing coverage meaning, pending Luna approval.
 - These metrics are deliberately not aliases. Their difference is always retained. Luna's selected report-usable customer meaning classifies the known legacy semantic divergence as an accepted migration difference; any difference not explicitly accepted for the exact model remains an unresolved contradiction and blocks cutover.
-- Version 4 comparison artifacts retain both named coverage measurements, distinguish Luna-accepted migration differences from unresolved contradictions, and include a bounded model-coverage breakdown with explicit
+- Version 5 comparison artifacts retain an exact normalized-request comparison key, both named coverage measurements, distinguish Luna-accepted migration differences from unresolved contradictions, and include a bounded model-coverage breakdown with explicit
   covered, limited, and not-applicable row IDs and their configured weights so Luna
   can review why a score was withheld without consulting raw scanner evidence.
 - Finding siblings are deduplicated at the configured family boundary; the strongest supported severity contributes once per family.
@@ -31,6 +31,7 @@ It does not consume raw scanner signals, raw v2 review artifacts, display-only i
 - Posture and action labels are selected from the same score bands.
 - Every comparison artifact records model version, source, score kind, input fingerprint, legacy score metadata, and score delta.
 - Completed scans persist an immutable shadow assessment and a separate bounded monitoring row. Monitoring rows contain score/coverage metrics, contradiction types, region, scan source, and a SHA-256 grouping key; they contain no domain name or raw evidence.
+- Cross-region ranges compare the same exact requested URL and scanner source family across known regions. Region-specific Lambda selectors (`eu_de`, `eu_ie`, and `california`) belong to source family `lambda`; they are execution locations, not different scanner technologies. Cross-source ranges also require the same exact requested URL and known region. A browser-extension row with unknown geography is not assigned a Lambda region and cannot satisfy the formal source-equivalence gate merely because its score matches.
 
 ## Calibration order
 

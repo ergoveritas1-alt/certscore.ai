@@ -93,6 +93,18 @@ test("cohort summary does not label same-region repeats as cross-region evidence
   assert.deepEqual(summary.crossRegion.ranges, []);
 });
 
+test("cohort summary compares regional Lambda scan-from values as one source family", () => {
+  const summary = summarizeCanonicalShadowScoreCohort([
+    artifact({ legacyScore: 72, region: "eu-central-1", scanId: "scan-a", scanSource: "eu_de", severity: "high" }),
+    artifact({ legacyScore: 80, region: "eu-west-1", scanId: "scan-b", scanSource: "eu_ie", severity: "high" })
+  ]);
+
+  assert.equal(summary.crossRegion.comparedGroupCount, 1);
+  assert.equal(summary.crossRegion.maximumScoreRange, 0);
+  assert.equal(summary.crossRegion.ranges[0]?.scanSource, "lambda");
+  assert.equal(summary.crossSource.comparedGroupCount, 0);
+});
+
 test("cohort summary separates cross-source variance from cross-region variance", () => {
   const summary = summarizeCanonicalShadowScoreCohort([
     artifact({ legacyScore: 72, region: "eu-west-1", scanId: "scan-a", scanSource: "lambda", severity: "medium" }),

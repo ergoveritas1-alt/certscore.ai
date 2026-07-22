@@ -1,4 +1,5 @@
 import type { CanonicalShadowScoreComparisonArtifact } from "./canonical-shadow-score-artifact";
+import { canonicalShadowScoreSourceFamily } from "./canonical-shadow-score-comparison-source";
 
 function ratio(numerator: number, denominator: number) {
   return denominator === 0 ? 0 : Number((numerator / denominator).toFixed(4));
@@ -40,11 +41,12 @@ export function summarizeCanonicalShadowScoreCohort(
     const scanSource = artifact.context.scanSource;
     const score = artifact.candidate.postureScore;
     if (!groupKey || !targetKey || !region || !scanSource || score === null) continue;
-    const regionGroupKey = `${groupKey}\u0000${targetKey}\u0000${scanSource}`;
+    const sourceFamily = canonicalShadowScoreSourceFamily(scanSource);
+    const regionGroupKey = `${groupKey}\u0000${targetKey}\u0000${sourceFamily}`;
     const regionValues = regionGroups.get(regionGroupKey) ?? {
       comparisonGroupKey: groupKey,
       regions: new Set<string>(),
-      scanSource,
+      scanSource: sourceFamily,
       scores: []
     };
     regionValues.regions.add(region);
@@ -58,7 +60,7 @@ export function summarizeCanonicalShadowScoreCohort(
       scanSources: new Set<string>(),
       scores: []
     };
-    sourceValues.scanSources.add(scanSource);
+    sourceValues.scanSources.add(sourceFamily);
     sourceValues.scores.push(score);
     sourceGroups.set(sourceGroupKey, sourceValues);
   }

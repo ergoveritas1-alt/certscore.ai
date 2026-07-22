@@ -1,3 +1,5 @@
+import { canonicalShadowScoreSourceFamily } from "./canonical-shadow-score-comparison-source";
+
 export type StoredCanonicalShadowComparisonMetric = {
   candidateCoverageRatio: number;
   candidateScore: number | null;
@@ -37,7 +39,8 @@ export function summarizeStoredCanonicalShadowComparisons(
   const sourceGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
   for (const metric of metrics) {
     if (!metric.comparisonGroupKey || !metric.comparisonTargetKey || !metric.region || !metric.scanSource || metric.candidateScore === null) continue;
-    const regionKey = `${metric.comparisonGroupKey}\u0000${metric.comparisonTargetKey}\u0000${metric.scanSource}`;
+    const sourceFamily = canonicalShadowScoreSourceFamily(metric.scanSource);
+    const regionKey = `${metric.comparisonGroupKey}\u0000${metric.comparisonTargetKey}\u0000${sourceFamily}`;
     const regionRows = regionGroups.get(regionKey) ?? [];
     regionRows.push(metric);
     regionGroups.set(regionKey, regionRows);
@@ -56,12 +59,12 @@ export function summarizeStoredCanonicalShadowComparisons(
       minScore: Math.min(...scores),
       range: Math.max(...scores) - Math.min(...scores),
       regionCount: regions.size,
-      scanSource: rows[0]!.scanSource!,
+      scanSource: canonicalShadowScoreSourceFamily(rows[0]!.scanSource!),
       sampleCount: scores.length
     }];
   }).sort((left, right) => right.range - left.range || left.comparisonGroupKey.localeCompare(right.comparisonGroupKey));
   const sourceRanges = [...sourceGroups.values()].flatMap((rows) => {
-    const scanSources = new Set(rows.map((row) => row.scanSource));
+    const scanSources = new Set(rows.map((row) => canonicalShadowScoreSourceFamily(row.scanSource!)));
     const scores = rows.flatMap((row) => row.candidateScore ?? []);
     if (scanSources.size < 2 || scores.length < 2) return [];
     return [{

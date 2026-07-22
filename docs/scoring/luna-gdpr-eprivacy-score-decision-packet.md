@@ -60,6 +60,7 @@ deterministic benchmark while their decision status remains `pending_luna`.
 - Owned canaries cover the required behavioral lanes.
 - At least 10 public targets are selected by the canonical cooldown-aware selector; no target is hand-picked and no cooldown is bypassed.
 - Equivalent source/region score variance is within Luna's labeled tolerance.
+- Formal cross-source evidence must preserve geography. Matching browser-extension and Lambda scores are useful parity evidence, but an extension scan with unknown geography cannot be relabeled as a Lambda region or counted as a same-region equivalence sample.
 - Withholding, score drift, band distribution, and contradiction rates are reviewed.
 - Web report, dashboard, Pulse, exports, and admin agree on kind, version, value, posture, and both named coverage measurements.
 - Public methodology describes observed risk and evidence coverage without implying certification or a legal conclusion.
