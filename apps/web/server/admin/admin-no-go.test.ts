@@ -27,6 +27,19 @@ test("retained runtime-only no-go assessments remain visible", () => {
   });
 });
 
+test("snapshot-backed assessments remain visible when runtime artifacts are absent", () => {
+  assert.deepEqual(projectAdminNoGo({
+    snapshotVisualAccessReview: { go_no_go: "NO_GO", reason_code: "captcha_or_challenge" }
+  }), {
+    isNoGo: true,
+    reason: "captcha_or_challenge",
+    source: "visual_review"
+  });
+  assert.equal(projectAdminNoGo({
+    snapshotRuntimeAssessment: { decision: "no_go", reason_codes: ["navigation_transport_failure"] }
+  }).isNoGo, true);
+});
+
 test("operational access flags are a bounded final fallback", () => {
   assert.equal(projectAdminNoGo({ accessPostureClass: "early_loss" }).isNoGo, true);
   assert.equal(projectAdminNoGo({ blockedFlag: true }).isNoGo, true);

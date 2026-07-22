@@ -20,6 +20,7 @@ import { CANONICAL_VENDOR_RESOLVER_VERSION } from "@certscore/vendor-resolver";
 import {
   buildRuntimeCookieInventory,
   countEligibleNonEssentialPreconsentStorageMetricRows,
+  hasUnresolvedNonEssentialPreconsentStorageEvidence,
   getRuntimeCookiePrimaryProvider,
   isEligibleNonEssentialPreconsentStorageRow
 } from "../scans/runtime-cookie-evidence";
@@ -1766,7 +1767,11 @@ function buildEvidenceArtifact(input: {
         "storageTouched"
       ]),
       eligibleNonEssentialPreConsentStorageCount: input.reportSurface.runtimeCookieRows.filter(isEligibleNonEssentialPreconsentStorageRow).length,
-      observedNonEssentialPreConsentStorageCount: countEligibleNonEssentialPreconsentStorageMetricRows(input.reportSurface.runtimeCookieRows),
+      observedNonEssentialPreConsentStorageCount:
+        hasUnresolvedNonEssentialPreconsentStorageEvidence(input.reportSurface.runtimeCookieRows) &&
+        countEligibleNonEssentialPreconsentStorageMetricRows(input.reportSurface.runtimeCookieRows) === 0
+          ? null
+          : countEligibleNonEssentialPreconsentStorageMetricRows(input.reportSurface.runtimeCookieRows),
       provenTimestampedPreConsentCookieWriteCount: input.reportSurface.runtimeCookieRows.filter((row) => row.timingEvidence === "before_consent_cookie_write" && row.setAtMs !== null).length,
       lateOrInitialSnapshotCookieCount: input.reportSurface.runtimeCookieRows.filter((row) => row.timingEvidence === "initial_cookie_snapshot" || row.timingEvidence === "periodic_cookie_snapshot").length
     },
@@ -1923,9 +1928,14 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const storageSummary = asRecord(recordValue(hybridRuntimeEvidence, "storageSummary"));
   const networkSummary = asRecord(recordValue(hybridRuntimeEvidence, "networkSummary"));
   const hasClassifiedRuntimeStorageRows = reportSurface.runtimeCookieRows.length > 0;
-  const nonEssentialPreConsentStorageCount = hasClassifiedRuntimeStorageRows
+  const observedNonEssentialPreConsentStorageCount = hasClassifiedRuntimeStorageRows
     ? countEligibleNonEssentialPreconsentStorageMetricRows(reportSurface.runtimeCookieRows)
     : null;
+  const nonEssentialStorageEvidenceUnresolved = hasUnresolvedNonEssentialPreconsentStorageEvidence(reportSurface.runtimeCookieRows);
+  const nonEssentialPreConsentStorageCount =
+    nonEssentialStorageEvidenceUnresolved && observedNonEssentialPreConsentStorageCount === 0
+      ? null
+      : observedNonEssentialPreConsentStorageCount;
   const cookiesBeforeConsentCount = nonEssentialPreConsentStorageCount ??
     finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
     finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??

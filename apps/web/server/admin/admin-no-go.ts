@@ -14,8 +14,10 @@ export type AdminNoGoProjectionInput = {
   captchaFlag?: boolean | null;
   responseDisposition?: string | null;
   runtimeAssessment?: JsonRecord;
+  snapshotRuntimeAssessment?: JsonRecord;
   snapshotOutcome?: string | null;
   visualAccessReview?: JsonRecord;
+  snapshotVisualAccessReview?: JsonRecord;
 };
 
 function record(value: unknown) {
@@ -42,8 +44,9 @@ export function projectAdminNoGo(input: AdminNoGoProjectionInput): AdminNoGoProj
     return { isNoGo: true, reason: "API result disposition", source: "response" };
   }
 
-  const assessment = record(input.runtimeAssessment);
-  if (stringValue(assessment?.decision ?? assessment?.scan_no_go_decision) === "no_go") {
+  const assessments = [record(input.runtimeAssessment), record(input.snapshotRuntimeAssessment)];
+  const assessment = assessments.find((candidate) => stringValue(candidate?.decision ?? candidate?.scan_no_go_decision) === "no_go");
+  if (assessment) {
     const reasonCodes = assessment?.reasonCodes ?? assessment?.reason_codes;
     return {
       isNoGo: true,
@@ -52,7 +55,11 @@ export function projectAdminNoGo(input: AdminNoGoProjectionInput): AdminNoGoProj
     };
   }
 
-  const visualReview = record(input.visualAccessReview);
+  const visualReviews = [record(input.visualAccessReview), record(input.snapshotVisualAccessReview)];
+  const visualReview = visualReviews.find((candidate) => {
+    const decision = stringValue(candidate?.goNoGo ?? candidate?.go_no_go)?.toUpperCase();
+    return decision === "NO_GO";
+  });
   const visualDecision = stringValue(visualReview?.goNoGo ?? visualReview?.go_no_go)?.toUpperCase();
   if (visualDecision === "NO_GO") {
     return {
@@ -79,7 +86,9 @@ export function adminNoGoSql(input: {
   captchaFlag: string;
   responseSummary?: string;
   runtimeArtifacts: string;
+  snapshotRuntimeAssessment?: string;
   snapshotOutcome: string;
+  snapshotVisualAccessReview?: string;
   outcomesParameter?: string;
 }) {
   const responseDisposition = input.responseSummary
@@ -89,7 +98,9 @@ export function adminNoGoSql(input: {
     ${input.snapshotOutcome} = any(${input.outcomesParameter ?? "$5"}::text[])
     ${responseDisposition}
     or coalesce(${input.runtimeArtifacts}.scan_no_go_assessment ->> 'decision', ${input.runtimeArtifacts}.scan_no_go_assessment ->> 'scan_no_go_decision') = 'no_go'
+    ${input.snapshotRuntimeAssessment ? `or coalesce(${input.snapshotRuntimeAssessment} ->> 'decision', ${input.snapshotRuntimeAssessment} ->> 'scan_no_go_decision') = 'no_go'` : ""}
     or upper(coalesce(${input.runtimeArtifacts}.visual_access_review ->> 'goNoGo', ${input.runtimeArtifacts}.visual_access_review ->> 'go_no_go', '')) = 'NO_GO'
+    ${input.snapshotVisualAccessReview ? `or upper(coalesce(${input.snapshotVisualAccessReview} ->> 'goNoGo', ${input.snapshotVisualAccessReview} ->> 'go_no_go', '')) = 'NO_GO'` : ""}
     or ${input.accessPosture} = 'early_loss'
     or coalesce(${input.blockedFlag}, false)
     or coalesce(${input.captchaFlag}, false)

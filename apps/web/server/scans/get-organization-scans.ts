@@ -12,6 +12,7 @@ import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveDisplayCreatedAt } from "./display-state";
 import { selectConfiguredCustomerGdprEprivacyScore } from "./customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
+import { projectAdminNoGo } from "../admin/admin-no-go";
 import {
   loadOrganizationScanPageData,
   isMissingComplianceChangeEventsTable,
@@ -513,8 +514,21 @@ async function loadOrganizationScans(
       candidateAssessment: candidateScoreAssessmentMap.get(scan.id) ?? null,
       legacyAssessment: legacyScoreAssessmentMap.get(scan.id) ?? null
     });
-    const scoreAssessment = scoreSelection.assessment;
-    const displayedScore = scoreAssessment
+    const runtimeArtifact = runtimeArtifactMap.get(scan.id) ?? null;
+    const noGo = projectAdminNoGo({
+      accessPostureClass: normalizedAccessPosture.accessPostureClass,
+      blockedFlag: snapshot?.blocked_flag ?? null,
+      captchaFlag: snapshot?.captcha_flag ?? null,
+      runtimeAssessment: runtimeArtifact?.scan_no_go_assessment ?? null,
+      snapshotRuntimeAssessment: snapshot?.scan_no_go_assessment ?? null,
+      snapshotOutcome: snapshot?.scan_outcome ?? null,
+      visualAccessReview: runtimeArtifact?.visual_access_review ?? null,
+      snapshotVisualAccessReview: snapshot?.visual_access_review ?? null
+    });
+    const scoreAssessment = noGo.isNoGo ? null : scoreSelection.assessment;
+    const displayedScore = noGo.isNoGo
+      ? null
+      : scoreAssessment
       ? scoreAssessment.scoreValue
       : snapshot?.certscore_overall ?? null;
     return {
@@ -536,16 +550,16 @@ async function loadOrganizationScans(
         scoreScoredAt: scoreAssessment?.scoredAt ?? null,
         scoreSource: scoreAssessment?.scoreSource ?? (displayedScore !== null ? "legacy.scan-snapshot" : null),
         scoreVersion: scoreAssessment?.scoreVersion ?? null,
-        regulatoryScore: snapshot?.regulatory_exposure_score ?? null,
-        privacyScore: snapshot?.privacy_score ?? null,
-        consentScore: snapshot?.consent_score ?? null,
-        accessibilityScore: snapshot?.accessibility_score ?? null,
-        totalSignals,
-        findingCount: snapshot?.report_finding_count ?? 0,
-        topFindingCount: snapshot?.top_finding_count ?? null,
-        privacyPolicyPresent: snapshot?.privacy_policy_present ?? null,
-        cookieBannerPresent: snapshot?.cookie_banner_present ?? null,
-        cmpVendorName: snapshot?.cmp_vendor_name ?? null,
+        regulatoryScore: noGo.isNoGo ? null : snapshot?.regulatory_exposure_score ?? null,
+        privacyScore: noGo.isNoGo ? null : snapshot?.privacy_score ?? null,
+        consentScore: noGo.isNoGo ? null : snapshot?.consent_score ?? null,
+        accessibilityScore: noGo.isNoGo ? null : snapshot?.accessibility_score ?? null,
+        totalSignals: noGo.isNoGo ? null : totalSignals,
+        findingCount: noGo.isNoGo ? 0 : snapshot?.report_finding_count ?? 0,
+        topFindingCount: noGo.isNoGo ? null : snapshot?.top_finding_count ?? null,
+        privacyPolicyPresent: noGo.isNoGo ? null : snapshot?.privacy_policy_present ?? null,
+        cookieBannerPresent: noGo.isNoGo ? null : snapshot?.cookie_banner_present ?? null,
+        cmpVendorName: noGo.isNoGo ? null : snapshot?.cmp_vendor_name ?? null,
         consentAuditCompleted:
           runtimeArtifactMap.get(scan.id)?.consent_audit_completed ??
           getHybridConsentAuditCompleted(runtimeArtifactMap.get(scan.id) as Record<string, unknown> | null),

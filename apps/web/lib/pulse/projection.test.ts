@@ -305,8 +305,9 @@ test("Pulse descriptive storage totals include explicit pre-consent observations
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
   assert.match(source, /eligibleNonEssentialPreConsentStorageCount: input\.reportSurface\.runtimeCookieRows\.filter\(isEligibleNonEssentialPreconsentStorageRow\)\.length/);
-  assert.match(source, /observedNonEssentialPreConsentStorageCount: countEligibleNonEssentialPreconsentStorageMetricRows/);
-  assert.match(source, /nonEssentialPreConsentStorageCount = hasClassifiedRuntimeStorageRows\s+\? countEligibleNonEssentialPreconsentStorageMetricRows/);
+  assert.match(source, /observedNonEssentialPreConsentStorageCount:/);
+  assert.match(source, /hasUnresolvedNonEssentialPreconsentStorageEvidence/);
+  assert.match(source, /nonEssentialPreConsentStorageCount =/);
   assert.match(source, /nonEssentialPreConsentStorage: nonEssentialPreConsentStorageCount/);
   assert.match(source, /hasClassifiedRuntimeStorageRows \? "Non-essential storage" : "Pre-consent storage"/);
   assert.match(source, /hasClassifiedRuntimeStorageRows \? "nonessential_only" : "all_observed"/);

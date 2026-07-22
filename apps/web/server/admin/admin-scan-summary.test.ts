@@ -7,6 +7,9 @@ test("admin scan summaries consume the canonical report projection", async () =>
   assert.match(source, /buildPulseProjection/);
   assert.match(source, /reportSummary/);
   assert.match(source, /topFindingIds\.length/);
+  assert.match(source, /const noGo = projectAdminNoGo/);
+  assert.match(source, /score: noGo\.isNoGo \? null/);
+  assert.match(source, /privacyPolicyPresent: noGo\.isNoGo \? null/);
   assert.match(source, /resultDisposition === "no_go" \? null : "completed_partial"/);
   assert.doesNotMatch(source, /projectExecutiveFindingsFromUnifiedPackets/);
 });

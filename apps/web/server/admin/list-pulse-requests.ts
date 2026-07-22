@@ -160,7 +160,9 @@ const PULSE_NO_GO_SQL = adminNoGoSql({
   captchaFlag: "ss.captcha_flag",
   responseSummary: "pr.response_summary",
   runtimeArtifacts: "sra",
+  snapshotRuntimeAssessment: "ss.scan_no_go_assessment",
   snapshotOutcome: "ss.scan_outcome",
+  snapshotVisualAccessReview: "ss.visual_access_review",
   outcomesParameter: "$12"
 });
 
@@ -292,7 +294,9 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     responseDisposition: typeof responseSummary.resultDisposition === "string" ? responseSummary.resultDisposition : null,
     runtimeAssessment: asRecord(row.scan_no_go_assessment),
     snapshotOutcome: typeof row.scan_outcome === "string" ? row.scan_outcome : null,
-    visualAccessReview: asRecord(row.visual_access_review)
+    visualAccessReview: asRecord(row.visual_access_review),
+    snapshotRuntimeAssessment: asRecord(row.scan_no_go_assessment),
+    snapshotVisualAccessReview: asRecord(row.visual_access_review)
   });
   const score = noGo.isNoGo ? null : retainedScore;
   return {
@@ -308,7 +312,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     noGoFlag: noGo.isNoGo,
     noGoReason: noGo.reason,
     noGoSource: noGo.source,
-    cmpVendorName: typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null,
+    cmpVendorName: noGo.isNoGo ? null : typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null,
     createdAt: timestampString(row.created_at) ?? String(row.created_at),
     detail: getRequestContextString(requestContext, "detail"),
     elapsedSeconds:
@@ -335,8 +339,9 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     primaryLanguage: primaryLanguage?.locale ?? null,
     primaryLanguageConfidence: primaryLanguage?.confidence ?? null,
     primaryLanguageSource: primaryLanguage?.source ?? null,
-    privacyPolicyPresent:
-      typeof row.privacy_policy_present === "boolean" ? row.privacy_policy_present : null,
+    privacyPolicyPresent: noGo.isNoGo
+      ? null
+      : typeof row.privacy_policy_present === "boolean" ? row.privacy_policy_present : null,
     resolutionMode: typeof row.resolution_mode === "string" ? row.resolution_mode : null,
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
@@ -364,8 +369,8 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
       ["queued", "running", "finalizing"].includes(String(row.status))
         ? String(row.scan_status)
         : String(row.status),
-    snapshotFindingCount: typeof row.snapshot_finding_count === "number" ? row.snapshot_finding_count : null,
-    snapshotTotalSignals: typeof row.snapshot_total_signals === "number" ? row.snapshot_total_signals : null,
+    snapshotFindingCount: noGo.isNoGo ? null : typeof row.snapshot_finding_count === "number" ? row.snapshot_finding_count : null,
+    snapshotTotalSignals: noGo.isNoGo ? null : typeof row.snapshot_total_signals === "number" ? row.snapshot_total_signals : null,
     summaryJsonDownloads: typeof row.summary_json_downloads === "number" ? row.summary_json_downloads : 0,
     evidenceJsonDownloads: typeof row.evidence_json_downloads === "number" ? row.evidence_json_downloads : 0,
     topFindingIds: storedTopFindingIds,

@@ -251,16 +251,20 @@ export async function listAdminScansPage(
       captchaFlag: snapshot?.captcha_flag,
       runtimeAssessment: runtimeArtifact?.scan_no_go_assessment ?? snapshot?.scan_no_go_assessment,
       snapshotOutcome: snapshot?.scan_outcome,
-      visualAccessReview: runtimeArtifact?.visual_access_review ?? snapshot?.visual_access_review
+      visualAccessReview: runtimeArtifact?.visual_access_review ?? snapshot?.visual_access_review,
+      snapshotRuntimeAssessment: snapshot?.scan_no_go_assessment,
+      snapshotVisualAccessReview: snapshot?.visual_access_review
     });
     const scoreSelection = selectConfiguredCustomerGdprEprivacyScore({
       candidateAssessment: candidateScoreAssessmentMap.get(scan.id) ?? null,
       legacyAssessment: legacyScoreAssessmentMap.get(scan.id) ?? null
     });
     const scoreAssessment = noGo.isNoGo ? null : scoreSelection.assessment;
-    const displayedScore = scoreAssessment
-      ? scoreAssessment.scoreValue
-      : snapshot?.certscore_overall ?? null;
+    const displayedScore = noGo.isNoGo
+      ? null
+      : scoreAssessment
+        ? scoreAssessment.scoreValue
+        : snapshot?.certscore_overall ?? null;
 
     return {
       activityAt: displayCreatedAt,
@@ -298,11 +302,11 @@ export async function listAdminScansPage(
       completedAt: scan.completed_at,
       startedAt: scan.started_at,
       pagesScanned: scan.pages_scanned,
-      totalSignals: snapshot?.total_signals ?? null,
+      totalSignals: noGo.isNoGo ? null : snapshot?.total_signals ?? null,
       topFindingCount: displayedScore === null
         ? null
         : snapshot?.top_finding_count ?? null,
-      findingCount: snapshot?.report_finding_count ?? null,
+      findingCount: noGo.isNoGo ? null : snapshot?.report_finding_count ?? null,
       freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? pulseAttribution?.request_context ?? null),
       certscoreOverall: displayedScore,
       scoreCoverageConfidence: scoreAssessment?.coverageConfidence ?? null,
@@ -315,8 +319,8 @@ export async function listAdminScansPage(
       scoreScoredAt: scoreAssessment?.scoredAt ?? null,
       scoreSource: scoreAssessment?.scoreSource ?? (displayedScore !== null ? "legacy.scan-snapshot" : null),
       scoreVersion: scoreAssessment?.scoreVersion ?? null,
-      cmpVendorName: snapshot?.cmp_vendor_name ?? null,
-      privacyPolicyPresent: snapshot?.privacy_policy_present ?? null,
+      cmpVendorName: noGo.isNoGo ? null : snapshot?.cmp_vendor_name ?? null,
+      privacyPolicyPresent: noGo.isNoGo ? null : snapshot?.privacy_policy_present ?? null,
       primaryLanguage: primaryLanguage?.locale ?? null,
       primaryLanguageConfidence: primaryLanguage?.confidence ?? null,
       primaryLanguageSource: primaryLanguage?.source ?? null,

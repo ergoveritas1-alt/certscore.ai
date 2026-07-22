@@ -150,7 +150,9 @@ const SCAN_ACTIVITY_NO_GO_SQL = adminNoGoSql({
   blockedFlag: "ss.blocked_flag",
   captchaFlag: "ss.captcha_flag",
   runtimeArtifacts: "sra",
+  snapshotRuntimeAssessment: "ss.scan_no_go_assessment",
   snapshotOutcome: "ss.scan_outcome",
+  snapshotVisualAccessReview: "ss.visual_access_review",
   outcomesParameter: "$12"
 });
 

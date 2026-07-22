@@ -6,6 +6,7 @@ import { getAnonymousScanById, getScanById } from "../scans/get-scan-by-id";
 import type { PublicScanRecord } from "../scans/get-public-scan-record";
 import { materializeLocalV2DagScanDetail } from "../scans/local-v2-dag-report";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
+import { projectAdminNoGo } from "./admin-no-go";
 import { persistAdminScanSummary } from "./repository";
 
 export type AdminScanSummary = {
@@ -76,20 +77,28 @@ export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRec
     recordObject(runtimeArtifacts, "scanNoGoAssessment");
   const visualAccessReview = recordObject(runtimeArtifacts, "visual_access_review") ??
     recordObject(runtimeArtifacts, "visualAccessReview");
+  const noGo = projectAdminNoGo({
+    responseDisposition: resultDisposition,
+    runtimeAssessment: scanNoGoAssessment,
+    snapshotRuntimeAssessment: recordObject(snapshot, "scan_no_go_assessment"),
+    snapshotOutcome: recordString(snapshot, "scan_outcome"),
+    visualAccessReview,
+    snapshotVisualAccessReview: recordObject(snapshot, "visual_access_review")
+  });
   const visualEvidenceArtifacts = Array.isArray(runtimeArtifacts?.visual_evidence_artifacts)
     ? runtimeArtifacts.visual_evidence_artifacts
     : null;
   const summary: AdminScanSummary = {
-    cmpVendorName: recordString(snapshot, "cmp_vendor_name"),
+    cmpVendorName: noGo.isNoGo ? null : recordString(snapshot, "cmp_vendor_name"),
     industry: scanRecord.domainBenchmark?.industry ?? null,
     primaryLanguage: recordString(snapshot, "site_language_primary"),
-    privacyPolicyPresent: recordBoolean(snapshot, "privacy_policy_present"),
+    privacyPolicyPresent: noGo.isNoGo ? null : recordBoolean(snapshot, "privacy_policy_present"),
     scanOutcome:
       recordString(snapshot, "scan_outcome") ??
       (resultDisposition === "no_go" ? null : "completed_partial"),
-    score: recordNumber(reportSummary, "score") ?? recordNumber(snapshot, "certscore_overall"),
-    topFindingIds,
-    topFindingCount: topFindingIds.length
+    score: noGo.isNoGo ? null : recordNumber(reportSummary, "score") ?? recordNumber(snapshot, "certscore_overall"),
+    topFindingIds: noGo.isNoGo ? [] : topFindingIds,
+    topFindingCount: noGo.isNoGo ? 0 : topFindingIds.length
   };
 
   await persistAdminScanSummary({

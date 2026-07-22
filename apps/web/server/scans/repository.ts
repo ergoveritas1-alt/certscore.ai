@@ -207,6 +207,7 @@ export type OrganizationScanSnapshotRow = {
   robots_fetch_http_status: number | null;
   robots_fetch_status: string | null;
   scan_id: string;
+  scan_no_go_assessment?: Record<string, unknown> | null;
   scan_outcome: string | null;
   stop_reason_code: string | null;
   stop_reason_detail: string | null;
@@ -216,6 +217,7 @@ export type OrganizationScanSnapshotRow = {
   total_signals: number;
   top_finding_count?: number | null;
   verified_public_surfaces_count?: number | null;
+  visual_access_review?: Record<string, unknown> | null;
 };
 
 export type OrganizationRuntimeArtifactRow = {
@@ -225,6 +227,8 @@ export type OrganizationRuntimeArtifactRow = {
   consent_reject_reduced_tracking: boolean | null;
   hybrid_runtime_evidence?: Record<string, unknown> | null;
   scan_id: string;
+  scan_no_go_assessment?: Record<string, unknown> | null;
+  visual_access_review?: Record<string, unknown> | null;
 };
 
 export type OrganizationChangeSummaryRow = {
