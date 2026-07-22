@@ -56,9 +56,11 @@ deterministic benchmark while their decision status remains `pending_luna`.
 Production revision `1c9a08c7` deployed decision schema v3, migration 0149, and the
 identical-input source monitoring lane to web and all three approved Lambda regions.
 A read-only production verification found canonical fingerprints on the retained
-EU-DE, EU-IE, and browser-extension rows. Those fingerprints are different, so no
-identical-input group is credited yet. This is the expected fail-closed result and
-leaves the live Lambda/browser-extension sample requirement open.
+EU-DE, EU-IE, and browser-extension rows. Those fingerprints are different, and a
+bounded 90-day production query found zero cross-source groups sharing both target
+and exact input fingerprint, so no identical-input group is credited yet. This is
+the expected fail-closed result and leaves the live Lambda/browser-extension sample
+requirement open.
 
 - Deterministic invariants and exact report-row projection tests pass.
 - Candidate-v3 has no deterministic high-severity/Clear contradiction and matches all
