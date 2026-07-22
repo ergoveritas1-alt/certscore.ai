@@ -82,7 +82,10 @@ export default async function DashboardPage() {
   );
   const latestCompletedScan = recentScans.find((scan) => scan.status === "completed") ?? null;
   const websitesNeedingReview = latestByWebsite.filter(
-    (scan) => (scan.topFindingCount ?? 0) > 0 || (scan.certscoreOverall !== null && scan.certscoreOverall < 75) || Boolean(scan.interruptionLabel)
+    (scan) =>
+      (scan.topFindingCount ?? 0) > 0 ||
+      (scan.scoreLabel === "GDPR/ePrivacy evidence" && scan.certscoreOverall !== null && scan.certscoreOverall < 75) ||
+      Boolean(scan.interruptionLabel)
   ).length;
   const websitesWithPrivacyPolicy = latestByWebsite.filter((scan) => scan.privacyPolicyPresent === true).length;
   const scanUsagePercent = scanUsage.monthlyLimit === null || scanUsage.monthlyLimit <= 0
@@ -133,7 +136,7 @@ export default async function DashboardPage() {
               </div>
               <p className="mt-1.5 text-xs text-slate-500">{scanUsagePercent === null ? "No monthly limit" : `${scanUsagePercent}% used`} · resets {formatDate(scanUsage.monthlyPeriodEnd)}</p>
             </div>
-            <div className="bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Latest score</p><p className="mt-1 text-2xl font-semibold text-slate-950">{latestCompletedScan?.certscoreOverall ?? "—"}{latestCompletedScan?.certscoreOverall !== null && latestCompletedScan ? <span className="text-sm text-slate-400">/100</span> : null}</p><p className="truncate text-xs text-slate-500">{latestCompletedScan?.domainHostname ?? "No completed scan"}</p></div>
+            <div className="bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{latestCompletedScan?.scoreLabel ?? "GDPR/ePrivacy evidence"}</p><p className="mt-1 text-2xl font-semibold text-slate-950">{latestCompletedScan?.certscoreOverall ?? "—"}{latestCompletedScan?.certscoreOverall !== null && latestCompletedScan ? <span className="text-sm text-slate-400">/100</span> : null}</p><p className="truncate text-xs text-slate-500">{latestCompletedScan?.domainHostname ?? "No completed scan"}</p></div>
             <div className="bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Needs review</p><p className="mt-1 text-2xl font-semibold text-slate-950">{websitesNeedingReview}</p><p className="text-xs text-slate-500">of {latestByWebsite.length} websites</p></div>
             <div className="bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Privacy coverage</p><p className="mt-1 text-2xl font-semibold text-slate-950">{websitesWithPrivacyPolicy}<span className="text-sm text-slate-400">/{latestByWebsite.length}</span></p><p className="text-xs text-slate-500">latest scans found a privacy policy</p></div>
           </CardContent>

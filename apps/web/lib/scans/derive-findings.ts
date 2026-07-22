@@ -29,8 +29,6 @@ type MinimalScanRecord = {
 type DerivedPresentationSummary = {
   findings: CertScoreFinding[];
   groupedFindings: Array<{ section: CertScoreFindingSection; findings: CertScoreFinding[] }>;
-  posture: "Clear" | "Watch" | "Action Needed";
-  score: number | null;
   lastScannedAt: string;
   requestedHost: string | null;
   finalHost: string | null;
@@ -353,19 +351,6 @@ function deriveTopObservedEntities(input: {
     .slice(0, 10);
 }
 
-function deriveSummaryPosture(score: number | null) {
-  if (typeof score !== "number" || !Number.isFinite(score)) {
-    return "Clear" as const;
-  }
-  if (score < 50) {
-    return "Action Needed" as const;
-  }
-  if (score < 72) {
-    return "Watch" as const;
-  }
-  return "Clear" as const;
-}
-
 function getConcreteIdentifierLikeRequests(requestObservations: Record<string, unknown>[]) {
   return requestObservations.filter((row) => {
     if (row.identifierLike !== true) {
@@ -663,13 +648,10 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
   });
 
   const derivedLastScannedAt = scanRecord.scan.completedAt ?? scanRecord.scan.createdAt;
-  const derivedScore = getNumber(scanRecord.snapshot?.certscore_overall) ?? null;
 
   return {
     findings: [],
     groupedFindings: [],
-    posture: deriveSummaryPosture(derivedScore),
-    score: derivedScore,
     lastScannedAt: derivedLastScannedAt,
     requestedHost,
     finalHost,

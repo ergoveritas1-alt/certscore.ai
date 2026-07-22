@@ -774,6 +774,95 @@ function requestUrl(row: Record<string, unknown>) {
   return firstString(row.normalizedUrl, row.requestUrl, row.url);
 }
 
+type EndpointJurisdictionVendor = {
+  category?: string | null;
+  hostnames: string[];
+  vendorName?: string | null;
+};
+
+export function deriveEndpointJurisdictionEvidence(
+  rows: Array<Record<string, unknown>>,
+  vendors: EndpointJurisdictionVendor[] = []
+) {
+  const grouped = new Map<string, {
+    confidence: "high" | "medium";
+    etldPlusOne: string | null;
+    firstPartyStatus: "third_party";
+    host: string;
+    inferenceBasis: string;
+    inferredCountryCode: string | null;
+    inferredRegion: string | null;
+    locationLabel: string | null;
+    matchedVendorCategory: string | null;
+    matchedVendorName: string | null;
+    requestCount: number;
+    samplePaths: string[];
+    scriptCount: number;
+    sources: string[];
+    transferReviewSignal: true;
+  }>();
+
+  for (const row of rows) {
+    const thirdParty = row.thirdParty === true || row.isThirdParty === true;
+    const region = firstString(row.endpointGeographyRegion);
+    const jurisdiction = firstString(row.endpointGeographyJurisdiction);
+    if (
+      !thirdParty ||
+      row.collectionEndpointObserved !== true ||
+      firstString(row.endpointGeographyStatus) !== "region_observed" ||
+      (!region && !jurisdiction)
+    ) {
+      continue;
+    }
+    const url = requestUrl(row);
+    const host = firstString(row.hostname, row.requestHostname) ?? hostnameFromUrl(url);
+    if (!host) continue;
+    const normalizedHost = host.toLowerCase().replace(/^www\./, "");
+    const vendor = vendors.find((candidate) => candidate.hostnames.some((hostname) =>
+      normalizedHost === hostname || normalizedHost.endsWith(`.${hostname}`)
+    ));
+    const key = `${normalizedHost}|${region ?? ""}|${jurisdiction ?? ""}`;
+    const existing = grouped.get(key);
+    let pathname: string | null = null;
+    if (url) {
+      try {
+        pathname = new URL(url).pathname.slice(0, 240);
+      } catch {
+        pathname = null;
+      }
+    }
+    const resourceType = firstString(row.resourceType, row.initiatorType);
+    const sources = uniqueStrings([...(existing?.sources ?? []), "request", resourceType === "script" ? "script" : null]);
+    const basis = uniqueStrings(Array.isArray(row.endpointGeographyBasis)
+      ? row.endpointGeographyBasis.filter((value): value is string => typeof value === "string")
+      : []
+    ).slice(0, 6);
+    grouped.set(key, {
+      confidence: jurisdiction && firstString(row.endpointGeographyPrecision) === "provider_region" ? "high" : "medium",
+      etldPlusOne: getTldtsDomain(normalizedHost) ?? null,
+      firstPartyStatus: "third_party",
+      host: normalizedHost,
+      inferenceBasis: basis.length > 0
+        ? basis.join("+").slice(0, 300)
+        : existing?.inferenceBasis ?? "retained_endpoint_geography",
+      inferredCountryCode: jurisdiction,
+      inferredRegion: region,
+      locationLabel: firstString(row.endpointGeographyLocationLabel) ?? existing?.locationLabel ?? null,
+      matchedVendorCategory: vendor?.category ?? null,
+      matchedVendorName: vendor?.vendorName ?? null,
+      requestCount: (existing?.requestCount ?? 0) + 1,
+      samplePaths: uniqueStrings([...(existing?.samplePaths ?? []), pathname]).slice(0, 5),
+      scriptCount: (existing?.scriptCount ?? 0) + (resourceType === "script" ? 1 : 0),
+      sources,
+      transferReviewSignal: true
+    });
+  }
+
+  return [...grouped.values()].sort((left, right) =>
+    right.requestCount - left.requestCount || left.host.localeCompare(right.host)
+  ).slice(0, 50);
+}
+
 function cookieName(row: Record<string, unknown>) {
   return firstString(row.cookieName, row.name);
 }
@@ -2556,6 +2645,67 @@ function summarizeCollectionSurfaces(bundle: CanonicalEvidenceBundle) {
   };
 }
 
+export function deriveSensitiveThirdPartyTrackingCorrelation(input: {
+  collectionSurfaceObservations: Array<Record<string, unknown>> | null;
+  requestPurposeRows: Array<Record<string, unknown>>;
+  runtimeCoverageRetained: boolean;
+}) {
+  const inventoryRetained = Array.isArray(input.collectionSurfaceObservations);
+  const sensitiveRows = (input.collectionSurfaceObservations ?? []).filter((row) => row.hasSensitiveFieldHint === true);
+  const contextKey = (value: unknown) => {
+    const url = firstString(value);
+    if (!url) return null;
+    try {
+      const parsed = new URL(url);
+      return `${parsed.hostname.toLowerCase()}${parsed.pathname.replace(/\/$/, "") || "/"}`;
+    } catch {
+      return null;
+    }
+  };
+  const sensitiveContextKeys = new Set(sensitiveRows.map((row) => contextKey(row.pageUrl)).filter(Boolean));
+  const samePageTrackingRows = input.requestPurposeRows.filter((row) => {
+    const key = contextKey(row.pageUrl);
+    return Boolean(key && sensitiveContextKeys.has(key));
+  });
+  const coverageUsable = inventoryRetained && input.runtimeCoverageRetained;
+  const labels = uniqueStrings(sensitiveRows.flatMap((row) =>
+    Array.isArray(row.labels) ? row.labels.filter((value): value is string => typeof value === "string") : []
+  )).slice(0, 12);
+  const fieldTypes = uniqueStrings(sensitiveRows.flatMap((row) =>
+    Array.isArray(row.fieldTypes) ? row.fieldTypes.filter((value): value is string => typeof value === "string") : []
+  )).slice(0, 12);
+  const sensitiveFormUrls = uniqueStrings(sensitiveRows.map((row) => firstString(row.pageUrl))).slice(0, 5);
+  const trackingVendors = uniqueStrings(samePageTrackingRows.map((row) => firstString(row.vendor, row.vendorName))).slice(0, 8);
+  const trackingDomains = uniqueStrings(samePageTrackingRows.map((row) => firstString(row.hostname))).slice(0, 8);
+  const trackingCategories = uniqueStrings(samePageTrackingRows.map((row) => firstString(row.category))).slice(0, 8);
+
+  return {
+    analyticsObserved: trackingCategories.some((category) => /analytics|measurement/i.test(category)),
+    correlationMethod: "direct",
+    coverageStatus: coverageUsable ? "usable" : "limited",
+    directVsInferred: "direct",
+    eligibleSensitiveFieldCount: sensitiveRows.length,
+    eligibleSensitiveFieldObserved: sensitiveRows.length > 0,
+    evidenceConfidence: coverageUsable ? "moderate" : "low",
+    evidenceStrengthFlags: coverageUsable ? ["direct_runtime"] : ["coverage_limited"],
+    highSensitivityDataCollectionDetected: sensitiveRows.length > 0,
+    rawSensitiveFieldCount: sensitiveRows.length,
+    samePageOrFlow: samePageTrackingRows.length > 0,
+    samePageTrackingObserved: samePageTrackingRows.length > 0,
+    sensitiveCollectionSurfaceObserved: sensitiveRows.length > 0,
+    sensitiveFieldLabels: labels,
+    sensitiveFieldTypes: fieldTypes,
+    sensitiveFormUrls,
+    status: coverageUsable ? "ok" : "limited",
+    tagManagerObserved: trackingCategories.some((category) => /tag[_ -]?manager/i.test(category)),
+    thirdPartyTrackingActiveInSameContext: samePageTrackingRows.length > 0,
+    thirdPartyTrackingCategories: trackingCategories,
+    thirdPartyTrackingDomains: trackingDomains,
+    thirdPartyTrackingRequestCount: samePageTrackingRows.length,
+    thirdPartyTrackingVendors: trackingVendors
+  };
+}
+
 function summarizeTransportSecurity(bundle: CanonicalEvidenceBundle) {
   const observation = (bundle.transportSecurityObservations ?? [])[0] ?? null;
   if (!observation) {
@@ -3442,8 +3592,23 @@ function buildMaterializedLocalV2Detail(
         : null;
     })
     .filter((row) => row !== null) as Array<Record<string, unknown>>);
+  const endpointJurisdictionEvidence = deriveEndpointJurisdictionEvidence(
+    networkEvents as Array<Record<string, unknown>>,
+    reportableVendorRows.map((vendor) => ({
+      category: vendor.vendorCategory,
+      hostnames: vendor.matchedHostnames,
+      vendorName: vendor.vendorName
+    }))
+  );
   const boundedRequestPurposeRows = selectBoundedPreconsentRequestPurposeRows(requestPurposeRows, 50);
   const promotionGradeRequestPurposeRows = boundedRequestPurposeRows.filter(isPromotionGradePreconsentRequestRow);
+  const sensitiveThirdPartyTrackingCorrelation = deriveSensitiveThirdPartyTrackingCorrelation({
+    collectionSurfaceObservations: Array.isArray(bundle.collectionSurfaceObservations)
+      ? bundle.collectionSurfaceObservations as Array<Record<string, unknown>>
+      : null,
+    requestPurposeRows: promotionGradeRequestPurposeRows,
+    runtimeCoverageRetained: runtimeCountsRetained
+  });
   const promotionGradePreconsentRequestUrls = uniqueStrings(
     promotionGradeRequestPurposeRows.map((row) => firstString(row.requestUrl)).filter(Boolean)
   );
@@ -3584,6 +3749,8 @@ function buildMaterializedLocalV2Detail(
       timestampMs: event.timestampMs,
       url: requestUrl(event)
     })),
+    endpointJurisdictionEvidence,
+    sensitiveThirdPartyTrackingCorrelation,
     requestPurposeClassificationConfidence: boundedRequestPurposeRows,
     requestToVendorObservations: reportableVendorRows.map((vendor) => ({
       category: vendor.vendorCategory,

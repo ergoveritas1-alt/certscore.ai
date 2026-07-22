@@ -4663,6 +4663,36 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats direct same-context sensit
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes consumes typed hybrid sensitive tracking correlation", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        sensitiveThirdPartyTrackingCorrelation: {
+          coverageStatus: "usable",
+          correlationMethod: "direct",
+          directVsInferred: "direct",
+          eligibleSensitiveFieldCount: 1,
+          evidenceConfidence: "moderate",
+          highSensitivityDataCollectionDetected: true,
+          samePageTrackingObserved: true,
+          sensitiveFieldLabels: ["Medical condition"],
+          sensitiveFormUrls: ["https://example.com/appointment"],
+          status: "ok",
+          thirdPartyTrackingCategories: ["analytics"],
+          thirdPartyTrackingVendors: ["Google Analytics"]
+        }
+      }
+    }
+  });
+
+  assert.equal(outcomes.sensitive_surfaces_third_party_tracking?.status, "Gap observed");
+  assert.match(
+    outcomes.sensitive_surfaces_third_party_tracking?.limitation ?? "",
+    /sensitive or high-risk collection surface/i
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps footer ad-choice controls as post-choice review signals", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

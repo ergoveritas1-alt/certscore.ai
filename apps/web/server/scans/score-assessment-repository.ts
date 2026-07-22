@@ -1,6 +1,6 @@
 "use server";
 
-import { queryOne } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 
 export type VersionedScoreAssessmentInput = {
   coverageConfidence: "high" | "medium" | "low" | "insufficient";
@@ -21,7 +21,34 @@ type VersionedScoreAssessmentRow = {
   id: string;
 };
 
+export type StoredVersionedScoreAssessment = {
+  coverageConfidence: VersionedScoreAssessmentInput["coverageConfidence"];
+  coverageRatio: number;
+  scanId: string;
+  scoreKind: VersionedScoreAssessmentInput["scoreKind"];
+  scoreSource: string;
+  scoreStatus: "scored" | "withheld";
+  scoreValue: number | null;
+  scoreVersion: string;
+  scoredAt: string;
+  withholdingReason: string | null;
+};
+
+type StoredVersionedScoreAssessmentRow = {
+  coverage_confidence: StoredVersionedScoreAssessment["coverageConfidence"];
+  coverage_ratio: string | number;
+  scan_id: string;
+  score_kind: StoredVersionedScoreAssessment["scoreKind"];
+  score_source: string;
+  score_status: StoredVersionedScoreAssessment["scoreStatus"];
+  score_value: number | null;
+  score_version: string;
+  scored_at: string;
+  withholding_reason: string | null;
+};
+
 const MAX_INPUT_FINDING_IDS = 256;
+const MAX_SCAN_IDS = 2_000;
 
 function assertBoundedText(value: string, label: string, maxLength: number) {
   const trimmed = value.trim();
@@ -123,4 +150,43 @@ export async function persistVersionedScoreAssessment(input: VersionedScoreAsses
     id: inserted?.id ?? null,
     inserted: inserted !== null
   };
+}
+
+export async function loadLatestVersionedScoreAssessments(input: {
+  scanIds: string[];
+  scoreKind: VersionedScoreAssessmentInput["scoreKind"];
+}) {
+  const scanIds = [...new Set(input.scanIds)].slice(0, MAX_SCAN_IDS);
+  if (scanIds.length === 0) return new Map<string, StoredVersionedScoreAssessment>();
+  const result = await query<StoredVersionedScoreAssessmentRow>(
+    `select distinct on (scan_id)
+            scan_id::text,
+            score_kind,
+            score_version,
+            score_source,
+            score_status,
+            score_value,
+            coverage_ratio,
+            coverage_confidence,
+            withholding_reason,
+            scored_at::text
+       from public.scan_score_assessments
+      where scan_id = any($1::uuid[])
+        and score_kind = $2
+      order by scan_id, scored_at desc, created_at desc`,
+    [scanIds, input.scoreKind],
+    { readOnly: true }
+  );
+  return new Map(result.rows.map((row) => [row.scan_id, {
+    coverageConfidence: row.coverage_confidence,
+    coverageRatio: Number(row.coverage_ratio),
+    scanId: row.scan_id,
+    scoreKind: row.score_kind,
+    scoreSource: row.score_source,
+    scoreStatus: row.score_status,
+    scoreValue: row.score_value,
+    scoreVersion: row.score_version,
+    scoredAt: row.scored_at,
+    withholdingReason: row.withholding_reason
+  }]));
 }

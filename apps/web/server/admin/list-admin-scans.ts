@@ -33,6 +33,7 @@ import { projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
 import { requirePlatformAdminContext } from "./platform-admin";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
+import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
 
 export type AdminScanListItem = {
   accessPostureClass: AccessPostureClass | null;
@@ -45,6 +46,12 @@ export type AdminScanListItem = {
   noGoReason: string | null;
   noGoSource: AdminNoGoProjection["source"];
   certscoreOverall: number | null;
+  scoreCoverageConfidence: "high" | "medium" | "low" | "insufficient" | null;
+  scoreCoverageRatio: number | null;
+  scoreLabel: "GDPR/ePrivacy evidence" | "Legacy scan score" | null;
+  scoreScoredAt: string | null;
+  scoreSource: string | null;
+  scoreVersion: string | null;
   cmpVendorName: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -159,7 +166,13 @@ export async function listAdminScansPage(
     runtimeArtifacts,
     scanRows
   } = scanPageData;
-  const pulseAttributionRows = await loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id), null);
+  const [pulseAttributionRows, scoreAssessmentMap] = await Promise.all([
+    loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id), null),
+    loadLatestVersionedScoreAssessments({
+      scanIds: scanRows.map((scan) => scan.id),
+      scoreKind: "gdpr_eprivacy_evidence"
+    })
+  ]);
   const pulseAttributionMap = new Map(pulseAttributionRows.map((row) => [row.scan_id, row] as const));
 
   const domainMap = new Map(domains.flatMap((domain) => (domain.id ? [[domain.id, domain] as const] : [])));
@@ -235,6 +248,10 @@ export async function listAdminScansPage(
       snapshotOutcome: snapshot?.scan_outcome,
       visualAccessReview: runtimeArtifact?.visual_access_review
     });
+    const scoreAssessment = scoreAssessmentMap.get(scan.id) ?? null;
+    const displayedScore = scoreAssessment
+      ? scoreAssessment.scoreValue
+      : snapshot?.certscore_overall ?? null;
 
     return {
       activityAt: displayCreatedAt,
@@ -273,12 +290,22 @@ export async function listAdminScansPage(
       startedAt: scan.started_at,
       pagesScanned: scan.pages_scanned,
       totalSignals: snapshot?.total_signals ?? null,
-      topFindingCount: snapshot?.certscore_overall === null || snapshot?.certscore_overall === undefined
+      topFindingCount: displayedScore === null
         ? null
-        : snapshot.top_finding_count ?? null,
+        : snapshot?.top_finding_count ?? null,
       findingCount: snapshot?.report_finding_count ?? null,
       freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? pulseAttribution?.request_context ?? null),
-      certscoreOverall: snapshot?.certscore_overall ?? null,
+      certscoreOverall: displayedScore,
+      scoreCoverageConfidence: scoreAssessment?.coverageConfidence ?? null,
+      scoreCoverageRatio: scoreAssessment?.coverageRatio ?? null,
+      scoreLabel: scoreAssessment
+        ? "GDPR/ePrivacy evidence"
+        : displayedScore !== null
+          ? "Legacy scan score"
+          : null,
+      scoreScoredAt: scoreAssessment?.scoredAt ?? null,
+      scoreSource: scoreAssessment?.scoreSource ?? (displayedScore !== null ? "legacy.scan-snapshot" : null),
+      scoreVersion: scoreAssessment?.scoreVersion ?? null,
       cmpVendorName: snapshot?.cmp_vendor_name ?? null,
       privacyPolicyPresent: snapshot?.privacy_policy_present ?? null,
       primaryLanguage: primaryLanguage?.locale ?? null,
@@ -357,6 +384,12 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     noGoReason: linkedScan?.noGoReason ?? null,
     noGoSource: linkedScan?.noGoSource ?? null,
     certscoreOverall: linkedScan?.certscoreOverall ?? null,
+    scoreCoverageConfidence: linkedScan?.scoreCoverageConfidence ?? null,
+    scoreCoverageRatio: linkedScan?.scoreCoverageRatio ?? null,
+    scoreLabel: linkedScan?.scoreLabel ?? null,
+    scoreScoredAt: linkedScan?.scoreScoredAt ?? null,
+    scoreSource: linkedScan?.scoreSource ?? null,
+    scoreVersion: linkedScan?.scoreVersion ?? null,
     cmpVendorName: linkedScan?.cmpVendorName ?? null,
     completedAt: request.reused_completed_at,
     createdAt: request.requested_at,

@@ -52,8 +52,6 @@ test("deriveCertScoreFindings now returns metrics without surfaced findings", ()
 
   assert.deepEqual(summary.findings, []);
   assert.deepEqual(summary.groupedFindings, []);
-  assert.equal(summary.posture, "Action Needed");
-  assert.equal(summary.score, 42);
   assert.equal(summary.finalHost, "fojik.site");
   assert.equal(summary.landedOnDifferentHost, true);
   assert.equal(summary.thirdPartyRequestCount, 124);
@@ -207,46 +205,4 @@ test("deriveCertScoreFindings preserves landed-host attribution and host alias h
 
   assert.equal(alias.finalHost, "www.google.com");
   assert.equal(alias.landedOnDifferentHost, false);
-});
-
-test("deriveCertScoreFindings derives score-based posture when no executive findings are returned", () => {
-  const clear = deriveCertScoreFindings({
-    runtimeArtifacts: null,
-    snapshot: {
-      certscore_overall: 88
-    },
-    scan: {
-      completedAt: "2026-04-23T20:27:18.000Z",
-      createdAt: "2026-04-23T20:27:00.000Z",
-      domainHostname: "example.com"
-    }
-  });
-
-  const watch = deriveCertScoreFindings({
-    runtimeArtifacts: null,
-    snapshot: {
-      certscore_overall: 60
-    },
-    scan: {
-      completedAt: "2026-04-23T20:27:18.000Z",
-      createdAt: "2026-04-23T20:27:00.000Z",
-      domainHostname: "example.com"
-    }
-  });
-
-  const actionNeeded = deriveCertScoreFindings({
-    runtimeArtifacts: null,
-    snapshot: {
-      certscore_overall: 32
-    },
-    scan: {
-      completedAt: "2026-04-23T20:27:18.000Z",
-      createdAt: "2026-04-23T20:27:00.000Z",
-      domainHostname: "example.com"
-    }
-  });
-
-  assert.equal(clear.posture, "Clear");
-  assert.equal(watch.posture, "Watch");
-  assert.equal(actionNeeded.posture, "Action Needed");
 });

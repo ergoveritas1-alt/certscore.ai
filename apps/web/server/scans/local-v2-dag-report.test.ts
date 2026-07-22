@@ -42,6 +42,122 @@ test("getLocalV2PrimaryLanguage ranks declared, retained text, and URL evidence"
   } as unknown as CanonicalEvidenceBundle), "de");
 });
 
+test("deriveEndpointJurisdictionEvidence materializes bounded typed geography without query values", async () => {
+  const { deriveEndpointJurisdictionEvidence } = await loadLocalV2DagReport();
+  const rows = deriveEndpointJurisdictionEvidence([
+    {
+      collectionEndpointObserved: true,
+      endpointGeographyBasis: ["host_only_endpoint_geography", "aws_region_hostname"],
+      endpointGeographyJurisdiction: "US",
+      endpointGeographyLocationLabel: "AWS US West (Oregon)",
+      endpointGeographyPrecision: "provider_region",
+      endpointGeographyRegion: "us-west-2",
+      endpointGeographyStatus: "region_observed",
+      hostname: "collector.us-west-2.example.net",
+      requestUrl: "https://collector.us-west-2.example.net/collect?email=private@example.com",
+      resourceType: "script",
+      thirdParty: true
+    },
+    {
+      collectionEndpointObserved: true,
+      endpointGeographyJurisdiction: "US",
+      endpointGeographyPrecision: "provider_region",
+      endpointGeographyRegion: "us-west-2",
+      endpointGeographyStatus: "region_observed",
+      hostname: "collector.us-west-2.example.net",
+      requestUrl: "https://collector.us-west-2.example.net/event?account=secret",
+      thirdParty: true
+    },
+    {
+      collectionEndpointObserved: false,
+      endpointGeographyRegion: "us-west-2",
+      endpointGeographyStatus: "region_observed",
+      hostname: "static.us-west-2.example.net",
+      thirdParty: true
+    }
+  ], [{
+    category: "analytics",
+    hostnames: ["example.net"],
+    vendorName: "Example Analytics"
+  }]);
+
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0], {
+    confidence: "high",
+    etldPlusOne: "example.net",
+    firstPartyStatus: "third_party",
+    host: "collector.us-west-2.example.net",
+    inferenceBasis: "host_only_endpoint_geography+aws_region_hostname",
+    inferredCountryCode: "US",
+    inferredRegion: "us-west-2",
+    locationLabel: "AWS US West (Oregon)",
+    matchedVendorCategory: "analytics",
+    matchedVendorName: "Example Analytics",
+    requestCount: 2,
+    samplePaths: ["/collect", "/event"],
+    scriptCount: 1,
+    sources: ["request", "script"],
+    transferReviewSignal: true
+  });
+  assert.doesNotMatch(JSON.stringify(rows), /private@example|account=secret/);
+});
+
+test("deriveEndpointJurisdictionEvidence requires direct third-party collection geography", async () => {
+  const { deriveEndpointJurisdictionEvidence } = await loadLocalV2DagReport();
+  assert.deepEqual(deriveEndpointJurisdictionEvidence([
+    {
+      collectionEndpointObserved: true,
+      endpointGeographyRegion: "us-west-2",
+      endpointGeographyStatus: "unknown",
+      hostname: "unknown.example",
+      thirdParty: true
+    },
+    {
+      collectionEndpointObserved: true,
+      endpointGeographyRegion: "us-west-2",
+      endpointGeographyStatus: "region_observed",
+      hostname: "first-party.example",
+      thirdParty: false
+    }
+  ]), []);
+});
+
+test("deriveSensitiveThirdPartyTrackingCorrelation requires same-page promotion-grade tracking", async () => {
+  const { deriveSensitiveThirdPartyTrackingCorrelation } = await loadLocalV2DagReport();
+  const correlated = deriveSensitiveThirdPartyTrackingCorrelation({
+    collectionSurfaceObservations: [{
+      fieldTypes: ["text"],
+      hasSensitiveFieldHint: true,
+      labels: ["Medical condition"],
+      pageUrl: "https://example.com/appointment?step=1"
+    }],
+    requestPurposeRows: [
+      { category: "analytics", hostname: "analytics.example.net", pageUrl: "https://example.com/appointment?step=1", vendor: "Example Analytics" },
+      { category: "advertising", hostname: "ads.example.net", pageUrl: "https://example.com/home", vendor: "Example Ads" }
+    ],
+    runtimeCoverageRetained: true
+  });
+
+  assert.equal(correlated.status, "ok");
+  assert.equal(correlated.samePageTrackingObserved, true);
+  assert.equal(correlated.thirdPartyTrackingRequestCount, 1);
+  assert.deepEqual(correlated.thirdPartyTrackingVendors, ["Example Analytics"]);
+  assert.deepEqual(correlated.sensitiveFormUrls, ["https://example.com/appointment?step=1"]);
+});
+
+test("deriveSensitiveThirdPartyTrackingCorrelation records a checked negative when inventory and runtime coverage are usable", async () => {
+  const { deriveSensitiveThirdPartyTrackingCorrelation } = await loadLocalV2DagReport();
+  const correlation = deriveSensitiveThirdPartyTrackingCorrelation({
+    collectionSurfaceObservations: [],
+    requestPurposeRows: [{ category: "analytics", pageUrl: "https://example.com/", vendor: "Analytics" }],
+    runtimeCoverageRetained: true
+  });
+
+  assert.equal(correlation.status, "ok");
+  assert.equal(correlation.eligibleSensitiveFieldCount, 0);
+  assert.equal(correlation.samePageTrackingObserved, false);
+});
+
 test("getLocalV2FinalDocumentUrl prefers retained final-page evidence after a cross-domain redirect", async () => {
   const { getLocalV2FinalDocumentUrl, isThirdPartyRuntimeEventForDocument } = await loadLocalV2DagReport();
   assert.equal(getLocalV2FinalDocumentUrl({
@@ -5117,7 +5233,7 @@ test("materializeLocalV2DagScanDetail marks failed pre-consent runtime without s
   }
 });
 
-test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable when runtime counts are limited", async () => {
+test("materializeLocalV2DagScanDetail withholds consent choice quality when fallback control inventory is incomplete", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
   const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/fallback-consent-controls-"));
@@ -5329,9 +5445,9 @@ test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable 
       unifiedFindings: projectedFindings
     });
     const choiceQuality = checklist.find((item) => item.id === "consent_choice_quality");
-    assert.equal(choiceQuality?.status, "Not observed");
-    assert.equal(choiceQuality?.evidenceState, "not_observed");
-    assert.match(choiceQuality?.limitation ?? "", /No obvious cookie-banner dark-pattern signal/i);
+    assert.equal(choiceQuality?.status, "Not confirmed");
+    assert.equal(choiceQuality?.evidenceState, "not_testable");
+    assert.match(choiceQuality?.explanation ?? "", /control inventory was incomplete/i);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

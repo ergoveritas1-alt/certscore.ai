@@ -1,0 +1,59 @@
+# Current score producer and consumer audit
+
+Status: active remediation, 2026-07-21. The customer-facing replacement remains pending Luna calibration approval.
+
+## Decision
+
+CertScore does not currently support a defensible cross-domain overall score. The customer headline is therefore a `GDPR/ePrivacy evidence` score when a versioned evidence assessment exists. Older snapshot values retain their historical meaning and are labeled `Legacy scan score`; they are not relabeled as GDPR/ePrivacy evidence.
+
+Risk and coverage are separate. Coverage can withhold a risk score, but missing evidence must not be converted into observed risk. Accessibility, consumer-protection, financial-promotion, transport/security, California, and GDPR/ePrivacy results remain separate domains unless Luna approves a calibrated overall model.
+
+## Producers
+
+| Producer | Meaning | Current disposition |
+| --- | --- | --- |
+| `deriveRegulatoryCoverageScore` | Legacy GDPR/ePrivacy evidence-checklist score | Customer/Pulse legacy model. Explicit source/version and coverage metadata. Persisted once at scan completion for new Lambda and browser scans. Replacement candidate remains shadow-only. |
+| Canonical shadow scorer | Candidate GDPR/ePrivacy observed-risk posture plus coverage | Internal only, versioned, bounded, non-persistent, pending Luna. Consumes projected findings/checklist rows only. |
+| Local v2 DAG snapshot heuristic | Raw pre-consent request/cookie heuristic stored in `scan_snapshots` | Legacy compatibility field only. Must not be presented as the versioned GDPR/ePrivacy score and must not become a cutover input. |
+| Browser-extension snapshot heuristic | Raw browser signal heuristic stored in `scan_snapshots` | Legacy compatibility field only. Same restriction as the Lambda snapshot heuristic. |
+| Preview snapshot SQL and preview payload | Historical preview score family | Legacy preview behavior. Keep isolated from full-scan canonical scoring and label as preview/legacy where shown. |
+| Regulatory risk assessment and section scores | Domain-specific review context | Not an overall score. Preserve as separately named internal/domain metrics. |
+| Removed executive display formula | Display-only blend of stored score, consent/privacy subscores, and financial findings | Deleted. It had no active caller but violated the canonical pipeline and could have recreated an unversioned overall score. |
+| Removed presentation-summary score/posture | Snapshot-derived score bands in a metrics-only helper | Deleted. No caller consumed the fields, and keeping them would have left a latent second posture engine. |
+
+## Consumers
+
+| Surface | Required source and label |
+| --- | --- |
+| Full report | GDPR/ePrivacy evidence score derived from canonical checklist projection; explicit coverage/source/version metadata; no write during render. |
+| Pulse | Same GDPR/ePrivacy evidence assessment and metadata as the report. No snapshot substitution when the evidence score is withheld. |
+| Customer dashboard and scan history | Latest immutable versioned assessment when available. Label `GDPR/ePrivacy evidence`; otherwise label historical snapshot values `Legacy scan score`. |
+| Admin scan list | Same precedence as customer dashboard, with source/version/coverage available for inspection. |
+| Admin summary | Report/Pulse projection first, snapshot fallback only as explicitly legacy. Read/materialization must never update canonical score fields. |
+| Exports | Must carry score kind, source, version, scored time, coverage ratio/confidence, status, and withholding reason with any numeric score. |
+
+## Historical storage contract
+
+`scan_score_assessments` is immutable by `(scan_id, score_kind, score_version)`. It stores the score separately from coverage, source, version, scoring time, surfaced finding IDs, a bounded projection fingerprint, and an explicit withholding reason. A change in meaning requires a new version. Report reads never create or replace score history.
+
+Completion-time persistence is best-effort for scan availability: persistence failure is logged and monitored but does not convert a completed scan into a failed scan. Reprocessing the same version is idempotent.
+
+## Candidate-v2 corrections
+
+- Policy extraction is coverage evidence, not observed risk.
+- Surfaced sensitive-data findings are risk eligible and high-severity evidence can cap posture at 49.
+- Risk families are explicit: consent/tracking, contradiction, rights gaps, and sensitive data.
+- All 39 coverage rows retain explicit weights; missing and stale registry entries fail validation.
+- A no-finding score is withheld below 90% coverage; a finding-bearing score is withheld below 70% coverage.
+- Finding-family deduplication, monotonicity, critical caps, bounded artifacts, and contradiction checks are mandatory.
+
+## Open evidence and calibration gates
+
+1. `post_reject_tracking_reduction` is structurally unavailable because consent clicking is intentionally disabled. Luna must approve an explicit capability/applicability treatment; the threshold must not be lowered to hide it.
+2. Endpoint geography now materializes into bounded WC01 typed endpoint-jurisdiction evidence without query values. Deployment and owned-canary validation remain open.
+3. Sensitive-surface tracking now requires same-page correlation between typed field observations and promotion-grade third-party request-purpose rows. Deployment and source-equivalence validation remain open; scan-wide co-occurrence is rejected.
+4. Consent-control accessibility needs actual retained accessibility issue evidence; accessibility-tree discovery alone does not prove accessibility quality.
+5. The governed public calibration selector correctly failed closed: all registry targets are currently unavailable because of cooldown or exclusion. No fixed-site or latest-scan substitute is permitted.
+6. Luna must approve the corpus, benchmarks, bands, weights, penalties, caps, thresholds, expected-band review, and production cutover.
+
+Until all gates pass, candidate-v2 remains internal shadow output. If calibration cannot support an overall score, CertScore will continue to expose separate domain scores and coverage confidence and will withhold an overall score.

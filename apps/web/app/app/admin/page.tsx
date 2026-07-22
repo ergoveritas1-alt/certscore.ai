@@ -133,7 +133,7 @@ export default async function AdminOverviewPage() {
                   {scan.organizationName ?? "Unknown workspace"} · {scan.scanType} · {scan.status} · Scan from {scan.scanFromLabel}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Score {scan.certscoreOverall !== null ? `${scan.certscoreOverall}/100` : "—"} · Top {scan.topFindingCount ?? "—"} ·{" "}
+                  {scan.scoreLabel ?? "Score"} {scan.certscoreOverall !== null ? `${scan.certscoreOverall}/100` : "—"} · Top {scan.topFindingCount ?? "—"} ·{" "}
                   Privacy {scan.privacyPolicyPresent === true ? "✓" : scan.privacyPolicyPresent === false ? "—" : "?"} · CMP {scan.cmpVendorName ?? "—"}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">

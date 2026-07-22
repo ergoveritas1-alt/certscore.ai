@@ -730,6 +730,21 @@ export async function completeBrowserScanSession(input: {
     });
   }
 
+  try {
+    const { persistCompletedLegacyGdprEprivacyAssessment } = await import("../scans/score-assessment-lifecycle");
+    await persistCompletedLegacyGdprEprivacyAssessment({
+      organizationId: canonicalScan?.organization_id ?? null,
+      scanId: canonicalScanId
+    });
+  } catch (error) {
+    console.error("[score-assessment] browser completion-time persistence failed", {
+      browserScanId: input.browserScanId,
+      error: error instanceof Error ? error.message : String(error),
+      scanId: canonicalScanId,
+      scoreVersion: "gdpr-eprivacy-evidence.legacy-v1"
+    });
+  }
+
   return { canonicalScanId };
 }
 

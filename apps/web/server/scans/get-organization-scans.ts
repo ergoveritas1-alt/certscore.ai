@@ -10,6 +10,7 @@ import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homep
 import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveDisplayCreatedAt } from "./display-state";
+import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
 import {
   loadOrganizationScanPageData,
   isMissingComplianceChangeEventsTable,
@@ -32,6 +33,12 @@ export type OrganizationScanListItem = {
   domainId: string | null;
   domainLastScannedAt: string | null;
   certscoreOverall: number | null;
+  scoreCoverageConfidence: "high" | "medium" | "low" | "insufficient" | null;
+  scoreCoverageRatio: number | null;
+  scoreLabel: "GDPR/ePrivacy evidence" | "Legacy scan score" | null;
+  scoreScoredAt: string | null;
+  scoreSource: string | null;
+  scoreVersion: string | null;
   regulatoryScore: number | null;
   privacyScore: number | null;
   privacyPolicyPresent: boolean | null;
@@ -370,6 +377,10 @@ async function loadOrganizationScans(
     signalCountMap,
     summaryScanIds
   } = await loadOrganizationScanPageData(organizationId, input);
+  const scoreAssessmentMap = await loadLatestVersionedScoreAssessments({
+    scanIds: scanRows.map((scan) => scan.id),
+    scoreKind: "gdpr_eprivacy_evidence"
+  });
 
   const domainMap = new Map(domains.map((domain) => [domain.id, domain]));
   const domainLastCompletedAtMap = new Map<string, string>();
@@ -491,6 +502,10 @@ async function loadOrganizationScans(
       startedAt: scan.started_at
     });
     const scanFromDisplay = getScanFromDisplay(scan.scan_config_json);
+    const scoreAssessment = scoreAssessmentMap.get(scan.id) ?? null;
+    const displayedScore = scoreAssessment
+      ? scoreAssessment.scoreValue
+      : snapshot?.certscore_overall ?? null;
     return {
         id: scan.id,
         domainActiveScanExists: latestDomainScan?.status === "queued" || latestDomainScan?.status === "running",
@@ -499,7 +514,17 @@ async function loadOrganizationScans(
         domainLastScannedAt:
           (domain?.last_scanned_at ?? scan.display_last_scanned_at ?? (displayDomainId ? domainLastCompletedAtMap.get(displayDomainId) : null)) ??
           null,
-        certscoreOverall: snapshot?.certscore_overall ?? null,
+        certscoreOverall: displayedScore,
+        scoreCoverageConfidence: scoreAssessment?.coverageConfidence ?? null,
+        scoreCoverageRatio: scoreAssessment?.coverageRatio ?? null,
+        scoreLabel: scoreAssessment
+          ? "GDPR/ePrivacy evidence"
+          : displayedScore !== null
+            ? "Legacy scan score"
+            : null,
+        scoreScoredAt: scoreAssessment?.scoredAt ?? null,
+        scoreSource: scoreAssessment?.scoreSource ?? (displayedScore !== null ? "legacy.scan-snapshot" : null),
+        scoreVersion: scoreAssessment?.scoreVersion ?? null,
         regulatoryScore: snapshot?.regulatory_exposure_score ?? null,
         privacyScore: snapshot?.privacy_score ?? null,
         consentScore: snapshot?.consent_score ?? null,

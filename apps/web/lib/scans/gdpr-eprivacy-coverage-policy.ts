@@ -7282,7 +7282,12 @@ function policyTextExtractionLimitationMessage(summary: Record<string, unknown> 
 }
 
 function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
-  const correlation = getEventMetadata(input.events, "sensitive_third_party_tracking_correlation");
+  const correlation =
+    getEventMetadata(input.events, "sensitive_third_party_tracking_correlation") ??
+    getObject(getHybridRuntimeEvidence(input.runtimeArtifacts), [
+      "sensitiveThirdPartyTrackingCorrelation",
+      "sensitive_third_party_tracking_correlation"
+    ]);
   const status = getString(correlation, ["status"]);
   const eligibleSensitiveFieldCount = getNumber(correlation, ["eligibleSensitiveFieldCount"]);
   const rawSensitiveFieldCount = getNumber(correlation, ["rawSensitiveFieldCount"]);

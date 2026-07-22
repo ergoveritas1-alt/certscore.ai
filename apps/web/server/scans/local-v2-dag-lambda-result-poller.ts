@@ -661,6 +661,22 @@ export async function recordLocalV2DagLambdaResultEvent(
       );
     }
   }
+  if (parsedMessage.status === "completed") {
+    try {
+      const { persistCompletedLegacyGdprEprivacyAssessment } = await import("./score-assessment-lifecycle");
+      await persistCompletedLegacyGdprEprivacyAssessment({
+        organizationId: context.organizationId,
+        scanId: parsedMessage.scanId,
+        scoredAt: parsedMessage.completedAt
+      });
+    } catch (error) {
+      console.error("[score-assessment] completion-time persistence failed", {
+        error: error instanceof Error ? error.message : String(error),
+        scanId: parsedMessage.scanId,
+        scoreVersion: "gdpr-eprivacy-evidence.legacy-v1"
+      });
+    }
+  }
 }
 
 export async function handleLocalV2DagLambdaResultMessage(
