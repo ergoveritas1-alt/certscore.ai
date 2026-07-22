@@ -21,6 +21,9 @@ It does not consume raw scanner signals, raw v2 review artifacts, display-only i
 - `observedRiskIndex` records supported risk even when coverage is inadequate.
 - `postureScore` is withheld when coverage, registry completeness, input bounds, or model configuration fails.
 - `coverageRatio` and `coverageConfidence` remain separate from risk.
+- Version 2 comparison artifacts retain a bounded coverage breakdown with explicit
+  covered, limited, and not-applicable row IDs and their configured weights so Luna
+  can review why a score was withheld without consulting raw scanner evidence.
 - Finding siblings are deduplicated at the configured family boundary; the strongest supported severity contributes once per family.
 - Critical caps prevent configured high-severity core findings from coexisting with a misleadingly strong posture score.
 - Posture and action labels are selected from the same score bands.

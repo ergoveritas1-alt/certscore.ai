@@ -1,6 +1,6 @@
 import type { CanonicalShadowScoreResult } from "./canonical-shadow-score";
 
-export const CANONICAL_SHADOW_SCORE_COMPARISON_SCHEMA_VERSION = "canonical-shadow-score-comparison.v1";
+export const CANONICAL_SHADOW_SCORE_COMPARISON_SCHEMA_VERSION = "canonical-shadow-score-comparison.v2";
 
 type LegacyScoreReference = {
   score: number | null;

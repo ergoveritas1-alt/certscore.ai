@@ -48,6 +48,18 @@ export type CanonicalShadowScoreResult = {
   }>;
   contradictions: string[];
   coverageConfidence: "high" | "medium" | "low" | "insufficient";
+  coverageBreakdown: {
+    applicableWeight: number;
+    coveredRowIds: string[];
+    coveredWeight: number;
+    limitedRows: Array<{
+      assessmentStatus: CanonicalShadowCoverageRow["assessmentStatus"];
+      evidenceState: CanonicalShadowCoverageRow["evidenceState"];
+      rowId: string;
+      weight: number;
+    }>;
+    notApplicableRowIds: string[];
+  };
   coverageRatio: number;
   cutoverEligible: boolean;
   familyContributions: Array<{
@@ -212,6 +224,7 @@ export function deriveCanonicalShadowScore(input: {
   const boundedCoverageRows = [...new Map(sortedCoverageRows.map((row) => [row.rowId, row] as const)).values()];
   const applicableRows = boundedCoverageRows.filter((row) => row.assessmentStatus !== "not_applicable");
   const coveredRows = applicableRows.filter((row) => !isCoverageLimited(row));
+  const limitedRows = applicableRows.filter(isCoverageLimited);
   const applicableCoverageWeight = applicableRows.reduce(
     (total, row) => total + (input.model.coverageRowWeights[row.rowId] ?? 0),
     0
@@ -321,6 +334,21 @@ export function deriveCanonicalShadowScore(input: {
     actionLabel: finalPostureScore === null ? null : postureBand?.actionLabel ?? null,
     appliedCaps,
     contradictions,
+    coverageBreakdown: {
+      applicableWeight: applicableCoverageWeight,
+      coveredRowIds: coveredRows.map((row) => row.rowId).sort(),
+      coveredWeight: coveredCoverageWeight,
+      limitedRows: limitedRows.map((row) => ({
+        assessmentStatus: row.assessmentStatus,
+        evidenceState: row.evidenceState,
+        rowId: row.rowId,
+        weight: input.model.coverageRowWeights[row.rowId] ?? 0
+      })),
+      notApplicableRowIds: boundedCoverageRows
+        .filter((row) => row.assessmentStatus === "not_applicable")
+        .map((row) => row.rowId)
+        .sort()
+    },
     coverageConfidence: coverageConfidence(coverageRatio, applicableRows.length),
     coverageRatio,
     cutoverEligible: input.model.approvalStatus === "approved_by_luna" && contradictions.length === 0 && finalPostureScore !== null,

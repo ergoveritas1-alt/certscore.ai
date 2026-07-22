@@ -49,7 +49,7 @@ test("comparison artifact preserves version provenance and a bounded score delta
     delta: 13,
     status: "candidate_higher"
   });
-  assert.equal(artifact.schemaVersion, "canonical-shadow-score-comparison.v1");
+  assert.equal(artifact.schemaVersion, "canonical-shadow-score-comparison.v2");
   assert.equal(artifact.context.region, "eu-west-1");
   assert.equal(artifact.legacy.scoreVersion, "gdpr-eprivacy-evidence.legacy-v1");
 });

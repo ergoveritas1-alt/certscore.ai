@@ -108,7 +108,39 @@ test("coverage limits withhold posture score without erasing observed risk", () 
   assert.equal(result.observedRiskIndex, 30);
   assert.equal(result.postureScore, null);
   assert.equal(result.coverageConfidence, "low");
+  assert.deepEqual(result.coverageBreakdown, {
+    applicableWeight: 2,
+    coveredRowIds: ["consent_surface_observed"],
+    coveredWeight: 1,
+    limitedRows: [{
+      assessmentStatus: "coverage_limitation",
+      evidenceState: "not_testable",
+      rowId: "reject_all_path_availability",
+      weight: 1
+    }],
+    notApplicableRowIds: []
+  });
   assert.deepEqual(result.withheldReasons, ["coverage_below_model_threshold"]);
+});
+
+test("coverage breakdown excludes not-applicable rows from the denominator", () => {
+  const result = deriveCanonicalShadowScore({
+    coverageRows: [
+      { assessmentStatus: "checked", evidenceState: "observed", rowId: "privacy_notice_availability" },
+      { assessmentStatus: "not_applicable", evidenceState: "not_applicable", rowId: "reject_all_path_availability" }
+    ],
+    findings: [],
+    model: MODEL
+  });
+
+  assert.equal(result.coverageRatio, 1);
+  assert.deepEqual(result.coverageBreakdown, {
+    applicableWeight: 1,
+    coveredRowIds: ["privacy_notice_availability"],
+    coveredWeight: 1,
+    limitedRows: [],
+    notApplicableRowIds: ["reject_all_path_availability"]
+  });
 });
 
 test("medium coverage cannot produce a posture score when no eligible finding anchors the result", () => {
