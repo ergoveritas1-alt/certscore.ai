@@ -11,6 +11,7 @@ import {
 import { summarizeCanonicalShadowScoreCohort } from "../lib/scans/canonical-shadow-score-cohort";
 import { runCanonicalShadowScore } from "../lib/scans/canonical-shadow-score-run";
 import type { CanonicalShadowScoreModel } from "../lib/scans/canonical-shadow-score";
+import { deriveGdprEprivacyUsableCoverageSummary } from "../lib/scans/gdpr-eprivacy-review-summary";
 
 const MAX_COHORT_SCANS = 100;
 
@@ -129,6 +130,7 @@ async function main() {
         checklistRows: projection.checklistRows,
         unifiedFindings: projection.unifiedFindings
       });
+      const reportUsableCoverage = deriveGdprEprivacyUsableCoverageSummary(projection.checklistRows);
       artifacts.push(runCanonicalShadowScore({
         context: {
           comparisonGroupKey: scan.comparisonGroupKey,
@@ -140,6 +142,11 @@ async function main() {
         generatedAt,
         inputProjectionFingerprint: projectionFingerprint(scoreInput),
         legacy: {
+          coverageConfidence: projection.legacyScoreAssessment.coverageConfidence,
+          coverageRatio: projection.legacyScoreAssessment.coverageRatio,
+          reportInScopeRowCount: reportUsableCoverage.inScopeRowCount,
+          reportUsableEvidenceRatio: reportUsableCoverage.ratio,
+          reportUsableRowCount: reportUsableCoverage.usableRowCount,
           score: projection.legacyScoreAssessment.score,
           scoreKind: projection.legacyScoreAssessment.scoreKind,
           scoreSource: projection.legacyScoreAssessment.scoreSource,

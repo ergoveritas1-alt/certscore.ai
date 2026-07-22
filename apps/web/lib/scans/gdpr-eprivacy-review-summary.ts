@@ -186,6 +186,26 @@ function hasUsableObservedTransparencyEvidence(item: GdprEprivacyCoverageCheckli
   return Boolean(excerpt && isArticle13DisclosureEvidenceUsable(excerpt, disclosureType, { mode: "retained_report" }));
 }
 
+export function deriveGdprEprivacyUsableCoverageSummary(
+  items: GdprEprivacyCoverageChecklistItem[]
+) {
+  const inScopeRows = items.filter((item) => item.assessmentStatus !== "not_applicable");
+  const extractionLimitedTransparencyRows = inScopeRows.filter((item) =>
+    getString(getRetainedEvidence(item), ["signalObserved", "signal_observed"]) === "not_confirmed_extraction_limited"
+  );
+  const usableRows = inScopeRows.filter((item) =>
+    item.evidenceState !== "not_testable" &&
+    item.assessmentStatus !== "coverage_limitation" &&
+    !extractionLimitedTransparencyRows.includes(item) &&
+    hasUsableObservedTransparencyEvidence(item)
+  );
+  return {
+    inScopeRowCount: inScopeRows.length,
+    ratio: inScopeRows.length === 0 ? 0 : usableRows.length / inScopeRows.length,
+    usableRowCount: usableRows.length
+  };
+}
+
 function getRetainedRecord(item: GdprEprivacyCoverageChecklistItem | null, key: string) {
   return asRecord(getRetainedEvidence(item)[key]);
 }
@@ -622,11 +642,7 @@ export function deriveGdprEprivacyReviewSummary(
   const extractionLimitedTransparencyRows = inScopeRows.filter((item) =>
     getString(getRetainedEvidence(item), ["signalObserved", "signal_observed"]) === "not_confirmed_extraction_limited"
   );
-  const usableRows = inScopeRows.filter((item) =>
-    item.evidenceState !== "not_testable" && item.assessmentStatus !== "coverage_limitation"
-    && !extractionLimitedTransparencyRows.includes(item)
-    && hasUsableObservedTransparencyEvidence(item)
-  ).length;
+  const usableCoverage = deriveGdprEprivacyUsableCoverageSummary(items);
   const technicalLimitCount = items.filter((item) =>
     getAssessmentDirection(item) === "technical_limitation"
   ).length;
@@ -643,7 +659,7 @@ export function deriveGdprEprivacyReviewSummary(
 
   return {
     bullets,
-    coverageText: `${usableRows} of ${inScopeRows.length} in-scope rows had usable automated evidence.${technicalLimitCount > 0 ? ` ${technicalLimitCount} technical limit${technicalLimitCount === 1 ? "" : "s"} recorded.` : ""}${extractionLimitedTransparencyRows.length > 0 ? ` Privacy surfaces were reachable, but substantive policy content was not retained; ${extractionLimitedTransparencyRows.length} transparency row${extractionLimitedTransparencyRows.length === 1 ? " remains" : "s remain"} unconfirmed.` : ""}`,
+    coverageText: `${usableCoverage.usableRowCount} of ${usableCoverage.inScopeRowCount} in-scope rows had usable automated evidence.${technicalLimitCount > 0 ? ` ${technicalLimitCount} technical limit${technicalLimitCount === 1 ? "" : "s"} recorded.` : ""}${extractionLimitedTransparencyRows.length > 0 ? ` Privacy surfaces were reachable, but substantive policy content was not retained; ${extractionLimitedTransparencyRows.length} transparency row${extractionLimitedTransparencyRows.length === 1 ? " remains" : "s remain"} unconfirmed.` : ""}`,
     evidenceCards,
     limits: SUMMARY_LIMITS_COPY,
     priorityReviewText: formatPriorityReviewText({ gapCount, partialConcernCount, reviewSignalCount }),

@@ -18,6 +18,11 @@ export type CanonicalShadowScoreRunInput = {
   generatedAt: string;
   inputProjectionFingerprint: string;
   legacy: {
+    coverageConfidence: string;
+    coverageRatio: number;
+    reportInScopeRowCount: number;
+    reportUsableEvidenceRatio: number;
+    reportUsableRowCount: number;
     score: number | null;
     scoreKind: string;
     scoreSource: string;

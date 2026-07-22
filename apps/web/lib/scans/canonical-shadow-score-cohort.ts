@@ -16,7 +16,9 @@ export function summarizeCanonicalShadowScoreCohort(
 ) {
   const scored = artifacts.filter((artifact) => artifact.candidate.postureScore !== null);
   const withheld = artifacts.filter((artifact) => artifact.candidate.postureScore === null);
-  const contradicted = artifacts.filter((artifact) => artifact.candidate.contradictions.length > 0);
+  const contradicted = artifacts.filter((artifact) =>
+    artifact.candidate.contradictions.length > 0 || artifact.comparison.contradictions.length > 0
+  );
   const deltas = artifacts.flatMap((artifact) => artifact.comparison.delta ?? []);
   const groupScores = new Map<string, number[]>();
 
@@ -52,7 +54,10 @@ export function summarizeCanonicalShadowScoreCohort(
     contradictions: {
       count: contradicted.length,
       rate: ratio(contradicted.length, artifacts.length),
-      types: [...new Set(contradicted.flatMap((artifact) => artifact.candidate.contradictions))].sort()
+      types: [...new Set(contradicted.flatMap((artifact) => [
+        ...artifact.candidate.contradictions,
+        ...artifact.comparison.contradictions
+      ]))].sort()
     },
     coverageConfidenceCounts: {
       high: artifacts.filter((artifact) => artifact.candidate.coverageConfidence === "high").length,
@@ -65,7 +70,7 @@ export function summarizeCanonicalShadowScoreCohort(
       maximumScoreRange: crossRegionRanges[0]?.range ?? null,
       ranges: crossRegionRanges.slice(0, 100)
     },
-    cutoverEligibleCount: artifacts.filter((artifact) => artifact.candidate.cutoverEligible).length,
+    cutoverEligibleCount: artifacts.filter((artifact) => artifact.cutoverEligible).length,
     modelVersions: [...new Set(artifacts.map((artifact) => artifact.candidate.modelVersion))].sort(),
     sampleCount: artifacts.length,
     scoredCount: scored.length,

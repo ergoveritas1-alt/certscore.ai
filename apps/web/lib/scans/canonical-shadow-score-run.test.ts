@@ -10,6 +10,11 @@ function input(): CanonicalShadowScoreRunInput {
     generatedAt: "2026-07-22T00:00:00.000Z",
     inputProjectionFingerprint: "sha256:fixture",
     legacy: {
+      coverageConfidence: "high",
+      coverageRatio: 1,
+      reportInScopeRowCount: 1,
+      reportUsableEvidenceRatio: 1,
+      reportUsableRowCount: 1,
       score: 72,
       scoreKind: "gdpr_eprivacy_evidence",
       scoreSource: "wc01.regulatory-coverage-score",

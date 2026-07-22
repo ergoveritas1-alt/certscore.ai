@@ -9,6 +9,7 @@ import {
 } from "../../lib/scans/canonical-shadow-score-input";
 import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL } from "../../lib/scans/canonical-shadow-score-model";
 import { runCanonicalShadowScore } from "../../lib/scans/canonical-shadow-score-run";
+import { deriveGdprEprivacyUsableCoverageSummary } from "../../lib/scans/gdpr-eprivacy-review-summary";
 import { getPublicScanByIdForReadOnlyAnalysis } from "./get-scan-by-id";
 import { materializeLocalV2DagScanDetail } from "./local-v2-dag-report";
 
@@ -35,6 +36,7 @@ export async function buildStoredScanCanonicalShadowScore(scanId: string, genera
     checklistRows: projection.checklistRows,
     unifiedFindings: projection.unifiedFindings
   });
+  const reportUsableCoverage = deriveGdprEprivacyUsableCoverageSummary(projection.checklistRows);
   const domainKey = materializedRecord.scan.domainHostname
     ? hash(materializedRecord.scan.domainHostname.toLowerCase())
     : null;
@@ -50,6 +52,11 @@ export async function buildStoredScanCanonicalShadowScore(scanId: string, genera
     generatedAt,
     inputProjectionFingerprint: projectionFingerprint(scoreInput),
     legacy: {
+      coverageConfidence: projection.legacyScoreAssessment.coverageConfidence,
+      coverageRatio: projection.legacyScoreAssessment.coverageRatio,
+      reportInScopeRowCount: reportUsableCoverage.inScopeRowCount,
+      reportUsableEvidenceRatio: reportUsableCoverage.ratio,
+      reportUsableRowCount: reportUsableCoverage.usableRowCount,
       score: projection.legacyScoreAssessment.score,
       scoreKind: projection.legacyScoreAssessment.scoreKind,
       scoreSource: projection.legacyScoreAssessment.scoreSource,
