@@ -19,6 +19,27 @@ import {
 } from "./score-assessment-repository";
 import { classifyVersionedScoreLifecycleTime } from "./score-assessment-lifecycle-policy";
 
+function scoreLifecyclePhaseError(phase: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(`Score lifecycle ${phase} failed: ${message}`, { cause: error });
+}
+
+async function runScoreLifecyclePhase<T>(phase: string, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    throw scoreLifecyclePhaseError(phase, error);
+  }
+}
+
+function runSynchronousScoreLifecyclePhase<T>(phase: string, operation: () => T): T {
+  try {
+    return operation();
+  } catch (error) {
+    throw scoreLifecyclePhaseError(phase, error);
+  }
+}
+
 export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
   organizationId: string | null;
   scanId: string;
@@ -33,14 +54,16 @@ export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
       return { inserted: false, reason: "score_time_missing_or_invalid" as const };
     }
   }
-  const legacyAlreadyPersisted = await hasVersionedScoreAssessment({
-    scanId: input.scanId,
-    scoreKind: "gdpr_eprivacy_evidence",
-    scoreVersion: LEGACY_GDPR_EPRIVACY_SCORE_VERSION
-  });
-  const rawRecord = input.organizationId
-    ? await getScanById({ organizationId: input.organizationId, scanId: input.scanId })
-    : await getAnonymousScanById(input.scanId);
+  const legacyAlreadyPersisted = await runScoreLifecyclePhase("legacy-existence-check", () =>
+    hasVersionedScoreAssessment({
+      scanId: input.scanId,
+      scoreKind: "gdpr_eprivacy_evidence",
+      scoreVersion: LEGACY_GDPR_EPRIVACY_SCORE_VERSION
+    })
+  );
+  const rawRecord = await runScoreLifecyclePhase("scan-load", () => input.organizationId
+    ? getScanById({ organizationId: input.organizationId, scanId: input.scanId })
+    : getAnonymousScanById(input.scanId));
   if (!rawRecord || rawRecord.scan.status !== "completed") {
     return { inserted: false, reason: "scan_not_completed_or_missing" as const };
   }
@@ -57,17 +80,23 @@ export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
     return { inserted: false, reason: "score_time_missing_or_invalid" as const };
   }
 
-  const scanRecord = await materializeLocalV2DagScanDetail(rawRecord);
-  const projection = buildCanonicalGdprEprivacyShadowProjection(scanRecord);
+  const scanRecord = await runScoreLifecyclePhase("scan-materialization", () =>
+    materializeLocalV2DagScanDetail(rawRecord)
+  );
+  const projection = runSynchronousScoreLifecyclePhase("canonical-projection", () =>
+    buildCanonicalGdprEprivacyShadowProjection(scanRecord)
+  );
   const persisted = legacyAlreadyPersisted
     ? { createdAt: null, id: null, inserted: false }
-    : await persistVersionedScoreAssessment(buildLegacyGdprEprivacyVersionedAssessmentInput({
-        assessment: projection.legacyScoreAssessment,
-        checklistRows: projection.checklistRows,
-        scanId: input.scanId,
-        scoredAt,
-        unifiedFindings: projection.unifiedFindings
-      }));
+    : await runScoreLifecyclePhase("legacy-persistence", () =>
+        persistVersionedScoreAssessment(buildLegacyGdprEprivacyVersionedAssessmentInput({
+          assessment: projection.legacyScoreAssessment,
+          checklistRows: projection.checklistRows,
+          scanId: input.scanId,
+          scoredAt,
+          unifiedFindings: projection.unifiedFindings
+        }))
+      );
 
   let shadowInserted = false;
   let shadowModelVersion: string | null = null;
