@@ -38,7 +38,7 @@ The latest scans and fixed public domain lists are diagnostic inputs only, never
 
 ## Luna decisions required
 
-Luna must approve the corpus, family boundaries, weights, penalties, caps, coverage threshold, posture bands, expected bands, contradiction thresholds, and final cutover. The candidate-v0 JSON is a calibration hypothesis, not an approved model.
+Luna must approve the corpus, family boundaries, weights, penalties, caps, coverage thresholds, posture bands, expected bands, contradiction thresholds, and final cutover. Candidate JSON files are calibration hypotheses, not approved models. Candidate-v1 adds a stricter 0.90 coverage requirement when no eligible surfaced finding anchors the result; the general risk-anchored threshold remains 0.70.
 
 Cutover remains blocked until all of the following are true:
 

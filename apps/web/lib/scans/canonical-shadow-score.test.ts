@@ -11,6 +11,13 @@ import {
 
 const MODEL: CanonicalShadowScoreModel = {
   approvalStatus: "pending_luna",
+  coverageRowWeights: {
+    consent_surface_observed: 1,
+    pre_consent_third_party_tracking: 1,
+    privacy_notice_availability: 1,
+    reject_all_path_availability: 1,
+    retention_disclosure_observed: 1
+  },
   criticalPostureCaps: [{
     capId: "critical-tracking-cap",
     family: "consent_tracking",
@@ -22,6 +29,7 @@ const MODEL: CanonicalShadowScoreModel = {
     contradiction: 30,
     policy_extraction: 15
   },
+  minimumCoverageRatioForNoFindingPostureScore: 0.9,
   minimumCoverageRatioForPostureScore: 0.7,
   postureBands: [
     { actionLabel: "Monitor", minimumScore: 75, posture: "Clear" },
@@ -103,6 +111,41 @@ test("coverage limits withhold posture score without erasing observed risk", () 
   assert.deepEqual(result.withheldReasons, ["coverage_below_model_threshold"]);
 });
 
+test("medium coverage cannot produce a posture score when no eligible finding anchors the result", () => {
+  const result = deriveCanonicalShadowScore({
+    coverageRows: [
+      { assessmentStatus: "checked", evidenceState: "observed", rowId: "privacy_notice_availability" },
+      { assessmentStatus: "checked", evidenceState: "not_observed", rowId: "consent_surface_observed" },
+      { assessmentStatus: "checked", evidenceState: "observed", rowId: "retention_disclosure_observed" },
+      { assessmentStatus: "coverage_limitation", evidenceState: "not_testable", rowId: "reject_all_path_availability" }
+    ],
+    findings: [],
+    model: MODEL
+  });
+
+  assert.equal(result.coverageRatio, 0.75);
+  assert.equal(result.observedRiskIndex, 0);
+  assert.equal(result.postureScore, null);
+  assert.deepEqual(result.withheldReasons, ["coverage_below_no_finding_threshold"]);
+});
+
+test("medium coverage can retain a risk-anchored posture score", () => {
+  const result = deriveCanonicalShadowScore({
+    coverageRows: [
+      { assessmentStatus: "checked", evidenceState: "observed", rowId: "privacy_notice_availability" },
+      { assessmentStatus: "checked", evidenceState: "not_observed", rowId: "consent_surface_observed" },
+      { assessmentStatus: "checked", evidenceState: "observed", rowId: "retention_disclosure_observed" },
+      { assessmentStatus: "coverage_limitation", evidenceState: "not_testable", rowId: "reject_all_path_availability" }
+    ],
+    findings: [finding()],
+    model: MODEL
+  });
+
+  assert.equal(result.coverageRatio, 0.75);
+  assert.equal(result.postureScore, 54);
+  assert.deepEqual(result.withheldReasons, []);
+});
+
 test("critical caps prevent a supported high-severity gap from coexisting with a strong score", () => {
   const result = deriveCanonicalShadowScore({ coverageRows: COVERAGE_ROWS, findings: [finding()], model: MODEL });
 
@@ -137,14 +180,18 @@ test("model audit reports missing, stale, and invalid family configuration", () 
       ...MODEL,
       familyMaximumRiskPoints: { consent_tracking: 101, stale_family: 5 }
     },
+    scoreEligibleCoverageRowIds: Object.keys(MODEL.coverageRowWeights),
     scoreEligibleFamilies: ["consent_tracking", "contradiction"]
   });
 
   assert.deepEqual(audit, {
+    invalidCoverageRowWeights: [],
     invalidGlobalSettings: [],
     invalidPostureBands: [],
     invalidFamilyMaximums: ["consent_tracking"],
+    missingCoverageRows: [],
     missingFamilies: ["contradiction"],
+    staleCoverageRows: [],
     staleFamilies: ["stale_family"]
   });
 });
@@ -164,6 +211,7 @@ test("model audit rejects ambiguous bands, non-monotonic severity points, and un
       ],
       severityRiskPoints: { high: 10, medium: 20, low: 5 }
     },
+    scoreEligibleCoverageRowIds: Object.keys(MODEL.coverageRowWeights),
     scoreEligibleFamilies: Object.keys(MODEL.familyMaximumRiskPoints)
   });
 
@@ -172,6 +220,76 @@ test("model audit rejects ambiguous bands, non-monotonic severity points, and un
     "severityRiskPoints.monotonicity"
   ]);
   assert.deepEqual(audit.invalidPostureBands, ["duplicate_minimum_score", "missing_zero_floor"]);
+});
+
+test("model audit rejects a no-finding coverage threshold below the general threshold", () => {
+  const audit = auditCanonicalShadowScoreModel({
+    model: {
+      ...MODEL,
+      minimumCoverageRatioForNoFindingPostureScore: 0.6
+    },
+    scoreEligibleCoverageRowIds: Object.keys(MODEL.coverageRowWeights),
+    scoreEligibleFamilies: Object.keys(MODEL.familyMaximumRiskPoints)
+  });
+
+  assert.deepEqual(audit.invalidGlobalSettings, ["minimumCoverageRatioForNoFindingPostureScore"]);
+});
+
+test("model audit reports missing, stale, and invalid coverage row weights", () => {
+  const audit = auditCanonicalShadowScoreModel({
+    model: {
+      ...MODEL,
+      coverageRowWeights: {
+        consent_surface_observed: 0,
+        stale_row: 1
+      }
+    },
+    scoreEligibleCoverageRowIds: ["consent_surface_observed", "privacy_notice_availability"],
+    scoreEligibleFamilies: Object.keys(MODEL.familyMaximumRiskPoints)
+  });
+
+  assert.deepEqual(audit.invalidCoverageRowWeights, ["consent_surface_observed"]);
+  assert.deepEqual(audit.missingCoverageRows, ["privacy_notice_availability"]);
+  assert.deepEqual(audit.staleCoverageRows, ["stale_row"]);
+});
+
+test("direct scoring fails closed for invalid coverage row weights", () => {
+  const result = deriveCanonicalShadowScore({
+    coverageRows: COVERAGE_ROWS,
+    findings: [finding()],
+    model: {
+      ...MODEL,
+      coverageRowWeights: {
+        ...MODEL.coverageRowWeights,
+        privacy_notice_availability: 0
+      }
+    }
+  });
+
+  assert.equal(result.postureScore, null);
+  assert.deepEqual(result.withheldReasons, ["invalid_model_configuration"]);
+});
+
+test("coverage uses explicit row weights and duplicate row IDs fail closed", () => {
+  const weightedModel: CanonicalShadowScoreModel = {
+    ...MODEL,
+    coverageRowWeights: {
+      consent_surface_observed: 3,
+      reject_all_path_availability: 1
+    },
+    minimumCoverageRatioForNoFindingPostureScore: 0.7
+  };
+  const rows: CanonicalShadowCoverageRow[] = [
+    { assessmentStatus: "checked", evidenceState: "observed", rowId: "consent_surface_observed" },
+    { assessmentStatus: "coverage_limitation", evidenceState: "not_testable", rowId: "reject_all_path_availability" }
+  ];
+  const weighted = deriveCanonicalShadowScore({ coverageRows: rows, findings: [finding()], model: weightedModel });
+  const duplicate = deriveCanonicalShadowScore({ coverageRows: [...rows, rows[0]!], findings: [finding()], model: weightedModel });
+
+  assert.equal(weighted.coverageRatio, 0.75);
+  assert.equal(weighted.postureScore, 54);
+  assert.equal(duplicate.postureScore, null);
+  assert.deepEqual(duplicate.withheldReasons, ["duplicate_coverage_row_ids:consent_surface_observed"]);
 });
 
 test("the model resolves posture and action label from the same candidate score", () => {

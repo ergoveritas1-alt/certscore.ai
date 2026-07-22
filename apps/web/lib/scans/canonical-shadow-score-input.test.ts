@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
-import { buildCanonicalShadowScoreInput } from "./canonical-shadow-score-input";
+import {
+  getGdprEprivacyCoverageChecklistRowIds,
+  type GdprEprivacyCoverageChecklistItem
+} from "./gdpr-eprivacy-coverage-checklist";
+import {
+  buildCanonicalShadowScoreInput,
+  GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_IDS,
+  GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_REGISTRY
+} from "./canonical-shadow-score-input";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 
 function packet(input: {
@@ -22,12 +29,15 @@ function packet(input: {
 }
 
 test("canonical score input accepts only already-surfaced unified findings and typed checklist rows", () => {
-  const input = buildCanonicalShadowScoreInput({
-    checklistRows: [{
+  const checklistRows = GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_REGISTRY
+    .filter((entry) => entry.required)
+    .map((entry) => ({
       assessmentStatus: "checked",
       evidenceState: "observed",
-      id: "privacy_notice_availability"
-    } as GdprEprivacyCoverageChecklistItem],
+      id: entry.rowId
+    } as GdprEprivacyCoverageChecklistItem));
+  const input = buildCanonicalShadowScoreInput({
+    checklistRows,
     unifiedFindings: [
       packet({ family: "consent_tracking", findingId: "pre_consent_tracking_detected", reportable: true, status: "surface" }),
       packet({ family: "accessibility", findingId: "wcag_contrast", reportable: true, status: "surface" }),
@@ -36,14 +46,49 @@ test("canonical score input accepts only already-surfaced unified findings and t
     ]
   });
 
-  assert.deepEqual(input.coverageRows, [{
+  assert.equal(input.coverageRows.length, checklistRows.length);
+  assert.deepEqual(input.coverageRows.find((row) => row.rowId === "privacy_notice_availability"), {
     assessmentStatus: "checked",
     evidenceState: "observed",
     rowId: "privacy_notice_availability"
-  }]);
+  });
   assert.deepEqual(input.findings, [{
     family: "consent_tracking",
     findingId: "pre_consent_tracking_detected",
     severity: "high"
   }]);
+});
+
+test("the score coverage registry exactly covers canonical GDPR/ePrivacy checklist definitions", () => {
+  assert.deepEqual(
+    [...GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_IDS].sort(),
+    getGdprEprivacyCoverageChecklistRowIds().sort()
+  );
+});
+
+test("canonical score input fails closed for missing, duplicate, or unknown coverage rows", () => {
+  const requiredRows = GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_REGISTRY
+    .filter((entry) => entry.required)
+    .map((entry) => ({
+      assessmentStatus: "checked",
+      evidenceState: "observed",
+      id: entry.rowId
+    } as GdprEprivacyCoverageChecklistItem));
+  const baseInput = { unifiedFindings: [] as UnifiedFindingDisplayPacket[] };
+
+  assert.throws(
+    () => buildCanonicalShadowScoreInput({ ...baseInput, checklistRows: requiredRows.slice(1) }),
+    /registry mismatch: missing:/
+  );
+  assert.throws(
+    () => buildCanonicalShadowScoreInput({ ...baseInput, checklistRows: [...requiredRows, requiredRows[0]!] }),
+    /registry mismatch: duplicate:/
+  );
+  assert.throws(
+    () => buildCanonicalShadowScoreInput({
+      ...baseInput,
+      checklistRows: [...requiredRows, { ...requiredRows[0]!, id: "unreviewed_new_row" }]
+    }),
+    /registry mismatch: unknown:/
+  );
 });

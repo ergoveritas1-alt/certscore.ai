@@ -41,7 +41,9 @@ This was a retained-evidence diagnostic run only. It generated no live traffic, 
 ## Reproduction
 
 ```bash
-pnpm score:shadow:retained-cohort -- --limit 11
+pnpm score:shadow:retained-cohort -- --limit 11 \
+  --model docs/scoring/gdpr-eprivacy-shadow-candidate-v0.json \
+  --out artifacts/scoring/gdpr-eprivacy-shadow-retained-candidate-v0.json
 ```
 
 The generated detailed artifact remains under `artifacts/scoring/` and is intentionally not a production score record.

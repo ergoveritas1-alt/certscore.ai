@@ -17,8 +17,10 @@ function input(): CanonicalShadowScoreRunInput {
     },
     model: {
       approvalStatus: "pending_luna",
+      coverageRowWeights: { privacy_notice_availability: 1 },
       criticalPostureCaps: [],
       familyMaximumRiskPoints: { contradiction: 30 },
+      minimumCoverageRatioForNoFindingPostureScore: 0.7,
       minimumCoverageRatioForPostureScore: 0.7,
       postureBands: [
         { actionLabel: "Monitor", minimumScore: 75, posture: "Clear" },
@@ -29,6 +31,7 @@ function input(): CanonicalShadowScoreRunInput {
       version: "test.pending-luna"
     },
     scanId: "00000000-0000-4000-8000-000000000001",
+    scoreEligibleCoverageRowIds: ["privacy_notice_availability"],
     scoreEligibleFamilies: ["contradiction"]
   };
 }
@@ -47,4 +50,3 @@ test("shadow score run rejects incomplete Luna family configuration", () => {
 
   assert.throws(() => runCanonicalShadowScore(value), /model audit failed: consent_tracking/);
 });
-

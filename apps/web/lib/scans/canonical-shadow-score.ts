@@ -19,6 +19,7 @@ export type CanonicalShadowCoverageRow = {
 
 export type CanonicalShadowScoreModel = {
   approvalStatus: "pending_luna" | "approved_by_luna";
+  coverageRowWeights: Record<string, number>;
   criticalPostureCaps: Array<{
     capId: string;
     family?: string;
@@ -27,6 +28,7 @@ export type CanonicalShadowScoreModel = {
     minimumSeverity: CanonicalShadowScoreSeverity;
   }>;
   familyMaximumRiskPoints: Record<string, number>;
+  minimumCoverageRatioForNoFindingPostureScore: number;
   minimumCoverageRatioForPostureScore: number;
   postureBands: Array<{
     actionLabel: string;
@@ -111,9 +113,12 @@ function capMatchesFinding(
 
 export function auditCanonicalShadowScoreModel(input: {
   model: CanonicalShadowScoreModel;
+  scoreEligibleCoverageRowIds: string[];
   scoreEligibleFamilies: string[];
 }) {
   const configuredFamilies = Object.keys(input.model.familyMaximumRiskPoints);
+  const configuredCoverageRows = Object.keys(input.model.coverageRowWeights);
+  const scoreEligibleCoverageRowIds = [...new Set(input.scoreEligibleCoverageRowIds)].sort();
   const scoreEligibleFamilies = [...new Set(input.scoreEligibleFamilies)].sort();
   const capIds = input.model.criticalPostureCaps.map((cap) => cap.capId);
   const bandMinimums = input.model.postureBands.map((band) => band.minimumScore);
@@ -124,6 +129,11 @@ export function auditCanonicalShadowScoreModel(input: {
     input.model.minimumCoverageRatioForPostureScore < 0 ||
     input.model.minimumCoverageRatioForPostureScore > 1
       ? ["minimumCoverageRatioForPostureScore"]
+      : []),
+    ...(!Number.isFinite(input.model.minimumCoverageRatioForNoFindingPostureScore) ||
+    input.model.minimumCoverageRatioForNoFindingPostureScore < input.model.minimumCoverageRatioForPostureScore ||
+    input.model.minimumCoverageRatioForNoFindingPostureScore > 1
+      ? ["minimumCoverageRatioForNoFindingPostureScore"]
       : []),
     ...Object.entries(input.model.severityRiskPoints).flatMap(([severity, points]) =>
       !Number.isFinite(points) || points < 0 || points > 100 ? [`severityRiskPoints.${severity}`] : []
@@ -146,6 +156,12 @@ export function auditCanonicalShadowScoreModel(input: {
     )
   ].sort();
   return {
+    invalidCoverageRowWeights: configuredCoverageRows
+      .filter((rowId) => {
+        const value = input.model.coverageRowWeights[rowId];
+        return !rowId.trim() || value === undefined || !Number.isFinite(value) || value <= 0 || value > 100;
+      })
+      .sort(),
     invalidGlobalSettings,
     invalidPostureBands: [
       ...input.model.postureBands
@@ -167,7 +183,9 @@ export function auditCanonicalShadowScoreModel(input: {
         return !family.trim() || value === undefined || !Number.isFinite(value) || value < 0 || value > 100;
       })
       .sort(),
+    missingCoverageRows: scoreEligibleCoverageRowIds.filter((rowId) => input.model.coverageRowWeights[rowId] === undefined),
     missingFamilies: scoreEligibleFamilies.filter((family) => input.model.familyMaximumRiskPoints[family] === undefined),
+    staleCoverageRows: configuredCoverageRows.filter((rowId) => !scoreEligibleCoverageRowIds.includes(rowId)).sort(),
     staleFamilies: configuredFamilies.filter((family) => !scoreEligibleFamilies.includes(family)).sort()
   };
 }
@@ -183,12 +201,31 @@ export function deriveCanonicalShadowScore(input: {
     left.family.localeCompare(right.family) || left.findingId.localeCompare(right.findingId) || left.severity.localeCompare(right.severity)
   );
   const uniqueFindings = allUniqueFindings.slice(0, CANONICAL_SHADOW_MAX_FINDINGS);
-  const boundedCoverageRows = [...input.coverageRows]
+  const sortedCoverageRows = [...input.coverageRows]
     .sort((left, right) => left.rowId.localeCompare(right.rowId))
     .slice(0, CANONICAL_SHADOW_MAX_COVERAGE_ROWS);
+  const duplicateCoverageRowIds = [...new Set(
+    sortedCoverageRows
+      .map((row) => row.rowId)
+      .filter((rowId, index, values) => values.indexOf(rowId) !== index)
+  )].sort();
+  const boundedCoverageRows = [...new Map(sortedCoverageRows.map((row) => [row.rowId, row] as const)).values()];
   const applicableRows = boundedCoverageRows.filter((row) => row.assessmentStatus !== "not_applicable");
   const coveredRows = applicableRows.filter((row) => !isCoverageLimited(row));
-  const coverageRatio = applicableRows.length === 0 ? 0 : boundedRatio(coveredRows.length / applicableRows.length);
+  const applicableCoverageWeight = applicableRows.reduce(
+    (total, row) => total + (input.model.coverageRowWeights[row.rowId] ?? 0),
+    0
+  );
+  const coveredCoverageWeight = coveredRows.reduce(
+    (total, row) => total + (input.model.coverageRowWeights[row.rowId] ?? 0),
+    0
+  );
+  const coverageRatio = applicableCoverageWeight === 0
+    ? 0
+    : boundedRatio(coveredCoverageWeight / applicableCoverageWeight);
+  const unconfiguredCoverageRows = [...new Set(
+    boundedCoverageRows.map((row) => row.rowId).filter((rowId) => input.model.coverageRowWeights[rowId] === undefined)
+  )].sort();
   const unconfiguredFamilies = [...new Set(
     uniqueFindings.map((finding) => finding.family).filter((family) => input.model.familyMaximumRiskPoints[family] === undefined)
   )].sort();
@@ -233,19 +270,32 @@ export function deriveCanonicalShadowScore(input: {
     (score, cap) => Math.min(score, cap.maxPostureScore),
     uncappedPostureScore
   );
+  const modelAudit = auditCanonicalShadowScoreModel({
+    model: input.model,
+    scoreEligibleCoverageRowIds: Object.keys(input.model.coverageRowWeights),
+    scoreEligibleFamilies: Object.keys(input.model.familyMaximumRiskPoints)
+  });
   const withheldReasons = [
-    ...(auditCanonicalShadowScoreModel({
-      model: input.model,
-      scoreEligibleFamilies: Object.keys(input.model.familyMaximumRiskPoints)
-    }).invalidGlobalSettings.length > 0
+    ...(Object.values(modelAudit).some((issues) => issues.length > 0)
       ? ["invalid_model_configuration"]
       : []),
     ...(allUniqueFindings.length > CANONICAL_SHADOW_MAX_FINDINGS ? ["finding_input_bound_exceeded"] : []),
     ...(input.coverageRows.length > CANONICAL_SHADOW_MAX_COVERAGE_ROWS ? ["coverage_row_input_bound_exceeded"] : []),
+    ...(duplicateCoverageRowIds.length > 0
+      ? [`duplicate_coverage_row_ids:${duplicateCoverageRowIds.join(",")}`]
+      : []),
     ...(applicableRows.length === 0 ? ["no_applicable_coverage_rows"] : []),
     ...(coverageRatio < input.model.minimumCoverageRatioForPostureScore ? ["coverage_below_model_threshold"] : []),
+    ...(familyContributions.length === 0 &&
+    coverageRatio >= input.model.minimumCoverageRatioForPostureScore &&
+    coverageRatio < input.model.minimumCoverageRatioForNoFindingPostureScore
+      ? ["coverage_below_no_finding_threshold"]
+      : []),
     ...(unconfiguredFamilies.length > 0
       ? [`unconfigured_finding_families:${unconfiguredFamilies.join(",")}`]
+      : []),
+    ...(unconfiguredCoverageRows.length > 0
+      ? [`unconfigured_coverage_rows:${unconfiguredCoverageRows.join(",")}`]
       : [])
   ];
   const postureScore = withheldReasons.length === 0 ? cappedPostureScore : null;

@@ -25,12 +25,14 @@ export type CanonicalShadowScoreRunInput = {
   };
   model: CanonicalShadowScoreModel;
   scanId: string;
+  scoreEligibleCoverageRowIds: string[];
   scoreEligibleFamilies: string[];
 };
 
 export function runCanonicalShadowScore(input: CanonicalShadowScoreRunInput) {
   const modelAudit = auditCanonicalShadowScoreModel({
     model: input.model,
+    scoreEligibleCoverageRowIds: input.scoreEligibleCoverageRowIds,
     scoreEligibleFamilies: input.scoreEligibleFamilies
   });
   const auditIssues = Object.values(modelAudit).flat();
@@ -52,4 +54,3 @@ export function runCanonicalShadowScore(input: CanonicalShadowScoreRunInput) {
     scanId: input.scanId
   });
 }
-

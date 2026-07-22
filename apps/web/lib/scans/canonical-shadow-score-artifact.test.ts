@@ -5,8 +5,10 @@ import { deriveCanonicalShadowScore, type CanonicalShadowScoreModel } from "./ca
 
 const MODEL: CanonicalShadowScoreModel = {
   approvalStatus: "pending_luna",
+  coverageRowWeights: { privacy_notice_availability: 1 },
   criticalPostureCaps: [],
   familyMaximumRiskPoints: { contradiction: 30 },
+  minimumCoverageRatioForNoFindingPostureScore: 0.5,
   minimumCoverageRatioForPostureScore: 0.5,
   postureBands: [
     { actionLabel: "Monitor", minimumScore: 75, posture: "Clear" },

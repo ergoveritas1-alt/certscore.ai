@@ -5,6 +5,7 @@ import path from "node:path";
 import { closePools } from "@website-signal-risk-scanner/db";
 import {
   buildCanonicalShadowScoreInput,
+  GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_IDS,
   GDPR_EPRIVACY_SHADOW_SCORE_ELIGIBLE_FAMILIES
 } from "../lib/scans/canonical-shadow-score-input";
 import { summarizeCanonicalShadowScoreCohort } from "../lib/scans/canonical-shadow-score-cohort";
@@ -146,6 +147,7 @@ async function main() {
         },
         model: input.model,
         scanId: scan.scanId,
+        scoreEligibleCoverageRowIds: [...GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_IDS],
         scoreEligibleFamilies: [...GDPR_EPRIVACY_SHADOW_SCORE_ELIGIBLE_FAMILIES]
       }));
     } catch {

@@ -61,7 +61,7 @@
     "policy_extraction": 15,
     "rights_gap": 25
   },
-  "minimumCoverageRatioForNoFindingPostureScore": 0.7,
+  "minimumCoverageRatioForNoFindingPostureScore": 0.9,
   "minimumCoverageRatioForPostureScore": 0.7,
   "postureBands": [
     {
@@ -85,5 +85,5 @@
     "medium": 15,
     "low": 5
   },
-  "version": "gdpr-eprivacy-shadow.candidate-v0.pending-luna"
+  "version": "gdpr-eprivacy-shadow.candidate-v1.pending-luna"
 }
