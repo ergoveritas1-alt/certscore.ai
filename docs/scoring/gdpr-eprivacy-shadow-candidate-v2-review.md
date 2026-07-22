@@ -57,11 +57,16 @@ row that should remain in the denominator.
 ## Candidate-v2 retained replay
 
 - Input and successfully projected: 11/11 retained bundles.
-- Scored: 6; withheld: 5.
-- Contradictions: 0; projection/scoring failures: 0.
+- Scored: 7; withheld: 4.
+- Coverage-semantics contradictions: 11/11; projection/scoring failures: 0.
 - Median absolute legacy delta: 14; p95 absolute delta: 28.
 - Candidate-v1 to candidate-v2 numerical changes: 0 in this cohort because none of
   the retained surfaced inputs belonged to `policy_extraction` or `sensitive_data`.
+
+The 11/11 contradiction rate is expected under schema v3 and is useful evidence,
+not a reason to suppress the gate: every retained legacy score-input coverage value
+differs from the exact report usable-evidence ratio. The retained runner now uses the
+same report-row projection as the passive production cohort and live admin shadow.
 
 The unchanged numerical result is expected and does not validate the family change.
 Deterministic fixtures must prove both policy-extraction exclusion and sensitive-data

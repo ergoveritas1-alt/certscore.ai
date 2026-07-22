@@ -10,6 +10,8 @@ import {
 import { summarizeCanonicalShadowScoreCohort } from "../apps/web/lib/scans/canonical-shadow-score-cohort";
 import { runCanonicalShadowScore } from "../apps/web/lib/scans/canonical-shadow-score-run";
 import type { CanonicalShadowScoreModel } from "../apps/web/lib/scans/canonical-shadow-score";
+import { deriveGdprEprivacyUsableCoverageSummary } from "../apps/web/lib/scans/gdpr-eprivacy-review-summary";
+import { getReportableGdprEprivacyCoverageItems } from "../apps/web/lib/scans/gdpr-eprivacy-reportable-rows";
 
 type JsonObject = Record<string, unknown>;
 
@@ -154,6 +156,9 @@ async function main() {
         checklistRows: projection.checklistRows,
         unifiedFindings: projection.unifiedFindings
       });
+      const reportUsableCoverage = deriveGdprEprivacyUsableCoverageSummary(
+        getReportableGdprEprivacyCoverageItems(projection.checklistRows)
+      );
       const scanId = typeof bundle.scanId === "string" ? bundle.scanId : `retained-shadow-${index}`;
       artifacts.push(runCanonicalShadowScore({
         context: {
@@ -166,6 +171,11 @@ async function main() {
         generatedAt,
         inputProjectionFingerprint: hash(JSON.stringify(scoreInput)),
         legacy: {
+          coverageConfidence: projection.legacyScoreAssessment.coverageConfidence,
+          coverageRatio: projection.legacyScoreAssessment.coverageRatio,
+          reportInScopeRowCount: reportUsableCoverage.inScopeRowCount,
+          reportUsableEvidenceRatio: reportUsableCoverage.ratio,
+          reportUsableRowCount: reportUsableCoverage.usableRowCount,
           score: projection.legacyScoreAssessment.score,
           scoreKind: projection.legacyScoreAssessment.scoreKind,
           scoreSource: projection.legacyScoreAssessment.scoreSource,
