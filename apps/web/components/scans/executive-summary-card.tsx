@@ -44,7 +44,6 @@ type DomainBenchmarkCardData = {
   confidence: "low" | "medium" | "high";
   estimatedRankLabel: string;
   expectedCookiesBeforeConsent: number;
-  expectedOverallScore: number;
   expectedThirdPartyRequests: number;
   industry: string;
   rationale: string;
@@ -1886,6 +1885,7 @@ function BenchmarkMetricCard(input: {
   maxValue?: number;
   note?: string | null;
 }) {
+  const isScoreMetric = input.label === "Overall score" || input.label === "GDPR/ePrivacy evidence score";
   const actualValue = typeof input.actualValue === "number" ? input.actualValue : null;
   const benchmarkValue = typeof input.benchmarkValue === "number" ? input.benchmarkValue : null;
   const dynamicScaleBase = Math.max(actualValue ?? 0, benchmarkValue ?? 0, 1);
@@ -1902,7 +1902,7 @@ function BenchmarkMetricCard(input: {
       : "";
   const deltaLabel =
     delta !== null
-      ? input.label === "Overall score"
+      ? isScoreMetric
         ? `${delta > 0 ? "+" : ""}${delta} vs expected${benchmarkContext}`
         : delta > 0
           ? `+${delta} above expected${benchmarkContext}`
@@ -1911,7 +1911,7 @@ function BenchmarkMetricCard(input: {
             : `At expected level${benchmarkContext}`
       : null;
   const tone =
-    input.label === "Overall score"
+    isScoreMetric
       ? {
           card: "bg-white",
           rail: "bg-sky-100/90",
@@ -1997,114 +1997,6 @@ function BenchmarkMetricCard(input: {
       </div>
     </div>
   );
-}
-
-export function deriveBenchmarkScoreExplanation(input: {
-  benchmark: DomainBenchmarkCardData;
-  cookieBannerPresent?: boolean | null;
-  findings: CertScoreFinding[];
-  score: number | null;
-  vendorNames?: string[];
-}) {
-  if (!input.benchmark || typeof input.score !== "number") {
-    return null;
-  }
-
-  const delta = input.score - input.benchmark.expectedOverallScore;
-  const findingIds = new Set(input.findings.map((finding) => finding.id));
-  const hasPreConsentTrackingFinding =
-    findingIds.has("pre_consent_tracking_detected") ||
-    findingIds.has("third_party_tracking_pre_consent");
-  const hasPreConsentStorageFinding =
-    findingIds.has("third_party_cookie_pre_consent") ||
-    findingIds.has("analytics_cookie_pre_consent") ||
-    findingIds.has("adtech_cookie_pre_consent");
-  const hasObservedTrackingVendorContext = (input.vendorNames ?? []).length > 0;
-
-  if (input.cookieBannerPresent === false && hasObservedTrackingVendorContext && (hasPreConsentTrackingFinding || hasPreConsentStorageFinding)) {
-    return "First-layer reject availability and pre-consent third-party activity are the main review items. CertScore.ai did not confirm a first-layer GDPR/ePrivacy cookie consent banner, while advertising/analytics storage and tracking were observed before any recorded consent choice. Footer privacy/ad-choice controls were observed, but they do not establish a GDPR/ePrivacy accept/reject consent surface.";
-  }
-  const drivers = [
-    hasPreConsentTrackingFinding
-      ? "tracking before consent"
-      : null,
-    hasPreConsentStorageFinding
-      ? "pre-consent tracking cookies"
-      : null,
-    findingIds.has("rtb_cookie_sync_observed") ? "RTB cookie-sync activity" : null,
-    findingIds.has("policy_behavior_contradiction_detected") ||
-    findingIds.has("policy_clarity_risk") ||
-    findingIds.has("cookie_disclosure_gap")
-      ? "a policy/runtime review issue"
-      : null,
-    findingIds.has("reject_tracking_persists_after_reject") ? "post-reject tracking activity" : null,
-    findingIds.has("reject_option_missing_or_hidden") ||
-    findingIds.has("asymmetric_consent_ui") ||
-    findingIds.has("consent_dark_patterns_detected") ||
-    findingIds.has("forced_consent_interaction")
-      ? "consent choice interface signals"
-      : null,
-    findingIds.has("session_recording_services_detected") ||
-    findingIds.has("possible_session_replay_on_sensitive_input_surface")
-      ? "session replay activity"
-      : null,
-    findingIds.has("probable_fingerprinting") || findingIds.has("fingerprinting_related_signals_observed")
-      ? "fingerprinting-related telemetry"
-      : null,
-    Array.from(findingIds).some((id) => /accessibility|wcag|contrast|keyboard|screen_reader|missing_alt|form_label|focus/.test(id))
-      ? "accessibility"
-      : null
-  ];
-  const driverText = formatInlineList(uniqueStrings(drivers).slice(0, 4));
-  const vendorNames = uniqueStrings(input.vendorNames ?? []).slice(0, 3);
-  const promotedPrivacyDriverCount = drivers
-    .filter((driver): driver is string => typeof driver === "string")
-    .filter((driver) => driver !== "accessibility").length;
-  const onlyAccessibilityPromoted = promotedPrivacyDriverCount === 0 && drivers.includes("accessibility");
-  const vendorText =
-    vendorNames.length > 0 && promotedPrivacyDriverCount > 0
-      ? ` Representative observed vendors included ${formatInlineList(vendorNames)}.`
-      : "";
-  const retainedPrivacyContextText =
-    onlyAccessibilityPromoted && vendorNames.length > 0
-      ? " Third-party and cookie context was retained for review but did not promote to a top-level privacy finding."
-      : "";
-  const hasConsentUxReviewFinding =
-    findingIds.has("reject_option_missing_or_hidden") ||
-    findingIds.has("asymmetric_consent_ui") ||
-    findingIds.has("forced_consent_interaction") ||
-    findingIds.has("consent_dark_patterns_detected") ||
-    findingIds.has("blocking_overlay_observed") ||
-    findingIds.has("content_obstructed_by_overlay") ||
-    findingIds.has("repeated_consent_prompt");
-  const consentUxBenchmarkNote =
-    hasConsentUxReviewFinding && delta >= -3
-      ? " Overall score remains near benchmark, but consent UX findings require review."
-      : "";
-
-  if (delta < 0) {
-    if (delta >= -3) {
-      return driverText
-        ? `This score is near the ${input.benchmark.industry} benchmark expectation, with retained review context concentrated in ${driverText}.${consentUxBenchmarkNote}`
-        : `This score is near the ${input.benchmark.industry} benchmark expectation for the retained evidence.${consentUxBenchmarkNote}`;
-    }
-
-    return driverText
-      ? `${sentenceWithPeriod(
-          `This score is below the ${input.benchmark.industry} benchmark expectation mainly because retained evidence showed ${driverText}`
-        )}${retainedPrivacyContextText}${vendorText}`
-      : `This score is below the ${input.benchmark.industry} benchmark expectation based on surfaced findings.`;
-  }
-
-  if (delta > 0) {
-    return driverText
-      ? `This score is above the ${input.benchmark.industry} benchmark expectation, with remaining review context concentrated around ${driverText}.${consentUxBenchmarkNote}`
-      : `This score is above the ${input.benchmark.industry} benchmark expectation for the retained evidence.${consentUxBenchmarkNote}`;
-  }
-
-  return driverText
-    ? `This score is in line with the ${input.benchmark.industry} benchmark expectation, with review context concentrated around ${driverText}.${consentUxBenchmarkNote}`
-    : `This score is in line with the ${input.benchmark.industry} benchmark expectation.${consentUxBenchmarkNote}`;
 }
 
 function ExecutiveMetricCard(input: {
@@ -4572,11 +4464,11 @@ export function ExecutiveSummaryCard(input: {
                 <div className="space-y-2">
                   <div className="grid gap-2 sm:grid-cols-3">
                     <BenchmarkMetricCard
-                      label="Overall score"
+                      label="GDPR/ePrivacy evidence score"
                       actualValue={input.score}
-                      benchmarkValue={input.domainBenchmark?.expectedOverallScore ?? null}
-                      benchmarkIndustry={input.domainBenchmark?.industry ?? null}
+                      benchmarkValue={null}
                       maxValue={100}
+                      note="Weighted from evidence-gated GDPR/ePrivacy checklist rows. Scan coverage and evidence limitations affect how this score should be interpreted."
                     />
                     <BenchmarkMetricCard
                       label="Third-party requests"

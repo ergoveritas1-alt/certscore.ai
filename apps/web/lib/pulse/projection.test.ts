@@ -155,6 +155,15 @@ test("Pulse projection exposes explicit counts for agent summaries", () => {
   assert.match(source, /counts: base\.counts/);
 });
 
+test("Pulse identifies the customer-facing score as a versioned GDPR/ePrivacy evidence score", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+
+  assert.match(source, /gdprEprivacyScoreAssessment/);
+  assert.match(source, /coverageRatio: reportSurface\.gdprEprivacyScoreAssessment\.coverageRatio/);
+  assert.match(source, /kind: reportSurface\.gdprEprivacyScoreAssessment\.scoreKind/);
+  assert.match(source, /version: reportSurface\.gdprEprivacyScoreAssessment\.scoreVersion/);
+});
+
 test("Pulse policy surfaces exclude unfetched guessed aliases and retain verified canonical pages", () => {
   const rows = projectedPolicySurfaceRows(pulseScanRecord({
     accessPostureSummary: { finalEffectiveUrl: "https://medal.tv/" },

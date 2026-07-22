@@ -39,10 +39,7 @@ import {
   projectExternalScanNoGo,
   type ExternalScanNoGoResult
 } from "@website-signal-risk-scanner/shared";
-import {
-  buildScanReportUnifiedFindings,
-  deriveExecutiveDisplayedScore
-} from "../../components/scans/shared-scan-detail-view";
+import { buildScanReportUnifiedFindings } from "../../components/scans/shared-scan-detail-view";
 import { absoluteUrl } from "../seo";
 import {
   PULSE_API_VERSION,
@@ -317,14 +314,6 @@ function boundedScore(value: number | null) {
   return value === null ? null : Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function deriveRegulatoryRiskDisplayScore(scanRecord: ScanDetailResponse) {
-  const riskScore = finiteNumber(scanRecord.regulatoryRisk?.overallScore);
-  if (riskScore !== null) {
-    return boundedScore(100 - riskScore);
-  }
-  return null;
-}
-
 function buildPulseReportSurface(input: {
   coverageLimited: boolean;
   scanRecord: ScanDetailResponse;
@@ -417,17 +406,12 @@ function buildPulseReportSurface(input: {
     ...publicExecutiveFindings.filter((finding) => !regulatoryGapFindingIds.has(finding.id))
   ];
   const topFindings = regulatoryGapTopFindings.length > 0 ? regulatoryGapTopFindings : publicExecutiveTopFindings;
-  const gdprEprivacyScore = deriveRegulatoryCoverageScore({
+  const gdprEprivacyScoreAssessment = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: reportableGdprRows
-  }).score;
-  const executiveScore = deriveExecutiveDisplayedScore({
-    findings: allFindings,
-    previewMode: "homepage",
-    snapshot: scanRecord.snapshot,
-    storedScore: presentationSummary.score
   });
-  const score = boundedScore(gdprEprivacyScore ?? executiveScore ?? deriveRegulatoryRiskDisplayScore(scanRecord));
+  const gdprEprivacyScore = gdprEprivacyScoreAssessment.score;
+  const score = boundedScore(gdprEprivacyScore);
   const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerInventoryRows);
   const preConsentTrackerRows = groupedTrackerRows
     .filter((row) => row.firstSeenMs !== null)
@@ -450,6 +434,7 @@ function buildPulseReportSurface(input: {
     executive,
     gdprEprivacyChecklist,
     gdprEprivacyScore,
+    gdprEprivacyScoreAssessment,
     presentationSummary,
     preConsentTrackerRows,
     reportableGdprRows,
@@ -526,7 +511,7 @@ export function derivePulseReportScore(input: {
     unifiedFindingPackets: input.unifiedFindingPackets
   });
 
-  return input.findings ? boundedScore(surface.score ?? deriveRegulatoryRiskDisplayScore(scanRecord)) : surface.score;
+  return surface.score;
 }
 
 function deriveFreshness(completedAt: string | null, generated: string) {
@@ -1934,6 +1919,13 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     domain,
     score,
     scoreLabel: score === null ? "Not available" : `${score}/100`,
+    scoreMetadata: score === null ? null : {
+      coverageConfidence: reportSurface.gdprEprivacyScoreAssessment.coverageConfidence,
+      coverageRatio: reportSurface.gdprEprivacyScoreAssessment.coverageRatio,
+      kind: reportSurface.gdprEprivacyScoreAssessment.scoreKind,
+      source: reportSurface.gdprEprivacyScoreAssessment.scoreSource,
+      version: reportSurface.gdprEprivacyScoreAssessment.scoreVersion
+    },
     riskLevel: summary.riskLevel,
     actionLabel: getPulseExecutiveActionLabel(executive.posture),
     benchmark,

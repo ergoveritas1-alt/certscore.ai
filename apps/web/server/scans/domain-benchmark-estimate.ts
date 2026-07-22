@@ -5,7 +5,6 @@ export type DomainBenchmarkEstimate = {
   confidence: "low" | "medium" | "high";
   estimatedRankLabel: string;
   expectedCookiesBeforeConsent: number;
-  expectedOverallScore: number;
   expectedThirdPartyRequests: number;
   industry: string;
   rationale: string;
@@ -73,7 +72,6 @@ export function getDomainBenchmarkEstimateOverride(domainHostname: string | null
       confidence: "high",
       estimatedRankLabel: "Large Japanese news publisher",
       expectedCookiesBeforeConsent: 4,
-      expectedOverallScore: 70,
       expectedThirdPartyRequests: 55,
       industry: "Media / Japanese sports-news publisher",
       rationale: "Matched the daily.co.jp registrable domain; do not collapse the multi-label .co.jp suffix into the unrelated Daily.co video-conferencing brand."
@@ -85,7 +83,6 @@ export function getDomainBenchmarkEstimateOverride(domainHostname: string | null
       confidence: "high",
       estimatedRankLabel: "Global smart-home consumer electronics brand",
       expectedCookiesBeforeConsent: 2,
-      expectedOverallScore: 76,
       expectedThirdPartyRequests: 18,
       industry: "Consumer electronics / smart-home security",
       rationale: "Matched the IMOU and IMOU Life registrable domains and their camera, doorbell, smart-lock, and home-security product family."
@@ -97,7 +94,6 @@ export function getDomainBenchmarkEstimateOverride(domainHostname: string | null
       confidence: "high",
       estimatedRankLabel: "Large Italian digital-infrastructure provider",
       expectedCookiesBeforeConsent: 2,
-      expectedOverallScore: 74,
       expectedThirdPartyRequests: 24,
       industry: "Technology / hosting, cloud, PEC and connectivity",
       rationale: "Matched Aruba S.p.A.'s aruba.it service domain and its hosting, cloud, certified-email (PEC), connectivity, and digital-trust product evidence; do not infer the unrelated Aruba tourism entity from the brand name alone."
@@ -112,7 +108,6 @@ export function getDomainBenchmarkEstimateOverride(domainHostname: string | null
     confidence: "high",
     estimatedRankLabel: "Specialized SaaS",
     expectedCookiesBeforeConsent: 0,
-    expectedOverallScore: 86,
     expectedThirdPartyRequests: 8,
     industry: "Compliance software / privacy and accessibility risk analytics",
     rationale: "Matched first-party CertScore.ai domain; use the product category instead of hostname-only credit-scoring inference."
@@ -184,20 +179,17 @@ export function buildDomainBenchmarkEstimateFromMacroEnrichment(value: unknown):
     normalizedIndustry === "media"
       ? {
           expectedCookiesBeforeConsent: 4,
-          expectedOverallScore: 70,
           expectedThirdPartyRequests: 55,
           estimatedRankLabel: "Large media publisher"
         }
       : normalizedIndustry === "education"
         ? {
             expectedCookiesBeforeConsent: 2,
-            expectedOverallScore: 76,
             expectedThirdPartyRequests: 18,
             estimatedRankLabel: "Specialized content / education"
           }
         : {
             expectedCookiesBeforeConsent: 2,
-            expectedOverallScore: 72,
             expectedThirdPartyRequests: 24,
             estimatedRankLabel: "Typical category peer"
           };
@@ -240,11 +232,10 @@ export function normalizeDomainBenchmarkEstimate(value: unknown): DomainBenchmar
   const confidenceValue = getString(record.confidence);
   const confidence =
     confidenceValue === "low" || confidenceValue === "medium" || confidenceValue === "high" ? confidenceValue : "medium";
-  const expectedOverallScore = getFiniteNumber(record.expectedOverallScore);
   const expectedThirdPartyRequests = getFiniteNumber(record.expectedThirdPartyRequests);
   const expectedCookiesBeforeConsent = getFiniteNumber(record.expectedCookiesBeforeConsent);
 
-  if (!industry || !estimatedRankLabel || expectedOverallScore === null || expectedThirdPartyRequests === null || expectedCookiesBeforeConsent === null) {
+  if (!industry || !estimatedRankLabel || expectedThirdPartyRequests === null || expectedCookiesBeforeConsent === null) {
     return null;
   }
 
@@ -257,7 +248,6 @@ export function normalizeDomainBenchmarkEstimate(value: unknown): DomainBenchmar
     confidence,
     estimatedRankLabel,
     expectedCookiesBeforeConsent: clampNumber(normalizedCookieEstimate, 0, 100),
-    expectedOverallScore: clampNumber(expectedOverallScore, 0, 100),
     expectedThirdPartyRequests: clampNumber(expectedThirdPartyRequests, 0, 200),
     industry,
     rationale
@@ -287,7 +277,7 @@ export async function generateDomainBenchmarkEstimate(input: {
         {
           role: "system",
           content:
-            "You estimate website benchmark values from a domain name only. Infer likely industry/category from the domain and use realistic priors from typical sites in that category. Return only JSON with: industry, estimatedRankLabel, expectedOverallScore, expectedThirdPartyRequests, expectedCookiesBeforeConsent, confidence, rationale. Output calibrated, non-extreme estimates. For expectedCookiesBeforeConsent, do not default to 0: most modern sites set at least 1 to 3 cookies before consent for session, load-balancing, security, consent-state, analytics, or embedded services. Use 0 only when the domain strongly suggests a minimal static, personal, placeholder, privacy-first, or government-style site with very limited tracking. If uncertain, prefer a small positive value over 0."
+            "You estimate coarse website benchmark context from a domain name only. Infer likely industry/category from the domain and use realistic priors from typical sites in that category. Return only JSON with: industry, estimatedRankLabel, expectedThirdPartyRequests, expectedCookiesBeforeConsent, confidence, rationale. Do not estimate or return a CertScore or overall score. For expectedCookiesBeforeConsent, do not default to 0: most modern sites set at least 1 to 3 cookies before consent for session, load-balancing, security, consent-state, analytics, or embedded services. Use 0 only when the domain strongly suggests a minimal static, personal, placeholder, privacy-first, or government-style site with very limited tracking. If uncertain, prefer a small positive value over 0."
         },
         {
           role: "user",
@@ -296,10 +286,8 @@ export async function generateDomainBenchmarkEstimate(input: {
             "Task:",
             "- Best-guess the site's industry/category.",
             "- Best-guess a popularity rank label such as 'Top 1k', 'Top 10k', 'Top 100k', 'Top 1M', or 'Long-tail'.",
-            "- Best-guess typical values for:",
-            "  1. overall score (0-100, higher is better)",
-            "  2. third-party requests on first load",
-            "  3. cookies before consent",
+            "- Best-guess typical values for third-party requests on first load and cookies before consent.",
+            "- Do not estimate a CertScore or any overall score.",
             "- This is a benchmark estimate for this type of domain, not a restatement of any observed scan output.",
             "- Use realistic website-category priors and common web patterns.",
             "- For cookies before consent, avoid 0 unless the domain clearly indicates a very minimal or privacy-centric site; otherwise usually choose at least 1 to 3, and more for ecommerce, media, SaaS, marketing, or ad-supported sites.",

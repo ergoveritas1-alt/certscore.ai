@@ -1,6 +1,37 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
+import { getGdprEprivacyCoverageChecklistRowIds } from "./gdpr-eprivacy-coverage-checklist";
+import {
+  auditRegulatoryCoverageScoreConfig,
+  deriveRegulatoryCoverageScore,
+  GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION,
+  REGULATORY_COVERAGE_SCORE_SOURCE
+} from "./regulatory-coverage-score";
+
+test("GDPR/ePrivacy scoring configuration explicitly covers the canonical checklist registry", () => {
+  const audit = auditRegulatoryCoverageScoreConfig({
+    framework: "gdpr_eprivacy",
+    rowIds: getGdprEprivacyCoverageChecklistRowIds()
+  });
+
+  assert.deepEqual(audit, { missingConfigIds: [], staleConfigIds: [] });
+});
+
+test("unknown checklist rows withhold scoring instead of receiving a silent fallback weight", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [{
+      assessmentStatus: "checked",
+      evidenceState: "observed",
+      id: "unregistered_future_row",
+      status: "Observed"
+    }]
+  });
+
+  assert.equal(result.score, null);
+  assert.equal(result.coverageConfidence, "insufficient");
+  assert.match(result.summary, /configuration is missing/i);
+});
 
 test("California score is derived from evidence-gated checklist rows", () => {
   const score = deriveRegulatoryCoverageScore({
@@ -89,9 +120,13 @@ test("GDPR/ePrivacy score uses the same row-led scoring mechanics", () => {
   });
 
   assert.equal(strongScore.score, 100);
+  assert.equal(strongScore.coverageConfidence, "high");
+  assert.equal(strongScore.scoreVersion, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION);
+  assert.equal(strongScore.scoreSource, REGULATORY_COVERAGE_SCORE_SOURCE);
   assert.equal(strongScore.ratingLabel, "Strong");
   assert.match(strongScore.summary, /evidence-gated checklist rows/i);
   assert.doesNotMatch(strongScore.summary, /\d+ checked|\d+ review|\d+ gap/i);
   assert.equal(gapScore.score, 6);
+  assert.equal(gapScore.coverageConfidence, "low");
   assert.equal(gapScore.ratingLabel, "Needs work");
 });

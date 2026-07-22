@@ -231,17 +231,27 @@ test("Admin Scans reads persisted summaries without report materialization in th
   assert.match(source, /mapScanRequestRow\(request, linkedScanId \? scansById\.get\(linkedScanId\)/);
 });
 
-test("public report materialization persists the canonical summary before returning", async () => {
+test("public report materialization is read-only with respect to score and admin summary state", async () => {
   const source = await readFile("apps/web/server/scans/get-public-scan-record.ts", "utf8");
-  assert.match(source, /persistAdminScanSummaryForRecord\(materialized\)/);
-  assert.match(source, /await persistAdminScanSummaryForRecord/);
+  assert.doesNotMatch(source, /persistAdminScanSummaryForRecord/);
+  assert.doesNotMatch(source, /persistAdminScanSummary/);
 });
 
-test("the rendered report projection persists its exact score and top-finding count", async () => {
+test("the rendered report projection cannot mutate canonical or admin-summary score state", async () => {
   const source = await readFile("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
-  assert.match(source, /score: executiveAccessLimitationNotice \? null : executiveDisplayedScore/);
-  assert.match(source, /topFindingCount: persistedTopFindings\.length/);
-  assert.match(source, /const persistedTopFindings = executiveAccessLimitationNotice \? \[\] : topExecutiveFindings/);
+  assert.doesNotMatch(source, /persistAdminScanSummary/);
+  assert.doesNotMatch(source, /certscore_overall\s*=/);
+});
+
+test("admin summary persistence cannot overwrite the canonical score", async () => {
+  const source = await readFile("apps/web/server/admin/repository.ts", "utf8");
+  const start = source.indexOf("export async function persistAdminScanSummary");
+  const end = source.indexOf("\nexport ", start + 1);
+  const functionSource = source.slice(start, end > start ? end : undefined);
+
+  assert.doesNotMatch(functionSource, /certscore_overall/);
+  assert.doesNotMatch(functionSource, /input\.score/);
+  assert.match(functionSource, /top_finding_count/);
 });
 
 test("admin summary persistence accepts completed scans without a canonical score", async () => {

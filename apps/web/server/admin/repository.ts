@@ -1045,7 +1045,6 @@ export async function persistAdminScanSummary(input: {
   privacyPolicyPresent: boolean | null;
   scanOutcome?: string | null;
   scanId: string;
-  score: number | null;
   topFindingCount: number;
   trancoRank?: number | null;
   scanNoGoAssessment?: Record<string, unknown> | null;
@@ -1055,7 +1054,7 @@ export async function persistAdminScanSummary(input: {
   await query(
     `insert into scan_snapshots (
        scan_id, organization_id, domain_id, pages_requested, pages_scanned,
-       admin_summary_generated_at, admin_industry_label, certscore_overall, top_finding_count,
+       admin_summary_generated_at, admin_industry_label, top_finding_count,
        site_language_primary, scan_outcome,
        privacy_policy_present, cmp_vendor_name, tranco_rank,
        scan_no_go_assessment, visual_access_review, visual_evidence_artifacts
@@ -1066,23 +1065,21 @@ export async function persistAdminScanSummary(input: {
             greatest(coalesce(scans.pages_requested, scans.pages_scanned, 1), 1),
             coalesce(scans.pages_scanned, 0),
             timezone('utc', now()),
-            $6,
-            $2,
-            $3,
-            $7, $8,
-            coalesce($4, false),
             $5,
-            $9,
+            $2,
+            $6, $7,
+            coalesce($3, false),
+            $4,
+            $8,
+            $9::jsonb,
             $10::jsonb,
-            $11::jsonb,
-            $12::jsonb
+            $11::jsonb
       from scans
       where scans.id = $1
         and scans.domain_id is not null
      on conflict (scan_id) do update
        set admin_summary_generated_at = excluded.admin_summary_generated_at,
            admin_industry_label = excluded.admin_industry_label,
-           certscore_overall = excluded.certscore_overall,
            top_finding_count = excluded.top_finding_count,
            site_language_primary = excluded.site_language_primary,
            scan_outcome = coalesce(excluded.scan_outcome, scan_snapshots.scan_outcome),
@@ -1094,7 +1091,6 @@ export async function persistAdminScanSummary(input: {
            visual_evidence_artifacts = coalesce(excluded.visual_evidence_artifacts, scan_snapshots.visual_evidence_artifacts)`,
     [
       input.scanId,
-      input.score,
       input.topFindingCount,
       input.privacyPolicyPresent,
       input.cmpVendorName,

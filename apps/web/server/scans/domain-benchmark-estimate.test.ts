@@ -70,7 +70,6 @@ test("shouldPreferMacroBenchmarkEstimate replaces generic domain-only estimates"
         confidence: "medium",
         estimatedRankLabel: "Top 1M",
         expectedCookiesBeforeConsent: 2,
-        expectedOverallScore: 62,
         expectedThirdPartyRequests: 18,
         industry: "General web / placeholder or brand landing (unknown)",
         rationale: "Domain is generic and ambiguous."
@@ -79,7 +78,6 @@ test("shouldPreferMacroBenchmarkEstimate replaces generic domain-only estimates"
         confidence: "high",
         estimatedRankLabel: "Large media publisher",
         expectedCookiesBeforeConsent: 4,
-        expectedOverallScore: 70,
         expectedThirdPartyRequests: 55,
         industry: "Media / publisher / streaming & news",
         rationale: "Matched scan macro enrichment for ABC Network: media, publisher."

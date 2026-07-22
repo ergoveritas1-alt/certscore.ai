@@ -7,7 +7,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   buildRegulatoryLenses,
   buildRegulatoryLensesFromUnifiedPackets,
-  deriveBenchmarkScoreExplanation,
   ExecutiveSummaryCard
 } from "./executive-summary-card";
 import { ADA_ACCESSIBILITY_FIXTURES } from "../../lib/scans/ada-accessibility.fixtures";
@@ -21,6 +20,17 @@ test("Executive storage metric uses the concise non-essential label", () => {
   assert.doesNotMatch(source, new RegExp(["Non-essential", "pre-consent storage"].join(" ")));
   assert.match(source, /Essential and unclassified storage are excluded from this metric/);
   assert.match(source, /beforeConsentStorageScope === "nonessential_only"/);
+});
+
+test("the headline score is precisely labeled and is not compared with an AI-estimated overall benchmark", () => {
+  const source = readFileSync(new URL("./executive-summary-card.tsx", import.meta.url), "utf8");
+  const benchmarkSource = readFileSync(new URL("../../server/scans/domain-benchmark-estimate.ts", import.meta.url), "utf8");
+
+  assert.match(source, /label="GDPR\/ePrivacy evidence score"/);
+  assert.match(source, /benchmarkValue=\{null\}/);
+  assert.doesNotMatch(source, /label="Overall score"/);
+  assert.doesNotMatch(source, /expectedOverallScore/);
+  assert.doesNotMatch(benchmarkSource, /expectedOverallScore/);
 });
 
 test("report projection keeps descriptive pre-consent storage separate from promotion-grade regulatory counts", () => {
@@ -805,181 +815,6 @@ test("buildRegulatoryLenses maps probable fingerprinting only into GDPR/ePrivacy
   assert.deepEqual(disclosureLenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
-test("benchmark score explanation uses surfaced findings without percentile claims", () => {
-  const explanation = deriveBenchmarkScoreExplanation({
-    benchmark: {
-      confidence: "medium",
-      estimatedRankLabel: "Typical",
-      expectedCookiesBeforeConsent: 1,
-      expectedOverallScore: 82,
-      expectedThirdPartyRequests: 8,
-      industry: "Entertainment ticketing",
-      rationale: "Matched to an entertainment benchmark."
-    },
-    findings: [
-      makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
-        shortSummary: "pre-consent tracking"
-      }),
-      makeFinding("third_party_cookie_pre_consent", "Third-party cookies before consent", {
-        shortSummary: "cookie activity before consent"
-      }),
-      makeFinding("rtb_cookie_sync_observed", "Adtech identity sync-like request observed", {
-        shortSummary: "RTB sync"
-      }),
-      makeFinding("policy_behavior_contradiction_detected", "Policy/runtime alignment review", {
-        shortSummary: "policy states a long raw quote that should not be copied into the score note"
-      })
-    ],
-    score: 61,
-    vendorNames: ["Adobe Analytics", "DoubleClick", "Meta Pixel"]
-  });
-
-  assert.equal(
-    explanation,
-    "This score is below the Entertainment ticketing benchmark expectation mainly because retained evidence showed tracking before consent, pre-consent tracking cookies, RTB cookie-sync activity, and a policy/runtime review issue. Representative observed vendors included Adobe Analytics, DoubleClick, and Meta Pixel."
-  );
-  assert.doesNotMatch(explanation ?? "", /policy states a long raw quote/i);
-  assert.doesNotMatch(explanation ?? "", /percent|peer/i);
-});
-
-test("benchmark score explanation leads with unconfirmed banner plus pre-consent tracking storage", () => {
-  const explanation = deriveBenchmarkScoreExplanation({
-    benchmark: {
-      confidence: "medium",
-      estimatedRankLabel: "Typical",
-      expectedCookiesBeforeConsent: 2,
-      expectedOverallScore: 72,
-      expectedThirdPartyRequests: 24,
-      industry: "SaaS / web application",
-      rationale: "Matched to a SaaS benchmark."
-    },
-    cookieBannerPresent: false,
-    findings: [
-      makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
-        shortSummary: "pre-consent tracking"
-      }),
-      makeFinding("third_party_cookie_pre_consent", "Third-party cookies before consent", {
-        shortSummary: "cookie activity before consent"
-      }),
-      makeFinding("sensitive_data_collection_with_third_party_tracking_present", "Sensitive tracking finding retained elsewhere", {
-        shortSummary: "Sensitive surface evidence was retained elsewhere."
-      })
-    ],
-    score: 61,
-    vendorNames: ["Google Analytics"]
-  });
-
-  assert.equal(
-    explanation,
-    "First-layer reject availability and pre-consent third-party activity are the main review items. CertScore did not confirm a first-layer GDPR/ePrivacy cookie consent banner, while advertising/analytics storage and tracking were observed before any recorded consent choice. Footer privacy/ad-choice controls were observed, but they do not establish a GDPR/ePrivacy accept/reject consent surface."
-  );
-});
-
-test("benchmark score explanation does not claim advertising tracking without vendor context", () => {
-  const explanation = deriveBenchmarkScoreExplanation({
-    benchmark: {
-      confidence: "medium",
-      estimatedRankLabel: "Typical",
-      expectedCookiesBeforeConsent: 2,
-      expectedOverallScore: 72,
-      expectedThirdPartyRequests: 24,
-      industry: "SaaS / web application",
-      rationale: "Matched to a SaaS benchmark."
-    },
-    cookieBannerPresent: false,
-    findings: [
-      makeFinding("third_party_cookie_pre_consent", "Third-party cookies before consent", {
-        shortSummary: "cookie activity before consent"
-      })
-    ],
-    score: 61,
-    vendorNames: []
-  });
-
-  assert.doesNotMatch(explanation ?? "", /advertising\/analytics storage and tracking were observed/i);
-  assert.doesNotMatch(explanation ?? "", /Consent and pre-consent tracking risk is the main issue/i);
-});
-
-test("benchmark score explanation treats tiny negative deltas as near benchmark", () => {
-  const explanation = deriveBenchmarkScoreExplanation({
-    benchmark: {
-      confidence: "medium",
-      estimatedRankLabel: "Typical",
-      expectedCookiesBeforeConsent: 2,
-      expectedOverallScore: 72,
-      expectedThirdPartyRequests: 24,
-      industry: "SaaS / web application",
-      rationale: "Matched to a SaaS benchmark."
-    },
-    findings: [
-      makeFinding("wcag_color_contrast_issue", "Visual contrast accessibility issue", {
-        section: "Accessibility",
-        severity: "medium"
-      })
-    ],
-    score: 70,
-    vendorNames: []
-  });
-
-  assert.equal(
-    explanation,
-    "This score is near the SaaS / web application benchmark expectation, with retained review context concentrated in accessibility."
-  );
-  assert.doesNotMatch(explanation ?? "", /below the SaaS \/ web application benchmark expectation/i);
-});
-
-test("benchmark score explanation names consent UX review even when score remains above benchmark", () => {
-  const explanation = deriveBenchmarkScoreExplanation({
-    benchmark: {
-      confidence: "medium",
-      estimatedRankLabel: "Typical",
-      expectedCookiesBeforeConsent: 8,
-      expectedOverallScore: 62,
-      expectedThirdPartyRequests: 55,
-      industry: "Media / publisher sites",
-      rationale: "Matched to a media benchmark."
-    },
-    findings: [
-      makeFinding("reject_option_missing_or_hidden", "Reject/refusal option not observed or nested", {
-        shortSummary: "Consent UI requires review."
-      })
-    ],
-    score: 67,
-    vendorNames: []
-  });
-
-  assert.match(explanation ?? "", /above the Media \/ publisher sites benchmark expectation/);
-  assert.match(explanation ?? "", /Overall score remains near benchmark, but consent UX findings require review\./);
-});
-
-test("benchmark score explanation avoids vendor score-driver copy for accessibility-only findings", () => {
-  const explanation = deriveBenchmarkScoreExplanation({
-    benchmark: {
-      confidence: "medium",
-      estimatedRankLabel: "Typical",
-      expectedCookiesBeforeConsent: 2,
-      expectedOverallScore: 78,
-      expectedThirdPartyRequests: 24,
-      industry: "Media / publisher",
-      rationale: "Matched to a media benchmark."
-    },
-    findings: [
-      makeFinding("visual_contrast_accessibility_issue", "Visual contrast accessibility issue", {
-        section: "Accessibility",
-        shortSummary: "Retained evidence showed accessibility issues."
-      })
-    ],
-    score: 61,
-    vendorNames: ["Google Ads", "Amazon Ads"]
-  });
-
-  assert.equal(
-    explanation,
-    "This score is below the Media / publisher benchmark expectation mainly because retained evidence showed accessibility. Third-party and cookie context was retained for review but did not promote to a top-level privacy finding."
-  );
-  assert.doesNotMatch(explanation ?? "", /Representative observed vendors/i);
-});
-
 test("ExecutiveSummaryCard explains interruption-backed limited coverage only when events are provided", () => {
   const baseProps = {
     accessLimitationNotice: null,
@@ -1410,7 +1245,6 @@ test("ExecutiveSummaryCard renders limited review for latimes-style interrupted 
         confidence: "medium",
         estimatedRankLabel: "Typical",
         expectedCookiesBeforeConsent: 4,
-        expectedOverallScore: 78,
         expectedThirdPartyRequests: 55,
         industry: "Media / publisher sites",
         rationale: "Matched to a media benchmark."
@@ -1488,7 +1322,6 @@ test("ExecutiveSummaryCard keeps clean well-covered scans clear", () => {
         confidence: "medium",
         estimatedRankLabel: "Typical",
         expectedCookiesBeforeConsent: 2,
-        expectedOverallScore: 82,
         expectedThirdPartyRequests: 55,
         industry: "Media / publisher sites",
         rationale: "Matched to a media benchmark."
@@ -1559,7 +1392,6 @@ test("ExecutiveSummaryCard surfaces under-observed ecosystem coverage diagnostic
         confidence: "medium",
         estimatedRankLabel: "Typical",
         expectedCookiesBeforeConsent: 2,
-        expectedOverallScore: 82,
         expectedThirdPartyRequests: 55,
         industry: "Media / publisher sites",
         rationale: "Matched to a media benchmark."
@@ -1876,7 +1708,6 @@ test("ExecutiveSummaryCard shows benchmark beside clear posture without scanned 
         confidence: "medium",
         estimatedRankLabel: "Typical",
         expectedCookiesBeforeConsent: 4,
-        expectedOverallScore: 82,
         expectedThirdPartyRequests: 8,
         industry: "Web portal / News & Media / Internet services",
         rationale: "Matched to a portal benchmark."
@@ -1936,7 +1767,6 @@ test("ExecutiveSummaryCard withholds scores when the captured page is not repres
         confidence: "medium",
         estimatedRankLabel: "Typical",
         expectedCookiesBeforeConsent: 4,
-        expectedOverallScore: 78,
         expectedThirdPartyRequests: 12,
         industry: "SaaS / web application",
         rationale: "Matched to a SaaS benchmark."
@@ -3477,7 +3307,6 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
         confidence: "medium",
         estimatedRankLabel: "Typical",
         expectedCookiesBeforeConsent: 2,
-        expectedOverallScore: 72,
         expectedThirdPartyRequests: 24,
         industry: "SaaS / web application",
         rationale: "Matched to a SaaS benchmark."

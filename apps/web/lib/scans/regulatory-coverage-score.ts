@@ -16,12 +16,20 @@ type RegulatoryCoverageRowConfig = {
 };
 
 export type RegulatoryCoverageScore = {
+  coverageConfidence: "high" | "medium" | "low" | "insufficient";
   coverageRatio: number;
   ratingLabel: string;
   score: number | null;
+  scoreKind: "california_evidence" | "gdpr_eprivacy_evidence";
+  scoreSource: string;
+  scoreVersion: string;
   summary: string;
   toneClass: string;
 };
+
+export const REGULATORY_COVERAGE_SCORE_SOURCE = "wc01.regulatory-coverage-score";
+export const CALIFORNIA_EVIDENCE_SCORE_VERSION = "california-evidence.legacy-v1";
+export const GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION = "gdpr-eprivacy-evidence.legacy-v1";
 
 const CALIFORNIA_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   cipa_sensitive_communication_interception: { weight: 7 },
@@ -43,23 +51,57 @@ const CALIFORNIA_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
 const GDPR_EPRIVACY_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   accessibility_consent_controls: { weight: 4 },
   accept_consent_control: { weight: 7 },
+  advertising_retargeting_vendor_signal_observed: { weight: 5 },
+  analytics_vendor_observed: { weight: 5 },
+  automated_decision_making_profiling_disclosure: { weight: 5 },
+  cmp_framework_signal_observed: { weight: 5 },
   consent_choice_quality: { weight: 10 },
   consent_surface_observed: { weight: 10 },
+  controller_contact_disclosure: { weight: 5 },
+  cookie_notice_policy_availability: { weight: 5 },
   cross_border_endpoint_review: { weight: 5 },
+  data_subject_rights_disclosure: { weight: 5 },
+  device_identification_fingerprinting_signal_observed: { weight: 5 },
+  dpo_contact_point_disclosure: { weight: 5 },
+  embedded_content_pre_consent: { weight: 5 },
+  international_transfers_disclosure: { weight: 5 },
+  legal_basis_disclosure_observed: { weight: 5 },
   options_settings_preferences_control: { weight: 7 },
   post_reject_tracking_reduction: { weight: 10 },
   pre_consent_cookies_storage: { weight: 12 },
   pre_consent_third_party_tracking: { weight: 14 },
   preference_withdrawal_control: { weight: 7 },
+  privacy_notice_availability: { weight: 5 },
+  processing_purposes_disclosure: { weight: 5 },
+  recipients_vendor_categories_disclosure: { weight: 5 },
   reject_all_path_availability: { weight: 10 },
+  retention_disclosure_observed: { weight: 5 },
+  retargeting_behavioral_advertising_signal_observed: { weight: 5 },
   sensitive_surfaces_third_party_tracking: { weight: 8 },
   social_media_embed_pre_consent: { weight: 6 },
-  session_replay_after_refusal: { weight: 5 },
-  session_replay_before_consent: { weight: 5 },
-  session_replay_disclosure_alignment: { weight: 4 },
   session_replay_fingerprinting_review: { weight: 3 },
-  session_replay_sensitive_surface: { weight: 4 }
+  supervisory_authority_complaint_disclosure: { weight: 5 },
+  third_party_iframe_pre_consent: { weight: 5 },
+  third_party_service_connection_pre_consent: { weight: 5 },
+  transport_security_form_transport: { weight: 5 },
+  transport_security_http_redirect: { weight: 5 },
+  transport_security_https_delivery: { weight: 5 },
+  transport_security_mixed_content: { weight: 5 },
+  transport_security_tls_certificate: { weight: 5 }
 };
+
+export function auditRegulatoryCoverageScoreConfig(input: {
+  framework: RegulatoryCoverageFramework;
+  rowIds: string[];
+}) {
+  const configs = getConfigs(input.framework);
+  const rowIds = [...new Set(input.rowIds)];
+  const configuredIds = Object.keys(configs);
+  return {
+    missingConfigIds: rowIds.filter((id) => !configs[id]).sort(),
+    staleConfigIds: configuredIds.filter((id) => !rowIds.includes(id)).sort()
+  };
+}
 
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -88,6 +130,16 @@ function getTone(score: number | null) {
     ratingLabel: "Needs work",
     toneClass: "border-rose-200 bg-rose-50 text-rose-800"
   };
+}
+
+function getCoverageConfidence(coverageRatio: number) {
+  if (coverageRatio >= 0.9) {
+    return "high" as const;
+  }
+  if (coverageRatio >= 0.7) {
+    return "medium" as const;
+  }
+  return "low" as const;
 }
 
 function getRetainedEvidence(row: RegulatoryCoverageRow) {
@@ -192,11 +244,38 @@ function getFrameworkLabel(framework: RegulatoryCoverageFramework) {
   return framework === "california" ? "California" : "GDPR/ePrivacy";
 }
 
+function getScoreMetadata(framework: RegulatoryCoverageFramework) {
+  return framework === "california"
+    ? {
+        scoreKind: "california_evidence" as const,
+        scoreSource: REGULATORY_COVERAGE_SCORE_SOURCE,
+        scoreVersion: CALIFORNIA_EVIDENCE_SCORE_VERSION
+      }
+    : {
+        scoreKind: "gdpr_eprivacy_evidence" as const,
+        scoreSource: REGULATORY_COVERAGE_SCORE_SOURCE,
+        scoreVersion: GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION
+      };
+}
+
 export function deriveRegulatoryCoverageScore(input: {
   framework: RegulatoryCoverageFramework;
   rows: RegulatoryCoverageRow[];
 }): RegulatoryCoverageScore {
   const configs = getConfigs(input.framework);
+  const scoreMetadata = getScoreMetadata(input.framework);
+  const missingConfigIds = [...new Set(input.rows.map((row) => row.id).filter((id) => !configs[id]))].sort();
+  if (missingConfigIds.length > 0) {
+    const tone = getTone(null);
+    return {
+      coverageConfidence: "insufficient",
+      coverageRatio: 0,
+      score: null,
+      summary: `${getFrameworkLabel(input.framework)} score was withheld because scoring configuration is missing for: ${missingConfigIds.join(", ")}.`,
+      ...scoreMetadata,
+      ...tone
+    };
+  }
   let earned = 0;
   let possible = 0;
   let coveredWeight = 0;
@@ -206,7 +285,10 @@ export function deriveRegulatoryCoverageScore(input: {
     if (factor === null) {
       continue;
     }
-    const weight = configs[row.id]?.weight ?? 5;
+    const weight = configs[row.id]?.weight;
+    if (weight === undefined) {
+      continue;
+    }
     possible += weight;
     earned += weight * factor;
     if (!isCoverageLimited(row)) {
@@ -217,9 +299,11 @@ export function deriveRegulatoryCoverageScore(input: {
   if (possible <= 0) {
     const tone = getTone(null);
     return {
+      coverageConfidence: "insufficient",
       coverageRatio: 0,
       score: null,
       summary: `${getFrameworkLabel(input.framework)} score was withheld because no applicable checklist rows were testable.`,
+      ...scoreMetadata,
       ...tone
     };
   }
@@ -232,9 +316,11 @@ export function deriveRegulatoryCoverageScore(input: {
   const summary = `${getFrameworkLabel(input.framework)} score is weighted from evidence-gated checklist rows. Weak negative checks, coverage limits, and vendor/request mismatches receive partial credit.`;
 
   return {
+    coverageConfidence: getCoverageConfidence(coverageRatio),
     coverageRatio,
     score,
     summary,
+    ...scoreMetadata,
     ...tone
   };
 }

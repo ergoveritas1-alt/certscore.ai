@@ -520,6 +520,10 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   }
 ];
 
+export function getGdprEprivacyCoverageChecklistRowIds() {
+  return CHECKLIST_ROWS.map((row) => row.id);
+}
+
 const SESSION_REPLAY_PARENT_ROW_ID = "session_replay_fingerprinting_review";
 const SESSION_REPLAY_CHILD_ROW_LABELS = new Map([
   ["session_replay_before_consent", "Before consent"],
