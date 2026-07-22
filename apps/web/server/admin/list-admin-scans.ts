@@ -257,7 +257,7 @@ export async function listAdminScansPage(
       candidateAssessment: candidateScoreAssessmentMap.get(scan.id) ?? null,
       legacyAssessment: legacyScoreAssessmentMap.get(scan.id) ?? null
     });
-    const scoreAssessment = scoreSelection.assessment;
+    const scoreAssessment = noGo.isNoGo ? null : scoreSelection.assessment;
     const displayedScore = scoreAssessment
       ? scoreAssessment.scoreValue
       : snapshot?.certscore_overall ?? null;

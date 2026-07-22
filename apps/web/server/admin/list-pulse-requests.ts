@@ -267,7 +267,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
   const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
   const storedTopFindingIds = asStringArray(responseSummary.topFindingIds);
   const scanFromValue = normalizeScanFrom(requestContext.scanFrom ?? asRecord(row.scan_config_json).scanFrom);
-  const score =
+  const retainedScore =
     typeof responseSummary.score === "number"
       ? responseSummary.score
       : typeof row.snapshot_score === "number" ? row.snapshot_score : null;
@@ -294,6 +294,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     snapshotOutcome: typeof row.scan_outcome === "string" ? row.scan_outcome : null,
     visualAccessReview: asRecord(row.visual_access_review)
   });
+  const score = noGo.isNoGo ? null : retainedScore;
   return {
     adminSummaryGeneratedAt: timestampString(row.admin_summary_generated_at),
     accessPostureClass: typeof row.access_posture_class === "string" ? row.access_posture_class : null,
@@ -388,6 +389,9 @@ async function applyConfiguredScores(items: AdminPulseRequestListItem[]) {
   ]);
   return items.map((item) => {
     if (!item.scanId) return item;
+    if (item.noGoFlag) {
+      return { ...item, score: null, topFindingCount: null };
+    }
     const selection = selectConfiguredCustomerGdprEprivacyScore({
       candidateAssessment: postureScores.get(item.scanId) ?? null,
       legacyAssessment: legacyScores.get(item.scanId) ?? null
