@@ -13,7 +13,7 @@ import {
   GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
   isLunaScoreDecisionApprovedForModel
 } from "./canonical-shadow-score-luna-decision";
-import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL } from "./canonical-shadow-score-model";
+import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL } from "./canonical-shadow-score-model";
 
 export const CANONICAL_SHADOW_BENCHMARK_SCHEMA_VERSION = "canonical-shadow-score-benchmark.v1";
 export const CANONICAL_SHADOW_MAX_BENCHMARK_CASES = 32;
@@ -29,7 +29,7 @@ type BenchmarkCase = {
 };
 
 function completeRows(): CanonicalShadowCoverageRow[] {
-  return Object.keys(GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL.coverageRowWeights).map((rowId) => ({
+  return Object.keys(GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL.coverageRowWeights).map((rowId) => ({
     assessmentStatus: "checked",
     evidenceState: "observed",
     rowId
@@ -37,7 +37,7 @@ function completeRows(): CanonicalShadowCoverageRow[] {
 }
 
 function limitedRows(): CanonicalShadowCoverageRow[] {
-  return Object.keys(GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL.coverageRowWeights).map((rowId) => ({
+  return Object.keys(GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL.coverageRowWeights).map((rowId) => ({
     assessmentStatus: "coverage_limitation",
     evidenceState: "not_testable",
     rowId
@@ -195,7 +195,7 @@ function resultSignature(result: CanonicalShadowScoreResult) {
 
 export function buildCanonicalShadowScoreBenchmarkArtifact(
   generatedAt: string,
-  model: CanonicalShadowScoreModel = GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL
+  model: CanonicalShadowScoreModel = GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL
 ) {
   const boundedCases = GDPR_EPRIVACY_SHADOW_BENCHMARK_CASES.slice(0, CANONICAL_SHADOW_MAX_BENCHMARK_CASES);
   const cases = boundedCases.map((benchmarkCase) => ({
@@ -241,6 +241,15 @@ export function buildCanonicalShadowScoreBenchmarkArtifact(
       ? [`supported_high_severity_gap_has_clear_posture:${entry.caseId}`]
       : []
   ).sort();
+  const expectedBandMismatches = cases.flatMap((entry) => {
+    const laneDecision = GDPR_EPRIVACY_SHADOW_LUNA_DECISION.expectedBandLanes.find(
+      (lane) => lane.laneId === entry.laneId
+    );
+    const actualBand = entry.result.posture ?? "Withheld";
+    return laneDecision?.expectedPostureBand && laneDecision.expectedPostureBand !== actualBand
+      ? [`expected_band_mismatch:${entry.caseId}:${laneDecision.expectedPostureBand}->${actualBand}`]
+      : [];
+  }).sort();
   const lunaApproved = isLunaScoreDecisionApprovedForModel(
     GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
     model.version
@@ -249,9 +258,10 @@ export function buildCanonicalShadowScoreBenchmarkArtifact(
   return {
     cases,
     generatedAt,
-    acceptanceBlockers: [...invariantFailures, ...candidateContradictions].sort(),
+    acceptanceBlockers: [...invariantFailures, ...candidateContradictions, ...expectedBandMismatches].sort(),
     candidateContradictions,
-    gdprEprivacyCutoverEligible: lunaApproved && invariantFailures.length === 0 && candidateContradictions.length === 0,
+    expectedBandMismatches,
+    gdprEprivacyCutoverEligible: lunaApproved && invariantFailures.length === 0 && candidateContradictions.length === 0 && expectedBandMismatches.length === 0,
     invariantFailures,
     invariants: {
       allRequiredLanesRepresented: missingLaneIds.length === 0 && extraLaneIds.length === 0,

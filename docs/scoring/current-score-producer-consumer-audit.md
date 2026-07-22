@@ -68,4 +68,4 @@ The versioned lifecycle has a hard activation cutoff of `2026-07-22T06:30:00.000
 7. Legacy scorer input coverage and report usable-evidence coverage are distinct calculations and can diverge (production canaries measured `1.0` versus `27/30` and `28/30`). Shadow comparison schema v3 records both over the exact customer-report row projection and treats any divergence as a cutover-blocking contradiction; Luna must approve one canonical coverage meaning before cutover.
 8. The twelve-lane deterministic benchmark found that a supported high-severity rights gap currently yields `75 / Clear / Monitor`. The cutover gate now reports this as an acceptance blocker; Luna must approve a model change before cutover.
 
-Until all gates pass, candidate-v2 remains internal shadow output. If calibration cannot support an overall score, CertScore will continue to expose separate domain scores and coverage confidence and will withhold an overall score.
+Until all gates pass, candidate-v3 remains internal shadow output. If calibration cannot support an overall score, CertScore will continue to expose separate domain scores and coverage confidence and will withhold an overall score.

@@ -16,23 +16,39 @@ test("benchmark artifact represents every objective lane and keeps overall score
   assert.equal(artifact.schemaVersion, CANONICAL_SHADOW_BENCHMARK_SCHEMA_VERSION);
   assert.deepEqual([...new Set(artifact.cases.map((entry) => entry.laneId))].sort(), [...LUNA_EXPECTED_BAND_LANE_IDS].sort());
   assert.deepEqual(artifact.invariantFailures, []);
-  assert.deepEqual(artifact.candidateContradictions, [
-    "supported_high_severity_gap_has_clear_posture:policy-rights-gap"
-  ]);
+  assert.deepEqual(artifact.candidateContradictions, []);
+  assert.deepEqual(artifact.expectedBandMismatches, []);
   assert.equal(artifact.overallScoreStatus, "withheld_unmodeled_domains");
   assert.equal(artifact.gdprEprivacyCutoverEligible, false);
 });
 
-test("candidate outcomes expose meaningful risk lanes without assigning Luna expected bands", () => {
+test("candidate-v3 outcomes match Luna's twelve pending calibration bands", () => {
   assert.equal(lane("low_signal")[0]?.result.postureScore, 100);
   assert.equal(lane("strong_consent_controls")[0]?.result.postureScore, 100);
   assert.equal(lane("pre_consent_tracking_storage")[0]?.result.postureScore, 54);
-  assert.equal(lane("policy_gaps")[0]?.result.postureScore, 75);
-  assert.equal(lane("policy_gaps")[0]?.result.posture, "Clear");
+  assert.equal(lane("policy_gaps")[0]?.result.postureScore, 70);
+  assert.equal(lane("policy_gaps")[0]?.result.posture, "Watch");
   assert.equal(lane("session_replay_fingerprinting")[0]?.result.postureScore, 49);
   assert.equal(lane("sensitive_contexts")[0]?.result.postureScore, 49);
   assert.equal(lane("access_limited_no_go")[0]?.result.postureScore, null);
-  assert.ok(artifact.lunaLaneDecisions.every((entry) => entry.expectedPostureBand === null && entry.status === "pending_luna"));
+  assert.deepEqual(
+    Object.fromEntries(artifact.lunaLaneDecisions.map((entry) => [entry.laneId, entry.expectedPostureBand])),
+    {
+      access_limited_no_go: "Withheld",
+      accessibility: "Clear",
+      consumer_protection: "Clear",
+      cross_region_equivalence: "Watch",
+      low_signal: "Clear",
+      policy_gaps: "Watch",
+      pre_consent_tracking_storage: "Watch",
+      sensitive_contexts: "Action Needed",
+      session_replay_fingerprinting: "Action Needed",
+      source_equivalence: "Clear",
+      strong_consent_controls: "Clear",
+      transport_security: "Clear"
+    }
+  );
+  assert.ok(artifact.lunaLaneDecisions.every((entry) => entry.status === "pending_luna"));
 });
 
 test("unmodeled domains cannot silently become an overall score", () => {

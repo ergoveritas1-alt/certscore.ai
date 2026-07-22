@@ -29,12 +29,12 @@ function approvedDecision(): CanonicalShadowScoreLunaDecision {
     expectedBandLanes: GDPR_EPRIVACY_SHADOW_LUNA_DECISION.expectedBandLanes.map((lane) => ({
       ...lane,
       status: "approved_by_luna",
-      expectedPostureBand: "Luna-labeled",
+      expectedPostureBand: lane.expectedPostureBand ?? "Withheld",
       evidenceArtifact: `artifacts/scoring/luna/lanes/${lane.laneId}.json`
     })),
     modelParameters: {
       status: "approved_by_luna",
-      approvedModelArtifact: "docs/scoring/gdpr-eprivacy-shadow-candidate-v2.json",
+      approvedModelArtifact: "docs/scoring/gdpr-eprivacy-shadow-candidate-v3.json",
       decisionEvidenceArtifact: "artifacts/scoring/luna/model-parameters.json"
     },
     signOff: {
@@ -49,10 +49,24 @@ function approvedDecision(): CanonicalShadowScoreLunaDecision {
 test("the checked-in Luna decision packet is valid, explicit, and still pending", () => {
   assert.deepEqual(auditLunaScoreDecision(GDPR_EPRIVACY_SHADOW_LUNA_DECISION), []);
   assert.equal(GDPR_EPRIVACY_SHADOW_LUNA_DECISION.coverageSemantics.recommendedCustomerFacingMetric, "report_usable_evidence");
+  assert.equal(GDPR_EPRIVACY_SHADOW_LUNA_DECISION.coverageSemantics.status, "approved_by_luna");
+  assert.equal(GDPR_EPRIVACY_SHADOW_LUNA_DECISION.coverageSemantics.selectedCustomerFacingMetric, "report_usable_evidence");
   assert.equal(isLunaScoreDecisionApprovedForModel(
     GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
     GDPR_EPRIVACY_SHADOW_LUNA_DECISION.modelVersion
   ), false);
+  assert.ok(GDPR_EPRIVACY_SHADOW_LUNA_DECISION.expectedBandLanes.every(
+    (lane) => lane.expectedPostureBand !== null && lane.evidenceArtifact !== null
+  ));
+});
+
+test("pending final approval cannot erase Luna's selected lane labels", () => {
+  const incomplete = structuredClone(GDPR_EPRIVACY_SHADOW_LUNA_DECISION);
+  incomplete.expectedBandLanes[0]!.expectedPostureBand = null;
+  incomplete.expectedBandLanes[0]!.evidenceArtifact = null;
+
+  assert.ok(auditLunaScoreDecision(incomplete).includes("expectedBandLanes.low_signal.expectedPostureBand"));
+  assert.ok(auditLunaScoreDecision(incomplete).includes("expectedBandLanes.low_signal.evidenceArtifact"));
 });
 
 test("an approval flag without evidence cannot pass the Luna gate", () => {

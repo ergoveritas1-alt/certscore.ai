@@ -9,6 +9,7 @@ export const LUNA_COVERAGE_METRIC_IDS = [
 ] as const;
 
 type LunaDecisionStatus = "pending_luna" | "approved_by_luna";
+type LunaExpectedPostureBand = "Action Needed" | "Clear" | "Watch" | "Withheld";
 
 export type CanonicalShadowScoreLunaDecision = {
   schemaVersion: "gdpr-eprivacy-shadow-luna-decision.v1";
@@ -33,7 +34,7 @@ export type CanonicalShadowScoreLunaDecision = {
   expectedBandLanes: Array<{
     laneId: string;
     status: LunaDecisionStatus;
-    expectedPostureBand: string | null;
+    expectedPostureBand: LunaExpectedPostureBand | null;
     evidenceArtifact: string | null;
   }>;
   modelParameters: {
@@ -72,9 +73,23 @@ export function auditLunaScoreDecision(
   if (!decision.coverageSemantics.options.every((option) => populated(option.label) && populated(option.meaning))) {
     errors.push("coverageSemantics.options");
   }
+  if (!validStatuses.has(decision.coverageSemantics.status)) errors.push("coverageSemantics.status");
+  if (decision.coverageSemantics.status === "approved_by_luna") {
+    const selectedMetric = decision.coverageSemantics.selectedCustomerFacingMetric;
+    if (!selectedMetric || !metricIds.includes(selectedMetric)) errors.push("coverageSemantics.selectedCustomerFacingMetric");
+    if (!populated(decision.coverageSemantics.decisionEvidenceArtifact)) errors.push("coverageSemantics.decisionEvidenceArtifact");
+  }
   if (new Set(laneIds).size !== laneIds.length) errors.push("expectedBandLanes.duplicateLaneId");
   if (laneIds.join("|") !== [...LUNA_EXPECTED_BAND_LANE_IDS].sort().join("|")) {
     errors.push("expectedBandLanes.laneIds");
+  }
+  const validExpectedBands = new Set<LunaExpectedPostureBand>(["Action Needed", "Clear", "Watch", "Withheld"]);
+  for (const lane of decision.expectedBandLanes) {
+    if (!validStatuses.has(lane.status)) errors.push(`expectedBandLanes.${lane.laneId}.status`);
+    if (lane.expectedPostureBand === null || !validExpectedBands.has(lane.expectedPostureBand)) {
+      errors.push(`expectedBandLanes.${lane.laneId}.expectedPostureBand`);
+    }
+    if (!populated(lane.evidenceArtifact)) errors.push(`expectedBandLanes.${lane.laneId}.evidenceArtifact`);
   }
 
   if (decision.decisionStatus === "approved_by_luna") {

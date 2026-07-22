@@ -1,10 +1,10 @@
 {
   "schemaVersion": "gdpr-eprivacy-shadow-luna-decision.v1",
-  "modelVersion": "gdpr-eprivacy-shadow.candidate-v2.pending-luna",
+  "modelVersion": "gdpr-eprivacy-shadow.candidate-v3-rights-max-30.pending-luna",
   "decisionStatus": "pending_luna",
   "coverageSemantics": {
-    "status": "pending_luna",
-    "selectedCustomerFacingMetric": null,
+    "status": "approved_by_luna",
+    "selectedCustomerFacingMetric": "report_usable_evidence",
     "recommendedCustomerFacingMetric": "report_usable_evidence",
     "options": [
       {
@@ -18,7 +18,7 @@
         "meaning": "Weighted share of score-eligible model rows that are testable; this is an internal score-withholding input, not report completeness."
       }
     ],
-    "decisionEvidenceArtifact": null
+    "decisionEvidenceArtifact": "docs/scoring/gdpr-eprivacy-shadow-candidate-v2-review.md"
   },
   "benchmarkCorpus": {
     "status": "pending_luna",
@@ -30,18 +30,18 @@
     "governedPublicSampleArtifact": null
   },
   "expectedBandLanes": [
-    { "laneId": "low_signal", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "strong_consent_controls", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "pre_consent_tracking_storage", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "policy_gaps", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "session_replay_fingerprinting", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "sensitive_contexts", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "accessibility", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "transport_security", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "consumer_protection", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "access_limited_no_go", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "cross_region_equivalence", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null },
-    { "laneId": "source_equivalence", "status": "pending_luna", "expectedPostureBand": null, "evidenceArtifact": null }
+    { "laneId": "low_signal", "status": "pending_luna", "expectedPostureBand": "Clear", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" },
+    { "laneId": "strong_consent_controls", "status": "pending_luna", "expectedPostureBand": "Clear", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" },
+    { "laneId": "pre_consent_tracking_storage", "status": "pending_luna", "expectedPostureBand": "Watch", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" },
+    { "laneId": "policy_gaps", "status": "pending_luna", "expectedPostureBand": "Watch", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" },
+    { "laneId": "session_replay_fingerprinting", "status": "pending_luna", "expectedPostureBand": "Action Needed", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" },
+    { "laneId": "sensitive_contexts", "status": "pending_luna", "expectedPostureBand": "Action Needed", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" },
+    { "laneId": "accessibility", "status": "pending_luna", "expectedPostureBand": "Clear", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" },
+    { "laneId": "transport_security", "status": "pending_luna", "expectedPostureBand": "Clear", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" },
+    { "laneId": "consumer_protection", "status": "pending_luna", "expectedPostureBand": "Clear", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" },
+    { "laneId": "access_limited_no_go", "status": "pending_luna", "expectedPostureBand": "Withheld", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" },
+    { "laneId": "cross_region_equivalence", "status": "pending_luna", "expectedPostureBand": "Watch", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" },
+    { "laneId": "source_equivalence", "status": "pending_luna", "expectedPostureBand": "Clear", "evidenceArtifact": "docs/scoring/luna-gdpr-eprivacy-score-decision-packet.md" }
   ],
   "modelParameters": {
     "status": "pending_luna",

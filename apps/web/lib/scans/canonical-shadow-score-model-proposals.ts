@@ -1,5 +1,8 @@
 import type { CanonicalShadowScoreModel } from "./canonical-shadow-score";
-import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL } from "./canonical-shadow-score-model";
+import {
+  GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL,
+  GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL
+} from "./canonical-shadow-score-model";
 
 export type CanonicalShadowScoreModelProposal = {
   changedParameters: string[];
@@ -11,15 +14,7 @@ export type CanonicalShadowScoreModelProposal = {
 export const GDPR_EPRIVACY_SHADOW_MODEL_PROPOSALS: CanonicalShadowScoreModelProposal[] = [
   {
     changedParameters: ["familyMaximumRiskPoints.rights_gap:25->30"],
-    model: {
-      ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL,
-      approvalStatus: "pending_luna",
-      familyMaximumRiskPoints: {
-        ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL.familyMaximumRiskPoints,
-        rights_gap: 30
-      },
-      version: "gdpr-eprivacy-shadow.candidate-v3a-rights-max-30.pending-luna"
-    },
+    model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL,
     proposalId: "rights-family-maximum-30",
     rationale: "Makes a high-severity rights gap contribute the full configured high-severity risk value, moving the deterministic posture from Clear to Watch without adding a family-specific cap."
   },

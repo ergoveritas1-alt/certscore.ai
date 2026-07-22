@@ -9,7 +9,7 @@ function argumentValue(name: string) {
 
 async function main() {
   const outputPath = path.resolve(
-    argumentValue("--out") ?? "artifacts/scoring/gdpr-eprivacy-shadow-benchmark-candidate-v2.json"
+    argumentValue("--out") ?? "artifacts/scoring/gdpr-eprivacy-shadow-benchmark-candidate-v3.json"
   );
   const artifact = buildCanonicalShadowScoreBenchmarkArtifact(new Date().toISOString());
 

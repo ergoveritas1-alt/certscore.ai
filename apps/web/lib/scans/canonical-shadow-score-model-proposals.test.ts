@@ -63,3 +63,13 @@ test("Luna proposals expose distinct bounded policy-gap outcomes", () => {
     { risk: 25, score: 49, posture: "Action Needed", cap: 49 }
   );
 });
+
+test("Luna's selected Watch label blocks the stronger Action Needed alternative", () => {
+  const proposal = GDPR_EPRIVACY_SHADOW_MODEL_PROPOSALS.find((entry) => entry.proposalId === "high-rights-gap-cap-49");
+  assert.ok(proposal);
+  const artifact = buildCanonicalShadowScoreBenchmarkArtifact("2026-07-22T12:00:00.000Z", proposal.model);
+  assert.deepEqual(artifact.expectedBandMismatches, [
+    "expected_band_mismatch:policy-rights-gap:Watch->Action Needed"
+  ]);
+  assert.ok(artifact.acceptanceBlockers.includes("expected_band_mismatch:policy-rights-gap:Watch->Action Needed"));
+});

@@ -1,8 +1,9 @@
-# GDPR/ePrivacy shadow candidate-v2 review
+# GDPR/ePrivacy shadow candidate-v2 to candidate-v3 review
 
 ## Decision
 
-**Reject candidate-v1 for cutover. Keep candidate-v2 in shadow with `pending_luna` approval.**
+**Reject candidate-v1 and candidate-v2 for cutover. Advance candidate-v3 in shadow
+with `pending_luna` approval.**
 
 Candidate-v1 mixed an evidence-coverage problem (`policy_extraction`) into observed
 risk while omitting surfaced `sensitive_data` findings from the risk model. That
@@ -21,20 +22,25 @@ bands, weights, caps, and thresholds.
 
 ## Deterministic benchmark blocker
 
-The twelve-lane candidate-v2 benchmark has complete structural lane coverage and
-passes deterministic cross-region and Lambda/browser-extension equivalence. It also
-exposes one cutover blocker: a supported high-severity `rights_gap` finding contributes
+The twelve-lane candidate-v2 benchmark had complete structural lane coverage and
+passed deterministic cross-region and Lambda/browser-extension equivalence. It also
+exposed one cutover blocker: a supported high-severity `rights_gap` finding contributed
 the family maximum of 25 points, producing `75 / Clear / Monitor`, and no critical cap
 applies. This is misleadingly strong for the retained input and must not be approved by
 changing only the expected label. Luna must decide a revised family maximum, severity
 penalty, critical cap, or posture threshold and rerun every lane and cohort.
 
-Three pending-Luna alternatives are now machine-checkable: rights-family maximum 30
+Three alternatives are machine-checkable: rights-family maximum 30
 (`70 / Watch`), high-rights cap 54 (`54 / Watch`), and high-rights cap 49
 (`49 / Action Needed`). The review packet recommends the family-maximum change as the
 next calibration hypothesis because it preserves the shared high-severity value. The
 retained 11-scan corpus contains no surfaced rights-gap family input, so all three
 produce the same retained summary and the corpus cannot select between them.
+
+Luna selected the rights-family maximum of 30 as
+`candidate-v3-rights-max-30.pending-luna` for continued calibration. This resolves the
+deterministic high-severity/Clear contradiction without approving the model or
+authorizing cutover. All twelve expected bands are now explicit and machine-enforced.
 
 Accessibility, transport/security, and consumer-protection cases are explicitly
 outside the GDPR/ePrivacy candidate. Their presence does not alter this domain score,
@@ -109,7 +115,7 @@ same report-row projection as the passive production cohort and live admin shado
 
 The unchanged numerical result is expected and does not validate the family change.
 Deterministic fixtures must prove both policy-extraction exclusion and sensitive-data
-inclusion before candidate-v2 can advance.
+inclusion before any candidate can advance to final approval.
 
 ## Public calibration status
 
@@ -127,7 +133,7 @@ selector must still return all 10 required targets from a fresh central export.
 2. Review the exact recurring limited rows on current owned canaries.
 3. Fix missing current-production evidence mappings before changing the model denominator.
 4. Complete Luna labels for every required expected-band lane.
-5. Resolve the high-severity rights-gap `Clear` contradiction through a Luna-approved model revision.
+5. Validate Luna's selected candidate-v3 rights-gap treatment against an approved live corpus.
 6. Repeat retained and passive shadow comparisons under the revised candidate.
 7. Run the ledger-selected public cohort only when at least 10 targets are eligible.
 8. Record Luna corpus, parameter, and final sign-off artifacts in the machine-readable decision packet.

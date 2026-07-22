@@ -12,7 +12,7 @@ The shadow score accepts only:
 
 1. GDPR/ePrivacy checklist rows produced by the existing WC01 concern, policy, and checklist projection.
 2. Unified findings that the canonical surfacing policy already marks reportable and surfaced.
-3. The explicit candidate-v2 GDPR/ePrivacy score-family registry: `consent_tracking`, `contradiction`, `rights_gap`, and `sensitive_data`.
+3. The explicit candidate-v3 GDPR/ePrivacy score-family registry: `consent_tracking`, `contradiction`, `rights_gap`, and `sensitive_data`.
 
 It does not consume raw scanner signals, raw v2 review artifacts, display-only inferences, repair output, or unrelated accessibility and financial findings.
 

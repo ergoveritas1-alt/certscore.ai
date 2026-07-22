@@ -123,9 +123,9 @@ function scanRecord(bundle: JsonObject, outDir: string, index: number): JsonObje
 
 async function main() {
   const inputPath = path.resolve(argumentValue("--input") ?? "artifacts/v2-scan-quality-calibration/consent-retention-06d7e04f-20260718/passive");
-  const modelPath = path.resolve(argumentValue("--model") ?? "docs/scoring/gdpr-eprivacy-shadow-candidate-v2.json");
+  const modelPath = path.resolve(argumentValue("--model") ?? "docs/scoring/gdpr-eprivacy-shadow-candidate-v3.json");
   const modelProposalId = argumentValue("--model-proposal");
-  const outputPath = path.resolve(argumentValue("--out") ?? "artifacts/scoring/gdpr-eprivacy-shadow-retained-candidate-v2.json");
+  const outputPath = path.resolve(argumentValue("--out") ?? "artifacts/scoring/gdpr-eprivacy-shadow-retained-candidate-v3.json");
   const requestedLimit = Number(argumentValue("--limit") ?? "100");
   const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(100, Math.floor(requestedLimit))) : 100;
   const modelProposal = modelProposalId

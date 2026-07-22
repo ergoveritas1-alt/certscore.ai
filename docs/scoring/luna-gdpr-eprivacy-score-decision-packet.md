@@ -9,8 +9,12 @@ authorize legal-compliance claims.
 
 ## Current recommendation
 
-- Keep candidate-v2 internal and `pending_luna`.
-- Use **report usable evidence** as the customer-facing coverage meaning because it
+- Advance `candidate-v3-rights-max-30` as Luna's selected calibration candidate;
+  keep it internal and `pending_luna` until the governed public sample is available.
+- Candidate-v3 raises the rights-gap family maximum from 25 to 30. A supported
+  high-severity rights gap now produces `70 / Watch / Review`, using the shared
+  high-severity value without a family-specific discontinuous cap.
+- Luna selects **report usable evidence** as the customer-facing coverage meaning because it
   matches the exact GDPR/ePrivacy rows customers see.
 - Keep **model eligibility coverage** as an internal weighted input used to withhold
   a score when model inputs are not sufficiently testable.
@@ -19,16 +23,39 @@ authorize legal-compliance claims.
 
 ## Luna decisions
 
-1. **Coverage semantics:** select one customer-facing metric and attach the decision evidence.
+1. **Coverage semantics:** decided. Customer-facing coverage is exact report usable evidence; model eligibility coverage remains internal.
 2. **Benchmark corpus:** approve the retained replay, owned canaries, and the canonical selector's governed public sample. The central contact-history export and selector artifacts are mandatory; live selection fails closed when unavailable or ineligible.
 3. **Expected bands:** label all twelve required lanes: low signal, strong consent controls, pre-consent tracking/storage, policy gaps, session replay/fingerprinting, sensitive contexts, accessibility, transport/security, consumer protection, access-limited/no-go, cross-region equivalence, and Lambda/browser-extension source equivalence.
 4. **Model parameters:** approve or revise family boundaries, weights, severity points, family maximums, critical caps, score-withholding thresholds, posture bands, and contradiction thresholds.
 5. **Final sign-off:** identify the approver, timestamp the decision, and attach the final evidence artifact for the exact model version.
 
+## Luna expected-band labels
+
+These are calibration expectations for the GDPR/ePrivacy domain score, not an overall
+CertScore and not legal conclusions. They are now machine-enforced against the
+deterministic benchmark while their decision status remains `pending_luna`.
+
+| Lane | Expected domain posture | Reason |
+| --- | --- | --- |
+| Low signal, complete coverage | Clear | No supported score-eligible gap; adequate evidence is required. |
+| Strong consent controls | Clear | No supported score-eligible gap in the fixture. |
+| Pre-consent tracking/storage | Watch | Supported high consent/tracking risk is capped at 54. |
+| Policy/rights gap | Watch | Candidate-v3 contributes 30 risk points, producing 70. |
+| Session replay/fingerprinting contradiction | Action Needed | Supported high contradiction activates the 49 cap. |
+| Sensitive context | Action Needed | Supported high sensitive-data risk activates the 49 cap. |
+| Accessibility | Clear for this domain score | Accessibility is excluded from GDPR/ePrivacy risk; overall score remains withheld. |
+| Transport/security | Clear for this domain score | Transport/security is excluded from GDPR/ePrivacy risk; overall score remains withheld. |
+| Consumer protection | Clear for this domain score | Consumer protection is excluded from GDPR/ePrivacy risk; overall score remains withheld. |
+| Access-limited/no-go | Withheld | Evidence coverage is inadequate. |
+| Cross-region equivalent inputs | Watch | Both equivalent high tracking fixtures must match exactly. |
+| Lambda/browser-extension equivalent inputs | Clear | Both equivalent medium-contradiction fixtures must match exactly. |
+
 ## Acceptance evidence
 
 - Deterministic invariants and exact report-row projection tests pass.
-- The deterministic candidate-v2 benchmark currently blocks approval because a supported high-severity rights gap produces `75 / Clear / Monitor`. Luna must approve a model change that removes this contradiction; changing only an expected label is insufficient.
+- Candidate-v3 has no deterministic high-severity/Clear contradiction and matches all
+  twelve encoded expected bands. Any future mismatch becomes a benchmark acceptance
+  blocker; changing only a label cannot make an unsupported model cutover-eligible.
 - Retained replay has no projection failures or unexplained contradictions.
 - Owned canaries cover the required behavioral lanes.
 - At least 10 public targets are selected by the canonical cooldown-aware selector; no target is hand-picked and no cooldown is bypassed.

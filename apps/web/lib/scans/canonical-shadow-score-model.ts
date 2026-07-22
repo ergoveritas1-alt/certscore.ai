@@ -113,3 +113,16 @@ export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL = {
   },
   version: "gdpr-eprivacy-shadow.candidate-v2.pending-luna"
 } as const satisfies CanonicalShadowScoreModel;
+
+export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL = {
+  ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL,
+  approvalStatus: isLunaScoreDecisionApprovedForModel(
+    GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
+    "gdpr-eprivacy-shadow.candidate-v3-rights-max-30.pending-luna"
+  ) ? "approved_by_luna" : "pending_luna",
+  familyMaximumRiskPoints: {
+    ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL.familyMaximumRiskPoints,
+    rights_gap: 30
+  },
+  version: "gdpr-eprivacy-shadow.candidate-v3-rights-max-30.pending-luna"
+} as const satisfies CanonicalShadowScoreModel;
