@@ -6234,6 +6234,9 @@ function attr(attrs: string, name: string): string | undefined {
 function normalizeUrl(href: string, baseUrl: string): string | undefined {
   try {
     const parsed = new URL(href, baseUrl);
+    if (parsed.toString().endsWith("#")) {
+      parsed.hash = "";
+    }
     if (
       parsed.hash &&
       classifyPrivacySurface({ url: parsed.toString() }).surfaceType === "unknown"

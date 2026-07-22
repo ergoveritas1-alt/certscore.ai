@@ -61,6 +61,7 @@ type ConsentFlowRuntimeScanner = typeof import("./scanners/consent-flow-runtime-
 type ConsentFlowRuntimeInput = Parameters<ConsentFlowRuntimeScanner>[0];
 type ConsentFlowRuntimeResult = Awaited<ReturnType<ConsentFlowRuntimeScanner>>;
 const MAX_MODULE_TIMING_BREAKDOWN_ENTRIES = 40;
+const PRE_CONSENT_DEADLINE_SETTLE_GRACE_MS = 250;
 
 export {
   chromiumLaunchArgs,
@@ -269,31 +270,25 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     1_000,
     Math.min(input.preConsentModuleDeadlineMs ?? scanProfile.internalBudgetMs, scanProfile.internalBudgetMs),
   );
-  const preConsentDeadlineController = preConsentEnabled ? new AbortController() : undefined;
-  const preConsentDeadlineTimer = preConsentDeadlineController
-    ? setTimeout(() => {
-        preConsentDeadlineController.abort(new Error(
-          `Pre-consent runtime reached its ${preConsentModuleDeadlineMs}ms module budget; retained bounded partial evidence.`,
-        ));
-      }, preConsentModuleDeadlineMs)
-    : undefined;
   const preConsentResultPromise = preConsentEnabled
-    ? preConsentRuntimeScanner({
-      url: input.url,
-      normalizedUrl,
-      scanStartedAtMs: startedAtMs,
-      internalBudgetMs: scanProfile.internalBudgetMs,
-      artifactWriter,
-      browser: sharedBrowser,
-      stubHeavyResources: input.captureReplay,
-      screenshotCaptureMode: "viewport_first",
-      screenshotMode: input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always"),
-      screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
-      softDeadlineSignal: preConsentDeadlineController?.signal,
-      waitMode: leanPreConsent ? "fast" : "full",
-      signal: input.signal,
-    }).finally(() => {
-      if (preConsentDeadlineTimer) clearTimeout(preConsentDeadlineTimer);
+    ? settlePreConsentRuntimeWithinDeadline({
+      deadlineMs: preConsentModuleDeadlineMs,
+      startedAtMs,
+      run: (softDeadlineSignal) => preConsentRuntimeScanner({
+        url: input.url,
+        normalizedUrl,
+        scanStartedAtMs: startedAtMs,
+        internalBudgetMs: scanProfile.internalBudgetMs,
+        artifactWriter,
+        browser: sharedBrowser,
+        stubHeavyResources: input.captureReplay,
+        screenshotCaptureMode: "viewport_first",
+        screenshotMode: input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always"),
+        screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
+        softDeadlineSignal,
+        waitMode: leanPreConsent ? "fast" : "full",
+        signal: input.signal,
+      }),
     })
     : Promise.resolve(emptyPreConsentResult(nowIso(startedAtMs)));
   const policySurfaceResultPromise = policySurfaceEnabled
@@ -2486,6 +2481,85 @@ function isLocalHeadedFallbackEnabled() {
 function isCaptureReplayHeadedRetryEnabled() {
   const explicit = process.env.CERTSCORE_V2_CAPTURE_REPLAY_HEADED_RETRY?.trim();
   return explicit === "1" || explicit === "true";
+}
+
+export async function settlePreConsentRuntimeWithinDeadline(input: {
+  deadlineMs: number;
+  graceMs?: number;
+  run: (softDeadlineSignal: AbortSignal) => Promise<PreConsentRuntimeScannerResult>;
+  startedAtMs: number;
+}): Promise<PreConsentRuntimeScannerResult> {
+  const controller = new AbortController();
+  const deadlineMessage =
+    `Pre-consent runtime reached its ${input.deadlineMs}ms module budget; retained bounded partial evidence.`;
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let graceTimer: ReturnType<typeof setTimeout> | undefined;
+  const deadlinePromise = new Promise<"deadline">((resolve) => {
+    deadlineTimer = setTimeout(() => {
+      controller.abort(new Error(deadlineMessage));
+      resolve("deadline");
+    }, input.deadlineMs);
+  });
+  const workPromise = Promise.resolve().then(() => input.run(controller.signal));
+
+  try {
+    const initialResult = await Promise.race([
+      workPromise.then((value) => ({ kind: "result" as const, value })),
+      deadlinePromise.then(() => ({ kind: "deadline" as const })),
+    ]);
+    if (initialResult.kind === "result") {
+      return initialResult.value;
+    }
+
+    const graceMs = Math.max(0, input.graceMs ?? PRE_CONSENT_DEADLINE_SETTLE_GRACE_MS);
+    const graceResult = await Promise.race([
+      workPromise.then((value) => ({ kind: "result" as const, value })),
+      new Promise<{ kind: "fallback" }>((resolve) => {
+        graceTimer = setTimeout(() => resolve({ kind: "fallback" }), graceMs);
+      }),
+    ]);
+    if (graceResult.kind === "result") {
+      return graceResult.value;
+    }
+
+    return deadlineLimitedPreConsentResult({
+      completedAtMs: Date.now(),
+      deadlineMs: input.deadlineMs,
+      startedAtMs: input.startedAtMs,
+    });
+  } finally {
+    if (deadlineTimer) clearTimeout(deadlineTimer);
+    if (graceTimer) clearTimeout(graceTimer);
+  }
+}
+
+function deadlineLimitedPreConsentResult(input: {
+  completedAtMs: number;
+  deadlineMs: number;
+  startedAtMs: number;
+}): PreConsentRuntimeScannerResult {
+  const startedAt = nowIso(input.startedAtMs);
+  const completedAt = nowIso(input.completedAtMs);
+  const limitation =
+    `Pre-consent runtime did not settle after its ${input.deadlineMs}ms module budget; no pre-consent evidence was retained.`;
+  return {
+    ...emptyPreConsentResult(startedAt),
+    moduleRun: {
+      moduleName: "preConsentRuntimeScanner",
+      status: "skipped_budget",
+      startedAt,
+      completedAt,
+      durationMs: Math.max(0, input.completedAtMs - input.startedAtMs),
+      evidenceRefs: [],
+      errors: [limitation],
+    },
+    visualCapture: {
+      status: "unavailable",
+      failureReason: "unknown",
+      artifactRefs: [],
+      notes: [limitation],
+    },
+  };
 }
 
 function emptyPreConsentResult(startedAt: string): PreConsentRuntimeScannerResult {
