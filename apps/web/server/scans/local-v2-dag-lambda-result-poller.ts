@@ -662,20 +662,34 @@ export async function recordLocalV2DagLambdaResultEvent(
     }
   }
   if (parsedMessage.status === "completed") {
-    try {
-      const { persistCompletedLegacyGdprEprivacyAssessment } = await import("./score-assessment-lifecycle");
-      await persistCompletedLegacyGdprEprivacyAssessment({
-        organizationId: context.organizationId,
-        scanId: parsedMessage.scanId,
-        scoredAt: parsedMessage.completedAt
-      });
-    } catch (error) {
-      console.error("[score-assessment] completion-time persistence failed", {
-        error: error instanceof Error ? error.message : String(error),
-        scanId: parsedMessage.scanId,
-        scoreVersion: "gdpr-eprivacy-evidence.legacy-v1"
-      });
-    }
+    const { persistCompletedLegacyGdprEprivacyAssessment } = await import("./score-assessment-lifecycle");
+    const scorePersistence = await persistCompletedLegacyGdprEprivacyAssessment({
+      organizationId: context.organizationId,
+      scanId: parsedMessage.scanId,
+      scoredAt: parsedMessage.completedAt
+    });
+    assertLocalV2DagCompletionScorePersistence(scorePersistence);
+    console.info(JSON.stringify({
+      event: "scan.score_assessment.completion_persisted",
+      legacyReason: scorePersistence.reason,
+      scanId: parsedMessage.scanId,
+      shadowModelVersion: "shadowModelVersion" in scorePersistence ? scorePersistence.shadowModelVersion : null,
+      shadowReason: "shadowReason" in scorePersistence ? scorePersistence.shadowReason : null
+    }));
+  }
+}
+
+export function assertLocalV2DagCompletionScorePersistence(result: {
+  reason: string;
+  shadowModelVersion?: string | null;
+  shadowReason?: string | null;
+}) {
+  const legacyPersisted = result.reason === "inserted" || result.reason === "already_persisted";
+  const shadowPersisted = result.shadowReason === "inserted" || result.shadowReason === "already_persisted";
+  if (!legacyPersisted || !shadowPersisted || !result.shadowModelVersion) {
+    throw new Error(
+      `Completed scan score persistence is incomplete (legacy=${result.reason}, shadow=${result.shadowReason ?? "missing"}, model=${result.shadowModelVersion ?? "missing"}).`
+    );
   }
 }
 

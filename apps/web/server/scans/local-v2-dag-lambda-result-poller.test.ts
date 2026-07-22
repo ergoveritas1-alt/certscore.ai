@@ -12,7 +12,11 @@ import {
   ingestLocalV2DagLambdaResultMessage,
   parseLocalV2DagLambdaResultMessage
 } from "./local-v2-dag-lambda-dispatch";
-import { mirrorLocalV2DagLambdaArtifacts, pollLocalV2DagLambdaResultQueue } from "./local-v2-dag-lambda-result-poller";
+import {
+  assertLocalV2DagCompletionScorePersistence,
+  mirrorLocalV2DagLambdaArtifacts,
+  pollLocalV2DagLambdaResultQueue
+} from "./local-v2-dag-lambda-result-poller";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 
 function buildResultMessage(overrides: Record<string, unknown> = {}) {
@@ -580,4 +584,33 @@ test("local web poller records Lambda result before marking scan completed", asy
   assert.match(source, /coverage_level = 'limited_none'/);
   assert.match(source, /scan_outcome = \$2/);
   assert.match(source, /pages_scanned = case when \$2::int = 0 then 0/);
+});
+
+test("completed Lambda results are not acknowledged without both immutable score projections", () => {
+  assert.doesNotThrow(() => assertLocalV2DagCompletionScorePersistence({
+    reason: "inserted",
+    shadowModelVersion: "candidate-v3",
+    shadowReason: "inserted"
+  }));
+  assert.doesNotThrow(() => assertLocalV2DagCompletionScorePersistence({
+    reason: "already_persisted",
+    shadowModelVersion: "candidate-v3",
+    shadowReason: "already_persisted"
+  }));
+  assert.throws(
+    () => assertLocalV2DagCompletionScorePersistence({
+      reason: "scan_not_completed_or_missing",
+      shadowModelVersion: null,
+      shadowReason: null
+    }),
+    /score persistence is incomplete/
+  );
+  assert.throws(
+    () => assertLocalV2DagCompletionScorePersistence({
+      reason: "inserted",
+      shadowModelVersion: "candidate-v3",
+      shadowReason: "persistence_failed"
+    }),
+    /score persistence is incomplete/
+  );
 });
