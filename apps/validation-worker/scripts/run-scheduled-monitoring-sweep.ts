@@ -31,6 +31,12 @@ if (originalLoad) {
       };
     }
 
+    if (request === "next/headers") {
+      return {
+        headers: async () => new Headers()
+      };
+    }
+
     return originalLoad.call(this, request, parent, isMain);
   };
 }
