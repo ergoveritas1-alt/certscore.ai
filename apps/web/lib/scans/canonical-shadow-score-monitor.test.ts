@@ -13,6 +13,7 @@ function metric(overrides: Partial<StoredCanonicalShadowComparisonMetric>): Stor
     comparisonTargetKey: "sha256:target",
     contradictionTypes: [],
     generatedAt: "2026-07-22T00:00:00.000Z",
+    inputProjectionFingerprint: "sha256:input",
     legacyCoverageRatio: 1,
     legacyScore: 75,
     modelVersion: "candidate-v3",
@@ -84,6 +85,39 @@ test("persisted monitor reports source variance without calling it region varian
   assert.equal(summary.crossSource.maximumScoreRange, 10);
   assert.equal(summary.crossSource.ranges[0]?.region, "eu-west-1");
   assert.equal(summary.crossSource.ranges[0]?.sourceCount, 2);
+});
+
+test("persisted monitor compares identical canonical inputs across sources without inventing browser geography", () => {
+  const summary = summarizeStoredCanonicalShadowComparisons([
+    metric({ inputProjectionFingerprint: "sha256:identical", scanId: "scan-1", scanSource: "eu_ie" }),
+    metric({
+      candidateScore: 70,
+      inputProjectionFingerprint: "sha256:identical",
+      region: null,
+      scanId: "scan-2",
+      scanSource: "local_extension"
+    })
+  ]);
+
+  assert.equal(summary.crossSource.comparedGroupCount, 0);
+  assert.equal(summary.equivalentInputCrossSource.comparedGroupCount, 1);
+  assert.equal(summary.equivalentInputCrossSource.maximumScoreRange, 10);
+  assert.equal(summary.equivalentInputCrossSource.ranges[0]?.hasUnknownRegion, true);
+  assert.deepEqual(summary.equivalentInputCrossSource.ranges[0]?.regions, ["eu-west-1"]);
+});
+
+test("persisted monitor never calls different canonical inputs source-equivalent", () => {
+  const summary = summarizeStoredCanonicalShadowComparisons([
+    metric({ inputProjectionFingerprint: "sha256:first", scanId: "scan-1", scanSource: "eu_ie" }),
+    metric({
+      inputProjectionFingerprint: "sha256:second",
+      region: null,
+      scanId: "scan-2",
+      scanSource: "local_extension"
+    })
+  ]);
+
+  assert.equal(summary.equivalentInputCrossSource.comparedGroupCount, 0);
 });
 
 test("persisted monitor never compares different requested URLs on the same hostname", () => {

@@ -28,7 +28,7 @@ the report, Pulse exports, dashboard/history, and admin scan summaries.
 3. Run `pnpm score:luna-cutover-gate`; it must pass without an override.
 4. Confirm the seven-day persisted monitor has enough representative rows to review
    score drift, contradiction rate, withholding rate, and comparable cross-region
-   and cross-source ranges. Its `alertEvaluation` must be
+   same-region cross-source, and identical-input cross-source ranges. Its `alertEvaluation` must be
    `within_approved_baseline`; `withheld` and `pause_rollout` are cutover blockers.
 5. Verify the same stored candidate kind, version, score, and coverage on report,
    Pulse Summary/Evidence JSON, dashboard/history, and admin surfaces.

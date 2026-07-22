@@ -25,9 +25,10 @@ test("versioned score storage is immutable, bounded, and separates score from co
 });
 
 test("shadow comparison monitoring is immutable, bounded, and domain-safe", async () => {
-  const [migration, targetMigration] = await Promise.all([
+  const [migration, targetMigration, inputFingerprintMigration] = await Promise.all([
     readFile("packages/db/migrations/0147_score_shadow_comparison_monitoring.sql", "utf8"),
-    readFile("packages/db/migrations/0148_score_shadow_comparison_target_key.sql", "utf8")
+    readFile("packages/db/migrations/0148_score_shadow_comparison_target_key.sql", "utf8"),
+    readFile("packages/db/migrations/0149_score_shadow_input_fingerprint.sql", "utf8")
   ]);
   const repository = await readFile("apps/web/server/scans/canonical-shadow-score-monitor-repository.ts", "utf8");
 
@@ -38,10 +39,15 @@ test("shadow comparison monitoring is immutable, bounded, and domain-safe", asyn
   assert.match(migration, /scanner_region/);
   assert.match(targetMigration, /comparison_target_key/);
   assert.match(targetMigration, /SHA-256 fingerprint of the normalized requested scan URL/);
+  assert.match(inputFingerprintMigration, /input_projection_fingerprint/);
+  assert.match(inputFingerprintMigration, /identical-input source comparison without raw evidence or inferred geography/);
   assert.match(repository, /on conflict \(scan_id, model_version\) do nothing/);
   assert.doesNotMatch(repository, /do update/i);
   assert.match(repository, /comparisonGroupKey must be a SHA-256 digest, never a domain name/);
   assert.match(repository, /comparisonTargetKey must be a SHA-256 digest, never a URL/);
+  assert.match(repository, /canonicalSha256Fingerprint/);
+  assert.match(repository, /must be a SHA-256 digest/);
+  assert.match(repository, /startsWith\("sha256:"\)/);
   assert.match(repository, /MAX_MONITOR_ROWS = 5_000/);
 });
 

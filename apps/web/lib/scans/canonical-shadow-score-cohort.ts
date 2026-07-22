@@ -33,6 +33,14 @@ export function summarizeCanonicalShadowScoreCohort(
     scanSources: Set<string>;
     scores: number[];
   }>();
+  const equivalentInputSourceGroups = new Map<string, {
+    comparisonGroupKey: string;
+    hasUnknownRegion: boolean;
+    inputProjectionFingerprint: string;
+    regions: Set<string>;
+    scanSources: Set<string>;
+    scores: number[];
+  }>();
 
   for (const artifact of scored) {
     const groupKey = artifact.context.comparisonGroupKey;
@@ -40,8 +48,23 @@ export function summarizeCanonicalShadowScoreCohort(
     const region = artifact.context.region;
     const scanSource = artifact.context.scanSource;
     const score = artifact.candidate.postureScore;
-    if (!groupKey || !targetKey || !region || !scanSource || score === null) continue;
+    if (!groupKey || !targetKey || !scanSource || score === null) continue;
     const sourceFamily = canonicalShadowScoreSourceFamily(scanSource);
+    const equivalentInputSourceGroupKey = `${groupKey}\u0000${targetKey}\u0000${artifact.inputProjectionFingerprint}`;
+    const equivalentInputSourceValues = equivalentInputSourceGroups.get(equivalentInputSourceGroupKey) ?? {
+      comparisonGroupKey: groupKey,
+      hasUnknownRegion: false,
+      inputProjectionFingerprint: artifact.inputProjectionFingerprint,
+      regions: new Set<string>(),
+      scanSources: new Set<string>(),
+      scores: []
+    };
+    equivalentInputSourceValues.hasUnknownRegion ||= !region;
+    if (region) equivalentInputSourceValues.regions.add(region);
+    equivalentInputSourceValues.scanSources.add(sourceFamily);
+    equivalentInputSourceValues.scores.push(score);
+    equivalentInputSourceGroups.set(equivalentInputSourceGroupKey, equivalentInputSourceValues);
+    if (!region) continue;
     const regionGroupKey = `${groupKey}\u0000${targetKey}\u0000${sourceFamily}`;
     const regionValues = regionGroups.get(regionGroupKey) ?? {
       comparisonGroupKey: groupKey,
@@ -63,6 +86,7 @@ export function summarizeCanonicalShadowScoreCohort(
     sourceValues.scanSources.add(sourceFamily);
     sourceValues.scores.push(score);
     sourceGroups.set(sourceGroupKey, sourceValues);
+
   }
 
   const crossRegionRanges = [...regionGroups.values()].flatMap((values) => {
@@ -85,6 +109,20 @@ export function summarizeCanonicalShadowScoreCohort(
       minScore: Math.min(...values.scores),
       range: Math.max(...values.scores) - Math.min(...values.scores),
       region: values.region,
+      sampleCount: values.scores.length,
+      sourceCount: values.scanSources.size
+    }];
+  }).sort((left, right) => right.range - left.range || left.comparisonGroupKey.localeCompare(right.comparisonGroupKey));
+  const equivalentInputCrossSourceRanges = [...equivalentInputSourceGroups.values()].flatMap((values) => {
+    if (values.scanSources.size < 2 || values.scores.length < 2) return [];
+    return [{
+      comparisonGroupKey: values.comparisonGroupKey,
+      hasUnknownRegion: values.hasUnknownRegion,
+      inputProjectionFingerprint: values.inputProjectionFingerprint,
+      maxScore: Math.max(...values.scores),
+      minScore: Math.min(...values.scores),
+      range: Math.max(...values.scores) - Math.min(...values.scores),
+      regions: [...values.regions].sort(),
       sampleCount: values.scores.length,
       sourceCount: values.scanSources.size
     }];
@@ -122,6 +160,11 @@ export function summarizeCanonicalShadowScoreCohort(
       comparedGroupCount: crossSourceRanges.length,
       maximumScoreRange: crossSourceRanges[0]?.range ?? null,
       ranges: crossSourceRanges.slice(0, 100)
+    },
+    equivalentInputCrossSource: {
+      comparedGroupCount: equivalentInputCrossSourceRanges.length,
+      maximumScoreRange: equivalentInputCrossSourceRanges[0]?.range ?? null,
+      ranges: equivalentInputCrossSourceRanges.slice(0, 100)
     },
     cutoverEligibleCount: artifacts.filter((artifact) => artifact.cutoverEligible).length,
     modelVersions: [...new Set(artifacts.map((artifact) => artifact.candidate.modelVersion))].sort(),

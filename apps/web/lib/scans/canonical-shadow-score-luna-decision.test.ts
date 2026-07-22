@@ -46,11 +46,13 @@ function approvedDecision(): CanonicalShadowScoreLunaDecision {
         minimumComparableCount: 30,
         minimumCrossRegionGroupCount: 5,
         minimumCrossSourceGroupCount: 5,
+        minimumEquivalentInputCrossSourceGroupCount: 5,
         maximumAbsoluteScoreDeltaP95: 25,
         maximumContradictionRate: 0.02,
         maximumWithheldRate: 0.25,
         maximumCrossRegionScoreRange: 5,
-        maximumCrossSourceScoreRange: 5
+        maximumCrossSourceScoreRange: 5,
+        maximumEquivalentInputCrossSourceScoreRange: 5
       }
     },
     signOff: {

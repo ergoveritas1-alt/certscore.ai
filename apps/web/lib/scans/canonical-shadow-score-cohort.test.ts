@@ -22,8 +22,9 @@ const MODEL: CanonicalShadowScoreModel = {
 
 function artifact(input: {
   coverageLimited?: boolean;
+  inputProjectionFingerprint?: string;
   legacyScore: number;
-  region: string;
+  region: string | null;
   scanId: string;
   scanSource?: string;
   severity?: "high" | "medium" | "low";
@@ -46,7 +47,7 @@ function artifact(input: {
       scanSource: input.scanSource ?? "lambda"
     },
     generatedAt: "2026-07-22T00:00:00.000Z",
-    inputProjectionFingerprint: `sha256:${input.scanId}`,
+    inputProjectionFingerprint: input.inputProjectionFingerprint ?? `sha256:${input.scanId}`,
     legacy: {
       coverageConfidence: "high",
       coverageRatio: 1,
@@ -116,6 +117,32 @@ test("cohort summary separates cross-source variance from cross-region variance"
   assert.equal(summary.crossSource.maximumScoreRange, 15);
   assert.equal(summary.crossSource.ranges[0]?.region, "eu-west-1");
   assert.equal(summary.crossSource.ranges[0]?.sourceCount, 2);
+});
+
+test("cohort summary compares identical canonical inputs across sources with unknown browser geography", () => {
+  const summary = summarizeCanonicalShadowScoreCohort([
+    artifact({
+      inputProjectionFingerprint: "sha256:identical",
+      legacyScore: 72,
+      region: "eu-west-1",
+      scanId: "scan-a",
+      scanSource: "eu_ie",
+      severity: "high"
+    }),
+    artifact({
+      inputProjectionFingerprint: "sha256:identical",
+      legacyScore: 72,
+      region: null,
+      scanId: "scan-b",
+      scanSource: "local_extension",
+      severity: "high"
+    })
+  ]);
+
+  assert.equal(summary.crossSource.comparedGroupCount, 0);
+  assert.equal(summary.equivalentInputCrossSource.comparedGroupCount, 1);
+  assert.equal(summary.equivalentInputCrossSource.maximumScoreRange, 0);
+  assert.equal(summary.equivalentInputCrossSource.ranges[0]?.hasUnknownRegion, true);
 });
 
 test("cohort summary does not compare different requested URLs on the same hostname", () => {

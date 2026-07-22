@@ -15,7 +15,7 @@ type LunaDecisionStatus = "pending_luna" | "approved_by_luna";
 type LunaExpectedPostureBand = "Action Needed" | "Clear" | "Watch" | "Withheld";
 
 export type CanonicalShadowScoreLunaDecision = {
-  schemaVersion: "gdpr-eprivacy-shadow-luna-decision.v2";
+  schemaVersion: "gdpr-eprivacy-shadow-luna-decision.v3";
   modelVersion: string;
   decisionStatus: LunaDecisionStatus;
   coverageSemantics: {
@@ -53,11 +53,13 @@ export type CanonicalShadowScoreLunaDecision = {
       minimumComparableCount: number | null;
       minimumCrossRegionGroupCount: number | null;
       minimumCrossSourceGroupCount: number | null;
+      minimumEquivalentInputCrossSourceGroupCount: number | null;
       maximumAbsoluteScoreDeltaP95: number | null;
       maximumContradictionRate: number | null;
       maximumWithheldRate: number | null;
       maximumCrossRegionScoreRange: number | null;
       maximumCrossSourceScoreRange: number | null;
+      maximumEquivalentInputCrossSourceScoreRange: number | null;
     };
   };
   signOff: {
@@ -81,7 +83,7 @@ export function auditLunaScoreDecision(
   const laneIds = decision.expectedBandLanes.map((lane) => lane.laneId).sort();
   const validStatuses = new Set<LunaDecisionStatus>(["pending_luna", "approved_by_luna"]);
 
-  if (decision.schemaVersion !== "gdpr-eprivacy-shadow-luna-decision.v2") errors.push("schemaVersion");
+  if (decision.schemaVersion !== "gdpr-eprivacy-shadow-luna-decision.v3") errors.push("schemaVersion");
   if (decision.modelVersion !== expectedModelVersion) errors.push("modelVersion");
   if (!validStatuses.has(decision.decisionStatus)) errors.push("decisionStatus");
   if (new Set(metricIds).size !== metricIds.length) errors.push("coverageSemantics.duplicateMetricId");
@@ -116,12 +118,14 @@ export function auditLunaScoreDecision(
     "minimumSampleCount",
     "minimumComparableCount",
     "minimumCrossRegionGroupCount",
-    "minimumCrossSourceGroupCount"
+    "minimumCrossSourceGroupCount",
+    "minimumEquivalentInputCrossSourceGroupCount"
   ] as const;
   const scoreThresholds = [
     "maximumAbsoluteScoreDeltaP95",
     "maximumCrossRegionScoreRange",
-    "maximumCrossSourceScoreRange"
+    "maximumCrossSourceScoreRange",
+    "maximumEquivalentInputCrossSourceScoreRange"
   ] as const;
   const rateThresholds = ["maximumContradictionRate", "maximumWithheldRate"] as const;
   if (decision.monitoringBaselines.status === "approved_by_luna") {

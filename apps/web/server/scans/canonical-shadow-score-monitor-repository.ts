@@ -16,6 +16,7 @@ type StoredRow = {
   comparison_target_key: string | null;
   contradiction_types: string[];
   generated_at: string;
+  input_projection_fingerprint: string | null;
   legacy_coverage_ratio: string | number;
   legacy_score: number | null;
   model_version: string;
@@ -44,6 +45,14 @@ function boundedArray(values: string[], label: string) {
   return [...new Set(values.map((value) => boundedText(value, label, 160)))].sort();
 }
 
+function canonicalSha256Fingerprint(value: string, label: string) {
+  const bounded = boundedText(value, label, 160).toLowerCase();
+  if (!/^(?:sha256:)?[a-f0-9]{64}$/.test(bounded)) {
+    throw new Error(`${label} must be a SHA-256 digest.`);
+  }
+  return bounded.startsWith("sha256:") ? bounded : `sha256:${bounded}`;
+}
+
 export async function persistCanonicalShadowScoreComparison(
   artifact: CanonicalShadowScoreComparisonArtifact
 ) {
@@ -68,6 +77,10 @@ export async function persistCanonicalShadowScoreComparison(
     ...artifact.comparison.contradictions
   ], "contradictionType");
   const withholdingReasons = boundedArray(artifact.candidate.withheldReasons, "withholdingReason");
+  const inputProjectionFingerprint = canonicalSha256Fingerprint(
+    artifact.inputProjectionFingerprint,
+    "inputProjectionFingerprint"
+  );
   const inserted = await queryOne<InsertedRow>(
     `insert into public.scan_score_shadow_comparisons (
        scan_id,
@@ -87,11 +100,12 @@ export async function persistCanonicalShadowScoreComparison(
        comparison_group_key,
        comparison_target_key,
        scan_source,
+       input_projection_fingerprint,
        generated_at
      ) values (
        $1::uuid, $2, $3, $4, $5, $6::integer, $7::integer, $8::integer,
        $9::numeric, $10::numeric, $11::numeric, $12::text[], $13::text[],
-       $14, $15, $16, $17, $18::timestamptz
+       $14, $15, $16, $17, $18, $19::timestamptz
      )
      on conflict (scan_id, model_version) do nothing
      returning id`,
@@ -113,6 +127,7 @@ export async function persistCanonicalShadowScoreComparison(
       comparisonGroupKey,
       comparisonTargetKey,
       boundedOptionalText(artifact.context.scanSource, "scanSource", 80),
+      inputProjectionFingerprint,
       boundedText(artifact.generatedAt, "generatedAt", 80)
     ]
   );
@@ -142,6 +157,7 @@ export async function loadCanonicalShadowScoreMonitoringMetrics(input: {
             scan_source,
             comparison_group_key,
             comparison_target_key,
+            input_projection_fingerprint,
             generated_at::text
        from public.scan_score_shadow_comparisons
       where model_version = $1
@@ -158,6 +174,7 @@ export async function loadCanonicalShadowScoreMonitoringMetrics(input: {
     comparisonTargetKey: row.comparison_target_key,
     contradictionTypes: row.contradiction_types,
     generatedAt: row.generated_at,
+    inputProjectionFingerprint: row.input_projection_fingerprint,
     legacyCoverageRatio: Number(row.legacy_coverage_ratio),
     legacyScore: row.legacy_score,
     modelVersion: row.model_version,

@@ -7,6 +7,7 @@ export type StoredCanonicalShadowComparisonMetric = {
   comparisonTargetKey: string | null;
   contradictionTypes: string[];
   generatedAt: string;
+  inputProjectionFingerprint: string | null;
   legacyCoverageRatio: number;
   legacyScore: number | null;
   modelVersion: string;
@@ -37,9 +38,17 @@ export function summarizeStoredCanonicalShadowComparisons(
   const withheld = metrics.filter((metric) => metric.candidateScore === null);
   const regionGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
   const sourceGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
+  const equivalentInputSourceGroups = new Map<string, StoredCanonicalShadowComparisonMetric[]>();
   for (const metric of metrics) {
-    if (!metric.comparisonGroupKey || !metric.comparisonTargetKey || !metric.region || !metric.scanSource || metric.candidateScore === null) continue;
+    if (!metric.comparisonGroupKey || !metric.comparisonTargetKey || !metric.scanSource || metric.candidateScore === null) continue;
     const sourceFamily = canonicalShadowScoreSourceFamily(metric.scanSource);
+    if (metric.inputProjectionFingerprint) {
+      const equivalentInputSourceKey = `${metric.comparisonGroupKey}\u0000${metric.comparisonTargetKey}\u0000${metric.inputProjectionFingerprint}`;
+      const equivalentInputSourceRows = equivalentInputSourceGroups.get(equivalentInputSourceKey) ?? [];
+      equivalentInputSourceRows.push(metric);
+      equivalentInputSourceGroups.set(equivalentInputSourceKey, equivalentInputSourceRows);
+    }
+    if (!metric.region) continue;
     const regionKey = `${metric.comparisonGroupKey}\u0000${metric.comparisonTargetKey}\u0000${sourceFamily}`;
     const regionRows = regionGroups.get(regionKey) ?? [];
     regionRows.push(metric);
@@ -77,6 +86,23 @@ export function summarizeStoredCanonicalShadowComparisons(
       sourceCount: scanSources.size
     }];
   }).sort((left, right) => right.range - left.range || left.comparisonGroupKey.localeCompare(right.comparisonGroupKey));
+  const equivalentInputSourceRanges = [...equivalentInputSourceGroups.values()].flatMap((rows) => {
+    const sourceFamilies = new Set(rows.map((row) => canonicalShadowScoreSourceFamily(row.scanSource!)));
+    const scores = rows.flatMap((row) => row.candidateScore ?? []);
+    if (sourceFamilies.size < 2 || scores.length < 2) return [];
+    const regions = [...new Set(rows.flatMap((row) => row.region ?? []))].sort();
+    return [{
+      comparisonGroupKey: rows[0]!.comparisonGroupKey!,
+      hasUnknownRegion: rows.some((row) => row.region === null),
+      inputProjectionFingerprint: rows[0]!.inputProjectionFingerprint!,
+      maxScore: Math.max(...scores),
+      minScore: Math.min(...scores),
+      range: Math.max(...scores) - Math.min(...scores),
+      regions,
+      sampleCount: scores.length,
+      sourceCount: sourceFamilies.size
+    }];
+  }).sort((left, right) => right.range - left.range || left.comparisonGroupKey.localeCompare(right.comparisonGroupKey));
 
   return {
     comparison: {
@@ -98,6 +124,11 @@ export function summarizeStoredCanonicalShadowComparisons(
       comparedGroupCount: sourceRanges.length,
       maximumScoreRange: sourceRanges[0]?.range ?? null,
       ranges: sourceRanges.slice(0, 100)
+    },
+    equivalentInputCrossSource: {
+      comparedGroupCount: equivalentInputSourceRanges.length,
+      maximumScoreRange: equivalentInputSourceRanges[0]?.range ?? null,
+      ranges: equivalentInputSourceRanges.slice(0, 100)
     },
     modelVersions: [...new Set(metrics.map((metric) => metric.modelVersion))].sort(),
     sampleCount: metrics.length,

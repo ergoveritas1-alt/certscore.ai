@@ -12,9 +12,11 @@ type MonitoringAlertCode =
   | "contradiction_rate_above_limit"
   | "cross_region_range_above_limit"
   | "cross_source_range_above_limit"
+  | "equivalent_input_cross_source_range_above_limit"
   | "insufficient_comparable_count"
   | "insufficient_cross_region_groups"
   | "insufficient_cross_source_groups"
+  | "insufficient_equivalent_input_cross_source_groups"
   | "insufficient_sample_count"
   | "model_version_mismatch"
   | "withheld_rate_above_limit";
@@ -61,11 +63,21 @@ export function evaluateCanonicalShadowScoreMonitoring(
   addBelow("insufficient_comparable_count", summary.comparison.comparableCount, thresholds.minimumComparableCount);
   addBelow("insufficient_cross_region_groups", summary.crossRegion.comparedGroupCount, thresholds.minimumCrossRegionGroupCount);
   addBelow("insufficient_cross_source_groups", summary.crossSource.comparedGroupCount, thresholds.minimumCrossSourceGroupCount);
+  addBelow(
+    "insufficient_equivalent_input_cross_source_groups",
+    summary.equivalentInputCrossSource.comparedGroupCount,
+    thresholds.minimumEquivalentInputCrossSourceGroupCount
+  );
   addAbove("absolute_score_delta_p95_above_limit", summary.comparison.absoluteDeltaP95, thresholds.maximumAbsoluteScoreDeltaP95);
   addAbove("contradiction_rate_above_limit", summary.contradictions.rate, thresholds.maximumContradictionRate);
   addAbove("withheld_rate_above_limit", summary.withheldRate, thresholds.maximumWithheldRate);
   addAbove("cross_region_range_above_limit", summary.crossRegion.maximumScoreRange, thresholds.maximumCrossRegionScoreRange);
   addAbove("cross_source_range_above_limit", summary.crossSource.maximumScoreRange, thresholds.maximumCrossSourceScoreRange);
+  addAbove(
+    "equivalent_input_cross_source_range_above_limit",
+    summary.equivalentInputCrossSource.maximumScoreRange,
+    thresholds.maximumEquivalentInputCrossSourceScoreRange
+  );
 
   const unexpectedModelVersion = summary.modelVersions.find((version) => version !== decision.modelVersion);
   if (unexpectedModelVersion) {

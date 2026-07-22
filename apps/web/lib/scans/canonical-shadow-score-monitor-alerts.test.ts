@@ -16,11 +16,13 @@ function approvedDecision(): CanonicalShadowScoreLunaDecision {
         minimumComparableCount: 2,
         minimumCrossRegionGroupCount: 1,
         minimumCrossSourceGroupCount: 1,
+        minimumEquivalentInputCrossSourceGroupCount: 1,
         maximumAbsoluteScoreDeltaP95: 10,
         maximumContradictionRate: 0.1,
         maximumWithheldRate: 0.2,
         maximumCrossRegionScoreRange: 5,
-        maximumCrossSourceScoreRange: 5
+        maximumCrossSourceScoreRange: 5,
+        maximumEquivalentInputCrossSourceScoreRange: 5
       }
     }
   };
@@ -35,6 +37,7 @@ function summary() {
       comparisonTargetKey: "sha256:target",
       contradictionTypes: [],
       generatedAt: "2026-07-22T00:00:00.000Z",
+      inputProjectionFingerprint: "sha256:identical",
       legacyCoverageRatio: 1,
       legacyScore: 75,
       modelVersion: GDPR_EPRIVACY_SHADOW_LUNA_DECISION.modelVersion,
@@ -52,6 +55,7 @@ function summary() {
       comparisonTargetKey: "sha256:target",
       contradictionTypes: [],
       generatedAt: "2026-07-22T00:01:00.000Z",
+      inputProjectionFingerprint: "sha256:identical",
       legacyCoverageRatio: 1,
       legacyScore: 75,
       modelVersion: GDPR_EPRIVACY_SHADOW_LUNA_DECISION.modelVersion,
@@ -69,6 +73,7 @@ function summary() {
       comparisonTargetKey: "sha256:target",
       contradictionTypes: [],
       generatedAt: "2026-07-22T00:02:00.000Z",
+      inputProjectionFingerprint: "sha256:identical",
       legacyCoverageRatio: 1,
       legacyScore: 75,
       modelVersion: GDPR_EPRIVACY_SHADOW_LUNA_DECISION.modelVersion,
