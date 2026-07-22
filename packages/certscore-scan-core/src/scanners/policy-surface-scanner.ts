@@ -4762,11 +4762,15 @@ export async function readBoundedResponseBody(
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
   let truncated = false;
+  let completed = false;
   try {
     while (totalBytes < maxBytes) {
       throwIfAborted(signal);
-      const next = await reader.read();
-      if (next.done) break;
+      const next = await readResponseBodyChunk(reader, signal);
+      if (next.done) {
+        completed = true;
+        break;
+      }
       const remainingBytes = maxBytes - totalBytes;
       if (next.value.byteLength > remainingBytes) {
         chunks.push(next.value.subarray(0, remainingBytes));
@@ -4782,7 +4786,7 @@ export async function readBoundedResponseBody(
       }
     }
   } finally {
-    if (truncated) {
+    if (truncated || !completed) {
       await boundedCleanup(reader.cancel(), 100);
     } else {
       reader.releaseLock();
@@ -4795,6 +4799,34 @@ export async function readBoundedResponseBody(
     offset += chunk.byteLength;
   }
   return { body, truncated };
+}
+
+async function readResponseBodyChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal?: AbortSignal,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (!signal) return reader.read();
+  throwIfAborted(signal);
+
+  let abortListener: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_resolve, reject) => {
+        abortListener = () => {
+          const reason = abortReason(signal);
+          const error = new Error(reason?.message ?? "Policy response body read aborted.", {
+            cause: reason ?? undefined,
+          });
+          error.name = "AbortError";
+          reject(error);
+        };
+        signal.addEventListener("abort", abortListener, { once: true });
+      }),
+    ]);
+  } finally {
+    if (abortListener) signal.removeEventListener("abort", abortListener);
+  }
 }
 
 function combineAbortSignals(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {

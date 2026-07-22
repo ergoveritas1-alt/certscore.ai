@@ -34,3 +34,24 @@ test("policy response reads preserve complete bodies below the cap", async () =>
   assert.equal(result.truncated, false);
   assert.equal(new TextDecoder().decode(result.body), "bounded policy text");
 });
+
+test("policy response reads stop when a pending stream read ignores transport cancellation", async () => {
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelled = true;
+    },
+    pull() {
+      return new Promise(() => undefined);
+    },
+  });
+  const controller = new AbortController();
+  const startedAtMs = Date.now();
+  const pending = readBoundedResponseBody(new Response(stream), 100, controller.signal);
+
+  setTimeout(() => controller.abort(new Error("policy deadline reached")), 20);
+
+  await assert.rejects(pending, /policy deadline reached/);
+  assert.equal(cancelled, true);
+  assert.ok(Date.now() - startedAtMs < 250);
+});

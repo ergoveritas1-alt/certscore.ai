@@ -462,6 +462,7 @@ test("handler uploads a bounded artifact-only failure diagnostic on scanner time
     const result = await handler(validPayload(), {
       artifactChainTimeoutMs: 30,
       handlerSafetyTimeoutMs: 10_000,
+      resultPublishTimeoutMs: 100,
       scannerWorkTimeoutMs: 10,
       runArtifactChain: async () => await new Promise(() => undefined),
       s3Client: {
@@ -501,6 +502,7 @@ test("failure diagnostic upload errors do not suppress terminal publication", as
     const result = await handler(validPayload(), {
       artifactChainTimeoutMs: 30,
       handlerSafetyTimeoutMs: 10_000,
+      resultPublishTimeoutMs: 100,
       scannerWorkTimeoutMs: 10,
       runArtifactChain: async () => await new Promise(() => undefined),
       s3Client: {
@@ -534,6 +536,7 @@ test("a stalled failure diagnostic upload cannot consume the terminal publicatio
     const result = await handler(validPayload(), {
       artifactChainTimeoutMs: 30,
       handlerSafetyTimeoutMs: 10_000,
+      resultPublishTimeoutMs: 100,
       scannerWorkTimeoutMs: 10,
       runArtifactChain: async () => await new Promise(() => undefined),
       s3Client: {
