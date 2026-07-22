@@ -80,6 +80,7 @@ function outcomeLabel(value: string | null, noGo: boolean) {
 
 function accessLabel(request: {
   accessPostureClass: string | null;
+  adminSummaryGeneratedAt: string | null;
   blockedFlag: boolean | null;
   captchaFlag: boolean | null;
   noGoFlag: boolean;
@@ -90,7 +91,7 @@ function accessLabel(request: {
   if (request.noGoFlag) return request.noGoReason ?? "No-go";
   if (request.accessPostureClass === "robots_limited") return "Robots-limited";
   if (request.accessPostureClass === "degraded_but_useful") return "Limited";
-  return request.accessPostureClass ? "Clear" : "—";
+  return request.accessPostureClass || request.adminSummaryGeneratedAt ? "Clear" : "—";
 }
 
 export default async function AdminPulsePage({ searchParams }: AdminPulsePageProps) {

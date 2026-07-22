@@ -97,6 +97,14 @@ test("Admin Scans repairs bounded stale summaries and Score Shadow has no admin 
   assert.doesNotMatch(layoutSource, /scoring-shadow/);
 });
 
+test("API activity presents a persisted clear-access summary consistently with its access filter", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
+
+  assert.match(pageSource, /request\.accessPostureClass \|\| request\.adminSummaryGeneratedAt \? "Clear"/);
+  assert.match(listSource, /when ss\.scan_id is not null then 'clear'/);
+});
+
 test("API activity groups SDK and MCP result retrieval under the initiating logical request", async () => {
   const listSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
   const statusSource = await readFile("apps/web/lib/pulse/status.ts", "utf8");
