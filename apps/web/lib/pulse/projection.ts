@@ -1936,11 +1936,23 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const unclassifiedPreConsentStorageCount = hasClassifiedRuntimeStorageRows
     ? countUnclassifiedNonEssentialPreconsentStorageRows(reportSurface.runtimeCookieRows)
     : 0;
+  const storedPreConsentCookieCount = finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
+    finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
+    finiteNumber(recordValue(input.scanRecord.snapshot, "initialCookieCount"));
+  const storageMetricStatus = hasClassifiedRuntimeStorageRows
+    ? unclassifiedPreConsentStorageCount > 0
+      ? "partially_classified"
+      : (nonEssentialPreConsentStorageCount ?? 0) > 0
+        ? "measured_positive"
+        : "measured_zero"
+    : storedPreConsentCookieCount === null
+      ? "unavailable"
+      : storedPreConsentCookieCount > 0
+        ? "measured_positive"
+        : "measured_zero";
   const cookiesBeforeConsentCount = hasClassifiedRuntimeStorageRows
     ? nonEssentialPreConsentStorageCount
-    : finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
-      finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
-      finiteNumber(recordValue(input.scanRecord.snapshot, "initialCookieCount")) ??
+    : storedPreConsentCookieCount ??
       0;
   const policySurfaces = projectedPolicySurfaceRows(input.scanRecord).map(({ type, url }) => ({
     type,
@@ -1988,6 +2000,14 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     unclassifiedPreConsentStorageCount,
     storageMetricLabel: hasClassifiedRuntimeStorageRows ? "Non-essential storage" : "Pre-consent storage",
     storageMetricScope: hasClassifiedRuntimeStorageRows ? "nonessential_only" : "all_observed",
+    storageMetricStatus,
+    storageMetricExplanation: storageMetricStatus === "unavailable"
+      ? "Storage was not measured or retained for this scan."
+      : storageMetricStatus === "partially_classified"
+        ? "Storage was observed, but some retained rows could not be classified as essential or non-essential."
+        : storageMetricStatus === "measured_zero"
+          ? "Storage was scanned and none was detected in the reported scope."
+          : "Storage was observed in the reported scope.",
     totalStorageRecordsPresentBeforeRecordedConsent: reportSurface.runtimeCookieRows.length,
     consentPlatform: deriveConsentPlatform(input.scanRecord, reportSurface.presentationSummary),
     trackerFootprint: {

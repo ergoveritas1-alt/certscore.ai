@@ -359,6 +359,40 @@ test("explicit scanner continue assessment blocks downstream raw-text no-go reco
   assert.equal(result, null);
 });
 
+test("local v2 no-go classifies parked cross-domain placeholders before scoring", async () => {
+  const { buildLocalV2ScanNoGoAssessment } = await loadLocalV2DagReport();
+  const result = buildLocalV2ScanNoGoAssessment({
+    bundle: {
+      domSnapshots: [{ textExcerpt: "This domain may be for sale. Domains may be for sale." }]
+    } as unknown as CanonicalEvidenceBundle,
+    consentSurfaceLikelyPresent: false,
+    finalUrl: "https://domains.collinlove.com/query-default",
+    requestedUrl: "https://noyb.com/",
+    runtimeActivityObserved: true,
+    lowRuntimeActivity: false
+  });
+
+  assert.equal(result?.primaryReasonCode, "parked_or_placeholder");
+  assert.equal(result?.visualAccessReview.page_state, "parked_or_placeholder");
+});
+
+test("local v2 no-go classifies application error pages as wrong-site or soft-404", async () => {
+  const { buildLocalV2ScanNoGoAssessment } = await loadLocalV2DagReport();
+  const result = buildLocalV2ScanNoGoAssessment({
+    bundle: {
+      domSnapshots: [{ textExcerpt: "No company found! We couldn't find your company." }]
+    } as unknown as CanonicalEvidenceBundle,
+    consentSurfaceLikelyPresent: false,
+    finalUrl: "https://timeacle.com/booking/company",
+    requestedUrl: "https://timeacle.com/booking/",
+    runtimeActivityObserved: true,
+    lowRuntimeActivity: false
+  });
+
+  assert.equal(result?.primaryReasonCode, "wrong_site_or_soft_404");
+  assert.equal(result?.visualAccessReview.page_state, "wrong_site_or_soft_404");
+});
+
 test("buildLocalV2DagTimingArtifacts retains bounded module and policy timings", async () => {
   const { buildLocalV2DagTimingArtifacts } = await loadLocalV2DagReport();
   const bundle = {

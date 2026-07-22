@@ -1504,7 +1504,9 @@ const SCAN_NO_GO_SERVER_ERROR_PATTERN =
 const SCAN_NO_GO_MAINTENANCE_PATTERN =
   /(?:site|service|page) (?:is )?(?:temporarily )?(?:unavailable|under maintenance)|scheduled maintenance|we(?:'|’)ll be back soon|temporarily offline|page unavailable/i;
 const SCAN_NO_GO_PLACEHOLDER_PATTERN =
-  /\bexample domain\b|apache is functioning normally|website coming soon|site under construction|domain (?:is )?parked|domain (?:is )?for sale|welcome to nginx|default web site page|^[a-z0-9.-]+ is live!?$|this domain is an active and legitimate web address[^.]{0,160}(?:technical purposes|traffic routing|ad-tracking)/i;
+  /\bexample domain\b|apache is functioning normally|website coming soon|site under construction|domain (?:is )?parked|domain(?:s)? (?:is |are )?(?:for sale|may be for sale)|welcome to nginx|default web site page|placeholder page|^[a-z0-9.-]+ is live!?$|this domain is an active and legitimate web address[^.]{0,160}(?:technical purposes|traffic routing|ad-tracking)/i;
+const SCAN_NO_GO_APPLICATION_ERROR_PATTERN =
+  /\bno company found\b|couldn['’]t find your company|missing (?:tenant|company|account) (?:slug|identifier)|unknown (?:tenant|company)|page is not available for this (?:tenant|company)/i;
 const SCAN_NO_GO_LOADING_PATTERN =
   /^[^\p{L}\p{N}]{0,4}(?:loading|please wait|establishing (?:a )?secure connection|initializing)\b[\s\S]{0,120}$/iu;
 const SCAN_NO_GO_TLS_PATTERN = /invalid ssl certificate|certificate (?:is )?(?:invalid|expired)|privacy error|your connection is not private/i;
@@ -1996,6 +1998,9 @@ function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {
   }
   if (SCAN_NO_GO_PLACEHOLDER_PATTERN.test(normalized)) {
     return { confidence: 0.95, evidenceText, hardTerminal: true, reasonCode: "parked_or_placeholder", visualPageState: "parked_or_placeholder" };
+  }
+  if (SCAN_NO_GO_APPLICATION_ERROR_PATTERN.test(normalized)) {
+    return { confidence: 0.94, evidenceText, hardTerminal: true, reasonCode: "not_found_404", visualPageState: "wrong_site_or_soft_404" };
   }
   if (SCAN_NO_GO_MAINTENANCE_PATTERN.test(normalized)) {
     return { confidence: 0.95, evidenceText, hardTerminal: true, reasonCode: "maintenance_or_unavailable", visualPageState: "maintenance_or_unavailable" };

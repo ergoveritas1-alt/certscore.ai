@@ -1386,6 +1386,60 @@ test("WS01 scan-level no-go assessment enters canonical concern pipeline", () =>
   assert.doesNotMatch(`${packet?.title ?? ""} ${packet?.summary ?? ""}`, /maintenance_recharging_page/);
 });
 
+test("placeholder no-go assessment remains a coverage diagnostic and does not create normal tracking findings", () => {
+  const state = buildScanReportUnifiedFindingState({
+    accessibilityRuleCounts: [],
+    accessibilityRuleExamples: [],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    runtimeArtifacts: {
+      scan_no_go_assessment: {
+        decision: "no_go",
+        scanNoGoConfidence: 0.96,
+        reasonCodes: ["parked_or_placeholder", "scan_no_go_corroborated"],
+        corroboratorCodes: ["origin_not_reached", "low_runtime_activity"],
+        contradictorCodes: [],
+        status: "available",
+        supportingSignals: {
+          visualPageState: "parked_or_placeholder",
+          retainedVisualArtifactAvailable: true
+        }
+      },
+      visual_access_review: {
+        go_no_go: "NO_GO",
+        page_state: "parked_or_placeholder",
+        reason_code: "parked_or_placeholder",
+        short_explanation: "A parked placeholder page was retained instead of the requested public site.",
+        status: "available"
+      }
+    },
+    scan: {},
+    signalHits: [],
+    signals: [],
+    snapshot: {
+      final_url: "https://domains.example.test/placeholder",
+      registered_domain: "requested.example"
+    },
+    trackerVendors: [{ name: "Example Ads", category: "advertising" }],
+    validationFindings: []
+  } as never, {
+    deriveAccessibilityIssueRows: () => [],
+    deriveAccessibilityRuleEvidenceRows: () => [],
+    deriveConsentAuditFindings: () => [],
+    derivePolicyBehaviorContradictions: () => [],
+    derivePreconsentViolationRows: () => [],
+    filterContradictoryPositiveSurfaceFindings: (findings) => findings
+  });
+
+  const noGo = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "scan_quality_visual_no_go");
+  assert.equal(noGo?.presentationDecision.status, "audit_only");
+  assert.equal(state.globalUnifiedFindings.some((finding) => /tracking|cookie|advertising/i.test(finding.unifiedFindingId)), false);
+});
+
 test("normalized no-go concern retains the exact site-not-ready reason and customer presentation", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],

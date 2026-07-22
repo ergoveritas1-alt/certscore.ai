@@ -134,6 +134,7 @@ import {
   isEligibleNonEssentialPreconsentStorageRow,
   type RuntimeCookieEvidenceRow
 } from "../../lib/scans/runtime-cookie-evidence";
+import { buildScanProof } from "../../lib/scans/scan-proof";
 import {
   buildReportSurfaceVendorProjection,
   buildRuntimeInventoryGroupRows,
@@ -523,7 +524,7 @@ function InventoryTypeIcon({ type }: { type: "cookie" | "tracker" }) {
     return (
       <span
         aria-label="Cookie"
-        className="inline-flex h-[1.6rem] w-[1.6rem] items-center justify-center rounded-md border border-sky-200 bg-sky-50 text-sky-700"
+        className="inline-flex h-5 w-5 items-center justify-center text-sky-700"
         title="Cookie"
       >
         <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
@@ -537,7 +538,7 @@ function InventoryTypeIcon({ type }: { type: "cookie" | "tracker" }) {
   return (
     <span
       aria-label="Tracker"
-      className="inline-flex h-[1.6rem] w-[1.6rem] items-center justify-center rounded-md border border-violet-200 bg-violet-50 text-violet-700"
+      className="inline-flex h-5 w-5 items-center justify-center text-violet-700"
       title="Tracker"
     >
       <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
@@ -691,6 +692,56 @@ function getRuntimeInventoryMacroCategory(row: InventoryGroupRow) {
   });
 }
 
+function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) {
+  const beforeConsentCount = rows.filter((row) =>
+    row.type === "tracker"
+      ? row.preConsent && row.firstSeenMs !== null
+      : row.firstSeenMs !== null || /snapshot|pre-consent/i.test(row.timingEvidence ?? "")
+  ).length;
+  const necessaryCount = rows.filter((row) => {
+    const category = getRuntimeInventoryMacroCategory(row).toLowerCase();
+    return category === "essential" || category === "functional";
+  }).length;
+  const nonEssentialCount = rows.length - necessaryCount;
+
+  const segments = [
+    {
+      label: "Observed before consent",
+      value: beforeConsentCount,
+      detail: "Retained runtime evidence"
+    },
+    {
+      label: "Strictly necessary / functional",
+      value: necessaryCount,
+      detail: "Classified from the evidence"
+    },
+    {
+      label: "Non-essential or review",
+      value: nonEssentialCount,
+      detail: "Analytics, advertising, or unclear"
+    },
+    {
+      label: "After consent",
+      value: null,
+      detail: "Not tested; this scan is pre-consent only"
+    }
+  ];
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label="Consent evidence segmentation">
+      {segments.map((segment) => (
+        <div key={segment.label} className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">{segment.label}</p>
+            <span className="text-sm font-semibold text-slate-900">{segment.value ?? "—"}</span>
+          </div>
+          <p className="mt-1 text-[11px] leading-4 text-slate-500">{segment.detail}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RuntimeInventoryTable({
   cookieRows,
   firstPartyDomain,
@@ -715,7 +766,9 @@ function RuntimeInventoryTable({
           label="Copy table"
           payload={copyPayload}
         />
-        <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:grid-cols-[minmax(17rem,0.9fr)_minmax(0,2.1fr)] lg:items-start lg:px-5">
+        <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:px-5">
+          <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
+          <div className="grid gap-4 lg:grid-cols-[minmax(17rem,0.9fr)_minmax(0,2.1fr)] lg:items-start">
           <div className="grid gap-3 sm:grid-cols-2 lg:h-[317px] lg:grid-cols-1 lg:grid-rows-2">
             <InventoryPurposeCard rows={groupedInventoryRows} />
             <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
@@ -773,6 +826,7 @@ function RuntimeInventoryTable({
               </tbody>
             </table>
             </div>
+          </div>
           </div>
         </div>
       </details>
@@ -3436,11 +3490,36 @@ export function deriveExecutivePolicySurfaces(
     ...deriveSnapshotPolicySurfaceFallbacks(snapshot, enrichedSurfaces, runtimeArtifacts),
     ...deriveDiscoveredPrivacyPolicySurfaceFallbacks(runtimeArtifacts, enrichedSurfaces)
   ];
+  const scanIsNonRepresentative = Boolean(
+    snapshot && (
+      getRecordString(snapshot, "access_posture_class") === "early_loss" ||
+      /parked|placeholder|wrong_site|soft.?404|not.?found|maintenance|blocked|forbidden/i.test(
+        `${getRecordString(snapshot, "scan_outcome") ?? ""} ${getRecordString(snapshot, "block_page_classification") ?? ""}`
+      )
+    )
+  );
+  if (scanIsNonRepresentative) {
+    return [];
+  }
   const siteDomain = snapshot
     ? getRecordString(snapshot, "registered_domain") ?? getRecordString(snapshot, "domain")
     : null;
+  const dedupedSurfaces = Array.from(combinedSurfaces.reduce((byUrl, surface) => {
+    const key = normalizePolicySurfaceUrlForCompare(surface.pageUrl) ?? `${surface.pageLabel}:${surface.details.join("|")}`;
+    const existing = byUrl.get(key);
+    if (!existing) {
+      byUrl.set(key, surface);
+      return byUrl;
+    }
+    byUrl.set(key, {
+      ...existing,
+      details: uniqueStrings([...existing.details, ...surface.details]).slice(0, 5),
+      pageLabel: existing.pageLabel === surface.pageLabel ? existing.pageLabel : "Policy surface"
+    });
+    return byUrl;
+  }, new Map<string, ExecutivePolicySurface>()).values());
   return disambiguatePolicySurfaceLabels(prioritizePublicPolicySurfaces(
-    combinedSurfaces.map((surface) => ({ ...surface, type: surface.pageLabel, url: surface.pageUrl })),
+    dedupedSurfaces.map((surface) => ({ ...surface, type: surface.pageLabel, url: surface.pageUrl })),
     { siteDomain }
   ).map(({ type: _type, url: _url, ...surface }) => surface));
 }
@@ -6974,11 +7053,10 @@ export async function SharedScanDetailView({
   });
   const consentSurfaceCoverageItem = gdprEprivacyCoverageChecklist.find((item) => item.id === "consent_surface_observed");
   const executiveCookieBannerPresent =
-    scanRecord.snapshot?.cookie_banner_present === true ||
     consentSurfaceCoverageItem?.status === "Observed"
       ? true
-      : typeof scanRecord.snapshot?.cookie_banner_present === "boolean"
-        ? scanRecord.snapshot.cookie_banner_present
+      : consentSurfaceCoverageItem?.status === "Not observed"
+        ? false
         : null;
   const browserCoverageSufficient =
     scanRecord.scan.scanType !== "browser_extension" ||
@@ -7078,6 +7156,12 @@ export async function SharedScanDetailView({
   const scanDurationMs =
     getRuntimeArtifactNumber(scanRecord.runtimeArtifacts, "local_v2_dag_scan_core_duration_ms") ??
     scanRecord.scan.durationMs;
+  const scanProof = buildScanProof({
+    executiveThirdPartyRequestCount,
+    finalHost: certScoreSummary.finalHost,
+    runtimeArtifacts,
+    runtimeMetricsReliable: executiveRuntimeMetricsReliable
+  });
   const executiveTimelineEvents = buildExecutiveTimelineEvents(scanRecord.runtimeArtifacts);
   const scanTimeLabel = formatScanTimeLabel({
     completedAt: scanRecord.scan.completedAt,
@@ -7210,6 +7294,7 @@ export async function SharedScanDetailView({
             coverageMicrocards={coverageMicrocards}
             coverageLevel={executiveCoverageLevel}
             cmpVendorName={typeof scanRecord.snapshot?.cmp_vendor_name === "string" ? scanRecord.snapshot.cmp_vendor_name : null}
+            consentSurfaceStatus={consentSurfaceCoverageItem?.status ?? null}
             cookieBannerPresent={executiveCookieBannerPresent}
             domainBenchmark={scanRecord.domainBenchmark}
             externalCoverageContextAvailable={Boolean(fallbackEvidence)}
@@ -7227,6 +7312,8 @@ export async function SharedScanDetailView({
             score={executiveDisplayedScore}
             scoreLabel={`${scanRecord.customerGdprEprivacyScoreSelection?.label ?? "GDPR/ePrivacy evidence"} score`}
             scanDurationMs={scanDurationMs}
+            scanProof={scanProof}
+            scanProofDurationMs={scanDurationMs}
             scanOutcome={typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null}
             scanTimelineEvents={executiveTimelineEvents}
             sessionReplayVendorNames={certScoreSummary.sessionReplayVendorNames}

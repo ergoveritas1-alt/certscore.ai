@@ -2501,6 +2501,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not turn an incomplete conse
       rowId
     );
   }
+  assert.equal(outcomes.consent_surface_observed?.status, "Not testable");
+  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /inspection did not complete/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes preserves positive controls despite partial consent coverage", () => {

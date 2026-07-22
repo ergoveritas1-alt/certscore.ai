@@ -2116,10 +2116,42 @@ test("planned pre-consent baseline skips supplemental full-page capture without 
     const fullPageScreenshot = result.screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page");
     assert.equal(viewportScreenshot?.captureMethod, "primary_viewport_fallback");
     assert.equal(fullPageScreenshot, undefined);
-    assert.equal(result.screenshots[0]?.artifactId, "screenshot_pre_consent");
+    assert.ok(result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent"));
     assert.equal(result.visualCapture.captureMethod, "primary_viewport_fallback");
     assert.equal(result.moduleRun.timingBreakdown?.some((entry) => entry.label === "supplemental full-page screenshot"), false);
     assert.equal(result.moduleRun.timingBreakdown?.some((entry) => entry.label === "page evidence: consolidated snapshot"), true);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner retains the initial screenshot before delayed consent inspection completes", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-screenshot-before-consent-"));
+  try {
+    const url = server.urlFor("consent-late-cmp-choice-controls");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      screenshotMode: "always",
+      screenshotCaptureMode: "viewport_first",
+      waitMode: "full"
+    });
+
+    const timing = result.moduleRun.timingBreakdown ?? [];
+    const screenshotTiming = timing.find((entry) => entry.label === "early screenshot capture");
+    const consentTiming = timing.find((entry) => entry.label === "page evidence: consent UI");
+    assert.ok(result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent"));
+    assert.equal(result.visualCapture.status, "available");
+    assert.ok(screenshotTiming);
+    assert.ok(consentTiming);
+    assert.ok(screenshotTiming.durationMs >= 0);
+    assert.ok(consentTiming.durationMs >= 0);
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });

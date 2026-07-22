@@ -23,6 +23,7 @@ import {
 } from "../../lib/scans/public-report-finding-display";
 import { rankFindings } from "../../lib/scans/rank-findings";
 import { evaluateTopFindingEligibility } from "../../lib/scans/top-finding-eligibility";
+import type { ScanProof } from "../../lib/scans/scan-proof";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 import { buildPromotionGradePreconsentRequests } from "../../lib/scans/preconsent-public-evidence";
 import {
@@ -105,6 +106,8 @@ export type ExecutiveTimelineEvent = {
   vendorLabel?: string | null;
 };
 
+type ExecutiveScanProof = ScanProof;
+
 function isProtectedRouteInterruption(interruption: ExecutiveScanInterruption) {
   return /protected route/i.test(`${interruption.label} ${interruption.details.join(" ")}`);
 }
@@ -133,7 +136,7 @@ function getPostureClasses(posture: ExecutiveDisplayState) {
 }
 
 function getExecutiveBadgeLabel(displayState: ExecutiveDisplayState) {
-  return displayState === "Clear" ? "Complete" : displayState;
+  return displayState === "Clear" ? "Report generated" : displayState;
 }
 
 function uniqueStrings(values: Array<string | null | undefined>) {
@@ -1380,6 +1383,37 @@ function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotic
   );
 }
 
+function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: string | null; durationMs?: number | null }) {
+  const durationLabel = typeof input.durationMs === "number" && Number.isFinite(input.durationMs)
+    ? `${(input.durationMs / 1000).toFixed(1)}s observed`
+    : "Duration unavailable";
+  const rows = [
+    ["Requested host", input.requestedHost ?? "Unavailable"],
+    ["Final page", input.proof.finalUrl ?? "Unavailable"],
+    ["Browser/script activity", `${input.proof.scriptActivity === "observed" ? "Observed" : "Not verified"} · ${durationLabel}`],
+    ["Initial visual evidence", input.proof.screenshot.captureMethod ? `${input.proof.screenshot.status.replaceAll("_", " ")} · ${input.proof.screenshot.captureMethod}` : input.proof.screenshot.status.replaceAll("_", " ")],
+    ["Consent inspection", input.proof.consentInspection.replaceAll("_", " ")],
+    ["Runtime coverage", input.proof.runtimeCoverage.replaceAll("_", " ")],
+    ["Network activity", `${input.proof.networkActivity.status === "observed" ? "Observed" : "Not verified"} · ${input.proof.networkActivity.count ?? "—"} third-party requests`]
+  ] as const;
+  return (
+    <details className="group/scan-proof rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-slate-700 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span>How this page was observed</span>
+        <span className="text-slate-400 transition group-open/scan-proof:rotate-90"><CompactChevronRightIcon /></span>
+      </summary>
+      <dl className="mt-3 space-y-2 text-xs leading-5">
+        {rows.map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2">
+            <dt className="text-slate-500">{label}</dt>
+            <dd className="break-words font-medium text-slate-700">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  );
+}
+
 export function buildRegulatoryLenses(
   findings: CertScoreFinding[],
   counts: {
@@ -1959,6 +1993,11 @@ function BenchmarkMetricCard(input: {
       ].filter(Boolean).join(" ")
       : input.note;
   const benchmarkTooltip = [benchmarkTooltipBase, metricNote].filter(Boolean).join(" ");
+  const inlineMetricNote = actualValue === null
+    ? input.note ?? "Not measured because the relevant evidence coverage was incomplete."
+    : actualValue === 0
+      ? "Scanned, none detected."
+      : null;
   const displayLabel =
     input.label === "Third-party requests"
       ? "3rd-party requests"
@@ -1979,6 +2018,7 @@ function BenchmarkMetricCard(input: {
             {benchmarkTooltip ? <InfoTip align="start" placement="bottom" text={benchmarkTooltip} /> : null}
           </span>
         </div>
+        {inlineMetricNote ? <p className="mt-1.5 text-[10px] leading-4 text-slate-500">{inlineMetricNote}</p> : null}
       </div>
       <div className="mt-3 space-y-1">
         <div className={`relative h-2 rounded-full ${tone.rail}`}>
@@ -2180,7 +2220,6 @@ function CompactSnapshotSurfaceRow(input: { detail?: string | null; label: strin
   return (
     <div className="mb-1.5 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-xs font-medium text-slate-700 last:mb-0">
       <span>{input.label}</span>
-      <CompactChevronRightIcon />
     </div>
   );
 }
@@ -2190,6 +2229,7 @@ function ExecutiveSignalSnapshotPane(input: {
   cmpDisplayName: string;
   cmpStatusAvailable: boolean;
   cmpVendorName?: string | null;
+  consentSurfaceStatus?: string | null;
   domainTruncationNote?: string | null;
   policySurfaceLabelsByUrl: Map<string, string[]>;
   policySurfaces: ExecutivePolicySurface[];
@@ -2199,6 +2239,9 @@ function ExecutiveSignalSnapshotPane(input: {
   trackerFootprintRichDetails: Array<{ key: string; node: React.ReactNode }>;
   trackerFootprintTipText?: string | null;
   runtimeMetricsReliable?: boolean;
+  scanProof?: ExecutiveScanProof | null;
+  scanProofDurationMs?: number | null;
+  requestedHost?: string | null;
 }) {
   const runtimeMetricsReliable = input.runtimeMetricsReliable !== false;
   const trackerDetailLabel = runtimeMetricsReliable
@@ -2208,11 +2251,23 @@ function ExecutiveSignalSnapshotPane(input: {
     runtimeMetricsReliable && input.trackerFootprintRichDetails.length === 0 && input.beforeConsentCookieCount > 0
       ? `${input.beforeConsentCookieCount} ${input.beforeConsentCookieCount === 1 ? "cookie was" : "cookies were"} observed before consent; no third-party tracker vendor or domain was resolved for this scan.`
       : null;
+  const consentSurfaceStatus = input.consentSurfaceStatus ?? "Not determined";
+  const consentSurfaceLabel =
+    consentSurfaceStatus === "Observed"
+      ? (input.cmpVendorName ? input.cmpDisplayName : "Unknown CMP / consent banner")
+      : consentSurfaceStatus === "Not observed"
+        ? (input.cmpVendorName ? `${input.cmpDisplayName} technology signal detected` : "No consent banner observed")
+        : "Consent banner not determined";
+  const consentSurfaceNote =
+    consentSurfaceStatus === "Not determined" || consentSurfaceStatus === "Not testable"
+      ? "Consent inspection was incomplete or not representative; banner presence was not determined."
+      : null;
   return (
     <>
       <div className="space-y-1">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
       </div>
+      {input.scanProof ? <ScanProofPanel durationMs={input.scanProofDurationMs} proof={input.scanProof} requestedHost={input.requestedHost ?? null} /> : null}
       <CompactSnapshotPanel title="Consent platform">
         <div className="flex items-center gap-2">
           {runtimeMetricsReliable && input.cmpStatusAvailable ? (
@@ -2228,8 +2283,9 @@ function ExecutiveSignalSnapshotPane(input: {
           )}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-950">
-              {runtimeMetricsReliable ? input.cmpDisplayName : "Consent platform not testable"}
+              {runtimeMetricsReliable ? consentSurfaceLabel : "Consent platform not testable"}
             </p>
+            {consentSurfaceNote ? <p className="mt-1 text-xs leading-5 text-slate-500">{consentSurfaceNote}</p> : null}
           </div>
         </div>
       </CompactSnapshotPanel>
@@ -4164,6 +4220,7 @@ export function ExecutiveSummaryCard(input: {
   coverageDiagnosticIndicators?: CoverageDiagnosticIndicator[] | null;
   coverageLevel?: string | null;
   cmpVendorName?: string | null;
+  consentSurfaceStatus?: string | null;
   cookieBannerPresent?: boolean | null;
   domainBenchmark: DomainBenchmarkCardData;
   externalCoverageContextAvailable?: boolean | null;
@@ -4198,6 +4255,8 @@ export function ExecutiveSummaryCard(input: {
   policyEnrichmentCount?: number | null;
   policySurfaces?: ExecutivePolicySurface[] | null;
   runtimeMetricsReliable?: boolean;
+  scanProof?: ExecutiveScanProof | null;
+  scanProofDurationMs?: number | null;
   scanInterruptions?: ExecutiveScanInterruption[] | null;
   showFingerprintingSnapshot?: boolean;
   showReviewLenses?: boolean;
@@ -4256,7 +4315,7 @@ export function ExecutiveSummaryCard(input: {
   const recognizedCmpBrand = getRecognizedCmpBrand(input.cmpVendorName);
   const cmpDisplayName =
     recognizedCmpBrand?.label ??
-    (input.cookieBannerPresent ? "Unknown CMP / consent banner" : "No consent banner observed");
+    (input.cookieBannerPresent ? "Unknown CMP / consent banner" : "Consent banner not determined");
   const cmpStatusAvailable = Boolean(input.cookieBannerPresent || input.cmpVendorName);
   const fingerprintEvidence = input.fingerprintReasons.filter(Boolean);
   const hasProbableFingerprintingFinding = regulatoryFindingInput.some((finding) => finding.id === "probable_fingerprinting");
@@ -4607,6 +4666,7 @@ export function ExecutiveSummaryCard(input: {
                 cmpDisplayName={cmpDisplayName}
                 cmpStatusAvailable={cmpStatusAvailable}
                 cmpVendorName={input.cmpVendorName}
+                consentSurfaceStatus={input.consentSurfaceStatus}
                 domainTruncationNote={domainTruncationNote}
                 policySurfaceLabelsByUrl={policySurfaceLabelsByUrl}
                 policySurfaces={policySurfaces}
@@ -4616,6 +4676,9 @@ export function ExecutiveSummaryCard(input: {
                 trackerFootprintRichDetails={trackerFootprintRichDetails}
                 trackerFootprintTipText={trackerFootprintTipText}
                 runtimeMetricsReliable={runtimeMetricsReliable}
+                scanProof={input.scanProof}
+                scanProofDurationMs={input.scanProofDurationMs}
+                requestedHost={input.requestedHost}
               />
             )}
           </div>

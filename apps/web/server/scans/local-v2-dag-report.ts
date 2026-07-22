@@ -3111,7 +3111,7 @@ export function classifyRetainedRequestActivity(input: {
 }
 
 const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
-  /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|protected by kasada|x-kpsdk|detected unusual behaviour[^.]{0,180}(?:bot|browser)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot/i;
+  /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|protected by kasada|x-kpsdk|detected unusual behaviour[^.]{0,180}(?:bot|browser)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot|domain(?:s)? (?:is |are )?(?:for sale|may be for sale)|placeholder page|\bno company found\b|couldn['’]t find your company|missing (?:tenant|company|account) (?:slug|identifier)/i;
 const LOCAL_V2_VERCEL_SECURITY_CHALLENGE_PATTERN =
   /(?:^|\/)\.well-known\/vercel\/security\/|\/request-challenge(?:$|[?#])|challenge\.v2\.(?:min\.js|wasm)(?:$|[?#])|\/cdn-cgi\/challenge-platform\/|\/cdn-cgi\/challenge|challenges\.cloudflare\.com/i;
 const LOCAL_V2_SCREENSHOT_PLACEHOLDER_PATTERN =
@@ -3186,9 +3186,11 @@ function getProvidedLocalV2ScanNoGoAssessment(bundle: CanonicalEvidenceBundle) {
 export function buildLocalV2ScanNoGoAssessment(input: {
   bundle: CanonicalEvidenceBundle;
   consentSurfaceLikelyPresent: boolean;
+  finalUrl?: string | null;
   localOutDir?: string | null;
   runtimeActivityObserved: boolean;
   lowRuntimeActivity: boolean;
+  requestedUrl?: string | null;
 }) {
   const providedAssessment = input.bundle.scan_no_go_assessment ?? input.bundle.scanNoGoAssessment ?? null;
   const providedScanNoGo = getProvidedLocalV2ScanNoGoAssessment(input.bundle);
@@ -3201,6 +3203,22 @@ export function buildLocalV2ScanNoGoAssessment(input: {
 
   const textCandidates = collectLocalV2NoGoTextCandidates(input.bundle);
   const matchedText = textCandidates.find((text) => LOCAL_V2_HARD_NO_GO_TEXT_PATTERN.test(text));
+  const matchedPlaceholderText = matchedText && /domain(?:s)? (?:is |are )?(?:for sale|may be for sale)|placeholder page/i.test(matchedText)
+    ? matchedText
+    : null;
+  const matchedWrongSiteText = matchedText && /\bno company found\b|couldn['’]t find your company|missing (?:tenant|company|account) (?:slug|identifier)/i.test(matchedText)
+    ? matchedText
+    : null;
+  const requestedRootDomain = registrableDomain(hostnameFromUrl(input.requestedUrl));
+  const finalRootDomain = registrableDomain(hostnameFromUrl(input.finalUrl));
+  const crossRegistrableDomainNavigation = Boolean(
+    requestedRootDomain &&
+    finalRootDomain &&
+    requestedRootDomain !== finalRootDomain,
+  );
+  const crossDomainEvidenceText = crossRegistrableDomainNavigation
+    ? `The scan landed on ${finalRootDomain} instead of the requested ${requestedRootDomain}.`
+    : null;
   const moduleErrors = collectLocalV2ModuleErrors(input.bundle);
   const visualCapture = localV2VisualCapture(input.bundle);
   const screenshot = (input.bundle.screenshots ?? [])
@@ -3221,13 +3239,22 @@ export function buildLocalV2ScanNoGoAssessment(input: {
     return null;
   }
 
-  const primaryReasonCode = matchedText
-    ? "access_denied_or_forbidden_page"
+  const primaryReasonCode = matchedPlaceholderText
+    ? "parked_or_placeholder"
+    : matchedWrongSiteText
+      ? "wrong_site_or_soft_404"
+      : matchedText
+        ? "access_denied_or_forbidden_page"
     : retainedVisualErrorShell
       ? "retained_visual_error_shell"
       : "visual_capture_failed_or_placeholder";
-  const visualPageState = matchedText ? "access_blocked" : retainedVisualErrorShell ? "visual_error_shell" : "capture_failed";
+  const visualPageState = matchedPlaceholderText
+    ? "parked_or_placeholder"
+    : matchedWrongSiteText
+      ? "wrong_site_or_soft_404"
+      : matchedText ? "access_blocked" : retainedVisualErrorShell ? "visual_error_shell" : "capture_failed";
   const evidenceText = matchedText ??
+    crossDomainEvidenceText ??
     (retainedVisualErrorShell
       ? "The retained pre-consent screenshot appears to be a full-viewport visual error shell with negligible runtime evidence, not the normal public site."
       : "The pre-consent runtime scanner retained only a 1x1 screenshot placeholder after page/context closure and screenshot capture failures.");
@@ -3236,7 +3263,11 @@ export function buildLocalV2ScanNoGoAssessment(input: {
     "scan_runtime_artifacts.visual_access_review",
     screenshot ? "scan_runtime_artifacts.visual_evidence_artifacts" : null
   ].filter((value): value is string => Boolean(value));
-  const shortExplanation = matchedText
+  const shortExplanation = matchedPlaceholderText
+    ? `The retained initial-load evidence showed a parked or placeholder page instead of the normal public site: "${matchedPlaceholderText}"`
+    : matchedWrongSiteText
+      ? `The retained initial-load evidence showed an application error or wrong-site page instead of the normal public site: "${matchedWrongSiteText}"`
+      : matchedText
     ? `The retained initial-load evidence showed an access-denied or forbidden page instead of the normal public site: "${matchedText}"`
     : evidenceText;
   const visualAccessReview = {
@@ -3259,6 +3290,7 @@ export function buildLocalV2ScanNoGoAssessment(input: {
     reasonCodes: [primaryReasonCode, "scan_no_go_corroborated"],
     corroboratorCodes: [
       matchedText ? "access_block_text_observed" : null,
+      crossRegistrableDomainNavigation ? "final_registrable_domain_differed" : null,
       visualCaptureFailed ? "visual_capture_failed" : null,
       screenshotPlaceholderUsed ? "screenshot_placeholder_used" : null,
       pageContextClosed ? "page_context_closed" : null,
@@ -3272,8 +3304,8 @@ export function buildLocalV2ScanNoGoAssessment(input: {
       consentOrTrackerEvidenceObserved: input.consentSurfaceLikelyPresent,
       documentStatusBlocked: Boolean(matchedText),
       domContentLow: true,
-      expectedOriginReached: false,
-      firstPartyIdentityObserved: false,
+      expectedOriginReached: !crossRegistrableDomainNavigation,
+      firstPartyIdentityObserved: !crossRegistrableDomainNavigation,
       lowRuntimeActivity: input.lowRuntimeActivity,
       pageContextClosed,
       retainedVisualErrorShell,
@@ -3431,9 +3463,11 @@ function buildMaterializedLocalV2Detail(
   const localV2NoGo = buildLocalV2ScanNoGoAssessment({
     bundle,
     consentSurfaceLikelyPresent,
+    finalUrl: canonicalDocumentUrl,
     localOutDir: options.localOutDir,
     runtimeActivityObserved,
     lowRuntimeActivity,
+    requestedUrl: requestedDocumentUrl,
   });
   const providedScanNoGoAssessment = bundle.scan_no_go_assessment ?? bundle.scanNoGoAssessment ?? null;
   const providedVisualAccessReview = bundle.visual_access_review ?? bundle.visualAccessReview ?? null;

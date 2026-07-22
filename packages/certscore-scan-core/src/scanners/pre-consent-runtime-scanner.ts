@@ -826,6 +826,21 @@ export async function preConsentRuntimeScanner(
     const directCmpNetworkEvidenceAtInitialCapture = hasHighConfidenceDirectCmpRuntimeEvidence(
       buildCmpRuntimeObservations(vendorResolverInputs, input.scanStartedAtMs),
     );
+    const earlyScreenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
+    // Start the first visual capture before consent inspection. A slow CMP
+    // probe must never prevent us from retaining the page a visitor saw.
+    const earlyScreenshotCapturePromise = (input.screenshotMode ?? "always") === "always"
+      ? recordTiming(
+        timingBreakdown,
+        "early screenshot capture",
+        "Early pre-consent viewport screenshot starts immediately after DOMContentLoaded and runs independently of consent inspection.",
+        () => capturePreConsentScreenshot(page, earlyScreenshotPath, {
+          captureMode: "viewport_first",
+          screenshotErrors,
+          timeoutMs: Math.min(input.screenshotTimeoutMs ?? 5_000, 3_000),
+        }),
+      )
+      : null;
     const consentUiObservationPromise = recordBoundedTiming(
       timingBreakdown,
       "page evidence: consent UI",
@@ -850,10 +865,25 @@ export async function preConsentRuntimeScanner(
     );
     let preScreenshotConsentObservation: ConsentUiObservation | undefined;
     if ((input.screenshotMode ?? "always") === "always") {
+      const earlyScreenshotCapture = earlyScreenshotCapturePromise
+        ? await earlyScreenshotCapturePromise
+        : null;
+      if (earlyScreenshotCapture) {
+        screenshots.push({
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: elapsed(input.scanStartedAtMs),
+          captureMethod: earlyScreenshotCapture.captureMethod,
+          path: earlyScreenshotPath,
+          url: page.url(),
+          pagePhase: "dom_content_loaded",
+          consentStateAtTime: "pre_consent",
+        });
+        earlyScreenshotCaptured = true;
+        visualCapture = visualCaptureFromScreenshotSummary(earlyScreenshotCapture, earlyScreenshotPath);
+      }
       // Retain the first typed control inventory before any browser screenshot
-      // can monopolize the page/CDP session. Keep the existing parallel path
-      // when no early screenshot will run so unrelated iframe/runtime timing is
-      // unchanged.
+      // can monopolize the page/CDP session. The screenshot is already safely
+      // retained above, so a slow consent probe cannot remove visual evidence.
       preScreenshotConsentObservation = await consentUiObservationPromise;
       if (!hasSufficientFirstLayerConsentControls(preScreenshotConsentObservation)) {
         let earlyCmpRuntimeObservations = buildCmpRuntimeObservations(
@@ -904,28 +934,6 @@ export async function preConsentRuntimeScanner(
           retainedConsentUiObservation = preScreenshotConsentObservation;
         }
       }
-      const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
-      const screenshotCapture = await recordTiming(
-        timingBreakdown,
-        "early screenshot capture",
-        "Early pre-consent screenshot immediately after DOMContentLoaded.",
-        () => capturePreConsentScreenshot(page, screenshotPath, {
-          captureMode: input.screenshotCaptureMode ?? "viewport_first",
-          screenshotErrors,
-          timeoutMs: input.screenshotTimeoutMs ?? 5_000,
-        }),
-      );
-      screenshots.push({
-        artifactId: "screenshot_pre_consent",
-        capturedAtMs: elapsed(input.scanStartedAtMs),
-        captureMethod: screenshotCapture.captureMethod,
-        path: screenshotPath,
-        url: page.url(),
-        pagePhase: "dom_content_loaded",
-        consentStateAtTime: "pre_consent",
-      });
-      earlyScreenshotCaptured = true;
-      visualCapture = visualCaptureFromScreenshotSummary(screenshotCapture, screenshotPath);
       if (
         !hasSufficientFirstLayerConsentControls(preScreenshotConsentObservation) &&
         hasHighConfidenceDirectCmpRuntimeEvidence(retainedCmpRuntimeObservations) &&

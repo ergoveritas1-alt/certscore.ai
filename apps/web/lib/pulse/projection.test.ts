@@ -314,6 +314,9 @@ test("Pulse descriptive storage totals include explicit pre-consent observations
   assert.doesNotMatch(source, /const cookiesBeforeConsentCount = nonEssentialPreConsentStorageCount \?\?/);
   assert.match(source, /hasClassifiedRuntimeStorageRows \? "Non-essential storage" : "Pre-consent storage"/);
   assert.match(source, /hasClassifiedRuntimeStorageRows \? "nonessential_only" : "all_observed"/);
+  assert.match(source, /storageMetricStatus/);
+  assert.match(source, /Storage was scanned and none was detected/);
+  assert.match(source, /Storage was not measured or retained/);
 });
 
 test("Pulse evidence inventory filters display hostnames and deduplicates vendor rows", () => {
