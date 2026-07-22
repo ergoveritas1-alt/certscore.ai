@@ -35,6 +35,8 @@ export const LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS = 12_000;
 export const LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS = 2_000;
 const LOCAL_V2_DAG_LAMBDA_PRECONSENT_SHUTDOWN_RESERVE_MS = 10_000;
 const LOCAL_V2_DAG_LAMBDA_POST_FALLBACK_RESERVE_MS = 4_000;
+const LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS = 4_000;
+const LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS = 3;
 
 export type LocalV2DagLambdaDispatchPayload = {
   artifactOnly: true;
@@ -276,6 +278,57 @@ async function withHandlerSafetyTimeout<T>(
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+async function sendWithBoundedRetries<T>(input: {
+  attemptTimeoutMs: number;
+  maxAttempts: number;
+  operation: (signal: AbortSignal) => Promise<T>;
+  operationLabel: string;
+  signal?: AbortSignal;
+  totalTimeoutMs: number;
+}): Promise<T> {
+  const startedAtMs = Date.now();
+  const deadlineAtMs = startedAtMs + Math.max(10, input.totalTimeoutMs);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= Math.max(1, input.maxAttempts); attempt += 1) {
+    if (input.signal?.aborted) {
+      throw input.signal.reason instanceof Error
+        ? input.signal.reason
+        : new Error(`${input.operationLabel} aborted.`);
+    }
+    const remainingMs = deadlineAtMs - Date.now();
+    if (remainingMs <= 0) break;
+    const controller = new AbortController();
+    const abortFromParent = () => controller.abort(input.signal?.reason);
+    input.signal?.addEventListener("abort", abortFromParent, { once: true });
+    const attemptTimeoutMs = Math.max(10, Math.min(input.attemptTimeoutMs, remainingMs));
+    try {
+      return await withHandlerSafetyTimeout(
+        input.operation(controller.signal),
+        attemptTimeoutMs,
+        () => controller.abort(new Error(`${input.operationLabel} attempt ${attempt} deadline reached.`)),
+      );
+    } catch (error) {
+      lastError = error;
+      if (input.signal?.aborted) {
+        throw input.signal.reason instanceof Error ? input.signal.reason : error;
+      }
+      if (attempt < input.maxAttempts && deadlineAtMs - Date.now() > 10) {
+        console.warn("[v2-lambda-aws] bounded send retry", {
+          attempt,
+          durationMs: Date.now() - startedAtMs,
+          error: error instanceof Error ? error.message : String(error),
+          operation: input.operationLabel,
+        });
+      }
+    } finally {
+      input.signal?.removeEventListener("abort", abortFromParent);
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new LocalV2DagLambdaSafetyTimeoutError(Math.max(10, input.totalTimeoutMs));
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -1151,6 +1204,10 @@ async function timeLambdaPhase<T>(
   const memoryBefore = await runtimeMemorySnapshot();
   const startedAt = Date.now();
   const startedAtIso = new Date(startedAt).toISOString();
+  const logHandoffPhase = label.includes("artifact") || label === "auxiliary_upload" || label === "manifest_write";
+  if (logHandoffPhase) {
+    console.info("[v2-lambda-artifact] phase started", { label, startedAt: startedAtIso });
+  }
   try {
     const value = await fn();
     const completedAt = Date.now();
@@ -1163,6 +1220,9 @@ async function timeLambdaPhase<T>(
       startedAt: startedAtIso,
       status: "completed"
     });
+    if (logHandoffPhase) {
+      console.info("[v2-lambda-artifact] phase completed", { durationMs: completedAt - startedAt, label });
+    }
     return value;
   } catch (error) {
     const completedAt = Date.now();
@@ -1175,6 +1235,13 @@ async function timeLambdaPhase<T>(
       startedAt: startedAtIso,
       status: "failed"
     });
+    if (logHandoffPhase) {
+      console.warn("[v2-lambda-artifact] phase failed", {
+        durationMs: completedAt - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+        label,
+      });
+    }
     throw error;
   }
 }
@@ -2047,7 +2114,9 @@ const CORE_ARTIFACT_FILE_NAMES = new Set([
 ]);
 
 export async function uploadAuxiliaryArtifactFiles(input: {
+  attemptTimeoutMs?: number;
   artifactRoot: string;
+  maxAttempts?: number;
   payload: LocalV2DagLambdaDispatchPayload;
   s3Client?: S3PutClient;
   signal?: AbortSignal;
@@ -2064,11 +2133,14 @@ export async function uploadAuxiliaryArtifactFiles(input: {
 
   const bucket = requireArtifactBucket();
   const prefix = artifactKeyPrefix(input.payload).replace(/^\/+|\/+$/g, "");
-  const s3Client = input.s3Client ?? new S3Client({ region: input.payload.awsRegion });
+  const maxAttempts = Math.max(1, input.maxAttempts ?? (
+    input.s3Client ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS
+  ));
+  const attemptTimeoutMs = Math.max(10, input.attemptTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS);
   return Promise.all(fileNames.map(async (fileName) => {
     const object = await artifactObjectMetadata(path.join(input.artifactRoot, fileName));
     const key = `${prefix}/auxiliary/${fileName}`;
-    await s3Client.send(new PutObjectCommand({
+    const command = new PutObjectCommand({
       Body: object.body,
       Bucket: bucket,
       ContentType: auxiliaryContentType(fileName),
@@ -2080,7 +2152,17 @@ export async function uploadAuxiliaryArtifactFiles(input: {
         "certscore-production-finding-integration": "false",
         "certscore-v2-artifact-only": "true"
       }
-    }), { abortSignal: input.signal });
+    });
+    await sendWithBoundedRetries({
+      attemptTimeoutMs,
+      maxAttempts,
+      operation: (attemptSignal) => (
+        input.s3Client ?? new S3Client({ region: input.payload.awsRegion })
+      ).send(command, { abortSignal: attemptSignal }),
+      operationLabel: `S3 auxiliary upload ${fileName}`,
+      signal: input.signal,
+      totalTimeoutMs: attemptTimeoutMs * maxAttempts,
+    });
     return {
       fileName,
       sha256: object.sha256,
@@ -2101,15 +2183,20 @@ function auxiliaryContentType(fileName: string) {
 }
 
 export async function uploadArtifactFiles(input: {
+  attemptTimeoutMs?: number;
   fields?: Array<"manifestUri" | "scanArtifactUri">;
   manifestPath: string;
+  maxAttempts?: number;
   payload: LocalV2DagLambdaDispatchPayload;
   pointers: LocalV2DagLambdaArtifactPointers;
   s3Client?: S3PutClient;
   scanArtifactPath: string;
   signal?: AbortSignal;
 }): Promise<LocalV2DagLambdaArtifactMetadata> {
-  const s3Client = input.s3Client ?? new S3Client({ region: input.payload.awsRegion });
+  const maxAttempts = Math.max(1, input.maxAttempts ?? (
+    input.s3Client ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS
+  ));
+  const attemptTimeoutMs = Math.max(10, input.attemptTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS);
   const artifacts = [
     { field: "manifestUri" as const, path: input.manifestPath },
     { field: "scanArtifactUri" as const, path: input.scanArtifactPath }
@@ -2121,7 +2208,7 @@ export async function uploadArtifactFiles(input: {
     }
     const { bucket, key } = parseS3Uri(uri);
     const object = await artifactObjectMetadata(artifact.path);
-    await s3Client.send(new PutObjectCommand({
+    const command = new PutObjectCommand({
       Body: object.body,
       Bucket: bucket,
       ContentType: "application/json",
@@ -2133,7 +2220,17 @@ export async function uploadArtifactFiles(input: {
         "certscore-production-finding-integration": "false",
         "certscore-v2-artifact-only": "true"
       }
-    }), { abortSignal: input.signal });
+    });
+    await sendWithBoundedRetries({
+      attemptTimeoutMs,
+      maxAttempts,
+      operation: (attemptSignal) => (
+        input.s3Client ?? new S3Client({ region: input.payload.awsRegion })
+      ).send(command, { abortSignal: attemptSignal }),
+      operationLabel: `S3 ${artifact.field} upload`,
+      signal: input.signal,
+      totalTimeoutMs: attemptTimeoutMs * maxAttempts,
+    });
     return {
       field: artifact.field,
       metadata: {
@@ -2310,22 +2407,31 @@ function buildLocalV2DagLambdaHandlerTiming(input: {
 }
 
 export async function sendLocalV2DagLambdaResultMessage(input: {
+  attemptTimeoutMs?: number;
+  maxAttempts?: number;
   message: LocalV2DagLambdaResultMessage;
   queueUrl: string;
   sqsClient?: SqsSendClient;
   timeoutMs?: number;
 }) {
-  const sqsClient = input.sqsClient ?? new SQSClient({ region: parseQueueRegion(input.queueUrl) });
-  const controller = new AbortController();
   const timeoutMs = Math.max(10, input.timeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS);
-  await withHandlerSafetyTimeout(
-    sqsClient.send(new SendMessageCommand({
-      MessageBody: JSON.stringify(input.message),
-      QueueUrl: input.queueUrl
-    }), { abortSignal: controller.signal }),
-    timeoutMs,
-    () => controller.abort(new Error("Terminal SQS publication deadline reached."))
-  );
+  const maxAttempts = Math.max(1, input.maxAttempts ?? (
+    input.sqsClient ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS
+  ));
+  const attemptTimeoutMs = Math.max(10, input.attemptTimeoutMs ?? Math.floor(timeoutMs / maxAttempts));
+  const command = new SendMessageCommand({
+    MessageBody: JSON.stringify(input.message),
+    QueueUrl: input.queueUrl
+  });
+  await sendWithBoundedRetries({
+    attemptTimeoutMs,
+    maxAttempts,
+    operation: (attemptSignal) => (
+      input.sqsClient ?? new SQSClient({ region: parseQueueRegion(input.queueUrl) })
+    ).send(command, { abortSignal: attemptSignal }),
+    operationLabel: "Terminal SQS publication",
+    totalTimeoutMs: timeoutMs,
+  });
 }
 
 export async function handler(event: unknown, options: HandlerOptions = {}) {

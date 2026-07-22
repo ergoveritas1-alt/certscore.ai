@@ -4656,7 +4656,7 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
   else parentSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(), Math.max(500, timeoutMs));
   try {
-    const response = await fetch(url, {
+    const response = await awaitAbortablePolicyOperation(fetch(url, {
       headers: {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,*/*;q=0.7",
         "accept-language": "en-US,en;q=0.8,de;q=0.7,fr;q=0.7,es;q=0.7,it;q=0.7,nl;q=0.7,pl;q=0.7",
@@ -4664,7 +4664,7 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
       },
       signal: controller.signal,
       redirect: "follow",
-    });
+    }), controller.signal, "Policy fetch aborted before response headers were received.");
     const contentType = response.headers.get("content-type") ?? "";
     const attemptBase = {
       mode: "direct" as const,
@@ -4805,17 +4805,29 @@ async function readResponseBodyChunk(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   signal?: AbortSignal,
 ): Promise<ReadableStreamReadResult<Uint8Array>> {
-  if (!signal) return reader.read();
+  return awaitAbortablePolicyOperation(
+    reader.read(),
+    signal,
+    "Policy response body read aborted.",
+  );
+}
+
+export async function awaitAbortablePolicyOperation<T>(
+  work: Promise<T>,
+  signal: AbortSignal | undefined,
+  abortMessage: string,
+): Promise<T> {
+  if (!signal) return work;
   throwIfAborted(signal);
 
   let abortListener: (() => void) | undefined;
   try {
     return await Promise.race([
-      reader.read(),
+      work,
       new Promise<never>((_resolve, reject) => {
         abortListener = () => {
           const reason = abortReason(signal);
-          const error = new Error(reason?.message ?? "Policy response body read aborted.", {
+          const error = new Error(reason?.message ?? abortMessage, {
             cause: reason ?? undefined,
           });
           error.name = "AbortError";

@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readBoundedResponseBody } from "./scanners/policy-surface-scanner.js";
+import {
+  awaitAbortablePolicyOperation,
+  readBoundedResponseBody,
+} from "./scanners/policy-surface-scanner.js";
+
+test("policy operations stop when transport work ignores abort before response headers", async () => {
+  const controller = new AbortController();
+  const startedAtMs = Date.now();
+  const pending = awaitAbortablePolicyOperation(
+    new Promise<Response>(() => undefined),
+    controller.signal,
+    "policy fetch deadline reached",
+  );
+
+  setTimeout(() => controller.abort(new Error("policy fetch deadline reached")), 20);
+
+  await assert.rejects(pending, /policy fetch deadline reached/);
+  assert.ok(Date.now() - startedAtMs < 250);
+});
 
 test("policy response reads retain a bounded prefix and cancel the remaining stream", async () => {
   let cancelled = false;

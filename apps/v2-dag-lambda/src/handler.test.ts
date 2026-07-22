@@ -594,6 +594,35 @@ test("terminal SQS publication is bounded and aborts the SDK call", async () => 
   assert.ok(Date.now() - startedAt < 500);
 });
 
+test("terminal SQS publication retries a stalled send within its total deadline", async () => {
+  let sends = 0;
+  await sendLocalV2DagLambdaResultMessage({
+    attemptTimeoutMs: 15,
+    maxAttempts: 2,
+    message: {
+      artifactOnly: true,
+      completedAt: "2026-06-15T18:00:00.000Z",
+      contractVersion: "certscore.v2.lambda-dag-result.v1",
+      processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+      productionFindingIntegration: false,
+      scanId: "scan-local-retry",
+      status: "completed",
+      targetEnvironment: "local"
+    },
+    queueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results",
+    sqsClient: {
+      async send() {
+        sends += 1;
+        if (sends === 1) return await new Promise(() => undefined);
+        return { $metadata: {} };
+      }
+    },
+    timeoutMs: 80
+  });
+
+  assert.equal(sends, 2);
+});
+
 test("handler worker mode fails closed while post-consent flow scanning is disabled", async () => {
   let sentMessages = 0;
   const result = await handler(validPayload({
@@ -732,6 +761,41 @@ test("artifact uploader returns durable metadata for all v2 JSON artifacts", asy
   assert.ok((metadata.scanArtifactUri?.sizeBytes ?? 0) > 0);
   assert.equal(metadata.reviewArtifactUri, undefined);
   assert.equal(metadata.reportAdapterArtifactUri, undefined);
+});
+
+test("artifact uploader retries a stalled canonical upload", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "certscore-v2-lambda-upload-retry-test-"));
+  const files = {
+    manifestPath: path.join(tmp, "LocalV2DagLambdaManifest.json"),
+    scanArtifactPath: path.join(tmp, "CanonicalEvidenceBundle.json")
+  };
+  await Promise.all(Object.values(files).map((filePath) => writeFile(filePath, "{}", "utf8")));
+  const pointers = artifactPointersFromS3Keys({
+    bucket: "certscore-v2-local-artifacts",
+    keyPrefix: "v2-dag-lambda/local/scan-local-retry",
+    manifestFileName: "LocalV2DagLambdaManifest.json",
+    scanArtifactFileName: "CanonicalEvidenceBundle.json"
+  });
+  let sends = 0;
+
+  const metadata = await uploadArtifactFiles({
+    ...files,
+    attemptTimeoutMs: 15,
+    fields: ["scanArtifactUri"],
+    maxAttempts: 2,
+    payload: validPayload(),
+    pointers,
+    s3Client: {
+      async send() {
+        sends += 1;
+        if (sends === 1) return await new Promise(() => undefined);
+        return { $metadata: {} };
+      }
+    }
+  });
+
+  assert.equal(sends, 2);
+  assert.ok(metadata.scanArtifactUri);
 });
 
 test("artifact uploader can upload scan and manifest JSON independently for overlapped handoff", async () => {
