@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import type { VersionedScoreAssessmentInput } from "./score-assessment-repository";
 
+export const LEGACY_GDPR_EPRIVACY_SCORE_VERSION = "gdpr-eprivacy-evidence.legacy-v1";
+
 type LegacyGdprEprivacyScoreAssessment = {
   coverageConfidence: VersionedScoreAssessmentInput["coverageConfidence"];
   coverageRatio: number;

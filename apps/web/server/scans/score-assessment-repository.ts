@@ -21,6 +21,10 @@ type VersionedScoreAssessmentRow = {
   id: string;
 };
 
+type ExistingVersionedScoreAssessmentRow = {
+  exists: boolean;
+};
+
 export type StoredVersionedScoreAssessment = {
   coverageConfidence: VersionedScoreAssessmentInput["coverageConfidence"];
   coverageRatio: number;
@@ -150,6 +154,29 @@ export async function persistVersionedScoreAssessment(input: VersionedScoreAsses
     id: inserted?.id ?? null,
     inserted: inserted !== null
   };
+}
+
+export async function hasVersionedScoreAssessment(input: {
+  scanId: string;
+  scoreKind: VersionedScoreAssessmentInput["scoreKind"];
+  scoreVersion: string;
+}) {
+  const row = await queryOne<ExistingVersionedScoreAssessmentRow>(
+    `select exists (
+       select 1
+         from public.scan_score_assessments
+        where scan_id = $1::uuid
+          and score_kind = $2
+          and score_version = $3
+     ) as exists`,
+    [
+      assertBoundedText(input.scanId, "scanId", 80),
+      input.scoreKind,
+      assertBoundedText(input.scoreVersion, "scoreVersion", 120)
+    ],
+    { readOnly: true }
+  );
+  return row?.exists === true;
 }
 
 export async function loadLatestVersionedScoreAssessments(input: {

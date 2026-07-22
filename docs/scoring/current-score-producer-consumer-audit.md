@@ -12,7 +12,7 @@ Risk and coverage are separate. Coverage can withhold a risk score, but missing 
 
 | Producer | Meaning | Current disposition |
 | --- | --- | --- |
-| `deriveRegulatoryCoverageScore` | Legacy GDPR/ePrivacy evidence-checklist score | Customer/Pulse legacy model. Explicit source/version and coverage metadata. Persisted once at scan completion for new Lambda and browser scans. Replacement candidate remains shadow-only. |
+| `deriveRegulatoryCoverageScore` | Legacy GDPR/ePrivacy evidence-checklist score | Customer/Pulse legacy model. Explicit source/version and coverage metadata. Persisted once after production status confirms both scan completion and canonical report readiness, or during browser-scan completion. Replacement candidate remains shadow-only. |
 | Canonical shadow scorer | Candidate GDPR/ePrivacy observed-risk posture plus coverage | Internal only, versioned, bounded, non-persistent, pending Luna. Consumes projected findings/checklist rows only. |
 | Local v2 DAG snapshot heuristic | Raw pre-consent request/cookie heuristic stored in `scan_snapshots` | Legacy compatibility field only. Must not be presented as the versioned GDPR/ePrivacy score and must not become a cutover input. |
 | Browser-extension snapshot heuristic | Raw browser signal heuristic stored in `scan_snapshots` | Legacy compatibility field only. Same restriction as the Lambda snapshot heuristic. |
@@ -36,7 +36,7 @@ Risk and coverage are separate. Coverage can withhold a risk score, but missing 
 
 `scan_score_assessments` is immutable by `(scan_id, score_kind, score_version)`. It stores the score separately from coverage, source, version, scoring time, surfaced finding IDs, a bounded projection fingerprint, and an explicit withholding reason. A change in meaning requires a new version. Report reads never create or replace score history.
 
-Completion-time persistence is best-effort for scan availability: persistence failure is logged and monitored but does not convert a completed scan into a failed scan. Reprocessing the same version is idempotent.
+Completion-time persistence is best-effort for scan availability: persistence failure is logged and monitored but does not convert a completed scan into a failed scan. Lambda scans finalize from the lightweight status lifecycle only after both the terminal result and canonical report-readiness event exist; report rendering and admin-summary reads remain write-free. Reprocessing the same version is idempotent and repeat polls use a cheap exact-version existence check.
 
 ## Candidate-v2 corrections
 
