@@ -2941,7 +2941,10 @@ export function summarizeFirstLayerConsentChoices(
     null;
   const defaultToggleEvidence = summarizeConsentDefaultToggleEvidence(observation);
   const geometryChoices = summarizeGeometryFirstLayerConsentChoices(geometryEvidence);
-  const controls = (observation?.controls ?? []).filter((control) => control.visible !== false);
+  const controls = (observation?.controls ?? []).flatMap((control) => {
+    const label = getString(control?.label);
+    return label && control?.visible !== false ? [{ ...control, label }] : [];
+  });
   const visibleChoiceLabels = uniqueStrings(controls.map((control) => control.label)).slice(0, 12);
   const acceptLabels = uniqueStrings(controls
     .filter((control) => control.actionType === "accept_all")

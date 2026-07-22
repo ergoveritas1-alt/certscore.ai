@@ -209,6 +209,38 @@ test("summarizeFirstLayerConsentChoices retains IMOU banner text, controls, poli
   assert.deepEqual(summary?.policyLinks, ["https://www.imou.com/policy#privacy-policy"]);
 });
 
+test("summarizeFirstLayerConsentChoices discards malformed canonical control labels before geometry merge", async () => {
+  const { summarizeFirstLayerConsentChoices } = await loadLocalV2DagReport();
+  const summary = summarizeFirstLayerConsentChoices({
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      controls: [
+        { actionType: "accept_all", label: { text: "Accept" }, visible: true },
+        { actionType: "reject_all", label: "Reject", visible: true }
+      ]
+    }]
+  } as unknown as CanonicalEvidenceBundle, {
+    candidates: [{
+      actionType: "accept_all",
+      boundingBox: { height: 40, width: 120 },
+      decisionStatus: "confirmed_visible",
+      enabled: true,
+      intersectsViewport: true,
+      label: "Accept",
+      layer: "first_layer"
+    }],
+    summary: { cmpDetected: true, cmpName: "Fixture CMP" }
+  }) as Record<string, unknown> | null;
+
+  assert.deepEqual(summary?.visibleChoiceLabels, ["Reject", "Accept"]);
+  assert.deepEqual(
+    (summary?.controls as Array<{ label: string }>).map((control) => control.label),
+    ["Reject", "Accept"]
+  );
+});
+
 test("policy summary distinguishes discovered-but-budget-skipped privacy notices from absent notices", async () => {
   const { summarizePolicySurfaces } = await loadLocalV2DagReport();
   const discoveredSurface = {
