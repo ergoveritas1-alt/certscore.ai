@@ -77,24 +77,11 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
                   type="button"
                   aria-label={isSectionExpanded ? `Collapse ${headingLabel}` : `Expand ${headingLabel}`}
                   aria-pressed={isSectionExpanded}
-                  className={cn(
-                    "scan-report-button inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-                    isSectionExpanded
-                      ? "border-sky-300 bg-sky-50 text-sky-700 shadow-sm"
-                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800"
-                  )}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2"
                   title={isSectionExpanded ? `Collapse ${headingLabel}` : `Expand ${headingLabel}`}
                   onClick={() => setIsSectionExpanded((value) => !value)}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "transition-transform",
-                      isSectionExpanded ? "rotate-90" : "rotate-0"
-                    )}
-                  >
-                    <ScanReportDisclosureIcon className="h-4 w-4 rounded-[0.375rem] [&_svg]:h-2.5 [&_svg]:w-2.5" />
-                  </span>
+                  <ScanReportDisclosureIcon open={isSectionExpanded} className="h-8 w-8 rounded-lg [&_svg]:h-3.5 [&_svg]:w-3.5" />
                 </button>
               ) : null}
               <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">{headingLabel}</p>
