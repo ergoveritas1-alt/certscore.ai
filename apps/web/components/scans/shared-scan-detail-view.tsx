@@ -869,7 +869,6 @@ function RuntimeInventoryTable({
         />
         <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:px-5">
           <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
-          <PreConsentDataFlowSummary rows={groupedInventoryRows} />
           <div className="grid gap-4 lg:grid-cols-[minmax(17rem,0.9fr)_minmax(0,2.1fr)] lg:items-start">
           <div className="grid gap-3 sm:grid-cols-2 lg:h-[317px] lg:grid-cols-1 lg:grid-rows-2">
             <InventoryPurposeCard rows={groupedInventoryRows} />
@@ -932,6 +931,7 @@ function RuntimeInventoryTable({
             </div>
           </div>
           </div>
+          <PreConsentDataFlowSummary rows={groupedInventoryRows} />
         </div>
       </details>
     </section>

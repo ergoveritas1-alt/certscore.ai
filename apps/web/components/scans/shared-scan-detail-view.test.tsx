@@ -30,16 +30,19 @@ test("pre-consent inventory keeps purpose separate, removes requests, and places
 
 test("pre-consent inventory exposes retained cookie metadata and all three data-flow layers", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
+  const tableEnd = source.indexOf("</table>");
+  const dataFlowSummary = source.indexOf("<PreConsentDataFlowSummary");
 
   assert.match(source, /Show retained vendor evidence/);
   assert.match(source, />&gt;12 months</);
   assert.match(source, />Lifespan</);
   assert.match(source, />Data types</);
   assert.match(source, />Initiator chain</);
-  assert.match(source, /server location \(may be CDN edge\)/);
+  assert.match(source, /Server countries shown below are CDN-edge observations/);
   assert.match(source, /Controlling entity:/);
   assert.match(source, /Transfer mechanism:/);
   assert.match(source, /Cookie values are redacted/);
+  assert.ok(tableEnd >= 0 && dataFlowSummary > tableEnd, "data-flow summary should render below the inventory table");
 });
 
 test("getRecordOptionalBoolean preserves explicit incomplete coverage without penalizing legacy snapshots", async () => {
