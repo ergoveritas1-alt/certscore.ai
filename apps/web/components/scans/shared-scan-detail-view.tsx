@@ -968,7 +968,7 @@ function RuntimeInventoryTable({
                   <th className="sticky left-[90px] z-20 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="vendor" label="Vendor" /></th>
                   <th className="w-[130px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
                   <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="priority" label="Priority" /></th>
-                  <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="First seen" /></th>
+                  <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
                   <th className="w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Cookies</th>
                   <th className="w-[150px] max-w-[150px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Domain</th>
                   <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Server location</th>
