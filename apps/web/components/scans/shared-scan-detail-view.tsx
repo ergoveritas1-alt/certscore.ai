@@ -653,6 +653,7 @@ function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; 
             <div key={segment.label} className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter={segment.label.toLowerCase()} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
             <span className="truncate text-[11px] font-medium text-slate-500">{compact && segment.label === "Contextual" ? "Ctx" : segment.label}</span>
+            <InfoTip align="end" placement="bottom" text={`Inventory rows classified as ${segment.label.toLowerCase()} priority.`} />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{segment.count}</span>
           </div>
         ))}
@@ -720,6 +721,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
           <div key={purpose} className="flex min-h-5 min-w-0 cursor-pointer items-center gap-2 rounded-md px-1 py-0 transition-colors hover:bg-slate-100" data-inventory-filter={purpose.toLowerCase()} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: chartSegments.find((segment) => segment.label === purpose)?.color ?? "#64748b" }} />
             <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-600">{purpose}</span>
+            <InfoTip align="end" placement="bottom" text={`Rows classified with the ${purpose.toLowerCase()} purpose.`} />
             <span className="text-xs font-semibold text-slate-800">{count}</span>
           </div>
         )) : (
@@ -885,16 +887,19 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
           <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="non-essential" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Non-essential</span>
+            <InfoTip align="end" placement="bottom" text="Advertising, analytics, marketing, personalization, or other non-essential activity." />
             <span className="text-[11px] font-semibold text-slate-700">{nonEssentialCount}</span>
           </div>
           <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="review" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Review</span>
+            <InfoTip align="end" placement="bottom" text="Unknown, ambiguous, or insufficiently classified evidence needing review." />
             <span className="text-[11px] font-semibold text-slate-700">{reviewCount}</span>
           </div>
           <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="necessary" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Necessary</span>
+            <InfoTip align="end" placement="bottom" text="Essential or functional activity retained as necessary context." />
             <span className="text-[11px] font-semibold text-slate-700">{necessaryCount}</span>
           </div>
         </div>
