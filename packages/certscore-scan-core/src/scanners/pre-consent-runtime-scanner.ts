@@ -4909,7 +4909,11 @@ async function readAccessibilityConsentInventory(page: Page): Promise<{
       }
     })(),
     new Promise<{ controls: ConsentUiInventoryControl[]; hasPotentialToggle: boolean; textExcerpts: string[] }>((resolve) => {
-      timer = setTimeout(() => resolve({ controls: [], hasPotentialToggle: false, textExcerpts: [] }), 750);
+      // Large commerce accessibility trees can take longer than a DOM probe
+      // even though they remain the only responsive structured surface. Keep
+      // this within the caller's 3.5s consent budget while allowing Chrome to
+      // finish a bounded native-tree read.
+      timer = setTimeout(() => resolve({ controls: [], hasPotentialToggle: false, textExcerpts: [] }), 2_500);
     }),
   ]).catch(() => {
     return { controls: [], hasPotentialToggle: false, textExcerpts: [] };
