@@ -14,7 +14,7 @@ export {
   type CanonicalCookieKnowledge,
   type CanonicalVendorLegalContext,
   type TransferMechanism,
-} from "./cookie-knowledge-base.js";
+} from "./cookie-knowledge-base";
 
 export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-20-wave19-ifit-attribution";
 
