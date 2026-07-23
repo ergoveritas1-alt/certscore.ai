@@ -816,35 +816,36 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
   }).length;
   const nonEssentialCount = rows.length - necessaryCount;
 
-  const segments = [
-    {
-      label: "Observed before consent",
-      value: beforeConsentCount,
-      detail: "Retained runtime evidence"
-    },
-    {
-      label: "Strictly necessary / functional",
-      value: necessaryCount,
-      detail: "Classified from the evidence"
-    },
-    {
-      label: "Non-essential or review",
-      value: nonEssentialCount,
-      detail: "Analytics, advertising, or unclear"
-    }
-  ];
+  const totalClassified = necessaryCount + nonEssentialCount;
+  const necessaryShare = totalClassified > 0 ? (necessaryCount / totalClassified) * 100 : 0;
+  const donut = totalClassified > 0
+    ? `conic-gradient(#10b981 0 ${necessaryShare}%, #f59e0b ${necessaryShare}% 100%)`
+    : "conic-gradient(#cbd5e1 0 100%)";
 
   return (
-    <div className="grid gap-2 sm:grid-cols-3" aria-label="Consent evidence segmentation">
-      {segments.map((segment) => (
-        <div key={segment.label} className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">{segment.label}</p>
-            <span className="text-sm font-semibold text-slate-900">{segment.value ?? "—"}</span>
-          </div>
-          <p className="mt-1 text-[11px] leading-4 text-slate-500">{segment.detail}</p>
+    <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5" aria-label="Consent evidence segmentation">
+      <div className="relative grid h-16 w-16 shrink-0 place-items-center rounded-full" style={{ background: donut }}>
+        <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-50 text-center shadow-inner">
+          <span className="text-base font-semibold leading-none text-slate-900">{beforeConsentCount}</span>
+          <span className="text-[8px] font-semibold uppercase tracking-[0.08em] text-slate-500">observed</span>
         </div>
-      ))}
+      </div>
+      <div className="grid min-w-0 flex-1 gap-1.5 sm:grid-cols-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-slate-800">Necessary</p>
+            <p className="text-[11px] text-slate-500">{necessaryCount} functional</p>
+          </div>
+        </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500" />
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-slate-800">Review</p>
+            <p className="text-[11px] text-slate-500">{nonEssentialCount} non-essential</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
