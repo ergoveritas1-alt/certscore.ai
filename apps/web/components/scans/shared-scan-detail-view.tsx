@@ -938,15 +938,6 @@ function RuntimeInventoryTable({
               <InventoryPriorityDonut rows={groupedInventoryRows} />
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500" aria-label="Inventory chart legend and review guidance">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="font-semibold text-slate-600">Colors</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" />Risk / non-essential</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" />Review</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" />Necessary / neutral</span>
-            </div>
-            <span className="text-slate-500">Click a chart label to filter the table.</span>
-          </div>
           <InventoryTableInteractions tableId="preconsent-inventory-table" totalRows={groupedInventoryRows.length} />
           <div className="space-y-2 md:hidden" aria-label="Cookies and trackers mobile list">
             {groupedInventoryRows.map((row, index) => (
