@@ -1111,7 +1111,7 @@ export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivac
       color: "#d97706",
       count: summaryCounts.potential_concern,
       direction: "potential_concern",
-      label: "partial concern",
+      label: "partial",
       tooltip: "Rows with review-relevant evidence that may indicate a concern, but where context, scope, or evidence strength makes the signal less direct."
     },
     {
@@ -1139,7 +1139,7 @@ export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivac
       color: "#94a3b8",
       count: summaryCounts.technical_limitation,
       direction: "technical_limitation",
-      label: "coverage limited",
+      label: "limited",
       tooltip: "Rows where retained coverage did not support testing this area."
     }
   ] satisfies DecisionMixSegment[]).filter((item) => item.count > 0);

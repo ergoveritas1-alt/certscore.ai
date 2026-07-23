@@ -1558,7 +1558,7 @@ test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead 
   assert.match(html, /Rating mix/);
   assert.match(html, /5 rows/);
   assert.match(html, /concern/);
-  assert.match(html, /partial concern/);
+  assert.match(html, />partial</);
   assert.match(html, /review/);
   assert.match(html, /positive/);
   assert.match(html, /contextual/);
@@ -1571,7 +1571,6 @@ test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead 
   assert.doesNotMatch(html, />neutral</);
   assert.doesNotMatch(html, /potential concerns/);
   assert.doesNotMatch(html, /potential gaps/);
-  assert.doesNotMatch(html, />partial</);
   assert.doesNotMatch(html, />observed</);
 });
 
