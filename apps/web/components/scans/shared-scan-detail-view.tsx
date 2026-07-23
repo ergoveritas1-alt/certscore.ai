@@ -877,16 +877,15 @@ function RuntimeInventoryTable({
           payload={copyPayload}
         />
         <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:px-5">
-          <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
-          <div className="grid gap-4 lg:grid-cols-[minmax(17rem,0.9fr)_minmax(0,2.1fr)] lg:items-start">
-          <div className="grid gap-3 sm:grid-cols-2 lg:h-[317px] lg:grid-cols-1 lg:grid-rows-2">
+          <div className="grid gap-3 lg:grid-cols-3 lg:items-stretch">
+            <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
             <InventoryPurposeCard rows={groupedInventoryRows} />
             <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Priority mix</p>
               <InventoryPriorityDonut rows={groupedInventoryRows} />
             </div>
           </div>
-          <div className="overflow-hidden rounded-xl border border-slate-200 lg:h-[317px]">
+          <div className="overflow-hidden rounded-xl border border-slate-200">
             <div className="max-h-[340px] overflow-auto lg:h-full lg:max-h-none">
             <table className="w-full min-w-[1310px] table-fixed border-collapse text-left text-[13px]">
               <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
@@ -938,7 +937,6 @@ function RuntimeInventoryTable({
               </tbody>
             </table>
             </div>
-          </div>
           </div>
           <PreConsentDataFlowSummary rows={groupedInventoryRows} />
         </div>
