@@ -841,10 +841,10 @@ export async function preConsentRuntimeScanner(
         }),
       )
       : null;
-    const consentUiObservationPromise = recordBoundedTiming(
+    const captureInitialConsentUiObservation = () => recordBoundedTiming(
       timingBreakdown,
       "page evidence: consent UI",
-      "First-layer consent surface/control text and affordance inventory, started immediately after DOMContentLoaded.",
+      "First-layer consent surface/control inventory captured immediately after the retained viewport screenshot, avoiding CDP screenshot/inventory contention.",
       consentUiCaptureTimeoutMs,
       () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs, {
         deferBrowserProbeUntilCmpOrScreenshot: directCmpNetworkEvidenceAtInitialCapture,
@@ -853,6 +853,9 @@ export async function preConsentRuntimeScanner(
       }),
       () => emptyConsentUiObservation(input.scanStartedAtMs),
     );
+    const consentUiObservationPromise = earlyScreenshotCapturePromise
+      ? earlyScreenshotCapturePromise.then(captureInitialConsentUiObservation)
+      : captureInitialConsentUiObservation();
     const networkIdlePromise = recordTiming(
       timingBreakdown,
       "network idle wait",
