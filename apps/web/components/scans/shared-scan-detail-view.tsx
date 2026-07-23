@@ -795,10 +795,13 @@ function InventoryDataFlowCell({ row }: { row: InventoryGroupRow }) {
               {countryFlag(headquartersCountry)} HQ
             </span>
           ) : provider ? <span className="truncate max-w-[7rem]">{provider}</span> : null}
-          <InfoTip
-            align="start"
-            text={`Server country was not retained for this endpoint; the flag indicates controlling-entity headquarters, not server storage location.${provider ? ` Network provider: ${provider}.` : ""}`}
-          />
+          <span
+            aria-label="Server location context"
+            className="inline-flex h-[11px] w-[11px] items-center justify-center rounded-full border border-slate-300 text-[7px] font-semibold leading-none text-slate-500"
+            title={`Server country was not retained for this endpoint; the flag indicates controlling-entity headquarters, not server storage location.${provider ? ` Network provider: ${provider}.` : ""}`}
+          >
+            i
+          </span>
         </span>
       )}
       {flow.idSync ? <span className="rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">ID sync</span> : null}
