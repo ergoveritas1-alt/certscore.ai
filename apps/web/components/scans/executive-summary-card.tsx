@@ -2176,14 +2176,6 @@ function CompactSnapshotPanel(input: { children: React.ReactNode; title: React.R
   );
 }
 
-function CompactChevronDownIcon() {
-  return (
-    <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
-      <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
 function CompactChevronRightIcon() {
   return (
     <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
@@ -2307,8 +2299,8 @@ function ExecutiveSignalSnapshotPane(input: {
             <span className="inline-flex min-w-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-semibold uppercase leading-4 tracking-[0.16em] text-slate-500">
               <span className="truncate">{trackerDetailLabel}</span>
             </span>
-            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition group-open/tracker-footprint:rotate-180">
-              <CompactChevronDownIcon />
+            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition group-open/tracker-footprint:rotate-90">
+              <CompactChevronRightIcon />
             </span>
           </summary>
           <div className="mt-3 max-h-[13.25rem] space-y-1.5 overflow-y-auto pr-1">
