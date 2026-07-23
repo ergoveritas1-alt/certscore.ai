@@ -132,6 +132,26 @@ test("a visually blank settled screenshot remains no-go even when policy surface
   }
 });
 
+test("a partial runtime with no retained page evidence is no-go", () => {
+  const assessment = buildScanNoGoAssessment({
+    consentUiObservations: [],
+    domSnapshots: [{ textExcerpt: "" } as DomSnapshotArtifact],
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "partial",
+      errors: ["Pre-consent runtime reached its 35000ms module budget; retained bounded partial evidence."],
+    }] as never,
+    networkEvents: [{}, {}, {}, {}] as NetworkEvent[],
+    networkResponseEvents: [],
+    policySurfaceObservations: [],
+    screenshots: [],
+  });
+
+  assert.equal(assessment?.scanNoGoAssessment.decision, "no_go");
+  assert.equal(assessment?.primaryReasonCode, "loading_or_stalled");
+  assert.ok(assessment?.scanNoGoAssessment.corroboratorCodes.includes("partial_runtime_without_page_evidence"));
+});
+
 test("a late 403 cannot erase a substantial retained page load", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-late-403-rich-page-"));
   try {

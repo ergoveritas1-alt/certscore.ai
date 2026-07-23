@@ -1745,13 +1745,27 @@ export function buildScanNoGoAssessment(input: {
     input.networkEvents.length <= 4 &&
     successfulFirstPartyResponses <= 2 &&
     input.policySurfaceObservations.length === 0;
-  if (!settledPageState && !networkChallengeEvidence && !sparseSuccessfulPage && !temporallyConfirmedSparsePage) {
+  const partialRuntimeWithoutPageEvidence =
+    input.modulesRun.some((moduleRun) =>
+      moduleRun.moduleName === "preConsentRuntimeScanner" &&
+      moduleRun.status === "partial" &&
+      moduleRun.errors.some((error) => /(?:module budget|bounded partial evidence|runtime.*partial)/i.test(error))
+    ) &&
+    input.screenshots.length === 0 &&
+    longestDomText.length <= 60 &&
+    substantiveDomWordCount <= 10 &&
+    input.policySurfaceObservations.length === 0 &&
+    input.networkEvents.length <= 4 &&
+    !actionableConsentControlObserved;
+  if (!settledPageState && !networkChallengeEvidence && !sparseSuccessfulPage && !temporallyConfirmedSparsePage && !partialRuntimeWithoutPageEvidence) {
     return null;
   }
 
   const retainedEvidenceText = settledPageState?.evidenceText ??
-    (sparseSuccessfulPage || temporallyConfirmedSparsePage
-      ? "The settled page remained sparse after a bounded second-look capture."
+    (sparseSuccessfulPage || temporallyConfirmedSparsePage || partialRuntimeWithoutPageEvidence
+      ? partialRuntimeWithoutPageEvidence
+        ? "The bounded pre-consent runtime ended before representative page evidence could be retained."
+        : "The settled page remained sparse after a bounded second-look capture."
       : null) ??
     networkChallengeEvidence?.evidenceText ??
     "Potential security challenge evidence observed.";
@@ -1760,11 +1774,17 @@ export function buildScanNoGoAssessment(input: {
     .filter((artifact) => artifact.consentStateAtTime === "pre_consent")
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs)[0] ?? null;
   const primaryReasonCode = settledPageState?.reasonCode ??
-    (sparseSuccessfulPage || temporallyConfirmedSparsePage ? "blank_or_unusable_page" : "potential_security_challenge");
+    (partialRuntimeWithoutPageEvidence
+      ? "loading_or_stalled"
+      : sparseSuccessfulPage || temporallyConfirmedSparsePage
+        ? "blank_or_unusable_page"
+        : "potential_security_challenge");
   const visualPageState: VisualAccessReview["page_state"] = settledPageState?.visualPageState ??
-    (sparseSuccessfulPage || temporallyConfirmedSparsePage ? "blank_or_unusable" : "degraded_but_useful");
+    (partialRuntimeWithoutPageEvidence || sparseSuccessfulPage || temporallyConfirmedSparsePage
+      ? "blank_or_unusable"
+      : "degraded_but_useful");
   const blockedMainDocument = mainDocumentStatus !== null && [401, 403, 407, 429, 451, 500, 502, 503, 504].includes(mainDocumentStatus);
-  const explicitTerminalPage = Boolean(settledPageState) || sparseSuccessfulPage || temporallyConfirmedSparsePage;
+  const explicitTerminalPage = Boolean(settledPageState) || sparseSuccessfulPage || temporallyConfirmedSparsePage || partialRuntimeWithoutPageEvidence;
   const strongTerminalContradiction =
     successfulMainDocumentBeforeTerminal &&
     visuallySubstantiveScreenshotObserved &&
@@ -1827,6 +1847,7 @@ export function buildScanNoGoAssessment(input: {
       settledPageState ? "terminal_page_text_or_status_observed" : null,
       visuallyBlankSuccessfulPage ? "visual_blank_screenshot_observed" : null,
       sparseSuccessfulPage || temporallyConfirmedSparsePage ? "settled_page_nearly_empty" : null,
+      partialRuntimeWithoutPageEvidence ? "partial_runtime_without_page_evidence" : null,
       temporallyConfirmedSparsePage ? "bounded_second_look_remained_sparse" : null,
       screenshot ? "retained_visual_artifact_available" : null,
     ].filter((value): value is string => Boolean(value)),
