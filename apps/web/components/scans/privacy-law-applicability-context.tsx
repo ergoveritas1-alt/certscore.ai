@@ -47,13 +47,14 @@ function ApplicabilityLawIcon() {
 export function ApplicabilityAssumptionsNote() {
   return (
     <span className="group/applicability relative inline-flex shrink-0">
-      <button
-        type="button"
+      <span
+        role="img"
+        tabIndex={0}
         aria-label="Privacy-law applicability context"
-        className="scan-report-button inline-flex h-6 min-w-7 items-center justify-center rounded-full px-1.5 text-slate-400 hover:text-slate-600"
+        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 outline-none transition-colors hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:ring-offset-1"
       >
         <ApplicabilityLawIcon />
-      </button>
+      </span>
       <span className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-72 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-medium normal-case leading-5 tracking-normal text-slate-600 shadow-lg group-hover/applicability:block group-focus-within/applicability:block">
         {APPLICABILITY_ASSUMPTIONS_TOOLTIP}
       </span>
@@ -68,13 +69,14 @@ export function ApplicabilityChip(input: {
 
   return (
     <span className="group/applicability-chip relative inline-flex shrink-0 align-middle">
-      <button
-        type="button"
+      <span
+        role="img"
+        tabIndex={0}
         aria-label={label}
-        className="scan-report-button inline-flex h-[22px] min-w-7 items-center justify-center rounded-full px-1.5 text-slate-400 hover:text-slate-600"
+        className="inline-flex h-[22px] w-6 items-center justify-center rounded-full text-slate-400 outline-none transition-colors hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:ring-offset-1"
       >
         <ApplicabilityLawIcon />
-      </button>
+      </span>
       <span className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-72 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-medium normal-case leading-5 tracking-normal text-slate-600 shadow-lg group-hover/applicability-chip:block group-focus-within/applicability-chip:block">
         {getApplicabilityChipTooltip(input.kind)}
       </span>
