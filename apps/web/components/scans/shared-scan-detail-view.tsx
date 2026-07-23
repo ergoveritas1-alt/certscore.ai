@@ -924,7 +924,7 @@ function RuntimeInventoryTable({
                   <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Priority</th>
                   <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">First seen</th>
                   <th className="w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Cookies</th>
-                  <th className="w-[160px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Domain</th>
+                  <th className="w-[150px] max-w-[150px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Domain</th>
                   <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Server location</th>
                   <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Confidence</th>
                   <th className="w-[50px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Party</th>
@@ -933,28 +933,28 @@ function RuntimeInventoryTable({
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
                 {groupedInventoryRows.map((row, index) => (
-                  <tr key={getInventoryGroupRowRenderKey(row, index)} className="h-10">
+                  <tr key={getInventoryGroupRowRenderKey(row, index)} className="h-10 transition-colors odd:bg-slate-50/25 hover:bg-sky-50/35">
                     <td className="whitespace-nowrap px-2 py-1.5 align-top">
                       <InventoryTypeDisclosure row={row} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5">
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
                       <InventoryVendorCell label={row.vendor} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5" title={getInventoryPurposeLabel(row)}>{getInventoryPurposeLabel(row)}</td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5">
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={getInventoryPurposeLabel(row)}>{getInventoryPurposeLabel(row)}</td>
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
                       <InventoryPriorityCell
                         priority={row.priority}
                       />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
-                    <td className="max-w-[132px] truncate whitespace-nowrap px-2 py-1.5" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
+                    <td className="max-w-[132px] truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
+                    <td className="max-w-[150px] truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
                     <td className="px-2 py-1.5 align-top"><InventoryDataFlowCell row={row} /></td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5">
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
                       <InventoryConfidenceCell confidence={row.confidence} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5">{formatGroupedParty(row.party)}</td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5">{getRuntimeInventoryMacroCategory(row)}</td>
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">{formatGroupedParty(row.party)}</td>
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">{getRuntimeInventoryMacroCategory(row)}</td>
                   </tr>
                 ))}
                 {groupedInventoryRows.length === 0 ? (
