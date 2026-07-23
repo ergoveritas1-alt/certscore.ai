@@ -683,12 +683,13 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
   const hiddenPurposeCount = Math.max(0, purposeCounts.length - topPurposes.length);
   const hiddenPurposes = purposeCounts.slice(topPurposes.length);
   const getPurposeColor = (purpose: string, index: number) => {
-    const normalized = purpose.toLowerCase();
-    if (/advertis|marketing|retarget|tracking/.test(normalized)) return "#ef4444";
-    if (/unknown|unclassified/.test(normalized)) return "#64748b";
-    if (/cdn|performance|security|infrastructure/.test(normalized)) return "#14b8a6";
-    if (/analytics|measurement|personalization|functional/.test(normalized)) return index % 2 === 0 ? "#f59e0b" : "#8b5cf6";
-    return ["#f59e0b", "#8b5cf6", "#14b8a6", "#3b82f6"][index % 4];
+    const palettes = {
+      risk: ["#dc2626", "#ef4444", "#f87171", "#b91c1c"],
+      review: ["#d97706", "#f59e0b", "#fbbf24", "#f97316"],
+      neutral: ["#2563eb", "#3b82f6", "#60a5fa", "#38bdf8"]
+    };
+    const rank = purposeColorRank(purpose);
+    return (rank === 0 ? palettes.risk : rank === 2 ? palettes.neutral : palettes.review)[index % 4] ?? "#f59e0b";
   };
   const visibleTotal = topPurposes.reduce((total, [, count]) => total + count, 0);
   const otherTotal = Math.max(0, rows.length - visibleTotal);
