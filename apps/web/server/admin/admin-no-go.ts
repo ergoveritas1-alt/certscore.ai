@@ -1,9 +1,14 @@
-import { isScanNoGoSnapshotOutcome } from "@website-signal-risk-scanner/shared";
+import {
+  isScanNoGoSnapshotOutcome,
+  resolveScanNoGoPresentation,
+  type ScanNoGoLimitationKind,
+} from "@website-signal-risk-scanner/shared";
 
 type JsonRecord = Record<string, unknown> | null | undefined;
 
 export type AdminNoGoProjection = {
   isNoGo: boolean;
+  limitationKind: ScanNoGoLimitationKind | null;
   reason: string | null;
   source: "snapshot" | "response" | "runtime_assessment" | "visual_review" | "access_posture" | "blocked" | "captcha" | null;
 };
@@ -38,19 +43,28 @@ function firstString(value: unknown) {
 
 export function projectAdminNoGo(input: AdminNoGoProjectionInput): AdminNoGoProjection {
   if (isScanNoGoSnapshotOutcome(input.snapshotOutcome)) {
-    return { isNoGo: true, reason: input.snapshotOutcome ?? "no_go", source: "snapshot" };
+    return {
+      isNoGo: true,
+      limitationKind: input.snapshotOutcome === "no_go"
+        ? null
+        : resolveScanNoGoPresentation(input.snapshotOutcome).limitationKind,
+      reason: input.snapshotOutcome ?? "no_go",
+      source: "snapshot",
+    };
   }
   if (input.responseDisposition === "no_go") {
-    return { isNoGo: true, reason: "API result disposition", source: "response" };
+    return { isNoGo: true, limitationKind: null, reason: "API result disposition", source: "response" };
   }
 
   const assessments = [record(input.runtimeAssessment), record(input.snapshotRuntimeAssessment)];
   const assessment = assessments.find((candidate) => stringValue(candidate?.decision ?? candidate?.scan_no_go_decision) === "no_go");
   if (assessment) {
     const reasonCodes = assessment?.reasonCodes ?? assessment?.reason_codes;
+    const reason = firstString(reasonCodes);
     return {
       isNoGo: true,
-      reason: firstString(reasonCodes) ?? "Runtime no-go assessment",
+      limitationKind: reason ? resolveScanNoGoPresentation(reason).limitationKind : null,
+      reason: reason ?? "Runtime no-go assessment",
       source: "runtime_assessment"
     };
   }
@@ -64,20 +78,24 @@ export function projectAdminNoGo(input: AdminNoGoProjectionInput): AdminNoGoProj
   if (visualDecision === "NO_GO") {
     return {
       isNoGo: true,
+      limitationKind: resolveScanNoGoPresentation(
+        stringValue(visualReview?.reasonCode ?? visualReview?.reason_code),
+        stringValue(visualReview?.pageState ?? visualReview?.page_state),
+      ).limitationKind,
       reason: stringValue(visualReview?.reasonCode ?? visualReview?.reason_code) ?? "Visual access review",
       source: "visual_review"
     };
   }
   if (input.accessPostureClass === "early_loss") {
-    return { isNoGo: true, reason: "Early access loss", source: "access_posture" };
+    return { isNoGo: true, limitationKind: null, reason: "Early access loss", source: "access_posture" };
   }
   if (input.captchaFlag) {
-    return { isNoGo: true, reason: "CAPTCHA or challenge", source: "captcha" };
+    return { isNoGo: true, limitationKind: "scanner_access_limitation", reason: "CAPTCHA or challenge", source: "captcha" };
   }
   if (input.blockedFlag) {
-    return { isNoGo: true, reason: "Access blocked", source: "blocked" };
+    return { isNoGo: true, limitationKind: "scanner_access_limitation", reason: "Access blocked", source: "blocked" };
   }
-  return { isNoGo: false, reason: null, source: null };
+  return { isNoGo: false, limitationKind: null, reason: null, source: null };
 }
 
 export function adminNoGoSql(input: {

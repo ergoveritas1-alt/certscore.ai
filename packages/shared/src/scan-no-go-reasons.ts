@@ -316,6 +316,13 @@ export const SCAN_NO_GO_SNAPSHOT_OUTCOMES = Array.from(new Set([
   ...Object.values(SCAN_NO_GO_REASON_PRESENTATIONS).map((presentation) => presentation.snapshotScanOutcome),
 ]));
 
+const SCAN_NO_GO_REASON_BY_SNAPSHOT_OUTCOME = Object.fromEntries(
+  Object.values(SCAN_NO_GO_REASON_PRESENTATIONS).map((presentation) => [
+    presentation.snapshotScanOutcome,
+    presentation.code,
+  ]),
+) as Record<string, ScanNoGoReasonCode>;
+
 export function isScanNoGoSnapshotOutcome(value: string | null | undefined) {
   return Boolean(value && SCAN_NO_GO_SNAPSHOT_OUTCOMES.includes(value));
 }
@@ -377,7 +384,9 @@ export function resolveScanNoGoPresentation(
   const canonicalReason = normalizedReason && isScanNoGoReasonCode(normalizedReason)
     ? normalizedReason
     : normalizedReason
-      ? LEGACY_SCAN_NO_GO_REASON_ALIASES[normalizedReason] ?? PAGE_STATE_REASON_FALLBACKS[pageState ?? ""]
+      ? SCAN_NO_GO_REASON_BY_SNAPSHOT_OUTCOME[normalizedReason] ??
+        LEGACY_SCAN_NO_GO_REASON_ALIASES[normalizedReason] ??
+        PAGE_STATE_REASON_FALLBACKS[pageState ?? ""]
       : PAGE_STATE_REASON_FALLBACKS[pageState ?? ""];
   if (canonicalReason) {
     return {

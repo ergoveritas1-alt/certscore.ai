@@ -63,6 +63,12 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(setupScript, /Regional browser calibration requires enabled, labeled regional egress/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_\$\{location_env_prefix\}_RESULT_QUEUE_URL/);
   assert.match(setupScript, /CERTSCORE_CHROMIUM_EXECUTABLE_PATH: "\/usr\/bin\/chromium"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_EGRESS_ID/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_EGRESS_PROVIDER/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_VPC_MODE/);
+  assert.match(setupScript, /SCANNER_IMAGE_DIGEST/);
+  assert.match(setupScript, /Name=tag:Purpose,Values=lambda-nat-egress/);
   assert.doesNotMatch(setupScript, /PLAYWRIGHT_BROWSERS_PATH/);
 });
 

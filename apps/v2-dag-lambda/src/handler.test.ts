@@ -17,6 +17,7 @@ import {
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   artifactPointersFromS3Keys,
   buildLocalV2DagLambdaRuntimeDiagnostics,
+  buildScannerRuntimeProvenance,
   buildLocalV2DagLambdaScanTuning,
   handler,
   mergeLocalV2DagLambdaShardBundles,
@@ -252,7 +253,7 @@ test("handler bundle imports without browser-only PDF globals", async () => {
   assert.equal(typeof bundledHandler.handler, "function");
 });
 
-test("handler rejects wrong contract, processor, unsupported region, VPC, or production-integration flags", () => {
+test("handler rejects wrong contract, processor, unsupported region, network mode, or production-integration flags", () => {
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ contractVersion: "wrong" })),
     /contract version/
@@ -267,12 +268,36 @@ test("handler rejects wrong contract, processor, unsupported region, VPC, or pro
   );
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ vpcMode: "private" })),
-    /outside a VPC/
+    /supported network mode/
   );
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ productionFindingIntegration: true })),
     /artifact-only/
   );
+});
+
+test("handler accepts truthful VPC dispatch and emits bounded scanner runtime provenance", () => {
+  assert.equal(parseLocalV2DagLambdaDispatchPayload(validPayload({ vpcMode: "vpc" })).vpcMode, "vpc");
+  assert.deepEqual(buildScannerRuntimeProvenance(
+    { awsRegion: "eu-west-1", vpcMode: "vpc" },
+    {
+      AWS_LAMBDA_FUNCTION_VERSION: "$LATEST",
+      CERTSCORE_V2_DAG_LAMBDA_EGRESS_ID: "aws-nat:eu-west-1:eipalloc-123",
+      CERTSCORE_V2_DAG_LAMBDA_EGRESS_PROVIDER: "aws-nat-gateway",
+      CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH: `sha256:${"b".repeat(64)}`,
+      CERTSCORE_V2_DAG_LAMBDA_VPC_MODE: "vpc",
+      SCANNER_IMAGE_DIGEST: `sha256:${"a".repeat(64)}`,
+    },
+  ), {
+    awsRegion: "eu-west-1",
+    dispatchVpcMode: "vpc",
+    egressId: "aws-nat:eu-west-1:eipalloc-123",
+    egressProvider: "aws-nat-gateway",
+    functionVersion: "$LATEST",
+    imageDigest: `sha256:${"a".repeat(64)}`,
+    publicIpHash: `sha256:${"b".repeat(64)}`,
+    runtimeVpcMode: "vpc",
+  });
 });
 
 test("handler emits a validated completed SQS result without production findings", async () => {
@@ -327,6 +352,11 @@ test("handler emits a validated completed SQS result without production findings
   assert.equal(result.scannerGitSha, "abc123scanner");
   assert.equal(result.scannerImageTag, "scanner-image:abc123scanner");
   assert.equal(result.scannerRuntimeVersion, "v2-dag-runtime.1");
+  assert.deepEqual(result.scannerRuntimeProvenance, {
+    awsRegion: "eu-central-1",
+    dispatchVpcMode: "none",
+    runtimeVpcMode: "unknown"
+  });
   assert.equal(Object.hasOwn(result, "findings"), false);
   assert.equal(Object.hasOwn(result, "checklistRows"), false);
   assert.equal(Object.hasOwn(result, "score"), false);

@@ -582,6 +582,10 @@ test("local web poller records Lambda result before marking scan completed", asy
   );
   assert.match(source, /readRetainedScanCompletionDiagnostics/);
   assert.match(source, /coverage_level = 'limited_none'/);
+  assert.match(source, /blocked_flag = \$5/);
+  assert.match(source, /captcha_flag = \$6/);
+  assert.match(source, /scannerRuntimeProvenance/);
+  assert.match(source, /public_ip_hash = coalesce\(\$4, public_ip_hash\)/);
   assert.match(source, /scan_outcome = \$2/);
   assert.match(source, /pages_scanned = case when \$2::int = 0 then 0/);
 });

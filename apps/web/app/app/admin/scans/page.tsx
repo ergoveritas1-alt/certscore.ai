@@ -87,9 +87,18 @@ function formatAdminScanDuration(scan: Pick<AdminScanListItem, "completedAt" | "
 }
 
 function getAccessLabel(scan: AdminScanListItem) {
+  if (scan.noGoFlag) {
+    const category = scan.noGoLimitationKind === "scanner_access_limitation"
+      ? "Access"
+      : scan.noGoLimitationKind === "scanner_capture_limitation"
+        ? "Capture"
+        : scan.noGoLimitationKind === "target_site_state"
+          ? "Target"
+          : "No-go";
+    return `${category} · ${scan.interruptionLabel ?? scan.noGoReason ?? "No-go"}`;
+  }
   if (scan.captchaFlag) return "CAPTCHA";
   if (scan.blockedFlag || scan.accessPostureClass === "early_loss") return scan.homepageFetchHttpStatus ? `Blocked · ${scan.homepageFetchHttpStatus}` : "Blocked";
-  if (scan.noGoFlag) return scan.interruptionLabel ?? scan.noGoReason ?? "No-go";
   if (scan.accessPostureClass === "robots_limited") return "Robots-limited";
   if (scan.accessPostureClass === "degraded_but_useful") return "Limited";
   return scan.rowKind === "scan" ? "Clear" : "—";

@@ -534,6 +534,9 @@ export async function recordLocalV2DagLambdaResultEvent(
           ...(parsedMessage.scannerGitSha ? { scannerGitSha: parsedMessage.scannerGitSha } : {}),
           ...(parsedMessage.scannerImageTag ? { scannerImageTag: parsedMessage.scannerImageTag } : {}),
           ...(parsedMessage.scannerRuntimeVersion ? { scannerRuntimeVersion: parsedMessage.scannerRuntimeVersion } : {}),
+          ...(parsedMessage.scannerRuntimeProvenance
+            ? { scannerRuntimeProvenance: parsedMessage.scannerRuntimeProvenance }
+            : {}),
           targetEnvironment: parsedMessage.targetEnvironment,
           v2ArtifactsRemainInternal: true,
           ...(parsedMessage.error ? { error: parsedMessage.error } : {})
@@ -570,12 +573,15 @@ export async function recordLocalV2DagLambdaResultEvent(
     `update scans
         set completed_at = coalesce(completed_at, $2::timestamptz),
             error_message = case when $3 = 'failed' then $4 else error_message end,
+            egress_id = coalesce($5, egress_id),
+            egress_provider = coalesce($6, egress_provider),
             scan_config_json = jsonb_set(
               scan_config_json,
               '{execution,v2DagLambda}',
               coalesce(scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || jsonb_build_object(
                 'completedAt', $2::timestamptz,
-                'dispatchState', case when $3 = 'failed' then 'failed' else 'completed' end
+                'dispatchState', case when $3 = 'failed' then 'failed' else 'completed' end,
+                'runtimeProvenance', $7::jsonb
               ),
               true
             ),
@@ -586,9 +592,31 @@ export async function recordLocalV2DagLambdaResultEvent(
       parsedMessage.scanId,
       parsedMessage.completedAt,
       parsedMessage.status,
-      parsedMessage.error?.message ?? null
+      parsedMessage.error?.message ?? null,
+      parsedMessage.scannerRuntimeProvenance?.egressId ?? null,
+      parsedMessage.scannerRuntimeProvenance?.egressProvider ?? null,
+      parsedMessage.scannerRuntimeProvenance
+        ? JSON.stringify(parsedMessage.scannerRuntimeProvenance)
+        : null,
     ]
   );
+  if (parsedMessage.scannerRuntimeProvenance) {
+    await query(
+      `update scan_snapshots
+          set egress_id = coalesce($2, egress_id),
+              egress_type = coalesce($3, egress_type),
+              public_ip_hash = coalesce($4, public_ip_hash),
+              region = coalesce($5, region)
+        where scan_id = $1`,
+      [
+        parsedMessage.scanId,
+        parsedMessage.scannerRuntimeProvenance.egressId ?? null,
+        parsedMessage.scannerRuntimeProvenance.egressProvider ?? null,
+        parsedMessage.scannerRuntimeProvenance.publicIpHash ?? null,
+        parsedMessage.scannerRuntimeProvenance.awsRegion,
+      ],
+    );
+  }
   if (parsedMessage.status === "completed" && retainedDiagnostics) {
     const pagesScanned = retainedDiagnostics.noGo ? 0 : 1;
     await query(
@@ -605,7 +633,8 @@ export async function recordLocalV2DagLambdaResultEvent(
       await query(
         `update scan_snapshots
             set access_posture_class = 'early_loss',
-                blocked_flag = true,
+                blocked_flag = $5,
+                captcha_flag = $6,
                 coverage_level = 'limited_none',
                 homepage_fetch_status = 'failed',
                 pages_scanned = 0,
@@ -619,6 +648,8 @@ export async function recordLocalV2DagLambdaResultEvent(
           retainedDiagnostics.reasonCode ?? "unknown_access_limitation",
           presentation.explanation,
           presentation.snapshotStopReasonLabel,
+          presentation.limitationKind === "scanner_access_limitation",
+          presentation.code === "captcha_or_challenge",
         ]
       );
     }

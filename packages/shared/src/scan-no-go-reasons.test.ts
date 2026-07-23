@@ -29,6 +29,10 @@ test("canonical no-go detection covers every persisted reason-specific outcome",
   for (const presentation of Object.values(SCAN_NO_GO_REASON_PRESENTATIONS)) {
     assert.ok(SCAN_NO_GO_SNAPSHOT_OUTCOMES.includes(presentation.snapshotScanOutcome));
     assert.equal(isScanNoGoSnapshotOutcome(presentation.snapshotScanOutcome), true);
+    assert.equal(
+      resolveScanNoGoPresentation(presentation.snapshotScanOutcome).limitationKind,
+      presentation.limitationKind,
+    );
   }
   assert.equal(isScanNoGoSnapshotOutcome("no_go"), true);
   assert.equal(isScanNoGoSnapshotOutcome("completed_successfully"), false);

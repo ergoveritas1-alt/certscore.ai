@@ -570,6 +570,7 @@ test("queued full-scan config can dispatch v2 DAG Lambda outside localhost when 
   assert.equal(v2DagLambda?.functionName, "certscore-v2-dag-prod");
   assert.equal(v2DagLambda?.localOnly, false);
   assert.equal(v2DagLambda?.targetEnvironment, "production");
+  assert.equal(v2DagLambda?.vpcMode, "vpc");
   assert.equal(v2DagLambda?.productionFindingIntegration, false);
   assert.deepEqual(v2DagLambda?.debugOverrides, {
     scenarioConcurrency: 1,

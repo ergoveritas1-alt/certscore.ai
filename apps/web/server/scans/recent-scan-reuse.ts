@@ -10,6 +10,7 @@ export type RecentScanReuseCandidate = {
   hostname: string;
   id: string;
   normalizedUrl: string;
+  noGoDecision?: string | null;
   organizationId: string | null;
   pagesRequested: number;
   pagesScanned: number;
@@ -61,6 +62,7 @@ type ScanHistoryCandidate = {
   coverageLevel?: string | null;
   id?: string | null;
   pagesScanned?: number | null;
+  noGoDecision?: string | null;
   scanOutcome?: string | null;
   status: string;
 };
@@ -77,9 +79,13 @@ const NON_REUSABLE_SCAN_OUTCOMES = new Set([
 function hasReusableCoverage(scan: {
   accessPostureClass?: string | null;
   coverageLevel?: string | null;
+  noGoDecision?: string | null;
   pagesScanned?: number | null;
   scanOutcome?: string | null;
 }) {
+  if (scan.noGoDecision === "no_go") {
+    return true;
+  }
   return (
     (scan.pagesScanned === undefined || scan.pagesScanned === null || scan.pagesScanned > 0) &&
     scan.coverageLevel !== "limited_none" &&
@@ -207,11 +213,16 @@ async function loadRecentScanReuseCandidates(input: RecentScanReuseInput) {
             ss.access_posture_class as "accessPostureClass",
             ss.coverage_level as "coverageLevel",
             ss.scan_outcome as "scanOutcome",
+            coalesce(
+              sra.scan_no_go_assessment->>'decision',
+              ss.scan_no_go_assessment->>'decision'
+            ) as "noGoDecision",
             d.hostname,
             d.normalized_url as "normalizedUrl"
        from scans s
        join domains d on d.id = s.domain_id
        left join scan_snapshots ss on ss.scan_id = s.id
+       left join scan_runtime_artifacts sra on sra.scan_id = s.id
       where (
           (s.organization_id is null and d.organization_id is null)
           or (
@@ -231,16 +242,24 @@ async function loadRecentScanReuseCandidates(input: RecentScanReuseInput) {
               else coalesce(s.scan_config_json->>'scanFrom', '${DEFAULT_SCAN_FROM}')
             end = $4
         and s.pages_requested >= $5
-        and s.pages_scanned > 0
-        and coalesce(ss.coverage_level, '') <> 'limited_none'
-        and coalesce(ss.access_posture_class, '') <> 'early_loss'
-        and coalesce(ss.scan_outcome, '') not in (
-          'navigation_transport_failure',
-          'transport_failure',
-          'timeout_navigation',
-          'domain_inactive_or_unstable',
-          'unknown_access_limitation',
-          'verification_incomplete'
+        and (
+          coalesce(
+            sra.scan_no_go_assessment->>'decision',
+            ss.scan_no_go_assessment->>'decision'
+          ) = 'no_go'
+          or (
+            s.pages_scanned > 0
+            and coalesce(ss.coverage_level, '') <> 'limited_none'
+            and coalesce(ss.access_posture_class, '') <> 'early_loss'
+            and coalesce(ss.scan_outcome, '') not in (
+              'navigation_transport_failure',
+              'transport_failure',
+              'timeout_navigation',
+              'domain_inactive_or_unstable',
+              'unknown_access_limitation',
+              'verification_incomplete'
+            )
+          )
         )
         and (
           lower(regexp_replace(d.hostname, '^www\\.', '')) = lower(regexp_replace($6, '^www\\.', ''))

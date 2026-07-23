@@ -98,11 +98,18 @@ test("coverage must equal or exceed the new request", () => {
   assert.equal(eligibility({ minPagesRequested: 4 }, [candidate({ pagesRequested: 10 })]).eligible, true);
 });
 
-test("completed scans with no usable coverage or a no-go outcome are never reusable", () => {
+test("completed scans without usable coverage are excluded unless an explicit no-go result is cooling down", () => {
   assert.equal(eligibility({}, [candidate({ pagesScanned: 0 })]).eligible, false);
   assert.equal(eligibility({}, [candidate({ coverageLevel: "limited_none" })]).eligible, false);
   assert.equal(eligibility({}, [candidate({ accessPostureClass: "early_loss" })]).eligible, false);
   assert.equal(eligibility({}, [candidate({ scanOutcome: "navigation_transport_failure" })]).eligible, false);
+  assert.equal(eligibility({}, [candidate({
+    accessPostureClass: "early_loss",
+    coverageLevel: "limited_none",
+    noGoDecision: "no_go",
+    pagesScanned: 0,
+    scanOutcome: "homepage_security_challenge",
+  })]).eligible, true);
 });
 
 test("newest eligible scan wins when several candidates qualify", () => {

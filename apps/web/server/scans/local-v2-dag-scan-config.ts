@@ -11,6 +11,7 @@ export const LOCAL_V2_DAG_WC01_PROJECTION_VERSION = "wc01.normalized-concern-pol
 export type LocalV2DagScanProfile = (typeof LOCAL_V2_DAG_SCAN_PROFILES)[number];
 export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)[number];
 export type LocalV2DagLambdaTargetEnvironment = "local" | "production";
+export type LocalV2DagLambdaVpcMode = "none" | "vpc";
 export type LocalV2DagLambdaDebugOverrides = {
   actionFinalSettleMs?: number;
   actionSearchDeadlineMs?: number;
@@ -40,6 +41,7 @@ export type LocalV2DagScanEnv = {
   CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL?: string;
   CERTSCORE_V2_DAG_LAMBDA_SIMULATED?: string;
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV?: string;
+  CERTSCORE_V2_DAG_LAMBDA_VPC_MODE?: string;
   CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED?: string;
   CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME?: string;
   CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL?: string;
@@ -167,6 +169,14 @@ export function getLocalV2DagLambdaConfiguration(
     ? compactEnvValue(regionEnv.functionName) ?? "local-v2-dag-lambda-simulator"
     : compactEnvValue(regionEnv.functionName);
   const resultQueueUrl = simulatedLocalLambda ? null : compactEnvValue(regionEnv.resultQueueUrl);
+  const targetEnvironment = getLocalV2DagLambdaTargetEnvironment(env);
+  const vpcMode: LocalV2DagLambdaVpcMode = simulatedLocalLambda
+    ? "none"
+    : env.CERTSCORE_V2_DAG_LAMBDA_VPC_MODE === "none"
+      ? "none"
+      : env.CERTSCORE_V2_DAG_LAMBDA_VPC_MODE === "vpc" || targetEnvironment === "production"
+        ? "vpc"
+        : "none";
 
   if (!enabled) {
     missing.push("CERTSCORE_V2_DAG_LAMBDA_ENABLED=true");
@@ -189,8 +199,8 @@ export function getLocalV2DagLambdaConfiguration(
     orchestrationMode: env.CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE === "sharded" ? "sharded" as const : "single" as const,
     resultQueueUrl: resultQueueUrl ?? (simulatedLocalLambda ? "local://certscore-v2-dag-lambda-simulated-results" : null),
     simulatedLocalLambda,
-    targetEnvironment: getLocalV2DagLambdaTargetEnvironment(env),
-    vpcMode: "none" as const
+    targetEnvironment,
+    vpcMode
   };
 }
 

@@ -3,6 +3,7 @@
 import {
   type AccessPostureClass,
   type RecoverableFindingClass,
+  type ScanNoGoLimitationKind,
   type ScanExecutionTier
 } from "@website-signal-risk-scanner/shared";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
@@ -44,6 +45,7 @@ export type AdminScanListItem = {
   blockedFlag: boolean | null;
   captchaFlag: boolean | null;
   noGoFlag: boolean;
+  noGoLimitationKind: ScanNoGoLimitationKind | null;
   noGoReason: string | null;
   noGoSource: AdminNoGoProjection["source"];
   certscoreOverall: number | null;
@@ -336,6 +338,7 @@ export async function listAdminScansPage(
       interruptionLabel: accessPosture.label,
       interruptionReason: accessPosture.reason,
       noGoFlag: noGo.isNoGo,
+      noGoLimitationKind: noGo.limitationKind,
       noGoReason: noGo.reason,
       noGoSource: noGo.source
     };
@@ -394,6 +397,7 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     blockedFlag: null,
     captchaFlag: null,
     noGoFlag: linkedScan?.noGoFlag ?? false,
+    noGoLimitationKind: linkedScan?.noGoLimitationKind ?? null,
     noGoReason: linkedScan?.noGoReason ?? null,
     noGoSource: linkedScan?.noGoSource ?? null,
     certscoreOverall: linkedScan?.certscoreOverall ?? null,

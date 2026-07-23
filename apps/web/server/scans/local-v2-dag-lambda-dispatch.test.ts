@@ -316,6 +316,16 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
       scannerGitSha: "abc123scanner",
       scannerImageTag: "scanner-image:abc123scanner",
       scannerRuntimeVersion: "v2-dag-runtime.1",
+      scannerRuntimeProvenance: {
+        awsRegion: "eu-west-1",
+        dispatchVpcMode: "vpc",
+        egressId: "aws-nat:eu-west-1:eipalloc-123",
+        egressProvider: "aws-nat-gateway",
+        functionVersion: "$LATEST",
+        imageDigest: `sha256:${"a".repeat(64)}`,
+        publicIpHash: `sha256:${"b".repeat(64)}`,
+        runtimeVpcMode: "vpc"
+      },
       status: "completed",
       targetEnvironment: "local"
     })
@@ -333,6 +343,16 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
   assert.equal(parsed.scannerGitSha, "abc123scanner");
   assert.equal(parsed.scannerImageTag, "scanner-image:abc123scanner");
   assert.equal(parsed.scannerRuntimeVersion, "v2-dag-runtime.1");
+  assert.deepEqual(parsed.scannerRuntimeProvenance, {
+    awsRegion: "eu-west-1",
+    dispatchVpcMode: "vpc",
+    egressId: "aws-nat:eu-west-1:eipalloc-123",
+    egressProvider: "aws-nat-gateway",
+    functionVersion: "$LATEST",
+    imageDigest: `sha256:${"a".repeat(64)}`,
+    publicIpHash: `sha256:${"b".repeat(64)}`,
+    runtimeVpcMode: "vpc"
+  });
   assert.deepEqual(parsed.phaseTimings, [{
     completedAt: "2026-06-15T18:00:00.000Z",
     durationMs: 42,
