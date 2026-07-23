@@ -682,16 +682,18 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
   const topPurposes = purposeCounts.slice(0, purposeLimit);
   const hiddenPurposeCount = Math.max(0, purposeCounts.length - topPurposes.length);
   const hiddenPurposes = purposeCounts.slice(topPurposes.length);
-  const getPurposeColor = (purpose: string) => {
-    const rank = purposeColorRank(purpose);
-    if (rank === 0) return "#ef4444";
-    if (rank === 2) return "#3b82f6";
-    return "#f59e0b";
+  const getPurposeColor = (purpose: string, index: number) => {
+    const normalized = purpose.toLowerCase();
+    if (/advertis|marketing|retarget|tracking/.test(normalized)) return "#ef4444";
+    if (/unknown|unclassified/.test(normalized)) return "#64748b";
+    if (/cdn|performance|security|infrastructure/.test(normalized)) return "#14b8a6";
+    if (/analytics|measurement|personalization|functional/.test(normalized)) return index % 2 === 0 ? "#f59e0b" : "#8b5cf6";
+    return ["#f59e0b", "#8b5cf6", "#14b8a6", "#3b82f6"][index % 4];
   };
   const visibleTotal = topPurposes.reduce((total, [, count]) => total + count, 0);
   const otherTotal = Math.max(0, rows.length - visibleTotal);
   const chartSegments = [
-    ...topPurposes.map(([purpose, count]) => ({ color: getPurposeColor(purpose), count, label: purpose })),
+    ...topPurposes.map(([purpose, count], index) => ({ color: getPurposeColor(purpose, index), count, label: purpose })),
     ...(otherTotal > 0 ? [{ color: "#f59e0b", count: otherTotal, label: "Other" }] : [])
   ];
   let cursor = 0;
