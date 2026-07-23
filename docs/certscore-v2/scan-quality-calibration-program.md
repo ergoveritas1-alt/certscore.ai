@@ -27,6 +27,31 @@ The canonical benchmark is the set of stable capability lanes below, supported b
 layered calibration pyramid. Public domains are replaceable evidence sources, not the
 baseline itself.
 
+## Initial consent-quality target
+
+The initial release target for the consent-controls lane is **95%**, measured
+separately for banner presence and each first-layer control field (accept, reject,
+and options). The target applies only to normally reachable, representative pages
+with human-adjudicated ground truth. Blocked, challenged, blank, or otherwise
+non-representative pages are measured in the no-go/incomplete lane instead of being
+silently counted as consent negatives.
+
+For the initial gate, require:
+
+- at least 95% exact A/R/O agreement on loaded, adjudicated pages;
+- at least 95% per-field agreement for accept, reject, and options;
+- no more than 1% false-positive control claims;
+- retained screenshot or equivalent visual proof for every loaded adjudicated page;
+- no material regression in cookies, storage, trackers, policy, transport, or no-go
+  evidence; and
+- no more than 0.5 seconds median or 2 seconds p95 paired latency increase.
+
+The 95% number is a release target, not a claim that a small public cohort proves
+95% internet-wide accuracy. Promote a baseline only after the retained replay corpus
+and the region-stratified adjudicated sample meet the target. The A/R/O gate accepts
+the thresholds explicitly through `--min-loaded-exact-agreement` and
+`--min-field-agreement`; do not lower them to make an unstable cohort pass.
+
 1. **Deterministic fixtures** run for every scanner change and provide exact,
    repeatable coverage without public traffic.
 2. **Retained replay** runs the change against bounded, sanitized evidence captured

@@ -401,6 +401,35 @@ export const iframeEventSchema = runtimeEvidenceEventSchema.extend({
 export const consentUiObservationSchema = z.object({
   observationId: z.string(),
   observedAtMs: z.number().int().nonnegative(),
+  // Explicitly distinguishes a completed negative from an incomplete capture.
+  // Older bundles may omit these fields and continue using basis/timing data.
+  captureStatus: z.enum(["observed", "no_evidence", "incomplete"]).optional(),
+  captureDiagnostics: z.object({
+    completedChannels: z.array(z.enum([
+      "screenshot",
+      "accessibility_tree",
+      "dom_inventory",
+      "dom_snapshot",
+      "geometry",
+      "network_cmp",
+    ])).max(8).default([]),
+    timedOutChannels: z.array(z.enum([
+      "screenshot",
+      "accessibility_tree",
+      "dom_inventory",
+      "dom_snapshot",
+      "geometry",
+      "network_cmp",
+    ])).max(8).default([]),
+    failedChannels: z.array(z.enum([
+      "screenshot",
+      "accessibility_tree",
+      "dom_inventory",
+      "dom_snapshot",
+      "geometry",
+      "network_cmp",
+    ])).max(8).default([]),
+  }).optional(),
   likelyPresent: z.boolean(),
   basis: z.array(z.string()),
   textExcerpt: z.string().optional(),

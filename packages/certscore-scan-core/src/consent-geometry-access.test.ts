@@ -147,6 +147,15 @@ test("classifyConsentGeometryAccess marks navigation timeouts distinctly", () =>
   assert.equal(diagnostic.status, "timeout");
 });
 
+test("classifyConsentGeometryAccess keeps rendered HTTP-200 partial evidence loaded", () => {
+  const diagnostic = classifyConsentGeometryAccess({
+    httpStatus: 200,
+    errorMessage: "Pre-consent runtime reached its 35000ms module budget; retained bounded partial evidence.",
+  });
+
+  assert.equal(diagnostic.status, "loaded");
+});
+
 test("collectConsentGeometryPageAccess bounds hanging frame text extraction", async () => {
   const page = {
     frames: () => [

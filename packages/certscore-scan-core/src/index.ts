@@ -1457,6 +1457,7 @@ function consentUiCaptureIncomplete(input: {
   consentUiObservations?: ConsentUiObservation[];
 }) {
   return (input.consentUiObservations ?? []).some((observation) =>
+    observation.captureStatus === "incomplete" ||
     observation.basis.includes("bounded_capture_timeout_or_failure")
   );
 }

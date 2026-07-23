@@ -217,6 +217,16 @@ function classifyAccessStatus(input: {
   text: string;
 }): ConsentGeometryAccessStatus {
   const errorText = compactText(input.errorMessage ?? "");
+  // A rendered HTTP-200 page can finish with a bounded evidence-module error.
+  // That is a coverage limitation, not proof that the origin was inaccessible.
+  // Runtime coverage retains the limitation separately.
+  if (
+    typeof input.httpStatus === "number" &&
+    input.httpStatus >= 200 && input.httpStatus < 400 &&
+    /(?:module budget|bounded partial evidence|evidence capture|consent inspection|supplemental full-page screenshot).*?(?:timed out|timeout|exhausted|partial)/i.test(errorText)
+  ) {
+    return "loaded";
+  }
   if (/\b(?:timeout|timed out|net::ERR_TIMED_OUT)\b/i.test(errorText)) {
     return "timeout";
   }

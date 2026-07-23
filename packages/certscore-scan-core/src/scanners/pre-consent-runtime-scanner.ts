@@ -2341,6 +2341,12 @@ function emptyConsentUiObservation(scanStartedAtMs: number): ConsentUiObservatio
   return {
     observationId: "consent_ui_pre_consent",
     observedAtMs: elapsed(scanStartedAtMs),
+    captureStatus: "incomplete",
+    captureDiagnostics: {
+      completedChannels: [],
+      timedOutChannels: ["accessibility_tree", "dom_inventory"],
+      failedChannels: [],
+    },
     likelyPresent: false,
     basis: ["bounded_capture_timeout_or_failure"],
     textExcerpt: "",
@@ -5740,9 +5746,20 @@ function buildConsentUiObservationFromEvidence(input: {
   );
   const controlBasis = controls.map((control) => `control:${control.actionType}:${control.label}`);
   const likelyPresent = matched.length >= 2 || controls.length > 0;
+  const incomplete = fallbackBasis.some((basis) =>
+    basis === "bounded_capture_timeout_or_failure" || basis === "inventory:probe_failed"
+  );
   return {
     observationId: "consent_ui_pre_consent",
     observedAtMs: elapsed(scanStartedAtMs),
+    captureStatus: incomplete ? "incomplete" : likelyPresent ? "observed" : "no_evidence",
+    captureDiagnostics: {
+      completedChannels: inventoryDiagnostics?.inventorySources?.includes("accessibility_tree")
+        ? ["accessibility_tree"]
+        : [],
+      timedOutChannels: incomplete ? ["dom_inventory"] : [],
+      failedChannels: fallbackBasis.includes("inventory:probe_failed") ? ["dom_inventory"] : [],
+    },
     likelyPresent,
     basis: likelyPresent ? [
       ...fallbackBasis,
@@ -6006,6 +6023,25 @@ function mergeConsentUiObservations(
   ]).slice(0, 24);
   return {
     ...candidate,
+    captureStatus: current.captureStatus === "observed" || candidate.captureStatus === "observed"
+      ? "observed"
+      : current.captureStatus === "incomplete" || candidate.captureStatus === "incomplete"
+        ? "incomplete"
+        : candidate.captureStatus ?? current.captureStatus,
+    captureDiagnostics: {
+      completedChannels: unique([
+        ...(current.captureDiagnostics?.completedChannels ?? []),
+        ...(candidate.captureDiagnostics?.completedChannels ?? []),
+      ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["completedChannels"],
+      timedOutChannels: unique([
+        ...(current.captureDiagnostics?.timedOutChannels ?? []),
+        ...(candidate.captureDiagnostics?.timedOutChannels ?? []),
+      ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["timedOutChannels"],
+      failedChannels: unique([
+        ...(current.captureDiagnostics?.failedChannels ?? []),
+        ...(candidate.captureDiagnostics?.failedChannels ?? []),
+      ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["failedChannels"],
+    },
     acceptControlObserved: current.acceptControlObserved || candidate.acceptControlObserved ||
       controls.some((control) => control.actionType === "accept_all"),
     basis: unique([
