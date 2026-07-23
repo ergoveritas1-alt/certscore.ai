@@ -1063,6 +1063,58 @@ test("pre-consent runtime scanner can inventory NBC-style Continue from bounded 
   assert.match(inventory.textExcerpts.join(" "), /By using the site, you consent/i);
 });
 
+test("pre-consent runtime scanner inventories Amazon-style controls from a generic accessibility-tree container", () => {
+  const inventory = consentControlsFromAccessibilityTree([
+    {
+      nodeId: "1",
+      role: { value: "RootWebArea" },
+      name: { value: "Amazon.de" },
+      childIds: ["2", "20"],
+    },
+    {
+      nodeId: "2",
+      role: { value: "generic" },
+      name: { value: "" },
+      childIds: ["3", "4", "5", "6"],
+    },
+    {
+      nodeId: "3",
+      role: { value: "heading" },
+      name: { value: "Cookies und Werbeoptionen" },
+    },
+    {
+      nodeId: "4",
+      role: { value: "button" },
+      name: { value: "Akzeptieren" },
+    },
+    {
+      nodeId: "5",
+      role: { value: "button" },
+      name: { value: "Ablehnen" },
+    },
+    {
+      nodeId: "6",
+      role: { value: "link" },
+      name: { value: "Personalisieren" },
+    },
+    {
+      nodeId: "20",
+      role: { value: "link" },
+      name: { value: "Cookie-Hinweis" },
+    },
+  ]);
+
+  assert.deepEqual(
+    inventory.controls.map((control) => control.label).sort(),
+    ["Ablehnen", "Akzeptieren", "Personalisieren"],
+  );
+  assert.equal(
+    inventory.controls.some((control) => control.label === "Cookie-Hinweis"),
+    false,
+    "an isolated footer cookie link must not be promoted into the banner inventory",
+  );
+});
+
 test("pre-consent runtime scanner inventories first-layer category-scoped analytics controls through the canonical classifier", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-analytics-controls-"));

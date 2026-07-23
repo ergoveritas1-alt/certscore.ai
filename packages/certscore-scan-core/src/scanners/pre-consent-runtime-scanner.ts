@@ -27,7 +27,7 @@ import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { connect as tlsConnect } from "node:tls";
-import { chromium, type Browser, type BrowserContext, type Frame, type Page, type Request, type Response, type Route } from "playwright";
+import { chromium, type Browser, type BrowserContext, type CDPSession, type Frame, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import {
   captureConsentControlGeometry,
@@ -3626,6 +3626,25 @@ export async function detectConsentUi(
       },
     };
   }
+  // Prefer Chrome's native accessibility tree before asking the page's
+  // JavaScript thread to inventory the DOM. Commerce pages can keep that
+  // thread busy while Chrome is already painting a complete consent surface.
+  // The accessibility path is read-only and lets us retain the controls the
+  // browser exposed without interacting with the banner.
+  const earlyAccessibilityInventory = await readAccessibilityConsentInventory(page);
+  const earlyAccessibilityObservation = consentUiObservationFromAccessibilityInventory(
+    earlyAccessibilityInventory,
+    scanStartedAtMs,
+  );
+  if (
+    hasSufficientFirstLayerConsentControls(earlyAccessibilityObservation) &&
+    !earlyAccessibilityInventory.hasPotentialToggle
+  ) {
+    return annotateConsentInventoryTimingMarkers(earlyAccessibilityObservation, [
+      "accessibility_tree_early_inventory",
+      "early_exit_controls_found",
+    ]);
+  }
   const waitStartedAtMs = Date.now();
   const rapidObservation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
   const rapidInventoryHasPotentialToggle = rapidObservation.inventoryDiagnostics?.timingMarkers.includes(
@@ -3663,11 +3682,18 @@ export async function detectConsentUi(
         : ["rapid_cheap_snapshot"],
     );
   }
-  const immediateObservation = rapidObservation.controls.length > 0 || cheapTextObservation?.likelyPresent
+  const immediateDomObservation = rapidObservation.controls.length > 0 || cheapTextObservation?.likelyPresent
     ? await readConsentUiObservation(page, scanStartedAtMs, {
         allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
       })
     : cheapTextObservation ?? rapidObservation;
+  const immediateObservation = earlyAccessibilityObservation.controls.length > 0
+    ? mergeConsentUiObservations(
+        immediateDomObservation,
+        earlyAccessibilityObservation,
+        "inventory:accessibility_tree_early",
+      )
+    : immediateDomObservation;
   const mergedImmediateObservation = rapidObservation.controls.length > 0
     ? mergeConsentUiObservations(
         immediateObservation,
@@ -4842,6 +4868,7 @@ type AccessibilityNodeValue = {
 };
 
 export type ConsentAccessibilityTreeNode = {
+  backendDOMNodeId?: number;
   childIds?: string[];
   ignored?: boolean;
   name?: AccessibilityNodeValue;
@@ -4857,6 +4884,7 @@ const AX_CONSENT_CONTAINER_ROLE_PATTERN =
 
 async function readAccessibilityConsentInventory(page: Page): Promise<{
   controls: ConsentUiInventoryControl[];
+  hasPotentialToggle: boolean;
   textExcerpts: string[];
 }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -4867,16 +4895,21 @@ async function readAccessibilityConsentInventory(page: Page): Promise<{
         const result = await client.send("Accessibility.getFullAXTree", {} as never) as {
           nodes?: ConsentAccessibilityTreeNode[];
         };
-        return consentControlsFromAccessibilityTree(result.nodes ?? []);
+        const firstLayerNodes = await filterAccessibilityTreeToFirstLayer(
+          client,
+          result.nodes ?? [],
+          page.viewportSize(),
+        );
+        return consentControlsFromAccessibilityTree(firstLayerNodes);
       } finally {
         await boundedCleanup(client.detach(), 250);
       }
     })(),
-    new Promise<{ controls: ConsentUiInventoryControl[]; textExcerpts: string[] }>((resolve) => {
-      timer = setTimeout(() => resolve({ controls: [], textExcerpts: [] }), 750);
+    new Promise<{ controls: ConsentUiInventoryControl[]; hasPotentialToggle: boolean; textExcerpts: string[] }>((resolve) => {
+      timer = setTimeout(() => resolve({ controls: [], hasPotentialToggle: false, textExcerpts: [] }), 750);
     }),
   ]).catch(() => {
-    return { controls: [], textExcerpts: [] };
+    return { controls: [], hasPotentialToggle: false, textExcerpts: [] };
   }).finally(() => {
     if (timer) {
       clearTimeout(timer);
@@ -4884,10 +4917,101 @@ async function readAccessibilityConsentInventory(page: Page): Promise<{
   });
 }
 
+async function filterAccessibilityTreeToFirstLayer(
+  client: CDPSession,
+  nodes: ConsentAccessibilityTreeNode[],
+  viewport: { width: number; height: number } | null,
+): Promise<ConsentAccessibilityTreeNode[]> {
+  if (!viewport) return nodes;
+  const canonicalLabels = CANONICAL_CONSENT_INVENTORY_LABELS.map((label) => label.toLowerCase());
+  const candidates = nodes.filter((node) => {
+    if (!node.backendDOMNodeId || node.ignored === true) return false;
+    const role = axStringValue(node.role).toLowerCase();
+    if (!["button", "link", "checkbox", "switch", "radio"].includes(role)) return false;
+    const label = axStringValue(node.name).replace(/\s+/g, " ").trim().toLowerCase();
+    return role === "checkbox" || role === "switch" || role === "radio" || canonicalLabels.some(
+      (canonicalLabel) => label === canonicalLabel || (canonicalLabel.length >= 6 && label.includes(canonicalLabel)),
+    );
+  }).slice(0, 40);
+  if (candidates.length === 0) return nodes;
+  const firstLayerByNodeId = new Map(await Promise.all(candidates.map(async (node) => {
+    const box = await client.send("DOM.getBoxModel", {
+      backendNodeId: node.backendDOMNodeId,
+    } as never).catch(() => null) as { model?: { border?: number[] } } | null;
+    const quad = box?.model?.border ?? [];
+    const xs = quad.filter((_, index) => index % 2 === 0);
+    const ys = quad.filter((_, index) => index % 2 === 1);
+    const hasBox = xs.length >= 4 && ys.length >= 4;
+    const inFirstLayer = hasBox &&
+      Math.max(...xs) > 0 &&
+      Math.min(...xs) < viewport.width &&
+      Math.max(...ys) >= -200 &&
+      Math.min(...ys) <= viewport.height + 200;
+    return [node.nodeId, inFirstLayer] as const;
+  })));
+  return nodes.map((node) => firstLayerByNodeId.get(node.nodeId) === false
+    ? { ...node, ignored: true }
+    : node);
+}
+
+function consentUiObservationFromAccessibilityInventory(
+  inventory: {
+    controls: ConsentUiInventoryControl[];
+    hasPotentialToggle: boolean;
+    textExcerpts: string[];
+  },
+  scanStartedAtMs: number,
+): ConsentUiObservation {
+  const contextText = inventory.textExcerpts.join(" ").slice(0, 12_000);
+  const controls = inventory.controls.flatMap((control) => {
+    const classification = classifyConsentControlLabel({
+      label: control.label,
+      contextText,
+      hasConsentContext: true,
+    });
+    const actionType = consentUiControlActionTypeFromClassification(classification);
+    if (!actionType || actionType === "other") return [];
+    const {
+      frameUrl: _frameUrl,
+      inventoryContainerKey: _inventoryContainerKey,
+      inventoryRootSource: _inventoryRootSource,
+      inventorySource: _inventorySource,
+      ...retainedControl
+    } = control;
+    return [{
+      ...retainedControl,
+      actionType,
+      matchedTerm: classification.matchedTerm,
+      matchedLocale: classification.matchedLocale,
+      matchStrength: classification.matchStrength,
+      classifierReasonCodes: classification.reasonCodes,
+      classifierVariant: classification.variant,
+    }];
+  });
+  return buildConsentUiObservationFromEvidence({
+    scanStartedAtMs,
+    text: contextText,
+    controls,
+    fallbackBasis: controls.length > 0 ? ["inventory:accessibility_tree"] : [],
+    inventoryDiagnostics: {
+      candidateContainerCount: new Set(
+        inventory.controls.map((control) => control.inventoryContainerKey ?? "accessibility_tree"),
+      ).size,
+      candidateControlCount: inventory.controls.length,
+      retainedControlCount: controls.length,
+      inventorySources: controls.length > 0 ? ["accessibility_tree"] : [],
+      candidateLabels: inventory.controls.map((control) => control.label).slice(0, 24),
+      rejectionReasons: [],
+      timingMarkers: ["accessibility_tree_early_inventory_completed"],
+    },
+  });
+}
+
 export function consentControlsFromAccessibilityTree(
   nodes: ConsentAccessibilityTreeNode[],
 ): {
   controls: ConsentUiInventoryControl[];
+  hasPotentialToggle: boolean;
   textExcerpts: string[];
 } {
   const nodesById = new Map(nodes.map((node) => [node.nodeId, node]));
@@ -4900,6 +5024,12 @@ export function consentControlsFromAccessibilityTree(
   const textExcerpts: string[] = [];
   const controls: ConsentUiInventoryControl[] = [];
   const seen = new Set<string>();
+  const hasPotentialToggle = nodes.some((node) => {
+    if (node.ignored === true) return false;
+    const role = axStringValue(node.role).toLowerCase();
+    if (role !== "checkbox" && role !== "switch" && role !== "radio") return false;
+    return nearestAccessibilityConsentContainer(node, nodesById, parentById) !== null;
+  });
 
   for (const node of nodes) {
     if (node.ignored === true) {
@@ -4931,7 +5061,11 @@ export function consentControlsFromAccessibilityTree(
     }
     if (
       classification.intent === "options" &&
-      !/\b(?:we use cookies|use cookies|consent|accept|agree|allow|reject|decline|deny|refuse|analytics|tracking|marketing|privacy settings|privacy preferences|cookie preferences|similar techniques)\b/i.test(contextText)
+      !/\b(?:we use cookies|use cookies|consent|accept|agree|allow|reject|decline|deny|refuse|analytics|tracking|marketing|privacy settings|privacy preferences|cookie preferences|similar techniques)\b/i.test(contextText) &&
+      !(
+        accessibilitySubtreeConsentIntents(container, nodesById).has("accept") &&
+        accessibilitySubtreeConsentIntents(container, nodesById).has("reject")
+      )
     ) {
       continue;
     }
@@ -4961,6 +5095,7 @@ export function consentControlsFromAccessibilityTree(
 
   return {
     controls,
+    hasPotentialToggle,
     textExcerpts,
   };
 }
@@ -4983,17 +5118,52 @@ function nearestAccessibilityConsentContainer(
       AX_CONSENT_CONTAINER_ROLE_PATTERN.test(role) ||
       AX_CONSENT_CONTEXT_PATTERN.test(`${name} ${role}`)
     );
+    const clusteredIntents = accessibilitySubtreeConsentIntents(current, nodesById);
+    const hasBoundedConsentChoiceCluster =
+      clusteredIntents.has("accept") &&
+      clusteredIntents.has("reject") &&
+      subtreeText.length <= 12_000;
     if (
       current.nodeId !== node.nodeId &&
-      isLikelyConsentContainer &&
+      (isLikelyConsentContainer || hasBoundedConsentChoiceCluster) &&
       AX_CONSENT_CONTEXT_PATTERN.test(`${name} ${subtreeText}`) &&
-      subtreeText.length <= 4_000
+      subtreeText.length <= (hasBoundedConsentChoiceCluster ? 12_000 : 4_000)
     ) {
       return current;
     }
     currentId = parentById.get(currentId);
   }
   return null;
+}
+
+function accessibilitySubtreeConsentIntents(
+  root: ConsentAccessibilityTreeNode,
+  nodesById: Map<string, ConsentAccessibilityTreeNode>,
+): Set<string> {
+  const intents = new Set<string>();
+  const pending = [...(root.childIds ?? [])];
+  let visited = 0;
+  while (pending.length > 0 && visited < 120) {
+    const nodeId = pending.shift();
+    if (!nodeId) break;
+    const node = nodesById.get(nodeId);
+    if (!node) continue;
+    visited += 1;
+    pending.push(...(node.childIds ?? []));
+    const role = axStringValue(node.role).toLowerCase();
+    if (node.ignored === true || (role !== "button" && role !== "link")) continue;
+    const label = axStringValue(node.name).replace(/\s+/g, " ").trim().slice(0, 120);
+    if (!label) continue;
+    const classification = classifyConsentControlLabel({
+      label,
+      contextText: "cookie consent privacy preferences",
+      hasConsentContext: true,
+    });
+    if (classification.intent !== "unknown") {
+      intents.add(classification.intent);
+    }
+  }
+  return intents;
 }
 
 function collectAccessibilitySubtreeText(
