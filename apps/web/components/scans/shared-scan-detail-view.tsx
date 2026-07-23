@@ -761,8 +761,12 @@ function InventoryDataFlowCell({ row }: { row: InventoryGroupRow }) {
     `Transfer mechanism: ${candidate.transferMechanism.mechanism.replaceAll("_", " ")}; verified as of ${candidate.transferMechanism.verifiedAsOf}`,
     candidate.idSync ? "Known ID-sync endpoint observed pre-consent." : null
   ].filter(Boolean).join("\n")).join("\n\n");
+  const headquartersCountry = flow.controllingEntity.headquartersCountry;
+  const locationContext = headquartersCountry
+    ? `${headquartersCountry} HQ`
+    : flow.networkDestination.provider ?? null;
   return (
-    <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5" title={title}>
+    <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 leading-4" title={title}>
       {country ? (
         <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
           <span aria-hidden="true">{countryFlag(country)}</span>
@@ -771,6 +775,7 @@ function InventoryDataFlowCell({ row }: { row: InventoryGroupRow }) {
       ) : (
         <span className="font-medium text-slate-500">Unknown edge</span>
       )}
+      {!country && locationContext ? <span className="text-[10px] font-medium text-slate-400">({locationContext})</span> : null}
       {flow.idSync ? <span className="rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">ID sync</span> : null}
       {row.dataFlows.length > 1 ? <span className="text-[10px] font-medium text-slate-500">+{row.dataFlows.length - 1} more</span> : null}
     </span>
@@ -919,7 +924,7 @@ function RuntimeInventoryTable({
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5"><InventoryDataFlowCell row={row} /></td>
+                    <td className="px-2 py-1.5 align-top"><InventoryDataFlowCell row={row} /></td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryConfidenceCell confidence={row.confidence} />
                     </td>
