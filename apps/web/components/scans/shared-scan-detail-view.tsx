@@ -704,7 +704,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
   const gradient = rows.length > 0 ? `conic-gradient(${gradientStops.join(", ")})` : "conic-gradient(#e2e8f0 0 100%)";
 
   return (
-    <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+    <div className="min-h-0 overflow-visible rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Purpose mix</p>
       <div className="mt-3 flex items-start gap-3">
         <div
@@ -875,7 +875,7 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
     : "conic-gradient(#cbd5e1 0 100%)";
 
   return (
-    <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3" aria-label="Consent evidence segmentation">
+    <div className="min-h-0 overflow-visible rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3" aria-label="Consent evidence segmentation">
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Evidence mix</p>
       <div className="mt-3 flex items-start gap-3">
         <div className="relative grid h-20 w-20 shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50" style={{ background: donut }}>
@@ -938,7 +938,7 @@ function RuntimeInventoryTable({
           <div className="grid gap-3 lg:grid-cols-3 lg:items-stretch">
             <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
             <InventoryPurposeCard rows={groupedInventoryRows} />
-            <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+            <div className="min-h-0 overflow-visible rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Priority mix</p>
               <InventoryPriorityDonut rows={groupedInventoryRows} />
             </div>
