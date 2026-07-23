@@ -210,6 +210,7 @@ const variables = {
 };
 
 const conservativeDefaults = {
+  CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
   CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS: "false",
   CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE: "none",
   CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE: "webmd",
@@ -266,7 +267,6 @@ for (const key of ["CERTSCORE_V2_DAG_LAMBDA_ACTION_FINAL_SETTLE_MS"]) {
 }
 
 for (const key of [
-  "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT",
   "CERTSCORE_CHROMIUM_ACCEPT_LANGUAGE",
   "CERTSCORE_CHROMIUM_LOCALE",
   "CERTSCORE_CHROMIUM_TIMEZONE_ID",
@@ -349,6 +349,43 @@ else
     --memory-size "$memory_size" \
     --environment "file://${environment_json}" >/dev/null
 fi
+
+aws lambda wait function-updated --region "$region" --function-name "$function_name"
+
+regional_browser_config="${tmp_dir}/regional-browser-config.json"
+aws lambda get-function-configuration \
+  --region "$region" \
+  --function-name "$function_name" \
+  --query '{UserAgent:Environment.Variables.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT,Locale:Environment.Variables.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE,AcceptLanguage:Environment.Variables.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE,Timezone:Environment.Variables.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID,ProxyEnabled:Environment.Variables.SCAN_PROXY_ENABLED,EgressLabel:Environment.Variables.SCAN_EGRESS_LABEL}' \
+  --output json >"$regional_browser_config"
+
+REGIONAL_BROWSER_CONFIG="$regional_browser_config" \
+CERTSCORE_V2_DAG_LAMBDA_LOCATION_ENV_PREFIX="$location_env_prefix" \
+node <<'NODE'
+const { readFileSync } = require("node:fs");
+const observed = JSON.parse(readFileSync(process.env.REGIONAL_BROWSER_CONFIG, "utf8"));
+const expectedByRegion = {
+  EU_DE: { Locale: "de-DE", AcceptLanguage: "de-DE,de;q=0.9,en;q=0.8", Timezone: "Europe/Berlin" },
+  EU_IE: { Locale: "en-IE", AcceptLanguage: "en-IE,en;q=0.9", Timezone: "Europe/Dublin" },
+  US_WEST: { Locale: "en-US", AcceptLanguage: "en-US,en;q=0.9", Timezone: "America/Los_Angeles" },
+};
+const expected = expectedByRegion[process.env.CERTSCORE_V2_DAG_LAMBDA_LOCATION_ENV_PREFIX];
+if (!expected) throw new Error("Unknown regional browser calibration.");
+for (const [key, value] of Object.entries(expected)) {
+  if (observed[key] !== value) {
+    throw new Error(`Regional browser calibration mismatch for ${key}: expected ${value}, received ${observed[key] ?? "missing"}.`);
+  }
+}
+if (!/^Mozilla\/5\.0 \(X11; Linux x86_64\).* Chrome\/150\.0\.0\.0 Safari\/537\.36$/.test(observed.UserAgent ?? "")) {
+  throw new Error("Regional browser calibration requires the version-matched Linux Chrome 150 identity.");
+}
+if (/HeadlessChrome/i.test(observed.UserAgent)) {
+  throw new Error("Regional browser calibration must not expose the HeadlessChrome token.");
+}
+if (String(observed.ProxyEnabled).toLowerCase() !== "true" || !String(observed.EgressLabel ?? "").trim()) {
+  throw new Error("Regional browser calibration requires enabled, labeled regional egress.");
+}
+NODE
 
 aws lambda put-function-event-invoke-config \
   --region "$region" \

@@ -167,6 +167,7 @@ async function main() {
     "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE",
     "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS",
     "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID",
+    "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT",
     "CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE",
     "CERTSCORE_V2_DAG_LAMBDA_EGRESS_LABEL",
     "CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE",
@@ -551,6 +552,10 @@ function objectMapKey(bucket: string, key: string) {
 function applyRegionalLambdaParityEnv(region: LocalV2DagLambdaAwsRegion) {
   const prefix = lambdaLocationEnvPrefix(region);
   process.env.CERTSCORE_V2_DAG_LAMBDA_LOCATION_ENV_PREFIX = prefix;
+  setIfMissing(
+    "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+  );
 
   const defaults = regionalChromiumDefaults(region);
   for (const [key, value] of Object.entries(defaults)) {

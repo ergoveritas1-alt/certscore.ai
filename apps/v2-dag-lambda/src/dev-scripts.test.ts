@@ -52,6 +52,15 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-IE,en;q=0\.9"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "en-IE"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "Europe\/Dublin"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "de-DE,de;q=0\.9,en;q=0\.8"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "de-DE"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "Europe\/Berlin"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-US,en;q=0\.9"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "en-US"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "America\/Los_Angeles"/);
+  assert.match(setupScript, /Chrome\/150\.0\.0\.0 Safari\/537\.36/);
+  assert.doesNotMatch(setupScript, /HeadlessChrome\/150/);
+  assert.match(setupScript, /Regional browser calibration requires enabled, labeled regional egress/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_\$\{location_env_prefix\}_RESULT_QUEUE_URL/);
   assert.match(setupScript, /CERTSCORE_CHROMIUM_EXECUTABLE_PATH: "\/usr\/bin\/chromium"/);
   assert.doesNotMatch(setupScript, /PLAYWRIGHT_BROWSERS_PATH/);
@@ -109,6 +118,8 @@ test("local Lambda parity harness uses the Lambda pre-consent visual budget", as
   assert.match(parityScript, /LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_SCREENSHOT_TIMEOUT_MS/);
   assert.match(parityScript, /LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS/);
   assert.match(parityScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS/);
+  assert.match(parityScript, /Chrome\/150\.0\.0\.0 Safari\/537\.36/);
+  assert.doesNotMatch(parityScript, /HeadlessChrome\/150/);
   assert.doesNotMatch(parityScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS = "5000"/);
 });
 
