@@ -2852,7 +2852,7 @@ function ChecklistRows({
             </div>
             <div className="min-w-0 space-y-1">
               <div className="hidden items-start gap-2 md:flex">
-                <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                <div className="flex w-[6.75rem] shrink-0 items-center gap-1 pt-0.5">
                   {showPolicyReview ? (
                     <RowToolButton
                       active={false}
@@ -2881,7 +2881,7 @@ function ChecklistRows({
                 <p className="line-clamp-2 min-w-0 text-sm leading-6 text-slate-600">{renderRationaleText(rowRationale)}</p>
               </div>
               <div className="flex items-start gap-2 md:hidden">
-                <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                <div className="flex w-[6.75rem] shrink-0 items-center gap-1 pt-0.5">
                   {showPolicyReview ? (
                     <RowToolButton
                       active={false}
