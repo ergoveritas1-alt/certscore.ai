@@ -847,12 +847,14 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
     const category = getRuntimeInventoryMacroCategory(row).toLowerCase();
     return category === "essential" || category === "functional";
   }).length;
-  const nonEssentialCount = rows.length - necessaryCount;
+  const reviewCount = rows.filter((row) => getRuntimeInventoryMacroCategory(row).toLowerCase() === "review").length;
+  const nonEssentialCount = Math.max(0, rows.length - necessaryCount - reviewCount);
 
-  const totalClassified = necessaryCount + nonEssentialCount;
+  const totalClassified = necessaryCount + nonEssentialCount + reviewCount;
   const necessaryShare = totalClassified > 0 ? (necessaryCount / totalClassified) * 100 : 0;
+  const nonEssentialShare = totalClassified > 0 ? (nonEssentialCount / totalClassified) * 100 : 0;
   const donut = totalClassified > 0
-    ? `conic-gradient(#10b981 0 ${necessaryShare}%, #f59e0b ${necessaryShare}% 100%)`
+    ? `conic-gradient(#10b981 0 ${necessaryShare}%, #f59e0b ${necessaryShare}% ${necessaryShare + nonEssentialShare}%, #94a3b8 ${necessaryShare + nonEssentialShare}% 100%)`
     : "conic-gradient(#cbd5e1 0 100%)";
 
   return (
@@ -872,8 +874,13 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
           </div>
           <div className="flex min-w-0 items-center gap-1.5">
             <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
-            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Review</span>
+            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Non-essential</span>
             <span className="text-[11px] font-semibold text-slate-700">{nonEssentialCount}</span>
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400" />
+            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Review</span>
+            <span className="text-[11px] font-semibold text-slate-700">{reviewCount}</span>
           </div>
         </div>
       </div>
