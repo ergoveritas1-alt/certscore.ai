@@ -776,9 +776,7 @@ function InventoryDataFlowCell({ row }: { row: InventoryGroupRow }) {
     candidate.idSync ? "Known ID-sync endpoint observed pre-consent." : null
   ].filter(Boolean).join("\n")).join("\n\n");
   const headquartersCountry = flow.controllingEntity.headquartersCountry;
-  const locationContext = headquartersCountry
-    ? `${headquartersCountry} HQ`
-    : flow.networkDestination.provider ?? null;
+  const provider = flow.networkDestination.provider;
   return (
     <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 leading-4" title={title}>
       {country ? (
@@ -787,9 +785,18 @@ function InventoryDataFlowCell({ row }: { row: InventoryGroupRow }) {
           <span>{country}</span>
         </span>
       ) : (
-        <span className="font-medium text-slate-500">Unknown edge</span>
+        <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+          {headquartersCountry ? (
+            <span className="font-medium text-slate-500" title="Controlling entity headquarters country">
+              {countryFlag(headquartersCountry)} HQ
+            </span>
+          ) : provider ? <span className="truncate max-w-[7rem]">{provider}</span> : null}
+          <InfoTip
+            align="start"
+            text={`Server country was not retained for this endpoint; the flag indicates controlling-entity headquarters, not server storage location.${provider ? ` Network provider: ${provider}.` : ""}`}
+          />
+        </span>
       )}
-      {!country && locationContext ? <span className="text-[10px] font-medium text-slate-400">({locationContext})</span> : null}
       {flow.idSync ? <span className="rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">ID sync</span> : null}
       {row.dataFlows.length > 1 ? <span className="text-[10px] font-medium text-slate-500">+{row.dataFlows.length - 1} more</span> : null}
     </span>
