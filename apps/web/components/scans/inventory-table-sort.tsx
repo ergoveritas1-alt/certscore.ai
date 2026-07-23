@@ -31,10 +31,10 @@ export function InventorySortButton({ tableId, sortKey, label }: { tableId: stri
       }}
     >
       <span>{label}</span>
-      <span className={`inline-flex flex-col text-[8px] leading-[6px] ${direction ? "text-sky-600" : "text-slate-400 group-hover/sort:text-slate-600"}`} aria-hidden="true">
-        <span className={direction === "asc" ? "font-bold" : "opacity-60"}>▲</span>
-        <span className={direction === "desc" ? "font-bold" : "opacity-60"}>▼</span>
-      </span>
+      <svg aria-hidden="true" className={`h-3 w-2.5 shrink-0 ${direction ? "text-sky-600" : "text-slate-400 group-hover/sort:text-slate-600"}`} fill="none" viewBox="0 0 10 12">
+        <path className={direction === "asc" ? "opacity-100" : "opacity-45"} d="M5 1 1.8 4.4h6.4L5 1Z" fill="currentColor" />
+        <path className={direction === "desc" ? "opacity-100" : "opacity-45"} d="m5 11 3.2-3.4H1.8L5 11Z" fill="currentColor" />
+      </svg>
     </button>
   );
 }
