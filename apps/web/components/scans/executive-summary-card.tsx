@@ -1408,7 +1408,7 @@ function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: strin
       >
         <ScanReportDisclosureIcon className="h-5 w-5 group-open/scan-proof:rotate-90" />
       </summary>
-      <div className="absolute left-0 top-full z-30 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
+      <div className="absolute right-0 top-full z-30 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
       <dl className="space-y-2 text-xs leading-5">
         {rows.map(([label, value]) => (
           <div key={label} className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2">
