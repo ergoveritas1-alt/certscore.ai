@@ -49,6 +49,7 @@ import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { ScanPageHeader } from "./scan-page-header";
+import { InventoryTableInteractions } from "./inventory-table-interactions";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { NoGoBrowserExtensionRecovery } from "./no-go-browser-extension-recovery";
 import {
@@ -649,7 +650,7 @@ function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; 
       </div>
       <div className={`${compact ? "grid-cols-4 gap-x-2" : "grid-cols-2 gap-x-3 gap-y-1.5"} grid min-w-0 flex-1`}>
         {segments.map((segment) => (
-          <div key={segment.label} className="flex min-w-0 items-center gap-1.5">
+            <div key={segment.label} className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter={segment.label.toLowerCase()} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
             <span className="truncate text-[11px] font-medium text-slate-500">{compact && segment.label === "Contextual" ? "Ctx" : segment.label}</span>
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{segment.count}</span>
@@ -716,7 +717,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
         </div>
         <div className="grid min-w-0 flex-1 gap-2">
         {topPurposes.length > 0 ? topPurposes.map(([purpose, count]) => (
-          <div key={purpose} className="flex min-w-0 items-center gap-2">
+          <div key={purpose} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter={purpose.toLowerCase()} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: chartSegments.find((segment) => segment.label === purpose)?.color ?? "#64748b" }} />
             <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-600">{purpose}</span>
             <span className="text-xs font-semibold text-slate-800">{count}</span>
@@ -881,17 +882,17 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
           </div>
         </div>
         <div className="grid min-w-0 flex-1 gap-2">
-          <div className="flex min-w-0 items-center gap-1.5">
+          <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="non-essential" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Non-essential</span>
             <span className="text-[11px] font-semibold text-slate-700">{nonEssentialCount}</span>
           </div>
-          <div className="flex min-w-0 items-center gap-1.5">
+          <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="review" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Review</span>
             <span className="text-[11px] font-semibold text-slate-700">{reviewCount}</span>
           </div>
-          <div className="flex min-w-0 items-center gap-1.5">
+          <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="necessary" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Necessary</span>
             <span className="text-[11px] font-semibold text-slate-700">{necessaryCount}</span>
@@ -937,14 +938,43 @@ function RuntimeInventoryTable({
               <InventoryPriorityDonut rows={groupedInventoryRows} />
             </div>
           </div>
-          <div className="overflow-hidden rounded-xl border border-slate-200">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500" aria-label="Inventory chart legend and review guidance">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="font-semibold text-slate-600">Colors</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" />Risk / non-essential</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" />Review</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" />Necessary / neutral</span>
+            </div>
+            <span className="text-slate-500">Click a chart label to filter the table.</span>
+          </div>
+          <InventoryTableInteractions tableId="preconsent-inventory-table" totalRows={groupedInventoryRows.length} />
+          <div className="space-y-2 md:hidden" aria-label="Cookies and trackers mobile list">
+            {groupedInventoryRows.map((row, index) => (
+              <article key={`mobile-${getInventoryGroupRowRenderKey(row, index)}`} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{row.vendor}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{getInventoryPurposeLabel(row)}</p>
+                  </div>
+                  <InventoryPriorityCell priority={row.priority} />
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                  <span>{row.type === "cookie" ? "Cookie" : "Tracker"}</span>
+                  <span className="text-right">{formatInventoryTiming(row)}</span>
+                  <span className="truncate">{row.domains.join(", ") || "Domain not retained"}</span>
+                  <span className="text-right">{formatGroupedParty(row.party)}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 md:block">
             <div className="max-h-[370px] overflow-auto">
             <table id="preconsent-inventory-table" className="w-[1160px] min-w-[1160px] max-w-[1160px] table-fixed border-collapse text-left text-[13px]">
               <caption className="sr-only">Pre-consent cookies and trackers inventory</caption>
               <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500 shadow-[0_2px_8px_-6px_rgba(15,23,42,0.55)]">
                 <tr>
-                  <th className="w-[90px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Type</th>
-                  <th className="w-[150px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Vendor</th>
+                  <th className="sticky left-0 z-20 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Type</th>
+                  <th className="sticky left-[90px] z-20 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Vendor</th>
                   <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Purpose</th>
                   <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Priority</th>
                   <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">First seen</th>
@@ -960,17 +990,19 @@ function RuntimeInventoryTable({
                 {groupedInventoryRows.map((row, index) => (
                   <tr
                     key={getInventoryGroupRowRenderKey(row, index)}
-                    className="h-10 transition-colors odd:bg-slate-50/25 hover:bg-sky-50/35"
+                    className="group h-10 transition-colors odd:bg-slate-50/25 hover:bg-sky-50/35"
                     data-category={getRuntimeInventoryMacroCategory(row)}
+                    data-vendor={row.vendor}
                     data-inventory-row
                     data-pre-consent={row.preConsent ? "true" : "false"}
+                    data-first-seen={row.firstSeenMs ?? ""}
                     data-priority={row.priority}
                     data-search={`${row.vendor} ${getInventoryPurposeLabel(row)} ${row.cookieNames.join(" ")} ${row.domains.join(" ")}`.toLowerCase()}
                   >
-                    <td className="whitespace-nowrap px-2 py-1.5 align-top">
+                    <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-2 py-1.5 align-top group-hover:bg-sky-50/35">
                       <InventoryTypeDisclosure row={row} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
+                    <td className="sticky left-[90px] z-10 truncate whitespace-nowrap bg-white px-2 py-1.5 align-middle group-hover:bg-sky-50/35">
                       <InventoryVendorCell label={row.vendor} />
                     </td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={getInventoryPurposeLabel(row)}>{getInventoryPurposeLabel(row)}</td>
