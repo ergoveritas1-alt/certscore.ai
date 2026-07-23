@@ -403,7 +403,7 @@ test("getReportableGdprEprivacyCoverageItems omits standalone runtime vendor sig
   });
   const rowIds = new Set(getReportableGdprEprivacyCoverageItems(items).map((item) => item.id));
 
-  assert.equal(rowIds.has("consent_choice_quality"), true);
+  assert.equal(rowIds.has("consent_choice_quality"), false);
   assert.equal(rowIds.has("cookie_banner_preticked_or_implied_consent"), false);
   assert.equal(rowIds.has("advertising_retargeting_vendor_signal_observed"), false);
   assert.equal(rowIds.has("retargeting_behavioral_advertising_signal_observed"), false);

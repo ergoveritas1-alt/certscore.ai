@@ -7358,7 +7358,7 @@ export async function SharedScanDetailView({
                     <GdprEprivacyCoverageChecklistCard
                       defaultOpen
                       gdprEprivacyLens={gdprEprivacyExecutiveLens}
-                      items={gdprEprivacyCoverageChecklist}
+                      items={reportableGdprEprivacyCoverageChecklist}
                       showSummaryStrip={false}
                     />
                   ),

@@ -8,10 +8,13 @@ const DEFERRED_NON_PRODUCTION_ROW_IDS = new Set([
   "retargeting_behavioral_advertising_signal_observed",
   "sensitive_surfaces_third_party_tracking",
   "cross_border_endpoint_review",
-  "accessibility_consent_controls"
+  "accessibility_consent_controls",
+  // Consent-choice quality remains retained internal evidence, but the
+  // umbrella checklist row is not a reportable finding. Specific observed
+  // consent-control findings remain eligible independently.
+  "consent_choice_quality"
 ]);
 
 export function getReportableGdprEprivacyCoverageItems(items: GdprEprivacyCoverageChecklistItem[]) {
-  const nonDeferredItems = items.filter((item) => !DEFERRED_NON_PRODUCTION_ROW_IDS.has(item.id));
-  return nonDeferredItems.length > 0 ? nonDeferredItems : items;
+  return items.filter((item) => !DEFERRED_NON_PRODUCTION_ROW_IDS.has(item.id));
 }

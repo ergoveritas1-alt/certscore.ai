@@ -103,6 +103,7 @@
     "v2:calibration-ledger-record": "node --import tsx ./scripts/record-scan-quality-calibration-outcomes.ts",
     "v2:calibration-ledger-export": "node --import tsx ./scripts/export-scan-quality-calibration-ledger.ts",
     "v2:consent-canary-gate": "node --import tsx ./scripts/run-consent-controls-canary-gate.ts",
+    "v2:consent-fast-release-gate": "node --import tsx ./scripts/run-consent-capture-fast-release-gate.ts",
     "v2:retained-consent-audit": "node --import tsx ./scripts/audit-retained-consent-cohort.ts",
     "v2:evidence-calibration-manifest": "node --import tsx ./scripts/build-evidence-calibration-manifest.ts",
     "v2:gdpr-transparency-retained-audit": "node --import tsx ./scripts/audit-gdpr-transparency-retained-corpus.ts",
