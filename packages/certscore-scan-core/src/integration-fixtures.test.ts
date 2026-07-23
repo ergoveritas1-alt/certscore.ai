@@ -1115,6 +1115,40 @@ test("pre-consent runtime scanner inventories Amazon-style controls from a gener
   );
 });
 
+test("pre-consent accessibility inventory stays bounded on link-heavy commerce trees", () => {
+  const irrelevantLinks = Array.from({ length: 2_000 }, (_, index) => ({
+    nodeId: `nav-${index}`,
+    role: { value: "link" },
+    name: { value: `Product category ${index}` },
+  }));
+  const startedAtMs = Date.now();
+  const inventory = consentControlsFromAccessibilityTree([
+    {
+      nodeId: "root",
+      role: { value: "RootWebArea" },
+      name: { value: "Commerce" },
+      childIds: ["banner", ...irrelevantLinks.map((node) => node.nodeId)],
+    },
+    {
+      nodeId: "banner",
+      role: { value: "generic" },
+      name: { value: "" },
+      childIds: ["heading", "accept", "reject", "options"],
+    },
+    { nodeId: "heading", role: { value: "heading" }, name: { value: "Cookies und Werbeoptionen" } },
+    { nodeId: "accept", role: { value: "button" }, name: { value: "Akzeptieren" } },
+    { nodeId: "reject", role: { value: "button" }, name: { value: "Ablehnen" } },
+    { nodeId: "options", role: { value: "link" }, name: { value: "Personalisieren" } },
+    ...irrelevantLinks,
+  ]);
+
+  assert.deepEqual(
+    inventory.controls.map((control) => control.label).sort(),
+    ["Ablehnen", "Akzeptieren", "Personalisieren"],
+  );
+  assert.ok(Date.now() - startedAtMs < 500, "large accessibility trees should be filtered before ancestor analysis");
+});
+
 test("pre-consent runtime scanner inventories first-layer category-scoped analytics controls through the canonical classifier", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-analytics-controls-"));

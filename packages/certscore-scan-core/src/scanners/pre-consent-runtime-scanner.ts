@@ -5046,6 +5046,13 @@ export function consentControlsFromAccessibilityTree(
     if (!label || label.length > 120) {
       continue;
     }
+    const normalizedLabel = label.toLowerCase();
+    const isCanonicalConsentCandidate = CANONICAL_CONSENT_INVENTORY_LABELS.some(
+      (candidate) => normalizedLabel === candidate || (candidate.length >= 6 && normalizedLabel.includes(candidate)),
+    );
+    if (!isCanonicalConsentCandidate) {
+      continue;
+    }
     const container = nearestAccessibilityConsentContainer(node, nodesById, parentById);
     if (!container) {
       continue;
@@ -5062,13 +5069,11 @@ export function consentControlsFromAccessibilityTree(
     if (classification.intent === "unknown") {
       continue;
     }
+    const containerIntents = accessibilitySubtreeConsentIntents(container, nodesById);
     if (
       classification.intent === "options" &&
       !/\b(?:we use cookies|use cookies|consent|accept|agree|allow|reject|decline|deny|refuse|analytics|tracking|marketing|privacy settings|privacy preferences|cookie preferences|similar techniques)\b/i.test(contextText) &&
-      !(
-        accessibilitySubtreeConsentIntents(container, nodesById).has("accept") &&
-        accessibilitySubtreeConsentIntents(container, nodesById).has("reject")
-      )
+      !(containerIntents.has("accept") && containerIntents.has("reject"))
     ) {
       continue;
     }
