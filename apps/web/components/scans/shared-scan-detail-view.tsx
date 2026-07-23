@@ -569,7 +569,7 @@ function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
     return <InventoryTypeIcon type={row.type} />;
   }
   return (
-    <details className="group/cookie-detail relative">
+    <details className="group/cookie-detail relative z-10 open:z-40">
       <summary
         aria-label={`Show retained vendor evidence for ${row.vendor}`}
         className="inline-flex h-8 min-w-[3.5rem] cursor-pointer list-none items-center justify-center rounded-lg border border-sky-300 bg-gradient-to-b from-white to-sky-50 px-1.5 text-sky-700 shadow-[0_2px_0_0_rgb(186_230_253)] transition-all duration-150 hover:-translate-y-px hover:border-sky-500 hover:from-sky-50 hover:to-sky-100 hover:shadow-[0_3px_0_0_rgb(125_211_252)] active:translate-y-px active:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 group-open/cookie-detail:translate-y-px group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-sky-100 group-open/cookie-detail:shadow-none marker:hidden [&::-webkit-details-marker]:hidden"
@@ -582,7 +582,7 @@ function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
           </svg>
         </span>
       </summary>
-      <div className="mt-2 w-[34rem] max-w-[80vw] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
+      <div className="absolute left-0 top-full z-50 mt-2 w-[34rem] max-w-[80vw] rounded-xl border border-slate-200 bg-white p-3 shadow-[0_18px_42px_-16px_rgba(15,23,42,0.45)]">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Retained vendor evidence</p>
         <dl className="mb-2 grid grid-cols-[7rem_1fr] gap-x-2 rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] leading-4 text-slate-600">
           <dt className="font-medium text-slate-500">Products</dt><dd>{row.rawProducts.join(", ") || row.vendor}</dd>
@@ -999,7 +999,7 @@ function RuntimeInventoryTable({
                     data-priority={row.priority}
                     data-search={`${row.vendor} ${getInventoryPurposeLabel(row)} ${row.cookieNames.join(" ")} ${row.domains.join(" ")}`.toLowerCase()}
                   >
-                    <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-2 py-1.5 align-top group-hover:bg-sky-50/35">
+                    <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-2 py-1.5 align-top group-hover:bg-sky-50/35 has-[details[open]]:z-40">
                       <InventoryTypeDisclosure row={row} />
                     </td>
                     <td className="sticky left-[90px] z-10 truncate whitespace-nowrap bg-white px-2 py-1.5 align-middle group-hover:bg-sky-50/35">
