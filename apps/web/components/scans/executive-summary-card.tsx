@@ -4663,7 +4663,7 @@ export function ExecutiveSummaryCard(input: {
           </div>
         </div>
 
-        <div className="grid min-w-0 items-stretch gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(11rem,0.85fr)] min-[1000px]:w-[31rem] min-[1000px]:grid-cols-[17.5rem_12.75rem]">
+        <div className="grid min-w-0 items-stretch gap-3 sm:grid-cols-[minmax(0,0.9fr)_minmax(11rem,0.95fr)] min-[1000px]:w-[31rem] min-[1000px]:grid-cols-[15.75rem_14.5rem]">
           <div
             className="min-w-0 space-y-3 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]"
             data-executive-snapshot-pane
