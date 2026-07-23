@@ -123,7 +123,8 @@ trust_policy="$(mktemp)"
 permission_policy="$(mktemp)"
 environment_json="$(mktemp)"
 existing_environment_json="$(mktemp)"
-trap 'rm -f "$trust_policy" "$permission_policy" "$environment_json" "$existing_environment_json"' EXIT
+regional_browser_config="$(mktemp)"
+trap 'rm -f "$trust_policy" "$permission_policy" "$environment_json" "$existing_environment_json" "$regional_browser_config"' EXIT
 
 cat >"$trust_policy" <<'JSON'
 {
@@ -352,7 +353,6 @@ fi
 
 aws lambda wait function-updated --region "$region" --function-name "$function_name"
 
-regional_browser_config="${tmp_dir}/regional-browser-config.json"
 aws lambda get-function-configuration \
   --region "$region" \
   --function-name "$function_name" \
