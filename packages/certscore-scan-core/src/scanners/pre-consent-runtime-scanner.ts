@@ -822,7 +822,11 @@ export async function preConsentRuntimeScanner(
     const networkIdleTimeoutMs = fastWait ? 1_500 : 5_000;
     const settleWaitMs = fastWait ? 350 : 1_000;
     const consentUiWaitTimeoutMs = fastWait ? 1_800 : 3_500;
-    const consentUiCaptureTimeoutMs = fastWait ? 3_500 : 5_500;
+    // Regional commerce pages can paint a complete consent surface before
+    // their renderer answers structured DOM/accessibility reads. Preserve a
+    // bounded but realistic native-inventory window in fast Lambda runs;
+    // evidence quality is more important than shaving a few seconds here.
+    const consentUiCaptureTimeoutMs = fastWait ? 7_000 : 8_000;
     const directCmpNetworkEvidenceAtInitialCapture = hasHighConfidenceDirectCmpRuntimeEvidence(
       buildCmpRuntimeObservations(vendorResolverInputs, input.scanStartedAtMs),
     );
@@ -4911,9 +4915,9 @@ async function readAccessibilityConsentInventory(page: Page): Promise<{
     new Promise<{ controls: ConsentUiInventoryControl[]; hasPotentialToggle: boolean; textExcerpts: string[] }>((resolve) => {
       // Large commerce accessibility trees can take longer than a DOM probe
       // even though they remain the only responsive structured surface. Keep
-      // this within the caller's 3.5s consent budget while allowing Chrome to
+      // this within the caller's bounded consent budget while allowing Chrome to
       // finish a bounded native-tree read.
-      timer = setTimeout(() => resolve({ controls: [], hasPotentialToggle: false, textExcerpts: [] }), 2_500);
+      timer = setTimeout(() => resolve({ controls: [], hasPotentialToggle: false, textExcerpts: [] }), 6_000);
     }),
   ]).catch(() => {
     return { controls: [], hasPotentialToggle: false, textExcerpts: [] };
@@ -7532,26 +7536,28 @@ async function captureScaledFullPageScreenshotWithCdp(
   const client = await page.context().newCDPSession(page);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const metrics = await client.send("Page.getLayoutMetrics");
-    const contentSize = metrics.cssContentSize ?? metrics.contentSize;
-    const outputScale = Math.max(
-      0.5,
-      Math.min(0.75, 16_000 / Math.max(1, contentSize.height), 2_000 / Math.max(1, contentSize.width)),
-    );
     const screenshot = await Promise.race([
-      client.send("Page.captureScreenshot", {
-        captureBeyondViewport: true,
-        clip: {
-          height: Math.max(1, contentSize.height),
-          scale: outputScale,
-          width: Math.max(1, contentSize.width),
-          x: 0,
-          y: 0,
-        },
-        format: "jpeg",
-        fromSurface: true,
-        quality: 72,
-      }),
+      (async () => {
+        const metrics = await client.send("Page.getLayoutMetrics");
+        const contentSize = metrics.cssContentSize ?? metrics.contentSize;
+        const outputScale = Math.max(
+          0.5,
+          Math.min(0.75, 16_000 / Math.max(1, contentSize.height), 2_000 / Math.max(1, contentSize.width)),
+        );
+        return client.send("Page.captureScreenshot", {
+          captureBeyondViewport: true,
+          clip: {
+            height: Math.max(1, contentSize.height),
+            scale: outputScale,
+            width: Math.max(1, contentSize.width),
+            x: 0,
+            y: 0,
+          },
+          format: "jpeg",
+          fromSurface: true,
+          quality: 72,
+        });
+      })(),
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => reject(new Error("Supplemental full-page screenshot timed out")), timeoutMs);
       }),
