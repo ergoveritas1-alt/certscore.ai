@@ -436,7 +436,7 @@ export function DomainScanForm({
   }, [mode]);
 
   useEffect(() => {
-    if (variant !== "homepage-hero") {
+    if (variant !== "homepage-hero" && !compact) {
       return;
     }
 
@@ -489,7 +489,7 @@ export function DomainScanForm({
         clearTimeout(timer);
       }
     };
-  }, [variant]);
+  }, [compact, variant]);
 
   useEffect(() => {
     if (!canUseLocalExtensionScan && scanFrom === "local_extension") {
@@ -820,7 +820,7 @@ export function DomainScanForm({
               setDomain(event.target.value);
               resetValidationState();
             }}
-            placeholder={variant === "homepage-hero" ? heroPlaceholder : inputPlaceholder}
+            placeholder={variant === "homepage-hero" || compact ? heroPlaceholder : inputPlaceholder}
             type="text"
             value={domain}
             aria-label={inputLabel}
