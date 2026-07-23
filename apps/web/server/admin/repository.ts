@@ -886,6 +886,8 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
                   verified_public_surfaces_count,
                   site_language_primary,
                   scan_outcome,
+                  egress_id,
+                  egress_type,
                   tranco_rank,
                   scan_no_go_assessment,
                   visual_access_review,

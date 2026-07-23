@@ -1520,7 +1520,7 @@ const SCAN_NO_GO_SERVER_ERROR_PATTERN =
 const SCAN_NO_GO_MAINTENANCE_PATTERN =
   /(?:site|service|page) (?:is )?(?:temporarily )?(?:unavailable|under maintenance)|scheduled maintenance|we(?:'|’)ll be back soon|temporarily offline|page unavailable/i;
 const SCAN_NO_GO_PLACEHOLDER_PATTERN =
-  /\bexample domain\b|apache is functioning normally|website coming soon|site under construction|domain (?:is )?parked|domain(?:s)? (?:is |are )?(?:for sale|may be for sale)|welcome to nginx|default web site page|placeholder page|^[a-z0-9.-]+ is live!?$|this domain is an active and legitimate web address[^.]{0,160}(?:technical purposes|traffic routing|ad-tracking)/i;
+  /\bexample domain\b|apache is functioning normally|website coming soon|site under construction|domain (?:is )?parked|domain(?:s)? (?:is |are )?(?:for sale|may be for sale)|welcome to nginx|default web site page|placeholder page|^[a-z0-9.-]+ is live!?$|this domain is an active and legitimate web address[^.]{0,160}(?:technical purposes|traffic routing|ad-tracking)|(?:agency|company|business|brand|website) (?:business )?has been acquired by[\s\S]{0,180}(?:click|continue|visit)[\s\S]{0,100}(?:website|site)/i;
 const SCAN_NO_GO_APPLICATION_ERROR_PATTERN =
   /\bno company found\b|couldn['’]t find your company|missing (?:tenant|company|account) (?:slug|identifier)|unknown (?:tenant|company)|page is not available for this (?:tenant|company)/i;
 const SCAN_NO_GO_LOADING_PATTERN =
@@ -1771,7 +1771,7 @@ export function buildScanNoGoAssessment(input: {
     networkChallengeEvidence?.evidenceText ??
     "Potential security challenge evidence observed.";
   const securityChallengeRequestObserved = Boolean(networkChallengeEvidence);
-  const screenshot = input.screenshots
+  const screenshot = screenshotStructure?.screenshot ?? input.screenshots
     .filter((artifact) => artifact.consentStateAtTime === "pre_consent")
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs)[0] ?? null;
   const primaryReasonCode = settledPageState?.reasonCode ??
@@ -1825,7 +1825,7 @@ export function buildScanNoGoAssessment(input: {
     ? `Corroborated initial-load evidence showed a terminal no-go page instead of the normal public site: "${retainedEvidenceText}"`
     : `Potential no-go evidence was observed, but normal-site evidence required the scan to continue: "${retainedEvidenceText}"`;
   const visualAccessReview: VisualAccessReview = {
-    artifact_ref: screenshot ? "scan_core:screenshot_pre_consent" : null,
+    artifact_ref: screenshot ? `scan_core:${screenshot.artifactId}` : null,
     confidence,
     go_no_go: decision === "no_go" ? "NO_GO" : "GO",
     key_visual_evidence: [retainedEvidenceText],
@@ -1960,6 +1960,7 @@ function isIndependentlyUsablePolicySurface(
 type RetainedScreenshotStructure = {
   encodedBytesPerPixel: number;
   height: number;
+  screenshot: ScreenshotArtifact;
   visuallyBlank: boolean;
   visuallySubstantive: boolean;
   width: number;
@@ -1976,28 +1977,27 @@ function inspectRetainedScreenshotStructure(
     let descriptor: number | null = null;
     try {
       descriptor = openSync(screenshot.path, "r");
-      const header = Buffer.alloc(24);
+      const header = Buffer.alloc(65_536);
       const bytesRead = readSync(descriptor, header, 0, header.length, 0);
-      if (bytesRead < 24 || header.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") {
-        continue;
-      }
-      const width = header.readUInt32BE(16);
-      const height = header.readUInt32BE(20);
+      const dimensions = inspectScreenshotDimensions(header.subarray(0, bytesRead));
+      if (!dimensions) continue;
+      const { format, height, width } = dimensions;
       if (width <= 0 || height <= 0) continue;
       const byteLength = statSync(screenshot.path).size;
       const encodedBytesPerPixel = byteLength / (width * height);
       const candidate = {
         encodedBytesPerPixel,
         height,
+        screenshot,
         visuallyBlank:
           width >= 640 &&
           height >= 400 &&
-          encodedBytesPerPixel <= 0.02,
+          encodedBytesPerPixel <= (format === "jpeg" ? 0.012 : 0.02),
         visuallySubstantive:
           width >= 640 &&
           height >= 400 &&
-          byteLength >= 80_000 &&
-          encodedBytesPerPixel >= 0.06,
+          byteLength >= (format === "jpeg" ? 30_000 : 80_000) &&
+          encodedBytesPerPixel >= (format === "jpeg" ? 0.045 : 0.06),
         width,
       };
       if (!strongest || candidate.encodedBytesPerPixel > strongest.encodedBytesPerPixel) {
@@ -2010,6 +2010,47 @@ function inspectRetainedScreenshotStructure(
     }
   }
   return strongest;
+}
+
+function inspectScreenshotDimensions(
+  header: Buffer,
+): { format: "jpeg" | "png"; height: number; width: number } | null {
+  if (header.length >= 24 && header.subarray(0, 8).toString("hex") === "89504e470d0a1a0a") {
+    return {
+      format: "png",
+      height: header.readUInt32BE(20),
+      width: header.readUInt32BE(16),
+    };
+  }
+  if (header.length < 12 || header[0] !== 0xff || header[1] !== 0xd8) {
+    return null;
+  }
+  const startOfFrameMarkers = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+  let offset = 2;
+  while (offset + 9 < header.length) {
+    if (header[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    while (header[offset] === 0xff) offset += 1;
+    const marker = header[offset];
+    if (marker === undefined || marker === 0xd9 || marker === 0xda) break;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      offset += 1;
+      continue;
+    }
+    const segmentLength = header.readUInt16BE(offset + 1);
+    if (segmentLength < 2 || offset + 1 + segmentLength > header.length) break;
+    if (startOfFrameMarkers.has(marker)) {
+      return {
+        format: "jpeg",
+        height: header.readUInt16BE(offset + 4),
+        width: header.readUInt16BE(offset + 6),
+      };
+    }
+    offset += 1 + segmentLength;
+  }
+  return null;
 }
 
 function screenshotNoGoReviewRank(screenshot: ScreenshotArtifact) {

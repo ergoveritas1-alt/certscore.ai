@@ -132,6 +132,46 @@ test("a visually blank settled screenshot remains no-go even when policy surface
   }
 });
 
+test("a substantive supplemental JPEG prevents an early blank viewport from becoming blank-page no-go", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-supplemental-jpeg-"));
+  try {
+    const blankViewport = await retainedScreenshot(directory, { substantive: false });
+    blankViewport.artifactId = "screenshot_pre_consent";
+    const supplemental = await retainedJpegScreenshot(directory);
+    const assessment = buildScanNoGoAssessment(scanEvidence({
+      firstPartySuccesses: 4,
+      screenshots: [blankViewport, supplemental],
+      text: "Welcome to Example"
+    }));
+
+    assert.equal(assessment, null);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("an acquired-business landing page is a target-site placeholder, not a blank page", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-acquired-business-"));
+  try {
+    const assessment = buildScanNoGoAssessment(scanEvidence({
+      firstPartySuccesses: 4,
+      screenshots: [
+        await retainedScreenshot(directory, { substantive: false }),
+        await retainedJpegScreenshot(directory)
+      ],
+      text: "The R.O.EYE agency business has been acquired by Acceleration Partners. Please click here to continue to their website"
+    }));
+
+    assert.equal(assessment?.scanNoGoAssessment.decision, "no_go");
+    assert.equal(assessment?.primaryReasonCode, "parked_or_placeholder");
+    assert.equal(assessment?.visualAccessReview.artifact_ref, "scan_core:screenshot_pre_consent_full_page");
+    assert.equal(assessment?.scanNoGoAssessment.supportingSignals.visuallySubstantiveScreenshotObserved, true);
+    assert.equal(assessment?.scanNoGoAssessment.supportingSignals.visuallyBlankScreenshotObserved, false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("a partial runtime with no retained page evidence is no-go", () => {
   const assessment = buildScanNoGoAssessment({
     consentUiObservations: [],
@@ -338,6 +378,22 @@ async function retainedScreenshot(
     artifactId: "screenshot_pre_consent_no_go_confirmation",
     capturedAtMs: 2_000,
     captureMethod: "primary_viewport_fallback",
+    path: screenshotPath,
+    url: "https://example.test/",
+    pagePhase: "network_idle",
+    consentStateAtTime: "pre_consent",
+  };
+}
+
+async function retainedJpegScreenshot(directory: string): Promise<ScreenshotArtifact> {
+  const screenshotPath = path.join(directory, "supplemental-full-page.jpg");
+  const bytes = Buffer.alloc(60_000, 0x5a);
+  Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x02, 0xa3, 0x04, 0x01, 0x03, 0x01, 0x11, 0x00]).copy(bytes, 0);
+  await writeFile(screenshotPath, bytes);
+  return {
+    artifactId: "screenshot_pre_consent_full_page",
+    capturedAtMs: 4_000,
+    captureMethod: "primary_full_page",
     path: screenshotPath,
     url: "https://example.test/",
     pagePhase: "network_idle",

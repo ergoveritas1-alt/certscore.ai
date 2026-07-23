@@ -471,8 +471,8 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
           <p>Requested provider: {formatValue(requestedGeo.provider)}</p>
           <p>Requested country: {formatValue(requestedGeo.country)}</p>
           <p>Requested region: {formatValue(requestedGeo.region)}</p>
-          <p>Runtime egress ID: {formatValue(latestRuntimeContext?.egressId)}</p>
-          <p>Runtime provider: {formatValue(latestRuntimeContext?.egressProvider)}</p>
+          <p>Scanner egress ID: {formatValue(latestRuntimeContext?.egressId)}</p>
+          <p>Scanner egress provider: {formatValue(latestRuntimeContext?.egressProvider)}</p>
           <p>Proxy configured: {formatValue(latestRuntimeContext?.proxyConfigured)}</p>
           <p>Runtime event: {formatAdminDateTime(record.runtimeContextEvents[0]?.createdAt ?? null)}</p>
         </CardContent>

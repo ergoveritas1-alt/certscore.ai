@@ -97,6 +97,8 @@ export type AdminScanListItem = {
   scanFromLabel: string;
   scanFromValue: string;
   scanOutcome: string | null;
+  scannerEgressId: string | null;
+  scannerEgressProvider: string | null;
   trancoRank: number | null;
   source: string | null;
   status: string;
@@ -296,6 +298,8 @@ export async function listAdminScansPage(
       scanFromLabel: getScanFromDisplay(scan.scan_config_json).label,
       scanFromValue: getScanFromDisplay(scan.scan_config_json).value,
       scanOutcome: snapshot?.scan_outcome ?? null,
+      scannerEgressId: snapshot?.egress_id ?? null,
+      scannerEgressProvider: snapshot?.egress_type ?? null,
       trancoRank: snapshot?.tranco_rank ?? trancoRankFromScanConfig(scan.scan_config_json),
       source: typeof scan.scan_config_json?.source === "string" ? scan.scan_config_json.source : null,
       status: scan.status,
@@ -448,6 +452,8 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     scanFromLabel: scanFromDisplay.label,
     scanFromValue: scanFromDisplay.value,
     scanOutcome: linkedScan?.scanOutcome ?? null,
+    scannerEgressId: linkedScan?.scannerEgressId ?? null,
+    scannerEgressProvider: linkedScan?.scannerEgressProvider ?? null,
     trancoRank: linkedScan?.trancoRank ?? null,
     scanViewHref: getAdminAuthenticatedScanHref(linkedScanId),
     source: request.request_channel,

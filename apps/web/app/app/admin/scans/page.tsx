@@ -152,7 +152,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-1">
             <CardTitle>Scan Admin</CardTitle>
-            <p className="text-sm text-slate-500">Compact operational view of newest scan activity. Caller IP is the public address that reached CertScore, not the scanned site.</p>
+            <p className="text-sm text-slate-500">Requester IP identifies who reached CertScore. Scanner egress identifies the outbound runtime that reached the target site.</p>
           </div>
           <p className="text-sm text-slate-500">
             {scanMetrics.totalPhysicalScans} runs · {scanMetrics.totalScanRequests} requests
@@ -184,9 +184,9 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-          <table className="min-w-[1700px] table-fixed text-left text-xs">
+          <table className="min-w-[1860px] table-fixed text-left text-xs">
             <colgroup>
-              <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "170px" }} />
+              <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "190px" }} /><col style={{ width: "170px" }} />
               <col style={{ width: "150px" }} /><col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} />
               <col style={{ width: "210px" }} /><col style={{ width: "110px" }} /><col style={{ width: "80px" }} />
               <col style={{ width: "180px" }} /><col style={{ width: "65px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} />
@@ -196,7 +196,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
               <tr>
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" },
-                  { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
+                  { label: "Requester IP" }, { label: "Scanner egress" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
                   { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }
@@ -219,6 +219,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                   <tr key={scan.activityId} className="group h-[52px] hover:bg-slate-50/70">
                     <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50" title={status.label}><span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /><span className={status.label === "No-go" ? "text-rose-700" : "text-slate-700"}>{status.label}</span></span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={scan.requesterName ?? provenance.label}>{scan.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${requesterIpLabel(scan)} · ${scan.requesterIpSource.replaceAll("_", " ")}`}>{requesterIpLabel(scan)}</p></td>
+                    <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] text-slate-700" title={scan.scannerEgressId ?? "Scanner egress not recorded"}>{scan.scannerEgressId ?? "Not recorded"}</p><p className="mt-0.5 truncate text-[10px] text-slate-400" title={scan.scannerEgressProvider ?? undefined}>{scan.scannerEgressProvider ?? "Outbound runtime"}</p></td>
                     <td className="whitespace-nowrap px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}</td>
                     <td className="px-2.5 py-1.5">
                       <div className="flex min-w-0 items-center gap-1.5">

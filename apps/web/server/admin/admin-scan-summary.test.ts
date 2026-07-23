@@ -99,6 +99,18 @@ test("Admin Scans navigation is read-only and Score Shadow has no admin surface"
   assert.doesNotMatch(layoutSource, /scoring-shadow/);
 });
 
+test("Admin Scans separates requester identity from outbound scanner egress", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(pageSource, /\{ label: "Requester IP" \}, \{ label: "Scanner egress" \}/);
+  assert.match(pageSource, /Requester IP identifies who reached CertScore/);
+  assert.match(pageSource, /scan\.scannerEgressId/);
+  assert.match(listSource, /scannerEgressId: snapshot\?\.egress_id/);
+  assert.match(repositorySource, /scan_outcome,\s+egress_id,\s+egress_type,/);
+});
+
 test("Admin activity pagination supports a direct page jump", async () => {
   const controls = await readFile("apps/web/components/ui/pagination-controls.tsx", "utf8");
   const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");

@@ -225,6 +225,73 @@ test("does not evaluate windows below 25 completed scans", () => {
   assert.deepEqual(warnings, []);
 });
 
+test("keeps limitation-specific rates quiet until two windows or 50 scans confirm them", () => {
+  const input = {
+    batchId: "normal-scan-egress-a-window",
+    confirmationWindowCount: 1,
+    egress_id: "egress-a",
+    generatedAt,
+    metrics: {
+      completedCount: 25,
+      findingsPerCompleted: 2,
+      pagesScanned: 50,
+      scannerAccessLimitationRate: 0.4,
+      scannerCaptureLimitationRate: 0.2,
+      targetSiteStateRate: 0.4,
+      zeroFindingRate: 0.2
+    }
+  };
+
+  assert.equal(
+    evaluateLoadTestQualityWarnings(input).some((warning) => warning.code.endsWith("_limitation_rate") || warning.code === "target_site_state_rate"),
+    false
+  );
+});
+
+test("alerts separately on confirmed access, capture, and target-site limitation rates", () => {
+  const warnings = evaluateLoadTestQualityWarnings({
+    batchId: "normal-scan-egress-a-window",
+    confirmationWindowCount: 2,
+    egress_id: "egress-a",
+    generatedAt,
+    metrics: {
+      completedCount: 25,
+      findingsPerCompleted: 2,
+      pagesScanned: 50,
+      scannerAccessLimitationRate: 0.2,
+      scannerCaptureLimitationRate: 0.12,
+      targetSiteStateRate: 0.28,
+      zeroFindingRate: 0.2
+    }
+  });
+
+  assert.deepEqual(
+    warnings.map((warning) => warning.code).sort(),
+    ["scanner_access_limitation_rate", "scanner_capture_limitation_rate", "target_site_state_rate"]
+  );
+  assert.equal(warnings.find((warning) => warning.code === "scanner_capture_limitation_rate")?.severity, "critical");
+});
+
+test("50 scans confirm a limitation rate without a second named window", () => {
+  const warnings = evaluateLoadTestQualityWarnings({
+    batchId: "load-test-egress-a-50",
+    confirmationWindowCount: 1,
+    egress_id: "egress-a",
+    generatedAt,
+    metrics: {
+      completedCount: 50,
+      findingsPerCompleted: 2,
+      pagesScanned: 100,
+      scannerAccessLimitationRate: 0.16,
+      scannerCaptureLimitationRate: 0,
+      targetSiteStateRate: 0,
+      zeroFindingRate: 0.2
+    }
+  });
+
+  assert.equal(warnings.some((warning) => warning.code === "scanner_access_limitation_rate"), true);
+});
+
 test("warns when blocker labels spike versus baseline and findings drop", () => {
   const warnings = evaluateLoadTestQualityWarnings({
     baseline: {
