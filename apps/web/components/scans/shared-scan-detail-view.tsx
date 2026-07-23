@@ -885,20 +885,20 @@ function RuntimeInventoryTable({
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200">
             <div className="max-h-[340px] overflow-auto lg:h-full lg:max-h-none">
-            <table className="w-full min-w-[1310px] table-fixed border-collapse text-left text-[13px]">
+            <table className="w-full min-w-[1160px] table-fixed border-collapse text-left text-[13px]">
               <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>
-                  <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Type</th>
-                  <th className="w-[190px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Vendor</th>
-                  <th className="w-[130px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Purpose</th>
-                  <th className="w-[130px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Priority</th>
-                  <th className="w-[98px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">First seen</th>
-                  <th className="w-[150px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Cookie names</th>
-                  <th className="w-[210px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Domain</th>
-                  <th className="w-[150px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Server location</th>
-                  <th className="w-[96px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Confidence</th>
-                  <th className="w-[64px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Party</th>
-                  <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Category</th>
+                  <th className="w-[110px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Type</th>
+                  <th className="w-[150px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Vendor</th>
+                  <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Purpose</th>
+                  <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Priority</th>
+                  <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">First seen</th>
+                  <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Cookie names</th>
+                  <th className="w-[160px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Domain</th>
+                  <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Server location</th>
+                  <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Confidence</th>
+                  <th className="w-[50px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Party</th>
+                  <th className="w-[90px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Category</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
