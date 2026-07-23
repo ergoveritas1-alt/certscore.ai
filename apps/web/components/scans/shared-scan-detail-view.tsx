@@ -49,7 +49,6 @@ import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { ScanPageHeader } from "./scan-page-header";
-import { InventoryTableInteractions } from "./inventory-table-interactions";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { NoGoBrowserExtensionRecovery } from "./no-go-browser-extension-recovery";
 import {
@@ -938,7 +937,6 @@ function RuntimeInventoryTable({
               <InventoryPriorityDonut rows={groupedInventoryRows} />
             </div>
           </div>
-          <InventoryTableInteractions tableId="preconsent-inventory-table" totalRows={groupedInventoryRows.length} />
           <div className="space-y-2 md:hidden" aria-label="Cookies and trackers mobile list">
             {groupedInventoryRows.map((row, index) => (
               <article key={`mobile-${getInventoryGroupRowRenderKey(row, index)}`} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
