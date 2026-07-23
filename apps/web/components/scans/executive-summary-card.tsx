@@ -1403,7 +1403,7 @@ function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: strin
     <details className="group/scan-proof relative inline-block">
       <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 marker:hidden [&::-webkit-details-marker]:hidden">
         <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-300 text-[9px] font-bold text-slate-500">i</span>
-        <span>Observation details</span>
+        <span>Observed</span>
         <span className="text-slate-400 transition group-open/scan-proof:rotate-90"><CompactChevronRightIcon /></span>
       </summary>
       <div className="absolute left-0 top-full z-30 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
