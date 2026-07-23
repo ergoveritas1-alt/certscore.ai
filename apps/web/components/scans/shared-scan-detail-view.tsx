@@ -938,7 +938,7 @@ function RuntimeInventoryTable({
             </div>
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200">
-            <div className="max-h-[340px] overflow-auto lg:h-full lg:max-h-none">
+            <div className="max-h-[370px] overflow-auto">
             <table className="w-[1160px] min-w-[1160px] max-w-[1160px] table-fixed border-collapse text-left text-[13px]">
               <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>
