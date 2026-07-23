@@ -40,3 +40,30 @@ test("visual fallback retains bounded consent-surface evidence with the screensh
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test("full-page visual fallback preserves late consent surfaces after incomplete inspection", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-visual-fallback-full-page-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await capturePreConsentScreenshotOnlyFallback({
+      artifactWriter,
+      normalizedUrl: server.urlFor("consent-simple-accept-reject"),
+      scanStartedAtMs: Date.now(),
+      screenshotTimeoutMs: 5_000,
+      captureMode: "full_page",
+    });
+
+    assert.equal(result.visualCapture.status, "available");
+    assert.equal(result.visualCapture.captureMethod, "fresh_context_full_page");
+    assert.equal(result.screenshot.artifactId, "screenshot_pre_consent_full_page");
+    assert.equal(result.screenshot.captureMethod, "fresh_context_full_page");
+    assert.equal(result.screenshot.pagePhase, "network_idle");
+    assert.equal(result.consentUiObservation?.likelyPresent, true);
+    assert.equal(result.consentUiObservation?.acceptControlObserved, true);
+    assert.equal(result.consentUiObservation?.rejectControlObserved, true);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});

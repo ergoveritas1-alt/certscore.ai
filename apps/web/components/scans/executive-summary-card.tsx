@@ -1993,8 +1993,11 @@ function BenchmarkMetricCard(input: {
       ].filter(Boolean).join(" ")
       : input.note;
   const benchmarkTooltip = [benchmarkTooltipBase, metricNote].filter(Boolean).join(" ");
+  const isStorageMetric = input.label === "Non-essential storage" || input.label === "Pre-consent storage";
   const inlineMetricNote = actualValue === null
-    ? input.note ?? "Not measured because the relevant evidence coverage was incomplete."
+    ? isStorageMetric
+      ? null
+      : input.note ?? "Not measured because the relevant evidence coverage was incomplete."
     : actualValue === 0
       ? "Scanned, none detected."
       : null;

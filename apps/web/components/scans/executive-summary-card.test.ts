@@ -20,6 +20,8 @@ test("Executive storage metric uses the concise non-essential label", () => {
   assert.doesNotMatch(source, new RegExp(["Non-essential", "pre-consent storage"].join(" ")));
   assert.match(source, /Essential and unclassified storage are excluded from this metric/);
   assert.match(source, /beforeConsentStorageScope === "nonessential_only"/);
+  assert.match(source, /const isStorageMetric = input\.label === "Non-essential storage"/);
+  assert.match(source, /isStorageMetric\n      \? null/);
 });
 
 test("the headline score is precisely labeled and is not compared with an AI-estimated overall benchmark", () => {

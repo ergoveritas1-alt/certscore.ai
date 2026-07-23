@@ -371,9 +371,15 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       });
     }
   }
-  if (preConsentEnabled && shouldAttemptScreenshotOnlyFallback(preConsentResult, input.preConsentScreenshotMode)) {
+  const shouldCaptureIncompleteConsentVisualFallback = preConsentEnabled &&
+    shouldAttemptIncompleteConsentVisualFallback(preConsentResult, input.preConsentScreenshotMode);
+  const shouldCaptureScreenshotOnlyFallback = preConsentEnabled &&
+    shouldAttemptScreenshotOnlyFallback(preConsentResult, input.preConsentScreenshotMode);
+  if (shouldCaptureScreenshotOnlyFallback || shouldCaptureIncompleteConsentVisualFallback) {
     await phaseRecorder.record("pre_consent_screenshot_only_fallback", "started", {
-      reason: preConsentResult.visualCapture.failureReason ?? "missing_pre_consent_screenshot",
+      reason: shouldCaptureIncompleteConsentVisualFallback
+        ? "incomplete_consent_inspection"
+        : preConsentResult.visualCapture.failureReason ?? "missing_pre_consent_screenshot",
     });
     const screenshotFallback = await capturePreConsentScreenshotOnlyFallback({
       artifactWriter,
@@ -384,6 +390,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       scanStartedAtMs: startedAtMs,
       fallbackDeadlineMs: input.preConsentVisualFallbackDeadlineMs,
       screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
+      captureMode: shouldCaptureIncompleteConsentVisualFallback ? "full_page" : "viewport",
     }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       return {
@@ -397,7 +404,12 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       const fallbackDomSnapshots = screenshotFallback.domSnapshot ? [screenshotFallback.domSnapshot] : [];
       preConsentResult = {
         ...preConsentResult,
-        screenshots: [screenshotFallback.screenshot],
+        screenshots: [
+          screenshotFallback.screenshot,
+          ...preConsentResult.screenshots.filter((screenshot) =>
+            screenshot.artifactId !== screenshotFallback.screenshot.artifactId
+          ),
+        ],
         visualCapture: screenshotFallback.visualCapture,
         consentUiObservations: [
           ...preConsentResult.consentUiObservations,
@@ -411,9 +423,11 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
           ...preConsentResult.moduleRun,
           errors: [
             ...(preConsentResult.moduleRun.errors ?? []),
-            fallbackConsentUiObservations.length > 0
-              ? "Visual fallback retained a pre-consent screenshot and bounded consent-surface evidence after the primary runtime page/context closed."
-              : "Screenshot-only visual fallback retained a pre-consent screenshot after the primary runtime page/context closed.",
+            shouldCaptureIncompleteConsentVisualFallback
+              ? "Independent full-page visual fallback retained bounded consent-surface evidence after the primary consent inspection was incomplete."
+              : fallbackConsentUiObservations.length > 0
+                ? "Visual fallback retained a pre-consent screenshot and bounded consent-surface evidence after the primary runtime page/context closed."
+                : "Screenshot-only visual fallback retained a pre-consent screenshot after the primary runtime page/context closed.",
           ],
         },
       };
@@ -2198,6 +2212,27 @@ function shouldAttemptScreenshotOnlyFallback(
   return /page_closed|target page, context or browser has been closed|page\.goto|page\/context closed/i.test(errorText);
 }
 
+function shouldAttemptIncompleteConsentVisualFallback(
+  result: Awaited<ReturnType<typeof preConsentRuntimeScanner>>,
+  screenshotMode: RunScanInput["preConsentScreenshotMode"],
+) {
+  if (screenshotMode === "never" || result.screenshots.length === 0) {
+    return false;
+  }
+  const errorText = [
+    result.visualCapture.failureReason,
+    ...result.visualCapture.notes,
+    ...(result.moduleRun.errors ?? []),
+  ].join("\n");
+  const observationText = result.consentUiObservations
+    .flatMap((observation) => observation.basis)
+    .join("\n");
+  const inspectionIncomplete = /consent[_ -]ui[_ -]capture[_ -]timed[_ -]out|consent[_ -]surface[_ -]inspection|settled[_ -]inventory[_ -]missing|pre[_ -]consent[_ -]runtime[_ -]partial/i.test(
+    `${errorText}\n${observationText}`,
+  );
+  return inspectionIncomplete;
+}
+
 export async function capturePreConsentScreenshotOnlyFallback(input: {
   artifactWriter: ArtifactWriter;
   fallbackDeadlineMs?: number;
@@ -2206,6 +2241,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
   normalizedUrl: string;
   scanStartedAtMs: number;
   screenshotTimeoutMs?: number;
+  captureMode?: "viewport" | "full_page";
 }): Promise<{
   screenshot: ScreenshotArtifact;
   visualCapture: VisualCaptureSummary;
@@ -2269,8 +2305,15 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
       if (networkIdleTimeoutMs !== null) {
         await page.waitForLoadState("networkidle", { timeout: networkIdleTimeoutMs }).catch(() => undefined);
       }
+      const captureMode = input.captureMode ?? "viewport";
+      if (captureMode === "full_page") {
+        const passiveSettleTimeoutMs = optionalTimeoutForStep(3_000, 250);
+        if (passiveSettleTimeoutMs !== null) {
+          await page.waitForTimeout(passiveSettleTimeoutMs).catch(() => undefined);
+        }
+      }
       await page.screenshot({
-        fullPage: false,
+        fullPage: captureMode === "full_page",
         path: screenshotPath,
         timeout: timeoutForStep(Math.max(1_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 15_000))),
       });
@@ -2292,6 +2335,12 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
           page,
           input.scanStartedAtMs,
           consentUiTimeoutMs,
+          captureMode === "full_page"
+            ? {
+              allowFullDocumentCmpControls: true,
+              waitForControlsOnTextOnlySurface: true,
+            }
+            : undefined,
         ).catch(() => undefined);
       if (consentUiObservation && domPath) {
         consentUiObservation.evidenceRefs = [
@@ -2300,19 +2349,19 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
       }
       return {
         screenshot: {
-          artifactId: "screenshot_pre_consent",
+          artifactId: captureMode === "full_page" ? "screenshot_pre_consent_full_page" : "screenshot_pre_consent",
           capturedAtMs: Date.now() - input.scanStartedAtMs,
-          captureMethod: "independent_visual_fallback_viewport",
+          captureMethod: captureMode === "full_page" ? "fresh_context_full_page" : "independent_visual_fallback_viewport",
           path: screenshotPath,
           url: page.url(),
-          pagePhase: "dom_content_loaded",
+          pagePhase: captureMode === "full_page" ? "network_idle" : "dom_content_loaded",
           consentStateAtTime: "pre_consent",
         },
         visualCapture: {
           status: "available",
-          captureMethod: "independent_visual_fallback_viewport",
+          captureMethod: captureMode === "full_page" ? "fresh_context_full_page" : "independent_visual_fallback_viewport",
           artifactRefs: [{
-            artifactId: "screenshot_pre_consent",
+            artifactId: captureMode === "full_page" ? "screenshot_pre_consent_full_page" : "screenshot_pre_consent",
             artifactType: "screenshot",
             path: screenshotPath,
             label: "Pre-consent screenshot",
@@ -2324,9 +2373,11 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
             ...(navigationRecovered
               ? [`Independent visual fallback recovered through bounded navigation alternative ${page.url()}.`]
               : []),
-            consentUiObservation
-              ? "Screenshot and bounded consent-surface evidence retained by an independent visual fallback after the primary runtime page/context closed."
-              : "Screenshot retained by an independent screenshot-only fallback after the primary runtime page/context closed.",
+            captureMode === "full_page"
+              ? "Full-page screenshot and bounded consent-surface evidence retained by an independent visual fallback after incomplete primary consent inspection."
+              : consentUiObservation
+                ? "Screenshot and bounded consent-surface evidence retained by an independent visual fallback after the primary runtime page/context closed."
+                : "Screenshot retained by an independent screenshot-only fallback after the primary runtime page/context closed.",
           ],
         },
         consentUiObservation,
