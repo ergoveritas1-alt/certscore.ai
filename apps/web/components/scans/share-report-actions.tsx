@@ -25,24 +25,24 @@ export function buildVisualEvidenceRetryHref(href: string, attempt: number) {
 
 function actionClassName(tone: "primary" | "secondary" = "secondary") {
   const base =
-    "inline-flex min-h-9 items-center justify-center rounded-full px-3 text-xs font-semibold shadow-sm transition";
+    "scan-report-button inline-flex min-h-9 items-center justify-center rounded-full px-3 text-xs font-semibold";
 
   if (tone === "primary") {
-    return `${base} border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white hover:brightness-[1.04]`;
+    return `${base} scan-report-button-primary text-white`;
   }
 
-  return `${base} border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950`;
+  return `${base} text-slate-700 hover:text-slate-950`;
 }
 
 function iconActionClassName(tone: "primary" | "secondary" = "secondary") {
   const base =
-    "group relative inline-flex h-10 w-10 items-center justify-center rounded-full text-sm shadow-sm transition focus:outline-none focus:ring-2 focus:ring-sky-200 focus:ring-offset-2";
+    "scan-report-button group relative inline-flex h-10 w-10 items-center justify-center rounded-full text-sm";
 
   if (tone === "primary") {
-    return `${base} border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white hover:brightness-[1.04]`;
+    return `${base} scan-report-button-primary text-white`;
   }
 
-  return `${base} border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950`;
+  return `${base} text-slate-700 hover:text-slate-950`;
 }
 
 function IconTooltip({ label }: { label: string }) {
@@ -400,7 +400,7 @@ export function ShareReportActions({
                   <button
                     type="button"
                     aria-label="Zoom out captured image"
-                    className="inline-flex h-10 w-10 items-center justify-center text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
+                    className="scan-report-button inline-flex h-10 w-10 items-center justify-center text-slate-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
                     disabled={visualEvidenceZoom <= 0.5}
                     onClick={() => setVisualEvidenceZoom((value) => Math.max(0.5, Number((value - 0.25).toFixed(2))))}
                     title="Zoom out"
@@ -410,7 +410,7 @@ export function ShareReportActions({
                   <button
                     type="button"
                     aria-label="Reset captured image zoom"
-                    className="h-10 min-w-14 border-x border-slate-200 px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
+                    className="scan-report-button inline-flex h-10 min-w-14 items-center justify-center border-x-0 px-2 text-xs font-semibold text-slate-600 hover:text-slate-950"
                     onClick={() => setVisualEvidenceZoom(1)}
                     title="Reset zoom"
                   >
@@ -419,7 +419,7 @@ export function ShareReportActions({
                   <button
                     type="button"
                     aria-label="Zoom in captured image"
-                    className="inline-flex h-10 w-10 items-center justify-center text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
+                    className="scan-report-button inline-flex h-10 w-10 items-center justify-center text-slate-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
                     disabled={visualEvidenceZoom >= 3}
                     onClick={() => setVisualEvidenceZoom((value) => Math.min(3, Number((value + 0.25).toFixed(2))))}
                     title="Zoom in"
@@ -430,7 +430,7 @@ export function ShareReportActions({
                 <button
                   type="button"
                   aria-label="Close captured image"
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  className="scan-report-button inline-flex h-11 w-11 items-center justify-center rounded-xl text-slate-500 hover:text-slate-950"
                   onClick={closeVisualEvidenceDialog}
                 >
                   <CloseIcon />

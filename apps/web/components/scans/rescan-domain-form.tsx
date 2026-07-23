@@ -54,9 +54,9 @@ export function RescanDomainForm({ allowRestrictedScanOptions = false, cooldownM
           className={
             showLabel
               ? compact
-                ? "inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 shadow-sm hover:border-slate-400 hover:text-slate-950"
-                : "inline-flex h-11 items-center gap-2 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
-              : "h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
+                ? "scan-report-button inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 shadow-sm hover:border-slate-400 hover:text-slate-950"
+                : "scan-report-button inline-flex h-11 items-center gap-2 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
+              : "scan-report-button h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
           }
           disabled={isDisabled}
           size="sm"

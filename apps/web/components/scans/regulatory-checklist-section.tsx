@@ -80,7 +80,7 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
                     : "Expand all evidence packets and correction steps"}
                   aria-pressed={expandAllAdvancedEvidence}
                   className={cn(
-                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition",
+                    "scan-report-button inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
                     expandAllAdvancedEvidence
                       ? "border-sky-300 bg-sky-50 text-sky-700 shadow-sm"
                       : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800"
@@ -121,9 +121,9 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
                     type="button"
                     aria-pressed={selected}
                     className={cn(
-                      "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                      "scan-report-button rounded-full px-3 py-1.5 text-xs font-semibold",
                       selected
-                        ? "border-slate-950 bg-slate-950 text-white shadow-[0_12px_24px_-14px_rgba(15,23,42,0.9)] ring-1 ring-slate-950"
+                        ? "scan-report-button-dark border-slate-950 bg-slate-950 text-white shadow-[0_12px_24px_-14px_rgba(15,23,42,0.9)] ring-1 ring-slate-950"
                         : "border-transparent text-slate-500 hover:bg-white hover:text-slate-900"
                     )}
                     onClick={() => setActiveTabId(tab.id)}
@@ -163,8 +163,8 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
                                 key={tab.id}
                                 type="button"
                                 className={cn(
-                                  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold transition",
-                                  selected ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+                                  "scan-report-button flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold",
+                                  selected ? "scan-report-button-dark bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
                                 )}
                                 onClick={(event) => {
                                   setActiveTabId(tab.id);

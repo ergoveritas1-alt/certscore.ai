@@ -2625,7 +2625,7 @@ function RowToolButton({
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "group/tool inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition",
+        "scan-report-button group/tool inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
         active
           ? icon === "evidence"
             ? "border-sky-300 bg-sky-50 text-sky-700 shadow-sm"
@@ -2736,7 +2736,7 @@ function PolicyExcerptModal({
           </div>
           <button
             aria-label="Close policy excerpt"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+            className="scan-report-button inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-500 hover:text-slate-900"
             type="button"
             onClick={onClose}
           >

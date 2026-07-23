@@ -50,7 +50,7 @@ export function ApplicabilityAssumptionsNote() {
       <button
         type="button"
         aria-label="Privacy-law applicability context"
-        className="inline-flex h-6 min-w-7 items-center justify-center rounded-full border border-slate-200 bg-white/85 px-1.5 text-slate-400 shadow-sm transition hover:border-slate-300 hover:bg-white hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        className="scan-report-button inline-flex h-6 min-w-7 items-center justify-center rounded-full px-1.5 text-slate-400 hover:text-slate-600"
       >
         <ApplicabilityLawIcon />
       </button>
@@ -71,7 +71,7 @@ export function ApplicabilityChip(input: {
       <button
         type="button"
         aria-label={label}
-        className="inline-flex h-[22px] min-w-7 items-center justify-center rounded-full border border-slate-200 bg-white px-1.5 text-slate-400 shadow-sm transition hover:border-slate-300 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        className="scan-report-button inline-flex h-[22px] min-w-7 items-center justify-center rounded-full px-1.5 text-slate-400 hover:text-slate-600"
       >
         <ApplicabilityLawIcon />
       </button>
