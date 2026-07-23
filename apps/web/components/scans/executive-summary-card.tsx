@@ -1383,7 +1383,7 @@ function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotic
   );
 }
 
-function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: string | null; durationMs?: number | null }) {
+function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: string | null; durationMs?: number | null; coverageLimitation?: string | null }) {
   const durationLabel = typeof input.durationMs === "number" && Number.isFinite(input.durationMs)
     ? `${(input.durationMs / 1000).toFixed(1)}s observed`
     : "Duration unavailable";
@@ -1395,7 +1395,10 @@ function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: strin
     ["Consent inspection", input.proof.consentInspection.replaceAll("_", " ")],
     ["Runtime coverage", input.proof.runtimeCoverage.replaceAll("_", " ")],
     ["Network activity", `${input.proof.networkActivity.status === "observed" ? "Observed" : "Not verified"} · ${input.proof.networkActivity.count ?? "—"} third-party requests`]
-  ] as const;
+  ] as Array<readonly [string, string]>;
+  if (input.coverageLimitation) {
+    rows.push(["Coverage limitation", input.coverageLimitation]);
+  }
   return (
     <details className="group/scan-proof rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-slate-700 marker:hidden [&::-webkit-details-marker]:hidden">
@@ -2244,6 +2247,7 @@ function ExecutiveSignalSnapshotPane(input: {
   runtimeMetricsReliable?: boolean;
   scanProof?: ExecutiveScanProof | null;
   scanProofDurationMs?: number | null;
+  coverageLimitation?: string | null;
   requestedHost?: string | null;
 }) {
   const runtimeMetricsReliable = input.runtimeMetricsReliable !== false;
@@ -2270,7 +2274,7 @@ function ExecutiveSignalSnapshotPane(input: {
       <div className="space-y-1">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
       </div>
-      {input.scanProof ? <ScanProofPanel durationMs={input.scanProofDurationMs} proof={input.scanProof} requestedHost={input.requestedHost ?? null} /> : null}
+      {input.scanProof ? <ScanProofPanel coverageLimitation={input.coverageLimitation} durationMs={input.scanProofDurationMs} proof={input.scanProof} requestedHost={input.requestedHost ?? null} /> : null}
       <CompactSnapshotPanel title="Consent platform">
         <div className="flex items-center gap-2">
           {runtimeMetricsReliable && input.cmpStatusAvailable ? (
@@ -4422,6 +4426,7 @@ export function ExecutiveSummaryCard(input: {
   const executiveHeadline = input.accessLimitationNotice
     ? input.accessLimitationNotice.message
     : formatTopFindingHeadline(executiveHeadlineFindings);
+  const coverageLimitation = input.accessLimitationNotice?.message ?? null;
   const narrativePresentation = deriveExecutiveNarrativePresentation({
     accessLimitationNotice: input.accessLimitationNotice,
     executiveHeadline,
@@ -4682,6 +4687,7 @@ export function ExecutiveSummaryCard(input: {
                 runtimeMetricsReliable={runtimeMetricsReliable}
                 scanProof={input.scanProof}
                 scanProofDurationMs={input.scanProofDurationMs}
+                coverageLimitation={coverageLimitation}
                 requestedHost={input.requestedHost}
               />
             )}

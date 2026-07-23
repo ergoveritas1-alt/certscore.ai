@@ -7334,13 +7334,6 @@ export async function SharedScanDetailView({
             ) : null}
           </>
         }
-        statusLabel={isIncompleteScanCoverage ? "Limited" : undefined}
-        statusTone={isIncompleteScanCoverage ? "info" : undefined}
-        leadingBadges={showRegulatoryChecklistSection ? (
-          <span className="inline-flex shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">
-            Beta
-          </span>
-        ) : null}
         scanFromLabel={scanRecord.scan.scanFromLabel}
         scanFromValue={scanRecord.scan.scanFromValue}
         status={scanRecord.scan.status}
