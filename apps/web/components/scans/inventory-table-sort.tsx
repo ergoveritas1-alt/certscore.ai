@@ -22,7 +22,7 @@ export function InventorySortButton({ tableId, sortKey, label }: { tableId: stri
   return (
     <button
       type="button"
-      className="group/sort inline-flex items-center gap-1 rounded px-0.5 py-0.5 text-left transition-colors hover:bg-slate-200/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+      className="group/sort inline-flex items-center gap-1 rounded px-0.5 py-0.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] leading-none text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400 focus-visible:ring-offset-0"
       aria-label={`Sort by ${label}`}
       aria-pressed={direction !== null}
       onClick={() => {
@@ -31,7 +31,7 @@ export function InventorySortButton({ tableId, sortKey, label }: { tableId: stri
       }}
     >
       <span>{label}</span>
-      <span className={`inline-flex flex-col text-[9px] leading-[7px] ${direction ? "text-sky-600" : "text-slate-400 group-hover/sort:text-slate-600"}`} aria-hidden="true">
+      <span className={`inline-flex flex-col text-[8px] leading-[6px] ${direction ? "text-sky-600" : "text-slate-400 group-hover/sort:text-slate-600"}`} aria-hidden="true">
         <span className={direction === "asc" ? "font-bold" : "opacity-60"}>▲</span>
         <span className={direction === "desc" ? "font-bold" : "opacity-60"}>▼</span>
       </span>
