@@ -621,10 +621,10 @@ function formatInventoryCellForCopy(value: string | number | null | undefined) {
 
 function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; rows: InventoryGroupRow[] }) {
   const segments = [
-    { color: "#fb7185", count: rows.filter((row) => row.priority === "high").length, label: "High" },
-    { color: "#fbbf24", count: rows.filter((row) => row.priority === "review_needed").length, label: "Review" },
-    { color: "#38bdf8", count: rows.filter((row) => row.priority === "medium").length, label: "Medium" },
-    { color: "#94a3b8", count: rows.filter((row) => row.priority === "contextual").length, label: "Contextual" }
+    { color: "#ef4444", count: rows.filter((row) => row.priority === "high").length, label: "High" },
+    { color: "#f59e0b", count: rows.filter((row) => row.priority === "review_needed").length, label: "Review" },
+    { color: "#3b82f6", count: rows.filter((row) => row.priority === "medium").length, label: "Medium" },
+    { color: "#93c5fd", count: rows.filter((row) => row.priority === "contextual").length, label: "Contextual" }
   ];
   const total = Math.max(rows.length, 1);
   let cursor = 0;
@@ -672,12 +672,17 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
   const topPurposes = purposeCounts.slice(0, purposeLimit);
   const hiddenPurposeCount = Math.max(0, purposeCounts.length - topPurposes.length);
   const hiddenPurposes = purposeCounts.slice(topPurposes.length);
-  const colors = ["#0ea5e9", "#8b5cf6", "#14b8a6", "#f59e0b"];
+  const getPurposeColor = (purpose: string) => {
+    const normalized = purpose.toLowerCase();
+    if (/advertis|marketing|retarget|tracking/.test(normalized)) return "#ef4444";
+    if (/essential|functional|necessary|security/.test(normalized)) return "#3b82f6";
+    return "#f59e0b";
+  };
   const visibleTotal = topPurposes.reduce((total, [, count]) => total + count, 0);
   const otherTotal = Math.max(0, rows.length - visibleTotal);
   const chartSegments = [
-    ...topPurposes.map(([purpose, count], index) => ({ color: colors[index] ?? "#64748b", count, label: purpose })),
-    ...(otherTotal > 0 ? [{ color: "#cbd5e1", count: otherTotal, label: "Other" }] : [])
+    ...topPurposes.map(([purpose, count]) => ({ color: getPurposeColor(purpose), count, label: purpose })),
+    ...(otherTotal > 0 ? [{ color: "#f59e0b", count: otherTotal, label: "Other" }] : [])
   ];
   let cursor = 0;
   const gradientStops = chartSegments.flatMap((segment) => {
@@ -854,7 +859,7 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
   const necessaryShare = totalClassified > 0 ? (necessaryCount / totalClassified) * 100 : 0;
   const nonEssentialShare = totalClassified > 0 ? (nonEssentialCount / totalClassified) * 100 : 0;
   const donut = totalClassified > 0
-    ? `conic-gradient(#10b981 0 ${necessaryShare}%, #f59e0b ${necessaryShare}% ${necessaryShare + nonEssentialShare}%, #94a3b8 ${necessaryShare + nonEssentialShare}% 100%)`
+    ? `conic-gradient(#3b82f6 0 ${necessaryShare}%, #ef4444 ${necessaryShare}% ${necessaryShare + nonEssentialShare}%, #f59e0b ${necessaryShare + nonEssentialShare}% 100%)`
     : "conic-gradient(#cbd5e1 0 100%)";
 
   return (
@@ -868,17 +873,17 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
         </div>
         <div className="grid min-w-0 flex-1 gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+            <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Necessary</span>
             <span className="text-[11px] font-semibold text-slate-700">{necessaryCount}</span>
           </div>
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+            <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Non-essential</span>
             <span className="text-[11px] font-semibold text-slate-700">{nonEssentialCount}</span>
           </div>
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-slate-400" />
+            <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Review</span>
             <span className="text-[11px] font-semibold text-slate-700">{reviewCount}</span>
           </div>
