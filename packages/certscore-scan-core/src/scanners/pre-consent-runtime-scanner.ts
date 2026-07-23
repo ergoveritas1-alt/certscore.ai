@@ -3644,6 +3644,25 @@ export async function detectConsentUi(
   const cheapTextObservation = rapidObservation.controls.length === 0
     ? await readCheapConsentTextObservation(page, scanStartedAtMs)
     : undefined;
+  if (
+    options.returnAfterRapidAndCheapSnapshot === true &&
+    !rapidInventoryHasPotentialToggle &&
+    rapidObservation.controls.length > 0
+  ) {
+    const rapidAndCheapObservation = cheapTextObservation
+      ? mergeConsentUiObservations(
+          cheapTextObservation,
+          rapidObservation,
+          "inventory:rapid_first_layer_snapshot",
+        )
+      : rapidObservation;
+    return annotateConsentInventoryTimingMarkers(
+      rapidAndCheapObservation,
+      rapidAndCheapObservation.controls.length > 0
+        ? ["rapid_cheap_snapshot", "early_exit_controls_found"]
+        : ["rapid_cheap_snapshot"],
+    );
+  }
   const immediateObservation = rapidObservation.controls.length > 0 || cheapTextObservation?.likelyPresent
     ? await readConsentUiObservation(page, scanStartedAtMs, {
         allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
@@ -3664,14 +3683,6 @@ export async function detectConsentUi(
   const requestedControlSetRetained = options.waitForCompleteChoiceControls
     ? hasSufficientFirstLayerConsentControls(mergedImmediateObservation)
     : !options.waitForActionableChoiceControls || hasActionableConsentChoiceControl(mergedImmediateObservation);
-  if (options.returnAfterRapidAndCheapSnapshot === true) {
-    return annotateConsentInventoryTimingMarkers(
-      mergedImmediateObservation,
-      mergedImmediateObservation.controls.length > 0
-        ? ["rapid_cheap_snapshot", "early_exit_controls_found"]
-        : ["rapid_cheap_snapshot"],
-    );
-  }
   if (
     mergedImmediateObservation.controls.length > 0 && (
       requestedControlSetRetained
@@ -4158,16 +4169,29 @@ async function readRapidFirstLayerConsentUiObservation(
   }).catch((): RapidConsentInventory => ({ controls: [], contextText: "", hasPotentialToggle: false }))
     : { controls: [], contextText: "", hasPotentialToggle: false };
 
-  const controls = snapshot.controls.flatMap((control) => {
-    if (hasMultipleCanonicalConsentIntents(control.label)) return [];
-    const classification = classifyConsentControlLabel({
+  const classifiedControls = snapshot.controls.map((control) => ({
+    control,
+    classification: classifyConsentControlLabel({
       label: control.label,
       contextText: snapshot.contextText,
       hasConsentContext: true,
-    });
+    }),
+  }));
+  const hasCanonicalAcceptRejectCluster =
+    classifiedControls.some(({ classification }) => classification.intent === "accept") &&
+    classifiedControls.some(({ classification }) => classification.intent === "reject");
+  const controls = classifiedControls.flatMap(({ control, classification }) => {
+    if (hasMultipleCanonicalConsentIntents(control.label)) return [];
     const actionType = consentUiControlActionTypeFromClassification(classification);
     if (!actionType || actionType === "other") return [];
-    if (classification.matchStrength === "contextual" && !control.cmpScoped) return [];
+    if (
+      classification.matchStrength === "contextual" &&
+      !control.cmpScoped &&
+      !(
+        hasCanonicalAcceptRejectCluster &&
+        (actionType === "manage_preferences" || actionType === "save_preferences")
+      )
+    ) return [];
     const { cmpScoped: _cmpScoped, ...retainedControl } = control;
     return [{
       ...retainedControl,

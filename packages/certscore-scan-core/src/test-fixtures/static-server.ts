@@ -1447,6 +1447,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
         <p>Cookie-Einstellungen. Wir verwenden Cookies, um deine Erfahrung zu verbessern. Durch Klicken auf Akzeptieren stimmst du unserem Tracking zu.</p>
         <button id="reject-cookies" type="button">Ablehnen</button>
         <button id="accept-cookies" type="button">Akzeptieren</button>
+        <a id="personalize-cookies" href="#cookie-preferences-panel">Personalisieren</a>
       </section>
     `;
   }

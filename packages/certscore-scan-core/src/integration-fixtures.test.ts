@@ -1213,8 +1213,8 @@ test("pre-consent runtime scanner inventories compact German accept and reject c
 
     assert.equal(observation?.acceptControlObserved, true);
     assert.equal(observation?.rejectControlObserved, true);
-    assert.equal(observation?.managePreferencesControlObserved, false);
-    assert.deepEqual(observation?.visibleChoiceLabels, ["Ablehnen", "Akzeptieren"]);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.deepEqual(observation?.visibleChoiceLabels, ["Ablehnen", "Akzeptieren", "Personalisieren"]);
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });

@@ -1688,7 +1688,7 @@ export function buildScanNoGoAssessment(input: {
     visuallyBlankSuccessfulPage ? "visually_blank_screenshot_observed" : null,
   ].filter((value): value is string => Boolean(value)));
   const strongPositiveSiteEvidence = positiveSiteSignals.some((signal) =>
-    signal !== "main_document_success"
+    signal !== "main_document_success" && signal !== "visually_blank_screenshot_observed"
   );
   const networkChallengeEvidence = detectScanNoGoNetworkChallengeEvidence({
     networkEvents: input.networkEvents,
@@ -1698,6 +1698,8 @@ export function buildScanNoGoAssessment(input: {
   const challengePageState: ClassifiedNoGoPageState | null =
     networkChallengeEvidence &&
     (textPageState?.reasonCode === "captcha_or_challenge" ||
+      (textPageState?.reasonCode === "access_denied_or_forbidden_page" &&
+        !strongPositiveSiteEvidence) ||
       (httpPageState?.reasonCode === "access_denied_or_forbidden_page" &&
         !strongPositiveSiteEvidence))
       ? {

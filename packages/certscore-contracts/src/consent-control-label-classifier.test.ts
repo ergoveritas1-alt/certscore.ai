@@ -64,6 +64,10 @@ test("classifies German Microsoft-style consent controls", () => {
   assert.equal(classifyConsentControlLabel({ label: "Annehmen" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Ablehnen" }).intent, "reject");
   assert.equal(classifyConsentControlLabel({ label: "Cookies verwalten" }).intent, "options");
+  assert.equal(classifyConsentControlLabel({
+    label: "Personalisieren",
+    contextText: "Cookies und Werbeoptionen",
+  }).intent, "options");
 });
 
 test("classifies British spelling choice controls as options", () => {
