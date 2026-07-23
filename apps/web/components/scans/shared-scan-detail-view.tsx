@@ -571,13 +571,15 @@ function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
     <details className="group/cookie-detail relative">
       <summary
         aria-label={`Show retained vendor evidence for ${row.vendor}`}
-        className="inline-flex cursor-pointer list-none items-center gap-0.5 rounded-md border border-slate-200 bg-white px-1 py-0.5 text-sky-700 hover:border-slate-300 marker:hidden [&::-webkit-details-marker]:hidden"
+        className="inline-flex h-8 min-w-[3.5rem] cursor-pointer list-none items-center justify-center rounded-lg border border-sky-300 bg-gradient-to-b from-white to-sky-50 px-1.5 text-sky-700 shadow-[0_2px_0_0_rgb(186_230_253)] transition-all duration-150 hover:-translate-y-px hover:border-sky-500 hover:from-sky-50 hover:to-sky-100 hover:shadow-[0_3px_0_0_rgb(125_211_252)] active:translate-y-px active:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 group-open/cookie-detail:translate-y-px group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-sky-100 group-open/cookie-detail:shadow-none marker:hidden [&::-webkit-details-marker]:hidden"
         title="Show retained requests, cookies, and storage metadata"
       >
         <InventoryTypeIcon type={row.cookieDetails.length > 0 ? "cookie" : row.type} />
-        <svg aria-hidden="true" className="h-2.5 w-2.5 transition-transform group-open/cookie-detail:rotate-180" fill="none" viewBox="0 0 12 12">
-          <path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-        </svg>
+        <span className="ml-1 inline-flex h-5 w-4 items-center justify-end border-l border-sky-200 pl-1 group-hover/cookie-detail:border-sky-300 group-open/cookie-detail:border-sky-400">
+          <svg aria-hidden="true" className="h-3 w-3 transition-transform group-open/cookie-detail:rotate-180" fill="none" viewBox="0 0 12 12">
+            <path d="m2.5 4 3.5 3.5L9.5 4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+          </svg>
+        </span>
       </summary>
       <div className="mt-2 w-[34rem] max-w-[80vw] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Retained vendor evidence</p>
@@ -783,7 +785,7 @@ function PreConsentDataFlowSummary({ rows }: { rows: InventoryGroupRow[] }) {
   const adequacyCountry = new Set(flows.filter((flow) => flow.transferMechanism.mechanism === "adequacy_decision").map((flow) => flow.controllingEntity.legalEntity ?? flow.endpoint)).size;
   return (
     <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-      Pre-consent data flows: {flows.length} endpoint{flows.length === 1 ? "" : "s"} · {uniqueEntities.size} identified controlling entit{uniqueEntities.size === 1 ? "y" : "ies"} · {usControlled} US-controlled · {euControlled} EU-controlled · {adequacyCountry} adequacy-country. Server countries shown below are CDN-edge observations, not asserted data-storage locations.
+      Pre-consent data flows: {flows.length} endpoint{flows.length === 1 ? "" : "s"} · {uniqueEntities.size} identified controlling entit{uniqueEntities.size === 1 ? "y" : "ies"} · {usControlled} US-controlled · {euControlled} EU-controlled · {adequacyCountry} adequacy-country. Server countries shown in table are CDN-edge observations, not asserted data-storage locations.
     </p>
   );
 }
