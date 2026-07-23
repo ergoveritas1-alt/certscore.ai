@@ -641,7 +641,7 @@ function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; 
     <div className={`flex gap-3 ${compact ? "items-center" : "mt-3 items-start"}`}>
       <div
         aria-label="Priority distribution"
-        className={`${compact ? "h-14 w-14" : "h-20 w-20"} grid shrink-0 place-items-center rounded-full`}
+        className={`${compact ? "h-14 w-14" : "h-20 w-20"} grid shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50`}
         style={{ background: gradient }}
       >
         <div className={`${compact ? "h-8 w-8 text-[10px]" : "h-11 w-11 text-[11px]"} grid place-items-center rounded-full bg-white font-semibold text-slate-600 shadow-sm`}>
@@ -708,7 +708,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
       <div className="mt-3 flex items-start gap-3">
         <div
           aria-label="Purpose distribution"
-          className="grid h-20 w-20 shrink-0 place-items-center rounded-full"
+          className="grid h-20 w-20 shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50"
           style={{ background: gradient }}
         >
           <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-[11px] font-semibold text-slate-600 shadow-sm">
@@ -876,7 +876,7 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
     <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3" aria-label="Consent evidence segmentation">
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Evidence mix</p>
       <div className="mt-3 flex items-start gap-3">
-        <div className="relative grid h-20 w-20 shrink-0 place-items-center rounded-full" style={{ background: donut }}>
+        <div className="relative grid h-20 w-20 shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50" style={{ background: donut }}>
           <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-center text-[11px] font-semibold text-slate-600 shadow-sm">
             <span className="text-base leading-none text-slate-900">{beforeConsentCount}</span>
           </div>
