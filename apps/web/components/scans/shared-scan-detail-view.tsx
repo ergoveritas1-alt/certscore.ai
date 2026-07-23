@@ -521,17 +521,17 @@ function InventoryConfidenceCell({ confidence }: { confidence: InventoryConfiden
   );
 }
 
-function InventoryTypeIcon({ type }: { type: "cookie" | "tracker" }) {
+function InventoryTypeIcon({ emphasized = false, type }: { emphasized?: boolean; type: "cookie" | "tracker" }) {
   if (type === "cookie") {
     return (
       <span
         aria-label="Cookie"
-        className="inline-flex h-5 w-5 items-center justify-center text-sky-700"
+        className={`inline-flex items-center justify-center text-sky-700 ${emphasized ? "h-6 w-6 rounded-md bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200" : "h-5 w-5"}`}
         title="Cookie"
       >
-        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-          <path d="M20 13.2A8 8 0 1 1 10.8 4a3.1 3.1 0 0 0 3 4 3.2 3.2 0 0 0 4.1 4.1c.6.2 1.2.5 2.1 1.1Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-          <path d="M8.5 9.5h.01M7.5 15h.01M12.5 14h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
+        <svg aria-hidden="true" className={emphasized ? "h-4 w-4" : "h-3.5 w-3.5"} fill="none" viewBox="0 0 24 24">
+          <path d="M20 13.2A8 8 0 1 1 10.8 4a3.1 3.1 0 0 0 3 4 3.2 3.2 0 0 0 4.1 4.1c.6.2 1.2.5 2.1 1.1Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={emphasized ? 2.2 : 1.8} />
+          <path d="M8.5 9.5h.01M7.5 15h.01M12.5 14h.01" stroke="currentColor" strokeLinecap="round" strokeWidth={emphasized ? 3.1 : 2.6} />
         </svg>
       </span>
     );
@@ -540,14 +540,14 @@ function InventoryTypeIcon({ type }: { type: "cookie" | "tracker" }) {
   return (
     <span
       aria-label="Tracker"
-      className="inline-flex h-5 w-5 items-center justify-center text-violet-700"
+      className={`inline-flex items-center justify-center text-violet-700 ${emphasized ? "h-6 w-6 rounded-md bg-violet-100 text-violet-800 ring-1 ring-inset ring-violet-200" : "h-5 w-5"}`}
       title="Tracker"
     >
-      <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-        <path d="M17.6 7.3A7 7 0 0 0 5.3 10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
-        <path d="M15.2 7.4h2.7V4.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
-        <path d="M6.4 16.7A7 7 0 0 0 18.7 14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
-        <path d="M8.8 16.6H6.1v2.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
+      <svg aria-hidden="true" className={emphasized ? "h-4 w-4" : "h-3.5 w-3.5"} fill="none" viewBox="0 0 24 24">
+        <path d="M17.6 7.3A7 7 0 0 0 5.3 10" stroke="currentColor" strokeLinecap="round" strokeWidth={emphasized ? 2.25 : 1.9} />
+        <path d="M15.2 7.4h2.7V4.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={emphasized ? 2.25 : 1.9} />
+        <path d="M6.4 16.7A7 7 0 0 0 18.7 14" stroke="currentColor" strokeLinecap="round" strokeWidth={emphasized ? 2.25 : 1.9} />
+        <path d="M8.8 16.6H6.1v2.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={emphasized ? 2.25 : 1.9} />
       </svg>
     </span>
   );
@@ -574,7 +574,7 @@ function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
         className="inline-flex h-8 min-w-[3.5rem] cursor-pointer list-none items-center justify-center rounded-lg border border-sky-300 bg-gradient-to-b from-white to-sky-50 px-1.5 text-sky-700 shadow-[0_2px_0_0_rgb(186_230_253)] transition-all duration-150 hover:-translate-y-px hover:border-sky-500 hover:from-sky-50 hover:to-sky-100 hover:shadow-[0_3px_0_0_rgb(125_211_252)] active:translate-y-px active:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 group-open/cookie-detail:translate-y-px group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-sky-100 group-open/cookie-detail:shadow-none marker:hidden [&::-webkit-details-marker]:hidden"
         title="Show retained requests, cookies, and storage metadata"
       >
-        <InventoryTypeIcon type={row.cookieDetails.length > 0 ? "cookie" : row.type} />
+        <InventoryTypeIcon emphasized type={row.cookieDetails.length > 0 ? "cookie" : row.type} />
         <span className="ml-1 inline-flex h-5 w-4 items-center justify-end border-l border-sky-200 pl-1 group-hover/cookie-detail:border-sky-300 group-open/cookie-detail:border-sky-400">
           <svg aria-hidden="true" className="h-3 w-3 transition-transform group-open/cookie-detail:rotate-180" fill="none" viewBox="0 0 12 12">
             <path d="m2.5 4 3.5 3.5L9.5 4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />

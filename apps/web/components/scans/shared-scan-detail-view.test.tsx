@@ -34,6 +34,9 @@ test("pre-consent inventory exposes retained cookie metadata and all three data-
   const dataFlowSummary = source.indexOf("<PreConsentDataFlowSummary");
 
   assert.match(source, /Show retained vendor evidence/);
+  assert.match(source, /<InventoryTypeIcon emphasized type=/);
+  assert.match(source, /bg-sky-100/);
+  assert.match(source, /bg-violet-100/);
   assert.match(source, />&gt;12 months</);
   assert.match(source, />Lifespan</);
   assert.match(source, />Data types</);
