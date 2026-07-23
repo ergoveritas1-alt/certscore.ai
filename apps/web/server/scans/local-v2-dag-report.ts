@@ -3111,7 +3111,8 @@ export function classifyRetainedRequestActivity(input: {
 }
 
 const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
-  /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|protected by kasada|x-kpsdk|detected unusual behaviour[^.]{0,180}(?:bot|browser)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot|domain(?:s)? (?:is |are )?(?:for sale|may be for sale)|placeholder page|\bno company found\b|couldn['’]t find your company|missing (?:tenant|company|account) (?:slug|identifier)/i;
+  /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|protected by kasada|x-kpsdk|detected unusual behaviour[^.]{0,180}(?:bot|browser)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot|domain(?:s)? (?:is |are )?(?:for sale|may be for sale)|placeholder page|\bno company found\b|couldn['’]t find your company|missing (?:tenant|company|account) (?:slug|identifier)|(?:click|klicke)\s+(?:the|auf die)\s+(?:button|schaltfläche)\s+(?:below|unten)[^.]{0,140}(?:continue\s+(?:shopping|to proceed)|(?:mit dem )?einkauf\s+fortzufahren)/i;
+const LOCAL_V2_CHALLENGE_NO_GO_TEXT_PATTERN = /(?:click|klicke)\s+(?:the|auf die)\s+(?:button|schaltfläche)\s+(?:below|unten)[^.]{0,140}(?:continue\s+(?:shopping|to proceed)|(?:mit dem )?einkauf\s+fortzufahren)/i;
 const LOCAL_V2_VERCEL_SECURITY_CHALLENGE_PATTERN =
   /(?:^|\/)\.well-known\/vercel\/security\/|\/request-challenge(?:$|[?#])|challenge\.v2\.(?:min\.js|wasm)(?:$|[?#])|\/cdn-cgi\/challenge-platform\/|\/cdn-cgi\/challenge|challenges\.cloudflare\.com/i;
 const LOCAL_V2_SCREENSHOT_PLACEHOLDER_PATTERN =
@@ -3244,7 +3245,9 @@ export function buildLocalV2ScanNoGoAssessment(input: {
     : matchedWrongSiteText
       ? "wrong_site_or_soft_404"
       : matchedText
-        ? "access_denied_or_forbidden_page"
+        ? LOCAL_V2_CHALLENGE_NO_GO_TEXT_PATTERN.test(matchedText)
+          ? "captcha_or_challenge"
+          : "access_denied_or_forbidden_page"
     : retainedVisualErrorShell
       ? "retained_visual_error_shell"
       : "visual_capture_failed_or_placeholder";
@@ -3252,7 +3255,9 @@ export function buildLocalV2ScanNoGoAssessment(input: {
     ? "parked_or_placeholder"
     : matchedWrongSiteText
       ? "wrong_site_or_soft_404"
-      : matchedText ? "access_blocked" : retainedVisualErrorShell ? "visual_error_shell" : "capture_failed";
+      : matchedText
+        ? LOCAL_V2_CHALLENGE_NO_GO_TEXT_PATTERN.test(matchedText) ? "captcha_or_challenge" : "access_blocked"
+        : retainedVisualErrorShell ? "visual_error_shell" : "capture_failed";
   const evidenceText = matchedText ??
     crossDomainEvidenceText ??
     (retainedVisualErrorShell
@@ -3268,7 +3273,7 @@ export function buildLocalV2ScanNoGoAssessment(input: {
     : matchedWrongSiteText
       ? `The retained initial-load evidence showed an application error or wrong-site page instead of the normal public site: "${matchedWrongSiteText}"`
       : matchedText
-    ? `The retained initial-load evidence showed an access-denied or forbidden page instead of the normal public site: "${matchedText}"`
+    ? `The retained initial-load evidence showed a ${LOCAL_V2_CHALLENGE_NO_GO_TEXT_PATTERN.test(matchedText) ? "security challenge" : "access-denied or forbidden page"} instead of the normal public site: "${matchedText}"`
     : evidenceText;
   const visualAccessReview = {
     artifact_ref: screenshot ? "local_v2:screenshot_pre_consent" : null,

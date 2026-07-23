@@ -169,6 +169,22 @@ test("explicit challenge copy outranks a generic 403 reason", async () => {
   }
 });
 
+test("localized commerce security interstitial is a no-go", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-commerce-interstitial-"));
+  try {
+    const assessment = buildScanNoGoAssessment(scanEvidence({
+      screenshots: [await retainedScreenshot(directory, { substantive: false })],
+      text: "Klicke auf die Schaltfläche unten, um mit dem Einkauf fortzufahren Weiter shoppen Unsere AGB Datenschutzerklärung",
+    }));
+
+    assert.equal(assessment?.scanNoGoAssessment.decision, "no_go");
+    assert.equal(assessment?.primaryReasonCode, "captcha_or_challenge");
+    assert.equal(assessment?.visualAccessReview.page_state, "captcha_or_challenge");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("settled challenge text outranks generic words embedded in consent probe scripts", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-challenge-dom-priority-"));
   try {
