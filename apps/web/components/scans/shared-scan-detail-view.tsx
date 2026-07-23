@@ -923,7 +923,7 @@ function RuntimeInventoryTable({
                   <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Purpose</th>
                   <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Priority</th>
                   <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">First seen</th>
-                  <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Cookie names</th>
+                  <th className="w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Cookies</th>
                   <th className="w-[160px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Domain</th>
                   <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Server location</th>
                   <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Confidence</th>
@@ -947,7 +947,7 @@ function RuntimeInventoryTable({
                       />
                     </td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
+                    <td className="max-w-[132px] truncate whitespace-nowrap px-2.5 py-1.5" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
                     <td className="px-2 py-1.5 align-top"><InventoryDataFlowCell row={row} /></td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">
