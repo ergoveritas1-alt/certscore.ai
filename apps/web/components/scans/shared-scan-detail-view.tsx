@@ -644,7 +644,7 @@ function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; 
         className={`${compact ? "h-14 w-14" : "h-20 w-20"} grid shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50`}
         style={{ background: gradient }}
       >
-        <div className={`${compact ? "h-8 w-8 text-[10px]" : "h-11 w-11 text-[11px]"} grid place-items-center rounded-full bg-white font-semibold text-slate-600 shadow-sm`}>
+        <div className={`${compact ? "h-8 w-8 text-[10px]" : "h-11 w-11 text-base leading-none text-slate-900"} grid place-items-center rounded-full bg-white font-semibold shadow-sm`}>
           {rows.length}
         </div>
       </div>
@@ -715,7 +715,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
           className="grid h-20 w-20 shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50"
           style={{ background: gradient }}
         >
-          <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-[11px] font-semibold text-slate-600 shadow-sm">
+          <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-base font-semibold leading-none text-slate-900 shadow-sm">
             {rows.length}
           </div>
         </div>
