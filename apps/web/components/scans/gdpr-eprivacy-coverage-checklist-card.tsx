@@ -2837,6 +2837,7 @@ function ChecklistRows({
                 <div className="min-w-0 space-y-1.5">
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <p className="min-w-0 font-medium text-slate-950">{item.label}</p>
+                    <InfoTip align="start" placement="bottom" text={renderRationaleText(rowRationale)} />
                     <span
                       className={cn(
                         "inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.1em]",
