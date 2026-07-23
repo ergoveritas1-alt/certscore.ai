@@ -1149,7 +1149,7 @@ export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivac
   return (
     <div
       aria-label={`GDPR/ePrivacy checklist rating mix: ${summaryLabel}`}
-      className="ml-auto flex min-w-[18rem] max-w-xl shrink-0 flex-col items-stretch justify-start rounded-2xl border border-slate-200 bg-white/85 px-3 py-2 shadow-sm"
+      className="ml-auto flex min-w-[18rem] max-w-3xl shrink-0 flex-col items-stretch justify-start rounded-2xl border border-slate-200 bg-white/85 px-3 py-2 shadow-sm"
     >
       <div className="mb-1 flex items-baseline justify-between gap-3">
         <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Rating mix</span>
@@ -1168,7 +1168,7 @@ export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivac
           />
         ))}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
+      <div className="mt-2 flex flex-nowrap items-center justify-end gap-x-4 overflow-x-auto">
         {statusSummary.map((item) => (
           <span key={item.direction} className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] text-slate-600">
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
