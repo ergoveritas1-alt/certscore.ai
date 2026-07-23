@@ -715,9 +715,9 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
             {rows.length}
           </div>
         </div>
-        <div className="grid min-w-0 flex-1 gap-2">
+        <div className="grid min-w-0 flex-1 gap-1">
         {topPurposes.length > 0 ? topPurposes.map(([purpose, count]) => (
-          <div key={purpose} className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter={purpose.toLowerCase()} role="button" tabIndex={0}>
+          <div key={purpose} className="flex min-h-6 min-w-0 cursor-pointer items-center gap-2 rounded-md px-1 py-0 transition-colors hover:bg-slate-100" data-inventory-filter={purpose.toLowerCase()} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: chartSegments.find((segment) => segment.label === purpose)?.color ?? "#64748b" }} />
             <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-600">{purpose}</span>
             <span className="text-xs font-semibold text-slate-800">{count}</span>
