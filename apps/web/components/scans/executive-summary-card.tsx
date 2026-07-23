@@ -2453,14 +2453,12 @@ function ExecutiveTimelinePane(input: {
     events
   });
   const hiddenEventCount = Math.max(0, events.filter((event) => Number.isFinite(event.atMs) && event.atMs >= 0).length - positionedEvents.length);
-  const consentEvent = positionedEvents.find((event) => /consent/i.test(event.label));
 
   return (
     <div className="flex min-w-0 flex-col rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]" data-executive-timeline-pane>
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Scan Timeline</p>
       <div className="relative mt-3 min-h-[17rem] flex-1 overflow-hidden rounded-[1.05rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(254,242,242,0.45)_0%,rgba(255,255,255,0.95)_58%,rgba(240,253,244,0.55)_86%,#f8fafc_100%)] px-3 py-3 shadow-inner shadow-slate-100/70">
         <div className="absolute bottom-5 left-[1.15rem] top-5 w-px bg-gradient-to-b from-slate-200 via-slate-300 to-slate-200" aria-hidden="true" />
-        {consentEvent ? <div className="absolute left-2 right-3 z-0 border-t border-dashed border-emerald-200" style={{ top: `${consentEvent.top}%` }} aria-hidden="true"><span className="relative -top-2 ml-8 bg-white/80 px-1 text-[8px] font-semibold uppercase tracking-[0.1em] text-emerald-700">Consent</span></div> : null}
         <div className="absolute left-2 right-3 top-3 flex items-center gap-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-300 bg-white shadow-sm" aria-hidden="true" />
           <span className="min-w-0 flex-1 rounded-lg border-2 border-slate-200 bg-white/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-700 shadow-sm">
