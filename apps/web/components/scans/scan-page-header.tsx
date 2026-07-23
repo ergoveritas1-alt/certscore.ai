@@ -67,10 +67,10 @@ export function ScanPageHeader({
   const scanSourceContextId = scanSourceContext ? `scan-source-context-${scanFromValue ?? "default"}` : undefined;
 
   return (
-    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-      <div className="min-w-0 flex-1 space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="min-w-0 text-3xl font-semibold tracking-tight">{title}</h1>
+    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="min-w-0 text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
           {leadingBadges}
           <Badge tone={statusTone ?? getStatusTone(status)}>{statusLabel ?? formatStatus(status)}</Badge>
           {scanFromLabel ? (
@@ -99,7 +99,7 @@ export function ScanPageHeader({
             </span>
           ) : null}
         </div>
-        {createdAtLabel ? <div className="flex flex-wrap items-center gap-1.5 text-sm font-normal text-slate-400">{createdAtLabel}</div> : null}
+        {createdAtLabel ? <div className="flex flex-wrap items-center gap-1.5 text-xs font-normal text-slate-400">{createdAtLabel}</div> : null}
         {actionsPlacement === "belowTitle" ? actions : null}
         {autoRefresh}
       </div>

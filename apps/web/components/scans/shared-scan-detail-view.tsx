@@ -49,6 +49,7 @@ import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { ScanPageHeader } from "./scan-page-header";
+import { InventoryTableControls } from "./inventory-table-controls";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { NoGoBrowserExtensionRecovery } from "./no-go-browser-extension-recovery";
 import {
@@ -937,10 +938,12 @@ function RuntimeInventoryTable({
               <InventoryPriorityDonut rows={groupedInventoryRows} />
             </div>
           </div>
+          <InventoryTableControls tableId="preconsent-inventory-table" />
           <div className="overflow-hidden rounded-xl border border-slate-200">
             <div className="max-h-[370px] overflow-auto">
-            <table className="w-[1160px] min-w-[1160px] max-w-[1160px] table-fixed border-collapse text-left text-[13px]">
-              <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
+            <table id="preconsent-inventory-table" className="w-[1160px] min-w-[1160px] max-w-[1160px] table-fixed border-collapse text-left text-[13px]">
+              <caption className="sr-only">Pre-consent cookies and trackers inventory</caption>
+              <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500 shadow-[0_2px_8px_-6px_rgba(15,23,42,0.55)]">
                 <tr>
                   <th className="w-[90px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Type</th>
                   <th className="w-[150px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Vendor</th>
@@ -957,7 +960,15 @@ function RuntimeInventoryTable({
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
                 {groupedInventoryRows.map((row, index) => (
-                  <tr key={getInventoryGroupRowRenderKey(row, index)} className="h-10 transition-colors odd:bg-slate-50/25 hover:bg-sky-50/35">
+                  <tr
+                    key={getInventoryGroupRowRenderKey(row, index)}
+                    className="h-10 transition-colors odd:bg-slate-50/25 hover:bg-sky-50/35"
+                    data-category={getRuntimeInventoryMacroCategory(row)}
+                    data-inventory-row
+                    data-pre-consent={row.preConsent ? "true" : "false"}
+                    data-priority={row.priority}
+                    data-search={`${row.vendor} ${getInventoryPurposeLabel(row)} ${row.cookieNames.join(" ")} ${row.domains.join(" ")}`.toLowerCase()}
+                  >
                     <td className="whitespace-nowrap px-2 py-1.5 align-top">
                       <InventoryTypeDisclosure row={row} />
                     </td>

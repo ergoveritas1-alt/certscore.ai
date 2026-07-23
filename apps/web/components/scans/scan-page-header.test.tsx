@@ -43,7 +43,7 @@ test("ScanPageHeader places scan source badge above the created timestamp row", 
   assert.doesNotMatch(html, /<p[^>]*>Scan executed from Germany/);
   assert.match(
     html,
-    /<\/div><div class="flex flex-wrap items-center gap-1\.5 text-sm font-normal text-slate-400">Created Jun 4, 2026, 8:13 AM PDT \(scan time: 5 sec\)<\/div>/
+    /<\/div><div class="flex flex-wrap items-center gap-1\.5 text-xs font-normal text-slate-400">Created Jun 4, 2026, 8:13 AM PDT \(scan time: 5 sec\)<\/div>/
   );
 });
 
