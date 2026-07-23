@@ -668,8 +668,10 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
     const countDelta = right[1] - left[1];
     return countDelta !== 0 ? countDelta : left[0].localeCompare(right[0]);
   });
-  const topPurposes = purposeCounts.slice(0, 4);
+  const purposeLimit = purposeCounts.length === 5 ? 5 : 4;
+  const topPurposes = purposeCounts.slice(0, purposeLimit);
   const hiddenPurposeCount = Math.max(0, purposeCounts.length - topPurposes.length);
+  const hiddenPurposes = purposeCounts.slice(topPurposes.length);
   const colors = ["#0ea5e9", "#8b5cf6", "#14b8a6", "#f59e0b"];
   const visibleTotal = topPurposes.reduce((total, [, count]) => total + count, 0);
   const otherTotal = Math.max(0, rows.length - visibleTotal);
@@ -709,8 +711,20 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
         )) : (
           <p className="text-xs leading-5 text-slate-500">No retained purposes.</p>
         )}
-        {hiddenPurposeCount > 0 ? (
-          <p className="text-xs leading-5 text-slate-500">+{hiddenPurposeCount} more purpose{hiddenPurposeCount === 1 ? "" : "s"}</p>
+        {hiddenPurposeCount >= 2 ? (
+          <details className="group/purpose-more text-xs leading-5 text-slate-500">
+            <summary className="cursor-pointer list-none font-medium text-sky-700 underline decoration-sky-200 underline-offset-2 marker:hidden [&::-webkit-details-marker]:hidden">
+              +{hiddenPurposeCount} more purposes
+            </summary>
+            <div className="mt-1.5 grid gap-1 border-l-2 border-slate-200 pl-2">
+              {hiddenPurposes.map(([purpose, count]) => (
+                <div key={purpose} className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="truncate">{purpose}</span>
+                  <span className="shrink-0 font-semibold text-slate-700">{count}</span>
+                </div>
+              ))}
+            </div>
+          </details>
         ) : null}
         </div>
       </div>
