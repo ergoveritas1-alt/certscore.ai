@@ -1734,14 +1734,113 @@ export const consentSurfaceInspectionOutcomeSchema = z.object({
     "dom_snapshot",
     "visual_capture",
   ])).max(5),
+  evidenceChannels: z.array(z.object({
+    channel: z.enum([
+      "navigation_network",
+      "viewport_screenshot",
+      "dom_snapshot",
+      "accessibility_tree",
+      "page_script_inventory",
+      "cmp_runtime",
+      "geometry",
+    ]),
+    status: z.enum(["observed", "not_observed", "inspection_incomplete"]),
+    evidenceCount: z.number().int().nonnegative().max(100_000),
+    reasonCodes: z.array(z.string().max(120)).max(8).default([]),
+  })).max(7).default([]),
   limitationKeys: z.array(z.string().max(120)).max(16).default([]),
 });
+
+type ConsentEvidenceChannel = z.infer<typeof consentSurfaceInspectionOutcomeSchema>["evidenceChannels"][number];
+
+function deriveConsentEvidenceChannels(input: {
+  cmpRuntimeObservations: z.infer<typeof cmpRuntimeObservationSchema>[];
+  consentUiObservations: z.infer<typeof consentUiObservationSchema>[];
+  domSnapshots: z.infer<typeof domSnapshotArtifactSchema>[];
+  modulesRun: z.infer<typeof scanModuleRunSchema>[];
+  networkEvents: z.infer<typeof networkEventSchema>[];
+  screenshots: z.infer<typeof screenshotArtifactSchema>[];
+  visualCapture?: z.infer<typeof visualCaptureSummarySchema>;
+}): ConsentEvidenceChannel[] {
+  const preConsentRun = input.modulesRun.find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
+  const runtimeIncomplete = preConsentRun?.status !== "completed";
+  const observations = input.consentUiObservations;
+  const hasObservationBasis = (pattern: RegExp) => observations.some((observation) =>
+    observation.basis.some((basis) => pattern.test(basis))
+  );
+  const channel = (
+    name: ConsentEvidenceChannel["channel"],
+    status: ConsentEvidenceChannel["status"],
+    evidenceCount: number,
+    reasonCodes: string[] = [],
+  ): ConsentEvidenceChannel => ({
+    channel: name,
+    status,
+    evidenceCount: Math.max(0, Math.min(100_000, evidenceCount)),
+    reasonCodes: [...new Set(reasonCodes)].slice(0, 8),
+  });
+  const visualAvailable = input.visualCapture?.status === "available" || input.screenshots.length > 0;
+  const domObserved = input.domSnapshots.some((snapshot) =>
+    snapshot.consentStateAtTime === "pre_consent" && (snapshot.textExcerpt?.trim().length ?? 0) > 0
+  );
+  const accessibilityObserved = hasObservationBasis(/accessibility_tree/i);
+  const pageScriptObserved = hasObservationBasis(/(?:rapid|first_layer|generic_consent_surface|shadow_root|same_origin_frame|viewport|full_document)/i);
+  const geometryObserved = hasObservationBasis(/geometry:(?:captured|confirmed)|geometry_proof/i);
+  const geometryIncomplete = hasObservationBasis(/geometry_capture_unavailable|geometry.*(?:failed|unavailable)/i);
+  const consentObservationIncomplete = hasObservationBasis(/bounded_capture_timeout_or_failure|probe_failed|runtime_partial/i);
+
+  return [
+    channel(
+      "navigation_network",
+      input.networkEvents.length > 0 ? "observed" : runtimeIncomplete ? "inspection_incomplete" : "not_observed",
+      input.networkEvents.length,
+      input.networkEvents.length > 0 ? [] : runtimeIncomplete ? ["runtime_incomplete"] : ["no_network_events_retained"],
+    ),
+    channel(
+      "viewport_screenshot",
+      visualAvailable ? "observed" : runtimeIncomplete ? "inspection_incomplete" : "not_observed",
+      input.screenshots.length,
+      visualAvailable ? [] : runtimeIncomplete ? ["visual_capture_incomplete"] : ["no_visual_artifact_retained"],
+    ),
+    channel(
+      "dom_snapshot",
+      domObserved ? "observed" : runtimeIncomplete ? "inspection_incomplete" : "not_observed",
+      input.domSnapshots.length,
+      domObserved ? [] : runtimeIncomplete ? ["dom_snapshot_incomplete"] : ["no_substantive_dom_snapshot"],
+    ),
+    channel(
+      "accessibility_tree",
+      accessibilityObserved ? "observed" : consentObservationIncomplete ? "inspection_incomplete" : "not_observed",
+      accessibilityObserved ? observations.filter((observation) => observation.basis.some((basis) => /accessibility_tree/i.test(basis))).length : 0,
+      accessibilityObserved ? [] : consentObservationIncomplete ? ["accessibility_inventory_incomplete"] : ["no_accessibility_evidence"],
+    ),
+    channel(
+      "page_script_inventory",
+      pageScriptObserved ? "observed" : consentObservationIncomplete ? "inspection_incomplete" : "not_observed",
+      pageScriptObserved ? observations.reduce((sum, observation) => sum + observation.controls.length, 0) : 0,
+      pageScriptObserved ? [] : consentObservationIncomplete ? ["page_script_inventory_incomplete"] : ["no_page_script_inventory"],
+    ),
+    channel(
+      "cmp_runtime",
+      input.cmpRuntimeObservations.length > 0 ? "observed" : runtimeIncomplete ? "inspection_incomplete" : "not_observed",
+      input.cmpRuntimeObservations.length,
+      input.cmpRuntimeObservations.length > 0 ? [] : runtimeIncomplete ? ["cmp_runtime_incomplete"] : ["no_cmp_runtime_signal"],
+    ),
+    channel(
+      "geometry",
+      geometryObserved ? "observed" : geometryIncomplete || runtimeIncomplete ? "inspection_incomplete" : "not_observed",
+      geometryObserved ? observations.reduce((sum, observation) => sum + observation.controls.length, 0) : 0,
+      geometryObserved ? [] : geometryIncomplete ? ["geometry_capture_unavailable"] : runtimeIncomplete ? ["runtime_incomplete"] : ["no_geometry_evidence"],
+    ),
+  ];
+}
 
 export function deriveConsentSurfaceInspectionOutcome(input: {
   cmpRuntimeObservations?: z.infer<typeof cmpRuntimeObservationSchema>[];
   consentUiObservations?: z.infer<typeof consentUiObservationSchema>[];
   domSnapshots?: z.infer<typeof domSnapshotArtifactSchema>[];
   modulesRun?: z.infer<typeof scanModuleRunSchema>[];
+  networkEvents?: z.infer<typeof networkEventSchema>[];
   runtimeCoverage?: z.infer<typeof runtimeCoverageSummarySchema>;
   screenshots?: z.infer<typeof screenshotArtifactSchema>[];
   visualCapture?: z.infer<typeof visualCaptureSummarySchema>;
@@ -1813,6 +1912,15 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
       (input.screenshots ?? []).some((artifact) => artifact.consentStateAtTime === "pre_consent")
     ) ? "visual_capture" as const : null,
   ].filter((value): value is NonNullable<typeof value> => value !== null);
+  const evidenceChannels = deriveConsentEvidenceChannels({
+    cmpRuntimeObservations: input.cmpRuntimeObservations ?? [],
+    consentUiObservations: observations,
+    domSnapshots: input.domSnapshots ?? [],
+    modulesRun: input.modulesRun ?? [],
+    networkEvents: input.networkEvents ?? [],
+    screenshots: input.screenshots ?? [],
+    visualCapture: input.visualCapture,
+  });
   const outcome = consentSurfaceObserved
     ? actionableControlObserved
       ? "actionable_surface_observed" as const
@@ -1830,6 +1938,7 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     actionableControlObserved,
     observedAtMs: visibleObservation?.observedAtMs ?? latestObservation?.observedAtMs ?? null,
     evidenceSources,
+    evidenceChannels,
     limitationKeys: inspectionLimitationKeys,
   });
 }

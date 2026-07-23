@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   type AnalyticsConsentChoice,
@@ -69,6 +70,7 @@ function AnalyticsConsentPanel(input: {
 }
 
 export function AnalyticsConsentBanner() {
+  const pathname = usePathname();
   const [storedChoice, setStoredChoice] = useState<AnalyticsConsentChoice | null>(null);
   const [isReady, setIsReady] = useState(false);
 
@@ -77,7 +79,7 @@ export function AnalyticsConsentBanner() {
     setIsReady(true);
   }, []);
 
-  if (!isReady || storedChoice) {
+  if (pathname.startsWith("/calibration/") || !isReady || storedChoice) {
     return null;
   }
 

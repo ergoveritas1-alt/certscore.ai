@@ -11,6 +11,7 @@ import {
   boundedRetryAfterMs,
   httpTransportFallbackUrl,
   isNavigationTransportFailure,
+  isPendingMainDocumentStatus,
   isTransientMainDocumentStatus,
   navigationTransportRecoveryUrls,
 } from "./transport-fallback.js";
@@ -50,9 +51,122 @@ test("transient response retry is bounded", () => {
   assert.equal(isTransientMainDocumentStatus(429), true);
   assert.equal(isTransientMainDocumentStatus(503), true);
   assert.equal(isTransientMainDocumentStatus(404), false);
+  assert.equal(isPendingMainDocumentStatus(202), true);
+  assert.equal(isPendingMainDocumentStatus(200), false);
   assert.equal(boundedRetryAfterMs("0"), 0);
   assert.equal(boundedRetryAfterMs("10"), 2_000);
   assert.equal(boundedRetryAfterMs("invalid"), 500);
+});
+
+test("pre-consent navigation recovers one sparse pending 202 document", async () => {
+  let browserDocumentRequestCount = 0;
+  const server = createServer((request, response) => {
+    const isBrowserDocument = request.headers["sec-fetch-dest"] === "document";
+    if (isBrowserDocument) browserDocumentRequestCount += 1;
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    if (isBrowserDocument && browserDocumentRequestCount === 1) {
+      response.writeHead(202);
+      response.end("<!doctype html><html><body></body></html>");
+      return;
+    }
+    response.writeHead(200);
+    response.end("<!doctype html><html><body><h1>Recovered pending public page</h1><p>Privacy choices and public navigation are available.</p></body></html>");
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const url = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-pending-document-recovery-"));
+  try {
+    const result = await preConsentRuntimeScanner({
+      artifactWriter: await createArtifactWriter(tempRoot),
+      internalBudgetMs: 10_000,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      url,
+      waitMode: "fast",
+    });
+    assert.ok(browserDocumentRequestCount >= 2);
+    assert.ok(result.moduleRun.recoveryDiagnostics?.modes.includes("pending_document_passive_wait"));
+    assert.ok(result.moduleRun.recoveryDiagnostics?.modes.includes("pending_document_same_region_retry"));
+    assert.ok(result.domSnapshots.some((snapshot) => /Recovered pending public page/.test(snapshot.textExcerpt)));
+    assert.ok(result.networkResponseEvents.some((event) => event.status === 202));
+    assert.ok(result.networkResponseEvents.some((event) => event.status === 200));
+  } finally {
+    server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime retains delayed consent controls after a sparse pending 202 document", async () => {
+  let browserDocumentRequestCount = 0;
+  const server = createServer((request, response) => {
+    const isBrowserDocument = request.headers["sec-fetch-dest"] === "document";
+    if (isBrowserDocument) browserDocumentRequestCount += 1;
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    if (isBrowserDocument && browserDocumentRequestCount === 1) {
+      response.writeHead(202);
+      response.end("<!doctype html><html><body></body></html>");
+      return;
+    }
+    response.writeHead(200);
+    response.end(`<!doctype html><html><body><main id="app"></main><script>
+      setTimeout(() => {
+        const make = (codes) => String.fromCharCode(...codes);
+        const section = document.createElement("section");
+        section.setAttribute("role", "dialog");
+        section.setAttribute("aria-label", make([67, 104, 111, 105, 99, 101, 115]));
+        for (const codes of [
+          [65, 99, 99, 101, 112, 116, 32, 97, 108, 108],
+          [82, 101, 106, 101, 99, 116, 32, 97, 108, 108],
+          [67, 111, 111, 107, 105, 101, 32, 115, 101, 116, 116, 105, 110, 103, 115],
+        ]) {
+          const button = document.createElement("button");
+          button.textContent = make(codes);
+          section.appendChild(button);
+        }
+        document.getElementById("app").appendChild(section);
+      }, 3000);
+    </script></body></html>`);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const url = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-pending-document-delayed-consent-"));
+  try {
+    const result = await preConsentRuntimeScanner({
+      artifactWriter: await createArtifactWriter(tempRoot),
+      internalBudgetMs: 12_000,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      url,
+      waitMode: "fast",
+    });
+    const observation = result.consentUiObservations[0];
+    const timingLabels = result.moduleRun.timingBreakdown?.map((entry) => entry.label) ?? [];
+    assert.ok(browserDocumentRequestCount >= 2);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.basis.includes("recapture:late_accessibility_tree"),
+      true,
+      "delayed controls should be retained by the pending-document accessibility retry",
+    );
+    assert.equal(
+      timingLabels.includes("page evidence: late accessibility consent retry"),
+      true,
+      "pending-document recovery should schedule the bounded late accessibility retry",
+    );
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("pre-consent navigation recovers through the equivalent HTTP entry URL", async () => {

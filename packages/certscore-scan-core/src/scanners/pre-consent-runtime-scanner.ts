@@ -52,6 +52,7 @@ import {
   alternateWwwNavigationUrl,
   boundedRetryAfterMs,
   isNavigationTransportFailure,
+  isPendingMainDocumentStatus,
   isTransientMainDocumentStatus,
   navigationTransportRecoveryUrls,
 } from "../transport-fallback.js";
@@ -720,6 +721,46 @@ export async function preConsentRuntimeScanner(
 
     if (
       navigationResponse &&
+      isPendingMainDocumentStatus(navigationResponse.status()) &&
+      remainingModuleBudgetMs() >= 2_000
+    ) {
+      const pendingBodyText = await page.locator("body").innerText({ timeout: 600 }).catch(() => "");
+      const pendingBodyWordCount = pendingBodyText.trim().split(/\s+/).filter(Boolean).length;
+      const pendingDocumentIsSparse = pendingBodyText.trim().length < 120 && pendingBodyWordCount < 24;
+      if (pendingDocumentIsSparse) {
+        navigationNotes.push(
+          "Main document returned HTTP 202 with sparse content; allowed one bounded passive pending-document recovery before classifying the page.",
+        );
+        await measureRecovery("pending_document_passive_wait", () =>
+          page.waitForTimeout(Math.min(1_000, Math.max(0, remainingModuleBudgetMs() - 1_000))),
+        );
+        const recoveredBodyText = await page.locator("body").innerText({ timeout: 600 }).catch(() => "");
+        const recoveredWordCount = recoveredBodyText.trim().split(/\s+/).filter(Boolean).length;
+        if (recoveredBodyText.trim().length < 120 && recoveredWordCount < 24 && remainingModuleBudgetMs() >= 1_000) {
+          const pendingRetry = await measureRecovery("pending_document_same_region_retry", () =>
+            page.reload({
+              waitUntil: "commit",
+              timeout: Math.min(2_500, remainingModuleBudgetMs()),
+            }).catch(() => null),
+          );
+          if (pendingRetry) {
+            navigationResponse = pendingRetry;
+            effectiveNavigationUrl = page.url() === "about:blank" ? effectiveNavigationUrl : page.url();
+            await page.waitForLoadState("domcontentloaded", {
+              timeout: Math.min(1_500, remainingModuleBudgetMs()),
+            }).catch(() => undefined);
+            navigationNotes.push(
+              `Pending-document recovery completed with HTTP ${navigationResponse.status()}.`,
+            );
+          }
+        } else {
+          navigationNotes.push("The pending document became substantive during the passive recovery window.");
+        }
+      }
+    }
+
+    if (
+      navigationResponse &&
       [403, 429, 503].includes(navigationResponse.status()) &&
       remainingModuleBudgetMs() >= 4_750 &&
       await hasStrongUnresolvedSecurityChallenge(page)
@@ -891,7 +932,10 @@ export async function preConsentRuntimeScanner(
       // Retain the first typed control inventory before any browser screenshot
       // can monopolize the page/CDP session. The screenshot is already safely
       // retained above, so a slow consent probe cannot remove visual evidence.
-      preScreenshotConsentObservation = await consentUiObservationPromise;
+      [preScreenshotConsentObservation] = await Promise.all([
+        consentUiObservationPromise,
+        networkIdlePromise,
+      ]);
       if (!hasSufficientFirstLayerConsentControls(preScreenshotConsentObservation)) {
         let earlyCmpRuntimeObservations = buildCmpRuntimeObservations(
           vendorResolverInputs,
@@ -966,7 +1010,9 @@ export async function preConsentRuntimeScanner(
         }
       }
     }
-    await networkIdlePromise;
+    if ((input.screenshotMode ?? "always") !== "always") {
+      await networkIdlePromise;
+    }
     await recordTiming(
       timingBreakdown,
       "observation settle wait",
@@ -987,7 +1033,34 @@ export async function preConsentRuntimeScanner(
       `Captured ${networkEvents.length} request events and ${networkResponseEvents.length} response events during navigation, network-idle, and settle windows.`,
     );
 
-    const [pageEvidence, initialConsentObservation] = await recordTiming(
+    const lateAccessibilityRetryEligible =
+      earlyScreenshotCaptured &&
+      (preScreenshotConsentObservation?.captureStatus === "incomplete" ||
+        preScreenshotConsentObservation?.captureStatus === "no_evidence") &&
+      (preScreenshotConsentObservation?.controls.length ?? 0) === 0 &&
+      (initialNavigationHttpStatus === 202 || navigationAttempts.some((attempt) => attempt.httpStatus === 202)) &&
+      remainingModuleBudgetMs() >= 2_500;
+    const lateAccessibilityObservationPromise = lateAccessibilityRetryEligible
+      ? (async () => {
+        await page.waitForTimeout(fastWait ? 1_500 : 2_000).catch(() => undefined);
+        if (remainingModuleBudgetMs() < 750) {
+          return undefined;
+        }
+        return recordBoundedTiming(
+          timingBreakdown,
+          "page evidence: late accessibility consent retry",
+          "One delayed native accessibility-tree retry for a sparse pending main document; runs in parallel with ordinary page evidence and remains read-only.",
+          Math.min(fastWait ? 1_500 : 2_000, remainingModuleBudgetMs()),
+          () => detectConsentUi(page, input.scanStartedAtMs, 0, {
+            accessibilityOnly: true,
+            accessibilityTimeoutMs: fastWait ? 1_250 : 1_750,
+          }),
+          () => undefined,
+        );
+      })()
+      : Promise.resolve(undefined);
+
+    const [pageEvidence, initialConsentObservation, lateAccessibilityObservation] = await recordTiming(
       timingBreakdown,
       "page evidence capture",
       "Atomic read-only storage, scripts, iframes, browser API, collection surface, and DOM text snapshot after the first structured consent inventory is retained.",
@@ -1000,7 +1073,8 @@ export async function preConsentRuntimeScanner(
           timingBreakdown,
         }), preScreenshotConsentObservation
           ? Promise.resolve(preScreenshotConsentObservation)
-          : consentUiObservationPromise]),
+          : consentUiObservationPromise,
+        lateAccessibilityObservationPromise]),
     );
     const {
       apiAccesses,
@@ -1013,7 +1087,14 @@ export async function preConsentRuntimeScanner(
     } = pageEvidence;
     retainedStorageSnapshot = storageSnapshot;
     retainedCollectionSurfaceObservations = collectionSurfaceObservations;
-    let consentObservation = initialConsentObservation;
+    let consentObservation = lateAccessibilityObservation &&
+      isStrongerConsentUiObservation(lateAccessibilityObservation, initialConsentObservation)
+      ? mergeConsentUiObservations(
+        initialConsentObservation,
+        lateAccessibilityObservation,
+        "recapture:late_accessibility_tree",
+      )
+      : initialConsentObservation;
     retainedConsentUiObservation = consentObservation;
     let domText = initialDomText;
     if (
@@ -1718,6 +1799,23 @@ export async function preConsentRuntimeScanner(
           productionFindingIntegration: false,
         });
         consentGeometryDiagnosticWritten = true;
+        if (
+          geometry.pageUrl !== "about:blank" &&
+          geometry.viewport.width > 0 &&
+          geometry.viewport.height > 0 &&
+          geometry.candidates.length > 0 &&
+          geometry.summary.confidence > 0
+        ) {
+          // Geometry can corroborate an AX or DOM classification without
+          // producing a stronger observation of its own. Retain that channel
+          // explicitly so the evidence contract does not lose the proof when
+          // the primary observation wins the merge.
+          consentObservation = annotateConsentUiObservation(
+            consentObservation,
+            "geometry:captured",
+          );
+          retainedConsentUiObservation = consentObservation;
+        }
         const geometryConsentObservation = consentUiObservationFromConfirmedGeometryControls({
           artifactPath: geometryArtifactPath,
           geometry,
@@ -3613,6 +3711,8 @@ export async function detectConsentUi(
   scanStartedAtMs: number,
   waitForControlTimeoutMs = 3_500,
   options: {
+    accessibilityOnly?: boolean;
+    accessibilityTimeoutMs?: number;
     allowFullDocumentCmpControls?: boolean;
     deferBrowserProbeUntilCmpOrScreenshot?: boolean;
     waitForActionableChoiceControls?: boolean;
@@ -3644,7 +3744,10 @@ export async function detectConsentUi(
   // thread busy while Chrome is already painting a complete consent surface.
   // The accessibility path is read-only and lets us retain the controls the
   // browser exposed without interacting with the banner.
-  const earlyAccessibilityInventory = await readAccessibilityConsentInventory(page);
+  const earlyAccessibilityInventory = await readAccessibilityConsentInventory(
+    page,
+    options.accessibilityTimeoutMs,
+  );
   const earlyAccessibilityObservation = consentUiObservationFromAccessibilityInventory(
     earlyAccessibilityInventory,
     scanStartedAtMs,
@@ -3656,6 +3759,11 @@ export async function detectConsentUi(
     return annotateConsentInventoryTimingMarkers(earlyAccessibilityObservation, [
       "accessibility_tree_early_inventory",
       "early_exit_controls_found",
+    ]);
+  }
+  if (options.accessibilityOnly === true) {
+    return annotateConsentInventoryTimingMarkers(earlyAccessibilityObservation, [
+      "accessibility_tree_bounded_retry",
     ]);
   }
   const waitStartedAtMs = Date.now();
@@ -4350,16 +4458,19 @@ async function readConsentUiObservation(
       classifierVariant: classification.variant,
     };
   });
-  const classifiedConsentSurfaceCountsByContainer = new Map<string, number>();
+  const classifiedConsentSurfaceControlsByContainer = new Map<string, Set<string>>();
   for (const control of classifiedControls) {
     if (control.inventorySource !== "full_document_consent_surface" || control.actionType === "other") {
       continue;
     }
     const key = control.inventoryContainerKey ?? "unknown";
-    classifiedConsentSurfaceCountsByContainer.set(
-      key,
-      (classifiedConsentSurfaceCountsByContainer.get(key) ?? 0) + 1,
-    );
+    const controls = classifiedConsentSurfaceControlsByContainer.get(key) ?? new Set<string>();
+    controls.add([
+      control.actionType,
+      control.label.trim().toLowerCase(),
+      control.frameUrl ?? "main",
+    ].join(":"));
+    classifiedConsentSurfaceControlsByContainer.set(key, controls);
   }
   const retainedInventorySources = new Set<string>();
   const retainedRootSources = new Set<string>();
@@ -4409,7 +4520,7 @@ async function readConsentUiObservation(
     }
     if (
       control.inventorySource === "full_document_consent_surface" &&
-      (classifiedConsentSurfaceCountsByContainer.get(control.inventoryContainerKey ?? "unknown") ?? 0) < 2
+      (classifiedConsentSurfaceControlsByContainer.get(control.inventoryContainerKey ?? "unknown")?.size ?? 0) < 2
     ) {
       rejectedReasons.add("generic_container_fewer_than_two_classified_controls");
       return false;
@@ -4895,7 +5006,7 @@ const AX_CONSENT_CONTEXT_PATTERN =
 const AX_CONSENT_CONTAINER_ROLE_PATTERN =
   /^(?:alertdialog|dialog|region|banner)$/i;
 
-async function readAccessibilityConsentInventory(page: Page): Promise<{
+async function readAccessibilityConsentInventory(page: Page, timeoutMs = 6_000): Promise<{
   controls: ConsentUiInventoryControl[];
   hasPotentialToggle: boolean;
   textExcerpts: string[];
@@ -4923,7 +5034,7 @@ async function readAccessibilityConsentInventory(page: Page): Promise<{
       // even though they remain the only responsive structured surface. Keep
       // this within the caller's bounded consent budget while allowing Chrome to
       // finish a bounded native-tree read.
-      timer = setTimeout(() => resolve({ controls: [], hasPotentialToggle: false, textExcerpts: [] }), 6_000);
+      timer = setTimeout(() => resolve({ controls: [], hasPotentialToggle: false, textExcerpts: [] }), timeoutMs);
     }),
   ]).catch(() => {
     return { controls: [], hasPotentialToggle: false, textExcerpts: [] };
@@ -4980,7 +5091,7 @@ function consentUiObservationFromAccessibilityInventory(
   scanStartedAtMs: number,
 ): ConsentUiObservation {
   const contextText = inventory.textExcerpts.join(" ").slice(0, 12_000);
-  const controls = inventory.controls.flatMap((control) => {
+  const classifiedControls = inventory.controls.flatMap((control) => {
     const classification = classifyConsentControlLabel({
       label: control.label,
       contextText,
@@ -5003,7 +5114,23 @@ function consentUiObservationFromAccessibilityInventory(
       matchStrength: classification.matchStrength,
       classifierReasonCodes: classification.reasonCodes,
       classifierVariant: classification.variant,
+      _matchStrength: classification.matchStrength,
     }];
+  });
+  const hasActionableClassifiedControl = classifiedControls.some((control) =>
+    control.actionType === "accept_all" || control.actionType === "reject_all"
+  );
+  const controls = classifiedControls.flatMap((control) => {
+    if (
+      control.actionType === "manage_preferences" &&
+      (control._matchStrength === "contextual" || control._matchStrength === "weak") &&
+      !hasActionableClassifiedControl &&
+      !inventory.hasPotentialToggle
+    ) {
+      return [];
+    }
+    const { _matchStrength: _discardedMatchStrength, ...retainedControl } = control;
+    return [retainedControl];
   });
   return buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
@@ -5018,7 +5145,9 @@ function consentUiObservationFromAccessibilityInventory(
       retainedControlCount: controls.length,
       inventorySources: controls.length > 0 ? ["accessibility_tree"] : [],
       candidateLabels: inventory.controls.map((control) => control.label).slice(0, 24),
-      rejectionReasons: [],
+      rejectionReasons: controls.length < classifiedControls.length
+        ? ["generic_container_fewer_than_two_classified_controls"]
+        : [],
       timingMarkers: ["accessibility_tree_early_inventory_completed"],
     },
   });

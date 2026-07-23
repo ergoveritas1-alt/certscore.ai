@@ -152,6 +152,31 @@ test("a partial runtime with no retained page evidence is no-go", () => {
   assert.ok(assessment?.scanNoGoAssessment.corroboratorCodes.includes("partial_runtime_without_page_evidence"));
 });
 
+test("partial runtime with a retained actionable banner stays diagnostic instead of becoming no-go", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-partial-consent-evidence-"));
+  try {
+    const assessment = buildScanNoGoAssessment({
+      ...scanEvidence({
+        consentUiObservations: [consentObservation({ controlLabel: "Accept all" })],
+        firstPartySuccesses: 4,
+        screenshots: [await retainedScreenshot(directory, { substantive: true })],
+        text: "Welcome to Example. Cookie choices are shown below.",
+      }),
+      modulesRun: [{
+        moduleName: "preConsentRuntimeScanner",
+        status: "partial",
+        errors: ["Bounded geometry proof screenshot timed out after the page remained usable."],
+      }] as never,
+    });
+
+    assert.equal(assessment?.scanNoGoAssessment.decision, "continue_with_diagnostics");
+    assert.ok(assessment?.scanNoGoAssessment.contradictorCodes.includes("actionable_consent_control_observed"));
+    assert.ok(assessment?.scanNoGoAssessment.contradictorCodes.includes("visually_substantive_screenshot_observed"));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("a late 403 cannot erase a substantial retained page load", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-late-403-rich-page-"));
   try {

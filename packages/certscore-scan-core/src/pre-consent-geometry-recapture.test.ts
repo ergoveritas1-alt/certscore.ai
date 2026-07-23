@@ -138,12 +138,16 @@ test("pre-consent scanner retains a proof screenshot for deeply nested animated 
     assert.equal(result.consentUiObservations[0]?.rejectControlObserved, true);
     assert.equal(result.consentUiObservations[0]?.managePreferencesControlObserved, true);
     assert.ok(
-      result.consentUiObservations[0]?.inventoryDiagnostics?.timingMarkers.includes("rapid_inventory_completed"),
+      result.consentUiObservations[0]?.inventoryDiagnostics?.timingMarkers.some((marker) =>
+        marker === "rapid_inventory_completed" || marker === "accessibility_tree_early_inventory_completed"
+      ),
       JSON.stringify(result.consentUiObservations[0], null, 2),
     );
     assert.ok(
       result.consentUiObservations[0]?.inventoryDiagnostics?.timingMarkers.some((marker) =>
-        marker === "rapid_first_layer_inventory" || marker === "rapid_cmp_poll"
+        marker === "rapid_first_layer_inventory" ||
+        marker === "rapid_cmp_poll" ||
+        marker === "accessibility_tree_early_inventory"
       ),
       JSON.stringify(result.consentUiObservations[0], null, 2),
     );

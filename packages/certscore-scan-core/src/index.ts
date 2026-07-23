@@ -843,6 +843,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     consentUiObservations: preConsentResult.consentUiObservations,
     domSnapshots: preConsentResult.domSnapshots,
     modulesRun: boundedModulesRun,
+    networkEvents,
     runtimeCoverage,
     screenshots: preConsentResult.screenshots,
     visualCapture: preConsentResult.visualCapture,

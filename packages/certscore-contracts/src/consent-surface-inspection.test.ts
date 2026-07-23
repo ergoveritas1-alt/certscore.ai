@@ -65,6 +65,9 @@ test("complete bounded inspection can retain that no consent surface was observe
   assert.equal(outcome.coverageStatus, "complete");
   assert.equal(outcome.inspectionCompleted, true);
   assert.equal(outcome.observedAtMs, 900);
+  assert.equal(outcome.evidenceChannels.length, 7);
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "dom_snapshot")?.status, "not_observed");
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "navigation_network")?.status, "not_observed");
 });
 
 test("timeout evidence prevents absence from becoming a complete negative observation", () => {
@@ -114,6 +117,7 @@ test("inventory probe failure cannot establish that a consent surface is absent"
   assert.equal(outcome.outcome, "indeterminate_limited_coverage");
   assert.equal(outcome.coverageStatus, "limited");
   assert.ok(outcome.limitationKeys.includes("consent_surface_inspection_observation_incomplete"));
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "page_script_inventory")?.status, "inspection_incomplete");
 });
 
 test("unavailable main-frame geometry cannot establish that a consent surface is absent", () => {
@@ -151,4 +155,26 @@ test("canonical first-layer controls establish an actionable surface without CMP
   assert.equal(outcome.outcome, "actionable_surface_observed");
   assert.equal(outcome.actionableControlObserved, true);
   assert.equal(outcome.observedAtMs, 900);
+});
+
+test("captured geometry remains an observed evidence channel when AX owns classification", () => {
+  const input = baseInput();
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    basis: ["inventory:accessibility_tree", "geometry:captured"],
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    acceptControlObserved: true,
+    controls: [{
+      actionType: "accept_all",
+      classifierReasonCodes: ["canonical_match"],
+      label: "Accept all",
+      visible: true,
+    }],
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.status, "observed");
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.evidenceCount, 1);
 });

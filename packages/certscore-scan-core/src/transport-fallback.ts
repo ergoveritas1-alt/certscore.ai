@@ -13,6 +13,7 @@ const NAVIGATION_TRANSPORT_ERROR_PATTERNS = [
 ];
 
 const TRANSIENT_MAIN_DOCUMENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+const PENDING_MAIN_DOCUMENT_STATUSES = new Set([202]);
 
 export function httpTransportFallbackUrl(value: string): string | null {
   try {
@@ -63,6 +64,16 @@ export function navigationTransportRecoveryUrls(value: string): string[] {
 
 export function isTransientMainDocumentStatus(status: number | null | undefined): boolean {
   return typeof status === "number" && TRANSIENT_MAIN_DOCUMENT_STATUSES.has(status);
+}
+
+/**
+ * A 202 document can be a short-lived browser/pending shell rather than the
+ * public page. It is only eligible for recovery when the caller also proves
+ * that the retained document is sparse; a normal 202 response must not be
+ * treated as a failure or retried unconditionally.
+ */
+export function isPendingMainDocumentStatus(status: number | null | undefined): boolean {
+  return typeof status === "number" && PENDING_MAIN_DOCUMENT_STATUSES.has(status);
 }
 
 export function boundedRetryAfterMs(value: string | null | undefined, maxMs = 2_000): number {
