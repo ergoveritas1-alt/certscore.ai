@@ -738,7 +738,7 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
-      row.purpose,
+      getInventoryPurposeLabel(row),
       CONSENT_REVIEW_PRIORITY_LABELS[row.priority],
       formatFirstSeenMs(row.firstSeenMs),
       row.cookieNames.join(", ") || "—",
@@ -755,6 +755,10 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   ];
 
   return copyRows.map((row) => row.map(formatInventoryCellForCopy).join("\t")).join("\n");
+}
+
+function getInventoryPurposeLabel(row: Pick<InventoryGroupRow, "purpose" | "purposes">) {
+  return row.purposes.length > 0 ? row.purposes.join(", ") : row.purpose;
 }
 
 function countryFlag(countryCode: string | null) {
@@ -936,7 +940,7 @@ function RuntimeInventoryTable({
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryVendorCell label={row.vendor} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">{row.purpose}</td>
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={getInventoryPurposeLabel(row)}>{getInventoryPurposeLabel(row)}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryPriorityCell
                         priority={row.priority}
