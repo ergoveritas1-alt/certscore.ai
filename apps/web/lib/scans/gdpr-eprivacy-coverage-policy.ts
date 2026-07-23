@@ -4500,7 +4500,7 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
     return makeOutcome(
       "consent_choice_quality",
       "Not observed",
-      `No obvious cookie-banner dark-pattern signal was observed in retained first-layer consent controls.${visibleChoicePhrase} CertScore.ai observed same-layer accept, reject/refusal, and settings/preferences controls; deeper preference-center default states and visual-parity review were not used as standalone dark-pattern findings.`,
+      `No obvious consent-choice quality concern was observed in retained first-layer consent controls.${visibleChoicePhrase} CertScore.ai observed same-layer accept, reject/refusal, and settings/preferences controls; deeper preference-center default states and visual-parity review were not used as standalone consent-choice findings.`,
       evidenceRefs,
       {
         retainedEvidence: {

@@ -690,7 +690,7 @@ test("projects structured third-party cookie pre-consent without request urls bu
   assert.equal(booleanOnlyProjection.findings.some((finding) => finding.id === "third_party_cookie_pre_consent"), false);
 });
 
-test("keeps official executive findings in top findings while preserving consent dark-pattern umbrella", () => {
+test("keeps official executive findings in top findings without the suppressed consent umbrella", () => {
   const expectedExecutiveFindingIds = [
     "asymmetric_consent_ui",
     "content_obstructed_by_overlay",
@@ -840,11 +840,11 @@ test("keeps official executive findings in top findings while preserving consent
   ]) {
     assert.equal(projection.topFindings.some((finding) => finding.id === findingId), false);
   }
-  assert.ok(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
-  assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+  assert.equal(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
+  assert.equal(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
 });
 
-test("projects concrete reject-missing dark-pattern evidence into the umbrella executive finding", () => {
+test("projects concrete reject-missing evidence without the suppressed umbrella executive finding", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("reject_button_missing", {
       confidenceBand: "high",
@@ -872,17 +872,8 @@ test("projects concrete reject-missing dark-pattern evidence into the umbrella e
   ]);
 
   assert.ok(projection.findings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
-  const umbrellaFinding = projection.findings.find((finding) => finding.id === "consent_dark_patterns_detected");
-  assert.equal(umbrellaFinding?.label, "Cookie banner dark pattern signal");
-  assert.equal(
-    umbrellaFinding?.shortSummary,
-    "The retained consent interaction structure shows reject was not available on the first layer."
-  );
-  assert.doesNotMatch(
-    `${umbrellaFinding?.label ?? ""} ${umbrellaFinding?.shortSummary ?? ""} ${umbrellaFinding?.whyItMatters ?? ""}`,
-    /violates?|violation|liability|illegal|deceptive|manipulative|non-compliant/i
-  );
-  assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+  assert.equal(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
+  assert.equal(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
 });
 
 test("missing consent preference reopen control stays deferred from production executive findings", () => {
@@ -1245,7 +1236,7 @@ test("projects asymmetric consent UI with path-specific basis and without govern
   );
 });
 
-test("does not project generic accept-only consent signals into the dark-pattern umbrella", () => {
+test("does not project generic or concrete accept-only consent signals into the suppressed umbrella", () => {
   const weakProjection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("accept_only_banner", {
       evidence: {
@@ -1288,8 +1279,8 @@ test("does not project generic accept-only consent signals into the dark-pattern
 
   assert.equal(weakProjection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
   assert.equal(weakProjection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
-  assert.ok(concreteProjection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
-  assert.ok(concreteProjection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+  assert.equal(concreteProjection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
+  assert.equal(concreteProjection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
 });
 
 test("projects RTB cookie sync into executive and privacy regulatory lenses", () => {

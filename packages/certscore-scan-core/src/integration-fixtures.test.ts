@@ -1287,6 +1287,16 @@ test("pre-consent runtime scanner recaptures late first-layer controls without i
       true,
       "scanner should use the bounded post-settle recapture path",
     );
+    assert.equal(
+      bundle.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_cmp_controls"),
+      true,
+      "scanner should retain a screenshot synchronized to late first-layer controls",
+    );
+    assert.equal(
+      timingLabels.includes("late consent control screenshot"),
+      true,
+      "scanner should record the synchronized late-control screenshot",
+    );
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -2094,7 +2104,7 @@ test("planned pre-consent baseline skips screenshots when no consent surface is 
   }
 });
 
-test("planned pre-consent baseline skips supplemental full-page capture without consent evidence", async () => {
+test("planned pre-consent baseline retains supplemental full-page evidence for an ambiguous consent layer", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-viewport-screenshot-"));
   try {
@@ -2115,10 +2125,10 @@ test("planned pre-consent baseline skips supplemental full-page capture without 
     const viewportScreenshot = result.screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent");
     const fullPageScreenshot = result.screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page");
     assert.equal(viewportScreenshot?.captureMethod, "primary_viewport_fallback");
-    assert.equal(fullPageScreenshot, undefined);
+    assert.equal(fullPageScreenshot?.captureMethod, "primary_full_page");
     assert.ok(result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent"));
-    assert.equal(result.visualCapture.captureMethod, "primary_viewport_fallback");
-    assert.equal(result.moduleRun.timingBreakdown?.some((entry) => entry.label === "supplemental full-page screenshot"), false);
+    assert.equal(result.visualCapture.captureMethod, "primary_full_page");
+    assert.equal(result.moduleRun.timingBreakdown?.some((entry) => entry.label === "supplemental full-page screenshot"), true);
     assert.equal(result.moduleRun.timingBreakdown?.some((entry) => entry.label === "page evidence: consolidated snapshot"), true);
   } finally {
     await server.close();

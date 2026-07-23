@@ -398,13 +398,17 @@ function buildPulseReportSurface(input: {
     .filter((row) => row.status === "Not observed" || row.status === "Not confirmed" || row.status === "Not testable")
     .map((row) => `regulatory_gap__gdpr_eprivacy__${row.id}`));
   const publicExecutiveFindings = executive.findings.filter((finding) =>
-    isPublicPulseApiFinding(finding) && !neutralChecklistFindingIds.has(finding.id)
+    isPublicPulseApiFinding(finding) &&
+    finding.id !== "consent_dark_patterns_detected" &&
+    !neutralChecklistFindingIds.has(finding.id)
   );
   const publicExecutiveTopFindings = executive.topFindings.filter((finding) =>
-    isPublicPulseApiFinding(finding) && !neutralChecklistFindingIds.has(finding.id)
+    isPublicPulseApiFinding(finding) &&
+    finding.id !== "consent_dark_patterns_detected" &&
+    !neutralChecklistFindingIds.has(finding.id)
   );
   const allFindings = [
-    ...regulatoryGapTopFindings,
+    ...regulatoryGapTopFindings.filter((finding) => finding.id !== "consent_dark_patterns_detected"),
     ...publicExecutiveFindings.filter((finding) => !regulatoryGapFindingIds.has(finding.id))
   ];
   const topFindings = regulatoryGapTopFindings.length > 0 ? regulatoryGapTopFindings : publicExecutiveTopFindings;

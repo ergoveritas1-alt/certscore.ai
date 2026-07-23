@@ -2692,7 +2692,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes reconciles retained first-layer c
   assert.equal(outcomes.reject_all_path_availability?.status, "Observed");
   assert.equal(outcomes.reject_all_path_availability?.criticalEvidence.retainedEvidence.rejectInteractionSucceeded, true);
   assert.equal(outcomes.consent_choice_quality?.status, "Not observed");
-  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /No obvious cookie-banner dark-pattern signal/i);
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /No obvious consent-choice quality concern/i);
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, true);
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.acceptControlObserved, true);
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.rejectControlObserved, true);
@@ -2986,7 +2986,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes checks consent choice quality wit
   });
 
   assert.equal(outcomes.consent_choice_quality?.status, "Not observed");
-  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /No obvious cookie-banner dark-pattern signal/i);
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /No obvious consent-choice quality concern/i);
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.selectedEvidenceStrength, "strong");
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.darkPatternSignalObserved, false);
   assert.equal(outcomes.cookie_banner_preticked_or_implied_consent, undefined);

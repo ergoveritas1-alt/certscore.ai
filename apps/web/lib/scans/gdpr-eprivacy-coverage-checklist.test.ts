@@ -1087,7 +1087,7 @@ test("deriveGdprEprivacyCoverageChecklist renders consent choice quality as a st
   assert.equal(rejectPath.assessmentStatus, "checked");
 
   const choiceQuality = byId(items, "consent_choice_quality");
-  assert.equal(choiceQuality.label, "Cookie banner dark pattern signal");
+  assert.equal(choiceQuality.label, "Consent choice quality");
   assert.equal(choiceQuality.status, "Not confirmed");
   assert.equal(choiceQuality.assessmentStatus, "coverage_limitation");
   assert.equal(choiceQuality.evidenceState, "not_testable");
@@ -1189,12 +1189,12 @@ test("deriveGdprEprivacyCoverageChecklist projects canonical dark-pattern findin
   });
 
   const choiceQuality = byId(items, "consent_choice_quality");
-  assert.equal(choiceQuality.label, "Cookie banner dark pattern signal");
+  assert.equal(choiceQuality.label, "Consent choice quality");
   assert.equal(choiceQuality.status, "Review signal");
   assert.equal(choiceQuality.assessmentStatus, "review_signal");
   assert.equal(choiceQuality.evidenceState, "observed");
   assert.match(choiceQuality.criticalEvidence.statusBasis, /retained first-layer consent choice evidence/i);
-  assert.match(choiceQuality.evidenceRefs.join(" "), /Cookie banner dark pattern signal/i);
+  assert.match(choiceQuality.evidenceRefs.join(" "), /Consent choice quality/i);
 
   const rowIds = new Set(items.map((item) => item.id));
   assert.equal(rowIds.has("cookie_banner_preticked_or_implied_consent"), false);

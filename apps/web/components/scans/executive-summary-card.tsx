@@ -3764,7 +3764,6 @@ function getFindingCookieWriteCount(finding: CertScoreFinding) {
 function getCookieCountMismatchNote(input: {
   beforeConsentCookieCount: number;
   findings: CertScoreFinding[];
-  unclassifiedPreConsentStorageCount?: number;
 }) {
   const findingCount = input.findings
     .map(getFindingCookieWriteCount)
@@ -3773,9 +3772,6 @@ function getCookieCountMismatchNote(input: {
   const notes: string[] = [];
   if (typeof findingCount === "number" && findingCount !== input.beforeConsentCookieCount) {
     notes.push("Executive metric includes non-essential cookies explicitly observed in the pre-consent runtime; this finding shows the subset with promotion-grade write timing.");
-  }
-  if ((input.unclassifiedPreConsentStorageCount ?? 0) > 0) {
-    notes.push(`${input.unclassifiedPreConsentStorageCount} additional pre-consent storage record${input.unclassifiedPreConsentStorageCount === 1 ? " remains" : "s remain"} unclassified.`);
   }
   return notes.length > 0 ? notes.join(" ") : null;
 }
@@ -4291,9 +4287,14 @@ export function ExecutiveSummaryCard(input: {
     Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
   const cookieCountMismatchNote = getCookieCountMismatchNote({
     beforeConsentCookieCount: input.beforeConsentCookieCount,
-    findings: regulatoryFindingInput,
-    unclassifiedPreConsentStorageCount: input.unclassifiedPreConsentStorageCount
+    findings: regulatoryFindingInput
   });
+  const unclassifiedStorageInfoNote = (input.unclassifiedPreConsentStorageCount ?? 0) > 0
+    ? `${input.unclassifiedPreConsentStorageCount} additional pre-consent storage record${input.unclassifiedPreConsentStorageCount === 1 ? " remains" : "s remain"} unclassified. These records are retained in the Pre-consent Cookies & Trackers table under their Unknown classification and may be grouped by vendor, purpose, and domain.`
+    : null;
+  const storageMetricInfoNote = [cookieCountMismatchNote, unclassifiedStorageInfoNote]
+    .filter((note): note is string => Boolean(note))
+    .join(" ") || null;
   const executiveHeadlineFindings = displayedTopFindings.slice(0, 3).map((finding) => {
     const display = getPublicReportFindingDisplayForCertFinding(finding);
     return {
@@ -4552,7 +4553,7 @@ export function ExecutiveSummaryCard(input: {
                         : null}
                       benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}
-                      note={cookieCountMismatchNote}
+                      note={storageMetricInfoNote}
                     />
                   </div>
                 </div>

@@ -538,7 +538,7 @@ export const FINDING_REGULATORY_CONTEXTS: Record<string, FindingRegulatoryContex
   },
   consent_dark_patterns_detected: {
     findingId: "consent_dark_patterns_detected",
-    label: "Cookie banner dark pattern signal",
+    label: "Consent choice quality",
     category: "Consumer protection / Consent UX",
     regulatoryConcernGroup: "consent_experience_and_choice_architecture",
     primaryConcern: {

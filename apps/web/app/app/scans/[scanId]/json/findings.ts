@@ -253,7 +253,13 @@ export function mapUnifiedPacketsForJsonView(input: {
   domainHostname: string | null;
   packets: UnifiedFindingDisplayPacket[];
 }) {
-  return input.packets.map((packet) => {
+  const publicPackets = input.packets.filter((packet) =>
+    packet.unifiedFindingId !== "consent_dark_patterns_detected" &&
+    packet.unifiedFindingId !== "accept_only_banner" &&
+    packet.unifiedFindingId !== "dismiss_without_reject"
+  );
+
+  return publicPackets.map((packet) => {
     const pageLabel = packet.primaryPageUrl ?? input.domainHostname ?? "Unknown website";
     const summaryJson = {
       url: pageLabel,

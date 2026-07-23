@@ -90,7 +90,8 @@ export type DetectionMethodologySection = {
 
 const TOP_FINDING_IDS = EXECUTIVE_SUMMARY_TOP_FINDING_IDS;
 const PUBLIC_DEFERRED_FINDING_IDS = new Set<string>([
-  "cpra_cba_opt_out_missing"
+  "cpra_cba_opt_out_missing",
+  "consent_dark_patterns_detected"
 ]);
 const PUBLIC_DEFERRED_REGULATORY_CONTEXT_PATTERN =
   /CCPA|CPRA|California|CPPA|Do Not Sell|Do Not Share|sale\/share|sale or share|sale, sharing|selling\/sharing/i;

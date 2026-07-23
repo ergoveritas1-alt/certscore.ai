@@ -719,16 +719,11 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
       label: "Non-essential or review",
       value: nonEssentialCount,
       detail: "Analytics, advertising, or unclear"
-    },
-    {
-      label: "After consent",
-      value: null,
-      detail: "Not tested; this scan is pre-consent only"
     }
   ];
 
   return (
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label="Consent evidence segmentation">
+    <div className="grid gap-2 sm:grid-cols-3" aria-label="Consent evidence segmentation">
       {segments.map((segment) => (
         <div key={segment.label} className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5">
           <div className="flex items-baseline justify-between gap-2">
@@ -5840,7 +5835,9 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
     const state = debugBuildScanReportUnifiedFindingState(scanRecord);
     const ownerFindings = buildScanReportUnifiedFindingsFromState(state);
 
-    return filterContradictoryPositiveSurfaceFindings(ownerFindings);
+    return filterContradictoryPositiveSurfaceFindings(ownerFindings).filter(
+      (finding) => finding.unifiedFindingId !== "consent_dark_patterns_detected"
+    );
   } catch (error) {
     console.error("Failed to build scan report unified findings", error);
     return [] as UnifiedFindingDisplayPacket[];

@@ -1539,7 +1539,7 @@ test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead 
       assessmentStatus: "review_signal",
       evidenceState: "observed",
       id: "consent_choice_quality",
-      label: "Cookie banner dark pattern signal",
+      label: "Consent choice quality",
       status: "Review signal"
     }),
     makeChecklistItem({

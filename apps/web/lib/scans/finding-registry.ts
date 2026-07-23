@@ -639,7 +639,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   consent_dark_patterns_detected: {
     id: "consent_dark_patterns_detected",
-    label: "Cookie banner dark pattern signal",
+    label: "Consent choice quality",
     section: "Consent Experience",
     defaultSurfacePriority: 95,
     whyItMatters:

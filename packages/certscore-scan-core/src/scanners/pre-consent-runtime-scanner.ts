@@ -1737,6 +1737,61 @@ export async function preConsentRuntimeScanner(
       );
     }
 
+    // A fast initial screenshot can legitimately precede a late-rendering CMP.
+    // Once structured first-layer controls are retained, preserve a second
+    // screenshot from that same DOM state even when no direct CMP runtime
+    // marker was available to trigger the older synchronized-CMP path.
+    if (
+      (input.screenshotMode ?? "always") !== "never" &&
+      consentObservation.layerInspected === "first_layer" &&
+      consentObservation.controls.length > 0 &&
+      !screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_cmp_controls") &&
+      remainingModuleBudgetMs() >= 1_000
+    ) {
+      const synchronizedScreenshotPath = input.artifactWriter.artifactPath(
+        "screenshot-pre-consent-cmp-controls.png",
+      );
+      const synchronizedCapture = await recordTiming(
+        timingBreakdown,
+        "late consent control screenshot",
+        "Viewport capture synchronized to the retained first-layer consent controls after late CMP rendering.",
+        () => capturePreConsentScreenshot(page, synchronizedScreenshotPath, {
+          captureMode: "viewport_first",
+          screenshotErrors,
+          timeoutMs: Math.min(1_500, remainingModuleBudgetMs()),
+        }),
+      );
+      if (synchronizedCapture.status === "available") {
+        const synchronizedScreenshot: ScreenshotArtifact = {
+          artifactId: "screenshot_pre_consent_cmp_controls",
+          capturedAtMs: elapsed(input.scanStartedAtMs),
+          captureMethod: synchronizedCapture.captureMethod,
+          path: synchronizedScreenshotPath,
+          url: page.url(),
+          pagePhase: "network_idle",
+          consentStateAtTime: "pre_consent",
+        };
+        screenshots.unshift(synchronizedScreenshot);
+        const synchronizedVisualCapture = visualCaptureFromScreenshotSummary(
+          synchronizedCapture,
+          synchronizedScreenshotPath,
+          synchronizedScreenshot.artifactId,
+        );
+        visualCapture = {
+          ...synchronizedVisualCapture,
+          artifactRefs: uniqueEvidenceRefs([
+            ...synchronizedVisualCapture.artifactRefs,
+            ...visualCapture.artifactRefs,
+          ]),
+          notes: unique([
+            ...synchronizedVisualCapture.notes,
+            ...visualCapture.notes,
+            "Late-rendered first-layer consent controls and visual evidence were retained from the same pre-consent DOM state.",
+          ]),
+        };
+      }
+    }
+
     const initialNoGoCandidateText = domText.replace(/\s+/g, " ").trim();
     if (
       initialNoGoCandidateText.length <= 60 ||
@@ -7204,10 +7259,14 @@ function shouldCaptureSupplementalFullPageScreenshot(input: {
   screenshotErrors: string[];
   visualCapture: VisualCaptureSummary;
 }): boolean {
+  // An unknown layer can mean the banner is late-rendered or below the
+  // viewport. Preserve a bounded full-page artifact so visual review can
+  // distinguish "not present" from "not in the initial viewport".
   return input.visualCapture.status !== "available" ||
     input.screenshotErrors.length > 0 ||
     input.cmpRuntimeObservations.length > 0 ||
     input.consentObservation.likelyPresent ||
+    input.consentObservation.layerInspected === "unknown" ||
     input.consentObservation.controls.length > 0 ||
     hasTextBackedConsentSurface(input.consentObservation);
 }

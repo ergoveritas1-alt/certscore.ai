@@ -112,6 +112,26 @@ test("a successful main document followed by a blocked redirect is diagnostic wh
   }
 });
 
+test("a visually blank settled screenshot remains no-go even when policy surfaces were found", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-blank-screenshot-with-policy-"));
+  try {
+    const assessment = buildScanNoGoAssessment({
+      ...scanEvidence({
+        screenshots: [await retainedScreenshot(directory, { substantive: false })],
+      }),
+      policySurfaceObservations: [usablePolicySurface()],
+    });
+
+    assert.equal(assessment?.scanNoGoAssessment.decision, "no_go");
+    assert.equal(assessment?.primaryReasonCode, "blank_or_unusable_page");
+    assert.equal(assessment?.visualAccessReview.page_state, "blank_or_unusable");
+    assert.ok(assessment?.scanNoGoAssessment.corroboratorCodes.includes("retained_visual_artifact_available"));
+    assert.equal(assessment?.scanNoGoAssessment.supportingSignals.visuallyBlankScreenshotObserved, true);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("a late 403 cannot erase a substantial retained page load", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-late-403-rich-page-"));
   try {
@@ -194,6 +214,7 @@ function scanEvidence(input: {
   finalMainDocumentStatus?: number;
   firstPartySuccesses?: number;
   priorMainDocumentStatus?: number;
+  policySurfaceObservations?: PolicySurfaceObservation[];
   screenshots: ScreenshotArtifact[];
   text?: string;
 }) {
@@ -215,7 +236,7 @@ function scanEvidence(input: {
     modulesRun: [],
     networkEvents,
     networkResponseEvents,
-    policySurfaceObservations: [],
+    policySurfaceObservations: input.policySurfaceObservations ?? [],
     screenshots: input.screenshots,
   };
 }

@@ -372,11 +372,11 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "consent_choice_quality",
-    label: "Cookie banner dark pattern signal",
-    explanation: "Whether retained cookie-banner evidence shows choice architecture that may steer users toward accepting optional cookies or tracking.",
+    label: "Consent choice quality",
+    explanation: "Whether retained cookie-banner evidence supports review of the available consent choices and their presentation.",
     findingIds: ["consent_dark_patterns_detected", "asymmetric_consent_ui"],
     defaultFindingStatus: "Review signal",
-    notObservedText: "No cookie-banner dark pattern signal was surfaced from retained canonical evidence.",
+    notObservedText: "No consent-choice quality concern was surfaced from retained canonical evidence.",
     requiresPublicWebCoverage: true
   },
   {
@@ -1382,7 +1382,11 @@ function getEvidenceRefs(findings: UnifiedFindingDisplayPacket[]) {
   const refs = new Set<string>();
 
   for (const finding of findings) {
-    refs.add(finding.presentation?.findingName || finding.title || finding.unifiedFindingId);
+    refs.add(
+      finding.unifiedFindingId === "consent_dark_patterns_detected"
+        ? "Consent choice quality"
+        : finding.presentation?.findingName || finding.title || finding.unifiedFindingId
+    );
 
     for (const sourceRef of finding.sourceRefs ?? []) {
       const formatted = formatSourceRef(sourceRef);
@@ -1412,7 +1416,11 @@ function getProjectedEvidenceRefs(findings: NonNullable<GdprEprivacyCoverageChec
   const refs = new Set<string>();
 
   for (const finding of findings) {
-    refs.add(finding.label);
+    refs.add(
+      finding.id === "consent_dark_patterns_detected"
+        ? "Consent choice quality"
+        : finding.label
+    );
     for (const preview of finding.evidencePreview ?? []) {
       refs.add(preview);
     }

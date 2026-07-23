@@ -96,6 +96,10 @@ const DEFERRED_PRODUCTION_FINDING_IDS = new Set([
   "do_not_sell_sharing_disclosure_conflict"
 ]);
 
+const PUBLIC_SUPPRESSED_FINDING_IDS = new Set<keyof typeof CERT_SCORE_FINDING_REGISTRY>([
+  "consent_dark_patterns_detected"
+]);
+
 const FINGERPRINTING_CORROBORATING_TRACKING_IDS = new Set([
   "pre_consent_tracking_detected",
   "preconsent_tracking",
@@ -5111,6 +5115,9 @@ export function projectExecutiveFindingsFromUnifiedPackets(
   for (const packet of executiveInputPackets) {
     const findingIds = getMappedFindingIds(packet);
     const executiveEligibleFindingIds = findingIds.filter((findingId) => {
+      if (PUBLIC_SUPPRESSED_FINDING_IDS.has(findingId)) {
+        return false;
+      }
       if (packet.unifiedFindingId !== "fingerprinting_observed") {
         return true;
       }

@@ -1626,6 +1626,7 @@ export function buildScanNoGoAssessment(input: {
   const substantiveDomWordCount = longestDomText.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
   const screenshotStructure = inspectRetainedScreenshotStructure(input.screenshots);
   const visuallySubstantiveScreenshotObserved = screenshotStructure?.visuallySubstantive === true;
+  const visuallyBlankScreenshotObserved = screenshotStructure?.visuallyBlank === true;
   // Settled DOM text is the closest textual representation of the page the
   // visitor saw. Consent probes can contain large inline scripts whose source
   // mentions blocking or challenge behavior without representing page state.
@@ -1651,6 +1652,11 @@ export function buildScanNoGoAssessment(input: {
     !consentSurfaceTextPageState &&
     longestConsentSurfaceText.length >= 180 &&
     consentSurfaceWordCount >= 24;
+  const visuallyBlankSuccessfulPage =
+    visuallyBlankScreenshotObserved &&
+    !substantiveDomTextObserved &&
+    !substantiveCapturedPageTextObserved &&
+    !actionableConsentControlObserved;
   const positiveSiteSignals = uniqueStrings([
     mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400
       ? "main_document_success"
@@ -1665,6 +1671,7 @@ export function buildScanNoGoAssessment(input: {
     successfulFirstPartyResponses >= 4 ? "multiple_first_party_resources_loaded" : null,
     successfulMainDocumentBeforeTerminal ? "successful_main_document_before_terminal_state" : null,
     visuallySubstantiveScreenshotObserved ? "visually_substantive_screenshot_observed" : null,
+    visuallyBlankSuccessfulPage ? "visually_blank_screenshot_observed" : null,
   ].filter((value): value is string => Boolean(value)));
   const strongPositiveSiteEvidence = positiveSiteSignals.some((signal) =>
     signal !== "main_document_success"
@@ -1691,6 +1698,16 @@ export function buildScanNoGoAssessment(input: {
     ? textPageState
     : null;
   const pageState = challengePageState ?? explicitTextChallenge ?? httpPageState ?? textPageState;
+  const visualBlankPageState: ClassifiedNoGoPageState | null = visuallyBlankSuccessfulPage
+    ? {
+        confidence: 0.94,
+        evidenceText: "The retained public-page screenshot was visually blank after the page settled.",
+        hardTerminal: true,
+        reasonCode: "blank_or_unusable_page",
+        visualPageState: "blank_or_unusable",
+      }
+    : null;
+  const settledPageState = pageState ?? visualBlankPageState;
   const nearlyEmptyPage = longestDomText.length <= 40 && substantiveDomWordCount <= 6;
   const sparseSecondLookRetained = input.screenshots.some((artifact) =>
     artifact.artifactId === "screenshot_pre_consent_no_go_confirmation"
@@ -1711,11 +1728,11 @@ export function buildScanNoGoAssessment(input: {
     input.networkEvents.length <= 4 &&
     successfulFirstPartyResponses <= 2 &&
     input.policySurfaceObservations.length === 0;
-  if (!pageState && !networkChallengeEvidence && !sparseSuccessfulPage && !temporallyConfirmedSparsePage) {
+  if (!settledPageState && !networkChallengeEvidence && !sparseSuccessfulPage && !temporallyConfirmedSparsePage) {
     return null;
   }
 
-  const retainedEvidenceText = pageState?.evidenceText ??
+  const retainedEvidenceText = settledPageState?.evidenceText ??
     (sparseSuccessfulPage || temporallyConfirmedSparsePage
       ? "The settled page remained sparse after a bounded second-look capture."
       : null) ??
@@ -1725,12 +1742,12 @@ export function buildScanNoGoAssessment(input: {
   const screenshot = input.screenshots
     .filter((artifact) => artifact.consentStateAtTime === "pre_consent")
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs)[0] ?? null;
-  const primaryReasonCode = pageState?.reasonCode ??
+  const primaryReasonCode = settledPageState?.reasonCode ??
     (sparseSuccessfulPage || temporallyConfirmedSparsePage ? "blank_or_unusable_page" : "potential_security_challenge");
-  const visualPageState: VisualAccessReview["page_state"] = pageState?.visualPageState ??
+  const visualPageState: VisualAccessReview["page_state"] = settledPageState?.visualPageState ??
     (sparseSuccessfulPage || temporallyConfirmedSparsePage ? "blank_or_unusable" : "degraded_but_useful");
   const blockedMainDocument = mainDocumentStatus !== null && [401, 403, 407, 429, 451, 500, 502, 503, 504].includes(mainDocumentStatus);
-  const explicitTerminalPage = Boolean(pageState) || sparseSuccessfulPage || temporallyConfirmedSparsePage;
+  const explicitTerminalPage = Boolean(settledPageState) || sparseSuccessfulPage || temporallyConfirmedSparsePage;
   const strongTerminalContradiction =
     successfulMainDocumentBeforeTerminal &&
     visuallySubstantiveScreenshotObserved &&
@@ -1741,11 +1758,11 @@ export function buildScanNoGoAssessment(input: {
   const contradictedByNormalSite =
     strongPositiveSiteEvidence &&
     (
-      (!blockedMainDocument && !pageState?.hardTerminal) ||
+      (!blockedMainDocument && !settledPageState?.hardTerminal) ||
       strongTerminalContradiction ||
       (
         temporallyConfirmedSparsePage &&
-        !pageState?.hardTerminal &&
+        !settledPageState?.hardTerminal &&
         (
           actionableConsentControlObserved ||
           substantiveConsentSurfaceTextObserved ||
@@ -1759,7 +1776,7 @@ export function buildScanNoGoAssessment(input: {
       ? "no_go"
       : "continue_with_diagnostics";
   const confidence = decision === "no_go"
-    ? pageState?.confidence ?? (sparseSuccessfulPage || temporallyConfirmedSparsePage ? 0.91 : 0.9)
+    ? settledPageState?.confidence ?? (sparseSuccessfulPage || temporallyConfirmedSparsePage ? 0.91 : 0.9)
     : 0.72;
   const evidenceRefs = [
     "scan_runtime_artifacts.scan_no_go_assessment",
@@ -1790,7 +1807,8 @@ export function buildScanNoGoAssessment(input: {
     corroboratorCodes: [
       securityChallengeRequestObserved ? "network_security_challenge_request_observed" : null,
       networkChallengeEvidence?.corroboratorCode ?? null,
-      pageState ? "terminal_page_text_or_status_observed" : null,
+      settledPageState ? "terminal_page_text_or_status_observed" : null,
+      visuallyBlankSuccessfulPage ? "visual_blank_screenshot_observed" : null,
       sparseSuccessfulPage || temporallyConfirmedSparsePage ? "settled_page_nearly_empty" : null,
       temporallyConfirmedSparsePage ? "bounded_second_look_remained_sparse" : null,
       screenshot ? "retained_visual_artifact_available" : null,
@@ -1815,6 +1833,7 @@ export function buildScanNoGoAssessment(input: {
       visualPageState,
       successfulMainDocumentBeforeTerminal,
       visuallySubstantiveScreenshotObserved,
+      visuallyBlankScreenshotObserved,
       screenshotEncodedBytesPerPixel: screenshotStructure?.encodedBytesPerPixel ?? null,
       screenshotHeight: screenshotStructure?.height ?? null,
       screenshotWidth: screenshotStructure?.width ?? null,
@@ -1902,6 +1921,7 @@ function isIndependentlyUsablePolicySurface(
 type RetainedScreenshotStructure = {
   encodedBytesPerPixel: number;
   height: number;
+  visuallyBlank: boolean;
   visuallySubstantive: boolean;
   width: number;
 };
@@ -1930,6 +1950,10 @@ function inspectRetainedScreenshotStructure(
       const candidate = {
         encodedBytesPerPixel,
         height,
+        visuallyBlank:
+          width >= 640 &&
+          height >= 400 &&
+          encodedBytesPerPixel <= 0.02,
         visuallySubstantive:
           width >= 640 &&
           height >= 400 &&

@@ -2697,7 +2697,7 @@ test("runtime reject path depth promotes concrete dark-pattern reject-missing ev
   assert.ok(projection.findings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
   assert.ok(projection.findings.some((finding) => finding.id === "asymmetric_consent_ui"));
   assert.ok(!projection.findings.some((finding) => finding.id === "forced_consent_interaction"));
-  assert.ok(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+  assert.equal(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
   assert.ok(!weakState.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "reject_button_missing"));
   assert.ok(!weakState.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "accept_more_prominent_than_reject"));
   assert.ok(!weakState.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "forced_consent_wall"));
