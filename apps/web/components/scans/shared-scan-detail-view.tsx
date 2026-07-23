@@ -938,7 +938,7 @@ function RuntimeInventoryTable({
               <InventoryPriorityDonut rows={groupedInventoryRows} />
             </div>
           </div>
-          <div className="space-y-2 md:hidden" aria-label="Cookies and trackers mobile list">
+          <div className="space-y-2 lg:hidden" aria-label="Cookies and trackers mobile list">
             {groupedInventoryRows.map((row, index) => (
               <article key={`mobile-${getInventoryGroupRowRenderKey(row, index)}`} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
@@ -957,18 +957,18 @@ function RuntimeInventoryTable({
               </article>
             ))}
           </div>
-          <div className="hidden overflow-hidden rounded-xl border border-slate-200 md:block">
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 lg:block">
             <div className="max-h-[370px] overflow-auto">
             <InventorySortRuntime tableId="preconsent-inventory-table" />
             <table id="preconsent-inventory-table" className="w-[1190px] min-w-[1190px] max-w-[1190px] table-fixed border-collapse text-left text-[13px]">
               <caption className="sr-only">Pre-consent cookies and trackers inventory</caption>
               <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500 shadow-[0_2px_8px_-6px_rgba(15,23,42,0.55)]">
                 <tr>
-                  <th className="sticky left-0 z-20 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="type" label="Type" /></th>
-                  <th className="sticky left-[90px] z-20 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="vendor" label="Vendor" /></th>
-                  <th className="w-[130px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
-                  <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="priority" label="Priority" /></th>
-                  <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
+                  <th title="Cookie or tracker evidence type" className="sticky left-0 z-20 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="type" label="Type" /></th>
+                  <th title="Resolved vendor or first-party entity" className="sticky left-[90px] z-20 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="vendor" label="Vendor" /></th>
+                  <th title="Observed purpose classification" className="w-[130px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
+                  <th title="Review priority based on retained evidence" className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="priority" label="Priority" /></th>
+                  <th title="Elapsed time from scan start to observation" className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
                   <th className="w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Cookies</th>
                   <th className="w-[150px] max-w-[150px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Domain</th>
                   <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Server location</th>
@@ -981,7 +981,7 @@ function RuntimeInventoryTable({
                 {groupedInventoryRows.map((row, index) => (
                   <tr
                     key={getInventoryGroupRowRenderKey(row, index)}
-                    className="group h-10 transition-colors odd:bg-slate-50/25 hover:bg-sky-50/35"
+                    className={`group h-10 transition-colors odd:bg-slate-50/25 hover:bg-sky-50/55 ${index === 0 || groupedInventoryRows[index - 1]?.vendor !== row.vendor ? "border-t-2 border-slate-200" : ""}`}
                     data-category={getRuntimeInventoryMacroCategory(row)}
                     data-vendor={row.vendor}
                     data-type={row.type}
@@ -992,10 +992,10 @@ function RuntimeInventoryTable({
                     data-priority={row.priority}
                     data-search={`${row.vendor} ${getInventoryPurposeLabel(row)} ${row.cookieNames.join(" ")} ${row.domains.join(" ")}`.toLowerCase()}
                   >
-                    <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-2 py-1.5 align-top group-hover:bg-sky-50/35 has-[details[open]]:z-40">
+                    <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-2 py-1.5 align-top group-hover:bg-sky-50/55 has-[details[open]]:z-40">
                       <InventoryTypeDisclosure row={row} />
                     </td>
-                    <td className="sticky left-[90px] z-10 truncate whitespace-nowrap bg-white px-2 py-1.5 align-middle group-hover:bg-sky-50/35">
+                    <td className="sticky left-[90px] z-10 truncate whitespace-nowrap bg-white px-2 py-1.5 align-middle group-hover:bg-sky-50/55">
                       <InventoryVendorCell label={row.vendor} />
                     </td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={getInventoryPurposeLabel(row)}>{getInventoryPurposeLabel(row)}</td>

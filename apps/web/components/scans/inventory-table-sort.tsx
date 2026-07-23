@@ -24,6 +24,7 @@ export function InventorySortButton({ tableId, sortKey, label }: { tableId: stri
       type="button"
       className="group/sort inline-flex items-center gap-1 rounded px-0.5 py-0.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] leading-none text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400 focus-visible:ring-offset-0"
       aria-label={`Sort by ${label}`}
+      title={direction ? `${label}: ${direction === "asc" ? "ascending" : "descending"}` : `Sort by ${label}`}
       aria-pressed={direction !== null}
       onClick={() => {
         const nextDirection = direction === "asc" ? "desc" : "asc";
