@@ -6,6 +6,16 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
+export {
+  isCanonicalIdSyncEndpoint,
+  resolveCanonicalCookieKnowledge,
+  resolveCanonicalVendorLegalContext,
+  type CanonicalCookieCategory,
+  type CanonicalCookieKnowledge,
+  type CanonicalVendorLegalContext,
+  type TransferMechanism,
+} from "./cookie-knowledge-base.js";
+
 export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-20-wave19-ifit-attribution";
 
 export type VendorResolverEvidenceType =

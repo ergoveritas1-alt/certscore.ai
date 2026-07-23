@@ -137,6 +137,7 @@ import {
 import { buildScanProof } from "../../lib/scans/scan-proof";
 import {
   buildReportSurfaceVendorProjection,
+  buildPreConsentDataFlows,
   buildRuntimeInventoryGroupRows,
   buildTrackerInventoryGroupRows,
   buildTrackerInventoryRows,
@@ -149,6 +150,7 @@ import {
   type ConsentReviewPriority,
   type InventoryConfidence,
   type InventoryGroupRow,
+  type PreConsentDataFlow,
   type TrackerInventoryRow
 } from "../../lib/scans/runtime-inventory-projection";
 import {
@@ -551,14 +553,64 @@ function InventoryTypeIcon({ type }: { type: "cookie" | "tracker" }) {
   );
 }
 
-function formatInventoryParty(value: "first_party" | "third_party" | "unknown" | string | null | undefined) {
-  if (value === "first_party") {
-    return "1st";
+function formatCookieLifespan(seconds: number | null) {
+  if (seconds === null) return "Not retained";
+  if (seconds === 0) return "Session";
+  const days = Math.round(seconds / 86_400);
+  if (days >= 365) return `${(days / 365).toFixed(days >= 730 ? 1 : 2)} years`;
+  if (days >= 1) return `${days} day${days === 1 ? "" : "s"}`;
+  const hours = Math.max(1, Math.round(seconds / 3_600));
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
+function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
+  if (row.cookieDetails.length === 0 && row.domains.length === 0 && row.rawProducts.length === 0) {
+    return <InventoryTypeIcon type={row.type} />;
   }
-  if (value === "third_party") {
-    return "3rd";
-  }
-  return "—";
+  return (
+    <details className="group/cookie-detail relative">
+      <summary
+        aria-label={`Show retained vendor evidence for ${row.vendor}`}
+        className="inline-flex cursor-pointer list-none items-center gap-0.5 rounded-md border border-slate-200 bg-white px-1 py-0.5 text-sky-700 hover:border-slate-300 marker:hidden [&::-webkit-details-marker]:hidden"
+        title="Show retained requests, cookies, and storage metadata"
+      >
+        <InventoryTypeIcon type={row.cookieDetails.length > 0 ? "cookie" : row.type} />
+        <svg aria-hidden="true" className="h-2.5 w-2.5 transition-transform group-open/cookie-detail:rotate-180" fill="none" viewBox="0 0 12 12">
+          <path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+        </svg>
+      </summary>
+      <div className="mt-2 w-[34rem] max-w-[80vw] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Retained vendor evidence</p>
+        <dl className="mb-2 grid grid-cols-[7rem_1fr] gap-x-2 rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] leading-4 text-slate-600">
+          <dt className="font-medium text-slate-500">Products</dt><dd>{row.rawProducts.join(", ") || row.vendor}</dd>
+          <dt className="font-medium text-slate-500">Request endpoints</dt><dd className="break-all">{row.domains.join(", ") || "Not retained"}</dd>
+          <dt className="font-medium text-slate-500">Requests</dt><dd>{row.requestCount ?? "Not retained"}</dd>
+          <dt className="font-medium text-slate-500">Storage items</dt><dd>{row.cookieDetails.length}</dd>
+        </dl>
+        <div className="max-h-72 space-y-2 overflow-auto">
+          {row.cookieDetails.map((cookie) => (
+            <div key={`${cookie.cookieName}:${cookie.domain ?? ""}`} className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] leading-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono font-semibold text-slate-900">{cookie.cookieName}</span>
+                {cookie.longLived ? <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-rose-700">&gt;12 months</span> : null}
+                {cookie.setByThirdPartyScript ? <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-700">3rd-party script context</span> : null}
+              </div>
+              <p className="mt-1 text-slate-600">{cookie.description ?? "Purpose is not yet classified; manual review is recommended."}</p>
+              <dl className="mt-1 grid grid-cols-[7rem_1fr] gap-x-2 text-slate-600">
+                <dt className="font-medium text-slate-500">Domain</dt><dd className="break-all">{cookie.domain ?? "Not retained"}</dd>
+                <dt className="font-medium text-slate-500">Lifespan</dt><dd>{formatCookieLifespan(cookie.lifespanSeconds ?? null)}</dd>
+                <dt className="font-medium text-slate-500">Data types</dt><dd>{cookie.dataTypes?.join(", ") || "Review required"}</dd>
+                <dt className="font-medium text-slate-500">Initiator</dt><dd className="break-all">{cookie.setterScriptUrl ?? cookie.initiatorUrl ?? "Not retained"}</dd>
+                <dt className="font-medium text-slate-500">Initiator chain</dt><dd className="break-all">{cookie.initiatorChain?.join(" → ") || "Not retained"}</dd>
+              </dl>
+            </div>
+          ))}
+          {row.cookieDetails.length === 0 ? <p className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] text-slate-500">No cookie storage metadata was retained for this vendor.</p> : null}
+        </div>
+        <p className="mt-2 text-[10px] leading-4 text-slate-500">Cookie values are redacted; names, attributes, timing, and bounded initiator metadata are retained.</p>
+      </div>
+    </details>
+  );
 }
 
 function formatInventoryCellForCopy(value: string | number | null | undefined) {
@@ -666,7 +718,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
 
 function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   const copyRows = [
-    ["Type", "Vendor", "Purpose", "Priority", "First seen", "Cookie name(s)", "Domain", "Confidence", "Party", "Category"],
+    ["Type", "Vendor", "Purpose", "Priority", "First seen", "Cookie name(s)", "Domain", "Destination", "Confidence", "Party", "Category"],
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
@@ -675,6 +727,11 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
       formatFirstSeenMs(row.firstSeenMs),
       row.cookieNames.join(", ") || "—",
       row.domains.join(", ") || "—",
+      row.dataFlows.map((flow) => [
+        flow.networkDestination.countryCode ?? "unknown edge",
+        flow.controllingEntity.headquartersCountry ? `${flow.controllingEntity.headquartersCountry}-controlled` : null,
+        flow.idSync ? "ID sync" : null
+      ].filter(Boolean).join(" / ")).join(", ") || "—",
       INVENTORY_CONFIDENCE_LABELS[row.confidence],
       formatGroupedParty(row.party),
       getRuntimeInventoryMacroCategory(row)
@@ -682,6 +739,53 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   ];
 
   return copyRows.map((row) => row.map(formatInventoryCellForCopy).join("\t")).join("\n");
+}
+
+function countryFlag(countryCode: string | null) {
+  if (!countryCode || !/^[A-Z]{2}$/i.test(countryCode)) return "◌";
+  return [...countryCode.toUpperCase()]
+    .map((letter) => String.fromCodePoint(127397 + letter.charCodeAt(0)))
+    .join("");
+}
+
+function InventoryDataFlowCell({ row }: { row: InventoryGroupRow }) {
+  const flow = row.dataFlows[0];
+  if (!flow) return <span className="text-slate-400">Not retained</span>;
+  const country = flow.networkDestination.countryCode;
+  const title = row.dataFlows.map((candidate) => [
+    `Endpoint: ${candidate.endpoint}`,
+    `${candidate.networkDestination.label}: ${candidate.networkDestination.ip ?? "IP not retained"}${candidate.networkDestination.countryCode ? ` (${candidate.networkDestination.countryCode})` : ""}`,
+    `Controlling entity: ${candidate.controllingEntity.legalEntity ?? "Unknown"}${candidate.controllingEntity.headquartersCountry ? ` (${candidate.controllingEntity.headquartersCountry})` : ""}`,
+    `Transfer mechanism: ${candidate.transferMechanism.mechanism.replaceAll("_", " ")}; verified as of ${candidate.transferMechanism.verifiedAsOf}`,
+    candidate.idSync ? "Known ID-sync endpoint observed pre-consent." : null
+  ].filter(Boolean).join("\n")).join("\n\n");
+  return (
+    <span className="inline-flex items-center gap-1" title={title}>
+      <span aria-hidden="true">{countryFlag(country)}</span>
+      <span className="font-semibold">{country ?? "??"}</span>
+      {flow.idSync ? <span className="rounded bg-rose-100 px-1 text-[9px] font-semibold text-rose-700">ID sync</span> : null}
+      {row.dataFlows.length > 1 ? <span className="text-[10px] text-slate-500">+{row.dataFlows.length - 1}</span> : null}
+    </span>
+  );
+}
+
+function PreConsentDataFlowSummary({ rows }: { rows: InventoryGroupRow[] }) {
+  const flows = rows.flatMap((row) => row.dataFlows).filter((flow, index, all) =>
+    all.findIndex((candidate) =>
+      `${candidate.endpoint}\u0000${candidate.networkDestination.ip ?? ""}` ===
+      `${flow.endpoint}\u0000${flow.networkDestination.ip ?? ""}`
+    ) === index
+  );
+  if (flows.length === 0) return null;
+  const uniqueEntities = new Set(flows.map((flow) => flow.controllingEntity.legalEntity).filter(Boolean));
+  const usControlled = new Set(flows.filter((flow) => flow.controllingEntity.headquartersCountry === "US").map((flow) => flow.controllingEntity.legalEntity ?? flow.endpoint)).size;
+  const euControlled = new Set(flows.filter((flow) => ["AT", "BE", "BG", "HR", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"].includes(flow.controllingEntity.headquartersCountry ?? "")).map((flow) => flow.controllingEntity.legalEntity ?? flow.endpoint)).size;
+  const adequacyCountry = new Set(flows.filter((flow) => flow.transferMechanism.mechanism === "adequacy_decision").map((flow) => flow.controllingEntity.legalEntity ?? flow.endpoint)).size;
+  return (
+    <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+      Pre-consent data flows: {flows.length} endpoint{flows.length === 1 ? "" : "s"} · {uniqueEntities.size} identified controlling entit{uniqueEntities.size === 1 ? "y" : "ies"} · {usControlled} US-controlled · {euControlled} EU-controlled · {adequacyCountry} adequacy-country. Server countries shown below are CDN-edge observations, not asserted data-storage locations.
+    </p>
+  );
 }
 
 function getRuntimeInventoryMacroCategory(row: InventoryGroupRow) {
@@ -739,14 +843,16 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
 
 function RuntimeInventoryTable({
   cookieRows,
+  dataFlows,
   firstPartyDomain,
   trackerRows
 }: {
   cookieRows: RuntimeCookieEvidenceRow[];
+  dataFlows: PreConsentDataFlow[];
   firstPartyDomain?: string | null;
   trackerRows: TrackerInventoryRow[];
 }) {
-  const groupedInventoryRows = buildRuntimeInventoryGroupRows({ cookieRows, firstPartyDomain, trackerRows });
+  const groupedInventoryRows = buildRuntimeInventoryGroupRows({ cookieRows, dataFlows, firstPartyDomain, trackerRows });
   const copyPayload = buildRuntimeInventoryCopyPayload(groupedInventoryRows);
 
   return (
@@ -763,6 +869,7 @@ function RuntimeInventoryTable({
         />
         <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:px-5">
           <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
+          <PreConsentDataFlowSummary rows={groupedInventoryRows} />
           <div className="grid gap-4 lg:grid-cols-[minmax(17rem,0.9fr)_minmax(0,2.1fr)] lg:items-start">
           <div className="grid gap-3 sm:grid-cols-2 lg:h-[317px] lg:grid-cols-1 lg:grid-rows-2">
             <InventoryPurposeCard rows={groupedInventoryRows} />
@@ -773,7 +880,7 @@ function RuntimeInventoryTable({
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200 lg:h-[317px]">
             <div className="max-h-[340px] overflow-auto lg:h-full lg:max-h-none">
-            <table className="w-full min-w-[1200px] table-fixed border-collapse text-left text-[13px]">
+            <table className="w-full min-w-[1310px] table-fixed border-collapse text-left text-[13px]">
               <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>
                   <th className="w-[50px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Type</th>
@@ -783,6 +890,7 @@ function RuntimeInventoryTable({
                   <th className="w-[98px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">First seen</th>
                   <th className="w-[150px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Cookie names</th>
                   <th className="w-[210px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Domain</th>
+                  <th className="w-[110px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Destination</th>
                   <th className="w-[96px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Confidence</th>
                   <th className="w-[64px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Party</th>
                   <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Category</th>
@@ -791,8 +899,8 @@ function RuntimeInventoryTable({
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
                 {groupedInventoryRows.map((row, index) => (
                   <tr key={getInventoryGroupRowRenderKey(row, index)} className="h-10">
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">
-                      <InventoryTypeIcon type={row.type} />
+                    <td className="whitespace-nowrap px-2.5 py-1.5 align-top">
+                      <InventoryTypeDisclosure row={row} />
                     </td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryVendorCell label={row.vendor} />
@@ -806,6 +914,7 @@ function RuntimeInventoryTable({
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5"><InventoryDataFlowCell row={row} /></td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryConfidenceCell confidence={row.confidence} />
                     </td>
@@ -815,7 +924,7 @@ function RuntimeInventoryTable({
                 ))}
                 {groupedInventoryRows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-5 text-center text-slate-500" colSpan={10}>No retained cookie or tracker rows for this scan.</td>
+                    <td className="px-3 py-5 text-center text-slate-500" colSpan={11}>No retained cookie or tracker rows for this scan.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -6839,6 +6948,7 @@ export async function SharedScanDetailView({
     runtimeArtifacts
   });
   const cookieInventoryRows = runtimeCookieInventory.rows;
+  const preConsentDataFlows = buildPreConsentDataFlows(hybridRuntimeEvidence);
   const observedNonEssentialPreConsentStorageCount = countEligibleNonEssentialPreconsentStorageMetricRows(cookieInventoryRows);
   const unclassifiedPreConsentStorageCount = countUnclassifiedNonEssentialPreconsentStorageRows(cookieInventoryRows);
   const promotionGradePreConsentStorageCount = cookieInventoryRows.filter(isEligibleNonEssentialPreconsentStorageRow).length;
@@ -7343,6 +7453,7 @@ export async function SharedScanDetailView({
           {isNoGoReport ? null : (
             <RuntimeInventoryTable
               cookieRows={cookieInventoryRows}
+              dataFlows={preConsentDataFlows}
               firstPartyDomain={scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost}
               trackerRows={trackerInventoryRows}
             />

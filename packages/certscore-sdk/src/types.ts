@@ -293,6 +293,47 @@ export interface PreConsentCookiesTrackersRow {
   purpose?: string | null;
   priority?: "high" | "medium" | "review_needed" | "contextual" | "unknown";
   confidence?: "high" | "medium" | "low" | "unknown";
+  canonicalEntity?: string | null;
+  purposes?: string[];
+  domains?: string[];
+  products?: string[];
+  setByThirdPartyScript?: boolean;
+  set_by_third_party_script?: boolean;
+  cookieDetails?: Array<{
+    name: string;
+    domain?: string | null;
+    expiresAt?: string | null;
+    lifespanSeconds?: number | null;
+    lifespanSource?: string | null;
+    longLived?: boolean;
+    description?: string | null;
+    dataTypes?: string[];
+    setByThirdPartyScript?: boolean;
+    set_by_third_party_script?: boolean;
+    setterScriptUrl?: string | null;
+    initiatorChain?: string[];
+  }>;
+  dataFlows?: Array<{
+    endpoint: string;
+    idSync: boolean;
+    networkDestination: {
+      ip: string | null;
+      country: string | null;
+      countryCode: string | null;
+      asn: number | null;
+      provider: string | null;
+      label: "server location (may be CDN edge)";
+    };
+    controllingEntity: {
+      legalEntity: string | null;
+      headquartersCountry: string | null;
+    };
+    transferMechanism: {
+      mechanism: "adequacy_decision" | "dpf_certified" | "sccs_assumed_unverified" | "unknown";
+      basis: string;
+      verifiedAsOf: string;
+    };
+  }>;
   phase?: "pre_consent";
   evidenceBasis?: "runtime_observation" | "policy_surface_detection" | "accessibility_check" | "public_report_projection";
   observedBeforeConsent?: boolean;
@@ -311,6 +352,8 @@ export interface PreConsentCookiesTrackers {
     trackerCount: number;
     cookieCount: number;
     requestCount: number;
+    vendorCount?: number;
+    domainCount?: number;
     totalRowCount?: number;
     truncated?: boolean;
     [key: string]: unknown;

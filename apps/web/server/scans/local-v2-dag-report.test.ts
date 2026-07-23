@@ -557,6 +557,20 @@ test("classifies script loading, ad collection, and identifier synchronization s
     regulatoryRelevance: ["identifier_sync"],
     url: "https://sync.example.test/user_sync"
   }), "identifier_synchronization");
+  for (const url of [
+    "https://cm.g.doubleclick.net/pixel",
+    "https://am-match.taboola.com/pixel",
+    "https://ats.rlcdn.com/ats",
+    "https://nbcuni.demdex.net/event",
+    "https://gum.criteo.com/pixel"
+  ]) {
+    assert.equal(classifyRetainedRequestActivity({
+      category: "advertising",
+      collectionEndpointObserved: true,
+      resourceType: "fetch",
+      url
+    }), "identifier_synchronization", `${url} is a canonical ID-sync endpoint`);
+  }
   assert.equal(classifyRetainedRequestActivity({
     category: "analytics",
     collectionEndpointObserved: false,

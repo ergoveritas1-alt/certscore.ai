@@ -2435,6 +2435,73 @@ function buildCmpLoadOrderConcerns(
   ];
 }
 
+function buildRtbCookieSyncConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const hybridRuntimeEvidence = getRuntimeRecord(runtimeArtifacts, [
+    "hybridRuntimeEvidence",
+    "hybrid_runtime_evidence"
+  ]);
+  const rows = [
+    ...getRuntimeObjectArray(runtimeArtifacts, [
+      "rtbCookieSyncObservations",
+      "rtb_cookie_sync_observations",
+      "rtb_cookie_sync_evidence"
+    ]),
+    ...getRuntimeObjectArray(hybridRuntimeEvidence, [
+      "rtbCookieSyncObservations",
+      "rtb_cookie_sync_observations",
+      "rtb_cookie_sync_evidence"
+    ])
+  ];
+  const dedupedRows = rows.filter((row, index, allRows) => {
+    const identity = (candidate: Record<string, unknown>) => JSON.stringify([
+      getRuntimeString(candidate, ["hostname", "host", "domain"]),
+      getRuntimeString(candidate, ["pathSample", "path_sample"]),
+      getRuntimeNumber(candidate, ["timestampMs", "timestamp_ms", "tsMs", "ts_ms"])
+    ]);
+    return allRows.findIndex((candidate) => identity(candidate) === identity(row)) === index;
+  }).slice(0, 12);
+  const consentTimeline =
+    getRuntimeRecord(runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
+    getRuntimeRecord(hybridRuntimeEvidence, ["timelineMarkers", "timeline_markers"]);
+  const rawEvidence = {
+    consentSurfaceObserved:
+      getRuntimeBoolean(runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) ??
+      getRuntimeBoolean(hybridRuntimeEvidence, ["consentSurfaceObserved", "consent_surface_observed"]),
+    consentTimeline,
+    preconsent_tracking_detected: dedupedRows.length > 0,
+    rtb_cookie_sync_evidence: dedupedRows,
+    rtb_cookie_sync_observations: dedupedRows,
+    rtb_cookie_sync_vendors: uniqueStrings(
+      dedupedRows.map((row) => getRuntimeString(row, ["vendorName", "vendor_name", "vendor"]))
+    )
+  };
+  if (!hasConcreteRtbCookieSyncEvidence(rawEvidence)) {
+    return [];
+  }
+  const endpoints = uniqueStrings(
+    dedupedRows.map((row) => getRuntimeString(row, ["hostname", "host", "domain"]))
+  );
+  return [buildConcernFromSharedInput({
+    categoryId: "preconsent_tracking_incidents",
+    description: "A known advertising identity-sync endpoint was observed during the retained pre-consent request sequence.",
+    domainContext,
+    evidence: endpoints.map((endpoint) => `Pre-consent identity-sync endpoint: ${endpoint}`),
+    observedValue: `${dedupedRows.length} endpoint${dedupedRows.length === 1 ? "" : "s"}`,
+    originKey: "runtime_privacy.rtb_cookie_sync_observed",
+    originType: "runtime_artifact",
+    rawEvidence,
+    severity: "high",
+    signalKey: "privacy.rtb_cookie_sync_observed",
+    signalLabel: "Adtech identity sync-like request observed",
+    signalSource: "runtime_artifact_signal",
+    sourceType: "signal",
+    title: "Adtech identity sync-like request observed"
+  })];
+}
+
 function getPolicyDisclosureSummaryForGdprTransparency(
   runtimeArtifacts: Record<string, unknown> | null | undefined
 ) {
@@ -2728,6 +2795,7 @@ export function buildNormalizedConcerns(input: {
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCmpLoadOrderConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildRtbCookieSyncConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildGdprTransparencyArticle13Concerns(input.runtimeArtifacts, input.domainContext)
   ];
 

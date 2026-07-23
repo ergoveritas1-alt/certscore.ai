@@ -7,6 +7,7 @@ import {
   type DomSnapshotArtifact,
   type IframeEvent,
   type NetworkEvent,
+  type NetworkDestination,
   type NetworkResponseEvent,
   type RuntimeEvidenceEvent,
   type ScanModuleRun,
@@ -22,7 +23,13 @@ import {
   consentControlTerms,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
 } from "@certscore/contracts";
-import { resolveEndpointGeography, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
+import {
+  isCanonicalIdSyncEndpoint,
+  resolveCanonicalCookieKnowledge,
+  resolveEndpointGeography,
+  resolveVendorObservations,
+  type VendorResolverInput,
+} from "@certscore/vendor-resolver";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
@@ -41,11 +48,13 @@ import {
 import {
   classifyCookieParty,
   classifyHostnameParty,
+  classifyParty,
   getHostname,
   getRegistrableDomain,
   getRegistrableDomainFromUrl,
 } from "../domain-utils.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
+import { enrichNetworkDestination } from "../network-destination.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
 import {
@@ -189,6 +198,7 @@ export function applyFinalDocumentPartyClassification(input: {
     event.firstParty = party === "first_party";
     event.thirdParty = party === "third_party";
     event.isThirdParty = party === "third_party";
+    event.idSyncEndpoint = isCanonicalIdSyncEndpoint(hostname);
     event.attributionStatus = endpointAttribution.status;
     event.attributionReason = endpointAttribution.reason;
     event.resolverBasis = endpointAttribution.basis;
@@ -220,6 +230,7 @@ export function applyFinalDocumentPartyClassification(input: {
   }
 
   for (const event of input.cookieEvents) {
+    const knowledge = resolveCanonicalCookieKnowledge(event.cookieName);
     const hostname = getHostname(event.cookieDomain ?? event.hostname);
     const party = classifyCookieParty(event.cookieDomain ?? hostname, firstPartyHostname);
     event.hostname = hostname ?? undefined;
@@ -227,12 +238,18 @@ export function applyFinalDocumentPartyClassification(input: {
     event.firstParty = party === "first_party";
     event.thirdParty = party === "third_party";
     event.cookieParty = party;
+    if (knowledge.category !== "unknown") {
+      event.cookiePurpose = canonicalCookiePurpose(knowledge.category);
+    }
+    event.description = knowledge.description;
+    event.dataTypes = knowledge.dataTypes;
     event.cookieClassificationBasis = unique([
       ...event.cookieClassificationBasis.filter((basis) =>
         basis !== "first_party" && basis !== "third_party" && basis !== "unknown"
       ),
       party,
       "final_document_party",
+      `canonical_cookie_kb:${knowledge.category}`,
     ]);
   }
 
@@ -312,6 +329,10 @@ export async function preConsentRuntimeScanner(
   const runtimeErrors: string[] = [];
   const navigationNotes: string[] = [];
   const requestIds = new WeakMap<Request, string>();
+  const requestEvents = new WeakMap<Request, NetworkEvent>();
+  const cdpInitiatorsByUrl = new Map<string, string[][]>();
+  const cdpDestinationsByUrl = new Map<string, NetworkDestination[]>();
+  let networkMetadataSession: CDPSession | null = null;
   let visualCapture: VisualCaptureSummary = {
     status: "unavailable",
     failureReason: input.screenshotMode === "never" ? "skipped_by_mode" : "unknown",
@@ -336,6 +357,13 @@ export async function preConsentRuntimeScanner(
   });
   const page = context.newPage;
   const browserContext = context.newContext;
+  networkMetadataSession = await installCdpNetworkMetadataCapture(page, {
+    destinationsByUrl: cdpDestinationsByUrl,
+    initiatorsByUrl: cdpInitiatorsByUrl,
+  }).catch((error) => {
+    runtimeErrors.push(`CDP network metadata capture unavailable: ${errorMessageFromUnknown(error)}`);
+    return null;
+  });
   const abortRuntime = () => {
     void browserContext.close().catch(() => undefined);
     if (ownsBrowser) {
@@ -355,6 +383,12 @@ export async function preConsentRuntimeScanner(
     "consent inventory probe install",
     "Install deterministic consent-control DOM inventory helper for main document, open shadow roots, and same-origin frames.",
     () => installConsentInventoryProbe(browserContext),
+  );
+  await recordTiming(
+    timingBreakdown,
+    "cookie write probe install",
+    "Install a bounded metadata-only document.cookie write probe; cookie values are not retained.",
+    () => installCookieWriteProbe(browserContext),
   );
 
   for (const fulfiller of input.routeFulfillers ?? []) {
@@ -410,6 +444,12 @@ export async function preConsentRuntimeScanner(
       hostname,
       thirdParty: party === "third_party",
     });
+    const initiatorChain = shiftQueuedValue(cdpInitiatorsByUrl, requestUrl) ?? [];
+    const topLevelForParty = frameUrl === "about:blank" ? input.normalizedUrl : frameUrl;
+    const responsibleScriptUrl = initiatorChain.find((value) =>
+      classifyParty(value, topLevelForParty) === "third_party"
+    );
+    const networkDestination = shiftQueuedValue(cdpDestinationsByUrl, requestUrl);
     const event: NetworkEvent = {
       eventId: nextId("net"),
       eventType: "network_request",
@@ -435,6 +475,7 @@ export async function preConsentRuntimeScanner(
       },
       initiatorType: request.resourceType(),
       initiatorUrl: frameUrl === "about:blank" ? undefined : frameUrl,
+      initiatorStack: initiatorChain,
       evidenceRefs: [],
       confidence: 0.95,
       directVsInferred: "direct",
@@ -454,8 +495,11 @@ export async function preConsentRuntimeScanner(
       isMainFrame,
       isSubFrame: !isMainFrame,
       isThirdParty: party === "third_party",
+      idSyncEndpoint: isCanonicalIdSyncEndpoint(hostname),
+      networkDestination,
       parentRequestId: redirectedFromId,
       redirectChainRequestIds: redirectChainIds(request, requestIds),
+      responsibleScriptUrl,
       requestHeaders: safeHeaders,
       cookieHeaderPresent: safeHeaders.cookieHeaderPresent,
       cookieNamesSent: safeHeaders.cookieNames,
@@ -477,6 +521,7 @@ export async function preConsentRuntimeScanner(
       requestPayloadSignals: payloadSignals,
     };
     networkEvents.push(event);
+    requestEvents.set(request, event);
     vendorResolverInputs.push({
       ...resolverInputForEvent(event),
       type: request.resourceType() === "script" ? "script" : "request",
@@ -1291,6 +1336,7 @@ export async function preConsentRuntimeScanner(
         throw error;
       })
     );
+    const documentCookieWrites = await readCookieWriteProbe(page);
     const cookieSnapshot: CookieSnapshot = {
       artifactId: "cookie_snapshot_pre_consent",
       capturedAtMs: elapsed(input.scanStartedAtMs),
@@ -1309,6 +1355,8 @@ export async function preConsentRuntimeScanner(
     };
     retainedCookieSnapshot = cookieSnapshot;
     for (const cookie of cookies) {
+      const documentWrite = [...documentCookieWrites].reverse().find((write) => write.name === cookie.name);
+      const knowledge = resolveCanonicalCookieKnowledge(cookie.name);
       const cookieHostname = getHostname(cookie.domain) ?? undefined;
       const cookieRegistrableDomain = getRegistrableDomain(cookieHostname) ?? undefined;
       const cookieParty = classifyCookieParty(cookie.domain, firstPartyHostname);
@@ -1338,10 +1386,20 @@ export async function preConsentRuntimeScanner(
         sameSite: cookie.sameSite,
         secure: cookie.secure,
         httpOnly: cookie.httpOnly,
+        setByThirdPartyScript: Boolean(documentWrite?.scriptUrl &&
+          classifyParty(documentWrite.scriptUrl, page.url()) === "third_party"),
+        setterScriptUrl: documentWrite?.scriptUrl,
+        initiatorChain: documentWrite?.initiatorChain ?? [],
+        lifespanSeconds: Number.isFinite(cookie.expires) && cookie.expires > 0
+          ? Math.max(0, Math.round(cookie.expires - Date.now() / 1_000))
+          : 0,
+        lifespanSource: Number.isFinite(cookie.expires) && cookie.expires > 0 ? "browser_expiry" : "session",
+        description: knowledge.description,
+        dataTypes: knowledge.dataTypes,
         cookieParty,
         vendorAssociated: false,
-        cookiePurpose: "unknown",
-        cookieClassificationBasis: [cookieParty, "browser_snapshot"],
+        cookiePurpose: classifyKnownCookiePurpose(cookie.name),
+        cookieClassificationBasis: [cookieParty, "browser_snapshot", `canonical_cookie_kb:${knowledge.category}`],
         operation: "browser_snapshot",
         valueRedacted: true,
       };
@@ -2180,6 +2238,9 @@ export async function preConsentRuntimeScanner(
     };
   } finally {
     input.signal?.removeEventListener("abort", abortRuntime);
+    if (networkMetadataSession) {
+      await boundedCleanup(networkMetadataSession.detach(), 250);
+    }
     if (ownsBrowser) {
       await boundedCleanup(browser.close(), 1_000);
     }
@@ -2198,6 +2259,7 @@ export async function preConsentRuntimeScanner(
     const headers = await response.allHeaders().catch(() => response.headers());
     const request = response.request();
     const requestId = requestIds.get(request);
+    const requestEvent = requestEvents.get(request);
     const hostname = getHostname(responseUrl) ?? undefined;
     const registrableDomain = getRegistrableDomain(hostname) ?? undefined;
     const party = classifyHostnameParty(hostname, firstPartyHostname);
@@ -2219,6 +2281,10 @@ export async function preConsentRuntimeScanner(
       await response.request().sizes().catch(() => undefined),
     );
     const timing = responseTiming(response);
+    const networkDestination = await enrichNetworkDestination(
+      requestEvent?.networkDestination ?? shiftQueuedValue(cdpDestinationsByUrl, responseUrl),
+    );
+    if (requestEvent && networkDestination) requestEvent.networkDestination = networkDestination;
     const responseEvent: NetworkResponseEvent = {
       eventId: nextId("resp"),
       eventType: "network_response",
@@ -2246,6 +2312,7 @@ export async function preConsentRuntimeScanner(
       setCookieHeaders: effectiveSetCookieHeaders.map(redactSetCookieHeader),
       setCookieMetadata,
       cookieNamesSet: setCookieMetadata.map((metadata) => metadata.name),
+      networkDestination,
       responseHeaders: safeHeaders,
       cacheHeaders: pickHeaders(headers, ["cache-control", "expires"]),
       locationRedirectHeader: headers.location,
@@ -2260,6 +2327,14 @@ export async function preConsentRuntimeScanner(
     networkResponseEvents.push(responseEvent);
 
     for (const cookieMetadata of setCookieMetadata) {
+      const knowledge = resolveCanonicalCookieKnowledge(cookieMetadata.name);
+      const initiatorChain = unique([
+        ...(requestEvent?.initiatorStack ?? []),
+        requestEvent?.responsibleScriptUrl,
+      ].filter((value): value is string => Boolean(value))).slice(0, 12);
+      const setterScriptUrl = requestEvent?.responsibleScriptUrl ??
+        initiatorChain.find((value) => /^https?:\/\//i.test(value));
+      const cookieParty = classifyCookieParty(cookieMetadata.domain ?? hostname, firstPartyHostname);
       const cookieEvent: CookieEvent = {
         eventId: nextId("cookie"),
         eventType: "cookie",
@@ -2288,14 +2363,18 @@ export async function preConsentRuntimeScanner(
         httpOnly: cookieMetadata.httpOnly,
         sourceRequestId: requestId,
         sourceResponseEventId: responseEvent.eventId,
-        cookieParty: cookieMetadata.thirdParty === true
-          ? "third_party"
-          : cookieMetadata.firstParty === true
-            ? "first_party"
-            : "unknown",
+        setByThirdPartyScript: Boolean(setterScriptUrl &&
+          classifyParty(setterScriptUrl, page.url() === "about:blank" ? input.normalizedUrl : page.url()) === "third_party"),
+        setterScriptUrl,
+        initiatorChain,
+        lifespanSeconds: cookieLifespanSeconds(cookieMetadata, Date.now()),
+        lifespanSource: cookieLifespanSource(cookieMetadata),
+        description: knowledge.description,
+        dataTypes: knowledge.dataTypes,
+        cookieParty,
         vendorAssociated: false,
         cookiePurpose: classifyKnownCookiePurpose(cookieMetadata.name),
-        cookieClassificationBasis: ["set_cookie_header"],
+        cookieClassificationBasis: ["set_cookie_header", `canonical_cookie_kb:${knowledge.category}`],
         operation: "set_cookie_header",
         valueRedacted: true,
       };
@@ -7132,6 +7211,152 @@ function parseCookieNames(cookieHeader: string | undefined): string[] {
   );
 }
 
+type RetainedCookieWriteProbeRow = {
+  initiatorChain: string[];
+  name: string;
+  scriptUrl?: string;
+};
+
+async function installCookieWriteProbe(context: BrowserContext): Promise<void> {
+  await context.addInitScript(() => {
+    type CookieWriteWindow = Window & {
+      __certscoreCookieWrites?: Array<{ initiatorChain: string[]; name: string; scriptUrl?: string }>;
+    };
+    const target = window as CookieWriteWindow;
+    target.__certscoreCookieWrites = [];
+    const descriptor = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+    if (!descriptor?.get || !descriptor.set) return;
+    Object.defineProperty(document, "cookie", {
+      configurable: true,
+      enumerable: descriptor.enumerable,
+      get: descriptor.get.bind(document),
+      set(value: string) {
+        const name = value.split("=", 1)[0]?.trim().slice(0, 160);
+        if (name && (target.__certscoreCookieWrites?.length ?? 0) < 250) {
+          const stack = new Error().stack ?? "";
+          const initiatorChain = [...new Set(
+            [...stack.matchAll(/https?:\/\/[^\s)]+/g)]
+              .map((match) => match[0]?.replace(/:\d+:\d+$/, "").split(/[?#]/, 1)[0])
+              .filter((entry): entry is string => Boolean(entry))
+          )].slice(0, 12);
+          target.__certscoreCookieWrites?.push({
+            initiatorChain,
+            name,
+            scriptUrl: initiatorChain[0],
+          });
+        }
+        descriptor.set?.call(document, value);
+      },
+    });
+  });
+}
+
+async function readCookieWriteProbe(page: Page): Promise<RetainedCookieWriteProbeRow[]> {
+  return page.evaluate(() => {
+    const rows = (window as Window & {
+      __certscoreCookieWrites?: RetainedCookieWriteProbeRow[];
+    }).__certscoreCookieWrites;
+    return Array.isArray(rows) ? rows.slice(0, 250) : [];
+  }).catch(() => []);
+}
+
+async function installCdpNetworkMetadataCapture(
+  page: Page,
+  stores: {
+    destinationsByUrl: Map<string, NetworkDestination[]>;
+    initiatorsByUrl: Map<string, string[][]>;
+  },
+): Promise<CDPSession> {
+  const session = await page.context().newCDPSession(page);
+  await session.send("Network.enable");
+  session.on("Network.requestWillBeSent", (raw: unknown) => {
+    const params = raw as {
+      request?: { url?: string };
+      initiator?: { url?: string; stack?: { callFrames?: Array<{ url?: string }>; parent?: unknown } };
+    };
+    const url = params.request?.url;
+    if (!url) return;
+    const chain = unique([
+      params.initiator?.url,
+      ...flattenCdpInitiatorStack(params.initiator?.stack),
+    ].filter((value): value is string => Boolean(value)))
+      .flatMap((value) => {
+        try {
+          const parsed = new URL(value);
+          return [`${parsed.origin}${parsed.pathname}`];
+        } catch {
+          return [];
+        }
+      })
+      .filter((value) => /^https?:\/\//i.test(value))
+      .slice(0, 12);
+    if (chain.length > 0) pushQueuedValue(stores.initiatorsByUrl, url, chain);
+  });
+  session.on("Network.responseReceived", (raw: unknown) => {
+    const params = raw as {
+      response?: { remoteIPAddress?: string; url?: string };
+    };
+    const ip = params.response?.remoteIPAddress?.trim();
+    const url = params.response?.url;
+    if (!ip || !url) return;
+    pushQueuedValue(stores.destinationsByUrl, url, {
+      ip,
+      locationLabel: "server location (may be CDN edge)",
+      source: "cdp_remote_ip",
+    });
+  });
+  return session;
+}
+
+function flattenCdpInitiatorStack(
+  stack: { callFrames?: Array<{ url?: string }>; parent?: unknown } | undefined,
+): string[] {
+  const values: string[] = [];
+  let current: { callFrames?: Array<{ url?: string }>; parent?: unknown } | undefined = stack;
+  for (let depth = 0; current && depth < 6; depth += 1) {
+    values.push(...(current.callFrames ?? []).map((frame) => frame.url).filter((url): url is string => Boolean(url)));
+    current = current.parent && typeof current.parent === "object"
+      ? current.parent as { callFrames?: Array<{ url?: string }>; parent?: unknown }
+      : undefined;
+  }
+  return values;
+}
+
+function pushQueuedValue<T>(map: Map<string, T[]>, key: string, value: T) {
+  const queue = map.get(key) ?? [];
+  queue.push(value);
+  map.set(key, queue.slice(-20));
+}
+
+function shiftQueuedValue<T>(map: Map<string, T[]>, key: string): T | undefined {
+  const queue = map.get(key);
+  const value = queue?.shift();
+  if (queue?.length === 0) map.delete(key);
+  return value;
+}
+
+function canonicalCookiePurpose(
+  category: ReturnType<typeof resolveCanonicalCookieKnowledge>["category"],
+): CookieEvent["cookiePurpose"] {
+  return category;
+}
+
+function cookieLifespanSeconds(metadata: SetCookieMetadata, observedAtMs: number): number | undefined {
+  const maxAge = Number(metadata.maxAge);
+  if (Number.isFinite(maxAge) && maxAge >= 0) return Math.round(maxAge);
+  if (metadata.expires) {
+    const expiresAt = Date.parse(metadata.expires);
+    if (Number.isFinite(expiresAt)) return Math.max(0, Math.round((expiresAt - observedAtMs) / 1_000));
+  }
+  return 0;
+}
+
+function cookieLifespanSource(metadata: SetCookieMetadata): CookieEvent["lifespanSource"] {
+  if (metadata.maxAge !== undefined) return "max_age";
+  if (metadata.expires !== undefined) return "expires";
+  return "session";
+}
+
 export function parseSetCookieMetadata(
   setCookieHeader: string,
   fallbackHostname: string | undefined,
@@ -7213,6 +7438,8 @@ function stringAttribute(value: string | true | undefined): string | undefined {
 }
 
 function classifyKnownCookiePurpose(name: string): CookieEvent["cookiePurpose"] {
+  const knowledge = resolveCanonicalCookieKnowledge(name);
+  if (knowledge.category !== "unknown") return canonicalCookiePurpose(knowledge.category);
   if (/^(OptanonConsent|OptanonAlertBoxClosed|CookieConsent|didomi_token|euconsent-v2)$/i.test(name)) {
     return "consent_management";
   }

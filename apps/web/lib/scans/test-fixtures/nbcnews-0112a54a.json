@@ -1,0 +1,301 @@
+{
+  "scanId": "0112a54a",
+  "site": "https://www.nbcnews.com/",
+  "hybridRuntimeEvidence": {
+    "navigationSummary": {
+      "requestedUrl": "https://www.nbcnews.com/",
+      "finalUrl": "https://www.nbcnews.com/"
+    },
+    "timelineMarkers": {
+      "firstNonEssentialRequestMs": 3740,
+      "firstConsentSurfaceVisibleMs": 6740,
+      "firstConsentActionMs": null
+    },
+    "cookieWriteObservations": [
+      {
+        "cookieName": "demdex",
+        "domain": "demdex.net",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 7690,
+        "setMethod": "set_cookie_header",
+        "initiatorUrl": "https://nbcuni.demdex.net/event",
+        "initiatorChain": ["https://assets.adobedtm.com/launch.js", "https://nbcuni.demdex.net/event"],
+        "lifespanSeconds": 15552000,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "cto_bundle",
+        "domain": "criteo.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 14900,
+        "setMethod": "set_cookie_header",
+        "initiatorUrl": "https://gum.criteo.com/sync",
+        "initiatorChain": ["https://gum.criteo.com/sync"],
+        "lifespanSeconds": 33696000,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "test_cookie",
+        "domain": "doubleclick.net",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 16000,
+        "setMethod": "set_cookie_header",
+        "initiatorUrl": "https://ad.doubleclick.net/activity",
+        "initiatorChain": ["https://securepubads.g.doubleclick.net/tag/js/gpt.js", "https://ad.doubleclick.net/activity"],
+        "lifespanSeconds": 900,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "datadome",
+        "domain": "taboola.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 16200,
+        "setMethod": "set_cookie_header",
+        "initiatorUrl": "https://am-match.taboola.com/sync",
+        "initiatorChain": ["https://cdn.taboola.com/libtrc/nbcnews/loader.js", "https://am-match.taboola.com/sync"],
+        "lifespanSeconds": 31536000,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "_gcl_au",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 6750,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+        "initiatorChain": ["https://mps.nbcuni.com/runtime.js", "https://securepubads.g.doubleclick.net/tag/js/gpt.js"],
+        "lifespanSeconds": 40000000,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "aam_uuid",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 7700,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://assets.adobedtm.com/launch.js",
+        "initiatorChain": ["https://assets.adobedtm.com/launch.js"],
+        "lifespanSeconds": 34128000,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "sailthru_pageviews",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 8100,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://ak.sail-horizon.com/spm/spm.v1.min.js",
+        "initiatorChain": ["https://ak.sail-horizon.com/spm/spm.v1.min.js"],
+        "lifespanSeconds": 2592000,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "_parsely_session",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 8200,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://cdn.parsely.com/keys/nbcnews.com/p.js",
+        "initiatorChain": ["https://cdn.parsely.com/keys/nbcnews.com/p.js"],
+        "lifespanSeconds": 1800,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "cX_P",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 8300,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://cdn.cxense.com/cx.js",
+        "initiatorChain": ["https://cdn.cxense.com/cx.js"],
+        "lifespanSeconds": 31536000,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "cX_G",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 8310,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://cdn.cxense.com/cx.js",
+        "initiatorChain": ["https://cdn.cxense.com/cx.js"],
+        "lifespanSeconds": 31536000,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "_lr_geo_location",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 8400,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://ats.rlcdn.com/ats.js",
+        "initiatorChain": ["https://mps.nbcuni.com/runtime.js", "https://ats.rlcdn.com/ats.js"],
+        "lifespanSeconds": 86400,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "fw_vcid2",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 8500,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://mssl.fwmrm.net/libs/adm/6.50.0/AdManager.js",
+        "initiatorChain": ["https://mssl.fwmrm.net/libs/adm/6.50.0/AdManager.js"],
+        "lifespanSeconds": 31536000,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "ak_bmsc",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 3950,
+        "setMethod": "set_cookie_header",
+        "initiatorUrl": "https://www.nbcnews.com/",
+        "lifespanSeconds": 7200,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "bm_mi",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 3950,
+        "setMethod": "set_cookie_header",
+        "initiatorUrl": "https://www.nbcnews.com/",
+        "lifespanSeconds": 7200,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "__cf_bm",
+        "domain": "piano.io",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 14300,
+        "setMethod": "set_cookie_header",
+        "initiatorUrl": "https://experience.tinypass.com/xbuilder/experience/load",
+        "lifespanSeconds": 1800,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "_dd_s",
+        "domain": "nbcnews.com",
+        "category": "analytics",
+        "beforeConsent": true,
+        "setAtMs": 30400,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://www.nbcnews.com/runtime.js",
+        "lifespanSeconds": 900,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "OptanonConsent",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 30400,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+        "lifespanSeconds": 31536000,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "usprivacy",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 3950,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+        "lifespanSeconds": 31536000,
+        "lifespanSource": "max_age"
+      },
+      {
+        "cookieName": "BI_UI_previousPage",
+        "domain": "nbcnews.com",
+        "category": "security",
+        "beforeConsent": true,
+        "setAtMs": 3950,
+        "setMethod": "document_cookie",
+        "initiatorUrl": "https://www.nbcnews.com/runtime.js",
+        "lifespanSeconds": 86400,
+        "lifespanSource": "max_age"
+      }
+    ],
+    "requestObservations": [
+      {
+        "domain": "cm.g.doubleclick.net",
+        "requestUrl": "https://cm.g.doubleclick.net/pixel",
+        "preConsent": true,
+        "idSyncEndpoint": true,
+        "networkDestination": {
+          "ip": "142.250.72.2",
+          "countryCode": "US",
+          "asn": 15169,
+          "provider": "Google LLC",
+          "label": "server location (may be CDN edge)"
+        }
+      },
+      {
+        "domain": "am-match.taboola.com",
+        "requestUrl": "https://am-match.taboola.com/sync",
+        "preConsent": true,
+        "idSyncEndpoint": true,
+        "networkDestination": {
+          "ip": "151.101.2.2",
+          "countryCode": "US",
+          "asn": 54113,
+          "provider": "Fastly, Inc.",
+          "label": "server location (may be CDN edge)"
+        }
+      },
+      {
+        "domain": "gum.criteo.com",
+        "requestUrl": "https://gum.criteo.com/sync",
+        "preConsent": true,
+        "idSyncEndpoint": true,
+        "networkDestination": {
+          "ip": "178.250.0.1",
+          "countryCode": "FR",
+          "asn": 44788,
+          "provider": "Criteo SA",
+          "label": "server location (may be CDN edge)"
+        }
+      }
+    ],
+    "rtbCookieSyncObservations": [
+      {
+        "category": "identity_sync",
+        "consentStateAtTime": "pre_consent",
+        "hostname": "cm.g.doubleclick.net",
+        "pathSample": "/pixel",
+        "queryKeysSample": ["google_nid"],
+        "reason": "known_sync_endpoint",
+        "timestampMs": 6750,
+        "vendorName": "Google Ads / DoubleClick"
+      }
+    ]
+  },
+  "trackerRows": [
+    {"label": "Adobe", "category": "advertising", "confidence": 0.99, "domains": ["nbcuni.demdex.net"], "firstSeenMs": 3830, "observedVia": ["request"], "party": "third_party", "preConsent": true, "requestCount": 2, "source": "scanner"},
+    {"label": "Adobe Analytics / Experience Cloud", "category": "analytics", "confidence": 0.99, "domains": ["assets.adobedtm.com"], "firstSeenMs": 3830, "observedVia": ["request"], "party": "third_party", "preConsent": true, "requestCount": 2, "source": "scanner"},
+    {"label": "Criteo", "category": "advertising", "confidence": 0.99, "domains": ["gum.criteo.com"], "firstSeenMs": 14200, "observedVia": ["request"], "party": "third_party", "preConsent": true, "requestCount": 3, "source": "scanner"},
+    {"label": "Akamai", "category": "performance_monitoring", "confidence": 0.99, "domains": ["s.go-mpulse.net"], "firstSeenMs": 3950, "observedVia": ["request"], "party": "third_party", "preConsent": true, "requestCount": 1, "source": "scanner"},
+    {"label": "Akamai Bot Manager / Edge", "category": "security", "confidence": 0.99, "domains": ["www.nbcnews.com"], "firstSeenMs": 3950, "observedVia": ["cookie"], "party": "first_party", "preConsent": true, "requestCount": 1, "source": "scanner"},
+    {"label": "Cloudflare Bot Management", "category": "security", "confidence": 0.99, "domains": ["piano.io"], "firstSeenMs": 14300, "observedVia": ["request"], "party": "third_party", "preConsent": true, "requestCount": 2, "source": "scanner"},
+    {"label": "Piano", "category": "personalization", "confidence": 0.99, "domains": ["experience.tinypass.com"], "firstSeenMs": 3810, "observedVia": ["request"], "party": "third_party", "preConsent": true, "requestCount": 4, "source": "scanner"},
+    {"label": "OneTrust CMP", "category": "consent_management", "confidence": 0.99, "domains": ["cdn.cookielaw.org"], "firstSeenMs": 6740, "observedVia": ["request"], "party": "third_party", "preConsent": true, "requestCount": 2, "source": "scanner"}
+  ]
+}

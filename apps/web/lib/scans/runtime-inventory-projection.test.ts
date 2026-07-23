@@ -43,7 +43,7 @@ test("projects bounded BX01 request inventory without treating unresolved hosts 
     ]
   });
   const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
-  const oneTrust = groupedRows.find((row) => row.type === "tracker" && row.vendor === "OneTrust CMP");
+  const oneTrust = groupedRows.find((row) => row.canonicalEntity === "OneTrust, LLC");
   const priceSpider = groupedRows.find((row) => row.type === "tracker" && row.vendor === "cdn.pricespider.com");
 
   assert.equal(oneTrust?.purpose, "Cookie compliance");
@@ -99,7 +99,7 @@ test("derives Fable macro categories without replacing detailed purposes", () =>
   assert.equal(deriveInventoryMacroCategory({ purpose: "Tag management", priority: "medium", vendor: "Google Tag Manager" }), "Functional");
   assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "jQuery CDN" }), "Essential");
   assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "Instagram CDN" }), "Functional");
-  assert.equal(deriveInventoryMacroCategory({ purpose: "Unknown", priority: "review_needed", vendor: "unresolved.example" }), "Unknown");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "Unknown", priority: "review_needed", vendor: "unresolved.example" }), "Review");
 });
 
 test("classifies audience measurement as analytics unless advertising evidence is retained", () => {
@@ -147,7 +147,7 @@ test("projects Adobe Launch host as tag management instead of unknown tracker", 
   assert.equal(adobeRow?.purpose, "Tag Management");
   assert.equal(adobeRow?.macroCategory, "Functional");
   assert.equal(adobeRow?.priority, "medium");
-  assert.equal(adobeRow?.party, "3rd");
+  assert.equal(adobeRow?.party, "third_party");
 });
 
 test("projects canonical hostless vendor labels with known purposes and categories", () => {
@@ -163,9 +163,9 @@ test("projects canonical hostless vendor labels with known purposes and categori
   });
 
   const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
-  const adobe = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Adobe Audience Manager / Experience Cloud");
-  const akamai = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Akamai mPulse");
-  const amazon = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Amazon Ads");
+  const adobe = groupedRows.find((row) => row.canonicalEntity === "Adobe Inc.");
+  const akamai = groupedRows.find((row) => row.canonicalEntity === "Akamai Technologies, Inc.");
+  const amazon = groupedRows.find((row) => row.canonicalEntity === "Amazon.com, Inc.");
 
   assert.deepEqual(
     [adobe, akamai, amazon].map((row) => [row?.purpose, row?.macroCategory, row?.priority, row?.confidence]),
@@ -234,12 +234,12 @@ test("keeps first-party Akamai security tracker inventory contextual", () => {
   });
 
   const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
-  const akamaiRow = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Akamai Bot Manager / Edge");
+  const akamaiRow = groupedRows.find((row) => row.canonicalEntity === "Akamai Technologies, Inc.");
 
   assert.equal(akamaiRow?.purpose, "Security");
   assert.equal(akamaiRow?.macroCategory, "Essential");
   assert.equal(akamaiRow?.priority, "contextual");
-  assert.equal(akamaiRow?.party, "—");
+  assert.equal(akamaiRow?.party, "first_party");
 });
 
 test("filters cookie names and cookie-domain tokens out of tracker display domains", () => {
@@ -314,8 +314,8 @@ test("filters cookie names and cookie-domain tokens out of tracker display domai
   });
 
   const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
-  const googleAnalytics = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Google Analytics");
-  const cloudflare = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Cloudflare Bot Management");
+  const googleAnalytics = groupedRows.find((row) => row.canonicalEntity === "Google LLC");
+  const cloudflare = groupedRows.find((row) => row.canonicalEntity === "Cloudflare, Inc.");
   const quantcastChoice = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Quantcast Choice CMP");
   const permutive = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Permutive");
   const didomi = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Didomi CMP");

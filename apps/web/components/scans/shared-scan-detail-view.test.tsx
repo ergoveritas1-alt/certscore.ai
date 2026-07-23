@@ -22,10 +22,24 @@ const serverOnlyPath = require.resolve("server-only");
 test("pre-consent inventory keeps purpose separate, removes requests, and places category last", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
 
-  assert.match(source, /\["Type", "Vendor", "Purpose", "Priority", "First seen", "Cookie name\(s\)", "Domain", "Confidence", "Party", "Category"\]/);
+  assert.match(source, /\["Type", "Vendor", "Purpose", "Priority", "First seen", "Cookie name\(s\)", "Domain", "Destination", "Confidence", "Party", "Category"\]/);
   assert.match(source, />Purpose<\/[a-z]+>[\s\S]*>Party<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
   assert.doesNotMatch(source, />Req\.<\/[a-z]+>/);
   assert.doesNotMatch(source, /"Requests"/);
+});
+
+test("pre-consent inventory exposes retained cookie metadata and all three data-flow layers", () => {
+  const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
+
+  assert.match(source, /Show retained vendor evidence/);
+  assert.match(source, />&gt;12 months</);
+  assert.match(source, />Lifespan</);
+  assert.match(source, />Data types</);
+  assert.match(source, />Initiator chain</);
+  assert.match(source, /server location \(may be CDN edge\)/);
+  assert.match(source, /Controlling entity:/);
+  assert.match(source, /Transfer mechanism:/);
+  assert.match(source, /Cookie values are redacted/);
 });
 
 test("getRecordOptionalBoolean preserves explicit incomplete coverage without penalizing legacy snapshots", async () => {

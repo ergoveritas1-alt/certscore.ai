@@ -379,7 +379,7 @@ test("canonical security-cookie classification overrides stale advertising flags
     }
   });
 
-  assert.equal(inventory.rows[0]?.category, "necessary");
+  assert.equal(inventory.rows[0]?.category, "security");
   assert.equal(inventory.rows[0]?.nonEssential, false);
   assert.equal(inventory.rows[0]?.essentiality, "essential");
   assert.equal(getRuntimeCookiePrimaryProvider(inventory.rows[0]!), "Cloudflare");
@@ -432,7 +432,10 @@ test("classifies named measurement identifiers and leaves unknown identifiers un
     }
   });
   const rows = new Map(inventory.rows.map((row) => [row.cookieName, row]));
-  for (const name of ["_dd_s", "_zitok", "ebEventToTrack", "stableId"]) {
+  assert.equal(rows.get("_dd_s")?.category, "security");
+  assert.equal(rows.get("_dd_s")?.essentiality, "essential");
+  assert.equal(rows.get("_dd_s")?.nonEssential, false);
+  for (const name of ["_zitok", "ebEventToTrack", "stableId"]) {
     assert.equal(rows.get(name)?.category, "analytics");
     assert.equal(rows.get(name)?.essentiality, "unknown");
     assert.equal(rows.get(name)?.nonEssential, false);

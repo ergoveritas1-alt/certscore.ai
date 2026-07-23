@@ -1,3 +1,5 @@
+import { resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
+import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 import {
   findRuntimeCookieOwner,
   findRuntimeEntityOwner,
@@ -7,11 +9,18 @@ import {
 export type RuntimeCookieEvidenceRow = {
   category: string;
   cookieName: string;
+  dataTypes?: string[];
+  description?: string;
   domain: string | null;
+  expiresAt?: string | null;
   firstObservedAtMs: number | null;
   initiatorDomain: string | null;
   initiatorUrl: string | null;
   initiatorVendor: string | null;
+  initiatorChain?: string[];
+  lifespanSeconds?: number | null;
+  lifespanSource?: string | null;
+  longLived?: boolean;
   nonEssential: boolean;
   observedBeforeConsent?: boolean;
   explicitPreconsentEvidence?: boolean;
@@ -20,6 +29,8 @@ export type RuntimeCookieEvidenceRow = {
   responseUrl: string | null;
   sourceRequestUrl: string | null;
   setAtMs: number | null;
+  setByThirdPartyScript?: boolean;
+  setterScriptUrl?: string | null;
   setMethod: string | null;
   timingBasis: string | null;
   evidenceGrade: string | null;
@@ -164,7 +175,7 @@ export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | nu
 }
 
 export function isNonEssentialCookieCategory(category: string | null | undefined) {
-  return category === "analytics" || category === "advertising" || category === "dmp" || category === "session_replay" || category === "personalization" || category === "experimentation";
+  return category === "analytics" || category === "advertising" || category === "dmp" || category === "session_replay" || category === "personalization" || category === "marketing" || category === "experimentation";
 }
 
 export function isEligibleNonEssentialPreconsentStorageRow(row: RuntimeCookieEvidenceRow) {
@@ -380,7 +391,7 @@ function hostFamilyMatches(left: string | null | undefined, right: string | null
     normalizedLeft === normalizedRight ||
     normalizedLeft.endsWith(`.${normalizedRight}`) ||
     normalizedRight.endsWith(`.${normalizedLeft}`) ||
-    roughEtldPlusOne(normalizedLeft) === roughEtldPlusOne(normalizedRight)
+    registrableDomain(normalizedLeft) === registrableDomain(normalizedRight)
   );
 }
 
@@ -463,15 +474,11 @@ function normalizeHostForCookieParty(value: string | null | undefined) {
   return value?.trim().replace(/^\./, "").replace(/^www\./, "").toLowerCase() ?? null;
 }
 
-function roughEtldPlusOne(hostname: string | null | undefined) {
-  const parts = (hostname ?? "").replace(/^\./, "").toLowerCase().split(".").filter(Boolean);
-  if (parts.length <= 2) {
-    return parts.join(".");
-  }
-  const lastTwo = parts.slice(-2).join(".");
-  return new Set(["co.uk", "com.au", "com.br", "co.jp", "co.nz", "com.mx"]).has(lastTwo) && parts.length >= 3
-    ? parts.slice(-3).join(".")
-    : lastTwo;
+function registrableDomain(value: string | null | undefined) {
+  const normalized = normalizeHostForCookieParty(value);
+  if (!normalized) return null;
+  const hostname = getTldtsHostname(normalized.includes("://") ? normalized : `https://${normalized}`);
+  return hostname ? getTldtsDomain(hostname, { allowPrivateDomains: true }) ?? hostname : null;
 }
 
 function isSameSiteCookieDomain(cookieDomain: string | null, pageHostname: string | null) {
@@ -484,7 +491,7 @@ function isSameSiteCookieDomain(cookieDomain: string | null, pageHostname: strin
     normalizedCookieDomain === normalizedPageHostname ||
     normalizedPageHostname.endsWith(`.${normalizedCookieDomain}`) ||
     normalizedCookieDomain.endsWith(`.${normalizedPageHostname}`) ||
-    roughEtldPlusOne(normalizedCookieDomain) === roughEtldPlusOne(normalizedPageHostname)
+    registrableDomain(normalizedCookieDomain) === registrableDomain(normalizedPageHostname)
   );
 }
 
@@ -493,14 +500,13 @@ function getCookiePartyType(
   domain: string | null,
   hybrid: Record<string, unknown> | null
 ): RuntimeCookieEvidenceRow["party"] {
-  const setterHosts = [
-    hostnameFromUrl(getString(row.sourceRequestUrl ?? row.source_request_url)),
-    hostnameFromUrl(getString(row.responseUrl ?? row.response_url)),
-    hostnameFromUrl(getString(row.initiatorUrl ?? row.initiator_url)),
-    getString(row.initiatorDomain ?? row.initiator_domain)
-  ].filter((value): value is string => Boolean(value));
   const navigationHosts = getHybridPageHostnames(hybrid);
-  if ([...setterHosts, ...navigationHosts].some((hostname) => isSameSiteCookieDomain(domain, hostname))) {
+  const scannedSite = navigationHosts.map(registrableDomain).find((value): value is string => Boolean(value));
+  const cookieSite = registrableDomain(domain);
+  if (scannedSite && cookieSite) {
+    return scannedSite === cookieSite ? "first_party" : "third_party";
+  }
+  if (navigationHosts.some((hostname) => isSameSiteCookieDomain(domain, hostname))) {
     return "first_party";
   }
   if (row.thirdParty === true || row.third_party === true) {
@@ -510,7 +516,7 @@ function getCookiePartyType(
   if (cookiePartyType === "third_party" || cookiePartyType === "first_party") {
     return cookiePartyType;
   }
-  return "first_party";
+  return "unknown";
 }
 
 function isPreconsentCookieWrite(row: Record<string, unknown>, hybrid: Record<string, unknown> | null) {
@@ -549,6 +555,7 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     return null;
   }
   const domain = getString(row.domain ?? row.cookieDomain ?? row.cookie_domain)?.replace(/^\.+/, "") ?? null;
+  const knowledge = resolveCanonicalCookieKnowledge(cookieName);
   const explicitCategory = getString(row.category ?? row.cookieCategory ?? row.cookie_category);
   const inferredCategory = classifyRuntimeCookieCategory(cookieName, domain);
   const inferredSecurityOrNecessary = /^(?:security|necessary|functional|consent_management)$/i.test(inferredCategory);
@@ -556,9 +563,15 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     /^AMP_(?:MKTG_)?[A-Za-z0-9_-]+$/i.test(cookieName) ||
     /^ld_anonymous_user_key$/i.test(cookieName) ||
     /^_sp_(?:id|ses)\./i.test(cookieName);
-  const category = inferredSecurityOrNecessary || canonicalNamedCategory
-    ? inferredCategory
-    : explicitCategory && !/^unknown$/i.test(explicitCategory) ? explicitCategory : inferredCategory;
+  const retainedCategoryIsUnsupportedEssentialClaim =
+    /^(?:security|necessary|functional|consent_management)$/i.test(explicitCategory ?? "");
+  const category = knowledge.category !== "unknown"
+    ? knowledge.category
+    : inferredSecurityOrNecessary || canonicalNamedCategory
+      ? inferredCategory
+      : explicitCategory && !/^unknown$/i.test(explicitCategory) && !retainedCategoryIsUnsupportedEssentialClaim
+        ? explicitCategory
+        : inferredCategory;
   const setMethod = getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method ?? row.operation);
   const snapshot = /^(?:browser_snapshot|periodic_cookie_snapshot|initial_cookie_snapshot)$/i.test(setMethod ?? "");
   const rawFirstObservedAtMs = getNumber(row.firstObservedAtMs ?? row.first_observed_at_ms);
@@ -569,15 +582,19 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   const firstObservedAtMs = rawFirstObservedAtMs !== null && rawFirstObservedAtMs >= 0 ? rawFirstObservedAtMs : setAtMs;
   const retainedNonEssential = getBoolean(row.nonEssential ?? row.non_essential);
   const canonicalNonEssentialIdentifier = canonicalNamedCategory;
-  const nonEssential = inferredSecurityOrNecessary
-    ? false
+  const nonEssential = knowledge.essentiality !== "unknown"
+    ? knowledge.essentiality === "non_essential"
+    : inferredSecurityOrNecessary
+      ? false
     : canonicalNonEssentialIdentifier && isNonEssentialCookieCategory(inferredCategory)
       ? true
     : retainedNonEssential !== null
       ? retainedNonEssential
       : isNonEssentialCookieCategory(category);
-  const essentiality = inferredSecurityOrNecessary
-    ? "essential" as const
+  const essentiality = knowledge.essentiality !== "unknown"
+    ? knowledge.essentiality
+    : inferredSecurityOrNecessary
+      ? "essential" as const
     : nonEssential
       ? "non_essential" as const
       : "unknown" as const;
@@ -599,14 +616,36 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
       : rawInitiatorOwner
         ? rawInitiatorVendor
         : null;
+  const initiatorUrl = getString(row.initiatorUrl ?? row.initiator_url ?? row.cookieInitiatorUrl ?? row.cookie_initiator_url);
+  const initiatorDomain = getString(row.initiatorDomain ?? row.initiator_domain ?? row.cookieInitiatorDomain ?? row.cookie_initiator_domain) ??
+    hostnameFromUrl(initiatorUrl);
+  const navigationHosts = getHybridPageHostnames(hybrid);
+  const scannedSite = navigationHosts.map(registrableDomain).find((value): value is string => Boolean(value));
+  const initiatorSite = registrableDomain(initiatorDomain);
+  const cookieSite = registrableDomain(domain);
+  const initiatorChain = getStringArray(row.initiatorChain ?? row.initiator_chain);
+  const setterScriptUrl = getString(row.setterScriptUrl ?? row.setter_script_url) ?? initiatorUrl;
+  const setByThirdPartyScript = getBoolean(row.setByThirdPartyScript ?? row.set_by_third_party_script) ??
+    Boolean(scannedSite && cookieSite === scannedSite && initiatorSite && initiatorSite !== scannedSite);
+  const lifespanSeconds = getNumber(row.lifespanSeconds ?? row.lifespan_seconds);
+  const expiresAt = getString(row.expiresAt ?? row.expires_at ?? row.expires);
   return {
     category,
     cookieName,
+    dataTypes: getStringArray(row.dataTypes ?? row.data_types).length > 0
+      ? getStringArray(row.dataTypes ?? row.data_types)
+      : knowledge.dataTypes,
+    description: getString(row.description ?? row.cookieDescription ?? row.cookie_description) ?? knowledge.description,
     domain,
+    expiresAt,
     firstObservedAtMs,
-    initiatorDomain: getString(row.initiatorDomain ?? row.initiator_domain ?? row.cookieInitiatorDomain ?? row.cookie_initiator_domain),
-    initiatorUrl: getString(row.initiatorUrl ?? row.initiator_url ?? row.cookieInitiatorUrl ?? row.cookie_initiator_url),
+    initiatorDomain,
+    initiatorUrl,
     initiatorVendor,
+    initiatorChain,
+    lifespanSeconds,
+    lifespanSource: getString(row.lifespanSource ?? row.lifespan_source),
+    longLived: lifespanSeconds !== null && lifespanSeconds > 365 * 24 * 60 * 60,
     // Canonical cookie-name/domain classification wins over stale generic flags. In
     // particular, edge-security cookies must never be promoted as advertising or
     // other non-essential storage merely because an upstream row said `true`.
@@ -621,6 +660,8 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     responseUrl: getString(row.responseUrl ?? row.response_url),
     sourceRequestUrl: getString(row.sourceRequestUrl ?? row.source_request_url ?? row.responseUrl ?? row.response_url ?? row.initiatorUrl ?? row.initiator_url),
     setAtMs,
+    setByThirdPartyScript,
+    setterScriptUrl,
     setMethod,
     timingBasis: snapshot
       ? initialSnapshot ? "initial_cookie_snapshot" : "periodic_cookie_snapshot"
@@ -636,15 +677,25 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
 
 function normalizeInitialCookieRow(cookieName: string, domain: string | null): RuntimeCookieEvidenceRow {
   const normalizedDomain = domain?.replace(/^\.+/, "") ?? null;
-  const category = classifyRuntimeCookieCategory(cookieName, normalizedDomain);
+  const knowledge = resolveCanonicalCookieKnowledge(cookieName);
+  const category = knowledge.category !== "unknown"
+    ? knowledge.category
+    : classifyRuntimeCookieCategory(cookieName, normalizedDomain);
   return {
     category,
     cookieName,
+    dataTypes: knowledge.dataTypes,
+    description: knowledge.description,
     domain: normalizedDomain,
+    expiresAt: null,
     firstObservedAtMs: null,
     initiatorDomain: null,
     initiatorUrl: null,
     initiatorVendor: null,
+    initiatorChain: [],
+    lifespanSeconds: null,
+    lifespanSource: null,
+    longLived: false,
     nonEssential: isNonEssentialCookieCategory(category),
     observedBeforeConsent: false,
     essentiality: isNonEssentialCookieCategory(category)
@@ -654,6 +705,8 @@ function normalizeInitialCookieRow(cookieName: string, domain: string | null): R
     responseUrl: null,
     sourceRequestUrl: null,
     setAtMs: null,
+    setByThirdPartyScript: false,
+    setterScriptUrl: null,
     setMethod: "initial_cookie_snapshot",
     timingBasis: "initial_cookie_snapshot",
     evidenceGrade: null,

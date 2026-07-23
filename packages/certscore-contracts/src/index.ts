@@ -218,6 +218,17 @@ export const responseSizeSchema = z.object({
   responseHeadersSize: z.number().int().nonnegative().optional(),
 });
 
+export const networkDestinationSchema = z.object({
+  ip: z.string().max(64),
+  country: z.string().length(2).optional(),
+  countryCode: z.string().length(2).optional(),
+  city: z.string().max(120).optional(),
+  asn: z.number().int().positive().optional(),
+  provider: z.string().max(160).optional(),
+  source: z.enum(["cdp_remote_ip", "cdp_remote_ip_geolite2"]),
+  locationLabel: z.literal("server location (may be CDN edge)"),
+});
+
 export const setCookieMetadataSchema = z.object({
   name: z.string(),
   domain: z.string().optional(),
@@ -275,6 +286,8 @@ export const networkEventSchema = runtimeEvidenceEventSchema.extend({
   isMainFrame: z.boolean().optional(),
   isSubFrame: z.boolean().optional(),
   isThirdParty: z.boolean().optional(),
+  idSyncEndpoint: z.boolean().optional(),
+  networkDestination: networkDestinationSchema.optional(),
   parentRequestId: z.string().optional(),
   redirectChainRequestIds: z.array(z.string()).default([]),
   responsibleScriptUrl: z.string().optional(),
@@ -311,6 +324,7 @@ export const networkResponseEventSchema = runtimeEvidenceEventSchema.extend({
   setCookieHeaders: z.array(z.string()).default([]),
   setCookieMetadata: z.array(setCookieMetadataSchema).default([]),
   cookieNamesSet: z.array(z.string()).default([]),
+  networkDestination: networkDestinationSchema.optional(),
   responseHeaders: safeResponseHeadersSchema.optional(),
   cacheHeaders: z.record(z.string()).default({}),
   locationRedirectHeader: z.string().optional(),
@@ -331,12 +345,21 @@ export const cookieEventSchema = runtimeEvidenceEventSchema.extend({
   httpOnly: z.boolean().optional(),
   sourceRequestId: z.string().optional(),
   sourceResponseEventId: z.string().optional(),
+  setByThirdPartyScript: z.boolean().optional(),
+  setterScriptUrl: z.string().max(2_000).optional(),
+  initiatorChain: z.array(z.string().max(2_000)).max(12).optional(),
+  lifespanSeconds: z.number().int().nonnegative().optional(),
+  lifespanSource: z.enum(["max_age", "expires", "browser_expiry", "session"]).optional(),
+  description: z.string().max(500).optional(),
+  dataTypes: z.array(z.string().max(120)).max(12).optional(),
   cookieParty: z.enum(["first_party", "third_party", "unknown"]).default("unknown"),
   vendorAssociated: z.boolean().default(false),
   associatedVendorRef: z.string().optional(),
   cookiePurpose: z.enum([
     "analytics",
     "advertising",
+    "marketing",
+    "personalization",
     "session_replay",
     "consent_management",
     "tag_management",
@@ -2234,6 +2257,7 @@ export type ScanModuleRun = z.infer<typeof scanModuleRunSchema>;
 export type RuntimeEvidenceEvent = z.infer<typeof runtimeEvidenceEventSchema>;
 export type NetworkEvent = z.infer<typeof networkEventSchema>;
 export type NetworkResponseEvent = z.infer<typeof networkResponseEventSchema>;
+export type NetworkDestination = z.infer<typeof networkDestinationSchema>;
 export type CookieEvent = z.infer<typeof cookieEventSchema>;
 export type SetCookieMetadata = z.infer<typeof setCookieMetadataSchema>;
 export type CookieSnapshot = z.infer<typeof cookieSnapshotSchema>;

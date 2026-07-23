@@ -18,7 +18,12 @@ import {
   type NormalizedVendorObservation,
   type PolicySurfaceInspectionOutcome
 } from "@certscore/contracts";
-import { resolveVendorDisplayCategory, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
+import {
+  isCanonicalIdSyncEndpoint,
+  resolveVendorDisplayCategory,
+  resolveVendorObservations,
+  type VendorResolverInput
+} from "@certscore/vendor-resolver";
 import { isScanNoGoSnapshotOutcome, resolveScanNoGoPresentation } from "@website-signal-risk-scanner/shared";
 import {
   adaptGdprTransparencyTopicCandidatesForProduction,
@@ -3093,12 +3098,17 @@ export function classifyRetainedRequestActivity(input: {
 }) {
   const relevance = (input.regulatoryRelevance ?? []).join(" ").toLowerCase();
   const url = input.url ?? "";
+  const hostname = hostnameFromUrl(url);
   const canonicalVendorEndpointObserved = Boolean(
     inferDirectEndpointVendorFromUrl(url) &&
     /^(?:beacon|fetch|xhr)$/i.test(input.resourceType ?? "")
   );
   const collectionEndpointObserved = input.collectionEndpointObserved || canonicalVendorEndpointObserved;
-  if (/identifier_sync|identity_resolution|cookie_sync/.test(relevance) || /(?:user|id|cookie)[_-]?sync|sync(?:\.gif|\/)|setuid|getuid/i.test(url)) {
+  if (
+    isCanonicalIdSyncEndpoint(hostname) ||
+    /identifier_sync|identity_resolution|cookie_sync/.test(relevance) ||
+    /(?:user|id|cookie)[_-]?sync|sync(?:\.gif|\/)|setuid|getuid/i.test(url)
+  ) {
     return "identifier_synchronization";
   }
   if (collectionEndpointObserved && /advertising|adtech|retargeting|marketing/i.test(input.category)) {
@@ -3108,6 +3118,29 @@ export function classifyRetainedRequestActivity(input: {
     return "tracker_beacon";
   }
   return "library";
+}
+
+function retainedRequestPathSample(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    return new URL(value).pathname.slice(0, 240);
+  } catch {
+    return null;
+  }
+}
+
+function retainedRequestUrlSample(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    const redactedQuery = [...parsed.searchParams.keys()]
+      .slice(0, 16)
+      .map((key) => `${encodeURIComponent(key)}=[redacted]`)
+      .join("&");
+    return `${parsed.origin}${parsed.pathname}${redactedQuery ? `?${redactedQuery}` : ""}`.slice(0, 640);
+  } catch {
+    return null;
+  }
 }
 
 const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
@@ -3663,6 +3696,33 @@ function buildMaterializedLocalV2Detail(
     }))
   );
   const boundedRequestPurposeRows = selectBoundedPreconsentRequestPurposeRows(requestPurposeRows, 50);
+  const rtbCookieSyncObservations = boundedRequestPurposeRows
+    .filter((row) => row.classification === "identifier_synchronization")
+    .map((row) => {
+      const hostname = firstString(row.hostname);
+      const knownEndpoint = isCanonicalIdSyncEndpoint(hostname);
+      return {
+        category: "identity_sync",
+        consentStateAtTime: "pre_consent",
+        hostname,
+        pathSample: retainedRequestPathSample(firstString(row.requestUrl)),
+        queryKeysSample: (() => {
+        const value = firstString(row.requestUrl);
+        if (!value) return [];
+        try {
+          return [...new URL(value).searchParams.keys()].slice(0, 16);
+        } catch {
+          return [];
+        }
+        })(),
+        reason: knownEndpoint ? "known_sync_endpoint" : "sync_path",
+        registrableDomain: registrableDomain(hostname),
+        requestUrl: retainedRequestUrlSample(firstString(row.requestUrl)),
+        timestampMs: row.tsMs,
+        vendorName: row.vendorName ?? null,
+        evidenceBasis: knownEndpoint ? "canonical_id_sync_endpoint" : "retained_sync_request_shape",
+      };
+    });
   const promotionGradeRequestPurposeRows = boundedRequestPurposeRows.filter(isPromotionGradePreconsentRequestRow);
   const sensitiveThirdPartyTrackingCorrelation = deriveSensitiveThirdPartyTrackingCorrelation({
     collectionSurfaceObservations: Array.isArray(bundle.collectionSurfaceObservations)
@@ -3742,17 +3802,28 @@ function buildMaterializedLocalV2Detail(
     const category = event.cookiePurpose && event.cookiePurpose !== "unknown"
       ? event.cookiePurpose
       : matchedVendor?.vendorCategory ?? "unknown";
+    const initiatorUrl = event.setterScriptUrl ?? event.initiatorChain?.[0] ?? event.initiatorUrl ?? null;
+    const initiatorDomain = hostnameFromUrl(initiatorUrl) ?? null;
     return {
       beforeConsent: event.consentStateAtTime === "pre_consent",
       category,
       cookieName: event.cookieName,
       domain: (event.cookieDomain ?? event.hostname)?.replace(/^\.+/, ""),
+      expiresAt: event.expires ?? null,
       firstObservedAtMs: event.timestampMs,
-      initiatorDomain: event.hostname,
-      initiatorUrl: event.url,
+      initiatorChain: event.initiatorChain ?? [],
+      initiatorDomain,
+      initiatorUrl,
       initiatorVendor: snapshot || !matchedVendorHostAligned ? null : matchedVendor?.vendorName ?? null,
+      lifespanSeconds: event.lifespanSeconds ?? null,
+      lifespanSource: event.lifespanSource ?? null,
+      description: event.description ?? null,
+      dataTypes: event.dataTypes ?? [],
       nonEssential: /^(?:advertising|analytics|fingerprinting|marketing|measurement|personalization|session_replay)$/i.test(category),
       party: event.cookieParty ?? (event.thirdParty ? "third_party" : "first_party"),
+      setByThirdPartyScript: event.setByThirdPartyScript === true,
+      set_by_third_party_script: event.setByThirdPartyScript === true,
+      setterScriptUrl: event.setterScriptUrl ?? null,
       setAtMs: snapshot ? null : event.timestampMs,
       setMethod: event.operation ?? "cookie_event",
       thirdParty: event.thirdParty === true || event.cookieParty === "third_party",
@@ -3785,6 +3856,10 @@ function buildMaterializedLocalV2Detail(
       first_layer_consent_choices: completeFirstLayerConsentChoices
     } : {}),
     cookieWriteObservations,
+    rtbCookieSyncObserved: rtbCookieSyncObservations.length > 0,
+    rtb_cookie_sync_observed: rtbCookieSyncObservations.length > 0,
+    rtbCookieSyncObservations,
+    rtb_cookie_sync_observations: rtbCookieSyncObservations,
     networkSummary: {
       metricBasis: "retained_unique_request_events",
       observedRawRequestEventCount: runtimeObservationCounts?.networkEvents ?? null,
@@ -3797,6 +3872,8 @@ function buildMaterializedLocalV2Detail(
     },
     requestObservations: networkEvents.slice(0, 200).map((event) => ({
       collectionEndpointObserved: event.collectionEndpointObserved === true,
+      idSyncEndpoint: event.idSyncEndpoint === true,
+      networkDestination: event.networkDestination ?? null,
       domain: event.hostname ?? hostnameFromUrl(event.url),
       initiatorType: event.initiatorType ?? event.resourceType,
       documentUrl: safeLocalV2DocumentUrl(event.documentUrl, event.topLevelUrl, canonicalDocumentUrl),

@@ -1,4 +1,9 @@
-import { resolveCanonicalVendorLabel, resolveVendorDisplayCategory, resolveVendorObservations } from "@certscore/vendor-resolver";
+import {
+  resolveCanonicalCookieKnowledge,
+  resolveCanonicalVendorLabel,
+  resolveVendorDisplayCategory,
+  resolveVendorObservations
+} from "@certscore/vendor-resolver";
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 
 export type RuntimeVendorAttributionEvidence = {
@@ -74,7 +79,21 @@ export function findRuntimeCookieNameVendor(cookieName: string | null | undefine
   const trimmed = cookieName?.trim();
   if (!trimmed) return null;
   const observation = resolveCanonicalOwner({ cookieName: trimmed });
-  if (!observation) return null;
+  if (!observation) {
+    const knowledge = resolveCanonicalCookieKnowledge(trimmed);
+    const vendor = resolveCanonicalVendorLabel(knowledge.vendor);
+    if (!vendor) return null;
+    return {
+      category: knowledge.category,
+      product: vendor.product,
+      vendor: vendor.vendor,
+      attributionEvidence: {
+        signatureId: "canonical_cookie_knowledge_base",
+        matchedOn: "cookie_name" as const,
+        matchedValue: trimmed
+      }
+    };
+  }
   return {
     category: observation.purpose,
     product: observation.product ?? observation.vendor,
@@ -92,7 +111,24 @@ export function findRuntimeCookieOwner(cookieName: string | null | undefined, ho
   const normalizedHostname = normalizeRuntimeInventoryHost(hostname);
   if (!trimmed) return null;
   const observation = resolveCanonicalOwner({ cookieName: trimmed, hostname: normalizedHostname ?? undefined });
-  if (!observation) return null;
+  if (!observation) {
+    const knowledge = resolveCanonicalCookieKnowledge(trimmed);
+    const vendor = resolveCanonicalVendorLabel(knowledge.vendor);
+    if (!vendor) return null;
+    return {
+      category: knowledge.category,
+      confidence: vendor.confidence,
+      entity: vendor.entity,
+      product: vendor.product,
+      regulatoryRelevance: vendor.regulatoryRelevance,
+      vendor: vendor.vendor,
+      attributionEvidence: {
+        signatureId: "canonical_cookie_knowledge_base",
+        matchedOn: "cookie_name" as const,
+        matchedValue: trimmed
+      }
+    };
+  }
   return {
     category: observation.purpose,
     confidence: observation.confidence,

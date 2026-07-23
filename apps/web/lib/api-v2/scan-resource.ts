@@ -822,7 +822,7 @@ function normalizePreConsentParty(value: InventoryGroupRow["party"]): "first_par
   if (value === "first_party") {
     return "first_party";
   }
-  if (value === "third_party" || value === "3rd") {
+  if (value === "third_party") {
     return "third_party";
   }
   if (value === "mixed") {
@@ -841,6 +841,16 @@ function stableInventoryRowId(row: InventoryGroupRow, host: string | null) {
 function isTokenOnlyPreConsentLabel(value: string) {
   const trimmed = value.trim();
   return trimmed.startsWith(".") || trimmed.startsWith("_") || trimmed.startsWith("#");
+}
+
+function safeInventoryScriptUrl(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`.slice(0, 2_000);
+  } catch {
+    return null;
+  }
 }
 
 function buildApiV2PreConsentRow(row: InventoryGroupRow, pageUrlHost: string | null) {
@@ -865,6 +875,28 @@ function buildApiV2PreConsentRow(row: InventoryGroupRow, pageUrlHost: string | n
     priority: normalizePreConsentPriority(row.priority),
     confidence: normalizePreConsentConfidence(row.confidence),
     party: normalizePreConsentParty(row.party),
+    canonicalEntity: row.canonicalEntity,
+    purposes: row.purposes,
+    domains: row.domains.map(sanitizeHost).filter((value): value is string => Boolean(value)),
+    products: row.rawProducts,
+    dataFlows: row.dataFlows,
+    setByThirdPartyScript: row.setByThirdPartyScript,
+    set_by_third_party_script: row.setByThirdPartyScript,
+    cookieDetails: row.cookieDetails.map((cookie) => ({
+      name: cookie.cookieName,
+      domain: cookie.domain,
+      category: cookie.category,
+      description: cookie.description ?? "Purpose is not yet classified; manual review is recommended.",
+      dataTypes: cookie.dataTypes ?? [],
+      expiresAt: cookie.expiresAt ?? null,
+      lifespanSeconds: cookie.lifespanSeconds ?? null,
+      lifespanSource: cookie.lifespanSource ?? null,
+      longLived: cookie.longLived === true,
+      setByThirdPartyScript: cookie.setByThirdPartyScript === true,
+      set_by_third_party_script: cookie.setByThirdPartyScript === true,
+      setterScriptUrl: safeInventoryScriptUrl(cookie.setterScriptUrl),
+      initiatorChain: (cookie.initiatorChain ?? []).map(safeInventoryScriptUrl).filter((value): value is string => Boolean(value)).slice(0, 12)
+    })),
     requestCount,
     phase: "pre_consent" as const,
     observedBeforeConsent: true,
@@ -889,6 +921,10 @@ export function buildApiV2PreConsentCookiesTrackers(scanRecord: ScanDetailRespon
   }
 
   const rows = [...rowsById.values()];
+  const uniqueCookieKeys = new Set(rows.flatMap((row) =>
+    (row.cookieDetails ?? []).map((cookie) => `${cookie.name}\u0000${cookie.domain ?? ""}`)
+  ));
+  const uniqueDomains = new Set(rows.flatMap((row) => row.domains ?? (row.host ? [row.host] : [])));
   const resource = {
     type: "certscore_pre_consent_cookies_trackers",
     scanId: scan.id,
@@ -897,8 +933,10 @@ export function buildApiV2PreConsentCookiesTrackers(scanRecord: ScanDetailRespon
     summary: {
       rowCount: rows.length,
       trackerCount: rows.filter((row) => row.kind === "tracker").length,
-      cookieCount: rows.filter((row) => row.kind === "cookie").length,
-      requestCount: rows.reduce((total, row) => total + (row.requestCount ?? 0), 0)
+      cookieCount: uniqueCookieKeys.size,
+      requestCount: rows.reduce((total, row) => total + (row.requestCount ?? 0), 0),
+      vendorCount: rows.length,
+      domainCount: uniqueDomains.size
     },
     rows,
     links: {
