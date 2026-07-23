@@ -32,6 +32,18 @@ const ORPHAN_RECONCILIATION_AGE_MS = 75_000;
 
 type LambdaResultStatus = "completed" | "failed";
 type LambdaTargetEnvironment = "local" | "production";
+type LambdaAwsRegion = "eu-central-1" | "eu-west-1" | "us-west-2";
+
+type ScannerRuntimeProvenance = {
+  awsRegion: LambdaAwsRegion;
+  dispatchVpcMode: "none" | "vpc";
+  egressId?: string;
+  egressProvider?: string;
+  functionVersion?: string;
+  imageDigest?: string;
+  publicIpHash?: string;
+  runtimeVpcMode: "none" | "unknown" | "vpc";
+};
 
 type LambdaResultMessage = {
   artifactMetadata?: Record<string, unknown>;
@@ -43,6 +55,7 @@ type LambdaResultMessage = {
   scanId: string;
   scannerGitSha?: string;
   scannerImageTag?: string;
+  scannerRuntimeProvenance?: ScannerRuntimeProvenance;
   scannerRuntimeVersion?: string;
   status: LambdaResultStatus;
   targetEnvironment: LambdaTargetEnvironment;
@@ -193,6 +206,40 @@ function stringValue(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function parseScannerRuntimeProvenance(value: unknown): ScannerRuntimeProvenance | undefined {
+  const record = asRecord(value);
+  const awsRegion =
+    record.awsRegion === "eu-central-1" || record.awsRegion === "eu-west-1" || record.awsRegion === "us-west-2"
+      ? record.awsRegion
+      : null;
+  const dispatchVpcMode = record.dispatchVpcMode === "vpc" || record.dispatchVpcMode === "none"
+    ? record.dispatchVpcMode
+    : null;
+  const runtimeVpcMode =
+    record.runtimeVpcMode === "vpc" || record.runtimeVpcMode === "none" || record.runtimeVpcMode === "unknown"
+      ? record.runtimeVpcMode
+      : null;
+  if (!awsRegion || !dispatchVpcMode || !runtimeVpcMode) {
+    return undefined;
+  }
+  const imageDigest = stringValue(record.imageDigest);
+  const publicIpHash = stringValue(record.publicIpHash);
+  return {
+    awsRegion,
+    dispatchVpcMode,
+    ...(stringValue(record.egressId) ? { egressId: (stringValue(record.egressId) as string).slice(0, 128) } : {}),
+    ...(stringValue(record.egressProvider)
+      ? { egressProvider: (stringValue(record.egressProvider) as string).slice(0, 80) }
+      : {}),
+    ...(stringValue(record.functionVersion)
+      ? { functionVersion: (stringValue(record.functionVersion) as string).slice(0, 80) }
+      : {}),
+    ...(imageDigest && /^sha256:[a-f0-9]{64}$/i.test(imageDigest) ? { imageDigest } : {}),
+    ...(publicIpHash && /^sha256:[a-f0-9]{64}$/i.test(publicIpHash) ? { publicIpHash } : {}),
+    runtimeVpcMode
+  };
+}
+
 function parseLambdaHandlerTiming(value: unknown): LambdaHandlerTiming | undefined {
   const record = asRecord(value);
   const handlerStartedAt = stringValue(record.handlerStartedAt);
@@ -255,7 +302,10 @@ export function productionArtifactChainRejectReason(input: {
   return null;
 }
 
-function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: LambdaTargetEnvironment): LambdaResultMessage {
+export function parseLambdaResultMessage(
+  raw: string,
+  expectedTargetEnvironment: LambdaTargetEnvironment
+): LambdaResultMessage {
   const record = asRecord(JSON.parse(raw));
   if (record.artifactOnly !== true || record.productionFindingIntegration !== false) {
     throw new Error("Lambda result must remain artifact-only with production finding integration disabled.");
@@ -284,6 +334,7 @@ function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: Lambda
   const handlerTiming = parseLambdaHandlerTiming(record.handlerTiming);
   const artifactMetadata = asRecord(record.artifactMetadata);
   const artifactPointers = asRecord(record.artifactPointers);
+  const scannerRuntimeProvenance = parseScannerRuntimeProvenance(record.scannerRuntimeProvenance);
   if (targetEnvironment === "production" && status === "completed") {
     const artifactChainRejectReason = productionArtifactChainRejectReason({ artifactMetadata, artifactPointers });
     if (artifactChainRejectReason) {
@@ -303,6 +354,7 @@ function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: Lambda
     scanId,
     ...(stringValue(record.scannerGitSha) ? { scannerGitSha: (stringValue(record.scannerGitSha) as string).slice(0, 80) } : {}),
     ...(stringValue(record.scannerImageTag) ? { scannerImageTag: (stringValue(record.scannerImageTag) as string).slice(0, 160) } : {}),
+    ...(scannerRuntimeProvenance ? { scannerRuntimeProvenance } : {}),
     ...(stringValue(record.scannerRuntimeVersion)
       ? { scannerRuntimeVersion: (stringValue(record.scannerRuntimeVersion) as string).slice(0, 80) }
       : {}),
@@ -774,6 +826,9 @@ export async function recordLocalV2DagLambdaResult(
           resultStatus: parsedMessage.status,
           ...(parsedMessage.scannerGitSha ? { scannerGitSha: parsedMessage.scannerGitSha } : {}),
           ...(parsedMessage.scannerImageTag ? { scannerImageTag: parsedMessage.scannerImageTag } : {}),
+          ...(parsedMessage.scannerRuntimeProvenance
+            ? { scannerRuntimeProvenance: parsedMessage.scannerRuntimeProvenance }
+            : {}),
           ...(parsedMessage.scannerRuntimeVersion ? { scannerRuntimeVersion: parsedMessage.scannerRuntimeVersion } : {}),
           targetEnvironment: parsedMessage.targetEnvironment,
           v2ArtifactsRemainInternal: true,
@@ -788,6 +843,18 @@ export async function recordLocalV2DagLambdaResult(
     `update scans
         set completed_at = coalesce(completed_at, $2::timestamptz),
             error_message = case when $3 = 'failed' then $4 else error_message end,
+            egress_id = coalesce($5, egress_id),
+            egress_provider = coalesce($6, egress_provider),
+            scan_config_json = jsonb_set(
+              scan_config_json,
+              '{execution,v2DagLambda}',
+              coalesce(scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || jsonb_build_object(
+                'completedAt', $2::timestamptz,
+                'dispatchState', case when $3 = 'failed' then 'failed' else 'completed' end,
+                'runtimeProvenance', $7::jsonb
+              ),
+              true
+            ),
             status = case when $3 = 'failed' then 'failed' else 'completed' end
       where id = $1
         and status in ('queued', 'running')`,
@@ -795,9 +862,31 @@ export async function recordLocalV2DagLambdaResult(
       parsedMessage.scanId,
       parsedMessage.completedAt,
       parsedMessage.status,
-      parsedMessage.error?.message ?? null
+      parsedMessage.error?.message ?? null,
+      parsedMessage.scannerRuntimeProvenance?.egressId ?? null,
+      parsedMessage.scannerRuntimeProvenance?.egressProvider ?? null,
+      parsedMessage.scannerRuntimeProvenance
+        ? JSON.stringify(parsedMessage.scannerRuntimeProvenance)
+        : null
     ]
   );
+  if (parsedMessage.scannerRuntimeProvenance) {
+    await query(
+      `update scan_snapshots
+          set egress_id = coalesce($2, egress_id),
+              egress_type = coalesce($3, egress_type),
+              public_ip_hash = coalesce($4, public_ip_hash),
+              region = coalesce($5, region)
+        where scan_id = $1`,
+      [
+        parsedMessage.scanId,
+        parsedMessage.scannerRuntimeProvenance.egressId ?? null,
+        parsedMessage.scannerRuntimeProvenance.egressProvider ?? null,
+        parsedMessage.scannerRuntimeProvenance.publicIpHash ?? null,
+        parsedMessage.scannerRuntimeProvenance.awsRegion
+      ]
+    );
+  }
   await query(
     `update pulse_requests
         set status = case when $3 = 'failed' then 'failed' else 'completed' end,

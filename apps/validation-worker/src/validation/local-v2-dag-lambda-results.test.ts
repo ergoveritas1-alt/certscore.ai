@@ -10,6 +10,7 @@ import {
   getLambdaResultTargetEnvironment,
   getManualSmokeResultScanId,
   mirrorLocalV2DagLambdaArtifacts,
+  parseLambdaResultMessage,
   productionArtifactChainRejectReason
 } from "./local-v2-dag-lambda-results";
 
@@ -139,6 +140,57 @@ test("production result handoff requires verifiable canonical artifact pointers"
       manifestUri: "https://example.test/manifest.json"
     }
   }) ?? "", /s3:\/\//);
+});
+
+test("validation worker retains bounded scanner runtime provenance from Lambda results", () => {
+  const result = parseLambdaResultMessage(JSON.stringify({
+    artifactOnly: true,
+    artifactMetadata: {
+      manifestUri: { sha256: "a".repeat(64), sizeBytes: 100 },
+      scanArtifactUri: { sha256: "b".repeat(64), sizeBytes: 200 }
+    },
+    artifactPointers: {
+      manifestUri: "s3://certscore-artifacts/scan/LocalV2DagLambdaManifest.json",
+      scanArtifactUri: "s3://certscore-artifacts/scan/CanonicalEvidenceBundle.json"
+    },
+    completedAt: "2026-07-23T15:48:45.112Z",
+    contractVersion: "certscore.v2.lambda-dag-result.v1",
+    processor: "local-certscore-v2-dag-parallel-v1",
+    productionFindingIntegration: false,
+    scanId: "fca91cbb-cb56-4d8b-8056-a94d5472bf86",
+    scannerRuntimeProvenance: {
+      awsRegion: "eu-west-1",
+      dispatchVpcMode: "vpc",
+      egressId: "aws-nat:eu-west-1:eipalloc-0123456789abcdef0",
+      egressProvider: "aws-nat-gateway",
+      functionVersion: "$LATEST",
+      imageDigest: `sha256:${"c".repeat(64)}`,
+      publicIpHash: `sha256:${"d".repeat(64)}`,
+      runtimeVpcMode: "vpc"
+    },
+    status: "completed",
+    targetEnvironment: "production"
+  }), "production");
+
+  assert.deepEqual(result.scannerRuntimeProvenance, {
+    awsRegion: "eu-west-1",
+    dispatchVpcMode: "vpc",
+    egressId: "aws-nat:eu-west-1:eipalloc-0123456789abcdef0",
+    egressProvider: "aws-nat-gateway",
+    functionVersion: "$LATEST",
+    imageDigest: `sha256:${"c".repeat(64)}`,
+    publicIpHash: `sha256:${"d".repeat(64)}`,
+    runtimeVpcMode: "vpc"
+  });
+});
+
+test("validation worker persists scanner provenance before score materialization", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+
+  assert.match(source, /scannerRuntimeProvenance:\s*parsedMessage\.scannerRuntimeProvenance/);
+  assert.match(source, /egress_id = coalesce\(\$5, egress_id\)/);
+  assert.match(source, /'runtimeProvenance', \$7::jsonb/);
+  assert.match(source, /public_ip_hash = coalesce\(\$4, public_ip_hash\)/);
 });
 
 test("validation worker Lambda result poller retains leases and bounds result concurrency", async () => {
