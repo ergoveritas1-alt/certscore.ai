@@ -39,7 +39,7 @@ function TabLabel({ tab, useShortLabel = false }: { tab: RegulatoryChecklistTab;
 
 export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnostics", headingTrailing, showAdvancedEvidenceToggle = false, tabs }: RegulatoryChecklistSectionProps) {
   const [activeTabId, setActiveTabId] = useState(tabs[0]?.id ?? "");
-  const [expandAllAdvancedEvidence, setExpandAllAdvancedEvidence] = useState(false);
+  const [isSectionExpanded, setIsSectionExpanded] = useState(true);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null;
   const visibleTabs = tabs.filter((tab) => !tab.group || tab.group === "visible");
   const menuGroups = [
@@ -75,26 +75,22 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
               {showAdvancedEvidenceToggle ? (
                 <button
                   type="button"
-                  aria-label={expandAllAdvancedEvidence
-                    ? "Collapse all evidence packets and correction steps"
-                    : "Expand all evidence packets and correction steps"}
-                  aria-pressed={expandAllAdvancedEvidence}
+                  aria-label={isSectionExpanded ? `Collapse ${headingLabel}` : `Expand ${headingLabel}`}
+                  aria-pressed={isSectionExpanded}
                   className={cn(
                     "scan-report-button inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-                    expandAllAdvancedEvidence
+                    isSectionExpanded
                       ? "border-sky-300 bg-sky-50 text-sky-700 shadow-sm"
                       : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800"
                   )}
-                  title={expandAllAdvancedEvidence
-                    ? "Collapse all evidence packets and correction steps"
-                    : "Expand all evidence packets and correction steps"}
-                  onClick={() => setExpandAllAdvancedEvidence((value) => !value)}
+                  title={isSectionExpanded ? `Collapse ${headingLabel}` : `Expand ${headingLabel}`}
+                  onClick={() => setIsSectionExpanded((value) => !value)}
                 >
                   <span
                     aria-hidden="true"
                     className={cn(
                       "transition-transform",
-                      expandAllAdvancedEvidence ? "rotate-90" : "rotate-0"
+                      isSectionExpanded ? "rotate-90" : "rotate-0"
                     )}
                   >
                     <ScanReportDisclosureIcon className="h-4 w-4 rounded-[0.375rem] [&_svg]:h-2.5 [&_svg]:w-2.5" />
@@ -188,9 +184,11 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
         </div>
       </div>
       <div className="[&>*]:border-t-0 [&>*]:rounded-t-none">
-        <RegulatoryChecklistAdvancedEvidenceProvider value={{ expandAllAdvancedEvidence }}>
-          {activeTab.content}
-        </RegulatoryChecklistAdvancedEvidenceProvider>
+        {isSectionExpanded ? (
+          <RegulatoryChecklistAdvancedEvidenceProvider value={{ expandAllAdvancedEvidence: false }}>
+            {activeTab.content}
+          </RegulatoryChecklistAdvancedEvidenceProvider>
+        ) : null}
       </div>
     </section>
   );
