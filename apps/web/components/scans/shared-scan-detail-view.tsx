@@ -838,7 +838,7 @@ function PreConsentDataFlowSummary({ rows }: { rows: InventoryGroupRow[] }) {
   const adequacyCountry = new Set(flows.filter((flow) => flow.transferMechanism.mechanism === "adequacy_decision").map((flow) => flow.controllingEntity.legalEntity ?? flow.endpoint)).size;
   return (
     <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-      Pre-consent flows: {flows.length} endpoint{flows.length === 1 ? "" : "s"} · {uniqueEntities.size} entities · 🇺🇸 {usControlled} · 🇪🇺 {euControlled} · {adequacyCountry} adequacy. Server flags are CDN-edge observations, not storage locations.
+      Pre-consent flows: {flows.length} endpoint{flows.length === 1 ? "" : "s"} · {uniqueEntities.size} entities · <span className="cursor-help" title="Unique controlling entities headquartered in the United States">🇺🇸 {usControlled}</span> · <span className="cursor-help" title="Unique controlling entities headquartered in the European Union">🇪🇺 {euControlled}</span> · <span className="cursor-help" title="Unique entities using an adequacy decision as the transfer mechanism">{adequacyCountry} adequacy</span>. Server flags are CDN-edge observations, not storage locations.
     </p>
   );
 }
