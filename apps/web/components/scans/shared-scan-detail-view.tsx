@@ -49,7 +49,6 @@ import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { ScanPageHeader } from "./scan-page-header";
-import { InventoryTableControls } from "./inventory-table-controls";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { NoGoBrowserExtensionRecovery } from "./no-go-browser-extension-recovery";
 import {
@@ -938,7 +937,6 @@ function RuntimeInventoryTable({
               <InventoryPriorityDonut rows={groupedInventoryRows} />
             </div>
           </div>
-          <InventoryTableControls tableId="preconsent-inventory-table" />
           <div className="overflow-hidden rounded-xl border border-slate-200">
             <div className="max-h-[370px] overflow-auto">
             <table id="preconsent-inventory-table" className="w-[1160px] min-w-[1160px] max-w-[1160px] table-fixed border-collapse text-left text-[13px]">
