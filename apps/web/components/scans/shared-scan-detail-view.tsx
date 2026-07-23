@@ -970,19 +970,19 @@ function RuntimeInventoryTable({
             <InventorySortRuntime tableId="preconsent-inventory-table" />
             <table id="preconsent-inventory-table" className="w-[1190px] min-w-[1190px] max-w-[1190px] table-fixed border-collapse text-left text-[13px]">
               <caption className="sr-only">Pre-consent cookies and trackers inventory</caption>
-              <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500 shadow-[0_2px_8px_-6px_rgba(15,23,42,0.55)]">
+              <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500 shadow-[0_2px_8px_-6px_rgba(15,23,42,0.55)]">
                 <tr>
-                  <th title="Cookie or tracker evidence type" className="sticky left-0 z-30 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="type" label="Type" /></th>
-                  <th title="Resolved vendor or first-party entity" className="sticky left-[90px] z-30 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="vendor" label="Vendor" /></th>
-                  <th title="Observed purpose classification" className="w-[130px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
-                  <th title="Review priority based on retained evidence" className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="priority" label="Priority" /></th>
-                  <th title="Elapsed time from scan start to observation" className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
-                  <th className="w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Cookies</th>
-                  <th className="w-[150px] max-w-[150px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Domain</th>
-                  <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Server location</th>
-                  <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Confidence</th>
-                  <th className="w-[50px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Party</th>
-                  <th className="w-[90px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Category</th>
+                  <th title="Cookie or tracker evidence type" className="sticky left-0 top-0 z-30 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="type" label="Type" /></th>
+                  <th title="Resolved vendor or first-party entity" className="sticky left-[90px] top-0 z-30 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="vendor" label="Vendor" /></th>
+                  <th title="Observed purpose classification" className="sticky top-0 z-20 w-[130px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
+                  <th title="Review priority based on retained evidence" className="sticky top-0 z-20 w-[100px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="priority" label="Priority" /></th>
+                  <th title="Elapsed time from scan start to observation" className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
+                  <th className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Cookies</th>
+                  <th className="sticky top-0 z-20 w-[150px] max-w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Domain</th>
+                  <th className="sticky top-0 z-20 w-[120px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Server location</th>
+                  <th className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Confidence</th>
+                  <th className="sticky top-0 z-20 w-[50px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Party</th>
+                  <th className="sticky top-0 z-20 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Category</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
