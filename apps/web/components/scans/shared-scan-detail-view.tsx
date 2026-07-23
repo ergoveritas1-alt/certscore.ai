@@ -921,7 +921,7 @@ function RuntimeInventoryTable({
             <table className="w-[1160px] min-w-[1160px] max-w-[1160px] table-fixed border-collapse text-left text-[13px]">
               <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>
-                  <th className="w-[110px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Type</th>
+                  <th className="w-[90px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Type</th>
                   <th className="w-[150px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Vendor</th>
                   <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Purpose</th>
                   <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Priority</th>
