@@ -762,11 +762,17 @@ function InventoryDataFlowCell({ row }: { row: InventoryGroupRow }) {
     candidate.idSync ? "Known ID-sync endpoint observed pre-consent." : null
   ].filter(Boolean).join("\n")).join("\n\n");
   return (
-    <span className="inline-flex items-center gap-1" title={title}>
-      <span aria-hidden="true">{countryFlag(country)}</span>
-      <span className="font-semibold">{country ?? "??"}</span>
-      {flow.idSync ? <span className="rounded bg-rose-100 px-1 text-[9px] font-semibold text-rose-700">ID sync</span> : null}
-      {row.dataFlows.length > 1 ? <span className="text-[10px] text-slate-500">+{row.dataFlows.length - 1}</span> : null}
+    <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5" title={title}>
+      {country ? (
+        <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
+          <span aria-hidden="true">{countryFlag(country)}</span>
+          <span>{country}</span>
+        </span>
+      ) : (
+        <span className="font-medium text-slate-500">Unknown edge</span>
+      )}
+      {flow.idSync ? <span className="rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">ID sync</span> : null}
+      {row.dataFlows.length > 1 ? <span className="text-[10px] font-medium text-slate-500">+{row.dataFlows.length - 1} more</span> : null}
     </span>
   );
 }
@@ -891,7 +897,7 @@ function RuntimeInventoryTable({
                   <th className="w-[98px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">First seen</th>
                   <th className="w-[150px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Cookie names</th>
                   <th className="w-[210px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Domain</th>
-                  <th className="w-[110px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Destination</th>
+                  <th className="w-[150px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Server location</th>
                   <th className="w-[96px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Confidence</th>
                   <th className="w-[64px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Party</th>
                   <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Category</th>
