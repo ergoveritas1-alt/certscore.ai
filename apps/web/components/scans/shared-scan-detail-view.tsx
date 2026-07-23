@@ -829,7 +829,6 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
         <div className="relative grid h-20 w-20 shrink-0 place-items-center rounded-full" style={{ background: donut }}>
           <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-center text-[11px] font-semibold text-slate-600 shadow-sm">
             <span className="text-base leading-none text-slate-900">{beforeConsentCount}</span>
-            <span className="text-[8px] uppercase tracking-[0.08em] text-slate-500">observed</span>
           </div>
         </div>
         <div className="grid min-w-0 flex-1 gap-2">
