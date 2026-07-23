@@ -1400,12 +1400,14 @@ function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: strin
     rows.push(["Coverage limitation", input.coverageLimitation]);
   }
   return (
-    <details className="group/scan-proof rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-slate-700 marker:hidden [&::-webkit-details-marker]:hidden">
-        <span>How this page was observed</span>
+    <details className="group/scan-proof relative inline-block">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-300 text-[9px] font-bold text-slate-500">i</span>
+        <span>Observation details</span>
         <span className="text-slate-400 transition group-open/scan-proof:rotate-90"><CompactChevronRightIcon /></span>
       </summary>
-      <dl className="mt-3 space-y-2 text-xs leading-5">
+      <div className="absolute left-0 top-full z-30 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
+      <dl className="space-y-2 text-xs leading-5">
         {rows.map(([label, value]) => (
           <div key={label} className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2">
             <dt className="text-slate-500">{label}</dt>
@@ -1413,6 +1415,7 @@ function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: strin
           </div>
         ))}
       </dl>
+      </div>
     </details>
   );
 }
