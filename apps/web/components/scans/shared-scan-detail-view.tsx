@@ -969,13 +969,13 @@ function RuntimeInventoryTable({
           </div>
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 md:block">
             <div className="max-h-[370px] overflow-auto">
-            <table id="preconsent-inventory-table" className="w-[1160px] min-w-[1160px] max-w-[1160px] table-fixed border-collapse text-left text-[13px]">
+            <table id="preconsent-inventory-table" className="w-[1190px] min-w-[1190px] max-w-[1190px] table-fixed border-collapse text-left text-[13px]">
               <caption className="sr-only">Pre-consent cookies and trackers inventory</caption>
               <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500 shadow-[0_2px_8px_-6px_rgba(15,23,42,0.55)]">
                 <tr>
                   <th className="sticky left-0 z-20 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Type</th>
                   <th className="sticky left-[90px] z-20 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Vendor</th>
-                  <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Purpose</th>
+                  <th className="w-[130px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Purpose</th>
                   <th className="w-[100px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Priority</th>
                   <th className="w-[80px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">First seen</th>
                   <th className="w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 px-2 py-2 font-semibold">Cookies</th>
