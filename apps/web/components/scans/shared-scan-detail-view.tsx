@@ -661,10 +661,18 @@ function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; 
 }
 
 function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
+  const purposeColorRank = (purpose: string) => {
+    const normalized = purpose.toLowerCase();
+    if (/advertis|marketing|retarget|tracking/.test(normalized)) return 0;
+    if (/essential|functional|necessary|security/.test(normalized)) return 2;
+    return 1;
+  };
   const purposeCounts = Array.from(rows.reduce((counts, row) => {
     counts.set(row.purpose, (counts.get(row.purpose) ?? 0) + 1);
     return counts;
   }, new Map<string, number>())).sort((left, right) => {
+    const colorRankDelta = purposeColorRank(left[0]) - purposeColorRank(right[0]);
+    if (colorRankDelta !== 0) return colorRankDelta;
     const countDelta = right[1] - left[1];
     return countDelta !== 0 ? countDelta : left[0].localeCompare(right[0]);
   });
@@ -673,9 +681,9 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
   const hiddenPurposeCount = Math.max(0, purposeCounts.length - topPurposes.length);
   const hiddenPurposes = purposeCounts.slice(topPurposes.length);
   const getPurposeColor = (purpose: string) => {
-    const normalized = purpose.toLowerCase();
-    if (/advertis|marketing|retarget|tracking/.test(normalized)) return "#ef4444";
-    if (/essential|functional|necessary|security/.test(normalized)) return "#3b82f6";
+    const rank = purposeColorRank(purpose);
+    if (rank === 0) return "#ef4444";
+    if (rank === 2) return "#3b82f6";
     return "#f59e0b";
   };
   const visibleTotal = topPurposes.reduce((total, [, count]) => total + count, 0);
@@ -858,8 +866,9 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
   const totalClassified = necessaryCount + nonEssentialCount + reviewCount;
   const necessaryShare = totalClassified > 0 ? (necessaryCount / totalClassified) * 100 : 0;
   const nonEssentialShare = totalClassified > 0 ? (nonEssentialCount / totalClassified) * 100 : 0;
+  const reviewShare = totalClassified > 0 ? (reviewCount / totalClassified) * 100 : 0;
   const donut = totalClassified > 0
-    ? `conic-gradient(#3b82f6 0 ${necessaryShare}%, #ef4444 ${necessaryShare}% ${necessaryShare + nonEssentialShare}%, #f59e0b ${necessaryShare + nonEssentialShare}% 100%)`
+    ? `conic-gradient(#ef4444 0 ${nonEssentialShare}%, #f59e0b ${nonEssentialShare}% ${nonEssentialShare + reviewShare}%, #3b82f6 ${nonEssentialShare + reviewShare}% 100%)`
     : "conic-gradient(#cbd5e1 0 100%)";
 
   return (
@@ -873,11 +882,6 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
         </div>
         <div className="grid min-w-0 flex-1 gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
-            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Necessary</span>
-            <span className="text-[11px] font-semibold text-slate-700">{necessaryCount}</span>
-          </div>
-          <div className="flex min-w-0 items-center gap-1.5">
             <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Non-essential</span>
             <span className="text-[11px] font-semibold text-slate-700">{nonEssentialCount}</span>
@@ -886,6 +890,11 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
             <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Review</span>
             <span className="text-[11px] font-semibold text-slate-700">{reviewCount}</span>
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-500">Necessary</span>
+            <span className="text-[11px] font-semibold text-slate-700">{necessaryCount}</span>
           </div>
         </div>
       </div>
