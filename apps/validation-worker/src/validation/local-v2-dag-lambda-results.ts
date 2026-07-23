@@ -929,6 +929,27 @@ export async function recordLocalV2DagLambdaResult(
   }
 }
 
+async function persistScannerRuntimeSnapshot(parsedMessage: LambdaResultMessage) {
+  if (!parsedMessage.scannerRuntimeProvenance) {
+    return;
+  }
+  await query(
+    `update scan_snapshots
+        set egress_id = coalesce($2, egress_id),
+            egress_type = coalesce($3, egress_type),
+            public_ip_hash = coalesce($4, public_ip_hash),
+            region = coalesce($5, region)
+      where scan_id = $1`,
+    [
+      parsedMessage.scanId,
+      parsedMessage.scannerRuntimeProvenance.egressId ?? null,
+      parsedMessage.scannerRuntimeProvenance.egressProvider ?? null,
+      parsedMessage.scannerRuntimeProvenance.publicIpHash ?? null,
+      parsedMessage.scannerRuntimeProvenance.awsRegion
+    ]
+  );
+}
+
 function parseSqsEpochMillis(value: string | undefined) {
   if (!value) {
     return null;
@@ -995,6 +1016,7 @@ async function pollOnce(input: {
           targetEnvironment: parsed.targetEnvironment,
           webBaseUrl: input.webBaseUrl
         });
+        await persistScannerRuntimeSnapshot(parsed);
       }
       await input.client.send(new DeleteMessageCommand({
         QueueUrl: input.queueUrl,

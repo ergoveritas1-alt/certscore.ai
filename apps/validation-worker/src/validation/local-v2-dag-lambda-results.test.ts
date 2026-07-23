@@ -191,6 +191,9 @@ test("validation worker persists scanner provenance before score materialization
   assert.match(source, /egress_id = coalesce\(\$5, egress_id\)/);
   assert.match(source, /'runtimeProvenance', \$7::jsonb/);
   assert.match(source, /public_ip_hash = coalesce\(\$4, public_ip_hash\)/);
+  const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted");
+  const snapshotIndex = source.indexOf("await persistScannerRuntimeSnapshot", scoreIndex);
+  assert.ok(snapshotIndex > scoreIndex, "snapshot provenance must be persisted after score materialization creates the row");
 });
 
 test("validation worker Lambda result poller retains leases and bounds result concurrency", async () => {
