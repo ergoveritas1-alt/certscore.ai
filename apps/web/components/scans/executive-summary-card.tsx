@@ -2274,10 +2274,10 @@ function ExecutiveSignalSnapshotPane(input: {
       : null;
   return (
     <>
-      <div className="space-y-1">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
+        {input.scanProof ? <ScanProofPanel coverageLimitation={input.coverageLimitation} durationMs={input.scanProofDurationMs} proof={input.scanProof} requestedHost={input.requestedHost ?? null} /> : null}
       </div>
-      {input.scanProof ? <ScanProofPanel coverageLimitation={input.coverageLimitation} durationMs={input.scanProofDurationMs} proof={input.scanProof} requestedHost={input.requestedHost ?? null} /> : null}
       <CompactSnapshotPanel title="Consent platform">
         <div className="flex items-center gap-2">
           {runtimeMetricsReliable && input.cmpStatusAvailable ? (
