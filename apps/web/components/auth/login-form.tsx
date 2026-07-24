@@ -172,6 +172,10 @@ export function LoginForm(input?: {
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-700">Account access</h2>
+          <p className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-950">{isCreateAccount ? "Create your workspace" : "Welcome back"}</p>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            {isCreateAccount ? "Start with a focused, evidence-led review." : "Sign in to continue reviewing your workspace."}
+          </p>
         </div>
 
         {allowCreateAccount ? (
