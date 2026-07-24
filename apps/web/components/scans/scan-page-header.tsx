@@ -40,7 +40,18 @@ function getScanSourceContext(value: string | undefined) {
   }
 }
 
-function ScanOriginIcon() {
+function ScanOriginIcon({ browser }: { browser: boolean }) {
+  if (browser) {
+    return (
+      <svg aria-hidden="true" className="h-3.5 w-3.5 text-sky-600" fill="none" viewBox="0 0 16 16">
+        <rect height="10.5" rx="2" stroke="currentColor" strokeWidth="1.25" width="12" x="2" y="2.5" />
+        <path d="M2.5 5.5h11" stroke="currentColor" strokeWidth="1.25" />
+        <circle cx="8" cy="9" r="1.2" stroke="currentColor" strokeWidth="1.1" />
+        <path d="M5.7 12.3c.55-1.05 1.32-1.55 2.3-1.55s1.75.5 2.3 1.55" stroke="currentColor" strokeLinecap="round" strokeWidth="1.1" />
+      </svg>
+    );
+  }
+
   return (
     <svg aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 16 16">
       <path d="M8 14s4-3.8 4-7A4 4 0 0 0 4 7c0 3.2 4 7 4 7Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.25" />
@@ -63,6 +74,7 @@ export function ScanPageHeader({
   title
 }: ScanPageHeaderProps) {
   const scanFromMarker = getScanFromMarkerInput(scanFromValue);
+  const isBrowserExtensionScan = scanFromValue === "local_extension";
   const scanSourceContext = getScanSourceContext(scanFromValue);
   const scanSourceContextId = scanSourceContext ? `scan-source-context-${scanFromValue ?? "default"}` : undefined;
 
@@ -81,7 +93,7 @@ export function ScanPageHeader({
               tabIndex={scanSourceContext ? 0 : undefined}
               title={scanSourceContext ?? `Scan source: ${scanFromLabel}`}
             >
-              <ScanOriginIcon />
+              <ScanOriginIcon browser={isBrowserExtensionScan} />
               <ScanFromMarker
                 flag={"flag" in scanFromMarker ? scanFromMarker.flag : undefined}
                 icon={"icon" in scanFromMarker ? scanFromMarker.icon : undefined}

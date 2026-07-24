@@ -60,3 +60,18 @@ test("ScanPageHeader shows no regional context for default scan source", () => {
 
   assert.doesNotMatch(html, /regional consent interfaces can differ/);
 });
+
+test("ScanPageHeader uses a browser-origin icon for Chrome extension scans", () => {
+  const html = renderToStaticMarkup(
+    createElement(ScanPageHeader, {
+      scanFromLabel: "Chrome browser",
+      scanFromValue: "local_extension",
+      status: "completed",
+      title: "Scan: codeable.io"
+    })
+  );
+
+  assert.match(html, /Scan source: Chrome browser/);
+  assert.match(html, /<circle cx="8" cy="9" r="1\.2"/);
+  assert.doesNotMatch(html, /regional consent interfaces can differ/);
+});
