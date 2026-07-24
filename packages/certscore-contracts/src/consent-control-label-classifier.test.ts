@@ -533,6 +533,78 @@ test("classifies decline non-essential cookies as reject", () => {
   assert.equal(classification.matchStrength, "direct");
 });
 
+test("classifies optional-cookie refusal variants as reject", () => {
+  for (const [label, matchedTerm] of [
+    ["Decline optional cookies", "decline optional cookies"],
+    ["Refuse optional cookies", "refuse optional cookies"],
+    ["Deny optional cookies", "deny optional cookies"],
+  ] as const) {
+    const classification = classifyConsentControlLabel({ label });
+    assert.equal(classification.intent, "reject", label);
+    assert.equal(classification.semanticRole, "reject", label);
+    assert.equal(classification.matchedTerm, matchedTerm, label);
+    assert.equal(classification.matchStrength, "direct", label);
+  }
+});
+
+test("covers the audited reject, accept, and optional-choice vocabulary", () => {
+  const rejectLabels = [
+    "Reject Additional Cookies",
+    "Decline Cookies",
+    "Proceed with Required Cookies only",
+    "Refuse Functional Cookies",
+    "Refuse Advertising Cookies",
+    "Reject the use of cookies and other data for the purposes described",
+    "Deny Cookies",
+    "I decline optional cookies",
+  ];
+  for (const label of rejectLabels) {
+    const result = classifyConsentControlLabel({ label, contextText: "Choose which cookies this site may use." });
+    assert.equal(result.intent, "reject", label);
+  }
+
+  const acceptLabels = [
+    "Accept Selections",
+    "Consent to all",
+    "Accept and close",
+    "Accept use of cookies",
+    "Allow Selected",
+    "Accept the use of cookies and other data for the purposes described",
+    "Agree & Continue",
+  ];
+  for (const label of acceptLabels) {
+    assert.equal(classifyConsentControlLabel({ label }).intent, "accept", label);
+  }
+
+  const optionLabels = [
+    "Manage my choices",
+    "Set Cookie Options",
+    "More choices",
+    "Functional Cookies choice",
+    "Advertising Cookies choice",
+    "Consent Preference",
+    "View options",
+  ];
+  for (const label of optionLabels) {
+    assert.equal(
+      classifyConsentControlLabel({ label, contextText: "Cookie consent preferences" }).intent,
+      "options",
+      label,
+    );
+  }
+});
+
+test("keeps the audited vocabulary represented across every supported locale", () => {
+  for (const locale of SUPPORTED_PRIVACY_EVIDENCE_LOCALES) {
+    const entry = PRIVACY_EVIDENCE_LOCALE_REGISTRY.find((candidate) => candidate.locale === locale);
+    assert.ok(entry, locale);
+    assert.ok(entry?.consentControls.accept.length, `${locale}: accept coverage`);
+    assert.ok(entry?.consentControls.reject.length, `${locale}: reject coverage`);
+    assert.ok(entry?.consentControls.options.length, `${locale}: options coverage`);
+    assert.ok(entry?.consentControls.necessaryOnly.length, `${locale}: necessary-only coverage`);
+  }
+});
+
 test("classifies short non-essential reject labels in concatenated banner text", () => {
   const standalone = classifyConsentControlLabel({ label: "Reject Non-Essential" });
   assert.equal(standalone.intent, "reject");

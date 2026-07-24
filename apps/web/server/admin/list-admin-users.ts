@@ -3,6 +3,7 @@
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
 import {
   loadAdminUserOverviewData,
+  loadAdminUsersPageData,
   loadAdminUsersData,
   type AdminUserOverviewMetricsRow,
   type AdminUserOverviewRow,
@@ -119,6 +120,18 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
       lastCompletedScanAt: organization ? latestCompletedScan.get(organization.id) ?? null : null
     } satisfies AdminUserListItem;
   });
+}
+
+export async function listAdminUsersPage(limit = 25, offset = 0): Promise<{
+  items: AdminUserListItem[];
+  totalCount: number;
+}> {
+  await requirePlatformAdminContext();
+  const page = await loadAdminUsersPageData(limit, offset);
+  return {
+    items: page.users.map(mapAdminUserOverviewRow),
+    totalCount: page.totalCount
+  };
 }
 
 function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {

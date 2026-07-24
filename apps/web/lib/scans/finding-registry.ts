@@ -417,7 +417,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   reject_option_missing_or_hidden: {
     id: "reject_option_missing_or_hidden",
-    label: "Meaningful refusal option",
+    label: "Decline consent control",
     section: "Consent Experience",
     defaultSurfacePriority: 90,
     whyItMatters: "The retained first-layer consent surface did not show a reject, necessary-only, or equivalent refusal option. First-layer presentation expectations can vary by jurisdiction, so manual review is recommended.",

@@ -67,7 +67,7 @@ const HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDINGS = [
   },
   {
     id: "reject_decline_control_available",
-    title: "Meaningful refusal option available",
+    title: "Decline consent control",
     category: "Consent Controls",
     criticalityChip: "High criticality",
     href: "/findings/reject_option_missing_or_hidden",

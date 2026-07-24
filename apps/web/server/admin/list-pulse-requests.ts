@@ -1,5 +1,6 @@
 "use server";
 
+import { unstable_cache } from "next/cache";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import {
   formatScanFromLabel,
@@ -11,7 +12,7 @@ import { requesterIpAttributionFromContext, type RequesterIpAttributionSource } 
 import { inferPrimaryLanguage, type PrimaryLanguageConfidence, type PrimaryLanguageSource } from "../../lib/scans/primary-language";
 import { ensurePulseTables } from "../pulse/schema";
 import { adminNoGoSql, projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
-import { loadAdminScanFilterOptions } from "./repository";
+import { loadCachedAdminScanFilterOptions } from "./admin-query-cache";
 import { normalizeAdminActivityFilter, parseAdminActivitySearch } from "../../lib/admin/activity-search";
 import { requirePlatformAdminContext } from "./platform-admin";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
@@ -136,6 +137,51 @@ export type AdminPulseOverviewCounts = {
   summaryJsonDownloads: number;
   total: number;
 };
+
+const loadCachedAdminPulseOverviewCounts = unstable_cache(
+  async () => {
+    await ensurePulseTables();
+    const result = await queryOne<{
+      completed: number;
+      evidence_json_downloads: number;
+      feedback: number;
+      queued_or_running: number;
+      rate_limited: number;
+      summary_json_downloads: number;
+      total: number;
+    }>(
+      `with logical_pulse_requests as (
+         select pr.*, ${PULSE_EFFECTIVE_STATUS_SQL} as effective_status
+           from pulse_requests pr
+           left join scans s on s.id = pr.scan_id
+          where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
+       )
+       select
+         count(*)::int as total,
+         count(*) filter (where effective_status in ('completed', 'completed_limited'))::int as completed,
+         count(*) filter (where effective_status in ('queued', 'running', 'finalizing'))::int as queued_or_running,
+         count(*) filter (where effective_status = 'rate_limited')::int as rate_limited,
+         (select count(*)::int from pulse_feedback)::int as feedback,
+         (select count(*)::int from pulse_artifact_downloads where artifact_type = 'summary_json')::int as summary_json_downloads,
+         (select count(*)::int from pulse_artifact_downloads where artifact_type = 'evidence_json')::int as evidence_json_downloads
+       from logical_pulse_requests`,
+      [],
+      { readOnly: true }
+    );
+
+    return {
+      completed: result?.completed ?? 0,
+      evidenceJsonDownloads: result?.evidence_json_downloads ?? 0,
+      feedback: result?.feedback ?? 0,
+      queuedOrRunning: result?.queued_or_running ?? 0,
+      rateLimited: result?.rate_limited ?? 0,
+      summaryJsonDownloads: result?.summary_json_downloads ?? 0,
+      total: result?.total ?? 0
+    } satisfies AdminPulseOverviewCounts;
+  },
+  ["admin-pulse-overview-counts"],
+  { revalidate: 30 }
+);
 
 const LOGICAL_PULSE_ACTIVITY_PREDICATE = `not (
   pr.request_context ->> 'mode' = 'scanId'
@@ -431,47 +477,10 @@ function buildDisplayResponseSummary(input: {
 
 export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewCounts> {
   await requirePlatformAdminContext();
-  await ensurePulseTables();
-  const result = await queryOne<{
-    completed: number;
-    evidence_json_downloads: number;
-    feedback: number;
-    queued_or_running: number;
-    rate_limited: number;
-    summary_json_downloads: number;
-    total: number;
-  }>(
-    `with logical_pulse_requests as (
-       select pr.*, ${PULSE_EFFECTIVE_STATUS_SQL} as effective_status
-         from pulse_requests pr
-         left join scans s on s.id = pr.scan_id
-        where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
-     )
-     select
-       count(*)::int as total,
-       count(*) filter (where effective_status in ('completed', 'completed_limited'))::int as completed,
-       count(*) filter (where effective_status in ('queued', 'running', 'finalizing'))::int as queued_or_running,
-       count(*) filter (where effective_status = 'rate_limited')::int as rate_limited,
-       (select count(*)::int from pulse_feedback)::int as feedback,
-       (select count(*)::int from pulse_artifact_downloads where artifact_type = 'summary_json')::int as summary_json_downloads,
-       (select count(*)::int from pulse_artifact_downloads where artifact_type = 'evidence_json')::int as evidence_json_downloads
-     from logical_pulse_requests`,
-    [],
-    { readOnly: true }
-  );
-
-  return {
-    completed: result?.completed ?? 0,
-    evidenceJsonDownloads: result?.evidence_json_downloads ?? 0,
-    feedback: result?.feedback ?? 0,
-    queuedOrRunning: result?.queued_or_running ?? 0,
-    rateLimited: result?.rate_limited ?? 0,
-    summaryJsonDownloads: result?.summary_json_downloads ?? 0,
-    total: result?.total ?? 0
-  };
+  return await loadCachedAdminPulseOverviewCounts();
 }
 
-export async function listAdminPulseRequests(input: {
+export type AdminPulseRequestListInput = {
   limit?: number;
   offset?: number;
   query?: string | null;
@@ -484,7 +493,12 @@ export async function listAdminPulseRequests(input: {
   access?: string | null;
   outcome?: string | null;
   route?: AdminApiRoute | null;
-} = {}): Promise<AdminPulseRequestListItem[]> {
+};
+
+export async function listAdminPulseRequestsPage(input: AdminPulseRequestListInput = {}): Promise<{
+  items: AdminPulseRequestListItem[];
+  totalCount: number;
+}> {
   await requirePlatformAdminContext();
   await ensurePulseTables();
   const limit = Math.max(1, Math.min(100, input.limit ?? 20));
@@ -502,7 +516,9 @@ export async function listAdminPulseRequests(input: {
   const timeSpanHours = input.timeSpan === "4h" ? 4 : input.timeSpan === "12h" ? 12 : input.timeSpan === "24h" ? 24 : input.timeSpan === "7d" ? 168 : input.timeSpan === "31d" ? 744 : null;
   const since = timeSpanHours === null ? null : new Date(Date.now() - timeSpanHours * 60 * 60 * 1000).toISOString();
   const rows = await query<Record<string, unknown>>(
-    `select pr.public_id,
+    `with filtered_requests as (
+       select count(*) over()::int as filtered_total_count,
+            pr.public_id,
             pr.job_id,
             pr.requested_url,
             pr.normalized_domain,
@@ -546,10 +562,7 @@ export async function listAdminPulseRequests(input: {
             (select sp.page_language from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc limit 1) as page_language,
             (select array_agg(sp.page_language order by case when sp.page_type = 'homepage' then 0 else 1 end, sp.page_url asc) from scan_pages sp where sp.scan_id = pr.scan_id and nullif(trim(sp.page_language), '') is not null) as page_languages,
             ss.admin_industry_label,
-            s.scan_config_json,
-            coalesce(pf.feedback_count, 0)::int as feedback_count,
-            coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,
-            coalesce(pad.evidence_json_downloads, 0)::int as evidence_json_downloads
+            s.scan_config_json
        from pulse_requests pr
        left join scan_snapshots ss on ss.scan_id = pr.scan_id
        left join scan_runtime_artifacts sra on sra.scan_id = pr.scan_id
@@ -558,21 +571,28 @@ export async function listAdminPulseRequests(input: {
        left join users app_user on app_user.id::text = pr.requested_by ->> 'userId'
        left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
        left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
+      ${PULSE_ACTIVITY_FILTER_SQL}
+      order by pr.requested_at desc
+      limit $10 offset $11
+     )
+     select filtered_requests.*,
+            coalesce(pf.feedback_count, 0)::int as feedback_count,
+            coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,
+            coalesce(pad.evidence_json_downloads, 0)::int as evidence_json_downloads
+       from filtered_requests
        left join lateral (
          select count(*)::int as feedback_count
            from pulse_feedback
-          where pulse_request_id = pr.public_id
+          where pulse_request_id = filtered_requests.public_id
        ) pf on true
        left join lateral (
          select
            count(*) filter (where artifact_type = 'summary_json')::int as summary_json_downloads,
            count(*) filter (where artifact_type = 'evidence_json')::int as evidence_json_downloads
           from pulse_artifact_downloads
-         where pulse_request_id = pr.public_id
+         where pulse_request_id = filtered_requests.public_id
        ) pad on true
-      ${PULSE_ACTIVITY_FILTER_SQL}
-      order by pr.requested_at desc
-      limit $10 offset $11`,
+      order by filtered_requests.requested_at desc`,
     [
       input.status ?? null, search, freshness, language, industry, scanFrom, since, access, outcome,
       limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES, exclusionArray(parsedSearch.exclusions.requester), route,
@@ -582,7 +602,19 @@ export async function listAdminPulseRequests(input: {
     { readOnly: true }
   );
 
-  return applyConfiguredScores(rows.rows.map((row) => mapPulseRequestRow(row)));
+  const items = await applyConfiguredScores(rows.rows.map((row) => mapPulseRequestRow(row)));
+  return {
+    items,
+    totalCount: typeof rows.rows[0]?.filtered_total_count === "number"
+      ? rows.rows[0].filtered_total_count
+      : 0
+  };
+}
+
+export async function listAdminPulseRequests(
+  input: AdminPulseRequestListInput = {}
+): Promise<AdminPulseRequestListItem[]> {
+  return (await listAdminPulseRequestsPage(input)).items;
 }
 
 export async function countAdminPulseRequests(input: {
@@ -631,7 +663,7 @@ export async function countAdminPulseRequests(input: {
 
 export async function getAdminPulseFilterOptions() {
   await requirePlatformAdminContext();
-  return loadAdminScanFilterOptions();
+  return loadCachedAdminScanFilterOptions();
 }
 
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {

@@ -6,7 +6,7 @@ import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
 import { ADMIN_API_ROUTES, type AdminApiRoute } from "../../../../lib/admin/api-route";
 import { getAdminAuthenticatedScanHref } from "../../../../server/admin/admin-scan-links";
-import { countAdminPulseRequests, getAdminPulseFilterOptions, getAdminPulseOverviewCounts, listAdminPulseRequests, type AdminPulseRequestStatus } from "../../../../server/admin/list-pulse-requests";
+import { getAdminPulseFilterOptions, getAdminPulseOverviewCounts, listAdminPulseRequestsPage, type AdminPulseRequestStatus } from "../../../../server/admin/list-pulse-requests";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminReportLink } from "../scans/admin-scan-actions";
 import { AdminScansFilterForm } from "../scans/admin-scans-filter-form";
@@ -109,12 +109,13 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const pageSize = normalizePageSize(resolved.perPage);
   const page = normalizePage(resolved.page);
   const requestListInput = { limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan };
-  const [counts, filterOptions, filteredTotal, requests] = await withServerTiming("app.admin.api_activity", () => Promise.all([
+  const [counts, filterOptions, requestPage] = await withServerTiming("app.admin.api_activity", () => Promise.all([
     getAdminPulseOverviewCounts(),
     getAdminPulseFilterOptions(),
-    countAdminPulseRequests({ query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan }),
-    listAdminPulseRequests(requestListInput)
+    listAdminPulseRequestsPage(requestListInput)
   ]));
+  const filteredTotal = requestPage.totalCount;
+  const requests = requestPage.items;
   const pageCount = Math.max(1, Math.ceil(filteredTotal / pageSize));
 
   return (

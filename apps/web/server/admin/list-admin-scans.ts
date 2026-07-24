@@ -19,9 +19,7 @@ import {
 } from "../../lib/admin/requester-ip-attribution";
 import { deriveDisplayCreatedAt } from "../scans/display-state";
 import {
-  loadAdminScanOverviewCounts,
   loadAdminScanActivityPageRefs,
-  loadAdminScanFilterOptions,
   loadAdminScanListPageData,
   loadAdminPulseScanAttributionRows,
   loadAdminScanRequestRows,
@@ -36,6 +34,11 @@ import { requirePlatformAdminContext } from "./platform-admin";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
 import { selectConfiguredCustomerGdprEprivacyScore } from "../scans/customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
+import { withServerTiming } from "../performance/log-server-timing";
+import {
+  loadCachedAdminScanFilterOptions,
+  loadCachedAdminScanOverviewCounts
+} from "./admin-query-cache";
 
 export type AdminScanListItem = {
   accessPostureClass: AccessPostureClass | null;
@@ -144,25 +147,31 @@ export async function listAdminScansPage(
 ): Promise<{ items: AdminScanListItem[]; totalCount: number }> {
   await requirePlatformAdminContext();
   const requesterEmail = filters?.email?.trim().slice(0, 160) || null;
-  const page = await loadAdminScanActivityPageRefs(limit, offset, {
-    query: filters?.query ?? requesterEmail,
-    status: filters?.status,
-    freshness: filters?.freshness,
-    access: filters?.access,
-    outcome: filters?.outcome,
-    language: filters?.language,
-    industry: filters?.industry,
-    scanFrom: filters?.scanFrom,
-    timeSpan: filters?.timeSpan
-  });
+  const page = await withServerTiming(
+    "app.admin.scans.activity-page",
+    () => loadAdminScanActivityPageRefs(limit, offset, {
+      query: filters?.query ?? requesterEmail,
+      status: filters?.status,
+      freshness: filters?.freshness,
+      access: filters?.access,
+      outcome: filters?.outcome,
+      language: filters?.language,
+      industry: filters?.industry,
+      scanFrom: filters?.scanFrom,
+      timeSpan: filters?.timeSpan
+    })
+  );
   const selectedScanIds = [...new Set(page.rows.flatMap((row) => row.scan_id ? [row.scan_id] : []))];
   const selectedRequestIds = page.rows.flatMap((row) => row.request_public_id ? [row.request_public_id] : []);
-  const [scanPageData, scanRequestRows] = await Promise.all([
-    loadAdminScanListPageData(Math.max(selectedScanIds.length, 1), 0, null, selectedScanIds),
-    selectedScanIds.length || selectedRequestIds.length
-      ? loadAdminScanRequestRows(100_000, null, { publicIds: selectedRequestIds, scanIds: selectedScanIds })
-      : Promise.resolve([])
-  ]);
+  const [scanPageData, scanRequestRows] = await withServerTiming(
+    "app.admin.scans.row-enrichment",
+    () => Promise.all([
+      loadAdminScanListPageData(Math.max(selectedScanIds.length, 1), 0, null, selectedScanIds),
+      selectedScanIds.length || selectedRequestIds.length
+        ? loadAdminScanRequestRows(100_000, null, { publicIds: selectedRequestIds, scanIds: selectedScanIds })
+        : Promise.resolve([])
+    ])
+  );
   const {
     diagnosticEvents,
     domains,
@@ -171,17 +180,20 @@ export async function listAdminScansPage(
     runtimeArtifacts,
     scanRows
   } = scanPageData;
-  const [pulseAttributionRows, legacyScoreAssessmentMap, candidateScoreAssessmentMap] = await Promise.all([
-    loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id), null),
-    loadLatestVersionedScoreAssessments({
-      scanIds: scanRows.map((scan) => scan.id),
-      scoreKind: "gdpr_eprivacy_evidence"
-    }),
-    loadLatestVersionedScoreAssessments({
-      scanIds: scanRows.map((scan) => scan.id),
-      scoreKind: "gdpr_eprivacy_posture"
-    })
-  ]);
+  const [pulseAttributionRows, legacyScoreAssessmentMap, candidateScoreAssessmentMap] = await withServerTiming(
+    "app.admin.scans.score-attribution",
+    () => Promise.all([
+      loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id), null),
+      loadLatestVersionedScoreAssessments({
+        scanIds: scanRows.map((scan) => scan.id),
+        scoreKind: "gdpr_eprivacy_evidence"
+      }),
+      loadLatestVersionedScoreAssessments({
+        scanIds: scanRows.map((scan) => scan.id),
+        scoreKind: "gdpr_eprivacy_posture"
+      })
+    ])
+  );
   const pulseAttributionMap = new Map(pulseAttributionRows.map((row) => [row.scan_id, row] as const));
 
   const domainMap = new Map(domains.flatMap((domain) => (domain.id ? [[domain.id, domain] as const] : [])));
@@ -369,12 +381,12 @@ export async function listAdminScansPage(
 
 export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMetrics> {
   await requirePlatformAdminContext();
-  return await loadAdminScanOverviewCounts();
+  return await loadCachedAdminScanOverviewCounts();
 }
 
 export async function getAdminScanFilterOptions() {
   await requirePlatformAdminContext();
-  return await loadAdminScanFilterOptions();
+  return await loadCachedAdminScanFilterOptions();
 }
 
 function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListItem | null = null): AdminScanListItem {

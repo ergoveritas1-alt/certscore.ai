@@ -244,7 +244,7 @@ const PUBLIC_TITLE_OVERRIDES: Record<string, string> = {
   session_recording_services_detected: "Session replay service signal observed",
   forced_consent_interaction: "Consent prompt appeared to require interaction",
   pre_consent_tracking_detected: "Non-essential analytics initiated before a recorded affirmative choice",
-  reject_option_missing_or_hidden: "Meaningful refusal option",
+  reject_option_missing_or_hidden: "Decline consent control",
   rtb_cookie_sync_observed: "Adtech identity sync-like request observed",
   third_party_cookie_pre_consent: "Third-party cookie or storage observed before consent"
 };

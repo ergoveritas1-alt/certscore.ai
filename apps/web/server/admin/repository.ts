@@ -127,6 +127,15 @@ export type AdminScanActivityPageRef = {
   scan_id: string | null;
 };
 
+type AdminScanActivityPageResultRow = {
+  activity_at: string | null;
+  activity_id: string | null;
+  request_public_id: string | null;
+  row_kind: "request" | "scan" | null;
+  scan_id: string | null;
+  total_count: number;
+};
+
 export type AdminScanActivityFilters = {
   query?: string | null;
   status?: "any" | "no_go" | "failed" | "running" | "queued" | "limited" | "completed";
@@ -422,7 +431,7 @@ function adminScanActivityBaseSql() {
             ) ilike any($18::text[])
         )
       ))
-  ), filtered_activity as (
+  ), filtered_activity as materialized (
     select *
     from scan_activity
     where (
@@ -476,25 +485,47 @@ export async function loadAdminScanActivityPageRefs(
     exclusionArray(parsedSearch.exclusions.source)
   ];
   const baseSql = adminScanActivityBaseSql();
-  const [pageResult, countResult] = await Promise.all([
-    query<AdminScanActivityPageRef>(
-      `${baseSql}
+  const result = await query<AdminScanActivityPageResultRow>(
+    `${baseSql},
+     paged_activity as (
        select row_kind, activity_id, scan_id::text as scan_id, request_public_id, activity_at
-       from filtered_activity
-       order by activity_at desc, activity_id desc
-       limit $8 offset $9`,
-      params,
-      { readOnly: true }
-    ),
-    queryOne<{ total_count: number }>(
-      `${baseSql}
-       select count(*)::int as total_count, max($8::int) as requested_limit, max($9::int) as requested_offset
-       from filtered_activity`,
-      params,
-      { readOnly: true }
-    )
-  ]);
-  return { rows: pageResult.rows, totalCount: countResult?.total_count ?? 0 };
+         from filtered_activity
+        order by activity_at desc, activity_id desc
+        limit $8 offset $9
+     ),
+     activity_total as (
+       select count(*)::int as total_count
+         from filtered_activity
+     )
+     select paged_activity.row_kind,
+            paged_activity.activity_id,
+            paged_activity.scan_id,
+            paged_activity.request_public_id,
+            paged_activity.activity_at,
+            activity_total.total_count
+       from activity_total
+       left join paged_activity on true
+      order by paged_activity.activity_at desc nulls last,
+               paged_activity.activity_id desc nulls last`,
+    params,
+    { readOnly: true }
+  );
+  const rows = result.rows.flatMap((row): AdminScanActivityPageRef[] => {
+    if (!row.row_kind || !row.activity_id || !row.activity_at) {
+      return [];
+    }
+    return [{
+      activity_at: row.activity_at,
+      activity_id: row.activity_id,
+      request_public_id: row.request_public_id,
+      row_kind: row.row_kind,
+      scan_id: row.scan_id
+    }];
+  });
+  return {
+    rows,
+    totalCount: result.rows[0]?.total_count ?? 0
+  };
 }
 
 export async function loadAdminScanFilterOptions(): Promise<AdminScanFilterOptions> {
@@ -1339,6 +1370,101 @@ export async function loadAdminUsersData(): Promise<{
   };
 }
 
+export async function loadAdminUsersPageData(limit: number, offset = 0): Promise<{
+  totalCount: number;
+  users: AdminUserOverviewRow[];
+}> {
+  const normalizedLimit = Math.min(Math.max(limit, 1), 100);
+  const normalizedOffset = Math.max(offset, 0);
+  const [totalCountRow, users] = await Promise.all([
+    queryOne<{ total_count: number }>(
+      `select count(*)::int as total_count
+         from users`,
+      [],
+      { readOnly: true }
+    ),
+    query<AdminUserOverviewRow>(
+      `with selected_users as (
+         select id, email, full_name, auth_provider, created_at, updated_at
+           from users
+          order by created_at desc
+          limit $1 offset $2
+       ),
+       selected_memberships as (
+         select distinct on (organization_members.user_id)
+                organization_members.user_id,
+                organization_members.organization_id,
+                organization_members.role
+           from organization_members
+           join selected_users on selected_users.id = organization_members.user_id
+          order by organization_members.user_id, organization_members.created_at desc
+       ),
+       selected_organizations as (
+         select distinct organization_id
+           from selected_memberships
+          where organization_id is not null
+       ),
+       login_activity as (
+         select better_auth_users.email,
+                max(better_auth_sessions.created_at) as last_login_at
+           from better_auth_users
+           join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
+           join selected_users on selected_users.email = better_auth_users.email
+          group by better_auth_users.email
+       ),
+       domain_counts as (
+         select domains.organization_id,
+                count(*)::int as domain_count
+           from domains
+          where domains.organization_id in (select organization_id from selected_organizations)
+          group by domains.organization_id
+       ),
+       scan_counts as (
+         select scans.organization_id,
+                count(*)::int as total_scans,
+                count(*) filter (where completed_at is not null)::int as completed_scans,
+                max(created_at) as last_scan_at,
+                max(completed_at) as last_completed_scan_at
+           from scans
+          where scans.organization_id in (select organization_id from selected_organizations)
+          group by scans.organization_id
+       )
+       select selected_users.id,
+              selected_users.email,
+              selected_users.full_name,
+              selected_users.auth_provider,
+              selected_users.created_at,
+              selected_users.updated_at,
+              login_activity.last_login_at,
+              selected_memberships.organization_id,
+              selected_memberships.role as membership_role,
+              organizations.name as organization_name,
+              organizations.slug as organization_slug,
+              organizations.plan,
+              organizations.plan_status,
+              coalesce(domain_counts.domain_count, 0)::int as domain_count,
+              coalesce(scan_counts.total_scans, 0)::int as total_scans,
+              coalesce(scan_counts.completed_scans, 0)::int as completed_scans,
+              scan_counts.last_scan_at,
+              scan_counts.last_completed_scan_at
+         from selected_users
+         left join login_activity on login_activity.email = selected_users.email
+         left join selected_memberships on selected_memberships.user_id = selected_users.id
+         left join organizations on organizations.id = selected_memberships.organization_id
+         left join domain_counts on domain_counts.organization_id = selected_memberships.organization_id
+         left join scan_counts on scan_counts.organization_id = selected_memberships.organization_id
+        order by selected_users.created_at desc`,
+      [normalizedLimit, normalizedOffset],
+      { readOnly: true }
+    ).then((result) => result.rows)
+  ]);
+
+  return {
+    totalCount: totalCountRow?.total_count ?? 0,
+    users
+  };
+}
+
 export async function loadAdminUserOverviewData(limit = 8): Promise<{
   metrics: AdminUserOverviewMetricsRow | null;
   users: AdminUserOverviewRow[];
@@ -1768,42 +1894,7 @@ export async function updateAdminOrganizationPlan(input: {
 
 export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCounts> {
   await ensureScanRequestLogTable();
-  const [totalScansResult, totalScanRequestsResult, unlinkedScanRequestsResult, http403Result, http429Result, blockedOrCaptchaResult, scanFromResult] = await Promise.all([
-    query<{ count: string }>(`select count(*)::text as count from scans`, [], { readOnly: true }),
-    query<{ count: string }>(`select count(*)::text as count from scan_requests`, [], { readOnly: true }),
-    query<{ count: string }>(
-      `select count(*)::text as count
-         from scan_requests
-        where coalesce(fulfilled_by_scan_id, scan_id) is null
-           or resolution_mode = 'reused_existing_scan'`,
-      [],
-      { readOnly: true }
-    ),
-    query<{ count: string }>(
-      `select count(*)::text as count
-         from scan_snapshots
-        where homepage_fetch_http_status = 403
-           or robots_fetch_http_status = 403`,
-      [],
-      { readOnly: true }
-    ),
-    query<{ count: string }>(
-      `select count(*)::text as count
-         from scan_snapshots
-        where homepage_fetch_http_status = 429
-           or robots_fetch_http_status = 429`,
-      [],
-      { readOnly: true }
-    ),
-    query<{ count: string }>(
-      `select count(*)::text as count
-         from scan_snapshots
-        where blocked_flag = true
-           or captcha_flag = true
-           or scan_outcome = 'content_capture_degraded'`,
-      [],
-      { readOnly: true }
-    ),
+  const [scanFromResult, scanRequestCounts, snapshotCounts] = await Promise.all([
     query<{ count: string; scan_from: string }>(
       `select coalesce(scan_config_json->>'scanFrom', 'default') as scan_from,
               count(*)::text as count
@@ -1811,12 +1902,40 @@ export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCo
         group by coalesce(scan_config_json->>'scanFrom', 'default')`,
       [],
       { readOnly: true }
+    ),
+    queryOne<{ total_count: number; unlinked_count: number }>(
+      `select count(*)::int as total_count,
+              count(*) filter (
+                where coalesce(fulfilled_by_scan_id, scan_id) is null
+                   or resolution_mode = 'reused_existing_scan'
+              )::int as unlinked_count
+         from scan_requests`,
+      [],
+      { readOnly: true }
+    ),
+    queryOne<{ blocked_or_captcha_count: number; http_403_count: number; http_429_count: number }>(
+      `select count(*) filter (
+                where homepage_fetch_http_status = 403
+                   or robots_fetch_http_status = 403
+              )::int as http_403_count,
+              count(*) filter (
+                where homepage_fetch_http_status = 429
+                   or robots_fetch_http_status = 429
+              )::int as http_429_count,
+              count(*) filter (
+                where blocked_flag = true
+                   or captcha_flag = true
+                   or scan_outcome = 'content_capture_degraded'
+              )::int as blocked_or_captcha_count
+         from scan_snapshots`,
+      [],
+      { readOnly: true }
     )
   ]);
 
-  const totalPhysicalScans = Number(totalScansResult.rows[0]?.count ?? "0");
-  const totalScanRequests = Number(totalScanRequestsResult.rows[0]?.count ?? "0");
-  const totalUnlinkedScanRequests = Number(unlinkedScanRequestsResult.rows[0]?.count ?? "0");
+  const totalPhysicalScans = scanFromResult.rows.reduce((total, row) => total + Number(row.count), 0);
+  const totalScanRequests = scanRequestCounts?.total_count ?? 0;
+  const totalUnlinkedScanRequests = scanRequestCounts?.unlinked_count ?? 0;
 
   return {
     totalScans: totalPhysicalScans + totalUnlinkedScanRequests,
@@ -1827,9 +1946,9 @@ export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCo
       label: formatScanFromLabel(scanFrom),
       value: scanFrom
     })),
-    http403Count: Number(http403Result.rows[0]?.count ?? "0"),
-    http429Count: Number(http429Result.rows[0]?.count ?? "0"),
-    blockedOrCaptchaCount: Number(blockedOrCaptchaResult.rows[0]?.count ?? "0")
+    http403Count: snapshotCounts?.http_403_count ?? 0,
+    http429Count: snapshotCounts?.http_429_count ?? 0,
+    blockedOrCaptchaCount: snapshotCounts?.blocked_or_captcha_count ?? 0
   };
 }
 

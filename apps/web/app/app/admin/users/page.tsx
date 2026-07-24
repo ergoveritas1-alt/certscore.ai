@@ -3,7 +3,8 @@ import { MembershipRoleForm, type MembershipRole } from "../../../../components/
 import { OrganizationPlanForm } from "../../../../components/admin/organization-plan-form";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
-import { listAdminUsers } from "../../../../server/admin/list-admin-users";
+import { listAdminUsersPage } from "../../../../server/admin/list-admin-users";
+import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { updateMembershipRoleFormAction } from "../../../../server/admin/update-membership-role";
 import { updateOrganizationPlanFormAction } from "../../../../server/admin/update-organization-plan";
 
@@ -28,10 +29,19 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
   const resolved = searchParams ? await searchParams : {};
   const pageSize = normalizePageSize(resolved.perPage);
   const requestedPage = normalizePage(resolved.page);
-  const allUsers = await listAdminUsers();
-  const pageCount = Math.max(1, Math.ceil(allUsers.length / pageSize));
+  const requestedUserPage = await withServerTiming(
+    "app.admin.users.list",
+    () => listAdminUsersPage(pageSize, (requestedPage - 1) * pageSize)
+  );
+  const pageCount = Math.max(1, Math.ceil(requestedUserPage.totalCount / pageSize));
   const page = Math.min(requestedPage, pageCount);
-  const users = allUsers.slice((page - 1) * pageSize, page * pageSize);
+  const userPage = page === requestedPage
+    ? requestedUserPage
+    : await withServerTiming(
+        "app.admin.users.list.normalized",
+        () => listAdminUsersPage(pageSize, (page - 1) * pageSize)
+      );
+  const users = userPage.items;
 
   return (
     <Card className="border-slate-200 bg-white">
@@ -45,7 +55,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
           page={page}
           pageCount={pageCount}
           pageSize={pageSize}
-          totalCount={allUsers.length}
+          totalCount={userPage.totalCount}
           visibleCount={users.length}
         />
         <div className="overflow-x-auto overflow-y-visible">

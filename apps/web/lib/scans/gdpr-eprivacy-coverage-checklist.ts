@@ -124,7 +124,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "reject_all_path_availability",
-    label: "Meaningful refusal option",
+    label: "Decline consent control",
     explanation: "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
     findingIds: [
       "accept_only_banner",

@@ -143,7 +143,15 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const normalizedPage = Math.min(currentPage, totalPages);
   const scans = scanPage.items;
-  const hasActiveScans = scans.some((scan) => scan.status === "queued" || scan.status === "running");
+  const liveTargets = scans.flatMap((scan) => {
+    if (!["queued", "running", "finalizing"].includes(scan.status)) return [];
+    const id = scan.rowKind === "scan" ? scan.scanId : scan.requestPublicId;
+    return id ? [{
+      id,
+      kind: scan.rowKind,
+      status: scan.status
+    } as const] : [];
+  });
 
   return (
     <AdminNavigationProvider>
@@ -160,7 +168,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
         </div>
       </CardHeader>
       <CardContent className="min-w-0 space-y-3 pt-0">
-        <AdminScansAutoRefresh hasActiveScans={hasActiveScans} />
+        <AdminScansAutoRefresh targets={liveTargets} />
         <AdminScansFilterForm hasFilters={hasFilters}>
           <input aria-label="Filter by domain, scan ID, email, requester, IP, or source; use field not-equal syntax to exclude" className="h-10 min-w-[28rem] flex-[1_1_32rem] rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Domain, scan_id, email, requester, IP · source:homepage-anonymous · ip!=66.*" />
           <select aria-label="Filter scans by status" className="h-10 w-[7.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeStatus} name="status">{statuses.map((status) => <option key={status} value={status}>{status === "any" ? "Any status" : formatFilterLabel(status)}</option>)}</select>

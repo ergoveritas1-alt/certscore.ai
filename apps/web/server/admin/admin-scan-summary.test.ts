@@ -63,7 +63,7 @@ test("API activity navigation is read-only and does not repair summaries", async
   assert.doesNotMatch(pageSource, /materializeAdminScanSummaries/);
   assert.doesNotMatch(pageSource, /summary_repair/);
   assert.match(pageSource, /Promise\.all\(\[/);
-  assert.match(pageSource, /listAdminPulseRequests\(requestListInput\)/);
+  assert.match(pageSource, /listAdminPulseRequestsPage\(requestListInput\)/);
 });
 
 test("API activity derives terminal state and score from canonical scan records", async () => {
@@ -386,4 +386,63 @@ test("localhost web development has enough heap for broad authenticated route QA
   const packageJson = await readFile("apps/web/package.json", "utf8");
 
   assert.match(packageJson, /max-old-space-size=4096/);
+});
+
+test("admin users paginate in SQL instead of loading the complete account history", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(pageSource, /listAdminUsersPage\(pageSize,/);
+  assert.doesNotMatch(pageSource, /listAdminUsers\(\)/);
+  assert.match(repositorySource, /selected_users as/);
+  assert.match(repositorySource, /limit \$1 offset \$2/);
+  assert.match(repositorySource, /where scans\.organization_id in \(select organization_id from selected_organizations\)/);
+});
+
+test("admin scans poll lightweight status data and refresh only after a status change", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const refreshSource = await readFile("apps/web/app/app/admin/scans/admin-scans-auto-refresh.tsx", "utf8");
+  const routeSource = await readFile("apps/web/app/api/admin/scans/live-status/route.ts", "utf8");
+
+  assert.match(pageSource, /<AdminScansAutoRefresh targets=\{liveTargets\}/);
+  assert.match(refreshSource, /fetch\("\/api\/admin\/scans\/live-status"/);
+  assert.match(refreshSource, /result\.fingerprint !== initialFingerprint/);
+  assert.doesNotMatch(refreshSource, /setInterval/);
+  assert.match(routeSource, /getAdminScanLiveStatus\(targets\)/);
+});
+
+test("API activity obtains rows and the filtered total in one paginated query", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
+
+  assert.match(pageSource, /listAdminPulseRequestsPage\(requestListInput\)/);
+  assert.doesNotMatch(pageSource, /countAdminPulseRequests\(requestListInput\)/);
+  assert.match(listSource, /count\(\*\) over\(\)::int as filtered_total_count/);
+  assert.match(listSource, /limit \$10 offset \$11/);
+});
+
+test("admin scan activity materializes filters once for pagination and the total", async () => {
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(repositorySource, /filtered_activity as materialized/);
+  assert.match(repositorySource, /paged_activity as/);
+  assert.match(repositorySource, /activity_total as/);
+  assert.doesNotMatch(repositorySource, /const \[pageResult, countResult\] = await Promise\.all/);
+});
+
+test("admin scan overview combines related aggregate counts", async () => {
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(repositorySource, /count\(\*\) filter \(\s*where coalesce\(fulfilled_by_scan_id, scan_id\) is null/);
+  assert.match(repositorySource, /as http_403_count/);
+  assert.match(repositorySource, /as http_429_count/);
+  assert.match(repositorySource, /as blocked_or_captcha_count/);
+});
+
+test("admin scan list logs its expensive production stages separately", async () => {
+  const listSource = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
+
+  assert.match(listSource, /app\.admin\.scans\.activity-page/);
+  assert.match(listSource, /app\.admin\.scans\.row-enrichment/);
+  assert.match(listSource, /app\.admin\.scans\.score-attribution/);
 });
