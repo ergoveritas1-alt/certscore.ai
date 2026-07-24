@@ -473,6 +473,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
   const carouselFindings = HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDINGS;
   const [activeIndex, setActiveIndex] = useState(0);
   const [showRawEvidence, setShowRawEvidence] = useState(false);
+  const [evidenceCopied, setEvidenceCopied] = useState(false);
   const activeFinding = useMemo(
     () => carouselFindings[activeIndex] ?? carouselFindings[0],
     [activeIndex, carouselFindings]
@@ -485,11 +486,13 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
 
   function showPrevious() {
     setShowRawEvidence(false);
+    setEvidenceCopied(false);
     setActiveIndex((current) => (current === 0 ? carouselFindings.length - 1 : current - 1));
   }
 
   function showNext() {
     setShowRawEvidence(false);
+    setEvidenceCopied(false);
     setActiveIndex((current) => (current === carouselFindings.length - 1 ? 0 : current + 1));
   }
 
@@ -575,7 +578,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                   <p className="mt-2 text-sm leading-5 text-slate-600">{activeFinding.overview}</p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Brief regulatory context</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Why this matters</p>
                   <p className="mt-2 text-sm font-semibold text-slate-950">{activeFinding.regulatoryLabel}</p>
                   <p className="mt-1 text-xs leading-4 text-slate-500">{activeFinding.regulatoryCopy}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -589,7 +592,13 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
               <div className="flex flex-col rounded-[1.5rem] border border-slate-200 bg-white p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Example evidence</p>
                 <div className="mt-2 rounded-2xl border border-slate-800 bg-slate-950 p-3">
-                  <p className="text-xs font-semibold text-slate-100">{activeFinding.evidence.title}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-semibold text-slate-100">{activeFinding.evidence.title}</p>
+                    <div className="flex shrink-0 gap-1">
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-sky-200">Structured</span>
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">Retained</span>
+                    </div>
+                  </div>
                   {showRawEvidence ? (
                     <div className="mt-2 space-y-1 font-mono text-[11px] leading-5 text-slate-300">
                       {activeFinding.evidence.lines.map((line) => <p key={line} className="break-all">{line}</p>)}
@@ -609,6 +618,17 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                   )}
                   <button className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300" onClick={() => setShowRawEvidence((current) => !current)} type="button">
                     {showRawEvidence ? "Readable view" : "View raw"}
+                  </button>
+                  <button
+                    className="ml-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(activeFinding.evidence.lines.join("\n"));
+                      setEvidenceCopied(true);
+                      window.setTimeout(() => setEvidenceCopied(false), 1600);
+                    }}
+                    type="button"
+                  >
+                    {evidenceCopied ? "Copied" : "Copy evidence"}
                   </button>
                 </div>
                 <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Reviewer prompts</p>
