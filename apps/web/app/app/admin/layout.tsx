@@ -29,6 +29,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
           <Link
             key={item.href}
             href={item.href}
+            prefetch={false}
             className="app-raised-button rounded-full px-3.5 py-1.5 text-sm text-slate-700 hover:text-slate-950"
           >
             {item.label}

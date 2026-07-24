@@ -117,7 +117,7 @@ export default async function AdminOverviewPage() {
                 </p>
               </div>
             ))}
-            <PendingButtonLink href="/app/admin/users" idleContent="Open user admin" pendingContent="Opening..." variant="secondary" />
+            <PendingButtonLink href="/app/admin/users" idleContent="Open user admin" pendingContent="Opening..." prefetch={false} variant="secondary" />
           </CardContent>
         </Card>
 
@@ -147,6 +147,7 @@ export default async function AdminOverviewPage() {
                       href={`/app/admin/scans/${scan.linkedScanId}`}
                       idleContent="Inspect snapshot"
                       pendingContent="Opening..."
+                      prefetch={false}
                       size="sm"
                       variant="secondary"
                     />
@@ -154,7 +155,7 @@ export default async function AdminOverviewPage() {
                 ) : null}
               </div>
             ))}
-            <PendingButtonLink href="/app/admin/scans" idleContent="Open scan admin" pendingContent="Opening..." variant="secondary" />
+            <PendingButtonLink href="/app/admin/scans" idleContent="Open scan admin" pendingContent="Opening..." prefetch={false} variant="secondary" />
           </CardContent>
         </Card>
 
@@ -179,6 +180,7 @@ export default async function AdminOverviewPage() {
               href="/app/admin/monitor-requests"
               idleContent="Open monitor queue"
               pendingContent="Opening..."
+              prefetch={false}
               variant="secondary"
             />
           </CardContent>
@@ -199,11 +201,11 @@ export default async function AdminOverviewPage() {
                   Feedback {request.feedbackCount} · Requested {formatAdminDateTime(request.requestedAt)}
                 </p>
                 <div className="mt-3">
-                  <PendingButtonLink href={`/app/admin/pulse/${request.publicId}`} idleContent="Inspect Pulse" pendingContent="Opening..." size="sm" variant="secondary" />
+                  <PendingButtonLink href={`/app/admin/pulse/${request.publicId}`} idleContent="Inspect Pulse" pendingContent="Opening..." prefetch={false} size="sm" variant="secondary" />
                 </div>
               </div>
             ))}
-            <PendingButtonLink href="/app/admin/pulse" idleContent="Open API activity" pendingContent="Opening..." variant="secondary" />
+            <PendingButtonLink href="/app/admin/pulse" idleContent="Open API activity" pendingContent="Opening..." prefetch={false} variant="secondary" />
           </CardContent>
         </Card>
       </div>

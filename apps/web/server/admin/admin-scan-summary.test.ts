@@ -446,3 +446,15 @@ test("admin scan list logs its expensive production stages separately", async ()
   assert.match(listSource, /app\.admin\.scans\.row-enrichment/);
   assert.match(listSource, /app\.admin\.scans\.score-attribution/);
 });
+
+test("admin navigation does not prefetch expensive dynamic routes", async () => {
+  const layoutSource = await readFile("apps/web/app/app/admin/layout.tsx", "utf8");
+  const actionsSource = await readFile("apps/web/app/app/admin/scans/admin-scan-actions.tsx", "utf8");
+  const overviewSource = await readFile("apps/web/app/app/admin/page.tsx", "utf8");
+  const appShellSource = await readFile("apps/web/components/dashboard/app-shell.tsx", "utf8");
+
+  assert.match(layoutSource, /href=\{item\.href\}\s+prefetch=\{false\}/);
+  assert.equal((actionsSource.match(/prefetch=\{false\}/g) ?? []).length, 2);
+  assert.equal((overviewSource.match(/prefetch=\{false\}/g) ?? []).length, 6);
+  assert.equal((appShellSource.match(/prefetch=\{false\}/g) ?? []).length, 2);
+});

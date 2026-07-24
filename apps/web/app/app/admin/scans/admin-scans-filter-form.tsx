@@ -48,7 +48,7 @@ export function AdminScansFilterForm({ basePath = "/app/admin/scans", children, 
         {isPending ? <span aria-hidden="true" className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : null}
         {isPending ? "Filtering…" : "Filter"}
       </button>
-      {hasFilters ? <Link className="app-raised-button inline-flex h-10 shrink-0 items-center rounded-lg px-4 text-sm font-semibold text-slate-700" href={clearHref ?? basePath}>Clear</Link> : null}
+      {hasFilters ? <Link className="app-raised-button inline-flex h-10 shrink-0 items-center rounded-lg px-4 text-sm font-semibold text-slate-700" href={clearHref ?? basePath} prefetch={false}>Clear</Link> : null}
     </form>
   );
 }

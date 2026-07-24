@@ -337,6 +337,7 @@ export function AppShell({
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileNavOpen(false)}
+                      prefetch={false}
                       className={[
                         "flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition",
                         active
@@ -380,6 +381,7 @@ export function AppShell({
                             key={item.href}
                             href={item.href}
                             onClick={closeNav}
+                            prefetch={false}
                             aria-label={item.label}
                             title={item.label}
                             className={[

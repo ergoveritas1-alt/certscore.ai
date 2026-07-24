@@ -132,14 +132,14 @@ export function PaginationControls({
           {page <= 1 ? (
             <span className="cursor-not-allowed text-slate-400">Previous</span>
           ) : (
-            <Link href={buildHref({ basePath, page: page - 1, pageParamName, pageSize, perPageParamName, searchParams })}>Previous</Link>
+            <Link href={buildHref({ basePath, page: page - 1, pageParamName, pageSize, perPageParamName, searchParams })} prefetch={false}>Previous</Link>
           )}
         </Button>
         <Button asChild disabled={!resolvedHasNext} size="sm" variant="secondary">
           {!resolvedHasNext ? (
             <span className="cursor-not-allowed text-slate-400">Next</span>
           ) : (
-            <Link href={buildHref({ basePath, page: page + 1, pageParamName, pageSize, perPageParamName, searchParams })}>Next</Link>
+            <Link href={buildHref({ basePath, page: page + 1, pageParamName, pageSize, perPageParamName, searchParams })} prefetch={false}>Next</Link>
           )}
         </Button>
       </div>

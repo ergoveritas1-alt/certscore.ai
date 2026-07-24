@@ -12,6 +12,7 @@ type PendingLinkSharedProps = {
   className?: string;
   pendingClassName?: string;
   onClick?: AnchorHTMLAttributes<HTMLAnchorElement>["onClick"];
+  prefetch?: boolean;
 } & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "href" | "onClick" | "title">;
 
 type PendingLinkProps = PendingLinkSharedProps & {
@@ -91,6 +92,7 @@ export function PendingLink({
   ariaLabel,
   title,
   onClick,
+  prefetch,
   ...anchorProps
 }: PendingLinkProps) {
   const { handleClick, isNavigating } = usePendingNavigation(href, onClick);
@@ -102,6 +104,7 @@ export function PendingLink({
       className={[className, isNavigating ? pendingClassName : null].filter(Boolean).join(" ")}
       href={href}
       onClick={handleClick}
+      prefetch={prefetch}
       tabIndex={isNavigating ? -1 : undefined}
       title={title}
       {...anchorProps}
@@ -122,6 +125,7 @@ export function PendingButtonLink({
   size = "md",
   variant = "primary",
   onClick,
+  prefetch,
   ...anchorProps
 }: PendingButtonLinkProps) {
   const { handleClick, isNavigating } = usePendingNavigation(href, onClick);
@@ -138,6 +142,7 @@ export function PendingButtonLink({
         aria-disabled={isNavigating}
         href={href}
         onClick={handleClick}
+        prefetch={prefetch}
         tabIndex={isNavigating ? -1 : undefined}
         title={title}
         {...anchorProps}

@@ -130,6 +130,7 @@ function ActionButton({
         className={`app-raised-button inline-flex items-center justify-center rounded-full text-slate-700 hover:text-slate-950 ${navigationPending ? "cursor-wait opacity-60" : ""} ${compact ? "h-8 w-8 [&_svg]:h-4 [&_svg]:w-4" : "h-10 w-10"}`}
         href={href}
         onClick={handleClick}
+        prefetch={false}
         title={label}
       >
         {children}
@@ -189,6 +190,7 @@ export function AdminReportLink({
           event.preventDefault();
         }
       }}
+      prefetch={false}
     >
       {children}
     </Link>
