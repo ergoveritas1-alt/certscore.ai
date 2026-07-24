@@ -830,7 +830,7 @@ export function DomainScanForm({
             aria-label={inputLabel}
           />
           {mode === "full" ? (
-            <div className={variant === "homepage-hero" ? "absolute right-[8.25rem] top-1/2 -translate-y-1/2 scale-150 sm:right-[8.75rem]" : compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
+            <div className={variant === "homepage-hero" ? "absolute right-[8.25rem] top-1/2 -translate-y-1/2 scale-150 sm:right-[8.75rem]" : compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[8rem] top-1/2 -translate-y-1/2"}>
               <ScanFromSelect
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
@@ -849,7 +849,7 @@ export function DomainScanForm({
               />
             </div>
           ) : (
-            <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
+            <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[8rem] top-1/2 -translate-y-1/2"}>
               <ScanFromSelect
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
