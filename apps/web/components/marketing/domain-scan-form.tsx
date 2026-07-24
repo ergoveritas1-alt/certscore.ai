@@ -232,6 +232,15 @@ function normalizeBrowserScanTarget(rawDomain: string) {
   return url.toString();
 }
 
+function isValidScanTarget(rawDomain: string) {
+  try {
+    const normalized = normalizeBrowserScanTarget(rawDomain);
+    return Boolean(new URL(normalized).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function waitForBx01Message(requestId: string, expectedType: string, timeoutMs: number) {
   return new Promise<Bx01WindowMessage>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
@@ -379,7 +388,7 @@ export function DomainScanForm({
   const isSubmittingRef = useRef(false);
   const scanProgress = useScanProgressClock(isSubmitting);
   const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
-  const scanButtonArmed = effectiveSubmitDomain.length > 0;
+  const scanButtonArmed = isValidScanTarget(effectiveSubmitDomain);
   const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
   const expectsRecentScanReuse = shouldExpectRecentScanReuse({ freshRescan, hasRecentReusableScan, mode });
 
