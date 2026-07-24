@@ -11,7 +11,8 @@ import { ScanProgressReportVisible } from "../../../../components/scans/scan-pro
 import { ShareReportActions } from "../../../../components/scans/share-report-actions";
 import {
   hasPendingBrowserExtensionNormalization,
-  hasPendingPostCompletionFindingWork
+  hasPendingPostCompletionFindingWork,
+  shouldBackfillReportFindingCount
 } from "../../../../lib/scans/scan-auto-refresh";
 import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
@@ -100,7 +101,12 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     status: scanRecord.scan.status
   });
 
-  if (typeof displayScanRecord.snapshot?.report_finding_count !== "number" || displayScanRecord.scan.scanType === "browser_extension") {
+  const persistedSnapshot = scanRecord.snapshot;
+  if (shouldBackfillReportFindingCount({
+    hasPersistedSnapshot: Boolean(persistedSnapshot),
+    reportFindingCount: persistedSnapshot?.report_finding_count,
+    scanType: displayScanRecord.scan.scanType
+  })) {
     after(async () => {
       const reportFindingCount = await withServerTiming("app.scan_detail.backfill_finding_count", async () =>
         buildScanReportUnifiedFindings(displayScanRecord).length

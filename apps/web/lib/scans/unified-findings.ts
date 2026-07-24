@@ -19,6 +19,7 @@ import {
 import {
   buildNormalizedConcerns,
   buildUnifiedFindingCandidatesFromConcerns,
+  type NormalizedConcern,
   type NormalizedConcernAssertionLevel,
   type ConcernBackedUnifiedFindingCandidate,
   type NormalizedConcernEvidenceStrengthFlag,
@@ -7178,6 +7179,7 @@ function resolveUnifiedFindingForCandidate(candidate: UnifiedFindingCandidate | 
 }
 
 export function buildUnifiedFindingPackets(input: {
+  captureNormalizedConcerns?: (concerns: NormalizedConcern[]) => void;
   domainContext?: ScanDomainContext;
   reviewFindingCandidates: UnifiedFindingCandidate[];
   runtimeArtifacts?: Record<string, unknown> | null;
@@ -7201,6 +7203,7 @@ export function buildUnifiedFindingPackets(input: {
     runtimeArtifacts: input.runtimeArtifacts,
     validationFindings: input.validationFindings
   });
+  input.captureNormalizedConcerns?.(normalizedConcerns);
   const normalizedCandidates = buildUnifiedFindingCandidatesFromConcerns(normalizedConcerns);
   const packets = new Map<string, UnifiedFindingPacket>();
   const validationByPacket = new Map<string, ScanValidationFinding[]>();
@@ -7276,6 +7279,7 @@ export function buildUnifiedFindingPackets(input: {
 }
 
 export function buildUnifiedFindingDisplayPackets(input: {
+  captureNormalizedConcerns?: (concerns: NormalizedConcern[]) => void;
   coverageSummary?: UnifiedFindingCoverageSummary;
   macroEnrichment?: Record<string, unknown> | null;
   mergedSignals?: MergedSignalRecord[];
@@ -7296,6 +7300,7 @@ export function buildUnifiedFindingDisplayPackets(input: {
   const policyEnrichmentMissingContactCandidates = buildPolicyEnrichmentMissingContactCandidates(input.policyEnrichment);
   const policyEnrichmentClarityCandidates = buildPolicyEnrichmentClarityCandidates(input.policyEnrichment);
   const packets = buildUnifiedFindingPackets({
+    captureNormalizedConcerns: input.captureNormalizedConcerns,
     domainContext: buildScanDomainContext(input.macroEnrichment),
     reviewFindingCandidates: [
       ...input.reviewFindingCandidates,

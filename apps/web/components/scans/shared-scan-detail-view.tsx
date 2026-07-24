@@ -5984,6 +5984,80 @@ export function getHomepagePreviewGateIdleLabel(href: string) {
   return href.includes("mode=create_account") ? "Create account to view" : "Sign in to view";
 }
 
+type ScanReportRenderProjection = {
+  derivedContext: ScanReportUnifiedFindingState["derivedContext"];
+  globalUnifiedFindings: ScanReportUnifiedFindingState["globalUnifiedFindings"];
+  normalizedConcerns: NonNullable<ScanReportUnifiedFindingState["normalizedConcerns"]>;
+  ownerUnifiedFindings: UnifiedFindingDisplayPacket[];
+};
+
+// Keep only the compact projection for a short completed-report viewing window.
+// The bounded revision check avoids rebuilding the much larger canonical analyst
+// draft tree during reloads and nearby report switches without retaining that tree.
+const SCAN_REPORT_RENDER_PROJECTION_CACHE_TTL_MS = 60_000;
+const SCAN_REPORT_RENDER_PROJECTION_CACHE_MAX_ENTRIES = 3;
+const scanReportRenderProjectionCache = new Map<string, {
+  expiresAt: number;
+  projection: ScanReportRenderProjection;
+  revision: string;
+}>();
+
+function getScanReportRenderRevision(scanRecord: ScanDetailResponse) {
+  return [
+    scanRecord.scan.status,
+    scanRecord.scan.completedAt ?? "",
+    scanRecord.events.length,
+    scanRecord.mergedSignals.length,
+    scanRecord.policyEnrichment.length,
+    scanRecord.signalHits.length,
+    scanRecord.signals.length,
+    scanRecord.validationFindings.length,
+    scanRecord.snapshot?.report_finding_count ?? ""
+  ].join(":");
+}
+
+function buildScanReportRenderProjection(scanRecord: ScanDetailResponse): ScanReportRenderProjection {
+  const state = debugBuildScanReportUnifiedFindingState(scanRecord);
+
+  return {
+    derivedContext: state.derivedContext,
+    globalUnifiedFindings: state.globalUnifiedFindings,
+    normalizedConcerns: state.normalizedConcerns ?? [],
+    ownerUnifiedFindings: buildScanReportUnifiedFindingsFromState(state)
+  };
+}
+
+function getScanReportRenderProjection(scanRecord: ScanDetailResponse): ScanReportRenderProjection {
+  if (scanRecord.scan.status !== "completed") {
+    return buildScanReportRenderProjection(scanRecord);
+  }
+
+  const revision = getScanReportRenderRevision(scanRecord);
+  const cached = scanReportRenderProjectionCache.get(scanRecord.scan.id);
+  if (cached && cached.expiresAt > Date.now() && cached.revision === revision) {
+    scanReportRenderProjectionCache.delete(scanRecord.scan.id);
+    scanReportRenderProjectionCache.set(scanRecord.scan.id, cached);
+    return cached.projection;
+  }
+
+  const projection = buildScanReportRenderProjection(scanRecord);
+  scanReportRenderProjectionCache.set(scanRecord.scan.id, {
+    expiresAt: Date.now() + SCAN_REPORT_RENDER_PROJECTION_CACHE_TTL_MS,
+    projection,
+    revision
+  });
+
+  while (scanReportRenderProjectionCache.size > SCAN_REPORT_RENDER_PROJECTION_CACHE_MAX_ENTRIES) {
+    const oldestScanId = scanReportRenderProjectionCache.keys().next().value;
+    if (typeof oldestScanId !== "string") {
+      break;
+    }
+    scanReportRenderProjectionCache.delete(oldestScanId);
+  }
+
+  return projection;
+}
+
 export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailResponse): ScanReportUnifiedFindingState {
   const snapshot = scanRecord.snapshot;
   if (!snapshot) {
@@ -6000,6 +6074,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
         taxonomySnapshotSections: []
       },
       globalUnifiedFindings: [] as UnifiedFindingDisplayPacket[],
+      normalizedConcerns: [],
       sectionDrafts: []
     };
   }
@@ -6030,6 +6105,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
         taxonomySnapshotSections: []
       },
       globalUnifiedFindings: [] as UnifiedFindingDisplayPacket[],
+      normalizedConcerns: [],
       sectionDrafts: []
     };
   }
@@ -6693,6 +6769,7 @@ export function deriveSharedScanDetailGdprEprivacyCoverageChecklist(input: {
   coverageLimited: boolean;
   events?: ScanDetailResponse["events"];
   policyEnrichmentCount: number;
+  normalizedConcerns?: ScanReportUnifiedFindingState["normalizedConcerns"];
   projectedFindings?: GdprEprivacyCoverageChecklistInput["projectedFindings"];
   runtimeArtifacts: ScanDetailResponse["runtimeArtifacts"];
   runtimeCookieRows?: RuntimeCookieEvidenceRow[];
@@ -6701,7 +6778,7 @@ export function deriveSharedScanDetailGdprEprivacyCoverageChecklist(input: {
   snapshot: ScanDetailResponse["snapshot"];
   unifiedFindings: UnifiedFindingDisplayPacket[];
 }): GdprEprivacyCoverageChecklistItem[] {
-  const runtimeArtifactNormalizedConcerns = buildNormalizedConcerns({
+  const runtimeArtifactNormalizedConcerns = input.normalizedConcerns ?? buildNormalizedConcerns({
     reviewFindingCandidates: [],
     runtimeArtifacts: input.runtimeArtifacts,
     validationFindings: []
@@ -7084,8 +7161,8 @@ export async function SharedScanDetailView({
     vendor: row.vendor
   }));
   const reviewSectionError: string | null = null;
-  const scanReportUnifiedFindingState = debugBuildScanReportUnifiedFindingState(scanRecord);
-  const { taxonomySnapshotSections } = scanReportUnifiedFindingState.derivedContext;
+  const scanReportRenderProjection = getScanReportRenderProjection(scanRecord);
+  const { taxonomySnapshotSections } = scanReportRenderProjection.derivedContext;
 
   const preConsentTrackingObserved =
     snapshot?.preconsent_tracking_detected === true ||
@@ -7143,7 +7220,7 @@ export async function SharedScanDetailView({
   const showHomepagePreviewGate = previewMode === "homepage" && Boolean(createAccountHref);
   const baseFindingEvidenceDiagnostics =
     snapshot && !reviewSectionError
-      ? filterContradictoryPositiveSurfaceFindings(buildScanReportUnifiedFindingsFromState(scanReportUnifiedFindingState))
+      ? filterContradictoryPositiveSurfaceFindings(scanReportRenderProjection.ownerUnifiedFindings)
       : [];
   const supplementalRuntimeFindingDiagnostics = buildSupplementalRuntimeUnifiedFindingPackets(previewPayload);
   const findingEvidenceDiagnostics = filterContradictoryPositiveSurfaceFindings(mergeUnifiedFindingPacketsById([
@@ -7245,6 +7322,7 @@ export async function SharedScanDetailView({
   const gdprEprivacyCoverageChecklist = deriveSharedScanDetailGdprEprivacyCoverageChecklist({
     coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
     events: scanRecord.events,
+    normalizedConcerns: scanReportRenderProjection.normalizedConcerns,
     policyEnrichmentCount: scanRecord.policyEnrichment.length,
     projectedFindings: allExecutiveFindings,
     runtimeArtifacts,
@@ -7348,7 +7426,7 @@ export async function SharedScanDetailView({
     regulatoryLensOptions
   );
   const regulatoryChecklistUnifiedFindings = filterContradictoryPositiveSurfaceFindings(mergeUnifiedFindingPacketsById([
-    ...scanReportUnifiedFindingState.globalUnifiedFindings,
+    ...scanReportRenderProjection.globalUnifiedFindings,
     ...findingEvidenceDiagnostics
   ]));
   const betaRegulatoryFindingSources = buildBetaRegulatoryFindingSources({

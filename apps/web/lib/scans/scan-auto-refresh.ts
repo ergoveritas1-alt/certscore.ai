@@ -44,3 +44,14 @@ export function hasPendingBrowserExtensionNormalization(input: {
     !eventTypes.has("browser_extension.normalization_failed")
   );
 }
+
+export function shouldBackfillReportFindingCount(input: {
+  hasPersistedSnapshot: boolean;
+  reportFindingCount: unknown;
+  scanType: string;
+}) {
+  return (
+    input.hasPersistedSnapshot &&
+    (typeof input.reportFindingCount !== "number" || input.scanType === "browser_extension")
+  );
+}

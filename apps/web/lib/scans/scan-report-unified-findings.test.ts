@@ -252,6 +252,11 @@ test("cross-border endpoint-only evidence remains a review signal without disclo
   });
 
   assert.ok(state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "cross_border_endpoint_transfer_review_signal"));
+  assert.ok(
+    state.normalizedConcerns?.some(
+      (concern) => concern.suggestedUnifiedFindingId === "cross_border_endpoint_transfer_review_signal"
+    )
+  );
   assert.equal(state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "missing_transfer_disclosure"), false);
 });
 

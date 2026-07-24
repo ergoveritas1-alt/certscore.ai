@@ -13,6 +13,7 @@ import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { buildValidationFindingLookup } from "./validation-review-linking";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import type { NormalizedConcern } from "./normalized-concerns";
 import {
   dedupeHeadlineFindings,
   deriveConsentAuditFindings
@@ -85,6 +86,7 @@ export type ScanReportUnifiedFindingState = {
     taxonomySnapshotSections: Array<{ description: string; fields: string[]; title: string }>;
   };
   globalUnifiedFindings: UnifiedFindingDisplayPacket[];
+  normalizedConcerns?: NormalizedConcern[];
   sectionDrafts: Array<{
     pillar?: ReportPrimaryPillarDefinition;
     sections: ScanReportUnifiedFindingSectionDraft[];
@@ -2412,6 +2414,7 @@ export function buildScanReportUnifiedFindingState(
         taxonomySnapshotSections: []
       },
       globalUnifiedFindings: [],
+      normalizedConcerns: [],
       sectionDrafts: []
     };
   }
@@ -2575,7 +2578,11 @@ export function buildScanReportUnifiedFindingState(
       !linkedValidationFindingIds.has(String(finding.id ?? "")) &&
       !reviewFindingCandidates.some((candidate) => candidateCoversValidationFinding(candidate, finding as Record<string, unknown>))
   );
+  let normalizedConcerns: NormalizedConcern[] = [];
   const globalUnifiedFindings = dependencies.filterContradictoryPositiveSurfaceFindings(buildUnifiedFindingDisplayPackets({
+    captureNormalizedConcerns: (concerns) => {
+      normalizedConcerns = concerns;
+    },
     coverageSummary: {
       legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
       pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned),
@@ -2605,6 +2612,7 @@ export function buildScanReportUnifiedFindingState(
       taxonomySnapshotSections
     },
     globalUnifiedFindings,
+    normalizedConcerns,
     sectionDrafts
   };
 }
@@ -2760,6 +2768,7 @@ export function debugBuildScanReportUnifiedFindingStateForScan(scanRecord: Recor
         taxonomySnapshotSections: []
       },
       globalUnifiedFindings: [],
+      normalizedConcerns: [],
       sectionDrafts: []
     };
   }
@@ -2790,6 +2799,7 @@ export function debugBuildScanReportUnifiedFindingStateForScan(scanRecord: Recor
         taxonomySnapshotSections: []
       },
       globalUnifiedFindings: [],
+      normalizedConcerns: [],
       sectionDrafts: []
     };
   }
