@@ -473,7 +473,6 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
   const carouselFindings = HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDINGS;
   const [activeIndex, setActiveIndex] = useState(0);
   const [showRawEvidence, setShowRawEvidence] = useState(false);
-  const [evidenceCopied, setEvidenceCopied] = useState(false);
   const activeFinding = useMemo(
     () => carouselFindings[activeIndex] ?? carouselFindings[0],
     [activeIndex, carouselFindings]
@@ -486,13 +485,11 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
 
   function showPrevious() {
     setShowRawEvidence(false);
-    setEvidenceCopied(false);
     setActiveIndex((current) => (current === 0 ? carouselFindings.length - 1 : current - 1));
   }
 
   function showNext() {
     setShowRawEvidence(false);
-    setEvidenceCopied(false);
     setActiveIndex((current) => (current === carouselFindings.length - 1 ? 0 : current + 1));
   }
 
@@ -618,17 +615,6 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                   )}
                   <button className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300" onClick={() => setShowRawEvidence((current) => !current)} type="button">
                     {showRawEvidence ? "Readable view" : "View raw"}
-                  </button>
-                  <button
-                    className="ml-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(activeFinding.evidence.lines.join("\n"));
-                      setEvidenceCopied(true);
-                      window.setTimeout(() => setEvidenceCopied(false), 1600);
-                    }}
-                    type="button"
-                  >
-                    {evidenceCopied ? "Copied" : "Copy evidence"}
                   </button>
                 </div>
                 <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Reviewer prompts</p>
