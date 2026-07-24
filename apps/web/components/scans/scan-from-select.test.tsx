@@ -70,6 +70,18 @@ test("ScanFromSelect maps legacy default values to the selectable regional defau
   assert.doesNotMatch(html, /Default production scan/);
 });
 
+test("ScanFromSelect keeps the scan-from field button free of a trailing caret", () => {
+  const html = renderToStaticMarkup(
+    createElement(ScanFromSelect, {
+      includeScanFromOptions: true,
+      variant: "field"
+    })
+  );
+
+  assert.match(html, /EU-IR/);
+  assert.doesNotMatch(html, /m5\.5 7\.5 4\.5 4\.5 4\.5-4\.5/);
+});
+
 test("California scan marker renders as a flag graphic instead of literal sentinel text", () => {
   const html = renderToStaticMarkup(createElement(ScanFromMarker, { flag: "california", selected: false }));
 

@@ -249,11 +249,6 @@ export function ScanFromSelect({
         >
           <SelectedScanFromMarker option={selectedOption} />
           {variant === "field" ? <span>{selectedOption.label}</span> : null}
-          {variant === "field" ? (
-            <svg aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 20 20">
-              <path d="m5.5 7.5 4.5 4.5 4.5-4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-            </svg>
-          ) : null}
         </button>
       ) : null}
       {isOpen && isMounted
