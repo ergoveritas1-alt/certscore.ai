@@ -359,7 +359,6 @@ export function DomainScanForm({
   emptySubmitDomain = "",
   helperText,
   inputLabel = "Website domain",
-  inputPlaceholder = "Enter yoursite.com",
   mode = "preview",
   requestSource,
   sampleDomains = [],
@@ -445,10 +444,6 @@ export function DomainScanForm({
   }, [mode]);
 
   useEffect(() => {
-    if (variant !== "homepage-hero" && !compact) {
-      return;
-    }
-
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setHeroPlaceholder(HERO_IDLE_PLACEHOLDER);
       return;
@@ -829,7 +824,7 @@ export function DomainScanForm({
               setDomain(event.target.value);
               resetValidationState();
             }}
-            placeholder={variant === "homepage-hero" || compact ? heroPlaceholder : inputPlaceholder}
+            placeholder={heroPlaceholder}
             type="text"
             value={domain}
             aria-label={inputLabel}
@@ -852,20 +847,6 @@ export function DomainScanForm({
                 value={scanFrom}
                 variant="icon"
               />
-              {variant === "homepage-hero" ? (
-                <svg
-                  aria-hidden="true"
-                  className="pointer-events-none absolute -bottom-0.5 left-1/2 h-2 w-2 -translate-x-1/2 text-slate-500"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  viewBox="0 0 12 8"
-                >
-                  <path d="m2 2 4 4 4-4" />
-                </svg>
-              ) : null}
             </div>
           ) : (
             <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
