@@ -3,8 +3,8 @@ import { cloneElement, isValidElement } from "react";
 import { cn } from "../lib/cn";
 
 const buttonVariants = {
-  primary: "bg-ink text-white hover:bg-slate-800",
-  secondary: "bg-white text-ink ring-1 ring-slate-300 hover:bg-slate-50"
+  primary: "ui-button-primary bg-ink text-white hover:bg-slate-800",
+  secondary: "ui-button-secondary bg-white text-ink ring-1 ring-slate-300 hover:bg-slate-50"
 } as const;
 
 const buttonSizes = {
@@ -32,7 +32,7 @@ export function Button({
   ...props
 }: ButtonProps | AnchorProps) {
   const classes = cn(
-    "inline-flex items-center justify-center rounded-xl font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50",
+    "ui-button inline-flex items-center justify-center rounded-xl font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-50",
     buttonVariants[variant],
     buttonSizes[size],
     className

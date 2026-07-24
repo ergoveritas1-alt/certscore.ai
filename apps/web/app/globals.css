@@ -61,6 +61,63 @@ a {
     border-color: rgb(30 41 59);
     box-shadow: 0 3px 0 0 rgb(2 6 23);
   }
+
+  .certscore-app-content .ui-button:not(.scan-report-button),
+  .app-raised-button {
+    border: 1px solid rgb(186 230 253);
+    background-image: linear-gradient(180deg, rgb(255 255 255) 0%, rgb(240 249 255) 100%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      0 2px 0 rgb(186 230 253),
+      0 8px 18px -12px rgb(14 116 144 / 0.55);
+    translate: 0 0;
+    transition:
+      translate 150ms ease,
+      box-shadow 150ms ease,
+      border-color 150ms ease,
+      filter 150ms ease;
+  }
+
+  .certscore-app-content .ui-button:not(.scan-report-button):hover:not(:disabled),
+  .app-raised-button:hover:not(:disabled) {
+    border-color: rgb(14 165 233);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.95),
+      0 3px 0 rgb(125 211 252),
+      0 12px 22px -13px rgb(14 116 144 / 0.68);
+    translate: 0 -1px;
+  }
+
+  .certscore-app-content .ui-button:not(.scan-report-button):active:not(:disabled),
+  .app-raised-button:active:not(:disabled) {
+    box-shadow: inset 0 2px 4px rgb(15 23 42 / 0.14);
+    translate: 0 1px;
+  }
+
+  .certscore-app-content .ui-button-primary:not(.scan-report-button),
+  .app-raised-button-dark {
+    border-color: rgb(30 41 59);
+    background-image: linear-gradient(180deg, rgb(51 65 85) 0%, rgb(15 23 42) 100%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.18),
+      0 3px 0 rgb(2 6 23),
+      0 10px 20px -13px rgb(2 6 23 / 0.9);
+  }
+
+  .certscore-app-content .ui-button-primary:not(.scan-report-button):hover:not(:disabled),
+  .app-raised-button-dark:hover:not(:disabled) {
+    border-color: rgb(51 65 85);
+    filter: brightness(1.08);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.22),
+      0 4px 0 rgb(2 6 23),
+      0 14px 24px -14px rgb(2 6 23 / 0.95);
+  }
+
+  .certscore-app-content .ui-button-primary:not(.scan-report-button):active:not(:disabled),
+  .app-raised-button-dark:active:not(:disabled) {
+    box-shadow: inset 0 2px 5px rgb(2 6 23 / 0.65);
+  }
 }
 
 .status-sheen-label {

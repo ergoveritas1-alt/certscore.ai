@@ -127,7 +127,7 @@ function ActionButton({
       <Link
         aria-label={label}
         aria-disabled={navigationPending}
-        className={`inline-flex items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-slate-400 hover:text-slate-950 ${navigationPending ? "cursor-wait opacity-60" : ""} ${compact ? "h-8 w-8 [&_svg]:h-4 [&_svg]:w-4" : "h-10 w-10"}`}
+        className={`app-raised-button inline-flex items-center justify-center rounded-full text-slate-700 hover:text-slate-950 ${navigationPending ? "cursor-wait opacity-60" : ""} ${compact ? "h-8 w-8 [&_svg]:h-4 [&_svg]:w-4" : "h-10 w-10"}`}
         href={href}
         onClick={handleClick}
         title={label}
@@ -172,7 +172,7 @@ export function AdminReportLink({
     <Link
       aria-disabled={navigationPending}
       aria-label={ariaLabel}
-      className={`${className} ${navigationPending ? "cursor-wait opacity-60" : ""}`}
+      className={`app-raised-button ${className} ${navigationPending ? "cursor-wait opacity-60" : ""}`}
       href={href}
       onClick={(event) => {
         if (

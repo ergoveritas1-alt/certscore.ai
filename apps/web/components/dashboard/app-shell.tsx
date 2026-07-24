@@ -415,7 +415,7 @@ export function AppShell({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-slate-50">
             <main
               className={[
-                "min-w-0 flex-1 overflow-x-hidden px-4 pb-6 text-ink sm:px-6 sm:pb-8",
+                "certscore-app-content min-w-0 flex-1 overflow-x-hidden px-4 pb-6 text-ink sm:px-6 sm:pb-8",
                 scanReportPathActive ? "pt-0 sm:pt-0.5" : "pt-6 sm:pt-8"
               ].join(" ")}
             >

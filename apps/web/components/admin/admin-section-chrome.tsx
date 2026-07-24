@@ -37,7 +37,7 @@ export function AdminSectionChrome({ children }: AdminSectionChromeProps) {
           <Link
             key={item.href}
             href={item.href}
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+            className="app-raised-button rounded-full px-4 py-2 text-sm text-slate-700 hover:text-slate-950"
           >
             {item.label}
           </Link>

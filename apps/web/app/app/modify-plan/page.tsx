@@ -118,7 +118,7 @@ export default async function ModifyPlanPage({ searchParams }: ModifyPlanPagePro
             <form action={openStripeBillingPortalFormAction}>
               <input name="intent" type="hidden" value="manage_billing" />
               <button
-                className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 hover:bg-slate-50"
+                className="app-raised-button inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-slate-900"
                 type="submit"
               >
                 Manage billing
@@ -168,7 +168,7 @@ export default async function ModifyPlanPage({ searchParams }: ModifyPlanPagePro
                 <div className="pt-2">
                   {billingIntent === "checkout" && !selfServePurchasingEnabled ? (
                     <button
-                      className="inline-flex h-9 cursor-not-allowed items-center justify-center rounded-md bg-slate-200 px-3 text-sm font-medium text-slate-500"
+                      className="app-raised-button inline-flex h-9 cursor-not-allowed items-center justify-center rounded-md bg-slate-200 px-3 text-sm font-medium text-slate-500"
                       disabled
                       type="button"
                     >

@@ -80,8 +80,8 @@ export function OverviewScanHistoryCard({ scans }: OverviewScanHistoryCardProps)
             <p className="text-xs text-slate-500">Showing {start + 1}–{Math.min(start + visibleGroups.length, groups.length)} of {groups.length}</p>
             <div className="flex items-center gap-2">
               <select aria-label="Rows per page" className="h-8 rounded-full border border-slate-300 bg-white px-3 text-xs" onChange={(event) => { setPageSize(Number(event.target.value)); setCurrentPage(1); }} value={pageSize}>{PAGE_SIZE_OPTIONS.map((option) => <option key={option} value={option}>{option} per page</option>)}</select>
-              <button className="h-8 rounded-full border border-slate-300 bg-white px-3 text-xs disabled:opacity-40" disabled={page <= 1} onClick={() => setCurrentPage((value) => Math.max(1, value - 1))} type="button">Previous</button>
-              <button className="h-8 rounded-full border border-slate-300 bg-white px-3 text-xs disabled:opacity-40" disabled={page >= totalPages} onClick={() => setCurrentPage((value) => Math.min(totalPages, value + 1))} type="button">Next</button>
+              <button className="app-raised-button h-8 rounded-full px-3 text-xs disabled:opacity-40" disabled={page <= 1} onClick={() => setCurrentPage((value) => Math.max(1, value - 1))} type="button">Previous</button>
+              <button className="app-raised-button h-8 rounded-full px-3 text-xs disabled:opacity-40" disabled={page >= totalPages} onClick={() => setCurrentPage((value) => Math.min(totalPages, value + 1))} type="button">Next</button>
             </div>
           </div>
           <div className="overflow-x-auto rounded-xl border border-slate-200">

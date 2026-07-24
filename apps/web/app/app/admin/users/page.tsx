@@ -70,7 +70,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                         <button
                           type="button"
                           aria-label="User details"
-                          className="text-slate-400 transition hover:text-slate-700"
+                          className="app-raised-button inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-500 hover:text-slate-800"
                         >
                           <InfoIcon />
                         </button>
