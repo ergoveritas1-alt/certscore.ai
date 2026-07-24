@@ -319,7 +319,7 @@ export default async function MarketingHomePage() {
           <div className="overflow-hidden rounded-[2.25rem] bg-[linear-gradient(135deg,#081127_0%,#0b1a3f_45%,#132b63_100%)] px-6 py-10 shadow-[0_24px_60px_rgba(8,17,39,0.24)] sm:px-10 sm:py-12">
             <div className="max-w-4xl space-y-6">
               <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Get a clearer read on public-facing website signals.
+                Get a clearer read on website privacy diagnostics.
               </h2>
               <p className="max-w-3xl text-lg leading-8 text-slate-300">
                 Use CertScore.ai to observe pre-consent website behavior, detect tracking activity, review public policy surfaces, and monitor changes over time.
