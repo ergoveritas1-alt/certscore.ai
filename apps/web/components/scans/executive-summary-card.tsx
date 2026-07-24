@@ -2286,10 +2286,12 @@ function ExecutiveSignalSnapshotPane(input: {
             <CompactWarningBadgeIcon />
           )}
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-950">
-              {runtimeMetricsReliable ? consentSurfaceLabel : "Consent platform not testable"}
-            </p>
-            {consentSurfaceNote ? <p className="mt-1 text-xs leading-5 text-slate-500">{consentSurfaceNote}</p> : null}
+            <div className="flex items-center gap-1.5">
+              <p className="truncate text-sm font-semibold text-slate-950">
+                {runtimeMetricsReliable ? consentSurfaceLabel : "Consent platform not testable"}
+              </p>
+              {consentSurfaceNote ? <InfoTip align="start" placement="bottom" text={consentSurfaceNote} /> : null}
+            </div>
           </div>
         </div>
       </CompactSnapshotPanel>
