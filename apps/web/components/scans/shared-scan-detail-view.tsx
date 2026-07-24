@@ -753,11 +753,12 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
 
 function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   const copyRows = [
-    ["Type", "Vendor", "Purpose", "Priority", "First seen", "Cookie name(s)", "Domain", "Destination", "Confidence", "Party", "Category"],
+    ["Type", "Vendor", "Purpose", "Evidence", "Priority", "First seen", "Cookie name(s)", "Domain", "Destination", "Confidence", "Party", "Category"],
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
       getInventoryPurposeLabel(row),
+      getInventoryEvidenceLabel(row),
       CONSENT_REVIEW_PRIORITY_LABELS[row.priority],
       formatFirstSeenMs(row.firstSeenMs),
       row.cookieNames.join(", ") || "—",
@@ -854,6 +855,23 @@ function getRuntimeInventoryMacroCategory(row: InventoryGroupRow) {
     purpose: row.purpose,
     vendor: row.vendor
   });
+}
+
+function getInventoryEvidenceLabel(row: InventoryGroupRow) {
+  const category = getRuntimeInventoryMacroCategory(row).toLowerCase();
+  if (category === "essential" || category === "functional") return "Necessary";
+  if (category === "review") return "Review";
+  return "Non-essential";
+}
+
+function InventoryEvidenceCell({ row }: { row: InventoryGroupRow }) {
+  const evidence = getInventoryEvidenceLabel(row);
+  const tone = evidence === "Necessary"
+    ? "bg-blue-100 text-blue-700"
+    : evidence === "Review"
+      ? "bg-amber-100 text-amber-800"
+      : "bg-red-100 text-red-700";
+  return <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-4 ${tone}`}>{evidence}</span>;
 }
 
 function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) {
@@ -958,6 +976,7 @@ function RuntimeInventoryTable({
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-500">
                   <span>{row.type === "cookie" ? "Cookie" : "Tracker"}</span>
+                  <span className="text-right"><InventoryEvidenceCell row={row} /></span>
                   <span className="text-right">{formatInventoryTiming(row)}</span>
                   <span className="truncate">{row.domains.join(", ") || "Domain not retained"}</span>
                   <span className="text-right">{formatGroupedParty(row.party)}</span>
@@ -968,13 +987,14 @@ function RuntimeInventoryTable({
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 lg:block">
             <div className="max-h-[370px] overflow-auto">
             <InventorySortRuntime tableId="preconsent-inventory-table" />
-            <table id="preconsent-inventory-table" className="w-[1190px] min-w-[1190px] max-w-[1190px] table-fixed border-collapse text-left text-[13px]">
+            <table id="preconsent-inventory-table" className="w-[1280px] min-w-[1280px] max-w-[1280px] table-fixed border-collapse text-left text-[13px]">
               <caption className="sr-only">Pre-consent cookies and trackers inventory</caption>
               <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500 shadow-[0_2px_8px_-6px_rgba(15,23,42,0.55)]">
                 <tr>
                   <th title="Cookie or tracker evidence type" className="sticky left-0 top-0 z-30 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="type" label="Type" /></th>
                   <th title="Resolved vendor or first-party entity" className="sticky left-[90px] top-0 z-30 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="vendor" label="Vendor" /></th>
                   <th title="Observed purpose classification" className="sticky top-0 z-20 w-[130px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
+                  <th title="Consent evidence classification" className="sticky top-0 z-20 w-[105px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Evidence</th>
                   <th title="Review priority based on retained evidence" className="sticky top-0 z-20 w-[100px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="priority" label="Priority" /></th>
                   <th title="Elapsed time from scan start to observation" className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
                   <th className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Cookies</th>
@@ -1007,6 +1027,7 @@ function RuntimeInventoryTable({
                       <InventoryVendorCell label={row.vendor} />
                     </td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={getInventoryPurposeLabel(row)}>{getInventoryPurposeLabel(row)}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5 align-middle"><InventoryEvidenceCell row={row} /></td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
                       <InventoryPriorityCell
                         priority={row.priority}
@@ -1025,7 +1046,7 @@ function RuntimeInventoryTable({
                 ))}
                 {groupedInventoryRows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-5 text-center text-slate-500" colSpan={11}>No retained cookie or tracker rows for this scan.</td>
+                    <td className="px-3 py-5 text-center text-slate-500" colSpan={12}>No retained cookie or tracker rows for this scan.</td>
                   </tr>
                 ) : null}
               </tbody>

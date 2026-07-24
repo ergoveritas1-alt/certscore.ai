@@ -19,11 +19,11 @@ const serverOnlyPath = require.resolve("server-only");
   paths: []
 };
 
-test("pre-consent inventory keeps purpose separate, removes requests, and places category last", () => {
+test("pre-consent inventory keeps purpose and evidence separate, removes requests, and places category last", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
 
-  assert.match(source, /\["Type", "Vendor", "Purpose", "Priority", "First seen", "Cookie name\(s\)", "Domain", "Destination", "Confidence", "Party", "Category"\]/);
-  assert.match(source, />Purpose<\/[a-z]+>[\s\S]*>Party<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
+  assert.match(source, /\["Type", "Vendor", "Purpose", "Evidence", "Priority", "First seen", "Cookie name\(s\)", "Domain", "Destination", "Confidence", "Party", "Category"\]/);
+  assert.match(source, /label="Purpose"[\s\S]*>Evidence<\/[a-z]+>[\s\S]*>Party<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
   assert.doesNotMatch(source, />Req\.<\/[a-z]+>/);
   assert.doesNotMatch(source, /"Requests"/);
 });
