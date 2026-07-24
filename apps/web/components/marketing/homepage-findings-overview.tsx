@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FindingReferenceItem } from "../../lib/marketing/finding-atlas";
 
 type HomepageFindingsOverviewProps = {
@@ -472,6 +472,7 @@ function getFindingHref(finding: HomepageChecklistFinding, referenceFindingIds: 
 export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewProps) {
   const carouselFindings = HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDINGS;
   const [activeIndex, setActiveIndex] = useState(0);
+  const [showRawEvidence, setShowRawEvidence] = useState(false);
   const activeFinding = useMemo(
     () => carouselFindings[activeIndex] ?? carouselFindings[0],
     [activeIndex, carouselFindings]
@@ -483,12 +484,30 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
   }
 
   function showPrevious() {
+    setShowRawEvidence(false);
     setActiveIndex((current) => (current === 0 ? carouselFindings.length - 1 : current - 1));
   }
 
   function showNext() {
+    setShowRawEvidence(false);
     setActiveIndex((current) => (current === carouselFindings.length - 1 ? 0 : current + 1));
   }
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "ArrowLeft") {
+        setShowRawEvidence(false);
+        setActiveIndex((current) => (current === 0 ? carouselFindings.length - 1 : current - 1));
+      }
+      if (event.key === "ArrowRight") {
+        setShowRawEvidence(false);
+        setActiveIndex((current) => (current === carouselFindings.length - 1 ? 0 : current + 1));
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
     <section className="border-y border-slate-200 bg-white">
@@ -501,10 +520,13 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
             </div>
 
             <div className="flex min-h-[18rem] flex-1 flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.25)]">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Finding navigator</p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Finding navigator</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{activeIndex + 1} of {carouselFindings.length}</p>
+              </div>
               <div className="mt-4 space-y-3">
                 <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">{activeFinding.category}</span>
-                <p className="max-w-[19rem] text-sm leading-6 text-slate-600">Browse retained signals one at a time, then use the detail panel to review the evidence and context.</p>
+                <p className="max-w-[19rem] text-sm leading-5 text-slate-600">Browse retained signals one at a time. The detail panel shows the evidence and review context.</p>
               </div>
 
               <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
@@ -549,7 +571,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                   </span>
                 </div>
                 <div>
-                  <h3 className="text-2xl font-semibold tracking-tight text-slate-950">{activeFinding.title}</h3>
+                  <h3 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">{activeFinding.title}</h3>
                   <p className="mt-2 text-sm leading-5 text-slate-600">{activeFinding.overview}</p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
@@ -557,9 +579,6 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                   <p className="mt-2 text-sm font-semibold text-slate-950">{activeFinding.regulatoryLabel}</p>
                   <p className="mt-1 text-xs leading-4 text-slate-500">{activeFinding.regulatoryCopy}</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                      GDPR / ePrivacy
-                    </span>
                     <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
                       Evidence review
                     </span>
@@ -571,11 +590,26 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Example evidence</p>
                 <div className="mt-2 rounded-2xl border border-slate-800 bg-slate-950 p-3">
                   <p className="text-xs font-semibold text-slate-100">{activeFinding.evidence.title}</p>
-                  <div className="mt-2 space-y-1 font-mono text-[11px] leading-5 text-slate-300">
-                    {activeFinding.evidence.lines.map((line) => (
-                      <p key={line} className="break-all">{line}</p>
-                    ))}
-                  </div>
+                  {showRawEvidence ? (
+                    <div className="mt-2 space-y-1 font-mono text-[11px] leading-5 text-slate-300">
+                      {activeFinding.evidence.lines.map((line) => <p key={line} className="break-all">{line}</p>)}
+                    </div>
+                  ) : (
+                    <div className="mt-2 space-y-1 text-xs leading-5 text-slate-300">
+                      {activeFinding.evidence.lines.map((line) => {
+                        try {
+                          const parsed = JSON.parse(line) as Record<string, unknown>;
+                          const entries = Object.entries(parsed);
+                          return <p key={line}><span className="text-slate-500">{entries[0]?.[0]}:</span> {String(entries[0]?.[1] ?? "—")}</p>;
+                        } catch {
+                          return <p key={line}>{line}</p>;
+                        }
+                      })}
+                    </div>
+                  )}
+                  <button className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300" onClick={() => setShowRawEvidence((current) => !current)} type="button">
+                    {showRawEvidence ? "Readable view" : "View raw"}
+                  </button>
                 </div>
                 <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Reviewer prompts</p>
                 <ul className="mt-1.5 space-y-2 text-sm leading-5 text-slate-600">
@@ -587,7 +621,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                 <div className="mt-auto pt-4">
                   <Link
                     href={getFindingHref(activeFinding, referenceFindingIds)}
-                    className="inline-flex h-10 items-center justify-center rounded-md border border-slate-950 bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                    className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-900 bg-[linear-gradient(180deg,#334155_0%,#0f172a_100%)] px-4 text-sm font-semibold text-white shadow-[0_3px_0_#020617,0_12px_22px_-15px_rgba(2,6,23,0.9)] transition hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
                   >
                     View full finding
                   </Link>
