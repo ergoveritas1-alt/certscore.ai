@@ -493,7 +493,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
   return (
     <section className="border-y border-slate-200 bg-white">
       <div className="mx-auto max-w-6xl px-6 py-12">
-        <div className="grid gap-6 lg:grid-cols-[0.64fr_1.36fr] lg:items-stretch">
+        <div className="grid gap-6 lg:h-[38rem] lg:grid-cols-[0.64fr_1.36fr] lg:items-stretch">
           <div className="flex max-w-sm flex-col gap-4">
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Findings overview</p>
@@ -532,12 +532,12 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,252,255,1)_0%,rgba(255,255,255,0.98)_64%,rgba(249,253,250,0.98)_100%)] p-5 shadow-[0_24px_56px_rgba(15,23,42,0.08)]">
+          <div className="relative h-full overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,252,255,1)_0%,rgba(255,255,255,0.98)_64%,rgba(249,253,250,0.98)_100%)] p-5 shadow-[0_24px_56px_rgba(15,23,42,0.08)]">
             <div
               aria-hidden="true"
               className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,rgba(15,139,215,0.9)_0%,rgba(103,199,240,0.78)_58%,rgba(71,181,74,0.7)_100%)]"
             />
-            <div className="relative grid min-h-[18rem] gap-5 lg:grid-cols-[1fr_0.78fr]">
+            <div className="relative grid h-full min-h-0 gap-5 lg:grid-cols-[1fr_0.78fr]">
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
