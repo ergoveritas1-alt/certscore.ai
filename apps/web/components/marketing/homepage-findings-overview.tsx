@@ -497,6 +497,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
           <div className="max-w-sm space-y-4">
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Findings overview</p>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Review the evidence.</h2>
             </div>
 
             <div className="flex h-[22rem] flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-none">
