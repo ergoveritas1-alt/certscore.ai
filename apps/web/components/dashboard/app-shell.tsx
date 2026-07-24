@@ -5,6 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode, type SVGProps } from "react";
 import { FOOTER_COPYRIGHT_COPY, FOOTER_DISCLAIMER_COPY } from "../layout/footer-copy";
+import {
+  isScanReportPath,
+  LAST_SCAN_REPORT_PATH_STORAGE_KEY,
+  resolveScanViewHref
+} from "./scan-view-navigation";
 
 type NavIconProps = SVGProps<SVGSVGElement>;
 
@@ -143,7 +148,13 @@ export function AppShell({
   isPlatformAdmin = false
 }: AppShellProps) {
   const pathname = usePathname() ?? "";
-  const isScanReportPath = /^\/app\/scans\/[^/]+\/?$/.test(pathname);
+  const scanReportPathActive = isScanReportPath(pathname);
+  const [lastScanReportPath, setLastScanReportPath] = useState<string | null>(
+    scanReportPathActive ? pathname : null
+  );
+  const scanViewHref = resolveScanViewHref(
+    scanReportPathActive ? pathname : lastScanReportPath
+  );
   const userInitial = userEmail.slice(0, 1).toUpperCase();
   const displayOrganizationName = organizationName.replace(/\s+workspace$/i, "");
   const displayPlan =
@@ -152,9 +163,30 @@ export function AppShell({
   const [navExpanded, setNavExpanded] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const scopedNavItems = [
-    ...navItems,
+    ...navItems.map((item) =>
+      item.href === "/app/signals"
+        ? { ...item, href: scanViewHref }
+        : item
+    ),
     ...(isPlatformAdmin ? [{ href: "/app/admin", label: "Admin", icon: ShieldIcon }] : [])
   ];
+
+  useEffect(() => {
+    if (scanReportPathActive) {
+      setLastScanReportPath(pathname);
+      window.localStorage.setItem(LAST_SCAN_REPORT_PATH_STORAGE_KEY, pathname);
+      return;
+    }
+
+    if (lastScanReportPath) {
+      return;
+    }
+
+    const storedScanReportPath = window.localStorage.getItem(LAST_SCAN_REPORT_PATH_STORAGE_KEY);
+    if (isScanReportPath(storedScanReportPath ?? "")) {
+      setLastScanReportPath(storedScanReportPath);
+    }
+  }, [lastScanReportPath, pathname, scanReportPathActive]);
 
   useEffect(() => {
     setAccountMenuOpen(false);
@@ -384,7 +416,7 @@ export function AppShell({
             <main
               className={[
                 "min-w-0 flex-1 overflow-x-hidden px-4 pb-6 text-ink sm:px-6 sm:pb-8",
-                isScanReportPath ? "pt-0 sm:pt-0.5" : "pt-6 sm:pt-8"
+                scanReportPathActive ? "pt-0 sm:pt-0.5" : "pt-6 sm:pt-8"
               ].join(" ")}
             >
               {children}

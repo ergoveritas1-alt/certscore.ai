@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
@@ -100,12 +101,14 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   });
 
   if (typeof displayScanRecord.snapshot?.report_finding_count !== "number" || displayScanRecord.scan.scanType === "browser_extension") {
-    const reportFindingCount = await withServerTiming("app.scan_detail.backfill_finding_count", async () =>
-      buildScanReportUnifiedFindings(displayScanRecord).length
-    );
-    await persistReportFindingCount({
-      count: reportFindingCount,
-      scanId: displayScanRecord.scan.id
+    after(async () => {
+      const reportFindingCount = await withServerTiming("app.scan_detail.backfill_finding_count", async () =>
+        buildScanReportUnifiedFindings(displayScanRecord).length
+      );
+      await persistReportFindingCount({
+        count: reportFindingCount,
+        scanId: displayScanRecord.scan.id
+      });
     });
   }
   const pendingPostCompletionWork = hasPendingPostCompletionFindingWork({
