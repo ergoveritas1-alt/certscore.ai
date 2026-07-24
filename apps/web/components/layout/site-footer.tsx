@@ -75,13 +75,9 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8 text-sm text-slate-500">
-        <div className="space-y-2">
-          <p className="font-medium text-slate-700">CertScore.ai</p>
-          <p className="text-sm leading-6 text-slate-500">Evidence-led scanning for public website signals.</p>
-          <p className="max-w-none text-xs leading-5 text-slate-500 lg:whitespace-nowrap">
-            {FOOTER_DISCLAIMER_COPY}
-          </p>
-        </div>
+        <p className="max-w-none text-xs leading-5 text-slate-500 lg:whitespace-nowrap">
+          {FOOTER_DISCLAIMER_COPY}
+        </p>
         <div className="grid gap-7 border-t border-slate-100 pt-6 sm:grid-cols-2 lg:grid-cols-4">
           {sections.map((section) => (
             <nav key={section.title} aria-label={section.title} className="space-y-3">
