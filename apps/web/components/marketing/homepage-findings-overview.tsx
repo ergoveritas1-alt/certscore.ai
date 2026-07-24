@@ -507,11 +507,12 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
               <p className="mt-2 line-clamp-3 text-[1.35rem] font-semibold tracking-tight text-slate-950">{activeFinding.title}</p>
               <p className="mt-2 line-clamp-5 text-[13px] leading-5 text-slate-600">{activeFinding.overview}</p>
 
-              <div className="mt-auto flex items-center gap-3 pt-4">
+              <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <div className="flex items-center gap-2">
                 <button
                   type="button"
                   aria-label="Show previous finding"
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-900 shadow-sm shadow-slate-200/70 transition hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-950 hover:text-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-sky-200 bg-[linear-gradient(180deg,#ffffff_0%,#f0f9ff_100%)] text-slate-900 shadow-[0_2px_0_rgba(186,230,253,0.9),0_8px_16px_-12px_rgba(14,116,144,0.6)] transition hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-[0_3px_0_rgba(125,211,252,0.95),0_12px_20px_-12px_rgba(14,116,144,0.75)] active:translate-y-0.5 active:shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
                   onClick={showPrevious}
                 >
                   <ArrowIcon direction="left" />
@@ -519,11 +520,12 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                 <button
                   type="button"
                   aria-label="Show next finding"
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-900 shadow-sm shadow-slate-200/70 transition hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-950 hover:text-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-sky-200 bg-[linear-gradient(180deg,#ffffff_0%,#f0f9ff_100%)] text-slate-900 shadow-[0_2px_0_rgba(186,230,253,0.9),0_8px_16px_-12px_rgba(14,116,144,0.6)] transition hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-[0_3px_0_rgba(125,211,252,0.95),0_12px_20px_-12px_rgba(14,116,144,0.75)] active:translate-y-0.5 active:shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
                   onClick={showNext}
                 >
                   <ArrowIcon direction="right" />
                 </button>
+                </div>
                 <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
                   {String(activeIndex + 1).padStart(2, "0")} / {String(carouselFindings.length).padStart(2, "0")}
                 </p>
