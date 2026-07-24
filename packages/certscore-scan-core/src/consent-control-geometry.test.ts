@@ -46,6 +46,50 @@ test("captures IKEA-style OneTrust first-layer accept, reject, and options contr
   );
 });
 
+test("uses the rendered label when aria-label is a localization token", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-modal="true" aria-label="Cookie settings" style="position: fixed; left: 80px; top: 80px; width: 560px; padding: 24px; background: white;">
+      <p>We use cookies and similar technologies.</p>
+      <button id="reject" aria-label="BUTTONS.REJECT">Decline optional cookies</button>
+    </section>
+  `);
+
+  const reject = findCandidate(artifact, "Decline optional cookies");
+  assert.equal(reject?.ariaLabel, "BUTTONS.REJECT");
+  assert.equal(reject?.actionType, "reject_all");
+  assert.equal(reject?.decisionStatus, "confirmed_visible");
+});
+
+test("resolves aria-labelledby names when a control has no rendered text", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-modal="true" aria-label="Cookie settings" style="position: fixed; left: 80px; top: 80px; width: 560px; padding: 24px; background: white;">
+      <p>We use cookies and similar technologies.</p>
+      <span id="reject-label">Reject optional cookies</span>
+      <button id="reject" aria-labelledby="reject-label"></button>
+    </section>
+  `);
+
+  const reject = findCandidate(artifact, "Reject optional cookies");
+  assert.equal(reject?.actionType, "reject_all");
+  assert.equal(reject?.decisionStatus, "confirmed_visible");
+});
+
+test("omits composite consent wrappers while retaining their actionable descendants", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-modal="true" aria-label="Cookie settings" style="position: fixed; left: 80px; top: 80px; width: 560px; padding: 24px; background: white;">
+      <p>We use cookies and similar technologies.</p>
+      <div class="button-row">
+        <button type="button">Accept all cookies</button>
+        <button type="button">Decline optional cookies</button>
+      </div>
+    </section>
+  `);
+
+  assert.equal(artifact.candidates.some((candidate) => candidate.label === "Accept all cookies Decline optional cookies"), false);
+  assert.equal(findCandidate(artifact, "Accept all cookies")?.actionType, "accept_all");
+  assert.equal(findCandidate(artifact, "Decline optional cookies")?.actionType, "reject_all");
+});
+
 test("captures Air France-style DOM-present options as clipped rather than first-layer visible", async () => {
   const artifact = await captureFixture(`
     <style>
@@ -106,7 +150,7 @@ test("captures OneTrust optional-cookie noun-phrase controls as first-layer acce
         <p>We use cookies to provide necessary site functions and optional cookies for analytics and personalization.</p>
         <div id="onetrust-button-group">
           <button id="onetrust-pc-btn-handler">Manage Cookies</button>
-          <button id="onetrust-reject-all-handler">Reject Optional Cookies</button>
+          <button id="onetrust-reject-all-handler">Decline optional cookies</button>
           <button id="onetrust-accept-btn-handler">Accept Optional Cookies</button>
         </div>
       </section>
@@ -123,6 +167,11 @@ test("captures OneTrust optional-cookie noun-phrase controls as first-layer acce
   assert.equal(accept?.actionType, "accept_all");
   assert.equal(accept?.matchedTerm, "accept optional cookies");
   assert.equal(accept?.decisionStatus, "confirmed_visible");
+
+  const reject = findCandidate(artifact, "Decline optional cookies");
+  assert.equal(reject?.actionType, "reject_all");
+  assert.equal(reject?.matchedTerm, "decline optional cookies");
+  assert.equal(reject?.decisionStatus, "confirmed_visible");
 });
 
 test("retains Polish consent controls as production geometry evidence", async () => {

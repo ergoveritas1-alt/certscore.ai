@@ -1009,6 +1009,14 @@ function collectConsentGeometryInPage(input: {
     if (isStaticTextOnlyControlCandidate(element)) {
       return null;
     }
+    // Some CMPs add a class such as `button-row` to a wrapper that contains
+    // the real actionable controls. Retaining that wrapper creates a composite
+    // label (for example, "Manage settingsReject Accept") and can consume the
+    // candidate budget before its child buttons are considered. Keep the
+    // actual interactive descendants and omit only non-interactive wrappers.
+    if (!isSemanticallyInteractive(element) && hasInteractiveDescendant(element)) {
+      return null;
+    }
     const label = labelFor(element);
     const containerIndex = nearestContainerIndex(element, containerItems);
     const contextRoot = typeof containerIndex === "number" ? containerItems[containerIndex]?.element : nearestContextRoot(element, contextPattern);
@@ -1088,6 +1096,29 @@ function collectConsentGeometryInPage(input: {
       /\b(?:btn|button|choice|option|preference|purpose)\b/i.test(className) ||
       /(?:btn|button|choice|option|preference|purpose)/i.test(id)
     );
+  }
+
+  function isSemanticallyInteractive(element: Element): boolean {
+    const tagName = element.tagName.toLowerCase();
+    if (/^(?:a|button|input|select|textarea|summary)$/.test(tagName)) {
+      return true;
+    }
+    const role = (element.getAttribute("role") || "").toLowerCase();
+    if (/^(?:button|link|checkbox|radio|switch|tab|menuitem|option)$/i.test(role)) {
+      return true;
+    }
+    if (element.hasAttribute("onclick")) {
+      return true;
+    }
+    const tabindex = element.getAttribute("tabindex");
+    return tabindex !== null && Number.isFinite(Number(tabindex)) && Number(tabindex) >= 0;
+  }
+
+  function hasInteractiveDescendant(element: Element): boolean {
+    return deepQuerySelectorAll(
+      "button,a,input,select,textarea,summary,[role='button'],[role='link'],[role='checkbox'],[role='radio'],[role='switch'],[role='tab'],[role='menuitem'],[role='option'],[onclick],[tabindex]",
+      element,
+    ).some((descendant) => descendant !== element && isSemanticallyInteractive(descendant));
   }
 
   function nearestContextRoot(element: Element, pattern: RegExp): Element | undefined {
@@ -1211,10 +1242,41 @@ function collectConsentGeometryInPage(input: {
 
   function labelFor(element: Element): string {
     const aria = element.getAttribute("aria-label");
+    const labelRoot = element.getRootNode();
+    const labelledBy = (element.getAttribute("aria-labelledby") || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((id) => {
+        if (labelRoot instanceof Document) {
+          return labelRoot.getElementById(id);
+        }
+        if (labelRoot instanceof ShadowRoot) {
+          return labelRoot.querySelector(`#${cssEscape(id)}`);
+        }
+        return document.getElementById(id);
+      })
+      .filter((labelElement): labelElement is HTMLElement => Boolean(labelElement))
+      .map((labelElement) => compactText(labelElement.innerText || labelElement.textContent || ""))
+      .filter(Boolean)
+      .join(" ");
     const title = element.getAttribute("title");
     const value = element instanceof HTMLInputElement ? element.value : "";
-    const text = deepText(element);
-    return compactText(aria || title || value || text);
+    const visibleText = element instanceof HTMLElement ? compactText(element.innerText || "") : "";
+    const text = visibleText || deepText(element);
+    // Tokenized aria labels are implementation keys, not user-facing control
+    // names (for example `BUTTONS.REJECT`). Prefer the rendered label while
+    // retaining the token separately in ariaLabel for diagnostics.
+    for (const candidate of [aria, labelledBy, title, value, text]) {
+      const normalized = compactText(candidate || "");
+      if (normalized && !isLocalizationToken(normalized)) {
+        return normalized;
+      }
+    }
+    return compactText(aria || labelledBy || title || value || text);
+  }
+
+  function isLocalizationToken(value: string): boolean {
+    return /^[A-Za-z][A-Za-z0-9]*(?:[._:-][A-Za-z0-9_-]+)+$/.test(value) && !/\s/.test(value);
   }
 
   function selectorHintFor(element: Element): string {
