@@ -68,6 +68,9 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_VPC_MODE/);
   assert.match(setupScript, /SCANNER_IMAGE_DIGEST/);
+  assert.match(setupScript, /Name=vpc-id,Values="\$existing_vpc_id" Name=private-ip-address,Values="\$proxy_private_ip"/);
+  assert.match(setupScript, /aws-ec2-proxy:\$\{region\}:\$\{proxy_allocation_id\}/);
+  assert.match(setupScript, /uses proxy \$\{proxy_private_ip\}, but its EC2 network interface has no associated Elastic IP/);
   assert.match(setupScript, /Name=tag:Purpose,Values=lambda-nat-egress/);
   assert.doesNotMatch(setupScript, /PLAYWRIGHT_BROWSERS_PATH/);
 });

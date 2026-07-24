@@ -140,6 +140,16 @@ if ! [[ "$image_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
   exit 1
 fi
 
+if aws lambda get-function-configuration --region "$region" --function-name "$function_name" >/dev/null 2>&1; then
+  aws lambda get-function-configuration \
+    --region "$region" \
+    --function-name "$function_name" \
+    --query 'Environment.Variables' \
+    --output json >"$existing_environment_json"
+else
+  printf '{}\n' >"$existing_environment_json"
+fi
+
 vpc_mode="none"
 egress_id="aws-default:${region}"
 egress_provider="aws-default"
@@ -152,23 +162,53 @@ if aws lambda get-function-configuration --region "$region" --function-name "$fu
     --output text)"
   if [[ -n "$existing_vpc_id" && "$existing_vpc_id" != "None" ]]; then
     vpc_mode="vpc"
-    nat_allocation_id="$(aws ec2 describe-addresses \
-      --region "$region" \
-      --filters Name=tag:Purpose,Values=lambda-nat-egress \
-      --query 'Addresses[0].AllocationId' \
-      --output text)"
-    nat_public_ip="$(aws ec2 describe-addresses \
-      --region "$region" \
-      --filters Name=tag:Purpose,Values=lambda-nat-egress \
-      --query 'Addresses[0].PublicIp' \
-      --output text)"
-    if [[ -z "$nat_allocation_id" || "$nat_allocation_id" == "None" || -z "$nat_public_ip" || "$nat_public_ip" == "None" ]]; then
-      echo "VPC-attached Lambda ${function_name} is missing its tagged lambda-nat-egress address." >&2
-      exit 1
+    proxy_private_ip="$(node -e '
+      const { readFileSync } = require("node:fs");
+      const variables = JSON.parse(readFileSync(process.argv[1], "utf8"));
+      const value = variables.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER || variables.SCAN_PROXY_SERVER || variables.CERTSCORE_CHROMIUM_PROXY_SERVER;
+      if (!value) process.exit(0);
+      try {
+        const hostname = new URL(value).hostname;
+        if (/^(?:10|127|169\.254|172\.(?:1[6-9]|2\d|3[01])|192\.168)\./.test(hostname)) process.stdout.write(hostname);
+      } catch {}
+    ' "$existing_environment_json")"
+    if [[ -n "$proxy_private_ip" ]]; then
+      proxy_allocation_id="$(aws ec2 describe-network-interfaces \
+        --region "$region" \
+        --filters Name=vpc-id,Values="$existing_vpc_id" Name=private-ip-address,Values="$proxy_private_ip" \
+        --query 'NetworkInterfaces[0].Association.AllocationId' \
+        --output text)"
+      proxy_public_ip="$(aws ec2 describe-network-interfaces \
+        --region "$region" \
+        --filters Name=vpc-id,Values="$existing_vpc_id" Name=private-ip-address,Values="$proxy_private_ip" \
+        --query 'NetworkInterfaces[0].Association.PublicIp' \
+        --output text)"
+      if [[ -z "$proxy_allocation_id" || "$proxy_allocation_id" == "None" || -z "$proxy_public_ip" || "$proxy_public_ip" == "None" ]]; then
+        echo "VPC-attached Lambda ${function_name} uses proxy ${proxy_private_ip}, but its EC2 network interface has no associated Elastic IP." >&2
+        exit 1
+      fi
+      egress_id="aws-ec2-proxy:${region}:${proxy_allocation_id}"
+      egress_provider="aws-ec2-proxy"
+      egress_public_ip_hash="sha256:$(printf %s "$proxy_public_ip" | shasum -a 256 | awk '{print $1}')"
+    else
+      nat_allocation_id="$(aws ec2 describe-addresses \
+        --region "$region" \
+        --filters Name=tag:Purpose,Values=lambda-nat-egress \
+        --query 'Addresses[0].AllocationId' \
+        --output text)"
+      nat_public_ip="$(aws ec2 describe-addresses \
+        --region "$region" \
+        --filters Name=tag:Purpose,Values=lambda-nat-egress \
+        --query 'Addresses[0].PublicIp' \
+        --output text)"
+      if [[ -z "$nat_allocation_id" || "$nat_allocation_id" == "None" || -z "$nat_public_ip" || "$nat_public_ip" == "None" ]]; then
+        echo "VPC-attached Lambda ${function_name} is missing its tagged lambda-nat-egress address." >&2
+        exit 1
+      fi
+      egress_id="aws-nat:${region}:${nat_allocation_id}"
+      egress_provider="aws-nat-gateway"
+      egress_public_ip_hash="sha256:$(printf %s "$nat_public_ip" | shasum -a 256 | awk '{print $1}')"
     fi
-    egress_id="aws-nat:${region}:${nat_allocation_id}"
-    egress_provider="aws-nat-gateway"
-    egress_public_ip_hash="sha256:$(printf %s "$nat_public_ip" | shasum -a 256 | awk '{print $1}')"
   fi
 fi
 
@@ -230,16 +270,6 @@ cat >"$permission_policy" <<JSON
   ]
 }
 JSON
-
-if aws lambda get-function-configuration --region "$region" --function-name "$function_name" >/dev/null 2>&1; then
-  aws lambda get-function-configuration \
-    --region "$region" \
-    --function-name "$function_name" \
-    --query 'Environment.Variables' \
-    --output json >"$existing_environment_json"
-else
-  printf '{}\n' >"$existing_environment_json"
-fi
 
 EXISTING_ENVIRONMENT_JSON="$existing_environment_json" \
 CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET="$artifact_bucket" \
