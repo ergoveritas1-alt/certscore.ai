@@ -2293,7 +2293,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps concrete pre-consent tracke
   assert.deepEqual(outcomes.pre_consent_third_party_tracking?.criticalEvidence.missingOrIncompleteSourceSignals, []);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes retains elapsed ms for pre-consent cookie and tracking observations", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes uses the earliest eligible non-essential storage timestamp", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -2303,9 +2303,18 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes retains elapsed ms for pre-consen
         cookieWriteObservations: [
           {
             beforeConsent: true,
-            cookieName: "_ga",
-            domain: ".example.test",
-            setAtMs: -1,
+            category: "Security",
+            cookieName: "__cf_bm",
+            domain: ".codeable.io",
+            setAtMs: 1_000_422,
+            timingEvidence: "before_consent_cookie_write"
+          },
+          {
+            beforeConsent: true,
+            category: "Analytics",
+            cookieName: "ajs_anonymous_id",
+            domain: ".codeable.io",
+            setAtMs: 1_000_663,
             timingEvidence: "before_consent_cookie_write"
           }
         ],
@@ -2320,11 +2329,12 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes retains elapsed ms for pre-consen
           }
         ],
         storageSummary: {
-          cookiesBeforeConsentCount: 1,
-          cookiesSeenCount: 1
+          cookiesBeforeConsentCount: 2,
+          cookiesSeenCount: 2
         },
         timelineMarkers: {
-          firstCookieSeenMs: 1_000_006,
+          firstCookieSeenMs: 1_000_422,
+          firstNonEssentialStorageMs: 1_000_663,
           firstThirdPartyRequestMs: 1_000_478,
           navigationStartMs: 1_000_000
         }
@@ -2337,7 +2347,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes retains elapsed ms for pre-consen
 
   assert.equal(
     outcomes.pre_consent_cookies_storage?.criticalEvidence.retainedEvidence.firstPreconsentCookieOrStorageObservedMs,
-    6
+    663
   );
   assert.equal(
     outcomes.pre_consent_cookies_storage?.criticalEvidence.retainedEvidence.preconsentCookieOrStorageExactTimingRetained,
@@ -2345,7 +2355,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes retains elapsed ms for pre-consen
   );
   assert.match(
     outcomes.pre_consent_cookies_storage?.evidenceRefs.join(" ") ?? "",
-    /0.00600s after scan start/
+    /0.663s after scan start/
   );
   assert.equal(
     outcomes.pre_consent_third_party_tracking?.criticalEvidence.retainedEvidence.firstPreconsentThirdPartyTrackingObservedMs,
@@ -5554,6 +5564,39 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained first-layer declin
     "Reject click depth: 1",
     "Visible choice: decline"
   ]);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats a canonical necessary-only control as a refusal path", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentSurfaceInspection: {
+        coverageStatus: "complete",
+        inspectedPreInteraction: true,
+        inspectionCompleted: true
+      },
+      hybridRuntimeEvidence: {
+        firstLayerConsentChoices: {
+          controls: [{
+            actionType: "reject_all",
+            label: "Only required",
+            semanticRole: "necessary_only",
+            visible: true
+          }],
+          firstLayerCookieConsentBannerObserved: true,
+          gdprEprivacyConsentSurfaceObserved: "confirmed",
+          layerInspected: "first_layer",
+          visibleChoiceLabels: ["Only required"]
+        }
+      }
+    }
+  });
+
+  assert.equal(outcomes.reject_all_path_availability?.status, "Observed");
+  assert.match(
+    outcomes.reject_all_path_availability?.evidenceRefs.join(" ") ?? "",
+    /Only required/
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reduction artifact statuses", () => {

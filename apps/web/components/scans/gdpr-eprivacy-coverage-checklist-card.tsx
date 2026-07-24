@@ -1729,7 +1729,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
         : "A refusal path was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
     }
     if (evidenceLabel === "Potential gap") {
-      return "A first-layer reject-all or equivalent refusal path was expected from the observed consent surface but was not retained.";
+      return "The sufficiently retained first-layer consent surface did not show a reject, necessary-only, or equivalent refusal option. First-layer presentation expectations can vary by jurisdiction, so manual review is recommended.";
     }
   }
 
@@ -1744,7 +1744,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
         : "An accept consent control was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
     }
     if (evidenceLabel === "Potential gap") {
-      return "A first-layer accept consent control was expected from the observed consent surface but was not retained as structured control evidence.";
+      return "The retained first-layer consent surface did not confirm an explicit affirmative-choice control.";
     }
   }
 
@@ -1759,7 +1759,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
         : "An options/settings/preferences control was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
     }
     if (evidenceLabel === "Potential gap") {
-      return "A first-layer options/settings/preferences control was expected from the observed consent surface but was not retained as structured control evidence.";
+      return "The sufficiently retained first-layer consent surface did not show an options, settings, preferences, or manage-choices control.";
     }
   }
 

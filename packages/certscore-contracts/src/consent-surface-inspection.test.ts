@@ -19,6 +19,8 @@ function baseInput(): Parameters<typeof deriveConsentSurfaceInspectionOutcome>[0
       rejectControlObserved: false,
       managePreferencesControlObserved: false,
       controls: [],
+      impliedConsentLanguageObserved: false,
+      impliedConsentLanguageEvidence: [],
       evidenceRefs: [],
       confidence: 0.8
     }],
@@ -68,6 +70,39 @@ test("complete bounded inspection can retain that no consent surface was observe
   assert.equal(outcome.evidenceChannels.length, 7);
   assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "dom_snapshot")?.status, "not_observed");
   assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "navigation_network")?.status, "not_observed");
+});
+
+test("an ambiguous OK acknowledgment retains a non-actionable consent surface", () => {
+  const input = baseInput();
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    visibleChoiceLabels: ["OK"],
+    acceptControlObserved: false,
+    textExcerpt: "By using this site you agree to analytics cookies.",
+    controls: [{
+      label: "OK",
+      actionType: "accept_all",
+      semanticRole: "ambiguous_acknowledgment",
+      confidence: 0.52,
+      visible: true
+    }],
+    impliedConsentLanguageObserved: true,
+    impliedConsentLanguageEvidence: [{
+      classifierId: "implied_consent.by_using_agree",
+      matchedExcerpt: "By using this site you agree to analytics cookies.",
+      confidence: 0.9,
+      observedLayer: "first_layer",
+      observedAtMs: 900,
+      sourceArtifactRef: "fixture:consent-banner"
+    }]
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+  assert.equal(outcome.consentSurfaceObserved, true);
+  assert.equal(outcome.actionableControlObserved, false);
+  assert.equal(outcome.outcome, "non_actionable_surface_observed");
 });
 
 test("timeout evidence prevents absence from becoming a complete negative observation", () => {

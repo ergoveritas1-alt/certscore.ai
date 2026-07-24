@@ -305,10 +305,10 @@ export type CertScoreFinding = CertScoreFindingDefinition & {
 export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinition> = {
   pre_consent_tracking_detected: {
     id: "pre_consent_tracking_detected",
-    label: "Third-party tracking observed before recorded consent",
+    label: "Non-essential analytics initiated before a recorded affirmative choice",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 100,
-    whyItMatters: "Observed runtime behavior placed classified third-party tracking before a recorded consent choice, which is a high-priority implementation review signal.",
+    whyItMatters: "Analytics-classified or other promotion-grade non-essential activity was observed before any recorded affirmative consent action, which is a high-priority implementation review signal.",
     remediation: "Delay non-essential requests until consent state is established."
   },
   cmp_load_order_gap: {
@@ -417,10 +417,10 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   reject_option_missing_or_hidden: {
     id: "reject_option_missing_or_hidden",
-    label: "Reject/refusal option not observed or nested",
+    label: "Meaningful refusal option",
     section: "Consent Experience",
     defaultSurfacePriority: 90,
-    whyItMatters: "Users should be able to refuse non-essential processing as easily as they accept it.",
+    whyItMatters: "The retained first-layer consent surface did not show a reject, necessary-only, or equivalent refusal option. First-layer presentation expectations can vary by jurisdiction, so manual review is recommended.",
     remediation: "Expose a visible reject action on the first consent layer."
   },
   asymmetric_consent_ui: {

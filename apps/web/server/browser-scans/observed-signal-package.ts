@@ -1,5 +1,9 @@
 import type { summarizeBrowserEvidence } from "./evidence-summary";
-import { classifyGdprTransparencyTopics } from "@certscore/contracts";
+import {
+  classifyConsentControlLabel,
+  classifyConsentLanguage,
+  classifyGdprTransparencyTopics
+} from "@certscore/contracts";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
 import {
   BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
@@ -188,6 +192,22 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
     input.evidence.consentSummary && typeof input.evidence.consentSummary === "object"
       ? input.evidence.consentSummary
       : null;
+  const consentContextText = uniqueStrings(consentSummary?.matchedTextSnippets ?? [], 12).join(" ").slice(0, 1500);
+  const consentControlClassifications = uniqueStrings(consentSummary?.buttonsObserved ?? [], 20).map((label) => ({
+    classification: classifyConsentControlLabel({
+      label,
+      contextText: consentContextText,
+      hasConsentContext: consentSummary?.bannerObserved === true
+    }),
+    label
+  }));
+  const explicitAcceptObserved = consentControlClassifications.some(
+    ({ classification }) => classification.semanticRole === "explicit_accept"
+  );
+  const ambiguousAcknowledgmentObserved = consentControlClassifications.some(
+    ({ classification }) => classification.semanticRole === "ambiguous_acknowledgment"
+  );
+  const consentLanguage = classifyConsentLanguage({ text: consentContextText });
   const preconsentNetworkEvents = input.evidence.networkEvidence.filter((event) => event.consentInteractionObserved !== true);
   const resolvedPreconsentNetworkEvents = preconsentNetworkEvents.flatMap((event) => {
     const observations = resolveVendorObservations([{
@@ -325,10 +345,47 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
       : [],
     consentSummary?.observedAtMs ?? null
   );
-  addSignal("privacy.accept_all_present", "Accept-all control present", consentSummary?.acceptObserved === true, "boolean", 0.78);
+  addSignal("privacy.accept_all_present", "Explicit accept control present", explicitAcceptObserved, "boolean", 0.82);
+  addSignal("privacy.ambiguous_acknowledgment_present", "Ambiguous consent acknowledgment present", ambiguousAcknowledgmentObserved, "boolean", 0.82);
   addSignal("privacy.reject_all_present", "Reject-all control present", consentSummary?.rejectObserved === true, "boolean", 0.78);
   addSignal("privacy.granular_preferences_present", "Granular preferences present", consentSummary?.manageObserved === true, "boolean", 0.78);
   addSignal("privacy.first_layer_consent_labels", "First-layer consent control labels", Array.isArray(consentSummary?.buttonsObserved) ? consentSummary.buttonsObserved : [], "string_array", 0.78);
+  addSignal(
+    "privacy.first_layer_consent_control_roles",
+    "First-layer consent control semantic roles",
+    consentControlClassifications.map(({ classification, label }) => `${label}|${classification.semanticRole}`),
+    "string_array",
+    0.82
+  );
+  if (consentContextText) {
+    addSignal(
+      "privacy.first_layer_consent_context",
+      "Bounded first-layer consent context",
+      consentContextText.slice(0, 1500),
+      "text",
+      0.82,
+      [browserEvidenceRef("consent_ui", consentSummary?.observedAtMs ?? null, "banner")].filter((value): value is string => Boolean(value)),
+      consentSummary?.observedAtMs ?? null
+    );
+  }
+  addSignal(
+    "privacy.implied_consent_language_observed",
+    "Implied-consent language observed",
+    consentLanguage.impliedConsentLanguageObserved,
+    "boolean",
+    consentLanguage.impliedConsentLanguageObserved ? 0.9 : 0.72,
+    [],
+    consentSummary?.observedAtMs ?? null
+  );
+  addSignal(
+    "privacy.implied_consent_language_matches",
+    "Implied-consent language matches",
+    consentLanguage.matches.map((match) => `${match.classifierId}|${match.confidence}|${match.excerpt}`),
+    "string_array",
+    0.9,
+    [],
+    consentSummary?.observedAtMs ?? null
+  );
   addSignal("privacy.do_not_sell_link_present", "Do-not-sell/share control present", consentSummary?.doNotSellShareObserved === true, "boolean", 0.72);
   addSignal("privacy.preconsent_tracking_detected", "Pre-consent tracking detected", preconsentTrackerEvidenceUrls.length > 0, "boolean", 0.82, preconsentTrackerEvidenceRefs, input.evidence.timelineMarkers.firstThirdPartyRequestMs);
   addSignal("privacy.session_replay_runtime_vendors", "Session replay runtime vendors", trackerCategories.includes("session_replay") ? trackerVendors : [], "string_array", 0.76);

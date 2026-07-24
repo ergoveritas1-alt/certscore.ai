@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  classifyConsentLanguage,
   classifyConsentControlLabel,
   consentActionCandidateSchema,
   consentUiObservationSchema,
@@ -8,6 +9,41 @@ import {
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
+
+test("separates explicit consent controls from acknowledgments and refusal equivalents", () => {
+  assert.equal(
+    classifyConsentControlLabel({
+      label: "OK",
+      contextText: "By using this site you agree to analytics cookies."
+    }).semanticRole,
+    "ambiguous_acknowledgment"
+  );
+  assert.equal(classifyConsentControlLabel({ label: "Accept all" }).semanticRole, "explicit_accept");
+  assert.equal(
+    classifyConsentControlLabel({
+      label: "Only required",
+      contextText: "Choose which cookies this site may use."
+    }).semanticRole,
+    "necessary_only"
+  );
+  assert.equal(
+    classifyConsentControlLabel({
+      label: "Close",
+      contextText: "This site uses cookies."
+    }).semanticRole,
+    "dismiss"
+  );
+});
+
+test("classifies bounded implied-consent language canonically", () => {
+  const classification = classifyConsentLanguage({
+    text: "We use analytics. By using this site you agree to our use of cookies."
+  });
+  assert.equal(classification.impliedConsentLanguageObserved, true);
+  assert.equal(classification.matches[0]?.classifierId, "implied_consent.by_using_agree");
+  assert.match(classification.matches[0]?.excerpt ?? "", /By using this site/i);
+  assert.ok((classification.matches[0]?.excerpt.length ?? 0) <= 240);
+});
 
 test("classifies direct consent controls across English, German, and French", () => {
   assert.equal(classifyConsentControlLabel({ label: "Accept all" }).intent, "accept");

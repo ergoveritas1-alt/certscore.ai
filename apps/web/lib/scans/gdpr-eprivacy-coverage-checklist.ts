@@ -124,8 +124,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "reject_all_path_availability",
-    label: "Reject / decline control",
-    explanation: "Whether a first-layer reject, decline, refuse, or continue-without-accepting option was observed on the retained consent surface.",
+    label: "Meaningful refusal option",
+    explanation: "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
     findingIds: [
       "accept_only_banner",
       "dismiss_without_reject",
@@ -262,8 +262,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "embedded_content_pre_consent",
-    label: "Embedded 3rd party services before consent",
-    explanation: "Whether retained scanner evidence showed known embedded media, map, social, form/chat, or video-ad services before a recorded consent action.",
+    label: "Embedded third-party services before consent",
+    explanation: "Whether retained scanner evidence showed iframe, embed, widget, or visibly integrated third-party services before a recorded consent action. This row does not represent all background analytics or network requests.",
     findingIds: [],
     defaultFindingStatus: "Gap observed",
     notObservedText: "No known embedded 3rd party service was retained before a recorded consent action.",

@@ -4,6 +4,7 @@ import {
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./supported-languages";
 export * from "./consent-control-label-classifier";
+export * from "./consent-language-classifier";
 export * from "./gdpr-transparency-topic-classifier";
 export * from "./article13-disclosure-rejection";
 export * from "./privacy-surface-classifier";
@@ -22,6 +23,15 @@ export const supportedPrivacyEvidenceLocaleSchema = z.enum(SUPPORTED_PRIVACY_EVI
 export const supportedGdprTransparencyLocaleSchema = z.enum(SUPPORTED_GDPR_TRANSPARENCY_LOCALES);
 export const consentControlLocaleSchema = supportedPrivacyEvidenceLocaleSchema;
 export const consentControlMatchStrengthSchema = z.enum(["direct", "equivalent", "contextual", "weak"]);
+export const consentControlSemanticRoleSchema = z.enum([
+  "explicit_accept",
+  "ambiguous_acknowledgment",
+  "reject",
+  "necessary_only",
+  "preferences",
+  "dismiss",
+  "unknown",
+]);
 export const consentControlClassifierReasonCodesSchema = z.array(z.string().max(80)).max(16).optional();
 export const consentControlInventorySourceSchema = z.enum([
   "viewport",
@@ -473,12 +483,26 @@ export const consentUiObservationSchema = z.object({
     role: z.string().max(64).optional(),
     selectorHint: z.string().max(160).optional(),
     visible: z.boolean().default(true),
+    layer: z.enum(["first_layer", "unknown"]).optional(),
+    semanticRole: consentControlSemanticRoleSchema.optional(),
+    confidence: confidenceSchema.optional(),
+    nearbyConsentText: z.string().max(500).optional(),
+    artifactRef: z.string().max(240).optional(),
     matchedTerm: z.string().max(120).optional(),
     matchedLocale: consentControlLocaleSchema.optional(),
     matchStrength: consentControlMatchStrengthSchema.optional(),
     classifierReasonCodes: consentControlClassifierReasonCodesSchema,
     classifierVariant: z.string().max(80).optional(),
   })).default([]),
+  impliedConsentLanguageObserved: z.boolean().default(false).optional(),
+  impliedConsentLanguageEvidence: z.array(z.object({
+    classifierId: z.string().max(120),
+    matchedExcerpt: z.string().max(240),
+    confidence: confidenceSchema,
+    observedLayer: z.enum(["first_layer", "unknown"]),
+    observedAtMs: z.number().int().nonnegative().nullable().optional(),
+    sourceArtifactRef: z.string().max(240),
+  })).max(12).default([]).optional(),
   inventoryDiagnostics: z.object({
     candidateContainerCount: z.number().int().nonnegative(),
     candidateControlCount: z.number().int().nonnegative(),
@@ -686,6 +710,7 @@ export const consentActionCandidateSchema = z.object({
   visible: z.boolean().default(true),
   enabled: z.boolean().default(true),
   confidence: confidenceSchema,
+  semanticRole: consentControlSemanticRoleSchema.optional(),
   matchedTerm: z.string().max(120).optional(),
   matchedLocale: consentControlLocaleSchema.optional(),
   matchStrength: consentControlMatchStrengthSchema.optional(),
@@ -1878,12 +1903,21 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
   const actionableControlObserved = observations.some((observation) =>
     observation.layerInspected === "first_layer" &&
     (
-      observation.acceptControlObserved ||
+      (observation.acceptControlObserved && observation.controls.length === 0) ||
       observation.rejectControlObserved ||
       observation.managePreferencesControlObserved ||
       observation.controls.some((control) =>
         control.visible !== false &&
-        ["accept_all", "reject_all", "manage_preferences", "save_preferences"].includes(control.actionType)
+        (
+          control.semanticRole === "explicit_accept" ||
+          control.semanticRole === "reject" ||
+          control.semanticRole === "necessary_only" ||
+          control.semanticRole === "preferences" ||
+          (
+            !control.semanticRole &&
+            ["accept_all", "reject_all", "manage_preferences", "save_preferences"].includes(control.actionType)
+          )
+        )
       )
     )
   );

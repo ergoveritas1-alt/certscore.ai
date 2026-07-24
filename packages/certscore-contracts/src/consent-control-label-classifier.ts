@@ -19,6 +19,15 @@ export type ConsentControlMatchStrength =
   | "contextual"
   | "weak";
 
+export type ConsentControlSemanticRole =
+  | "explicit_accept"
+  | "ambiguous_acknowledgment"
+  | "reject"
+  | "necessary_only"
+  | "preferences"
+  | "dismiss"
+  | "unknown";
+
 export type ConsentControlClassifierProfile =
   | "production_default"
   | "multilingual_v1";
@@ -48,6 +57,7 @@ export type ConsentControlLabelClassifierInput = {
 
 export type ConsentControlLabelClassification = {
   intent: ConsentControlIntent;
+  semanticRole: ConsentControlSemanticRole;
   confidence: number;
   matchedTerm?: string;
   matchedLocale?: ConsentControlLocale;
@@ -150,6 +160,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "essential cookies only", "necessary_only"),
     equivalent("reject", "essential only", "necessary_only"),
     contextual("reject", "required only", { requiresConsentContext: true, variant: "necessary_only" }),
+    contextual("reject", "only required", { requiresConsentContext: true, variant: "necessary_only" }),
     equivalent("reject", "only necessary", "necessary_only"),
     equivalent("reject", "only essential", "necessary_only"),
     equivalent("reject", "only technically required", "necessary_only"),
@@ -688,9 +699,21 @@ export function classifyConsentControlLabel(
   if (NON_ACTIONABLE_REFERENCE_PATTERN.test(normalizedLabel)) {
     return unknown(["non_actionable_reference_label"]);
   }
+  if (/^(?:close|dismiss|×|x)$/i.test(normalizedLabel)) {
+    return {
+      intent: "unknown",
+      semanticRole: "dismiss",
+      confidence: 0.84,
+      matchedTerm: normalizedLabel,
+      matchStrength: "direct",
+      reasonCodes: ["matched_dismiss", "match_strength_direct"],
+      contextSatisfied: hasConsentContext,
+    };
+  }
   if (isUtiqScopedRejectLabel(normalizedLabel)) {
     return {
       intent: "privacy_opt_out",
+      semanticRole: "unknown",
       confidence: 0.86,
       matchedTerm: "utiq reject",
       matchedLocale: "de",
@@ -731,6 +754,7 @@ export function classifyConsentControlLabel(
   const confidence = confidenceFor(match.term, contextSatisfied);
   return {
     intent: match.term.intent,
+    semanticRole: semanticRoleForTerm(match.term),
     confidence,
     matchedTerm: match.term.phrase,
     matchedLocale: match.term.locale,
@@ -748,6 +772,21 @@ export function classifyConsentControlLabel(
     ]),
     contextSatisfied,
   };
+}
+
+function semanticRoleForTerm(term: ConsentControlTerm): ConsentControlSemanticRole {
+  if (term.intent === "reject") {
+    return term.variant === "necessary_only" ? "necessary_only" : "reject";
+  }
+  if (term.intent === "options") {
+    return "preferences";
+  }
+  if (term.intent === "accept") {
+    return term.strength === "weak" || term.variant === "continue_as_accept"
+      ? "ambiguous_acknowledgment"
+      : "explicit_accept";
+  }
+  return "unknown";
 }
 
 export function normalizeConsentControlText(value: string | null | undefined): string {
@@ -934,6 +973,7 @@ function hasCanonicalLocaleContext(
 function unknown(reasonCodes: string[]): ConsentControlLabelClassification {
   return {
     intent: "unknown",
+    semanticRole: "unknown",
     confidence: 0.2,
     reasonCodes: uniqueStrings(reasonCodes),
     contextSatisfied: false,

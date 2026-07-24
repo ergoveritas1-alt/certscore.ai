@@ -175,7 +175,14 @@ export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | nu
 }
 
 export function isNonEssentialCookieCategory(category: string | null | undefined) {
-  return category === "analytics" || category === "advertising" || category === "dmp" || category === "session_replay" || category === "personalization" || category === "marketing" || category === "experimentation";
+  const normalizedCategory = category?.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return normalizedCategory === "analytics" ||
+    normalizedCategory === "advertising" ||
+    normalizedCategory === "dmp" ||
+    normalizedCategory === "session_replay" ||
+    normalizedCategory === "personalization" ||
+    normalizedCategory === "marketing" ||
+    normalizedCategory === "experimentation";
 }
 
 export function isEligibleNonEssentialPreconsentStorageRow(row: RuntimeCookieEvidenceRow) {

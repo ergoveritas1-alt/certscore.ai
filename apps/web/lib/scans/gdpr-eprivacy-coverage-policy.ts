@@ -539,7 +539,30 @@ function getPreconsentCookieStorageTimingSummary(runtimeArtifacts: Record<string
   const beforeConsentCookieRows = [
     ...getObjectArray(hybridRuntimeEvidence, ["cookieWriteObservations", "cookie_write_observations"]),
     ...getObjectArray(hybridRuntimeEvidence, ["preconsentCookieEvidence", "preconsent_cookie_evidence"])
-  ].filter(rowHasPreconsentTimingEvidence);
+  ].filter(rowHasPreconsentTimingEvidence).filter((row) => {
+    const cookieName = getString(row, ["cookieName", "cookie_name", "name"]);
+    const domain = getString(row, ["domain", "cookieDomain", "cookie_domain"]);
+    if (!cookieName || isFunctionalCookieExcludedFromTrackingEvidence(cookieName, domain)) {
+      return false;
+    }
+    const category = getString(row, ["category", "cookieCategory", "cookie_category", "purpose"]) ??
+      classifyRuntimeCookieCategory(cookieName, domain);
+    return getBoolean(row, ["nonEssential", "non_essential"]) === true ||
+      isNonEssentialCookieCategory(category);
+  });
+  const canonicalNonEssentialStorageMs = getRuntimeObservedMs(
+    timelineMarkers,
+    ["firstNonEssentialStorageMs", "first_non_essential_storage_ms"],
+    navigationStartMs
+  ) ?? getRuntimeObservedMs(
+    storageSummary,
+    ["firstNonEssentialStorageMs", "first_non_essential_storage_ms"],
+    navigationStartMs
+  );
+  const legacySingleEligibleRowFallbackMs = canonicalNonEssentialStorageMs === null && beforeConsentCookieRows.length === 1
+    ? getRuntimeObservedMs(timelineMarkers, ["firstCookieSeenMs", "first_cookie_seen_ms"], navigationStartMs) ??
+      getRuntimeObservedMs(storageSummary, ["firstCookieSeenMs", "first_cookie_seen_ms"], navigationStartMs)
+    : null;
   const observedMs = getSortedUniqueMs([
     ...beforeConsentCookieRows.map((row) =>
       getRuntimeObservedMs(row, [
@@ -557,10 +580,8 @@ function getPreconsentCookieStorageTimingSummary(runtimeArtifacts: Record<string
         "timestamp_ms"
       ], navigationStartMs)
     ),
-    getRuntimeObservedMs(timelineMarkers, ["firstCookieSeenMs", "first_cookie_seen_ms"], navigationStartMs),
-    getRuntimeObservedMs(timelineMarkers, ["firstStorageWriteMs", "first_storage_write_ms"], navigationStartMs),
-    getRuntimeObservedMs(storageSummary, ["firstCookieSeenMs", "first_cookie_seen_ms"], navigationStartMs),
-    getRuntimeObservedMs(storageSummary, ["firstStorageWriteMs", "first_storage_write_ms"], navigationStartMs)
+    canonicalNonEssentialStorageMs,
+    legacySingleEligibleRowFallbackMs
   ]);
   const cookiesBeforeConsentCount = getNumber(storageSummary, ["cookiesBeforeConsentCount", "cookies_before_consent_count"]) ?? 0;
   const initialInventoryObserved = observedMs.length === 0 && (beforeConsentCookieRows.length > 0 || cookiesBeforeConsentCount > 0);
@@ -802,9 +823,13 @@ function getFirstLayerConsentChoiceEvidence(input: GdprEprivacyCoveragePolicyInp
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
   const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
   const consentPathControlLabels = getConsentPathControlLabels(consentUiPath, rejectPath);
-  const structuredControlLabels = getStructuredFirstLayerChoiceControls(firstLayerChoices)
+  const structuredControls = getStructuredFirstLayerChoiceControls(firstLayerChoices);
+  const structuredControlLabels = structuredControls
     .map(getControlLabel)
     .filter((label): label is string => Boolean(label));
+  const structuredAcceptControls = structuredControls.filter(isCanonicalAcceptControl);
+  const structuredRejectControls = structuredControls.filter(isCanonicalRejectControl);
+  const structuredControlInventoryRetained = structuredControls.length > 0;
   const visibleChoiceLabels = uniqueStrings([
     ...getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"]),
     ...structuredControlLabels,
@@ -825,9 +850,11 @@ function getFirstLayerConsentChoiceEvidence(input: GdprEprivacyCoveragePolicyInp
     ...getEvidenceText(lifecycle)
   ];
   const typedCookieNoticeTextObserved = surfaceText.some((text) => SIMPLE_COOKIE_NOTICE_TEXT_PATTERN.test(text));
-  const typedChoiceControlObserved = visibleChoiceLabels.some((label) =>
-    SIMPLE_ACCEPT_LABEL_PATTERN.test(label) || SIMPLE_REJECT_LABEL_PATTERN.test(label) || /cookie|consent|privacy choice|preferences?/i.test(label)
-  );
+  const typedChoiceControlObserved = structuredControlInventoryRetained
+    ? structuredControls.some((control) => !["dismiss", "unknown"].includes(getConsentControlSemanticRole(control)))
+    : visibleChoiceLabels.some((label) =>
+        SIMPLE_ACCEPT_LABEL_PATTERN.test(label) || SIMPLE_REJECT_LABEL_PATTERN.test(label) || /cookie|consent|privacy choice|preferences?/i.test(label)
+      );
   const bannerLikeSurfaceObserved =
     getBoolean(lifecycle, ["initialConsentLayerObserved", "initial_consent_layer_observed"]) === true ||
     getBoolean(consentSummary, ["bannerPresent", "banner_present"]) === true ||
@@ -836,14 +863,18 @@ function getFirstLayerConsentChoiceEvidence(input: GdprEprivacyCoveragePolicyInp
     getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true ||
     (typedCookieNoticeTextObserved && typedChoiceControlObserved);
   const acceptControlObserved =
-    getBoolean(firstLayerChoices, ["acceptControlObserved", "accept_control_observed", "acceptVisibleOnFirstLayer", "accept_visible_on_first_layer"]) === true ||
-    consentPathControlLabels.acceptLabels.some((label) => SIMPLE_ACCEPT_LABEL_PATTERN.test(label)) ||
-    visibleChoiceLabels.some((label) => SIMPLE_ACCEPT_LABEL_PATTERN.test(label));
+    structuredControlInventoryRetained
+      ? structuredAcceptControls.length > 0
+      : getBoolean(firstLayerChoices, ["acceptControlObserved", "accept_control_observed", "acceptVisibleOnFirstLayer", "accept_visible_on_first_layer"]) === true ||
+        consentPathControlLabels.acceptLabels.some((label) => SIMPLE_ACCEPT_LABEL_PATTERN.test(label)) ||
+        visibleChoiceLabels.some((label) => SIMPLE_ACCEPT_LABEL_PATTERN.test(label));
   const rejectControlObserved =
-    getBoolean(firstLayerChoices, ["rejectControlObserved", "reject_control_observed", "rejectVisibleOnFirstLayer", "reject_visible_on_first_layer"]) === true ||
-    getBoolean(rejectPath, ["rejectAvailableOnFirstLayer", "reject_available_on_first_layer"]) === true ||
-    consentPathControlLabels.rejectLabels.some((label) => SIMPLE_REJECT_LABEL_PATTERN.test(label)) ||
-    visibleChoiceLabels.some((label) => SIMPLE_REJECT_LABEL_PATTERN.test(label));
+    structuredControlInventoryRetained
+      ? structuredRejectControls.length > 0
+      : getBoolean(firstLayerChoices, ["rejectControlObserved", "reject_control_observed", "rejectVisibleOnFirstLayer", "reject_visible_on_first_layer"]) === true ||
+        getBoolean(rejectPath, ["rejectAvailableOnFirstLayer", "reject_available_on_first_layer"]) === true ||
+        consentPathControlLabels.rejectLabels.some((label) => SIMPLE_REJECT_LABEL_PATTERN.test(label)) ||
+        visibleChoiceLabels.some((label) => SIMPLE_REJECT_LABEL_PATTERN.test(label));
   const cookieNoticeTextObserved =
     typedCookieNoticeTextObserved ||
     (
@@ -883,7 +914,26 @@ function getControlLabel(control: Record<string, unknown>) {
   return getString(control, ["label", "labelText", "label_text", "text", "visibleText", "visible_text"]);
 }
 
+function getConsentControlSemanticRole(control: Record<string, unknown>) {
+  const retainedRole = getString(control, ["semanticRole", "semantic_role"]);
+  if (retainedRole) {
+    return retainedRole;
+  }
+  const label = getControlLabel(control);
+  if (!label) {
+    return "unknown";
+  }
+  return classifyConsentControlLabel({
+    label,
+    hasConsentContext: true,
+    hasPreferenceContext: getString(control, ["actionType", "action_type"]) === "save_preferences"
+  }).semanticRole;
+}
+
 function isCanonicalOptionsControl(control: Record<string, unknown>) {
+  if (getConsentControlSemanticRole(control) !== "preferences") {
+    return false;
+  }
   const actionType = getString(control, ["actionType", "action_type"]);
   const classifierReasonCodes = getStringArray(control, ["classifierReasonCodes", "classifier_reason_codes"]);
   const hasClassifierOptionsMetadata = classifierReasonCodes.includes("matched_options") ||
@@ -909,6 +959,9 @@ function isCanonicalOptionsControl(control: Record<string, unknown>) {
 }
 
 function isCanonicalAcceptControl(control: Record<string, unknown>) {
+  if (getConsentControlSemanticRole(control) !== "explicit_accept") {
+    return false;
+  }
   const actionType = getString(control, ["actionType", "action_type"]);
   const classifierReasonCodes = getStringArray(control, ["classifierReasonCodes", "classifier_reason_codes"]);
   const hasClassifierAcceptMetadata = classifierReasonCodes.includes("matched_accept") ||
@@ -928,14 +981,24 @@ function isCanonicalAcceptControl(control: Record<string, unknown>) {
   return classification.intent === "accept" && (actionType === null || actionType === "accept_all");
 }
 
+function isCanonicalRejectControl(control: Record<string, unknown>) {
+  const semanticRole = getConsentControlSemanticRole(control);
+  return semanticRole === "reject" || semanticRole === "necessary_only";
+}
+
 function serializeConsentControlEvidence(control: Record<string, unknown>) {
   return {
     actionType: getString(control, ["actionType", "action_type"]),
+    artifactRef: getString(control, ["artifactRef", "artifact_ref"]),
     classifierReasonCodes: getStringArray(control, ["classifierReasonCodes", "classifier_reason_codes"]),
+    confidence: getNumber(control, ["confidence"]),
     label: getControlLabel(control),
+    layer: getString(control, ["layer", "layerInspected", "layer_inspected"]),
     matchedLocale: getString(control, ["matchedLocale", "matched_locale"]),
     matchedTerm: getString(control, ["matchedTerm", "matched_term"]),
     matchStrength: getString(control, ["matchStrength", "match_strength"]),
+    nearbyConsentText: getString(control, ["nearbyConsentText", "nearby_consent_text"]),
+    semanticRole: getConsentControlSemanticRole(control),
     variant: getString(control, ["classifierVariant", "classifier_variant", "variant"])
   };
 }
@@ -1073,7 +1136,8 @@ function getExplicitFirstLayerGdprConsentBannerConfirmed(input: GdprEprivacyCove
   const lifecycle = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
   const consentUiPath = getObject(hybridRuntimeEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
-  const sources = [lifecycle, consentUiPath, rejectPath, input.runtimeArtifacts, input.snapshot];
+  const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
+  const sources = [firstLayerChoices, lifecycle, consentUiPath, rejectPath, input.runtimeArtifacts, input.snapshot];
   const firstLayerObserved = sources
     .map((source) => getBoolean(source, ["firstLayerCookieConsentBannerObserved", "first_layer_cookie_consent_banner_observed"]))
     .find((value): value is boolean => typeof value === "boolean");
@@ -1463,16 +1527,23 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     getString(consentSurfaceInspection, ["outcome"]) === "actionable_surface_observed" &&
     getString(consentSurfaceInspection, ["coverageStatus", "coverage_status"]) === "complete" &&
     getBoolean(consentSurfaceInspection, ["inspectionCompleted", "inspection_completed"]) === true;
-  const explicitlyObservedConsentSurface =
-    getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
-    getBoolean(hybridRuntimeEvidence, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
-    getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true;
+  const typedConsentUiObservationRetained = getObjectArray(
+    hybridRuntimeEvidence,
+    ["consentUiObservations", "consent_ui_observations"]
+  ).some((observation) =>
+    getBoolean(observation, ["likelyPresent", "likely_present"]) === true &&
+    (
+      getObjectArray(observation, ["controls"]).length > 0 ||
+      getStringArray(observation, ["evidenceRefs", "evidence_refs"]).length > 0 ||
+      getString(observation, ["textExcerpt", "text_excerpt"]) !== null
+    )
+  );
   const consentSurfaceObserved =
     (!privacyChoiceSurfaceOnly || simpleCookieNoticeWithChoice || retainedInitialCookieConsentLayerEvidence) &&
     (
       simpleCookieNoticeWithChoice ||
       retainedInitialCookieConsentLayerEvidence ||
-      explicitlyObservedConsentSurface ||
+      typedConsentUiObservationRetained ||
       explicitConsentBannerConfirmed === true ||
       typedConsentInspectionActionable ||
       retainedBannerTextOrControls
@@ -3379,8 +3450,14 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const interactionModel = getString(input.snapshot, ["consent_interaction_model"]);
   const skipNegativeReasons = getStringArray(consentAuditEntry, ["consentInteractionSkipNegativeReasonCodes"]);
   const diagnosticNegativeReasons = getStringArray(rejectDiagnostic, ["negativeReasonCodes"]);
-  const visibleRejectLabels = getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"])
-    .filter((label) => /\b(?:decline|reject|refuse|deny|opt[-\s]?out|necessary only|only necessary|essential only|only essential|essential cookies only|accept essential|accept necessary)\b/i.test(label));
+  const structuredFirstLayerControls = getStructuredFirstLayerChoiceControls(firstLayerChoices);
+  const structuredRejectControls = structuredFirstLayerControls.filter(isCanonicalRejectControl);
+  const visibleRejectLabels = structuredFirstLayerControls.length > 0
+    ? structuredRejectControls
+        .map(getControlLabel)
+        .filter((label): label is string => Boolean(label))
+    : getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"])
+        .filter((label) => /\b(?:decline|reject|refuse|deny|opt[-\s]?out|necessary only|only necessary|essential only|only essential|essential cookies only|accept essential|accept necessary)\b/i.test(label));
   const rejectAvailability = getString(rejectPath, [
     "availability",
     "status",
@@ -3398,6 +3475,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     getBoolean(rejectPath, ["rejectEquivalentFound", "reject_equivalent_found"]) === true ||
     getBoolean(rejectPath, ["rejectAvailableOnFirstLayer", "reject_available_on_first_layer"]) === true ||
     getBoolean(firstLayerChoices, ["rejectVisibleOnFirstLayer", "reject_visible_on_first_layer"]) === true ||
+    structuredRejectControls.length > 0 ||
     visibleRejectLabels.length > 0 ||
     rejectAvailability === "available" ||
     rejectAvailability === "reject_available_first_layer";
@@ -3587,6 +3665,33 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
           rejectClickDepth,
           rejectInteractionSucceeded,
           visibleRejectLabels: compactArray(visibleRejectLabels, 5)
+        }
+      }
+    );
+  }
+
+  if (firstLayerGdprBannerConfirmed === true && structuredFirstLayerControls.length > 0) {
+    return makeOutcome(
+      "reject_all_path_availability",
+      "Gap observed",
+      "The retained first-layer consent surface did not show a reject, necessary-only, or equivalent refusal option. First-layer presentation expectations can vary by jurisdiction, so manual review is recommended.",
+      [
+        "Evidence: complete structured first-layer control inventory",
+        ...getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"])
+          .map((label) => `Visible choice: ${label}`)
+          .slice(0, 5),
+        "Result: no reject, necessary-only, or equivalent refusal control retained"
+      ],
+      {
+        retainedEvidence: {
+          firstLayerCookieConsentBannerObserved: true,
+          gdprEprivacyConsentSurfaceObserved: "confirmed",
+          rejectControlObserved: false,
+          structuredControlInventoryRetained: true,
+          visibleChoiceLabels: compactArray(
+            getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"]),
+            8
+          )
         }
       }
     );
