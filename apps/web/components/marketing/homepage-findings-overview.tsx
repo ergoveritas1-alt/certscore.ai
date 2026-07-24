@@ -493,14 +493,14 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
   return (
     <section className="border-y border-slate-200 bg-white">
       <div className="mx-auto max-w-6xl px-6 py-12">
-        <div className="grid gap-6 lg:h-[38rem] lg:grid-cols-[0.64fr_1.36fr] lg:items-stretch">
-          <div className="flex max-w-sm flex-col gap-4">
+        <div className="grid gap-5 lg:h-[34rem] lg:grid-cols-[0.64fr_1.36fr] lg:items-stretch">
+          <div className="flex max-w-sm flex-col gap-3">
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Findings overview</p>
               <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Review the evidence.</h2>
             </div>
 
-            <div className="flex min-h-[22rem] flex-1 flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.25)]">
+            <div className="flex min-h-[18rem] flex-1 flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.25)]">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Finding navigator</p>
               <div className="mt-4 space-y-3">
                 <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">{activeFinding.category}</span>
@@ -533,13 +533,13 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
             </div>
           </div>
 
-          <div className="relative h-full overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,252,255,1)_0%,rgba(255,255,255,0.98)_64%,rgba(249,253,250,0.98)_100%)] p-5 shadow-[0_24px_56px_rgba(15,23,42,0.08)]">
+          <div className="relative h-full overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,252,255,1)_0%,rgba(255,255,255,0.98)_64%,rgba(249,253,250,0.98)_100%)] p-4 shadow-[0_24px_56px_rgba(15,23,42,0.08)]">
             <div
               aria-hidden="true"
               className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,rgba(15,139,215,0.9)_0%,rgba(103,199,240,0.78)_58%,rgba(71,181,74,0.7)_100%)]"
             />
-            <div className="relative grid h-full min-h-0 gap-5 lg:grid-cols-[1fr_0.78fr]">
-              <div className="space-y-4">
+            <div className="relative grid h-full min-h-0 gap-4 lg:grid-cols-[1fr_0.78fr]">
+              <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
                     {activeFinding.category}
@@ -553,13 +553,13 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                 </div>
                 <div>
                   <h3 className="text-2xl font-semibold tracking-tight text-slate-950">{activeFinding.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">{activeFinding.overview}</p>
+                  <p className="mt-2 text-sm leading-5 text-slate-600">{activeFinding.overview}</p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Brief regulatory context</p>
                   <p className="mt-2 text-sm font-semibold text-slate-950">{activeFinding.regulatoryLabel}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">{activeFinding.regulatoryCopy}</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
+                  <p className="mt-1 text-xs leading-4 text-slate-500">{activeFinding.regulatoryCopy}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
                       GDPR / ePrivacy
                     </span>
@@ -570,9 +570,9 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                 </div>
               </div>
 
-              <div className="flex flex-col rounded-[1.5rem] border border-slate-200 bg-white p-4">
+              <div className="flex flex-col rounded-[1.5rem] border border-slate-200 bg-white p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Example evidence</p>
-                <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-950 p-3">
+                <div className="mt-2 rounded-2xl border border-slate-800 bg-slate-950 p-3">
                   <p className="text-xs font-semibold text-slate-100">{activeFinding.evidence.title}</p>
                   <div className="mt-2 space-y-1 font-mono text-[11px] leading-5 text-slate-300">
                     {activeFinding.evidence.lines.map((line) => (
@@ -580,8 +580,8 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                     ))}
                   </div>
                 </div>
-                <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Reviewer prompts</p>
-                <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
+                <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Reviewer prompts</p>
+                <ul className="mt-1.5 space-y-2 text-sm leading-5 text-slate-600">
                   <li className="flex gap-2">
                     <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
                     <span>{activeFinding.reviewPrompt}</span>
