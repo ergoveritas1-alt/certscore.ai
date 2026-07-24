@@ -753,13 +753,12 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
 
 function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   const copyRows = [
-    ["Type", "Vendor", "Purpose", "Evidence", "Priority", "First seen", "Cookie name(s)", "Domain", "Destination", "Confidence", "Party", "Category"],
+    ["Type", "Vendor", "Purpose", "Evidence", "First seen", "Cookie name(s)", "Domain", "Destination", "Confidence", "Party", "Category", "Priority"],
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
       getInventoryPurposeLabel(row),
       getInventoryEvidenceLabel(row),
-      CONSENT_REVIEW_PRIORITY_LABELS[row.priority],
       formatFirstSeenMs(row.firstSeenMs),
       row.cookieNames.join(", ") || "—",
       row.domains.join(", ") || "—",
@@ -770,7 +769,8 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
       ].filter(Boolean).join(" / ")).join(", ") || "—",
       INVENTORY_CONFIDENCE_LABELS[row.confidence],
       formatGroupedParty(row.party),
-      getRuntimeInventoryMacroCategory(row)
+      getRuntimeInventoryMacroCategory(row),
+      CONSENT_REVIEW_PRIORITY_LABELS[row.priority]
     ])
   ];
 
@@ -863,14 +863,14 @@ function getRuntimeInventoryMacroCategory(row: InventoryGroupRow) {
 
 function getInventoryEvidenceLabel(row: InventoryGroupRow) {
   const category = getRuntimeInventoryMacroCategory(row).toLowerCase();
-  if (category === "essential" || category === "functional") return "Necessary";
+  if (category === "essential" || category === "functional") return "Essential";
   if (category === "review") return "Review";
   return "Non-essential";
 }
 
 function InventoryEvidenceCell({ row }: { row: InventoryGroupRow }) {
   const evidence = getInventoryEvidenceLabel(row);
-  const tone = evidence === "Necessary"
+  const tone = evidence === "Essential"
     ? "bg-blue-100 text-blue-700"
     : evidence === "Review"
       ? "bg-amber-100 text-amber-800"
@@ -923,7 +923,7 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
           </div>
           <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="necessary" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
-            <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Necessary</span>
+            <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Essential</span>
             <InfoTip align="end" placement="bottom" text="Essential or functional activity retained as necessary context." />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{necessaryCount}</span>
           </div>
@@ -999,7 +999,6 @@ function RuntimeInventoryTable({
                   <th title="Resolved vendor or first-party entity" className="sticky left-[90px] top-0 z-30 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="vendor" label="Vendor" /></th>
                   <th title="Observed purpose classification" className="sticky top-0 z-20 w-[130px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
                   <th title="Consent evidence classification" className="sticky top-0 z-20 w-[105px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Evidence</th>
-                  <th title="Review priority based on retained evidence" className="sticky top-0 z-20 w-[100px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="priority" label="Priority" /></th>
                   <th title="Elapsed time from scan start to observation" className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
                   <th className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Cookies</th>
                   <th className="sticky top-0 z-20 w-[150px] max-w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Domain</th>
@@ -1007,6 +1006,7 @@ function RuntimeInventoryTable({
                   <th className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Confidence</th>
                   <th className="sticky top-0 z-20 w-[50px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Party</th>
                   <th className="sticky top-0 z-20 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Category</th>
+                  <th title="Review priority based on retained evidence" className="sticky top-0 z-20 w-[100px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="priority" label="Priority" /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
@@ -1032,11 +1032,6 @@ function RuntimeInventoryTable({
                     </td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={getInventoryPurposeLabel(row)}>{getInventoryPurposeLabel(row)}</td>
                     <td className="whitespace-nowrap px-2 py-1.5 align-middle"><InventoryEvidenceCell row={row} /></td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
-                      <InventoryPriorityCell
-                        priority={row.priority}
-                      />
-                    </td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
                     <td className="max-w-[132px] truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
                     <td className="max-w-[150px] truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
@@ -1046,6 +1041,11 @@ function RuntimeInventoryTable({
                     </td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">{formatGroupedParty(row.party)}</td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">{getRuntimeInventoryMacroCategory(row)}</td>
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
+                      <InventoryPriorityCell
+                        priority={row.priority}
+                      />
+                    </td>
                   </tr>
                 ))}
                 {groupedInventoryRows.length === 0 ? (

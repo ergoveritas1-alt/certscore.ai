@@ -8205,8 +8205,8 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
   if (!sessionReplayObserved && contextualBrowserApiEvidenceObserved) {
     return makeOutcome(
       "session_replay_fingerprinting_review",
-      "Insufficient evidence",
-      "Browser API access was retained as context, but no session replay vendor, entropy transmission, identifier linkage, known fingerprinting library, or device-data-like request payload was retained. This contextual observation is not promoted as a fingerprinting finding.",
+      "Not observed",
+      "Browser API access was retained as device-identification context, but no session replay vendor or collection signal was observed. The browser/device context is evaluated separately in the device-identification row.",
       [
         "Context: browser API access retained",
         ...getStringArray(browserDeviceEntropyEvidence, ["hosts"]).map((host) => `Observed host: ${host}`).slice(0, 3)

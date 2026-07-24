@@ -1528,7 +1528,7 @@ const SCAN_NO_GO_RATE_LIMIT_PATTERN = /\b429\b[^\n]{0,80}(?:too many requests|ra
 const SCAN_NO_GO_SERVER_ERROR_PATTERN =
   /\b(?:500|502|503|504)\b[^\n]{0,100}(?:error|unavailable|gateway|timeout)|internal server error|service unavailable|bad gateway|gateway timeout/i;
 const SCAN_NO_GO_MAINTENANCE_PATTERN =
-  /(?:site|service|page) (?:is )?(?:temporarily )?(?:unavailable|under maintenance)|scheduled maintenance|we(?:'|’)ll be back soon|temporarily offline|page unavailable/i;
+  /(?:site|service|page) (?:is |will be |currently |temporarily )?(?:unavailable|offline|under maintenance|undergoing scheduled maintenance)|scheduled maintenance\b[\s\S]{0,120}(?:unavailable|offline|back soon|resume|restored)|we(?:'|’)ll be back soon|temporarily offline|page unavailable/i;
 const SCAN_NO_GO_PLACEHOLDER_PATTERN =
   /\bexample domain\b|apache is functioning normally|website coming soon|site under construction|domain (?:is )?parked|domain(?:s)? (?:is |are )?(?:for sale|may be for sale)|welcome to nginx|default web site page|placeholder page|^[a-z0-9.-]+ is live!?$|this domain is an active and legitimate web address[^.]{0,160}(?:technical purposes|traffic routing|ad-tracking)|(?:agency|company|business|brand|website) (?:business )?has been acquired by[\s\S]{0,180}(?:click|continue|visit)[\s\S]{0,100}(?:website|site)/i;
 const SCAN_NO_GO_APPLICATION_ERROR_PATTERN =
@@ -1548,6 +1548,25 @@ const SCAN_NO_GO_SECURITY_CHALLENGE_REQUEST_PATTERN =
 
 const SCAN_NO_GO_NAVIGATION_FAILURE_PATTERN =
   /page\.goto|net::ERR_|ERR_HTTP2_PROTOCOL_ERROR|ERR_QUIC_PROTOCOL_ERROR|navigation timeout|timeout \d+ms exceeded/i;
+
+const SCAN_ACCESS_BLOCK_TEXT_MARKERS = [
+  /\baccess denied\b/i,
+  /\b(?:403(?:\s*-\s*|\s+))?forbidden\b/i,
+  /\brequest blocked\b/i,
+  /\byou(?:'|’)?ve been blocked\b|\byou have been blocked\b/i,
+  /\bthe request could not be satisfied\b/i,
+  /\baccess (?:to this site has been denied|is temporarily restricted)\b/i,
+  /\bsecurity service to protect itself from online attacks\b/i,
+  /\bcloudflare ray id\b/i,
+  /\bblock access from your country\b|\bnot available in your (?:country|region)\b/i,
+] as const;
+
+function countAccessBlockTextMarkers(text: string) {
+  return SCAN_ACCESS_BLOCK_TEXT_MARKERS.reduce(
+    (count, pattern) => count + (pattern.test(text) ? 1 : 0),
+    0,
+  );
+}
 
 export function buildScanNoGoAssessment(input: {
   consentUiObservations: ConsentUiObservation[];
@@ -1655,6 +1674,9 @@ export function buildScanNoGoAssessment(input: {
     event.firstParty === true && (event.status ?? 0) >= 200 && (event.status ?? 0) < 400
   ).length;
   const substantiveDomWordCount = longestDomText.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
+  const substantiveRetainedDomVolumeObserved =
+    longestDomText.length >= 180 &&
+    substantiveDomWordCount >= 24;
   const screenshotStructure = inspectRetainedScreenshotStructure(input.screenshots);
   const visuallySubstantiveScreenshotObserved = screenshotStructure?.visuallySubstantive === true;
   const visuallyBlankScreenshotObserved = screenshotStructure?.visuallyBlank === true;
@@ -1695,6 +1717,9 @@ export function buildScanNoGoAssessment(input: {
     substantiveDomTextObserved
       ? "substantive_dom_text_observed"
       : null,
+    substantiveRetainedDomVolumeObserved
+      ? "substantive_retained_dom_volume_observed"
+      : null,
     actionableConsentControlObserved ? "actionable_consent_control_observed" : null,
     substantiveCapturedPageTextObserved ? "substantive_captured_page_text_observed" : null,
     substantiveConsentSurfaceTextObserved ? "substantive_consent_surface_text_observed" : null,
@@ -1705,7 +1730,9 @@ export function buildScanNoGoAssessment(input: {
     visuallyBlankSuccessfulPage ? "visually_blank_screenshot_observed" : null,
   ].filter((value): value is string => Boolean(value)));
   const strongPositiveSiteEvidence = positiveSiteSignals.some((signal) =>
-    signal !== "main_document_success" && signal !== "visually_blank_screenshot_observed"
+    signal !== "main_document_success" &&
+    signal !== "substantive_retained_dom_volume_observed" &&
+    signal !== "visually_blank_screenshot_observed"
   );
   const networkChallengeEvidence = detectScanNoGoNetworkChallengeEvidence({
     networkEvents: input.networkEvents,
@@ -1797,7 +1824,7 @@ export function buildScanNoGoAssessment(input: {
       : sparseSuccessfulPage || temporallyConfirmedSparsePage
         ? "blank_or_unusable_page"
         : "potential_security_challenge");
-  const visualPageState: VisualAccessReview["page_state"] =
+  const candidateVisualPageState: VisualAccessReview["page_state"] =
     primaryReasonCode === "target_unreachable_or_unsuitable"
       ? "capture_failed"
       : settledPageState?.visualPageState ??
@@ -1806,18 +1833,47 @@ export function buildScanNoGoAssessment(input: {
           : "degraded_but_useful");
   const blockedMainDocument = mainDocumentStatus !== null && [401, 403, 407, 429, 451, 500, 502, 503, 504].includes(mainDocumentStatus);
   const explicitTerminalPage = Boolean(settledPageState) || sparseSuccessfulPage || temporallyConfirmedSparsePage || partialRuntimeWithoutPageEvidence;
-  const strongTerminalContradiction =
+  const successfulSettledMainDocument =
+    mainDocumentStatus !== null &&
+    mainDocumentStatus >= 200 &&
+    mainDocumentStatus < 400;
+  const accessBlockMarkerCount = countAccessBlockTextMarkers(longestDomText || longestText);
+  const likelyIncidentalAccessBlockText =
+    textPageState?.reasonCode === "access_denied_or_forbidden_page" &&
+    !blockedMainDocument &&
+    substantiveRetainedDomVolumeObserved &&
+    accessBlockMarkerCount === 1;
+  const priorSuccessfulDocumentContradiction =
     successfulMainDocumentBeforeTerminal &&
     visuallySubstantiveScreenshotObserved &&
     (
-      (substantiveCapturedPageTextObserved && successfulFirstPartyResponses >= 8) ||
+      (substantiveRetainedDomVolumeObserved && successfulFirstPartyResponses >= 8) ||
       successfulFirstPartyResponses >= 16
+    );
+  // Access-block wording is common in article copy, inline application text,
+  // and transient interstitials. It is a candidate no-go signal until the
+  // settled page is corroborated. A screenshot is never sufficient by itself:
+  // require a second independent representative-page channel.
+  const representativeAccessBlockContradiction =
+    settledPageState?.reasonCode === "access_denied_or_forbidden_page" &&
+    visuallySubstantiveScreenshotObserved &&
+    (
+      (
+        actionableConsentControlObserved &&
+        (successfulSettledMainDocument || successfulMainDocumentBeforeTerminal)
+      ) ||
+      priorSuccessfulDocumentContradiction ||
+      (
+        likelyIncidentalAccessBlockText &&
+        successfulSettledMainDocument &&
+        successfulFirstPartyResponses >= 4
+      )
     );
   const contradictedByNormalSite =
     strongPositiveSiteEvidence &&
     (
       (!blockedMainDocument && !settledPageState?.hardTerminal) ||
-      strongTerminalContradiction ||
+      representativeAccessBlockContradiction ||
       (
         temporallyConfirmedSparsePage &&
         !settledPageState?.hardTerminal &&
@@ -1833,6 +1889,10 @@ export function buildScanNoGoAssessment(input: {
     explicitTerminalPage && !contradictedByNormalSite
       ? "no_go"
       : "continue_with_diagnostics";
+  const visualPageState: VisualAccessReview["page_state"] =
+    decision === "continue_with_diagnostics" && explicitTerminalPage
+      ? "degraded_but_useful"
+      : candidateVisualPageState;
   const confidence = decision === "no_go"
     ? settledPageState?.confidence ?? (sparseSuccessfulPage || temporallyConfirmedSparsePage ? 0.91 : 0.9)
     : 0.72;
@@ -1879,6 +1939,7 @@ export function buildScanNoGoAssessment(input: {
       expectedOriginReached: mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400,
       mainDocumentStatus,
       substantiveDomTextObserved: longestDomText.length >= 180 && substantiveDomWordCount >= 24,
+      substantiveRetainedDomVolumeObserved,
       substantiveWordCount: substantiveDomWordCount,
       successfulFirstPartyResponses,
       retainedVisualArtifactAvailable: Boolean(screenshot),
@@ -1891,6 +1952,9 @@ export function buildScanNoGoAssessment(input: {
       visualNoGo: decision === "no_go",
       visualPageState,
       successfulMainDocumentBeforeTerminal,
+      successfulSettledMainDocument,
+      accessBlockMarkerCount,
+      likelyIncidentalAccessBlockText,
       visuallySubstantiveScreenshotObserved,
       visuallyBlankScreenshotObserved,
       screenshotEncodedBytesPerPixel: screenshotStructure?.encodedBytesPerPixel ?? null,

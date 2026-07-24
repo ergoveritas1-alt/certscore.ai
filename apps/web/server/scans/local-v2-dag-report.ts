@@ -1,6 +1,7 @@
 import "server-only";
 
 import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
+import { unstable_cache } from "next/cache";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -4349,7 +4350,9 @@ function buildMaterializedLocalV2Detail(
   };
 }
 
-export async function materializeLocalV2DagScanDetail(
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v1";
+
+async function materializeLocalV2DagScanDetailUncached(
   scanRecord: ScanDetailResponse,
   options: { requireBundle?: boolean } = {}
 ): Promise<ScanDetailResponse> {
@@ -4394,4 +4397,36 @@ export async function materializeLocalV2DagScanDetail(
     localOutDir: shouldReadLocalOutDir ? input.outDir : null,
     scanArtifactUri: input.scanArtifactUri
   }) : scanRecord;
+}
+
+export async function materializeLocalV2DagScanDetail(
+  scanRecord: ScanDetailResponse,
+  options: { requireBundle?: boolean } = {}
+): Promise<ScanDetailResponse> {
+  const input = getLocalV2DagReportInput(scanRecord);
+  if (!input || scanRecord.scan.status !== "completed") {
+    return scanRecord;
+  }
+
+  // Production Lambda artifacts are immutable once their verified SHA is
+  // recorded. Cache the derived report by scan and artifact version so report
+  // navigation does not reread S3 and repeat the full projection on every hit.
+  // Local/test records without a verified artifact identity stay uncached so
+  // fixtures and local out-dir development remain fully deterministic.
+  if (!input.scanArtifactUri || !input.scanArtifactSha256) {
+    return materializeLocalV2DagScanDetailUncached(scanRecord, options);
+  }
+
+  const cachedMaterialization = unstable_cache(
+    () => materializeLocalV2DagScanDetailUncached(scanRecord, options),
+    [
+      LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION,
+      scanRecord.scan.id,
+      input.scanArtifactSha256,
+      input.manifestArtifactSha256 ?? "no-manifest",
+      options.requireBundle === true ? "required" : "optional"
+    ],
+    { revalidate: 3600 }
+  );
+  return cachedMaterialization();
 }

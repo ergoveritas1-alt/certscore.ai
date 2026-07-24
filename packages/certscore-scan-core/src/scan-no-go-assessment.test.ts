@@ -391,6 +391,178 @@ test("a genuine 403 with no usable-page contradictors remains no-go", async () =
   }
 });
 
+test("blocker-like wording inside substantive article content is diagnostic, not no-go", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-article-copy-"));
+  try {
+    const assessment = buildScanNoGoAssessment(scanEvidence({
+      firstPartySuccesses: 6,
+      screenshots: [await retainedScreenshot(directory, { substantive: true })],
+      text: "Morning News Politics Business Culture Technology Sports Opinion Subscribe Sign in. The court heard that a visitor had previously been shown an access denied message while attempting to open the public record. Reporters reviewed the incident, interviewed the parties, and published the complete account with related stories, navigation links, author information, publication details, and reader comments.",
+    }));
+
+    assert.equal(assessment?.scanNoGoAssessment.decision, "continue_with_diagnostics");
+    assert.equal(assessment?.visualAccessReview.page_state, "degraded_but_useful");
+    assert.equal(assessment?.scanNoGoAssessment.supportingSignals.likelyIncidentalAccessBlockText, true);
+    assert.ok(assessment?.scanNoGoAssessment.contradictorCodes.includes("substantive_retained_dom_volume_observed"));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("ThePrint-like representative page and consent modal contradict access-block wording", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-theprint-pattern-"));
+  try {
+    const assessment = buildScanNoGoAssessment(scanEvidence({
+      consentUiObservations: [consentObservation({ controlLabel: "Consent" })],
+      firstPartySuccesses: 6,
+      screenshots: [await retainedScreenshot(directory, { substantive: true })],
+      text: "Access denied",
+    }));
+
+    assert.equal(assessment?.scanNoGoAssessment.decision, "continue_with_diagnostics");
+    assert.equal(assessment?.visualAccessReview.page_state, "degraded_but_useful");
+    assert.ok(assessment?.scanNoGoAssessment.contradictorCodes.includes("actionable_consent_control_observed"));
+    assert.ok(assessment?.scanNoGoAssessment.contradictorCodes.includes("visually_substantive_screenshot_observed"));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("blocker wording in consent-probe script text does not override settled page DOM", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-script-copy-"));
+  try {
+    const observation = consentObservation({ controlLabel: "" });
+    observation.likelyPresent = false;
+    observation.acceptControlObserved = false;
+    observation.visibleChoiceLabels = [];
+    observation.controls = [];
+    observation.textExcerpt = `${"inline application script ".repeat(20)} request blocked`;
+    const assessment = buildScanNoGoAssessment(scanEvidence({
+      consentUiObservations: [observation],
+      firstPartySuccesses: 6,
+      screenshots: [await retainedScreenshot(directory, { substantive: true })],
+      text: "Example News Home World Business Science Culture. The settled public homepage contains current stories, normal navigation, publication details, account links, article summaries, images, and a complete footer for readers.",
+    }));
+
+    assert.equal(assessment, null);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("an initial security challenge that resolves into a representative page remains usable with diagnostics", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-resolved-challenge-"));
+  try {
+    const evidence = scanEvidence({
+      firstPartySuccesses: 6,
+      screenshots: [await retainedScreenshot(directory, { substantive: true })],
+      text: "Example Store Products Services Support Account. The final public storefront loaded with product navigation, pricing, customer information, help links, company details, and a complete footer after the initial request settled.",
+    });
+    evidence.networkEvents.push({
+      thirdParty: false,
+      url: "https://example.test/cdn-cgi/challenge-platform/scripts/jsd/main.js",
+    } as NetworkEvent);
+    const assessment = buildScanNoGoAssessment(evidence);
+
+    assert.equal(assessment?.scanNoGoAssessment.decision, "continue_with_diagnostics");
+    assert.equal(assessment?.visualAccessReview.page_state, "degraded_but_useful");
+    assert.ok(assessment?.scanNoGoAssessment.corroboratorCodes.includes("network_security_challenge_request_observed"));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a blocked third-party challenge resource does not make a representative page no-go", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-third-party-block-"));
+  try {
+    const evidence = scanEvidence({
+      firstPartySuccesses: 6,
+      screenshots: [await retainedScreenshot(directory, { substantive: true })],
+      text: "Example Magazine Latest Features Reviews Guides Subscribe. The representative public page includes normal editorial content, site navigation, account controls, article links, contact information, and a complete footer.",
+    });
+    evidence.networkEvents.push({
+      requestId: "third-party-challenge",
+      thirdParty: true,
+      url: "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/orchestrate/jsch/v1",
+    } as NetworkEvent);
+    evidence.networkResponseEvents.push({
+      firstParty: false,
+      requestId: "third-party-challenge",
+      status: 403,
+    } as NetworkResponseEvent);
+    const assessment = buildScanNoGoAssessment(evidence);
+
+    assert.equal(assessment?.scanNoGoAssessment.decision, "continue_with_diagnostics");
+    assert.equal(assessment?.visualAccessReview.page_state, "degraded_but_useful");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a polished but corroborated access-denied page remains no-go", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-polished-access-block-"));
+  try {
+    const assessment = buildScanNoGoAssessment(scanEvidence({
+      firstPartySuccesses: 8,
+      screenshots: [await retainedScreenshot(directory, { substantive: true })],
+      text: "Access denied. Your request blocked by the security service used to protect this site from online attacks. Reference information, support links, incident details, request identifiers, troubleshooting instructions, branding, navigation, and contact options are provided below so the site owner can investigate the blocked request.",
+    }));
+
+    assert.equal(assessment?.scanNoGoAssessment.decision, "no_go");
+    assert.equal(assessment?.primaryReasonCode, "access_denied_or_forbidden_page");
+    assert.equal(assessment?.visualAccessReview.page_state, "access_blocked");
+    assert.ok(Number(assessment?.scanNoGoAssessment.supportingSignals.accessBlockMarkerCount) >= 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("ordinary scheduled-maintenance navigation text does not make a usable site no-go", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-scheduled-maintenance-navigation-"));
+  try {
+    const assessment = buildScanNoGoAssessment(scanEvidence({
+      consentUiObservations: [consentObservation({ controlLabel: "Accept all" })],
+      firstPartySuccesses: 8,
+      screenshots: [await retainedScreenshot(directory, { substantive: true })],
+      text: "JOKER.COM Domain Registration Web Hosting Email Scheduled Maintenances Support Search your domain names and explore our hosting plans. Cookie preferences are available below.",
+    }));
+
+    assert.equal(assessment, null);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a genuine scheduled-maintenance notice remains no-go", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-genuine-maintenance-"));
+  try {
+    const assessment = buildScanNoGoAssessment(scanEvidence({
+      screenshots: [await retainedScreenshot(directory, { substantive: false })],
+      text: "Scheduled maintenance. The site is temporarily unavailable while we perform updates. We'll be back soon.",
+    }));
+
+    assert.equal(assessment?.scanNoGoAssessment.decision, "no_go");
+    assert.equal(assessment?.primaryReasonCode, "maintenance_or_unavailable");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a substantive screenshot alone cannot clear access-block evidence", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-screenshot-only-"));
+  try {
+    const assessment = buildScanNoGoAssessment(scanEvidence({
+      screenshots: [await retainedScreenshot(directory, { substantive: true })],
+      text: "Access denied.",
+    }));
+
+    assert.equal(assessment?.scanNoGoAssessment.decision, "no_go");
+    assert.equal(assessment?.visualAccessReview.page_state, "access_blocked");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 function scanEvidence(input: {
   consentUiObservations?: ConsentUiObservation[];
   finalMainDocumentStatus?: number;

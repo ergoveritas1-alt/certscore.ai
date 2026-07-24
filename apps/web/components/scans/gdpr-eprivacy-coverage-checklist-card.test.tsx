@@ -17,6 +17,22 @@ test("GDPR Transparency grouping includes every emitted Article 13 checklist row
   assert.match(source, /title: "GDPR Transparency"[\s\S]*automated_decision_making_profiling_disclosure/);
 });
 
+test("getEvidenceLabel keeps insufficient evidence distinct from missing test coverage", () => {
+  const partialEvidence = makeChecklistItem({
+    assessmentStatus: "coverage_limitation",
+    evidenceState: "observed",
+    status: "Insufficient evidence"
+  });
+  const missingCoverage = makeChecklistItem({
+    assessmentStatus: "coverage_limitation",
+    evidenceState: "not_testable",
+    status: "Not testable"
+  });
+
+  assert.equal(getEvidenceLabel(partialEvidence), "Not confirmed");
+  assert.equal(getEvidenceLabel(missingCoverage), "Not testable");
+});
+
 function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
   return {
     assessmentStatus: "review_signal",

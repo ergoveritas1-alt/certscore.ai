@@ -56,7 +56,14 @@ const POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS = new Set([
 ]);
 
 export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): EvidenceLabel {
-  if (item.assessmentStatus === "coverage_limitation" || item.evidenceState === "not_testable" || item.status === "Not testable") {
+  if (item.status === "Insufficient evidence") {
+    return "Not confirmed";
+  }
+  if (
+    item.assessmentStatus === "coverage_limitation" ||
+    item.status === "Not testable" ||
+    item.evidenceState === "not_testable"
+  ) {
     return "Not testable";
   }
   if (item.status === "Not confirmed" && retainedPolicyExtractionLimited(item)) {
@@ -68,7 +75,7 @@ export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): Evide
   if (item.status === "Gap observed") {
     return "Potential gap";
   }
-  if (item.status === "Insufficient evidence" || item.status === "Not confirmed" || item.status === "Review signal") {
+  if (item.status === "Not confirmed" || item.status === "Review signal") {
     return "Partial concern";
   }
   if (item.evidenceState === "observed" || item.status === "Observed") {

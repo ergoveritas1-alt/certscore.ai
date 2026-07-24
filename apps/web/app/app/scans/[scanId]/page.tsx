@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
@@ -29,6 +30,7 @@ import {
   getOrganizationScanStatusProjection,
   isPendingScanStatus
 } from "../../../../server/scans/scan-status-projection";
+import type { ScanStatusProjection } from "../../../../server/scans/scan-status-projection";
 import { canUseRestrictedScanOptions } from "../../../../server/scans/restricted-scan-options";
 import { getOrganizationSettings } from "../../../../server/settings/get-organization-settings";
 
@@ -43,6 +45,32 @@ type ScanDetailPageProps = {
 
 const RECENT_SCAN_REUSED_MESSAGE =
   "Recently scanned. Select Fresh re-scan to run a new scan.";
+
+function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanStatusProjection }) {
+  return (
+    <div className="space-y-8" aria-busy="true" aria-live="polite">
+      <div>
+        <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">CertScore.ai scan</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+          Scan: {statusProjection.domainHostname?.trim() || "website"}
+        </h1>
+        <p className="mt-2 text-sm text-slate-500">Loading the completed scan report…</p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        {["GDPR/ePrivacy evidence score", "3rd-party requests", "Non-essential storage"].map((label) => (
+          <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
+            <div className="mt-4 h-9 w-24 animate-pulse rounded-lg bg-slate-100" />
+          </div>
+        ))}
+      </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="h-5 w-40 animate-pulse rounded bg-slate-100" />
+        <div className="mt-5 h-28 animate-pulse rounded-xl bg-slate-50" />
+      </div>
+    </div>
+  );
+}
 
 function canViewCapturedImage(input: { isPlatformAdmin: boolean; role: string | null | undefined }) {
   return input.isPlatformAdmin || input.role === "admin" || input.role === "advanced";
@@ -77,6 +105,38 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
       </>
     );
   }
+  return (
+    <>
+      <PendingScanStartedEvent />
+      <Suspense fallback={<ScanDetailLoadingState statusProjection={statusProjection} />}>
+        <ScanDetailReportContent
+          isPlatformAdmin={isPlatformAdmin}
+          membership={membership}
+          organization={organization}
+          recentScanReused={recentScanReused}
+          scanId={scanId}
+          user={user}
+        />
+      </Suspense>
+    </>
+  );
+}
+
+async function ScanDetailReportContent({
+  isPlatformAdmin,
+  membership,
+  organization,
+  recentScanReused,
+  scanId,
+  user
+}: {
+  isPlatformAdmin: boolean;
+  membership: Awaited<ReturnType<typeof getDashboardContext>>["membership"];
+  organization: Awaited<ReturnType<typeof getDashboardContext>>["organization"];
+  recentScanReused: boolean;
+  scanId: string;
+  user: Awaited<ReturnType<typeof getDashboardContext>>["user"];
+}) {
   let [scanRecord, organizationSettings] = await Promise.all([
     withServerTiming("app.scan_detail.record", () =>
       isPlatformAdmin
@@ -144,7 +204,6 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
 
   return (
     <>
-      <PendingScanStartedEvent />
       <ScanProgressReportVisible scanId={displayScanRecord.scan.id} />
       <SharedScanDetailView
         analyticsScanSource="dashboard"

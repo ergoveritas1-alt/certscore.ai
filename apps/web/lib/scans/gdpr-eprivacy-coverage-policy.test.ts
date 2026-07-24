@@ -5363,9 +5363,9 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes separates weak browser entropy fr
   });
 
   const outcome = outcomes.session_replay_fingerprinting_review;
-  assert.equal(outcome?.status, "Insufficient evidence");
-  assert.match(outcome?.limitation ?? "", /context/i);
-  assert.doesNotMatch(outcome?.limitation ?? "", /Session replay \/ behavioral analytics/i);
+  assert.equal(outcome?.status, "Not observed");
+  assert.match(outcome?.limitation ?? "", /device-identification context/i);
+  assert.match(outcome?.limitation ?? "", /evaluated separately in the device-identification row/i);
   assert.equal(outcome?.criticalEvidence.retainedEvidence.sessionReplayObserved, false);
   assert.deepEqual(outcome?.criticalEvidence.retainedEvidence.browserDeviceEntropyEvidence, {
     entropyLinkedToIdentifier: false,
