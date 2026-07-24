@@ -842,9 +842,13 @@ function PreConsentDataFlowSummary({ rows }: { rows: InventoryGroupRow[] }) {
   const usControlled = new Set(flows.filter((flow) => flow.controllingEntity.headquartersCountry === "US").map((flow) => flow.controllingEntity.legalEntity ?? flow.endpoint)).size;
   const euControlled = new Set(flows.filter((flow) => ["AT", "BE", "BG", "HR", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"].includes(flow.controllingEntity.headquartersCountry ?? "")).map((flow) => flow.controllingEntity.legalEntity ?? flow.endpoint)).size;
   const adequacyCountry = new Set(flows.filter((flow) => flow.transferMechanism.mechanism === "adequacy_decision").map((flow) => flow.controllingEntity.legalEntity ?? flow.endpoint)).size;
+  const headquartersSummary = [
+    usControlled > 0 ? <span key="us" className="cursor-help" title="Unique controlling entities headquartered in the United States">🇺🇸 {usControlled} US HQ</span> : null,
+    euControlled > 0 ? <span key="eu" className="cursor-help" title="Unique controlling entities headquartered in the European Union">🇪🇺 {euControlled} EU HQ</span> : null
+  ].filter(Boolean);
   return (
     <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-      Pre-consent flows: {flows.length} endpoint{flows.length === 1 ? "" : "s"} · {uniqueEntities.size} entities · <span className="cursor-help" title="Unique controlling entities headquartered in the United States">🇺🇸 {usControlled}</span> · <span className="cursor-help" title="Unique controlling entities headquartered in the European Union">🇪🇺 {euControlled}</span>{adequacyCountry > 0 ? <> · <span className="cursor-help" title="Unique entities using an adequacy decision as the transfer mechanism">{adequacyCountry} adequacy-country</span></> : null}. Server flags are CDN-edge observations, not storage locations.
+      Pre-consent flows: {flows.length} endpoint{flows.length === 1 ? "" : "s"} · {uniqueEntities.size} entit{uniqueEntities.size === 1 ? "y" : "ies"} · {headquartersSummary.length > 0 ? headquartersSummary.map((item, index) => <span key={index}>{index > 0 ? " · " : null}{item}</span>) : <span className="cursor-help" title="No controlling-entity headquarters country was retained. This does not indicate where data is stored.">Controlling HQ not identified</span>}{adequacyCountry > 0 ? <> · <span className="cursor-help" title="Unique entities using an adequacy decision as the transfer mechanism">{adequacyCountry} adequacy-country</span></> : null}. Server locations are CDN-edge observations, not asserted storage locations.
     </p>
   );
 }

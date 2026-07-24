@@ -41,7 +41,8 @@ test("pre-consent inventory exposes retained cookie metadata and all three data-
   assert.match(source, />Lifespan</);
   assert.match(source, />Data types</);
   assert.match(source, />Initiator chain</);
-  assert.match(source, /Server flags are CDN-edge observations/);
+  assert.match(source, /Server locations are CDN-edge observations/);
+  assert.match(source, /Controlling HQ not identified/);
   assert.match(source, /Controlling entity:/);
   assert.match(source, /Transfer mechanism:/);
   assert.match(source, /Cookie values are redacted/);
