@@ -542,9 +542,6 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                    {activeFinding.category}
-                  </span>
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
                     {activeFinding.criticalityChip}
                   </span>
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
