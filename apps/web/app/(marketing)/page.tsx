@@ -238,26 +238,6 @@ export default async function MarketingHomePage() {
         </div>
       </section>
 
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-8">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[
-              ["01", "Enter a URL", "Start with any public website."],
-              ["02", "Scan the evidence", "Observe cookies, requests, and policy surfaces."],
-              ["03", "Review findings", "Open the retained context behind each signal."]
-            ].map(([step, title, detail]) => (
-              <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4" key={step}>
-                <span className="text-xs font-bold tracking-[0.16em] text-sky-600">{step}</span>
-                <div>
-                  <p className="text-sm font-semibold text-slate-950">{title}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">{detail}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <HomepageFindingsOverview findings={findings} />
 
       <section className="border-b border-slate-200 bg-white">
