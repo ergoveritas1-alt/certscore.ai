@@ -258,29 +258,6 @@ export default async function MarketingHomePage() {
         </div>
       </section>
 
-      <section className="border-b border-slate-200 bg-slate-50">
-        <div className="mx-auto grid max-w-6xl gap-6 px-6 py-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
-          <div className="space-y-3">
-            <Badge tone="neutral">Sample output</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">See what a review produces.</h2>
-            <p className="text-sm leading-6 text-slate-600">A scan turns public-web behavior into focused findings with evidence, context, and clear next steps.</p>
-          </div>
-          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.25)]">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Sample finding</p>
-              <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-semibold text-rose-700">Review</span>
-            </div>
-            <p className="mt-4 text-lg font-semibold text-slate-950">Third-party service connections before consent</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Retained requests and cookie evidence show what was observed before a recorded consent action.</p>
-            <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-              <span className="rounded-full bg-slate-100 px-2.5 py-1">Network evidence</span>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1">Cookie evidence</span>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1">Review context</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <HomepageFindingsOverview findings={findings} />
 
       <section className="border-b border-slate-200 bg-white">
