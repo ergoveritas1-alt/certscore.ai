@@ -501,10 +501,11 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
             </div>
 
             <div className="flex min-h-[22rem] flex-1 flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.25)]">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Finding highlights</p>
-              <p className="mt-2 line-clamp-3 text-[1.35rem] font-semibold tracking-tight text-slate-950">{activeFinding.title}</p>
-              <p className="mt-2 line-clamp-5 text-[13px] leading-5 text-slate-600">{activeFinding.overview}</p>
-              <p className="mt-5 max-w-[19rem] text-xs leading-5 text-slate-500">Browse one retained signal at a time, then open the full finding when you want the complete evidence context.</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Finding navigator</p>
+              <div className="mt-4 space-y-3">
+                <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">{activeFinding.category}</span>
+                <p className="max-w-[19rem] text-sm leading-6 text-slate-600">Browse retained signals one at a time, then use the detail panel to review the evidence and context.</p>
+              </div>
 
               <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
                 <div className="flex items-center gap-2">
