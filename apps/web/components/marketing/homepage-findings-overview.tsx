@@ -493,17 +493,18 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
   return (
     <section className="border-y border-slate-200 bg-white">
       <div className="mx-auto max-w-6xl px-6 py-12">
-        <div className="grid gap-6 lg:grid-cols-[0.64fr_1.36fr] lg:items-start">
-          <div className="max-w-sm space-y-4">
+        <div className="grid gap-6 lg:grid-cols-[0.64fr_1.36fr] lg:items-stretch">
+          <div className="flex max-w-sm flex-col gap-4">
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Findings overview</p>
               <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Review the evidence.</h2>
             </div>
 
-            <div className="flex h-[22rem] flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-none">
+            <div className="flex min-h-[22rem] flex-1 flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.25)]">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Finding highlights</p>
               <p className="mt-2 line-clamp-3 text-[1.35rem] font-semibold tracking-tight text-slate-950">{activeFinding.title}</p>
               <p className="mt-2 line-clamp-5 text-[13px] leading-5 text-slate-600">{activeFinding.overview}</p>
+              <p className="mt-5 max-w-[19rem] text-xs leading-5 text-slate-500">Browse one retained signal at a time, then open the full finding when you want the complete evidence context.</p>
 
               <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
                 <div className="flex items-center gap-2">
