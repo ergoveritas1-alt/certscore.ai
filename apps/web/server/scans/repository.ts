@@ -1926,4 +1926,34 @@ export async function loadOrganizationScanPageData(
   };
 }
 
+export async function getLatestOrganizationScanId(organizationId: string) {
+  const row = await queryOne<{ id: string }>(
+    `
+      with candidate_scan_ids as (
+        select s.id
+        from scans s
+        where s.organization_id = $1
+        union
+        select coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+        from scan_requests sr
+        where sr.organization_id = $1
+          and coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is not null
+        union
+        select d.latest_scan_id
+        from domains d
+        where d.organization_id = $1
+          and d.latest_scan_id is not null
+      )
+      select s.id
+      from candidate_scan_ids c
+      join scans s on s.id = c.id
+      order by s.created_at desc
+      limit 1
+    `,
+    [organizationId],
+    { readOnly: true }
+  );
+  return row?.id ?? null;
+}
+
 export { isMissingComplianceChangeEventsTable };
