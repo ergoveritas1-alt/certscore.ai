@@ -226,7 +226,7 @@ export function LoginForm(input?: {
       ) : null}
 
       {input?.allowGoogle ? (
-        <div className="space-y-4 rounded-[28px] border border-slate-200/90 bg-[linear-gradient(180deg,rgba(248,250,252,0.82)_0%,rgba(255,255,255,0.98)_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+        <div className="space-y-4">
           <a
             className="group flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] px-4 py-3 text-sm font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:bg-[linear-gradient(180deg,#ffffff_0%,#f3f8ff_100%)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.08)]"
             href={`/auth/google?next=${encodeURIComponent(nextPath)}`}
