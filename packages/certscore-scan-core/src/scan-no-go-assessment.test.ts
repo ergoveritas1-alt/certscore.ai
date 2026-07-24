@@ -12,7 +12,11 @@ import type {
   RuntimeCoverageSummary,
   ScreenshotArtifact,
 } from "@certscore/contracts";
-import { buildScanEvidenceLaneAssessment, buildScanNoGoAssessment } from "./index.js";
+import {
+  buildScanEvidenceLaneAssessment,
+  buildScanNoGoAssessment,
+  shouldAttemptScreenshotOnlyFallback,
+} from "./index.js";
 
 test("verified first-party policy evidence produces a partial outcome when homepage runtime is no-go", () => {
   const assessment = buildScanEvidenceLaneAssessment({
@@ -58,6 +62,29 @@ test("ordinary usable runtime remains usable without policy evidence", () => {
 
   assert.equal(assessment.outcome, "usable");
   assert.equal(assessment.lanes.homepageRuntime, "usable");
+});
+
+test("a placeholder-only visual capture remains eligible for independent screenshot recovery", () => {
+  const placeholderResult = {
+    collectionSurfaceObservations: [],
+    cookieEvents: [{}],
+    moduleRun: { errors: ["1x1 screenshot placeholder used after screenshot capture failures."] },
+    networkEvents: [{}],
+    networkResponseEvents: [],
+    screenshots: [{
+      artifactId: "screenshot_pre_consent",
+      captureMethod: "primary_placeholder",
+    }],
+    vendorResolverInputs: [],
+    visualCapture: {
+      status: "placeholder",
+      failureReason: "placeholder_used",
+      notes: ["A 1x1 screenshot placeholder was retained."],
+    },
+  };
+
+  assert.equal(shouldAttemptScreenshotOnlyFallback(placeholderResult as never, "always"), true);
+  assert.equal(shouldAttemptScreenshotOnlyFallback(placeholderResult as never, "never"), false);
 });
 
 test("consent controls prevent a sparse privacy gateway from becoming no-go", async () => {
@@ -190,6 +217,60 @@ test("a partial runtime with no retained page evidence is no-go", () => {
   assert.equal(assessment?.scanNoGoAssessment.decision, "no_go");
   assert.equal(assessment?.primaryReasonCode, "loading_or_stalled");
   assert.ok(assessment?.scanNoGoAssessment.corroboratorCodes.includes("partial_runtime_without_page_evidence"));
+});
+
+test("an infrastructure homepage target is separated from a generic loading stall", () => {
+  const assessment = buildScanNoGoAssessment({
+    consentUiObservations: [],
+    domSnapshots: [{ textExcerpt: "" } as DomSnapshotArtifact],
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "partial",
+      errors: ["Pre-consent runtime reached its module budget; retained bounded partial evidence."],
+    }] as never,
+    normalizedUrl: "https://alicdn.com/",
+    networkEvents: [{}, {}] as NetworkEvent[],
+    networkResponseEvents: [],
+    policySurfaceObservations: [],
+    screenshots: [],
+  });
+
+  assert.equal(assessment?.primaryReasonCode, "target_unreachable_or_unsuitable");
+  assert.equal(assessment?.visualAccessReview.page_state, "capture_failed");
+});
+
+test("navigation no-go preserves TLS and unsuitable-target distinctions", () => {
+  const tlsAssessment = buildScanNoGoAssessment({
+    consentUiObservations: [],
+    domSnapshots: [],
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "failed",
+      errors: ["page.goto: net::ERR_CERT_COMMON_NAME_INVALID at https://example.com/"],
+    }] as never,
+    normalizedUrl: "https://example.com/",
+    networkEvents: [],
+    networkResponseEvents: [],
+    policySurfaceObservations: [],
+    screenshots: [],
+  });
+  const targetAssessment = buildScanNoGoAssessment({
+    consentUiObservations: [],
+    domSnapshots: [],
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "failed",
+      errors: ["page.goto: net::ERR_INVALID_AUTH_CREDENTIALS at https://ad-srv.net/"],
+    }] as never,
+    normalizedUrl: "https://ad-srv.net/",
+    networkEvents: [],
+    networkResponseEvents: [],
+    policySurfaceObservations: [],
+    screenshots: [],
+  });
+
+  assert.equal(tlsAssessment?.primaryReasonCode, "tls_or_certificate_error");
+  assert.equal(targetAssessment?.primaryReasonCode, "target_unreachable_or_unsuitable");
 });
 
 test("partial runtime with a retained actionable banner stays diagnostic instead of becoming no-go", async () => {

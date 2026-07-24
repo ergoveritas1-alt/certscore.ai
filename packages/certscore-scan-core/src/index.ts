@@ -32,6 +32,7 @@ import { resolveVendorObservations } from "@certscore/vendor-resolver";
 import type { ScanNoGoReasonCode } from "@website-signal-risk-scanner/shared";
 import { chromium, type Browser } from "playwright";
 import { createArtifactWriter, type ArtifactWriter } from "./artifact-writer.js";
+import { withBoundedCookieInitiatorMetadata } from "./bounded-initiator-url.js";
 import {
   buildObservedJourneys,
   classifyCookieEvents,
@@ -55,7 +56,12 @@ import {
 } from "./scanners/policy-surface-scanner.js";
 import { chromiumContextOptions, chromiumLaunchOptions, chromiumProxyOptions } from "./playwright-runtime.js";
 import { throwIfAborted } from "./abort.js";
-import { isNavigationTransportFailure, navigationTransportRecoveryUrls } from "./transport-fallback.js";
+import {
+  classifyNavigationFailure,
+  isLikelyInfrastructureHomepageTarget,
+  isNavigationTransportFailure,
+  navigationTransportRecoveryUrls,
+} from "./transport-fallback.js";
 
 type ConsentFlowRuntimeScanner = typeof import("./scanners/consent-flow-runtime-scanner.js").consentFlowRuntimeScanner;
 type ConsentFlowRuntimeInput = Parameters<ConsentFlowRuntimeScanner>[0];
@@ -467,6 +473,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       consentUiObservations: preConsentResult.consentUiObservations,
       domSnapshots: preConsentResult.domSnapshots,
       modulesRun: [preConsentResult.moduleRun],
+      normalizedUrl,
       networkEvents: preConsentResult.networkEvents,
       networkResponseEvents: preConsentResult.networkResponseEvents,
       policySurfaceObservations: [],
@@ -718,7 +725,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       ...(consentFlowResult?.cookieEvents ?? []),
     ],
     normalizedVendorObservations,
-  );
+  ).map(withBoundedCookieInitiatorMetadata);
   const observedJourneys = buildObservedJourneys({
     networkEvents,
     networkResponseEvents,
@@ -798,6 +805,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       ...(consentFlowResult?.screenshots ?? []),
     ],
     modulesRun,
+    normalizedUrl,
   });
   const runtimeCoverage = scanNoGoEvidence?.scanNoGoAssessment.decision === "no_go"
     ? {
@@ -967,7 +975,9 @@ export function compactCanonicalEvidenceBundleForRetention(
       .map(stripRuntimeEventDiagnostics),
     networkEvents: bundle.networkEvents.map(stripNetworkEventDiagnostics),
     networkResponseEvents: bundle.networkResponseEvents.map(stripNetworkResponseDiagnostics),
-    cookieEvents: bundle.cookieEvents.map(stripRuntimeEventDiagnostics),
+    cookieEvents: bundle.cookieEvents
+      .map(withBoundedCookieInitiatorMetadata)
+      .map(stripRuntimeEventDiagnostics),
     scriptEvents: bundle.scriptEvents.map(stripRuntimeEventDiagnostics),
     iframeEvents: bundle.iframeEvents.map(stripRuntimeEventDiagnostics),
     observedJourneys: retainedJourneys,
@@ -1543,6 +1553,7 @@ export function buildScanNoGoAssessment(input: {
   consentUiObservations: ConsentUiObservation[];
   domSnapshots: DomSnapshotArtifact[];
   modulesRun: CanonicalEvidenceBundle["modulesRun"];
+  normalizedUrl?: string;
   networkEvents: NetworkEvent[];
   networkResponseEvents: NetworkResponseEvent[];
   policySurfaceObservations: PolicySurfaceObservation[];
@@ -1563,6 +1574,10 @@ export function buildScanNoGoAssessment(input: {
     input.screenshots.length === 0 &&
     input.domSnapshots.length === 0
   ) {
+    const primaryReasonCode = classifyNavigationFailure(
+      navigationFailureText,
+      input.normalizedUrl,
+    );
     const matchedText = boundedScanNoGoText(navigationFailureText) ?? "Initial navigation failed before page evidence could be retained.";
     const confidence = 0.92;
     const visualAccessReview: VisualAccessReview = {
@@ -1571,7 +1586,7 @@ export function buildScanNoGoAssessment(input: {
       go_no_go: "NO_GO",
       key_visual_evidence: [matchedText],
       page_state: "capture_failed",
-      reason_code: "navigation_transport_failure",
+      reason_code: primaryReasonCode,
       short_explanation: `The initial navigation failed before the scanner could retain public-page evidence: "${matchedText}"`,
       status: "missing_visual_artifact",
       version: "visual-access-review-v1",
@@ -1581,14 +1596,14 @@ export function buildScanNoGoAssessment(input: {
       version: "scan-no-go-assessment-v1",
       decision: "no_go",
       scanNoGoConfidence: confidence,
-      reasonCodes: ["navigation_transport_failure", "scan_no_go_corroborated"],
+      reasonCodes: [primaryReasonCode, "scan_no_go_corroborated"],
       corroboratorCodes: ["pre_consent_navigation_failed", "no_visual_artifact_retained"],
       contradictorCodes: [],
       supportingSignals: {
         challengeSignalsDetected: false,
         documentStatusBlocked: false,
         expectedOriginReached: false,
-        navigationTransportFailure: true,
+        navigationTransportFailure: primaryReasonCode === "navigation_transport_failure",
         retainedVisualArtifactAvailable: false,
         visualNoGo: true,
         visualPageState: "capture_failed",
@@ -1599,7 +1614,7 @@ export function buildScanNoGoAssessment(input: {
       ],
     };
     return {
-      primaryReasonCode: "navigation_transport_failure",
+      primaryReasonCode,
       scanNoGoAssessment,
       visualAccessReview,
     };
@@ -1776,14 +1791,19 @@ export function buildScanNoGoAssessment(input: {
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs)[0] ?? null;
   const primaryReasonCode = settledPageState?.reasonCode ??
     (partialRuntimeWithoutPageEvidence
-      ? "loading_or_stalled"
+      ? isLikelyInfrastructureHomepageTarget(input.normalizedUrl)
+        ? "target_unreachable_or_unsuitable"
+        : "loading_or_stalled"
       : sparseSuccessfulPage || temporallyConfirmedSparsePage
         ? "blank_or_unusable_page"
         : "potential_security_challenge");
-  const visualPageState: VisualAccessReview["page_state"] = settledPageState?.visualPageState ??
-    (partialRuntimeWithoutPageEvidence || sparseSuccessfulPage || temporallyConfirmedSparsePage
-      ? "blank_or_unusable"
-      : "degraded_but_useful");
+  const visualPageState: VisualAccessReview["page_state"] =
+    primaryReasonCode === "target_unreachable_or_unsuitable"
+      ? "capture_failed"
+      : settledPageState?.visualPageState ??
+        (partialRuntimeWithoutPageEvidence || sparseSuccessfulPage || temporallyConfirmedSparsePage
+          ? "blank_or_unusable"
+          : "degraded_but_useful");
   const blockedMainDocument = mainDocumentStatus !== null && [401, 403, 407, 429, 451, 500, 502, 503, 504].includes(mainDocumentStatus);
   const explicitTerminalPage = Boolean(settledPageState) || sparseSuccessfulPage || temporallyConfirmedSparsePage || partialRuntimeWithoutPageEvidence;
   const strongTerminalContradiction =
@@ -2251,14 +2271,27 @@ function uniqueStrings<T extends string>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
-function shouldAttemptScreenshotOnlyFallback(
+export function shouldAttemptScreenshotOnlyFallback(
   result: Awaited<ReturnType<typeof preConsentRuntimeScanner>>,
   screenshotMode: RunScanInput["preConsentScreenshotMode"],
 ) {
-  if (screenshotMode === "never" || result.screenshots.length > 0) {
+  if (screenshotMode === "never") {
     return false;
   }
-  if (result.visualCapture.status === "available" || result.visualCapture.status === "placeholder") {
+  const placeholderOnly =
+    result.visualCapture.status === "placeholder" ||
+    result.visualCapture.failureReason === "placeholder_used" ||
+    (
+      result.screenshots.length > 0 &&
+      result.screenshots.every((screenshot) =>
+        screenshot.captureMethod === "primary_placeholder" ||
+        screenshot.captureMethod === "fresh_context_placeholder"
+      )
+    );
+  if (result.visualCapture.status === "available" && !placeholderOnly) {
+    return false;
+  }
+  if (result.screenshots.length > 0 && !placeholderOnly) {
     return false;
   }
   const retainedEvidence =
@@ -2269,6 +2302,9 @@ function shouldAttemptScreenshotOnlyFallback(
     result.collectionSurfaceObservations.length > 0;
   if (!retainedEvidence) {
     return false;
+  }
+  if (placeholderOnly) {
+    return true;
   }
   const errorText = [
     result.visualCapture.failureReason,

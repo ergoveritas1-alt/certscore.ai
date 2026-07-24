@@ -9,7 +9,10 @@ import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner
 import {
   alternateWwwNavigationUrl,
   boundedRetryAfterMs,
+  classifyNavigationFailure,
+  httpsTransportUpgradeUrl,
   httpTransportFallbackUrl,
+  isLikelyInfrastructureHomepageTarget,
   isNavigationTransportFailure,
   isPendingMainDocumentStatus,
   isTransientMainDocumentStatus,
@@ -23,6 +26,15 @@ test("HTTP transport fallback preserves the complete HTTPS target", () => {
   );
   assert.equal(httpTransportFallbackUrl("http://example.com/"), null);
   assert.equal(httpTransportFallbackUrl("not a url"), null);
+});
+
+test("HTTPS transport upgrade preserves the complete HTTP target", () => {
+  assert.equal(
+    httpsTransportUpgradeUrl("http://example.com:8080/path?q=1#section"),
+    "https://example.com:8080/path?q=1#section",
+  );
+  assert.equal(httpsTransportUpgradeUrl("https://example.com/"), null);
+  assert.equal(httpsTransportUpgradeUrl("not a url"), null);
 });
 
 test("transport failure classification is bounded to navigation/network failures", () => {
@@ -45,6 +57,34 @@ test("entry navigation recovery stays on bounded apex/www and protocol variants"
     "http://example.com/path",
     "http://www.example.com/path",
   ]);
+  assert.deepEqual(navigationTransportRecoveryUrls("http://example.com/path"), [
+    "https://example.com/path",
+    "https://www.example.com/path",
+    "http://www.example.com/path",
+  ]);
+});
+
+test("navigation failures distinguish target, TLS, and unresolved route failures", () => {
+  assert.equal(
+    classifyNavigationFailure(new Error("net::ERR_CERT_COMMON_NAME_INVALID"), "https://example.com/"),
+    "tls_or_certificate_error",
+  );
+  assert.equal(
+    classifyNavigationFailure(new Error("net::ERR_CONNECTION_REFUSED"), "https://example.com/"),
+    "target_unreachable_or_unsuitable",
+  );
+  assert.equal(
+    classifyNavigationFailure(new Error("net::ERR_TUNNEL_CONNECTION_FAILED"), "https://example.com/"),
+    "navigation_transport_failure",
+  );
+  assert.equal(
+    classifyNavigationFailure(new Error("page.goto: Timeout 7500ms exceeded"), "https://cdn-kaspi.kz/"),
+    "target_unreachable_or_unsuitable",
+  );
+  assert.equal(isLikelyInfrastructureHomepageTarget("https://alicdn.com/"), true);
+  assert.equal(isLikelyInfrastructureHomepageTarget("https://cdn-kaspi.kz/"), true);
+  assert.equal(isLikelyInfrastructureHomepageTarget("https://ad-srv.net/"), true);
+  assert.equal(isLikelyInfrastructureHomepageTarget("https://codeable.io/"), false);
 });
 
 test("transient response retry is bounded", () => {

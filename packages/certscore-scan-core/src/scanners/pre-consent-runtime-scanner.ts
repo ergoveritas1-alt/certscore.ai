@@ -58,6 +58,10 @@ import { enrichNetworkDestination } from "../network-destination.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
 import {
+  boundedInitiatorChain,
+  boundedInitiatorUrl,
+} from "../bounded-initiator-url.js";
+import {
   alternateWwwNavigationUrl,
   boundedRetryAfterMs,
   isNavigationTransportFailure,
@@ -444,7 +448,9 @@ export async function preConsentRuntimeScanner(
       hostname,
       thirdParty: party === "third_party",
     });
-    const initiatorChain = shiftQueuedValue(cdpInitiatorsByUrl, requestUrl) ?? [];
+    const initiatorChain = boundedInitiatorChain(
+      shiftQueuedValue(cdpInitiatorsByUrl, requestUrl) ?? [],
+    );
     const topLevelForParty = frameUrl === "about:blank" ? input.normalizedUrl : frameUrl;
     const responsibleScriptUrl = initiatorChain.find((value) =>
       classifyParty(value, topLevelForParty) === "third_party"
@@ -1360,6 +1366,9 @@ export async function preConsentRuntimeScanner(
       const cookieHostname = getHostname(cookie.domain) ?? undefined;
       const cookieRegistrableDomain = getRegistrableDomain(cookieHostname) ?? undefined;
       const cookieParty = classifyCookieParty(cookie.domain, firstPartyHostname);
+      const initiatorChain = boundedInitiatorChain(documentWrite?.initiatorChain ?? []);
+      const setterScriptUrl = boundedInitiatorUrl(documentWrite?.scriptUrl) ??
+        initiatorChain.find((value) => /^https?:\/\//i.test(value));
       const snapshotCookieEvent: CookieEvent = {
         eventId: nextId("cookie"),
         eventType: "cookie",
@@ -1386,10 +1395,10 @@ export async function preConsentRuntimeScanner(
         sameSite: cookie.sameSite,
         secure: cookie.secure,
         httpOnly: cookie.httpOnly,
-        setByThirdPartyScript: Boolean(documentWrite?.scriptUrl &&
-          classifyParty(documentWrite.scriptUrl, page.url()) === "third_party"),
-        setterScriptUrl: documentWrite?.scriptUrl,
-        initiatorChain: documentWrite?.initiatorChain ?? [],
+        setByThirdPartyScript: Boolean(setterScriptUrl &&
+          classifyParty(setterScriptUrl, page.url()) === "third_party"),
+        setterScriptUrl,
+        initiatorChain,
         lifespanSeconds: Number.isFinite(cookie.expires) && cookie.expires > 0
           ? Math.max(0, Math.round(cookie.expires - Date.now() / 1_000))
           : 0,
@@ -2328,11 +2337,11 @@ export async function preConsentRuntimeScanner(
 
     for (const cookieMetadata of setCookieMetadata) {
       const knowledge = resolveCanonicalCookieKnowledge(cookieMetadata.name);
-      const initiatorChain = unique([
+      const initiatorChain = boundedInitiatorChain([
         ...(requestEvent?.initiatorStack ?? []),
         requestEvent?.responsibleScriptUrl,
-      ].filter((value): value is string => Boolean(value))).slice(0, 12);
-      const setterScriptUrl = requestEvent?.responsibleScriptUrl ??
+      ]);
+      const setterScriptUrl = boundedInitiatorUrl(requestEvent?.responsibleScriptUrl) ??
         initiatorChain.find((value) => /^https?:\/\//i.test(value));
       const cookieParty = classifyCookieParty(cookieMetadata.domain ?? hostname, firstPartyHostname);
       const cookieEvent: CookieEvent = {
@@ -7252,12 +7261,21 @@ async function installCookieWriteProbe(context: BrowserContext): Promise<void> {
 }
 
 async function readCookieWriteProbe(page: Page): Promise<RetainedCookieWriteProbeRow[]> {
-  return page.evaluate(() => {
+  const rows = await page.evaluate(() => {
     const rows = (window as Window & {
       __certscoreCookieWrites?: RetainedCookieWriteProbeRow[];
     }).__certscoreCookieWrites;
     return Array.isArray(rows) ? rows.slice(0, 250) : [];
   }).catch(() => []);
+  return rows.map((row) => {
+    const initiatorChain = boundedInitiatorChain(row.initiatorChain);
+    return {
+      initiatorChain,
+      name: row.name.slice(0, 160),
+      scriptUrl: boundedInitiatorUrl(row.scriptUrl) ??
+        initiatorChain.find((value) => /^https?:\/\//i.test(value)),
+    };
+  });
 }
 
 async function installCdpNetworkMetadataCapture(
@@ -7276,20 +7294,10 @@ async function installCdpNetworkMetadataCapture(
     };
     const url = params.request?.url;
     if (!url) return;
-    const chain = unique([
+    const chain = boundedInitiatorChain([
       params.initiator?.url,
       ...flattenCdpInitiatorStack(params.initiator?.stack),
-    ].filter((value): value is string => Boolean(value)))
-      .flatMap((value) => {
-        try {
-          const parsed = new URL(value);
-          return [`${parsed.origin}${parsed.pathname}`];
-        } catch {
-          return [];
-        }
-      })
-      .filter((value) => /^https?:\/\//i.test(value))
-      .slice(0, 12);
+    ]).filter((value) => /^https?:\/\//i.test(value));
     if (chain.length > 0) pushQueuedValue(stores.initiatorsByUrl, url, chain);
   });
   session.on("Network.responseReceived", (raw: unknown) => {
