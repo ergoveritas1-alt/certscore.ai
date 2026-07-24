@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import type { OrganizationScanListItem } from "../../server/scans/get-organization-scans";
@@ -106,7 +107,7 @@ export function OverviewScanHistoryCard({ scans }: OverviewScanHistoryCardProps)
                     <td className="px-2.5 py-1.5 text-[11px] text-slate-600">{formatDateTime(latest.completedAt ?? latest.createdAt)}</td>
                     <td className="px-2.5 py-1.5"><div className="flex items-center gap-1">
                       <PendingButtonLink ariaLabel="View latest scan" className="h-8 w-8 rounded-full border border-slate-300 bg-white p-0" href={`/app/scans/${latest.id}`} idleContent={<ViewIcon />} pendingContent="…" size="sm" title="View latest scan" variant="secondary" />
-                      {earlier.length > 0 ? <details className="relative"><summary aria-label="Earlier scans" className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full border border-slate-300 bg-white [&::-webkit-details-marker]:hidden"><HistoryIcon /></summary><div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl"><p className="px-2 py-1 text-xs font-semibold text-slate-900">Earlier scans</p>{earlier.map((scan) => <a className="block rounded-lg px-2 py-1.5 text-xs hover:bg-slate-50" href={`/app/scans/${scan.id}`} key={scan.id}>{formatDateTime(scan.completedAt ?? scan.createdAt)} · {scan.certscoreOverall ?? "—"}<span className="text-slate-400">/100 · {scan.scoreLabel ?? "Not scored"}</span></a>)}</div></details> : null}
+                      {earlier.length > 0 ? <details className="relative"><summary aria-label="Earlier scans" className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full border border-slate-300 bg-white [&::-webkit-details-marker]:hidden"><HistoryIcon /></summary><div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl"><p className="px-2 py-1 text-xs font-semibold text-slate-900">Earlier scans</p>{earlier.map((scan) => <Link className="block rounded-lg px-2 py-1.5 text-xs hover:bg-slate-50" href={`/app/scans/${scan.id}`} key={scan.id}>{formatDateTime(scan.completedAt ?? scan.createdAt)} · {scan.certscoreOverall ?? "—"}<span className="text-slate-400">/100 · {scan.scoreLabel ?? "Not scored"}</span></Link>)}</div></details> : null}
                     </div></td>
                   </tr>;
                 })}
