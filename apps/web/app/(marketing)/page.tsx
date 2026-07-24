@@ -324,17 +324,20 @@ export default async function MarketingHomePage() {
               <p className="max-w-3xl text-lg leading-8 text-slate-300">
                 Use CertScore.ai to observe pre-consent website behavior, detect tracking activity, review public policy surfaces, and monitor changes over time.
               </p>
-              <div className="max-w-3xl rounded-[1.4rem] border border-white/15 bg-white/8 p-2.5">
-                <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-200">Run another review</p>
-                <DomainScanForm buttonLabel="Scan a website" inputLabel="Website URL to scan" inputPlaceholder="Enter website here:" mode="full" requestSource="homepage" scanSource="homepage" />
-              </div>
               <div className="flex flex-col gap-3 sm:flex-row">
+                <PendingButtonLink
+                  className="w-full border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] text-white shadow-[0_16px_32px_rgba(47,99,234,0.24)] hover:brightness-[1.04] sm:w-auto"
+                  data-analytics-event="hero_book_demo_clicked"
+                  href={BOOK_DEMO_URL}
+                  idleContent="Schedule demo"
+                  pendingContent="Opening..."
+                />
                 <PendingButtonLink
                   className="w-full border border-white/12 bg-white/8 text-white hover:bg-white/12 sm:w-auto"
                   data-analytics-cta-type="sample_report"
                   data-analytics-event="hero_sample_report_clicked"
                   href={SAMPLE_REPORT_URL}
-                  idleContent="View sample report"
+                  idleContent="See Sample Report"
                   pendingContent="Opening..."
                   variant="secondary"
                 />
