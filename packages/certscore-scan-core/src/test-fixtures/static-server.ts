@@ -27,6 +27,7 @@ export type StaticFixturePage =
   | "consent-compact-analytics-controls"
   | "consent-compact-cookie-controls"
   | "consent-compact-privacy-settings-controls"
+  | "consent-contextual-approval-offscreen"
   | "consent-contextual-continue-accept"
   | "consent-deny-non-essential"
   | "consent-generic-learn-more-page-context"
@@ -205,6 +206,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-compact-analytics-controls": "consent-compact-analytics-controls",
   "consent-compact-cookie-controls": "consent-compact-cookie-controls",
   "consent-compact-privacy-settings-controls": "consent-compact-privacy-settings-controls",
+  "consent-contextual-approval-offscreen": "consent-contextual-approval-offscreen",
   "consent-contextual-continue-accept": "consent-contextual-continue-accept",
   "consent-deny-non-essential": "consent-deny-non-essential",
   "consent-generic-learn-more-page-context": "consent-generic-learn-more-page-context",
@@ -1311,6 +1313,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     compactAnalyticsControls: caseName === "consent-compact-analytics-controls",
     compactCookieControls: caseName === "consent-compact-cookie-controls",
     compactPrivacySettingsControls: caseName === "consent-compact-privacy-settings-controls",
+    contextualApprovalOffscreen: caseName === "consent-contextual-approval-offscreen",
     firstLayerNecessaryToggleOnly: caseName === "consent-first-layer-necessary-toggle-only",
     firstLayerOptionalToggleOff: caseName === "consent-first-layer-optional-toggle-off",
     firstLayerOptionalToggleOn: caseName === "consent-first-layer-optional-toggle-on",
@@ -1462,6 +1465,21 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
         <button id="settings" type="button">Settings</button>
         <button id="accept" type="button">Accept</button>
       </section>
+    `;
+  }
+  if (options.contextualApprovalOffscreen) {
+    return `
+      <main style="min-height: 1280px;">
+        <h1>Consent approval fixture</h1>
+        <p>Primary content appears before a compact consent surface.</p>
+      </main>
+      <section id="compact-cookie-consent" style="padding: 16px; border: 1px solid #111;">
+        <p>This website uses cookies to improve your experience. We also use cookies to show relevant ads and analyze traffic statistics.</p>
+        <button id="approval-control" type="button">I’m happy with that</button>
+      </section>
+      <script>
+        window.OneTrust = { fixture: true };
+      </script>
     `;
   }
   if (options.lateFirstLayerChoiceControls) {

@@ -4606,9 +4606,15 @@ async function readConsentUiObservation(
       rejectedReasons.add("footer_nav_page_chrome");
       return false;
     }
+    const isContextConfirmedApprovalControl =
+      control.actionType === "accept_all" &&
+      control.matchStrength === "contextual" &&
+      control.classifierReasonCodes?.includes("context_satisfied") === true &&
+      control.classifierVariant === "approval_acknowledgment";
     if (
       control.inventorySource === "full_document_consent_surface" &&
-      (classifiedConsentSurfaceControlsByContainer.get(control.inventoryContainerKey ?? "unknown")?.size ?? 0) < 2
+      (classifiedConsentSurfaceControlsByContainer.get(control.inventoryContainerKey ?? "unknown")?.size ?? 0) < 2 &&
+      !isContextConfirmedApprovalControl
     ) {
       rejectedReasons.add("generic_container_fewer_than_two_classified_controls");
       return false;
@@ -5463,10 +5469,16 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
       const consentContextPattern = /cookie|cookies|privacy|consent|analytics|tracking|marketing|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i;
       const consentSurfaceTextPattern = /cookie|cookies|privacy settings|privacy preferences|analytics preferences|consent preferences|tracking preferences/i;
       const consentSurfaceActionPattern = /consent|privacy|preference|preferences|setting|settings|choice|choices|accept|reject|decline|allow|manage|ablehnen|akzeptieren|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer/i;
+      const normalizeActionLabel = (value) =>
+        String(value || "")
+          .replace(/[‘’]/g, "'")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
       const canonicalActionLabelSet = new Set(
         Array.isArray(canonicalConsentInventoryLabels)
           ? canonicalConsentInventoryLabels
-            .map((value) => String(value || "").replace(/\s+/g, " ").trim().toLowerCase())
+            .map((value) => normalizeActionLabel(value))
             .filter((value) => value.length >= 4 && value.length <= 80)
           : []
       );
@@ -5488,7 +5500,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
         return (aria || title || value || textContent || "").replace(/\s+/g, " ").trim();
       };
       const isCanonicalActionLabel = (label) => {
-        const normalizedLabel = String(label || "").replace(/\s+/g, " ").trim().toLowerCase();
+        const normalizedLabel = normalizeActionLabel(label);
         if (canonicalActionLabelMatchCache.has(normalizedLabel)) {
           return canonicalActionLabelMatchCache.get(normalizedLabel);
         }
@@ -5501,7 +5513,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
         return matched;
       };
       const isExactCanonicalActionLabel = (label) => {
-        const normalizedLabel = String(label || "").replace(/\s+/g, " ").trim().toLowerCase();
+        const normalizedLabel = normalizeActionLabel(label);
         return canonicalActionLabelSet.has(normalizedLabel);
       };
       const hasCanonicalContextHint = (text) => {
@@ -5684,12 +5696,16 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           );
           const genericPageChrome = /^(?:footer|header|nav|aside)$/i.test(tagName) || /(?:footer|header|navbar|navigation|breadcrumb|menu)/i.test(id + " " + className + " " + role);
           const controlCount = current.querySelectorAll(controlSelector + ", [tabindex='0']").length;
+          const singleCanonicalContextualControl = (
+            controlCount === 1 &&
+            isExactCanonicalActionLabel(labelFor(element))
+          );
           if (
-            controlCount >= 2 &&
+            (controlCount >= 2 || singleCanonicalContextualControl) &&
             !genericPageChrome &&
             (dialogish || controlCount <= 8) &&
             consentSurfaceTextPattern.test(contextText) &&
-            consentSurfaceActionPattern.test(contextText)
+            (consentSurfaceActionPattern.test(contextText) || singleCanonicalContextualControl)
           ) {
             return { key: selectorHintFor(current), source: "full_document_consent_surface" };
           }

@@ -1915,6 +1915,44 @@ test("pre-consent runtime scanner inventories off-viewport controls inside bound
   }
 });
 
+test("pre-consent runtime scanner retains a context-confirmed off-viewport approval control", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-contextual-approval-"));
+  try {
+    const url = server.urlFor("consent-contextual-approval-offscreen");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      routeFulfillers,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      waitMode: "fast",
+    });
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.deepEqual(observation?.visibleChoiceLabels, ["I’m happy with that"]);
+    assert.equal(
+      observation?.controls[0]?.classifierVariant,
+      "approval_acknowledgment",
+    );
+    assert.equal(
+      observation?.basis.includes("inventory:full_document_consent_surface_controls"),
+      true,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner inventories open shadow-root consent controls without interaction", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-shadow-context-controls-"));

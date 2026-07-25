@@ -145,7 +145,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       assessmentStatus: "checked",
       evidenceState: "observed",
       id: "cmp_framework_signal_observed",
-      label: "CMP / consent-management signal",
+      label: "CMP framework",
       status: "Observed"
     })),
     "neutral_signal"
@@ -1535,7 +1535,7 @@ test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead 
       assessmentStatus: "checked",
       evidenceState: "observed",
       id: "cmp_framework_signal_observed",
-      label: "CMP / consent-management signal",
+      label: "CMP framework",
       status: "Observed"
     }),
     makeChecklistItem({
