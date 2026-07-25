@@ -83,6 +83,13 @@ test("cohort summary reports score drift, withholding, contradictions, and cross
   assert.equal(summary.scoredCount, 2);
   assert.equal(summary.withheldCount, 1);
   assert.equal(summary.withheldRate, 0.3333);
+  assert.equal(summary.calibration.sampleSufficient, false);
+  assert.equal(summary.calibration.upperTail.count, 0);
+  assert.equal(summary.calibration.lowerTail.count, 0);
+  assert.equal(summary.calibration.upperTail.maximumRate, 0.02);
+  assert.equal(summary.calibration.lowerTail.maximumRate, 0.02);
+  assert.equal(summary.calibration.pass, false);
+  assert.equal(summary.calibration.percentiles.p50, 70);
   assert.equal(summary.comparison.comparableCount, 2);
   assert.equal(summary.crossRegion.comparedGroupCount, 1);
   assert.equal(summary.crossRegion.maximumScoreRange, 15);
@@ -90,6 +97,24 @@ test("cohort summary reports score drift, withholding, contradictions, and cross
   assert.equal(summary.crossRegion.ranges[0]?.scanSource, "lambda");
   assert.equal(summary.crossSource.comparedGroupCount, 0);
   assert.equal(summary.cutoverEligibleCount, 0);
+});
+
+test("cohort calibration gate measures both score tails without normalizing the scores", () => {
+  const artifacts = Array.from({ length: 100 }, (_, index) => artifact({
+    legacyScore: 50,
+    region: null,
+    scanId: `scan-${index}`,
+    severity: index === 0 ? "high" : index < 6 ? "medium" : undefined
+  }));
+  const summary = summarizeCanonicalShadowScoreCohort(artifacts);
+
+  assert.equal(summary.calibration.sampleSufficient, true);
+  assert.equal(summary.calibration.upperTail.rate, 0.94);
+  assert.equal(summary.calibration.lowerTail.rate, 0);
+  assert.equal(summary.calibration.pass, false);
+  assert.equal(summary.calibration.scoreBuckets["61-70"], 1);
+  assert.equal(summary.calibration.scoreBuckets["81-90"], 5);
+  assert.equal(summary.calibration.scoreBuckets["91-100"], 94);
 });
 
 test("cohort summary does not label same-region repeats as cross-region evidence", () => {

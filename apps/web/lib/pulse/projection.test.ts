@@ -159,7 +159,10 @@ test("Pulse uses the same selected versioned GDPR/ePrivacy assessment as the rep
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
   assert.match(source, /gdprEprivacyScoreAssessment/);
+  assert.match(source, /getCustomerFacingGdprEprivacyPostureAssessment/);
   assert.match(source, /customerScoreAssessment/);
+  assert.match(source, /canonical_posture_assessment_unavailable/);
+  assert.doesNotMatch(source, /storedCustomerScoreAssessment \?\s*storedCustomerScoreAssessment\.scoreValue\s*:\s*gdprEprivacyScore/);
   assert.match(source, /coverageRatio: reportSurface\.customerScoreAssessment\.coverageRatio/);
   assert.match(source, /kind: reportSurface\.customerScoreAssessment\.scoreKind/);
   assert.match(source, /metricLabel: reportSurface\.customerScoreAssessment\.scoreKind/);

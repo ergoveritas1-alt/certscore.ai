@@ -169,6 +169,25 @@ test("classifies observed English options labels", () => {
   }).intent, "options");
 });
 
+test("classifies consent-contextual approval wording without broadening generic language", () => {
+  const classification = classifyConsentControlLabel({
+    label: "I'm happy with that",
+    contextText: "This website uses cookies to improve your experience and show relevant ads.",
+  });
+  assert.equal(classification.intent, "accept");
+  assert.equal(classification.semanticRole, "explicit_accept");
+  assert.equal(classification.matchStrength, "contextual");
+  assert.equal(classification.variant, "approval_acknowledgment");
+  assert.equal(classifyConsentControlLabel({ label: "I'm happy with that" }).intent, "unknown");
+  assert.equal(
+    classifyConsentControlLabel({
+      label: "I’m happy with that",
+      contextText: "We use cookies and analytics on this site.",
+    }).intent,
+    "accept",
+  );
+});
+
 test("classifies observed Spanish and Italian consent labels", () => {
   assert.equal(classifyConsentControlLabel({ label: "Aceptar" }).matchedLocale, "es");
   assert.equal(classifyConsentControlLabel({ label: "Aceptar y continuar" }).intent, "accept");

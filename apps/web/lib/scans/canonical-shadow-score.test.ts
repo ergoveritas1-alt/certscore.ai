@@ -186,6 +186,26 @@ test("critical caps prevent a supported high-severity gap from coexisting with a
   assert.deepEqual(result.contradictions, []);
 });
 
+test("an Admixer-style cluster of pre-consent tracker findings cannot retain a high posture score", () => {
+  const result = deriveCanonicalShadowScore({
+    coverageRows: COVERAGE_ROWS,
+    findings: [
+      finding({ findingId: "pre_consent_tracking_detected", severity: "high" }),
+      finding({ findingId: "third_party_tracking_pre_consent", severity: "high" }),
+      finding({ findingId: "third_party_cookie_pre_consent", severity: "medium" })
+    ],
+    model: MODEL
+  });
+
+  assert.equal(result.postureScore, 54);
+  assert.ok((result.postureScore ?? 100) < 60);
+  assert.deepEqual(result.familyContributions[0]?.findingIds, [
+    "pre_consent_tracking_detected",
+    "third_party_cookie_pre_consent",
+    "third_party_tracking_pre_consent"
+  ]);
+});
+
 test("unconfigured finding families fail closed", () => {
   const result = deriveCanonicalShadowScore({
     coverageRows: COVERAGE_ROWS,

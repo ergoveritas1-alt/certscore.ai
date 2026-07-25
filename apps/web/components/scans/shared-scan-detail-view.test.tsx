@@ -28,6 +28,45 @@ test("pre-consent inventory keeps purpose and evidence separate, removes request
   assert.doesNotMatch(source, /"Requests"/);
 });
 
+test("party attribution doughnut is derived directly from displayed Party values", async () => {
+  const { buildInventoryPartyAttributionSegments } = await import("./shared-scan-detail-view");
+  const segments = buildInventoryPartyAttributionSegments([
+    { party: "first_party" },
+    { party: "third_party" },
+    { party: "third_party" },
+    { party: "mixed" },
+    { party: "unknown" }
+  ]);
+
+  assert.deepEqual(
+    segments.map(({ count, filter, label }) => ({ count, filter, label })),
+    [
+      { count: 1, filter: "first_party", label: "1st party" },
+      { count: 2, filter: "third_party", label: "3rd party" },
+      { count: 1, filter: "mixed", label: "Mixed" },
+      { count: 1, filter: "unknown", label: "Unknown" }
+    ]
+  );
+
+  const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
+  assert.match(source, />Party attribution</);
+  assert.match(source, /aria-label="Party attribution distribution"/);
+  assert.doesNotMatch(source, />Priority mix</);
+});
+
+test("customer-facing scan detail calculates the current canonical model as its overall score", () => {
+  const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
+
+  assert.match(source, /buildCanonicalShadowScoreInput\(input\)/);
+  assert.match(source, /deriveCanonicalShadowScore\(\{/);
+  assert.match(source, /model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL/);
+  assert.match(source, /\? canonicalOverallScore\s+: null/);
+  assert.doesNotMatch(source, /getCustomerFacingGdprEprivacyPostureAssessment/);
+  assert.match(source, /scoreLabel="Overall score"/);
+  assert.doesNotMatch(source, /deriveRegulatoryCoverageScore/);
+  assert.doesNotMatch(source, /snapshot\?\.certscore_overall/);
+});
+
 test("pre-consent inventory exposes retained cookie metadata and all three data-flow layers", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
   const tableEnd = source.indexOf("</table>");
@@ -35,8 +74,15 @@ test("pre-consent inventory exposes retained cookie metadata and all three data-
 
   assert.match(source, /Show retained vendor evidence/);
   assert.match(source, /<InventoryTypeIcon emphasized type=/);
-  assert.match(source, /bg-sky-100/);
-  assert.match(source, /bg-violet-100/);
+  assert.match(source, /<InventoryTypeIcon emphasized type=\{row\.type\} \/>/);
+  assert.doesNotMatch(source, /row\.cookieDetails\.length > 0 \? "cookie" : row\.type/);
+  assert.match(source, /getInventoryTypeDisclosureClasses\(row\)/);
+  assert.match(source, /border-sky-300/);
+  assert.match(source, /to-red-50\/70/);
+  assert.match(source, /to-amber-50\/70/);
+  assert.match(source, /to-blue-50\/70/);
+  assert.match(source, /bg-slate-100/);
+  assert.match(source, /ring-slate-200/);
   assert.match(source, />&gt;12 months</);
   assert.match(source, />Lifespan</);
   assert.match(source, />Data types</);

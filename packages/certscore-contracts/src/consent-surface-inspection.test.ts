@@ -105,6 +105,36 @@ test("an ambiguous OK acknowledgment retains a non-actionable consent surface", 
   assert.equal(outcome.outcome, "non_actionable_surface_observed");
 });
 
+test("CMP runtime identity alone does not confirm a visible consent surface", () => {
+  const input = baseInput();
+  input.visualCapture = {
+    status: "available",
+    captureMethod: "primary_full_page",
+    artifactRefs: [],
+    notes: []
+  };
+  input.cmpRuntimeObservations = [{
+    observationId: "cmp-hubspot",
+    observedAtMs: 700,
+    sourceScanner: "preConsentRuntimeScanner",
+    scenario: "cmp_runtime_signal",
+    consentStateAtTime: "pre_consent",
+    entity: "hubspot",
+    vendor: "HubSpot",
+    product: "HubSpot Banner",
+    signals: [],
+    evidenceRefs: [],
+    confidence: 0.97,
+    directVsInferred: "direct"
+  }];
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.consentSurfaceObserved, false);
+  assert.equal(outcome.actionableControlObserved, false);
+  assert.equal(outcome.outcome, "no_surface_observed_complete_coverage");
+});
+
 test("timeout evidence prevents absence from becoming a complete negative observation", () => {
   const input = baseInput();
   input.consentUiObservations![0]!.basis = ["bounded_capture_timeout_or_failure"];

@@ -11,6 +11,7 @@ import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } fr
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveDisplayCreatedAt } from "./display-state";
 import { selectConfiguredCustomerGdprEprivacyScore } from "./customer-score-cutover-server";
+import { getCustomerFacingGdprEprivacyPostureAssessment } from "../../lib/scans/customer-score-cutover";
 import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
 import { projectAdminNoGo } from "../admin/admin-no-go";
 import {
@@ -37,7 +38,7 @@ export type OrganizationScanListItem = {
   certscoreOverall: number | null;
   scoreCoverageConfidence: "high" | "medium" | "low" | "insufficient" | null;
   scoreCoverageRatio: number | null;
-  scoreLabel: "GDPR/ePrivacy evidence" | "GDPR/ePrivacy posture" | "Legacy scan score" | null;
+  scoreLabel: "GDPR/ePrivacy posture" | null;
   scoreScoredAt: string | null;
   scoreSource: string | null;
   scoreVersion: string | null;
@@ -525,12 +526,12 @@ async function loadOrganizationScans(
       visualAccessReview: runtimeArtifact?.visual_access_review ?? null,
       snapshotVisualAccessReview: snapshot?.visual_access_review ?? null
     });
-    const scoreAssessment = noGo.isNoGo ? null : scoreSelection.assessment;
+    const scoreAssessment = noGo.isNoGo
+      ? null
+      : getCustomerFacingGdprEprivacyPostureAssessment(scoreSelection);
     const displayedScore = noGo.isNoGo
       ? null
-      : scoreAssessment
-      ? scoreAssessment.scoreValue
-      : snapshot?.certscore_overall ?? null;
+      : scoreAssessment?.scoreValue ?? null;
     return {
         id: scan.id,
         domainActiveScanExists: latestDomainScan?.status === "queued" || latestDomainScan?.status === "running",
@@ -542,13 +543,9 @@ async function loadOrganizationScans(
         certscoreOverall: displayedScore,
         scoreCoverageConfidence: scoreAssessment?.coverageConfidence ?? null,
         scoreCoverageRatio: scoreAssessment?.coverageRatio ?? null,
-        scoreLabel: scoreAssessment
-          ? scoreSelection.label
-          : displayedScore !== null
-            ? "Legacy scan score"
-            : null,
+        scoreLabel: scoreAssessment ? "GDPR/ePrivacy posture" : null,
         scoreScoredAt: scoreAssessment?.scoredAt ?? null,
-        scoreSource: scoreAssessment?.scoreSource ?? (displayedScore !== null ? "legacy.scan-snapshot" : null),
+        scoreSource: scoreAssessment?.scoreSource ?? null,
         scoreVersion: scoreAssessment?.scoreVersion ?? null,
         regulatoryScore: noGo.isNoGo ? null : snapshot?.regulatory_exposure_score ?? null,
         privacyScore: noGo.isNoGo ? null : snapshot?.privacy_score ?? null,

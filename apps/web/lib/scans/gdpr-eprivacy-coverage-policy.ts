@@ -302,6 +302,16 @@ function getConsentSurfaceInspection(runtimeArtifacts: Record<string, unknown> |
   );
 }
 
+function hasTypedConsentSurfaceObservation(input: GdprEprivacyCoveragePolicyInput) {
+  const inspection = getConsentSurfaceInspection(input.runtimeArtifacts);
+  return (
+    getBoolean(inspection, ["consentSurfaceObserved", "consent_surface_observed"]) === true &&
+    ["actionable_surface_observed", "non_actionable_surface_observed"].includes(
+      getString(inspection, ["outcome"]) ?? "",
+    )
+  );
+}
+
 function makeIncompleteConsentSurfaceInspectionOutcome(
   input: GdprEprivacyCoveragePolicyInput,
   rowId: string,
@@ -322,10 +332,16 @@ function makeIncompleteConsentSurfaceInspectionOutcome(
     return null;
   }
 
+  const surfaceObserved = hasTypedConsentSurfaceObservation(input);
+  const status = surfaceObserved ? "Not confirmed" as const : "Not testable" as const;
+  const statusText = surfaceObserved
+    ? `A consent surface was retained, but ${controlLabel} was not established from the retained first-layer evidence; deeper preference-path coverage was incomplete.`
+    : `The pre-interaction consent-surface inspection did not complete, so ${controlLabel} availability cannot be determined from the retained evidence.`;
+
   return makeOutcome(
     rowId,
-    "Not testable",
-    `The pre-interaction consent-surface inspection did not complete, so ${controlLabel} availability cannot be determined from the retained evidence.`,
+    status,
+    statusText,
     ["Evidence limitation: incomplete pre-interaction consent-surface inspection"],
     {
       missingOrIncompleteSourceSignals: [
@@ -1523,6 +1539,11 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     (simpleCookieNoticeEvidence.acceptControlObserved ||
       simpleCookieNoticeEvidence.rejectControlObserved ||
       simpleCookieNoticeEvidence.visibleChoiceLabels.length > 0);
+  const typedConsentInspectionObserved =
+    getBoolean(consentSurfaceInspection, ["consentSurfaceObserved", "consent_surface_observed"]) === true &&
+    ["actionable_surface_observed", "non_actionable_surface_observed"].includes(
+      getString(consentSurfaceInspection, ["outcome"]) ?? "",
+    );
   const typedConsentInspectionActionable =
     getString(consentSurfaceInspection, ["outcome"]) === "actionable_surface_observed" &&
     getString(consentSurfaceInspection, ["coverageStatus", "coverage_status"]) === "complete" &&
@@ -1539,14 +1560,20 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     )
   );
   const consentSurfaceObserved =
-    (!privacyChoiceSurfaceOnly || simpleCookieNoticeWithChoice || retainedInitialCookieConsentLayerEvidence) &&
-    (
+    typedConsentInspectionObserved ||
+    ((!privacyChoiceSurfaceOnly || simpleCookieNoticeWithChoice || retainedInitialCookieConsentLayerEvidence) && (
       simpleCookieNoticeWithChoice ||
       retainedInitialCookieConsentLayerEvidence ||
       typedConsentUiObservationRetained ||
       explicitConsentBannerConfirmed === true ||
       typedConsentInspectionActionable ||
       retainedBannerTextOrControls
+    ));
+
+  const consentInspectionIncomplete =
+    getBoolean(consentSurfaceInspection, ["inspectionCompleted", "inspection_completed"]) === false ||
+    ["partial", "limited", "incomplete"].includes(
+      getString(consentSurfaceInspection, ["coverageStatus", "coverage_status"]) ?? "",
     );
 
   const completeNoSurfaceObservation =
@@ -1571,11 +1598,6 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     );
   }
 
-  const consentInspectionIncomplete =
-    getBoolean(consentSurfaceInspection, ["inspectionCompleted", "inspection_completed"]) === false ||
-    ["partial", "limited", "incomplete"].includes(
-      getString(consentSurfaceInspection, ["coverageStatus", "coverage_status"]) ?? "",
-    );
   if (consentInspectionIncomplete && !consentSurfaceObserved) {
     return makeIncompleteConsentSurfaceInspectionOutcome(input, "consent_surface_observed", "consent-surface presence");
   }
@@ -1639,7 +1661,9 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
         ? "A first-layer cookie notice was observed with actionable Accept and Decline controls."
         : retainedInitialCookieConsentLayerEvidence
           ? "A first-layer cookie consent surface was retained with actionable choice or preference controls."
-          : "A consent surface or first-layer consent controls were retained in the tested context.",
+          : consentInspectionIncomplete
+            ? "A consent surface was retained in the tested context, but control inspection was incomplete; control availability was not established."
+            : "A consent surface or first-layer consent controls were retained in the tested context.",
       evidenceRefs,
       {
         retainedEvidence: {

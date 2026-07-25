@@ -12,11 +12,48 @@ function percentile(values: number[], quantile: number) {
   return sorted[index] ?? null;
 }
 
+const CALIBRATION_MINIMUM_SAMPLE_COUNT = 100;
+const CALIBRATION_UPPER_TAIL_MAX_RATE = 0.02;
+const CALIBRATION_LOWER_TAIL_MAX_RATE = 0.02;
+
+function scoreBucket(score: number) {
+  if (score <= 10) return "0-10" as const;
+  if (score <= 20) return "11-20" as const;
+  if (score <= 30) return "21-30" as const;
+  if (score <= 40) return "31-40" as const;
+  if (score <= 50) return "41-50" as const;
+  if (score <= 60) return "51-60" as const;
+  if (score <= 70) return "61-70" as const;
+  if (score <= 80) return "71-80" as const;
+  if (score <= 90) return "81-90" as const;
+  return "91-100" as const;
+}
+
 export function summarizeCanonicalShadowScoreCohort(
   artifacts: CanonicalShadowScoreComparisonArtifact[]
 ) {
   const scored = artifacts.filter((artifact) => artifact.candidate.postureScore !== null);
   const withheld = artifacts.filter((artifact) => artifact.candidate.postureScore === null);
+  const scoredValues = scored.flatMap((artifact) =>
+    artifact.candidate.postureScore === null ? [] : [artifact.candidate.postureScore]
+  );
+  const scoreBuckets = {
+    "0-10": 0,
+    "11-20": 0,
+    "21-30": 0,
+    "31-40": 0,
+    "41-50": 0,
+    "51-60": 0,
+    "61-70": 0,
+    "71-80": 0,
+    "81-90": 0,
+    "91-100": 0
+  };
+  for (const score of scoredValues) scoreBuckets[scoreBucket(score)] += 1;
+  const lowerTailCount = scoredValues.filter((score) => score <= 10).length;
+  const upperTailCount = scoredValues.filter((score) => score >= 90).length;
+  const lowerTailRate = ratio(lowerTailCount, scoredValues.length);
+  const upperTailRate = ratio(upperTailCount, scoredValues.length);
   const contradicted = artifacts.filter((artifact) =>
     artifact.candidate.contradictions.length > 0 || artifact.comparison.contradictions.length > 0
   );
@@ -150,6 +187,33 @@ export function summarizeCanonicalShadowScoreCohort(
       insufficient: artifacts.filter((artifact) => artifact.candidate.coverageConfidence === "insufficient").length,
       low: artifacts.filter((artifact) => artifact.candidate.coverageConfidence === "low").length,
       medium: artifacts.filter((artifact) => artifact.candidate.coverageConfidence === "medium").length
+    },
+    calibration: {
+      minimumSampleCount: CALIBRATION_MINIMUM_SAMPLE_COUNT,
+      sampleSufficient: scoredValues.length >= CALIBRATION_MINIMUM_SAMPLE_COUNT,
+      lowerTail: {
+        count: lowerTailCount,
+        maximumRate: CALIBRATION_LOWER_TAIL_MAX_RATE,
+        pass: scoredValues.length >= CALIBRATION_MINIMUM_SAMPLE_COUNT && lowerTailRate <= CALIBRATION_LOWER_TAIL_MAX_RATE,
+        rate: lowerTailRate,
+        range: "0-10"
+      },
+      upperTail: {
+        count: upperTailCount,
+        maximumRate: CALIBRATION_UPPER_TAIL_MAX_RATE,
+        pass: scoredValues.length >= CALIBRATION_MINIMUM_SAMPLE_COUNT && upperTailRate <= CALIBRATION_UPPER_TAIL_MAX_RATE,
+        rate: upperTailRate,
+        range: "90-100"
+      },
+      pass: scoredValues.length >= CALIBRATION_MINIMUM_SAMPLE_COUNT &&
+        lowerTailRate <= CALIBRATION_LOWER_TAIL_MAX_RATE &&
+        upperTailRate <= CALIBRATION_UPPER_TAIL_MAX_RATE,
+      scoreBuckets,
+      percentiles: {
+        p10: percentile(scoredValues, 0.1),
+        p50: percentile(scoredValues, 0.5),
+        p90: percentile(scoredValues, 0.9)
+      }
     },
     crossRegion: {
       comparedGroupCount: crossRegionRanges.length,

@@ -57,7 +57,7 @@ function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanSt
         <p className="mt-2 text-sm text-slate-500">Loading the completed scan report…</p>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        {["GDPR/ePrivacy evidence score", "3rd-party requests", "Non-essential storage"].map((label) => (
+        {["Overall score", "3rd-party requests", "Non-essential storage"].map((label) => (
           <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
             <div className="mt-4 h-9 w-24 animate-pulse rounded-lg bg-slate-100" />

@@ -115,7 +115,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "cmp_framework_signal_observed",
-    label: "Consent framework / CMP signal",
+    label: "CMP / consent-management signal",
     explanation: "Whether a consent-management framework, CMP vendor, or CMP runtime signal was observed in the pre-consent/public-web context.",
     findingIds: ["consent_surface_observed"],
     defaultFindingStatus: "Observed",

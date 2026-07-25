@@ -33,6 +33,12 @@ import {
   suppressUnsupportedCmpAliasRows
 } from "../scans/runtime-inventory-projection";
 import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
+import {
+  CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_KIND,
+  CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_SOURCE,
+  getCustomerFacingGdprEprivacyPostureAssessment
+} from "../scans/customer-score-cutover";
+import { GDPR_EPRIVACY_SHADOW_LUNA_DECISION } from "../scans/canonical-shadow-score-luna-decision";
 import { meaningfulPolicySurfaceTitle, prioritizePublicPolicySurfaces } from "../scans/policy-enrichment-row";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import {
@@ -417,11 +423,20 @@ function buildPulseReportSurface(input: {
     rows: reportableGdprRows
   });
   const gdprEprivacyScore = gdprEprivacyScoreAssessment.score;
-  const storedCustomerScoreAssessment = input.scanRecord.customerGdprEprivacyScoreSelection?.assessment ?? null;
-  const customerScoreAssessment = storedCustomerScoreAssessment ?? gdprEprivacyScoreAssessment;
-  const score = boundedScore(storedCustomerScoreAssessment
-    ? storedCustomerScoreAssessment.scoreValue
-    : gdprEprivacyScore);
+  const storedCustomerScoreAssessment = getCustomerFacingGdprEprivacyPostureAssessment(
+    input.scanRecord.customerGdprEprivacyScoreSelection
+  );
+  const customerScoreAssessment = storedCustomerScoreAssessment ?? {
+    coverageConfidence: gdprEprivacyScoreAssessment.coverageConfidence,
+    coverageRatio: gdprEprivacyScoreAssessment.coverageRatio,
+    scoreKind: CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_KIND,
+    scoreSource: CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_SOURCE,
+    scoreStatus: "withheld" as const,
+    scoreValue: null,
+    scoreVersion: GDPR_EPRIVACY_SHADOW_LUNA_DECISION.modelVersion,
+    withholdingReason: "canonical_posture_assessment_unavailable"
+  };
+  const score = boundedScore(storedCustomerScoreAssessment?.scoreValue ?? null);
   const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerInventoryRows);
   const preConsentTrackerRows = groupedTrackerRows
     .filter((row) => row.firstSeenMs !== null)

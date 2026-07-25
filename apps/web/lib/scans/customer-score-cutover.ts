@@ -6,6 +6,7 @@ import {
 
 export const CUSTOMER_GDPR_EPRIVACY_SCORE_MODE_ENV = "CERTSCORE_GDPR_EPRIVACY_SCORE_MODE";
 export const CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_KIND = "gdpr_eprivacy_posture" as const;
+export const CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_SOURCE = "wc01.canonical-gdpr-eprivacy-posture";
 
 export type CustomerScoreAssessment = {
   coverageConfidence: "high" | "insufficient" | "low" | "medium";
@@ -38,6 +39,15 @@ export type CustomerGdprEprivacyScoreSelection = {
   requestedMode: CustomerGdprEprivacyScoreMode;
   selectionReason: CustomerGdprEprivacyScoreSelectionReason;
 };
+
+export function getCustomerFacingGdprEprivacyPostureAssessment(
+  selection: CustomerGdprEprivacyScoreSelection | null | undefined
+) {
+  const assessment = selection?.assessment ?? null;
+  return assessment?.scoreKind === CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_KIND
+    ? assessment
+    : null;
+}
 
 function requestedMode(rawMode: string | null | undefined) {
   const normalized = rawMode?.trim().toLowerCase();

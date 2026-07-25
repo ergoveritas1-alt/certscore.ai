@@ -6,9 +6,10 @@ import {
   isLunaScoreDecisionApprovedForModel,
   type CanonicalShadowScoreLunaDecision
 } from "../../lib/scans/canonical-shadow-score-luna-decision";
+import { CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_SOURCE } from "../../lib/scans/customer-score-cutover";
 
 export const LEGACY_GDPR_EPRIVACY_SCORE_VERSION = "gdpr-eprivacy-evidence.legacy-v1";
-export const CANONICAL_GDPR_EPRIVACY_POSTURE_SCORE_SOURCE = "wc01.canonical-gdpr-eprivacy-posture";
+export const CANONICAL_GDPR_EPRIVACY_POSTURE_SCORE_SOURCE = CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_SOURCE;
 
 type LegacyGdprEprivacyScoreAssessment = {
   coverageConfidence: VersionedScoreAssessmentInput["coverageConfidence"];

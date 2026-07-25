@@ -813,6 +813,15 @@ function normalizeInventoryPurpose(value: string | null | undefined) {
   return (value ?? "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "unknown";
 }
 
+function getInventoryPurposeTokens(values: Array<string | null | undefined>) {
+  return new Set(
+    values
+      .flatMap((value) => (value ?? "").split(/[,;|/]+/))
+      .map((value) => normalizeInventoryPurpose(value))
+      .filter((value) => value !== "unknown"),
+  );
+}
+
 export function deriveInventoryMacroCategory(input: {
   priority?: ConsentReviewPriority | null;
   purpose?: string | null;
@@ -848,7 +857,13 @@ export function deriveInventoryMacroCategory(input: {
 }
 
 export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {
-  const purpose = normalizeInventoryPurpose(getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance));
+  const purposeLabels = [
+    getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance),
+    row.vendorDisplayCategory,
+    row.category,
+    ...(row.regulatoryRelevance ?? [])
+  ];
+  const purposeTokens = getInventoryPurposeTokens(purposeLabels);
   const confidence = getTrackerInventoryConfidence(row);
   const normalizedLabel = row.label.toLowerCase();
   const isLinkedInAdsPixel =
@@ -858,19 +873,52 @@ export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): Conse
   if (isLinkedInAdsPixel) {
     return row.preConsent ? "high" : "review_needed";
   }
-  if (/^(advertising|advertising_measurement|retargeting|session_replay|fingerprinting)$/.test(purpose)) {
+  const hasHighRiskPurpose = [
+    "advertising",
+    "advertising_measurement",
+    "ad_measurement",
+    "retargeting",
+    "audience_measurement",
+    "session_replay",
+    "fingerprinting"
+  ].some((purpose) => purposeTokens.has(purpose));
+  if (hasHighRiskPurpose) {
     return row.preConsent ? "high" : "medium";
   }
-  if (/^(personalization|personalisation)$/.test(purpose) && confidence === "low") {
+  const hasMediumRiskPurpose = [
+    "analytics",
+    "experimentation",
+    "personalization",
+    "personalisation",
+    "a_b_testing",
+    "embedded_content",
+    "tag_management",
+    "tag_manager",
+    "marketing_automation"
+  ].some((purpose) => purposeTokens.has(purpose));
+  if ((purposeTokens.has("personalization") || purposeTokens.has("personalisation")) && confidence === "low") {
     return "review_needed";
   }
-  if (/^(analytics|audience_measurement|experimentation|personalization|personalisation|a_b_testing|embedded_content|tag_management|tag_manager|marketing_automation)$/.test(purpose)) {
+  if (hasMediumRiskPurpose) {
     return row.preConsent ? "medium" : "contextual";
   }
-  if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics)$/.test(purpose)) {
+  const hasContextualPurpose = [
+    "security",
+    "payment",
+    "payment_processors",
+    "authentication",
+    "cookie_compliance",
+    "consent",
+    "consent_management",
+    "performance_monitoring",
+    "telemetry",
+    "diagnostics",
+    "telemetry_diagnostics"
+  ].some((purpose) => purposeTokens.has(purpose));
+  if (hasContextualPurpose) {
     return "contextual";
   }
-  if (/^(cdn_static|cdn|functional|publisher_infrastructure)$/.test(purpose)) {
+  if (["cdn_static", "cdn", "functional", "publisher_infrastructure"].some((purpose) => purposeTokens.has(purpose))) {
     return "contextual";
   }
   if (row.category === "unknown" || row.category === "unresolved_host" || row.domains.length === 0) {

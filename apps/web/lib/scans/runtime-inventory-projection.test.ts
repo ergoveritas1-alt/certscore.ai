@@ -102,7 +102,7 @@ test("derives Fable macro categories without replacing detailed purposes", () =>
   assert.equal(deriveInventoryMacroCategory({ purpose: "Unknown", priority: "review_needed", vendor: "unresolved.example" }), "Review");
 });
 
-test("classifies audience measurement as analytics unless advertising evidence is retained", () => {
+test("classifies pre-consent audience measurement as high-risk tracker evidence", () => {
   assert.equal(
     deriveInventoryMacroCategory({ purpose: "Audience measurement", priority: "medium", vendor: "Publisher analytics" }),
     "Analytics"
@@ -120,7 +120,58 @@ test("classifies audience measurement as analytics unless advertising evidence i
     requestCount: 1,
     source: "runtime requests",
     vendorDisplayCategory: "Analytics"
-  }), "medium");
+  }), "high");
+});
+
+test("scores composite tracker purposes by their highest recognized pre-consent risk", () => {
+  const hubSpotPriority = getTrackerConsentReviewPriority({
+    category: "analytics",
+    confidence: 0.95,
+    domains: ["js-eu1.hs-analytics.net", "js-eu1.hs-banner.com"],
+    firstSeenMs: 1690,
+    label: "HubSpot",
+    observedVia: ["request"],
+    party: "third_party",
+    preConsent: true,
+    regulatoryRelevance: [],
+    requestCount: 1,
+    source: "runtime requests",
+    vendorDisplayCategory: "Analytics, Marketing automation, Cookie compliance"
+  });
+  const leadfeederPriority = getTrackerConsentReviewPriority({
+    category: "analytics",
+    confidence: 0.95,
+    domains: ["sc.lfeeder.com"],
+    firstSeenMs: 3190,
+    label: "Leadfeeder",
+    observedVia: ["request"],
+    party: "third_party",
+    preConsent: true,
+    regulatoryRelevance: [],
+    requestCount: 1,
+    source: "runtime requests",
+    vendorDisplayCategory: "Analytics, Audience measurement"
+  });
+
+  assert.equal(hubSpotPriority, "medium");
+  assert.equal(leadfeederPriority, "high");
+});
+
+test("keeps unresolved composite tracker purposes at review priority", () => {
+  assert.equal(getTrackerConsentReviewPriority({
+    category: "unknown",
+    confidence: 0.8,
+    domains: ["unresolved.example"],
+    firstSeenMs: 1000,
+    label: "Unresolved vendor",
+    observedVia: ["request"],
+    party: "third_party",
+    preConsent: true,
+    regulatoryRelevance: [],
+    requestCount: 1,
+    source: "runtime requests",
+    vendorDisplayCategory: "Unknown, Unclassified"
+  }), "review_needed");
 });
 
 test("projects Adobe Launch host as tag management instead of unknown tracker", () => {

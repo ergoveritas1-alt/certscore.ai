@@ -3,7 +3,10 @@ import test from "node:test";
 import type { CanonicalShadowScoreLunaDecision } from "../../lib/scans/canonical-shadow-score-luna-decision";
 import { GDPR_EPRIVACY_SHADOW_LUNA_DECISION } from "../../lib/scans/canonical-shadow-score-luna-decision";
 import type { StoredVersionedScoreAssessment } from "./score-assessment-repository";
-import { selectCustomerGdprEprivacyScore } from "../../lib/scans/customer-score-cutover";
+import {
+  getCustomerFacingGdprEprivacyPostureAssessment,
+  selectCustomerGdprEprivacyScore
+} from "../../lib/scans/customer-score-cutover";
 
 function assessment(input: Partial<StoredVersionedScoreAssessment> = {}): StoredVersionedScoreAssessment {
   return {
@@ -42,6 +45,23 @@ function approvedDecision(): CanonicalShadowScoreLunaDecision {
       status: "approved_by_luna",
       approvedModelArtifact: "docs/scoring/gdpr-eprivacy-shadow-candidate-v3.json",
       decisionEvidenceArtifact: "artifacts/scoring/luna/model-parameters.json"
+    },
+    monitoringBaselines: {
+      status: "approved_by_luna",
+      decisionEvidenceArtifact: "artifacts/scoring/luna/monitoring-baselines.json",
+      thresholds: {
+        minimumSampleCount: 50,
+        minimumComparableCount: 30,
+        minimumCrossRegionGroupCount: 3,
+        minimumCrossSourceGroupCount: 3,
+        minimumEquivalentInputCrossSourceGroupCount: 3,
+        maximumAbsoluteScoreDeltaP95: 10,
+        maximumContradictionRate: 0.05,
+        maximumWithheldRate: 0.25,
+        maximumCrossRegionScoreRange: 10,
+        maximumCrossSourceScoreRange: 10,
+        maximumEquivalentInputCrossSourceScoreRange: 5
+      }
     },
     signOff: {
       status: "approved_by_luna",
@@ -128,4 +148,21 @@ test("a Luna-approved withheld candidate remains withheld instead of falling bac
   assert.equal(selected.assessment, withheld);
   assert.equal(selected.assessment?.scoreValue, null);
   assert.equal(selected.effectiveMode, "approved_candidate");
+});
+
+test("customer-facing overall score accepts posture assessments and rejects legacy evidence scores", () => {
+  const legacySelection = selectCustomerGdprEprivacyScore({
+    candidateAssessment: candidate,
+    legacyAssessment: legacy,
+    rawMode: "legacy"
+  });
+  const postureSelection = selectCustomerGdprEprivacyScore({
+    candidateAssessment: candidate,
+    decision: approvedDecision(),
+    legacyAssessment: legacy,
+    rawMode: "approved_candidate"
+  });
+
+  assert.equal(getCustomerFacingGdprEprivacyPostureAssessment(legacySelection), null);
+  assert.equal(getCustomerFacingGdprEprivacyPostureAssessment(postureSelection), candidate);
 });

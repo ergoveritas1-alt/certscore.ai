@@ -1213,23 +1213,6 @@ function isMeasuredCountLensFinding(finding: RegulatoryLensFinding) {
   );
 }
 
-function capContextOnlyLensTone(input: {
-  findings: RegulatoryLensFinding[];
-  score: number;
-  tone: ReturnType<typeof buildTone>;
-}) {
-  if (input.tone.label !== "Needs work") {
-    return { score: input.score, tone: input.tone };
-  }
-  if (input.findings.length === 0 || input.findings.some((finding) => !isContextOnlyLensFinding(finding))) {
-    return { score: input.score, tone: input.tone };
-  }
-  return {
-    score: Math.max(input.score, 50),
-    tone: buildWatchTone()
-  };
-}
-
 function buildMappedRegulatoryLensFindings(input: {
   context?: Record<string, unknown>;
   findingIds: Set<string>;
@@ -1322,10 +1305,6 @@ function buildTone(score: number) {
     return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
   }
   return { label: "Needs work", toneClass: "border-rose-200 bg-rose-50 text-rose-800" };
-}
-
-function buildWatchTone() {
-  return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
 }
 
 function buildMinimalRegulatoryLens(input: {
@@ -1454,6 +1433,7 @@ export function buildRegulatoryLenses(
     } | null;
     agencyMappings?: AgencyMapping[];
     benchmarkIndustry?: string | null;
+    gdprEprivacyPostureScore?: number | null;
     regulatoryRisk?: RegulatoryRiskAssessment | null;
     unifiedContext?: UnifiedRegulatoryContext | null;
   }
@@ -1528,16 +1508,23 @@ export function buildRegulatoryLenses(
       : null
   ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
 
-  const gdprScore = clampScore(
-    84 -
-      (hasTrackingConcern ? 32 : 0) -
-      (findingIds.has("cookie_disclosure_gap") ? 10 : 0) -
-      (beforeConsentCookieCount > 0 ? 14 : 0) -
-      (hasConsentConcern ? (hasTrackingConcern || beforeConsentCookieCount > 0 ? 16 : 6) : 0) -
-      (sensitiveTrackingFinding ? 12 : 0) -
-      (findingIds.has("session_recording_services_detected") ? 10 : 0)
-  );
-  const gdprDisplay = capContextOnlyLensTone({ findings: privacyTrackingNotes, score: gdprScore, tone: buildTone(gdprScore) });
+  const canonicalPostureScore =
+    typeof options?.gdprEprivacyPostureScore === "number" &&
+    Number.isFinite(options.gdprEprivacyPostureScore)
+      ? clampScore(options.gdprEprivacyPostureScore)
+      : null;
+  const gdprDisplay = canonicalPostureScore === null
+    ? {
+        score: null,
+        tone: {
+          label: "Not scored",
+          toneClass: "border-slate-300 bg-slate-100 text-slate-700"
+        }
+      }
+    : {
+        score: canonicalPostureScore,
+        tone: buildTone(canonicalPostureScore)
+      };
 
   const lenses: RegulatoryLens[] = [
     {
@@ -2013,6 +2000,7 @@ function BenchmarkMetricCard(input: {
     input.label === "Third-party requests"
       ? "3rd-party requests"
       : input.label;
+  const displayValue = actualValue === null && isScoreMetric ? "Not scored" : actualValue ?? "—";
   return (
     <div className={`relative overflow-visible rounded-[1.1rem] border border-slate-200 px-3.5 py-2 ${tone.card}`}>
       <div className="flex items-start justify-between gap-3">
@@ -2022,8 +2010,8 @@ function BenchmarkMetricCard(input: {
       </div>
       <div className="mt-2">
         <div className="flex items-end gap-1.5">
-          <span className={`text-[2.15rem] font-semibold leading-none tracking-tight ${tone.value}`}>{actualValue ?? "—"}</span>
-          {input.maxValue ? <span className="pb-0.5 text-[1.35rem] leading-none text-slate-500">/100</span> : null}
+          <span className={`text-[2.15rem] font-semibold leading-none tracking-tight ${actualValue === null && isScoreMetric ? "text-slate-500 text-[1.35rem]" : tone.value}`}>{displayValue}</span>
+          {input.maxValue && actualValue !== null ? <span className="pb-0.5 text-[1.35rem] leading-none text-slate-500">/100</span> : null}
           <span className="pb-1">
             <span className="sr-only">{benchmarkValue !== null ? `Expected ${benchmarkValue}` : "Expected benchmark unavailable"}</span>
             {benchmarkTooltip ? <InfoTip align="start" placement="bottom" text={benchmarkTooltip} /> : null}
@@ -2256,16 +2244,25 @@ function ExecutiveSignalSnapshotPane(input: {
       ? `${input.beforeConsentCookieCount} ${input.beforeConsentCookieCount === 1 ? "cookie was" : "cookies were"} observed before consent; no third-party tracker vendor or domain was resolved for this scan.`
       : null;
   const consentSurfaceStatus = input.consentSurfaceStatus ?? "Not determined";
+  const cmpDetectedLabel = input.cmpVendorName
+    ? `${input.cmpDisplayName.replace(/\s+(?:banner|cmp)$/i, "")} CMP detected`
+    : null;
   const consentSurfaceLabel =
     consentSurfaceStatus === "Observed"
       ? (input.cmpVendorName ? input.cmpDisplayName : "Unknown CMP / consent banner")
       : consentSurfaceStatus === "Not observed"
-        ? (input.cmpVendorName ? `${input.cmpDisplayName} technology signal detected` : "No consent banner observed")
-        : "Consent banner not determined";
+        ? (cmpDetectedLabel ?? "No consent banner observed")
+        : input.cmpVendorName
+          ? cmpDetectedLabel
+          : "Consent banner not determined";
   const consentSurfaceNote =
-    consentSurfaceStatus === "Not determined" || consentSurfaceStatus === "Not testable"
-      ? "Consent inspection was incomplete or not representative; banner presence was not determined."
-      : null;
+    input.cmpVendorName && consentSurfaceStatus === "Not observed"
+      ? `${input.cmpDisplayName} technology was observed, but no visible consent banner was retained in this scan context.`
+      : input.cmpVendorName && (consentSurfaceStatus === "Not determined" || consentSurfaceStatus === "Not testable")
+        ? `${input.cmpDisplayName} CMP technology was observed, but visible banner presence could not be determined because consent inspection was incomplete or not representative.`
+        : consentSurfaceStatus === "Not determined" || consentSurfaceStatus === "Not testable"
+          ? "Consent inspection was incomplete or not representative; banner presence was not determined."
+          : null;
   return (
     <>
       <div className="flex items-center justify-between gap-2">
@@ -4250,7 +4247,7 @@ export function ExecutiveSummaryCard(input: {
   regulatoryRisk?: RegulatoryRiskAssessment | null;
   resolvedVendorNames: string[];
   score: number | null;
-  scoreLabel?: "GDPR/ePrivacy evidence score" | "GDPR/ePrivacy posture score";
+  scoreLabel?: "Overall score" | "GDPR/ePrivacy evidence score" | "GDPR/ePrivacy posture score";
   scanDurationMs?: number | null;
   scanOutcome?: string | null;
   scanTimelineEvents?: ExecutiveTimelineEvent[] | null;
@@ -4334,6 +4331,7 @@ export function ExecutiveSummaryCard(input: {
   const recognizedCmpBrand = getRecognizedCmpBrand(input.cmpVendorName);
   const cmpDisplayName =
     recognizedCmpBrand?.label ??
+    input.cmpVendorName ??
     (input.cookieBannerPresent ? "Unknown CMP / consent banner" : "Consent banner not determined");
   const cmpStatusAvailable = Boolean(input.cookieBannerPresent || input.cmpVendorName);
   const fingerprintEvidence = input.fingerprintReasons.filter(Boolean);
@@ -4551,11 +4549,13 @@ export function ExecutiveSummaryCard(input: {
                 <div className="space-y-2">
                   <div className="grid gap-2 sm:grid-cols-3">
                     <BenchmarkMetricCard
-                      label={input.scoreLabel ?? "GDPR/ePrivacy evidence score"}
+                      label={input.scoreLabel ?? "Overall score"}
                       actualValue={input.score}
                       benchmarkValue={null}
                       maxValue={100}
-                      note="Weighted from evidence-gated GDPR/ePrivacy checklist rows. Scan coverage and evidence limitations affect how this score should be interpreted."
+                      note={input.score === null
+                        ? "Insufficient evidence to calculate a GDPR/ePrivacy posture score for this scan."
+                        : "Higher scores indicate stronger observed GDPR/ePrivacy posture. Lower scores indicate more issues requiring attention."}
                     />
                     <BenchmarkMetricCard
                       label="Third-party requests"

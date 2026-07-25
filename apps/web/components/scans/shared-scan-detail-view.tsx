@@ -184,7 +184,9 @@ import {
 } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
-import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
+import { buildCanonicalShadowScoreInput } from "../../lib/scans/canonical-shadow-score-input";
+import { deriveCanonicalShadowScore } from "../../lib/scans/canonical-shadow-score";
+import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL } from "../../lib/scans/canonical-shadow-score-model";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import {
@@ -196,6 +198,21 @@ import { ViewerTimestamp } from "../time/viewer-timestamp";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 
 export { getTrackerConsentReviewPriority };
+
+export function deriveCanonicalOverallScoreForReport(input: {
+  checklistRows: GdprEprivacyCoverageChecklistItem[];
+  unifiedFindings: UnifiedFindingDisplayPacket[];
+}) {
+  try {
+    const scoreInput = buildCanonicalShadowScoreInput(input);
+    return deriveCanonicalShadowScore({
+      ...scoreInput,
+      model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL
+    }).postureScore;
+  } catch {
+    return null;
+  }
+}
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
@@ -527,7 +544,7 @@ function InventoryTypeIcon({ emphasized = false, type }: { emphasized?: boolean;
     return (
       <span
         aria-label="Cookie"
-        className={`inline-flex items-center justify-center text-sky-700 ${emphasized ? "h-6 w-6 rounded-md bg-sky-100 text-sky-800 ring-1 ring-inset ring-sky-200" : "h-5 w-5"}`}
+        className={`inline-flex items-center justify-center text-sky-700 ${emphasized ? "h-6 w-6 rounded-md bg-slate-100 text-sky-800 ring-1 ring-inset ring-slate-200" : "h-5 w-5"}`}
         title="Cookie"
       >
         <svg aria-hidden="true" className={emphasized ? "h-4 w-4" : "h-3.5 w-3.5"} fill="none" viewBox="0 0 24 24">
@@ -541,7 +558,7 @@ function InventoryTypeIcon({ emphasized = false, type }: { emphasized?: boolean;
   return (
     <span
       aria-label="Tracker"
-      className={`inline-flex items-center justify-center text-violet-700 ${emphasized ? "h-6 w-6 rounded-md bg-violet-100 text-violet-800 ring-1 ring-inset ring-violet-200" : "h-5 w-5"}`}
+      className={`inline-flex items-center justify-center text-violet-700 ${emphasized ? "h-6 w-6 rounded-md bg-slate-100 text-violet-800 ring-1 ring-inset ring-slate-200" : "h-5 w-5"}`}
       title="Tracker"
     >
       <svg aria-hidden="true" className={emphasized ? "h-4 w-4" : "h-3.5 w-3.5"} fill="none" viewBox="0 0 24 24">
@@ -564,6 +581,17 @@ function formatCookieLifespan(seconds: number | null) {
   return `${hours} hour${hours === 1 ? "" : "s"}`;
 }
 
+function getInventoryTypeDisclosureClasses(row: InventoryGroupRow) {
+  const evidence = getInventoryEvidenceLabel(row);
+  if (evidence === "Essential") {
+    return "border-sky-300 bg-gradient-to-b from-white to-blue-50/70 text-blue-700 shadow-[0_2px_0_0_rgb(191_219_254)] hover:border-sky-500 hover:from-blue-50/80 hover:to-blue-100/70 hover:shadow-[0_3px_0_0_rgb(147_197_253)] group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-blue-50/80 group-open/cookie-detail:shadow-none";
+  }
+  if (evidence === "Review") {
+    return "border-sky-300 bg-gradient-to-b from-white to-amber-50/70 text-amber-700 shadow-[0_2px_0_0_rgb(253_230_138)] hover:border-sky-500 hover:from-amber-50/80 hover:to-amber-100/70 hover:shadow-[0_3px_0_0_rgb(252_211_77)] group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-amber-50/80 group-open/cookie-detail:shadow-none";
+  }
+  return "border-sky-300 bg-gradient-to-b from-white to-red-50/70 text-red-700 shadow-[0_2px_0_0_rgb(254_202_202)] hover:border-sky-500 hover:from-red-50/80 hover:to-red-100/70 hover:shadow-[0_3px_0_0_rgb(252_165_165)] group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-red-50/80 group-open/cookie-detail:shadow-none";
+}
+
 function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
   if (row.cookieDetails.length === 0 && row.domains.length === 0 && row.rawProducts.length === 0) {
     return <InventoryTypeIcon type={row.type} />;
@@ -572,10 +600,10 @@ function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
     <details className="group/cookie-detail relative z-10 open:z-40">
       <summary
         aria-label={`Show retained vendor evidence for ${row.vendor}`}
-        className="inline-flex h-8 min-w-[3.5rem] cursor-pointer list-none items-center justify-center rounded-lg border border-sky-300 bg-gradient-to-b from-white to-sky-50 px-1.5 text-sky-700 shadow-[0_2px_0_0_rgb(186_230_253)] transition-all duration-150 hover:-translate-y-px hover:border-sky-500 hover:from-sky-50 hover:to-sky-100 hover:shadow-[0_3px_0_0_rgb(125_211_252)] active:translate-y-px active:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 group-open/cookie-detail:translate-y-px group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-sky-100 group-open/cookie-detail:shadow-none marker:hidden [&::-webkit-details-marker]:hidden"
+        className={`inline-flex h-8 min-w-[3.5rem] cursor-pointer list-none items-center justify-center rounded-lg border px-1.5 transition-all duration-150 hover:-translate-y-px active:translate-y-px active:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 group-open/cookie-detail:translate-y-px marker:hidden [&::-webkit-details-marker]:hidden ${getInventoryTypeDisclosureClasses(row)}`}
         title="Show retained requests, cookies, and storage metadata"
       >
-        <InventoryTypeIcon emphasized type={row.cookieDetails.length > 0 ? "cookie" : row.type} />
+        <InventoryTypeIcon emphasized type={row.type} />
         <span className="ml-1 inline-flex h-5 w-4 items-center justify-end border-l border-sky-200 pl-1 group-hover/cookie-detail:border-sky-300 group-open/cookie-detail:border-sky-400">
           <svg aria-hidden="true" className="h-3 w-3 transition-transform group-open/cookie-detail:rotate-180" fill="none" viewBox="0 0 12 12">
             <path d="m2.5 4 3.5 3.5L9.5 4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
@@ -620,13 +648,39 @@ function formatInventoryCellForCopy(value: string | number | null | undefined) {
   return String(value ?? "—").replace(/[\t\r\n]+/g, " ").trim() || "—";
 }
 
-function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; rows: InventoryGroupRow[] }) {
-  const segments = [
-    { color: "#ef4444", count: rows.filter((row) => row.priority === "high").length, label: "High" },
-    { color: "#f59e0b", count: rows.filter((row) => row.priority === "review_needed").length, label: "Review" },
-    { color: "#3b82f6", count: rows.filter((row) => row.priority === "medium").length, label: "Medium" },
-    { color: "#93c5fd", count: rows.filter((row) => row.priority === "contextual").length, label: "Contextual" }
-  ];
+export function buildInventoryPartyAttributionSegments(
+  rows: Array<Pick<InventoryGroupRow, "party">>
+) {
+  return [
+    {
+      color: "#3b82f6",
+      count: rows.filter((row) => row.party === "first_party").length,
+      filter: "first_party",
+      label: "1st party"
+    },
+    {
+      color: "#8b5cf6",
+      count: rows.filter((row) => row.party === "third_party").length,
+      filter: "third_party",
+      label: "3rd party"
+    },
+    {
+      color: "#f59e0b",
+      count: rows.filter((row) => row.party === "mixed").length,
+      filter: "mixed",
+      label: "Mixed"
+    },
+    {
+      color: "#94a3b8",
+      count: rows.filter((row) => row.party === "unknown").length,
+      filter: "unknown",
+      label: "Unknown"
+    }
+  ] as const;
+}
+
+function InventoryPartyAttributionDonut({ rows }: { rows: InventoryGroupRow[] }) {
+  const segments = buildInventoryPartyAttributionSegments(rows);
   const total = Math.max(rows.length, 1);
   let cursor = 0;
   const gradientStops = segments.flatMap((segment) => {
@@ -638,22 +692,22 @@ function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; 
   const gradient = rows.length > 0 ? `conic-gradient(${gradientStops.join(", ")})` : "conic-gradient(#e2e8f0 0 100%)";
 
   return (
-    <div className={`flex gap-3 ${compact ? "items-center" : "mt-3 items-start"}`}>
+    <div className="mt-3 flex items-start gap-3">
       <div
-        aria-label="Priority distribution"
-        className={`${compact ? "h-14 w-14" : "h-20 w-20"} grid shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50`}
+        aria-label="Party attribution distribution"
+        className="grid h-20 w-20 shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50"
         style={{ background: gradient }}
       >
-        <div className={`${compact ? "h-8 w-8 text-[10px]" : "h-11 w-11 text-base leading-none text-slate-900"} grid place-items-center rounded-full bg-white font-semibold shadow-sm`}>
+        <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-base font-semibold leading-none text-slate-900 shadow-sm">
           {rows.length}
         </div>
       </div>
-      <div className={`${compact ? "grid-cols-4 gap-x-2" : "grid-cols-2 gap-x-3 gap-y-1.5"} grid min-w-0 flex-1`}>
+      <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-1.5">
         {segments.map((segment) => (
-            <div key={segment.label} className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter={segment.label.toLowerCase()} role="button" tabIndex={0}>
+          <div key={segment.filter} className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter={segment.filter} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
-            <span className="truncate text-[11px] font-medium text-slate-500">{compact && segment.label === "Contextual" ? "Ctx" : segment.label}</span>
-            <InfoTip align="end" placement="bottom" text={`Inventory rows classified as ${segment.label.toLowerCase()} priority.`} />
+            <span className="truncate text-[11px] font-medium text-slate-500">{segment.label}</span>
+            <InfoTip align="end" placement="bottom" text={`Inventory rows whose Party value is ${segment.label.toLowerCase()}.`} />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{segment.count}</span>
           </div>
         ))}
@@ -964,8 +1018,8 @@ function RuntimeInventoryTable({
             <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
             <InventoryPurposeCard rows={groupedInventoryRows} />
             <div className="min-h-0 overflow-visible rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Priority mix</p>
-              <InventoryPriorityDonut rows={groupedInventoryRows} />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Party attribution</p>
+              <InventoryPartyAttributionDonut rows={groupedInventoryRows} />
             </div>
           </div>
           <div className="space-y-2 lg:hidden" aria-label="Cookies and trackers mobile list">
@@ -7358,10 +7412,6 @@ export async function SharedScanDetailView({
     unifiedFindings: findingEvidenceDiagnostics
   });
   const reportableGdprEprivacyCoverageChecklist = getReportableGdprEprivacyCoverageItems(gdprEprivacyCoverageChecklist);
-  const gdprEprivacyCoverageScore = deriveRegulatoryCoverageScore({
-    framework: "gdpr_eprivacy",
-    rows: reportableGdprEprivacyCoverageChecklist
-  });
   const consentSurfaceCoverageItem = gdprEprivacyCoverageChecklist.find((item) => item.id === "consent_surface_observed");
   const executiveCookieBannerPresent =
     consentSurfaceCoverageItem?.status === "Observed"
@@ -7376,11 +7426,12 @@ export async function SharedScanDetailView({
     scanRecord.snapshot,
     "critical_coverage_complete",
   );
-  const storedCustomerGdprEprivacyAssessment = scanRecord.customerGdprEprivacyScoreSelection?.assessment ?? null;
+  const canonicalOverallScore = deriveCanonicalOverallScoreForReport({
+    checklistRows: gdprEprivacyCoverageChecklist,
+    unifiedFindings: findingEvidenceDiagnostics
+  });
   const executiveDisplayedScore = browserCoverageSufficient && criticalCoverageComplete !== false
-    ? storedCustomerGdprEprivacyAssessment
-      ? storedCustomerGdprEprivacyAssessment.scoreValue
-      : gdprEprivacyCoverageScore.score
+    ? canonicalOverallScore
     : null;
   const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {
@@ -7443,6 +7494,7 @@ export async function SharedScanDetailView({
     accessibilitySignals: executiveAccessibilitySignals,
     agencyMappings: scanRecord.agencyMappings,
     benchmarkIndustry: scanRecord.domainBenchmark?.industry ?? null,
+    gdprEprivacyPostureScore: executiveDisplayedScore,
     regulatoryRisk: scanRecord.regulatoryRisk
   };
   const executiveRegulatoryLenses = buildRegulatoryLensesFromUnifiedPackets(
@@ -7614,7 +7666,7 @@ export async function SharedScanDetailView({
             regulatoryRisk={scanRecord.regulatoryRisk}
             resolvedVendorNames={executiveResolvedVendorNames}
             score={executiveDisplayedScore}
-            scoreLabel={`${scanRecord.customerGdprEprivacyScoreSelection?.label ?? "GDPR/ePrivacy evidence"} score`}
+            scoreLabel="Overall score"
             scanDurationMs={scanDurationMs}
             scanProof={scanProof}
             scanProofDurationMs={scanDurationMs}

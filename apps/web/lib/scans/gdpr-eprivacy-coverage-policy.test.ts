@@ -2465,6 +2465,48 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats complete no-surface inspec
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps a typed limited surface observed while leaving controls unconfirmed", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentSurfaceInspection: {
+        consentSurfaceObserved: true,
+        coverageStatus: "limited",
+        inspectedPreInteraction: true,
+        inspectionCompleted: false,
+        outcome: "non_actionable_surface_observed",
+        observedAtMs: 20677,
+        evidenceSources: ["visual_capture", "dom_snapshot"],
+      },
+      hybridRuntimeEvidence: {
+        firstLayerConsentChoices: {
+          acceptControlObserved: false,
+          actionableControlInventoryRetained: false,
+          controls: [],
+          managePreferencesControlObserved: false,
+          rejectControlObserved: false,
+          visibleChoiceLabels: [],
+        },
+      },
+    },
+    snapshot: {
+      cookie_banner_present: true,
+    },
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Observed");
+  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /control inspection was incomplete/i);
+  for (const rowId of [
+    "reject_all_path_availability",
+    "accept_consent_control",
+    "options_settings_preferences_control",
+  ]) {
+    assert.equal(outcomes[rowId]?.status, "Not confirmed", rowId);
+    assert.match(outcomes[rowId]?.limitation ?? "", /was not established/i);
+    assert.match(outcomes[rowId]?.limitation ?? "", /deeper preference-path coverage was incomplete/i);
+  }
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes does not turn an incomplete consent inventory into missing-control findings", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

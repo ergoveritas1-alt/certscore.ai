@@ -133,6 +133,10 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("accept", "allow analytics", "category_analytics"),
     equivalent("accept", "accept analytics", "category_analytics"),
     equivalent("accept", "enable analytics", "category_analytics"),
+    contextual("accept", "i'm happy with that", {
+      requiresConsentContext: true,
+      variant: "approval_acknowledgment",
+    }),
     contextual("accept", "continue", { requiresContinueConsentContext: true, variant: "continue_as_accept" }),
     weak("accept", "ok", { requiresConsentContext: true }),
     weak("accept", "got it", { requiresConsentContext: true }),

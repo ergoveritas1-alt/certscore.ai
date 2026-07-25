@@ -24,15 +24,41 @@ test("Executive storage metric uses the concise non-essential label", () => {
   assert.match(source, /isStorageMetric\n      \? null/);
 });
 
-test("the headline score is precisely labeled and is not compared with an AI-estimated overall benchmark", () => {
+test("the headline score is labeled Overall score and is not compared with an AI-estimated benchmark", () => {
   const source = readFileSync(new URL("./executive-summary-card.tsx", import.meta.url), "utf8");
   const benchmarkSource = readFileSync(new URL("../../server/scans/domain-benchmark-estimate.ts", import.meta.url), "utf8");
 
-  assert.match(source, /label="GDPR\/ePrivacy evidence score"/);
+  assert.match(source, /label=\{input\.scoreLabel \?\? "Overall score"\}/);
   assert.match(source, /benchmarkValue=\{null\}/);
-  assert.doesNotMatch(source, /label="Overall score"/);
   assert.doesNotMatch(source, /expectedOverallScore/);
   assert.doesNotMatch(benchmarkSource, /expectedOverallScore/);
+});
+
+test("GDPR/ePrivacy lens consumes only the supplied canonical posture score", () => {
+  const unscored = buildRegulatoryLenses([], { beforeConsentCookieCount: 0, thirdPartyRequestCount: 0 });
+  const scored = buildRegulatoryLenses(
+    [],
+    { beforeConsentCookieCount: 0, thirdPartyRequestCount: 0 },
+    { gdprEprivacyPostureScore: 27 }
+  );
+
+  assert.equal(unscored[0]?.score, null);
+  assert.equal(unscored[0]?.ratingLabel, "Not scored");
+  assert.equal(scored[0]?.score, 27);
+  assert.equal(scored[0]?.ratingLabel, "Needs work");
+
+  const source = readFileSync(new URL("./executive-summary-card.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /const gdprScore = clampScore\(\s*84 -/);
+});
+
+test("withheld GDPR/ePrivacy posture score is labeled as not scored instead of a dash", () => {
+  const source = readFileSync("apps/web/components/scans/executive-summary-card.tsx", "utf8");
+
+  assert.ok(source.includes('const displayValue = actualValue === null && isScoreMetric ? "Not scored" : actualValue ?? "—";'));
+  assert.ok(source.includes("Insufficient evidence to calculate a GDPR/ePrivacy posture score for this scan."));
+  assert.ok(source.includes("Higher scores indicate stronger observed GDPR/ePrivacy posture."));
+  assert.doesNotMatch(source, /pending_luna|approved canonical|approved candidate|Luna/i);
+  assert.ok(source.includes('{input.maxValue && actualValue !== null ? <span className="pb-0.5 text-[1.35rem] leading-none text-slate-500">/100</span> : null}'));
 });
 
 test("report projection keeps descriptive pre-consent storage separate from promotion-grade regulatory counts", () => {
@@ -588,7 +614,7 @@ test("buildRegulatoryLenses omits empty cookie attribution arrays from count-onl
   assert.equal("initiatorUrls" in (cookieFinding?.evidence ?? {}), false);
 });
 
-test("buildRegulatoryLenses caps count-only privacy lenses at Watch", () => {
+test("buildRegulatoryLenses withholds a count-only privacy score without canonical posture", () => {
   const lenses = buildRegulatoryLenses(
     [],
     {
@@ -614,7 +640,8 @@ test("buildRegulatoryLenses caps count-only privacy lenses at Watch", () => {
 
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
 
-  assert.equal(gdprLens?.ratingLabel, "Watch");
+  assert.equal(gdprLens?.score, null);
+  assert.equal(gdprLens?.ratingLabel, "Not scored");
   assert.match(regulatoryFindingLabels(gdprLens?.findings ?? []).join(" "), /cookie timing records were retained before consent/i);
   assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
@@ -3128,6 +3155,40 @@ test("ExecutiveSummaryCard labels truncated observed domain lists", () => {
   assert.doesNotMatch(html, /8 more\.\.\./);
   assert.match(html, /observed-10\.example/);
   assert.match(html, /observed-11\.example/);
+});
+
+test("ExecutiveSummaryCard distinguishes a CMP signal from an unconfirmed banner", () => {
+  const html = renderToStaticMarkup(createElement(ExecutiveSummaryCard, {
+    accessLimitationNotice: null,
+    beforeConsentCookieCount: 0,
+    cmpVendorName: "HubSpot Banner",
+    consentSurfaceStatus: "Not testable",
+    domainBenchmark: null,
+    finalHost: "admixer.net",
+    fingerprintReasons: [],
+    fingerprintLabel: "None detected",
+    fingerprintNarrative: "No fingerprinting evidence detected.",
+    landedOnDifferentHost: false,
+    lastScannedAt: "2026-07-24T21:14:00.000Z",
+    posture: "Action Needed",
+    preConsentVendorNames: [],
+    requestedHost: "admixer.net",
+    resolvedVendorNames: ["HubSpot Banner"],
+    score: 59,
+    sessionReplayVendorNames: [],
+    thirdPartyRequestCount: 12,
+    thirdPartyDomains: ["js.hs-scripts.com"],
+    topFindings: [],
+    topObservedEntities: [{ label: "HubSpot Banner", category: "cmp", requestCount: 1 }],
+    trackerSummary: "1 vendor across 1 third-party domain",
+    unifiedFindings: [],
+    unresolvedVendorHosts: [],
+    vendorCategoryCounts: { cmp: 1 }
+  }));
+
+  assert.match(html, /HubSpot CMP detected/);
+  assert.match(html, /HubSpot Banner CMP technology was observed/);
+  assert.doesNotMatch(html, /Consent banner not determined/);
 });
 
 test("ExecutiveSummaryCard keeps vendor-and-domain tracker expand copy when classified vendors are present", () => {

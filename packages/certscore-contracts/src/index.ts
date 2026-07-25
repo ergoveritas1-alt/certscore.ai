@@ -1921,7 +1921,11 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
       )
     )
   );
-  const consentSurfaceObserved = Boolean(visibleObservation || (input.cmpRuntimeObservations ?? []).length > 0);
+  // A CMP runtime observation identifies consent-management technology, but it
+  // does not prove that a user-visible consent surface was rendered. Keep the
+  // technology signal separate from the consent-surface observation so a
+  // script/library signal cannot be projected as a confirmed banner.
+  const consentSurfaceObserved = Boolean(visibleObservation);
   const preConsentRun = (input.modulesRun ?? []).find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
   const observationFailed = observations.length === 0 || observations.some((observation) =>
     observation.basis.includes("bounded_capture_timeout_or_failure") ||
