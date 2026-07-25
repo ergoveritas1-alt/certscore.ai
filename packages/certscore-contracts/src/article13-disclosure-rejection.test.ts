@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   article13DisclosureRejectReason,
+  hasSubstantiveProcessingPurposesEvidence,
   isArticle13DisclosureEvidenceUsable,
   type Article13DisclosureRejectionMode,
 } from "./article13-disclosure-rejection";
@@ -12,6 +13,24 @@ const rejectionModes: Article13DisclosureRejectionMode[] = [
   "retained_report",
   "multilingual_classifier",
 ];
+
+test("Privacy Shield transfer wording does not qualify as processing-purposes evidence", () => {
+  const text = "Our payment provider is certified under the EU-US Privacy Shield.";
+
+  assert.equal(hasSubstantiveProcessingPurposesEvidence(text), false);
+  assert.equal(
+    article13DisclosureRejectReason(text, "processing_purposes", { mode: "retained_report" }),
+    "insufficient_row_specific_terms",
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "We process your email address to process your donation and send a receipt.",
+      "processing_purposes",
+      { mode: "retained_report" },
+    ),
+    true,
+  );
+});
 
 test("Article 13 rejection contract rejects navigation chrome consistently across modes", () => {
   const navigation =

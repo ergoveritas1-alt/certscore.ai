@@ -289,6 +289,52 @@ test("observed rendered privacy links remain reportable when document fetch fail
   assert.deepEqual(summary.discoveredPrivacyPolicyUrls, ["https://example.test/privacy"]);
 });
 
+test("policy summary materializes structured named-cookie disclosures from cookie surfaces", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const sourceUrl = "https://www.oxfam.org/en/cookies";
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "oxfam-cookie-policy",
+    surfaceType: "cookie_policy",
+    url: sourceUrl,
+    normalizedUrl: sourceUrl,
+    confidence: 0.96,
+    status: "fetched",
+    textExcerpt: "Cookie name Provider Expiry Purpose __stripe_mid Stripe 1 year",
+    policyCookieDisclosures: [
+      {
+        cookieName: "__stripe_mid",
+        provider: "Stripe",
+        duration: "1 year",
+        purpose: "Necessary for credit card transactions.",
+        category: "essential",
+        sourceUrl,
+        evidenceRef: "policy_cookie_stripe_mid",
+        parserProvenance: "policy_cookie_table_dom.v1",
+        confidence: 0.96,
+      },
+      {
+        cookieName: "fundraiseup_cid",
+        provider: "Fundraise Up",
+        duration: "10 years",
+        purpose: "Persistent anti-fraud and analytics identifier.",
+        category: "essential",
+        sourceUrl,
+        evidenceRef: "policy_cookie_fundraiseup_cid",
+        parserProvenance: "policy_cookie_table_dom.v1",
+        confidence: 0.96,
+      },
+    ],
+  }] as never, "https://www.oxfam.org/");
+  const summary = summarizePolicySurfaces(surfaces, "oxfam.org");
+
+  assert.equal(summary.cookiePolicyPresent, true);
+  assert.deepEqual(
+    summary.policyCookieDisclosures.map((row) => row.cookieName),
+    ["__stripe_mid", "fundraiseup_cid"],
+  );
+  assert.deepEqual(summary.cookieDisclosures, summary.policyCookieDisclosures);
+});
+
 test("buildLocalV2NoGoSnapshotFields preserves every canonical no-go reason classification", async () => {
   const { buildLocalV2NoGoSnapshotFields } = await loadLocalV2DagReport();
   for (const reasonCode of SCAN_NO_GO_REASON_CODES) {
@@ -841,6 +887,54 @@ test("resolveLocalV2DagVisualEvidencePointer resolves a mirrored screenshot with
       await resolveLocalV2DagVisualEvidencePointer(scanRecord, "toString"),
       null,
       "inherited object properties must not be accepted as artifact IDs"
+    );
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("resolveLocalV2DagVisualEvidencePointer resolves the local full-page JPEG artifact", async () => {
+  const { resolveLocalV2DagVisualEvidencePointer } = await loadLocalV2DagReport();
+  const scanId = "8f3f4d54-3137-4f3b-a0d4-4bdcfb8f94f3";
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/full-page-jpeg-"));
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await writeFile(path.join(outDir, "screenshot-pre-consent-full-page.jpg"), Buffer.from("jpeg"));
+
+    const scanRecord = makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        id: scanId,
+        scanConfigJson: {
+          ...makeScanRecord().scan.scanConfigJson,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    });
+
+    assert.deepEqual(
+      await resolveLocalV2DagVisualEvidencePointer(scanRecord, "local_v2:screenshot_pre_consent_full_page"),
+      {
+        bucket: null,
+        id: "local_v2:screenshot_pre_consent_full_page",
+        key: `local-v2-dag-scans/${scanId}/screenshot-pre-consent-full-page.jpg`,
+        mimeType: "image/jpeg",
+        status: "available"
+      }
     );
   } finally {
     if (previousAppUrl === undefined) {
@@ -3120,7 +3214,7 @@ test("materializeLocalV2DagScanDetail keeps unknown third-party requests and lon
       snapshot: detail.snapshot
     });
     assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Insufficient evidence");
-    assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Insufficient evidence");
+    assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Not observed");
   } finally {
     process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
     await rm(outDir, { recursive: true, force: true });
@@ -4911,9 +5005,12 @@ test("materializeLocalV2DagScanDetail withholds missing controls and score when 
 
     assert.equal(rejectPathArtifact?.firstLayerCookieConsentBannerObserved, false);
     assert.equal(rejectPathArtifact?.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
-    assert.equal(rejectPath?.status, "Not testable");
-    assert.equal(rejectPath?.evidenceState, "not_testable");
-    assert.match(rejectPath?.limitation ?? "", /inspection did not complete/i);
+    assert.equal(rejectPath?.status, "Not confirmed");
+    assert.equal(rejectPath?.evidenceState, "not_observed");
+    assert.match(
+      rejectPath?.limitation ?? "",
+      /reject or equivalent refusal control was not established/i
+    );
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

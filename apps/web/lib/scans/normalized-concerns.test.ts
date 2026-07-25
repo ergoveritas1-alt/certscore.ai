@@ -1760,6 +1760,66 @@ test("ambiguous GDPR Transparency Article 13 evidence receives no checklist cred
   assert.equal(concern.regulatoryChecklistEligibility, "none");
 });
 
+test("GDPR Transparency concerns keep stale transfer frameworks as review-only evidence", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      scanStartedAt: "2026-07-25T12:00:00.000Z",
+      policyDisclosureSummary: makeGdprTransparencyPolicyDisclosureSummary({
+        signals: [
+          makeApprovedGdprTransparencyArticle13Signal({
+            disclosureType: "international_transfers",
+            evidenceText: "Our payment provider is certified under the EU-US Privacy Shield.",
+          }),
+        ],
+      }),
+    },
+    validationFindings: [],
+  });
+  const concern = concerns.find((item) =>
+    item.originKey === "gdpr_transparency.article13.international_transfers"
+  );
+
+  assert.ok(concern);
+  assert.equal(concern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(
+    concern.evidenceBundle.rawEvidence?.staleLegalFrameworkReferenceObserved,
+    true,
+  );
+  assert.deepEqual(
+    concern.negativeEvidenceFlags,
+    ["stale_legal_framework_reference_observed"],
+  );
+});
+
+test("off-topic Privacy Shield wording receives no processing-purposes checklist credit", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      scanStartedAt: "2026-07-25T12:00:00.000Z",
+      policyDisclosureSummary: makeGdprTransparencyPolicyDisclosureSummary({
+        signals: [
+          makeApprovedGdprTransparencyArticle13Signal({
+            disclosureType: "processing_purposes",
+            evidenceText: "Our payment provider is certified under the EU-US Privacy Shield.",
+          }),
+        ],
+      }),
+    },
+    validationFindings: [],
+  });
+  const concern = concerns.find((item) =>
+    item.originKey === "gdpr_transparency.article13.processing_purposes"
+  );
+
+  assert.ok(concern);
+  assert.equal(concern.regulatoryChecklistEligibility, "none");
+  assert.equal(
+    concern.evidenceBundle.rawEvidence?.processingPurposesEvidenceSubstantive,
+    false,
+  );
+});
+
 test("missing GDPR Transparency classifier evidence alone does not create Article 13 gaps", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],

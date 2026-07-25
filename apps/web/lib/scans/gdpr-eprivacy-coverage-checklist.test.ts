@@ -830,6 +830,7 @@ test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session r
     ...outcome.criticalEvidence.retainedEvidence,
     sessionReplayEvidence: {
       collectionEndpointObserved: true,
+      firstSeenMs: 2410,
       preConsentObserved: false,
       vendors: ["Microsoft Clarity", "Hotjar", "Contentsquare"]
     }
@@ -857,6 +858,12 @@ test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session r
   assert.equal(row.label, "Session replay signal");
   assert.match(row.explanation, /not observed pre-consent in retained evidence/i);
   assert.match(row.explanation, /Microsoft Clarity, Hotjar, and Contentsquare/);
+  assert.deepEqual(row.criticalEvidence.retainedEvidence.sessionReplayEvidence, {
+    collectionEndpointObserved: true,
+    firstSeenMs: 2410,
+    preConsentObserved: false,
+    vendors: ["Microsoft Clarity", "Hotjar", "Contentsquare"]
+  });
   assert.doesNotMatch(row.explanation, /before consent observed/i);
   assert.equal(row.subchecks, undefined);
   assert.equal(items.some((item) => item.id === "session_replay_before_consent"), false);

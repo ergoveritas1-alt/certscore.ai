@@ -55,6 +55,7 @@ test("retained privacy-policy evidence remains complete when later policy work i
       discardedArticle13DisclosureSignals: [],
       gdprTransparencyTopicCandidates: [],
       retainedPolicySections: [],
+      policyCookieDisclosures: [],
       retainedArticle13SectionEvidence: [],
       mentionedVendors: [],
       mentionedPurposes: [],

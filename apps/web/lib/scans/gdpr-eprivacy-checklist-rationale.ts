@@ -186,8 +186,25 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
 
   if (item.id === "session_replay_fingerprinting_review") {
     const replayEvidence = getRecord(evidence.sessionReplayEvidence);
-    const replayVendors = formatList(getStringArray(replayEvidence?.vendors).slice(0, 4));
-    const replayFirstSeenMs = getFirstNumberFromRecord(replayEvidence, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]);
+    const replayVendors = formatList(uniqueStrings([
+      ...getStringArray(replayEvidence?.vendors),
+      ...getStringArrayFromEvidenceKeys(evidence, [
+        "sessionReplayVendors",
+        "session_replay_vendors",
+        "observedRuntimeVendors",
+        "observed_runtime_vendors"
+      ]),
+      ...getEvidenceVendorNames(item)
+    ]).slice(0, 4));
+    const replayFirstSeenMs =
+      getFirstNumberFromRecord(replayEvidence, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]) ??
+      getFirstNumberFromRows([
+        replayEvidence?.requestPurposeClassification,
+        replayEvidence?.request_purpose_classification,
+        evidence.requestPurposeClassification,
+        evidence.request_purpose_classification
+      ]) ??
+      firstSeenMs;
     if (evidenceLabel === "Not observed") {
       return "No eligible session replay or behavioral-recording vendor was observed in retained runtime evidence.";
     }

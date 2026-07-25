@@ -5,6 +5,7 @@ import {
   classifyPrivacySurface,
   type DirectVsInferred,
   type EvidenceRef,
+  type PolicyCookieDisclosureObservation,
   type PolicySurfaceObservation,
   type PrivacySurfaceClassification,
   type PrivacySurfaceMatchStrength,
@@ -1629,6 +1630,13 @@ async function processPolicyCandidate({
       }),
     )
     : [];
+  const policyCookieDisclosures = textQuality.usable
+    ? extractPolicyCookieDisclosures({
+        html: fetchedHtml,
+        retainedPolicySections: policySections,
+        sourceUrl: effectiveCandidate.normalizedUrl,
+      })
+    : [];
   const allowLegacyArticle13Extraction = fetched.documentFormat !== "pdf";
   const sectionEvidence = textQuality.usable && allowLegacyArticle13Extraction && effectiveCandidate.deterministicSurfaceType === "privacy_policy"
     ? retainedArticle13SectionEvidenceFromSections(policySections, effectiveCandidate.normalizedUrl)
@@ -1721,6 +1729,7 @@ async function processPolicyCandidate({
       gdprTransparencyTopicCandidates: merged.gdprTransparencyTopicCandidates,
       discardedArticle13DisclosureSignals: merged.discardedArticle13DisclosureSignals,
       retainedPolicySections: retainedPolicySectionsForObservation(policySections),
+      policyCookieDisclosures,
       retainedArticle13SectionEvidence: sectionEvidence,
       mentionedVendors: merged.mentionedVendors,
       mentionedPurposes: merged.mentionedPurposes,
@@ -3639,6 +3648,7 @@ function observationFromCandidate(
     gdprTransparencyTopicCandidates: input.gdprTransparencyTopicCandidates ?? [],
     discardedArticle13DisclosureSignals: input.discardedArticle13DisclosureSignals ?? [],
     retainedPolicySections: input.retainedPolicySections ?? [],
+    policyCookieDisclosures: input.policyCookieDisclosures ?? [],
     retainedArticle13SectionEvidence: input.retainedArticle13SectionEvidence ?? [],
     mentionedVendors: input.mentionedVendors ?? [],
     mentionedPurposes: input.mentionedPurposes ?? [],
@@ -5270,6 +5280,206 @@ export function extractPolicySections(input: {
     }))
     .filter((section) => section.textExcerpt.length >= 80)
     .slice(0, 80);
+}
+
+type CookieDisclosureColumn =
+  | "cookieName"
+  | "provider"
+  | "duration"
+  | "purpose";
+
+const COOKIE_DISCLOSURE_HEADER_PATTERNS: Record<CookieDisclosureColumn, RegExp> = {
+  cookieName: /^(?:cookie name|name of cookie|cookie|nom du cookie|nombre de la cookie|nombre de cookie|nome del cookie|cookienaam|cookie naam|nazwa pliku cookie)$/i,
+  provider: /^(?:provider|vendor|service provider|fournisseur|proveedor|fornitore|aanbieder|dostawca)$/i,
+  duration: /^(?:expiry|expiration|expires|duration|lifetime|retention|caducidad|duree|expiration du cookie|scadenza|durata|vervaldatum|looptijd|wygasniecie)$/i,
+  purpose: /^(?:purpose|description|function|use|usage|finalite|fonction|finalidad|funcion|scopo|funzione|doel|functie|cel|przeznaczenie)$/i,
+};
+
+function normalizeCookieDisclosureHeader(value: string) {
+  return normalizeWhitespace(value)
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[_|:–—-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function cookieDisclosureColumn(value: string): CookieDisclosureColumn | null {
+  const normalized = normalizeCookieDisclosureHeader(value);
+  for (const [column, pattern] of Object.entries(COOKIE_DISCLOSURE_HEADER_PATTERNS) as Array<
+    [CookieDisclosureColumn, RegExp]
+  >) {
+    if (pattern.test(normalized)) {
+      return column;
+    }
+  }
+  return null;
+}
+
+function cookieDisclosureCategory(value: string): PolicyCookieDisclosureObservation["category"] {
+  const normalized = normalizeCookieDisclosureHeader(value);
+  if (
+    /\b(?:non essential|nonessential|non necessary|optional|marketing|advertising|cookies non essentiels|cookies no esenciales|cookie non essenziali|niet essentiele cookies|opcjonalne pliki cookie)\b/i.test(normalized)
+  ) {
+    return "non_essential";
+  }
+  if (
+    /\b(?:essential|strictly necessary|necessary cookies|cookies essentiels|cookies esenciales|cookie essenziali|essentiele cookies|niezbedne pliki cookie)\b/i.test(normalized)
+  ) {
+    return "essential";
+  }
+  return "unknown";
+}
+
+function normalizeCookieDisclosureValue(value: string | undefined, maxLength: number) {
+  const normalized = normalizeWhitespace(value ?? "").replace(/^[-–—]+|[-–—]+$/g, "").trim();
+  return normalized.length > 0 ? normalized.slice(0, maxLength) : undefined;
+}
+
+function validPolicyCookieName(value: string | undefined) {
+  const normalized = normalizeCookieDisclosureValue(value, 200)?.replace(/^`+|`+$/g, "");
+  if (
+    !normalized ||
+    /^(?:cookie|cookie name|name|provider|purpose|duration|expiry)$/i.test(normalized) ||
+    normalized.split(/\s+/).length > 4 ||
+    /[.!?]\s+[A-Z]/.test(normalized)
+  ) {
+    return null;
+  }
+  return /^[A-Za-z0-9_.$:#*+\-\[\]]{1,200}$/.test(normalized) ? normalized : null;
+}
+
+function nearestPolicyTableHeading(html: string, tableIndex: number) {
+  const prefix = html.slice(0, tableIndex);
+  const headings = Array.from(
+    prefix.matchAll(/<h[1-4]\b[^>]*>([\s\S]*?)<\/h[1-4]>/gi),
+  );
+  return htmlToVisibleText(headings.at(-1)?.[1] ?? "");
+}
+
+function extractPolicyCookieDisclosuresFromHtml(
+  html: string,
+  sourceUrl: string,
+): PolicyCookieDisclosureObservation[] {
+  const cleanHtml = stripPageChromeHtml(html);
+  return Array.from(cleanHtml.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi))
+    .flatMap((tableMatch) => {
+      const tableHtml = tableMatch[1] ?? "";
+      const rows = Array.from(tableHtml.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi))
+        .map((rowMatch) =>
+          Array.from((rowMatch[1] ?? "").matchAll(/<(th|td)\b[^>]*>([\s\S]*?)<\/(?:th|td)>/gi))
+            .map((cellMatch) => ({
+              isHeader: (cellMatch[1] ?? "").toLowerCase() === "th",
+              text: htmlToVisibleText(cellMatch[2] ?? ""),
+            }))
+            .filter((cell) => cell.text.length > 0)
+        )
+        .filter((row) => row.length > 0);
+      const headerRowIndex = rows.findIndex((row) =>
+        row.some((cell) => cell.isHeader) ||
+        row.filter((cell) => cookieDisclosureColumn(cell.text) !== null).length >= 2
+      );
+      if (headerRowIndex < 0) {
+        return [];
+      }
+
+      const headerRow = rows[headerRowIndex] ?? [];
+      const columns = new Map<CookieDisclosureColumn, number>();
+      headerRow.forEach((cell, index) => {
+        const column = cookieDisclosureColumn(cell.text);
+        if (column && !columns.has(column)) {
+          columns.set(column, index);
+        }
+      });
+      const cookieNameIndex = columns.get("cookieName");
+      if (
+        cookieNameIndex === undefined ||
+        ![columns.get("provider"), columns.get("duration"), columns.get("purpose")]
+          .some((index) => index !== undefined)
+      ) {
+        return [];
+      }
+
+      const category = cookieDisclosureCategory(
+        nearestPolicyTableHeading(cleanHtml, tableMatch.index ?? 0),
+      );
+      return rows.slice(headerRowIndex + 1).flatMap((row) => {
+        const cookieName = validPolicyCookieName(row[cookieNameIndex]?.text);
+        if (!cookieName) {
+          return [];
+        }
+        return [{
+          cookieName,
+          provider: normalizeCookieDisclosureValue(
+            row[columns.get("provider") ?? -1]?.text,
+            240,
+          ),
+          duration: normalizeCookieDisclosureValue(
+            row[columns.get("duration") ?? -1]?.text,
+            160,
+          ),
+          purpose: normalizeCookieDisclosureValue(
+            row[columns.get("purpose") ?? -1]?.text,
+            640,
+          ),
+          category,
+          sourceUrl,
+          evidenceRef: `policy_cookie_${stableHash(`${sourceUrl}|${cookieName}`)}`,
+          parserProvenance: "policy_cookie_table_dom.v1" as const,
+          confidence: 0.96,
+        }];
+      });
+    });
+}
+
+function extractPolicyCookieDisclosuresFromSections(
+  sections: PolicySurfaceObservation["retainedPolicySections"],
+  sourceUrl: string,
+): PolicyCookieDisclosureObservation[] {
+  return sections.flatMap((section) => {
+    const match = section.textExcerpt.match(
+      /(?:^|\.\s*)(?:cookie name|name of cookie|cookie)\s*:\s*(.+?)\.\s*(?:provider|vendor)\s*:\s*(.+?)(?:\.\s*(?:expiry|expiration|duration|lifetime)\s*:\s*(.+?))?(?:\.\s*(?:purpose|description|function|usage)\s*:\s*(.+?))?$/i,
+    );
+    const cookieName = validPolicyCookieName(match?.[1]);
+    if (!cookieName) {
+      return [];
+    }
+    return [{
+      cookieName,
+      provider: normalizeCookieDisclosureValue(match?.[2], 240),
+      duration: normalizeCookieDisclosureValue(match?.[3], 160),
+      purpose: normalizeCookieDisclosureValue(match?.[4], 640),
+      category: cookieDisclosureCategory(section.heading),
+      sourceUrl,
+      evidenceRef: `policy_cookie_${stableHash(`${sourceUrl}|${cookieName}`)}`,
+      parserProvenance: "policy_cookie_table_text.v1" as const,
+      confidence: 0.78,
+    }];
+  });
+}
+
+export function extractPolicyCookieDisclosures(input: {
+  html: string;
+  retainedPolicySections: PolicySurfaceObservation["retainedPolicySections"];
+  sourceUrl: string;
+}): PolicyCookieDisclosureObservation[] {
+  const rows = [
+    ...extractPolicyCookieDisclosuresFromHtml(input.html, input.sourceUrl),
+    ...extractPolicyCookieDisclosuresFromSections(
+      input.retainedPolicySections,
+      input.sourceUrl,
+    ),
+  ];
+  const deduped = new Map<string, PolicyCookieDisclosureObservation>();
+  for (const row of rows) {
+    const key = `${row.sourceUrl.toLowerCase()}|${row.cookieName.toLowerCase()}`;
+    const current = deduped.get(key);
+    if (!current || row.confidence > current.confidence) {
+      deduped.set(key, row);
+    }
+  }
+  return [...deduped.values()].slice(0, 250);
 }
 
 function extractPolicyTableRowsFromHtml(html: string, sourceUrl: string): RetainedPolicySection[] {

@@ -3283,6 +3283,14 @@ export function deriveConcernPolicy(input: {
 
   if (isGdprTransparencyArticle13EvidenceConcern(input.rawEvidence)) {
     const regulatoryChecklistEligibility = getGdprTransparencyArticle13ChecklistEligibility(input.rawEvidence);
+    if (
+      getBooleanEvidence(input.rawEvidence, [
+        "staleLegalFrameworkReferenceObserved",
+        "stale_legal_framework_reference_observed"
+      ]) === true
+    ) {
+      negativeEvidenceFlags.add("stale_legal_framework_reference_observed");
+    }
     return {
       allowedNarrativeTier:
         getFirstString(input.rawEvidence, [

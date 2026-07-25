@@ -43,6 +43,22 @@ export function isArticle13DisclosureEvidenceUsable(
   return article13DisclosureRejectReason(value, disclosureType, options) === null;
 }
 
+export function hasSubstantiveProcessingPurposesEvidence(value: string) {
+  const text = normalizeArticle13Whitespace(value);
+  if (
+    /\b(?:privacy shield|data privacy framework|\bdpf\b|standard contractual clauses?|\bsccs?\b|adequacy decision|international data transfer|cross-border transfer)\b/i.test(text) &&
+    !/\b(?:purpose(?:s)? of (?:the )?(?:processing|collection|use)|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for))\b/i.test(text)
+  ) {
+    return false;
+  }
+
+  return (
+    /\b(?:purpose(?:s)? of (?:the )?(?:processing|collection|use)(?: of (?:your )?(?:personal )?(?:data|information))?|why we (?:process|collect|use) (?:your )?(?:personal )?(?:data|information)|purposes? for which (?:we )?(?:process|collect|use))\b/i.test(text) ||
+    /\bwe (?:use|process|collect) (?:your )?(?:(?:personal )?(?:data|information)|email address|contact details|name|payment information|donation information)\b.{0,100}\b(?:to|for(?: the purpose of)?)\b.{1,160}\b(?:provide|deliver|operate|maintain|improve|personalize|communicate|respond|process|fulfil|fulfill|protect|prevent|detect|measure|analy[sz]e|comply|send|administer|manage|support|facilitate)\b/i.test(text) ||
+    /\b(?:personal data|personal information|your data|your information)\b.{0,100}\b(?:is|are|may be|will be)?\s*(?:used|processed|collected)\b.{0,100}\b(?:to|for(?: the purpose of)?)\b.{1,160}\b(?:provide|deliver|operate|maintain|improve|personalize|communicate|respond|process|fulfil|fulfill|protect|prevent|detect|measure|analy[sz]e|comply|send|administer|manage|support|facilitate)\b/i.test(text)
+  );
+}
+
 export function article13DisclosureRejectReason(
   value: string,
   disclosureType: Article13DisclosureType | string | undefined,
@@ -321,7 +337,7 @@ function hasScanCoreRowSpecificArticle13Terms(
       return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:policy|privacy)|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
         !looksLikeArticle13PageChrome(text, { mode: "scan_core" });
     case "processing_purposes":
-      return /\b(?:purpose(?:s)?|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|provide (?:our )?services|personalize)\b/i.test(text);
+      return hasSubstantiveProcessingPurposesEvidence(text);
     case "legal_basis":
       return /\b(?:legal basis|lawful basis|legitimate interests?|performance of (?:a )?contract|contractual necessity|legal obligation|public task|public interest|vital interests?|with your consent|consent to)\b/i.test(text);
     case "recipients_or_vendor_categories":
@@ -354,7 +370,7 @@ function hasRetainedReportRowSpecificArticle13Terms(
       return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:policy|privacy)|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
         !looksLikeArticle13PageChrome(text, { mode: "retained_report" });
     case "processing_purposes":
-      return /\b(?:purpose(?:s)?|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|provide (?:our )?services|personalize)\b/i.test(text);
+      return hasSubstantiveProcessingPurposesEvidence(text);
     case "legal_basis":
       return /\b(?:legal basis|lawful basis|legitimate interests?|performance of (?:a )?contract|contractual necessity|legal obligation|public task|public interest|vital interests?|with your consent|consent to)\b/i.test(text);
     case "recipients_or_vendor_categories":

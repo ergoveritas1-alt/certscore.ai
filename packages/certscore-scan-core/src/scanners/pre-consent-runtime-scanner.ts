@@ -2632,10 +2632,16 @@ async function captureCmpRuntimeProbeInputs(input: {
 }): Promise<VendorResolverInput[]> {
   const observed = await input.page.evaluate(() => {
     const markerPattern =
-      /(consent|cookie|cmp|privacy|onetrust|optanon|didomi|truste|trustarc|usercentrics|cookiebot|cybot|sourcepoint|sp_message|osano|ketch|quantcast|iubenda|termly|cookieyes|cky|coi)/i;
+      /(consent|cookie|cmp|privacy|drupal|eu_cookie_compliance|sliding-popup|onetrust|optanon|didomi|truste|trustarc|usercentrics|cookiebot|cybot|sourcepoint|sp_message|osano|ketch|quantcast|iubenda|termly|cookieyes|cky|coi)/i;
     const globalNames = Object.getOwnPropertyNames(window)
       .filter((name) => markerPattern.test(name))
       .slice(0, 150);
+    const drupalSettings = (window as typeof window & {
+      drupalSettings?: Record<string, unknown>;
+    }).drupalSettings;
+    if (drupalSettings && typeof drupalSettings.eu_cookie_compliance === "object") {
+      globalNames.push("drupalSettings.eu_cookie_compliance");
+    }
     const selectors = new Set<string>();
     for (const element of Array.from(document.querySelectorAll("[id],[class]")).slice(0, 1_000)) {
       const id = element.getAttribute("id");

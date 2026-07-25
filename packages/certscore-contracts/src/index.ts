@@ -7,6 +7,7 @@ export * from "./consent-control-label-classifier";
 export * from "./consent-language-classifier";
 export * from "./gdpr-transparency-topic-classifier";
 export * from "./article13-disclosure-rejection";
+export * from "./legal-framework-validity";
 export * from "./privacy-surface-classifier";
 export * from "./privacy-evidence-locale-registry";
 export * from "./supported-languages";
@@ -1278,6 +1279,21 @@ export const domSnapshotArtifactSchema = z.object({
   consentStateAtTime: consentStateSchema,
 });
 
+export const policyCookieDisclosureObservationSchema = z.object({
+  cookieName: z.string().min(1).max(200),
+  provider: z.string().max(240).optional(),
+  duration: z.string().max(160).optional(),
+  purpose: z.string().max(640).optional(),
+  category: z.enum(["essential", "non_essential", "unknown"]).default("unknown"),
+  sourceUrl: z.string(),
+  evidenceRef: z.string().max(240),
+  parserProvenance: z.enum([
+    "policy_cookie_table_dom.v1",
+    "policy_cookie_table_text.v1",
+  ]),
+  confidence: z.number().min(0).max(1),
+});
+
 export const policySurfaceObservationSchema = z.object({
   observationId: z.string(),
   sourceScanner: z.string().default("policy_surface"),
@@ -1464,6 +1480,7 @@ export const policySurfaceObservationSchema = z.object({
     charEnd: z.number().int().nonnegative().optional(),
     quality: z.enum(["strong", "partial", "limited"]).default("partial"),
   })).default([]),
+  policyCookieDisclosures: z.array(policyCookieDisclosureObservationSchema).max(250).default([]),
   retainedArticle13SectionEvidence: z.array(z.object({
     coverageArea: z.enum([
       "controller_contact",
@@ -2325,6 +2342,7 @@ export type ScreenshotArtifact = z.infer<typeof screenshotArtifactSchema>;
 export type VisualCaptureSummary = z.infer<typeof visualCaptureSummarySchema>;
 export type DomSnapshotArtifact = z.infer<typeof domSnapshotArtifactSchema>;
 export type PolicySurfaceObservation = z.infer<typeof policySurfaceObservationSchema>;
+export type PolicyCookieDisclosureObservation = z.infer<typeof policyCookieDisclosureObservationSchema>;
 export type NormalizedVendorObservation = z.infer<
   typeof normalizedVendorObservationSchema
 >;

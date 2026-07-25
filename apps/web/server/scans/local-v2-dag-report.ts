@@ -1448,15 +1448,35 @@ function getLocalV2DagAuxiliaryArtifact(
 const LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES = {
   "local_v2:screenshot_pre_consent": "screenshot-pre-consent.png",
   "local_v2:screenshot_pre_consent_settled": "screenshot-pre-consent-settled.png",
-  "local_v2:screenshot_pre_consent_full_page": "screenshot-pre-consent-full-page.png",
+  "local_v2:screenshot_pre_consent_full_page": "screenshot-pre-consent-full-page.jpg",
   "local_v2:screenshot_pre_consent_geometry_proof": "screenshot-pre-consent-geometry-proof.png"
 } as const;
+
+const LOCAL_V2_VISUAL_EVIDENCE_ALTERNATE_FILE_NAMES: Partial<Record<
+  keyof typeof LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES,
+  readonly string[]
+>> = {
+  "local_v2:screenshot_pre_consent_full_page": [
+    "screenshot-pre-consent-full-page.jpg",
+    "screenshot-pre-consent-full-page.png",
+  ],
+};
+
+function localV2VisualEvidenceFileNames(id: keyof typeof LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES) {
+  return LOCAL_V2_VISUAL_EVIDENCE_ALTERNATE_FILE_NAMES[id] ?? [LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES[id]];
+}
+
+function localV2VisualEvidenceMimeType(fileName: string): "image/png" | "image/jpeg" {
+  return fileName.toLowerCase().endsWith(".jpg") || fileName.toLowerCase().endsWith(".jpeg")
+    ? "image/jpeg"
+    : "image/png";
+}
 
 export type LocalV2DagVisualEvidencePointer = {
   bucket: string | null;
   id: keyof typeof LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES;
   key: string;
-  mimeType: "image/png";
+  mimeType: "image/png" | "image/jpeg";
   status: "available";
 };
 
@@ -1474,22 +1494,24 @@ export async function resolveLocalV2DagVisualEvidencePointer(
   }
 
   const id = artifactId as keyof typeof LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES;
-  const fileName = LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES[id];
+  const fileNames = localV2VisualEvidenceFileNames(id);
   const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
   if (shouldReadLocalOutDir && input.outDir) {
-    try {
-      const localPath = path.join(resolveLocalV2OutDir(input.outDir), fileName);
-      if (statSync(localPath).isFile()) {
-        return {
-          bucket: null,
-          id,
-          key: `local-v2-dag-scans/${scanRecord.scan.id}/${fileName}`,
-          mimeType: "image/png",
-          status: "available"
-        };
+    for (const fileName of fileNames) {
+      try {
+        const localPath = path.join(resolveLocalV2OutDir(input.outDir), fileName);
+        if (statSync(localPath).isFile()) {
+          return {
+            bucket: null,
+            id,
+            key: `local-v2-dag-scans/${scanRecord.scan.id}/${fileName}`,
+            mimeType: localV2VisualEvidenceMimeType(fileName),
+            status: "available"
+          };
+        }
+      } catch {
+        // Fall through to the verified manifest pointer when the local mirror is unavailable.
       }
-    } catch {
-      // Fall through to the verified manifest pointer when the local mirror is unavailable.
     }
   }
 
@@ -1503,7 +1525,9 @@ export async function resolveLocalV2DagVisualEvidencePointer(
         uri: input.manifestArtifactUri
       })
     : null);
-  const screenshotArtifact = getLocalV2DagAuxiliaryArtifact(manifest, fileName);
+  const screenshotArtifact = fileNames
+    .map((fileName) => getLocalV2DagAuxiliaryArtifact(manifest, fileName))
+    .find((artifact): artifact is LocalV2DagLambdaArtifactPointer => Boolean(artifact));
   if (!screenshotArtifact) {
     return null;
   }
@@ -1514,7 +1538,7 @@ export async function resolveLocalV2DagVisualEvidencePointer(
       bucket,
       id,
       key,
-      mimeType: "image/png",
+      mimeType: localV2VisualEvidenceMimeType(screenshotArtifact.uri),
       status: "available"
     };
   } catch {
@@ -2068,6 +2092,27 @@ export function summarizePolicySurfaces(
     .map((row) => firstString(row.surface.textExcerpt))
     .filter(Boolean)
     .join("\n");
+  const policyCookieDisclosures = [
+    ...new Map(
+      cookieSurfaces
+        .flatMap((row) =>
+          (row.surface.policyCookieDisclosures ?? []).map((disclosure) => ({
+            ...disclosure,
+            sourceUrl:
+              firstString(
+                disclosure.sourceUrl,
+                row.pageUrl,
+                row.surface.normalizedUrl,
+                row.surface.url,
+              ) ?? disclosure.sourceUrl,
+          }))
+        )
+        .map((disclosure) => [
+          `${disclosure.sourceUrl.toLowerCase()}|${disclosure.cookieName.toLowerCase()}`,
+          disclosure,
+        ])
+    ).values(),
+  ].slice(0, 250);
   const discoveredPrivacySurfaces = (options.discoveredPolicySurfaces ?? [])
     .filter((surface) => surface.surfaceType === "privacy_policy")
     .filter((surface) => {
@@ -2322,6 +2367,10 @@ export function summarizePolicySurfaces(
     policyLastUpdatedTexts,
     cookiePolicyPresent: cookieSurfaces.length > 0,
     cookiePolicyUrls: uniqueStrings(cookieSurfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
+    cookieDisclosures: policyCookieDisclosures,
+    cookie_disclosures: policyCookieDisclosures,
+    policyCookieDisclosures,
+    policy_cookie_disclosures: policyCookieDisclosures,
     evaluatedPrivacyPolicySurfaceCount: evaluatedPrivacySurfaces.length,
     policyTextExtractionHealth,
     policy_text_extraction_health: policyTextExtractionHealth,

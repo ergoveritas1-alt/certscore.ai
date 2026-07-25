@@ -246,6 +246,7 @@ const DEFAULT_CONTAINER_LIMIT = 12;
 const CONSENT_CONTEXT_PATTERN = canonicalPhrasePattern([
   "cookie", "cookies", "consent", "privacy", "tracking", "advertising", "marketing",
   "optanon", "onetrust", "cmp", "trustarc", "didomi", "usercentrics", "cookiebot", "consentmanager",
+  "drupal", "eu cookie compliance", "sliding popup",
   ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => entry.contextHints),
 ]);
 const MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN = CONSENT_CONTEXT_PATTERN;
@@ -990,7 +991,16 @@ function collectConsentGeometryInPage(input: {
       "Didomi",
       "UC_UI",
       "TrustArc",
-    ].filter((name) => name in window),
+    ].filter((name) => name in window).concat(
+      (() => {
+        const settings = (window as typeof window & {
+          drupalSettings?: Record<string, unknown>;
+        }).drupalSettings;
+        return settings && typeof settings.eu_cookie_compliance === "object"
+          ? ["drupalSettings.eu_cookie_compliance"]
+          : [];
+      })(),
+    ),
     domSelectors,
     textSnippets: [
       compactText(document.body?.innerText || "").slice(0, 2_000),

@@ -32,6 +32,21 @@ test("registry includes first-wave CMP vendors", () => {
   ]) {
     assert.ok(names.includes(name), `${name} should be in the known CMP registry`);
   }
+  assert.ok(names.includes("Drupal EU Cookie Compliance module, non-TCF"));
+});
+
+test("detects Drupal EU Cookie Compliance from first-party runtime markers", () => {
+  const [detection] = detectKnownCmps({
+    cookieNames: ["cookie-agreed"],
+    domSelectors: ["#sliding-popup"],
+    jsGlobals: ["drupalSettings.eu_cookie_compliance"],
+    urls: ["https://www.example.org/modules/contrib/eu_cookie_compliance/js/eu_cookie_compliance.js"],
+  });
+
+  assert.equal(detection?.canonicalName, "Drupal EU Cookie Compliance module, non-TCF");
+  assert.equal(detection?.standards.length, 0);
+  assert.ok(detection?.matchedSignals.some((signal) => signal.source === "global"));
+  assert.ok(detection?.matchedSignals.some((signal) => signal.source === "script"));
 });
 
 test("detects Consentmanager by CDN script, cookies, globals, and labels", () => {

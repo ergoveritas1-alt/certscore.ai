@@ -1,6 +1,11 @@
 import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
-import { classifyConsentControlLabel } from "@certscore/contracts";
+import {
+  classifyConsentControlLabel,
+  evaluateLegalFrameworkValidity,
+  hasStaleLegalFrameworkReference,
+  hasSubstantiveProcessingPurposesEvidence,
+} from "@certscore/contracts";
 import type { NormalizedConcern } from "./normalized-concerns";
 import { classifyRuntimeCookieCategory, isFunctionalCookieExcludedFromTrackingEvidence, isNonEssentialCookieCategory } from "./runtime-cookie-evidence";
 
@@ -1582,6 +1587,34 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     getBoolean(consentSurfaceInspection, ["inspectionCompleted", "inspection_completed"]) === true &&
     getBoolean(consentSurfaceInspection, ["inspectedPreInteraction", "inspected_pre_interaction"]) === true;
 
+  const cmpEvidence = getCmpFrameworkSignalEvidence(input);
+  if (cmpEvidence.cmpObserved && !consentSurfaceObserved) {
+    return makeOutcome(
+      "consent_surface_observed",
+      "Not confirmed",
+      cmpEvidence.cmpVendorName
+        ? `A consent-management signal was observed from ${cmpEvidence.cmpVendorName}, but an actionable first-layer consent surface was not confirmed from retained control evidence.`
+        : "A consent-management runtime signal was observed, but an actionable first-layer consent surface was not confirmed from retained control evidence.",
+      [
+        cmpEvidence.cmpVendorName ? `Consent-management signal: ${cmpEvidence.cmpVendorName}` : null,
+        ...cmpEvidence.cmpSignals.map((signal) => `Consent-management signal: ${signal}`).slice(0, 5),
+        "Evidence: pre-consent CMP runtime observation; control inventory incomplete or unavailable"
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          cmpFrameworkSignalObserved: true,
+          cmpRuntimeSignalLabels: compactArray(cmpEvidence.cmpSignals, 8),
+          cmpVendorName: cmpEvidence.cmpVendorName,
+          consentSurfaceDecisionStates: ["cmp_runtime_signal_without_confirmed_surface"],
+          consentSurfaceObserved: false,
+          firstLayerCookieConsentBannerObserved: false,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          rejectControlObserved: false
+        }
+      }
+    );
+  }
+
   if (completeNoSurfaceObservation) {
     return makeOutcome(
       "consent_surface_observed",
@@ -2026,16 +2059,20 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
   ].filter(Boolean).join("\n");
   const policySurfaceTopics = getStringArray(policyDisclosureSummary, ["observedTopics", "observed_topics"]);
   const policySurfaceControls = getStringArray(policyDisclosureSummary, ["mentionedControls", "mentioned_controls"]);
-  const granularCookieInventoryConfirmed = getObjectArray(policyDisclosureSummary, [
+  const policyCookieDisclosures = getObjectArray(policyDisclosureSummary, [
     "cookieDisclosures",
     "cookie_disclosures",
     "policyCookieDisclosures",
     "policy_cookie_disclosures"
-  ]).some((row) => Boolean(
+  ]).filter((row) => Boolean(
     getString(row, ["cookieName", "cookie_name", "name"]) ||
     getString(row, ["provider", "vendor"]) ||
     getString(row, ["purpose", "category"])
   ));
+  const disclosedCookieNames = [...new Set(policyCookieDisclosures
+    .map((row) => getString(row, ["cookieName", "cookie_name", "name"]))
+    .filter((value): value is string => Boolean(value)))];
+  const granularCookieInventoryConfirmed = disclosedCookieNames.length > 0;
   const preferenceInterfaceConfirmed =
     policySurfaceControls.some((control) => /cookie|preferences?|settings|manage/i.test(control)) ||
     policySurfaceUrls.some((url) => /preference|settings|manage|privacy[-_ ]?center/i.test(url));
@@ -2070,12 +2107,16 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
     return makeOutcome(
       "cookie_notice_policy_availability",
       "Observed",
-      granularCookieInventoryConfirmed || preferenceInterfaceConfirmed
-        ? "A durable cookie disclosure surface was retained in the tested context. Granular inventory and preference-interface coverage are reported separately from disclosure availability."
+      granularCookieInventoryConfirmed
+        ? `A durable cookie disclosure surface and named-cookie inventory were retained in the tested context (${disclosedCookieNames.length} named cookie${disclosedCookieNames.length === 1 ? "" : "s"}${disclosedCookieNames.length > 0 ? `, including ${disclosedCookieNames.slice(0, 5).join(", ")}` : ""}). ${preferenceInterfaceConfirmed ? "A cookie preference interface was also retained." : "A separate cookie preference interface was not confirmed."}`
+        : preferenceInterfaceConfirmed
+          ? "A durable cookie disclosure surface and cookie preference interface were retained in the tested context; a granular named-cookie inventory was not confirmed."
         : "A durable cookie disclosure surface was retained in the tested context; a granular named-cookie inventory or preference interface was not confirmed.",
       [
         "Evidence: cookie policy or cookie disclosure surface retained",
-        granularCookieInventoryConfirmed ? "Evidence: granular cookie inventory retained" : "Not confirmed: granular named-cookie inventory",
+        granularCookieInventoryConfirmed
+          ? `Evidence: named-cookie inventory retained (${disclosedCookieNames.length}): ${disclosedCookieNames.slice(0, 8).join(", ")}`
+          : "Not confirmed: granular named-cookie inventory",
         preferenceInterfaceConfirmed ? "Evidence: cookie preference interface retained" : "Not confirmed: cookie preference interface",
         ...policySurfaceUrls.map((url) => `Policy URL: ${url}`).slice(0, 2)
       ],
@@ -2084,6 +2125,8 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
           cookieNoticeObserved: true,
           cookiePolicyPresent: true,
           granularCookieInventoryConfirmed,
+          policyCookieDisclosures: compactArray(policyCookieDisclosures, 40),
+          disclosedCookieNames: compactArray(disclosedCookieNames, 40),
           preferenceInterfaceConfirmed,
           cookiePolicyUrls: compactArray(policySurfaceUrls, 4),
           observedPolicyControls: compactArray(policySurfaceControls, 6),
@@ -5642,6 +5685,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
     "gdpr_transparency_article13_topic"
   ]) ?? config.disclosureType ?? "unknown";
   const sourceUrl = getString(rawEvidence, ["sourceUrl", "source_url"]);
+  const evidenceText = concern.evidenceBundle.policySnippets[0] ?? null;
   const locale = getString(rawEvidence, ["matchedLocale", "matched_locale"]);
   const state = getString(rawEvidence, [
     "gdprTransparencyArticle13ConcernState",
@@ -5649,9 +5693,19 @@ function buildGdprTransparencyArticle13ConcernOutcome(
   ]) ?? concern.observedValue ?? "ambiguous";
   const evidenceRefs = [
     `Evidence: ${config.label}`,
+    evidenceText ? `Excerpt: ${evidenceText}` : null,
     locale ? `Locale: ${locale}` : null,
     sourceUrl ? `Policy URL: ${sourceUrl}` : null
   ].filter((value): value is string => Boolean(value));
+  const legalFrameworkValidityMatches = getObjectArray(rawEvidence, [
+    "legalFrameworkValidityMatches",
+    "legal_framework_validity_matches"
+  ]);
+  const staleLegalFrameworkReferenceObserved =
+    getBoolean(rawEvidence, [
+      "staleLegalFrameworkReferenceObserved",
+      "stale_legal_framework_reference_observed"
+    ]) === true;
   const retainedEvidence = {
     article13Signal: {
       classifierProvenance: rawEvidence.classifierProvenance,
@@ -5659,6 +5713,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       confidence: rawEvidence.confidence,
       disclosureType: topic,
       evidenceSource: "normalized_gdpr_transparency_article13_concern",
+      evidenceText,
       matchStrength: rawEvidence.matchStrength,
       matchedLocale: locale,
       productionCredit: rawEvidence.productionCredit,
@@ -5674,8 +5729,32 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       state,
       topic
     },
+    legalFrameworkValidityMatches,
     signalObserved: concern.regulatoryChecklistEligibility === "observed" ? true : "partial"
   };
+
+  if (
+    config.rowId === "international_transfers_disclosure" &&
+    staleLegalFrameworkReferenceObserved
+  ) {
+    const reviewMessage =
+      legalFrameworkValidityMatches
+        .map((match) => getString(match, ["reviewMessage", "review_message"]))
+        .find(Boolean) ??
+      "An obsolete or no-longer-current transfer-framework reference was observed. The current transfer basis was not established by this scan; review the policy wording and safeguards actually in use.";
+    return makeOutcome(
+      config.rowId,
+      "Review signal",
+      reviewMessage,
+      evidenceRefs,
+      {
+        retainedEvidence: {
+          ...retainedEvidence,
+          signalObserved: "stale_legal_framework_reference"
+        }
+      }
+    );
+  }
 
   if (concern.regulatoryChecklistEligibility === "observed") {
     return makeOutcome(
@@ -6393,6 +6472,15 @@ function isPolicyDisclosureEvidenceUsable(value: string, disclosureType: string 
   if (disclosureType === "international_transfers" && !hasSubstantiveInternationalTransferDisclosure(text)) {
     return false;
   }
+  if (disclosureType === "processing_purposes") {
+    const frameworkMatches = evaluateLegalFrameworkValidity(text);
+    if (
+      frameworkMatches.length > 0 &&
+      !hasSubstantiveProcessingPurposesEvidence(text)
+    ) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -6793,6 +6881,39 @@ function hasRetainedControllerOrPrivacyContactDisclosure(
     Boolean(policyTextMatchEvidence(text, CONTROLLER_CONTACT_DISCLOSURE_PATTERN, "controller_contact"));
 }
 
+function getPolicyReviewScanDate(
+  input: GdprEprivacyCoveragePolicyInput,
+  summary: Record<string, unknown> | null | undefined,
+) {
+  const scanMetadata = getObject(input.runtimeArtifacts, [
+    "scanMetadata",
+    "scan_metadata",
+  ]);
+  const explicit =
+    getString(input.runtimeArtifacts, [
+      "scanStartedAt",
+      "scan_started_at",
+      "startedAt",
+      "started_at",
+    ]) ??
+    getString(scanMetadata, ["startedAt", "started_at"]) ??
+    getString(summary, ["scanStartedAt", "scan_started_at"]) ??
+    getString(input.snapshot, [
+      "scan_started_at",
+      "scanStartedAt",
+      "created_at",
+      "createdAt",
+    ]);
+  if (explicit) {
+    return explicit;
+  }
+
+  return input.events
+    ?.map((event) => event.createdAt)
+    .filter((value): value is string => Boolean(value))
+    .sort()[0] ?? null;
+}
+
 function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, config: PolicyDisclosureRowConfig) {
   const gdprTransparencyConcernOutcome = buildGdprTransparencyArticle13ConcernOutcome(input, config);
   if (gdprTransparencyConcernOutcome) {
@@ -6954,6 +7075,56 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
             : {})
         }
       : effectiveArticle13Signal;
+    const legalFrameworkValidityMatches =
+      config.rowId === "international_transfers_disclosure"
+        ? evaluateLegalFrameworkValidity(
+            [
+              displayTextMatchEvidence,
+              effectiveTextMatchEvidence,
+              getString(effectiveArticle13Signal, ["evidenceText", "evidence_text"]),
+              getString(effectiveArticle13Signal, [
+                "selectedPolicySectionExcerpt",
+                "selected_policy_section_excerpt"
+              ])
+            ].filter((value): value is string => Boolean(value)).join(" "),
+            getPolicyReviewScanDate(input, summary),
+          )
+        : [];
+    if (
+      config.rowId === "international_transfers_disclosure" &&
+      hasStaleLegalFrameworkReference(legalFrameworkValidityMatches)
+    ) {
+      const reviewMessage =
+        legalFrameworkValidityMatches
+          .map((match) => match.reviewMessage)
+          .find((value): value is string => Boolean(value)) ??
+        "An obsolete or no-longer-current transfer-framework reference was observed. The current transfer basis was not established by this scan; review the policy wording and safeguards actually in use.";
+      return makeOutcome(
+        config.rowId,
+        "Review signal",
+        reviewMessage,
+        [
+          "Evidence: international data movement or transfer safeguard disclosure",
+          displayTextMatchEvidence ? `Excerpt: ${displayTextMatchEvidence}` : null,
+          ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"])
+            .map((url) => `Policy URL: ${url}`)
+            .slice(0, 2)
+        ].filter((value): value is string => Boolean(value)),
+        {
+          retainedEvidence: {
+            article13Signal: retainedArticle13Signal,
+            legalFrameworkValidityMatches,
+            policySurfaceSummary: summary,
+            rowSpecificSectionEvidence: rowSpecificSectionEvidence?.sectionEvidence ?? undefined,
+            selectedEvidenceStrength: rowSpecificSectionEvidence?.selectedEvidenceStrength ?? undefined,
+            selectedPolicySectionHeading: rowSpecificSectionEvidence?.selectedPolicySectionHeading ?? undefined,
+            signalObserved: "stale_legal_framework_reference",
+            staleLegalFrameworkReferenceObserved: true,
+            supportSource: rowSpecificSectionEvidence?.evidenceType ?? undefined
+          }
+        }
+      );
+    }
     return makeOutcome(
       config.rowId,
       "Observed",

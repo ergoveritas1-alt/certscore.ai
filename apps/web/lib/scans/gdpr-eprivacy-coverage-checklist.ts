@@ -1012,6 +1012,25 @@ function mergeCoverageOutcomePreconsentTimingEvidence(input: {
     return input.coverageOutcome.criticalEvidence;
   }
 
+  if (input.rowId === "session_replay_fingerprinting_review" && input.coverageOutcome) {
+    const outcomeRetained = input.coverageOutcome.criticalEvidence.retainedEvidence;
+    const sessionReplayEvidence = getSessionReplayEvidenceFromOutcome(input.coverageOutcome);
+    const browserDeviceEntropyEvidence = getBrowserDeviceEntropyEvidenceFromOutcome(input.coverageOutcome);
+    if (sessionReplayEvidence || browserDeviceEntropyEvidence) {
+      return {
+        ...input.criticalEvidence,
+        retainedEvidence: {
+          ...input.criticalEvidence.retainedEvidence,
+          ...(sessionReplayEvidence ? { sessionReplayEvidence } : {}),
+          ...(browserDeviceEntropyEvidence ? { browserDeviceEntropyEvidence } : {}),
+          ...(outcomeRetained.sessionReplayObserved !== undefined
+            ? { sessionReplayObserved: outcomeRetained.sessionReplayObserved }
+            : {})
+        }
+      };
+    }
+  }
+
   const retainedTiming = getCoverageOutcomePreconsentTimingRetainedEvidence(input.rowId, input.coverageOutcome);
   const retainedTimingEntries = Object.entries(retainedTiming).filter(([, value]) => {
     if (value === null || value === undefined) {

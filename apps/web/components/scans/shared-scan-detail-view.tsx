@@ -451,6 +451,8 @@ const CONSENT_REVIEW_PRIORITY_LABELS: Record<ConsentReviewPriority, string> = {
   review_needed: "Review"
 };
 
+type InventoryEvidenceLabel = "Contextual" | "Essential" | "Non-essential" | "Review";
+
 const CONSENT_REVIEW_PRIORITY_INFOTIPS: Record<ConsentReviewPriority, string> = {
   contextual: "Observed activity from categories commonly associated with site operation, security, payment, authentication, consent management, CDN/static delivery, or other context-dependent functions.",
   high: "Pre-consent activity from a category commonly associated with advertising, audience measurement, retargeting, behavioral tracking, session replay, or fingerprinting.",
@@ -588,6 +590,9 @@ function getInventoryTypeDisclosureClasses(row: InventoryGroupRow) {
   }
   if (evidence === "Review") {
     return "border-sky-300 bg-gradient-to-b from-white to-amber-50/70 text-amber-700 shadow-[0_2px_0_0_rgb(253_230_138)] hover:border-sky-500 hover:from-amber-50/80 hover:to-amber-100/70 hover:shadow-[0_3px_0_0_rgb(252_211_77)] group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-amber-50/80 group-open/cookie-detail:shadow-none";
+  }
+  if (evidence === "Contextual") {
+    return "border-sky-300 bg-gradient-to-b from-white to-sky-50/70 text-sky-700 shadow-[0_2px_0_0_rgb(186,230,253)] hover:border-sky-500 hover:from-sky-50/80 hover:to-sky-100/70 hover:shadow-[0_3px_0_0_rgb(125,211,252)] group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-sky-50/80 group-open/cookie-detail:shadow-none";
   }
   return "border-sky-300 bg-gradient-to-b from-white to-red-50/70 text-red-700 shadow-[0_2px_0_0_rgb(254_202_202)] hover:border-sky-500 hover:from-red-50/80 hover:to-red-100/70 hover:shadow-[0_3px_0_0_rgb(252_165_165)] group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-red-50/80 group-open/cookie-detail:shadow-none";
 }
@@ -916,16 +921,22 @@ function getRuntimeInventoryMacroCategory(row: InventoryGroupRow) {
 }
 
 function getInventoryEvidenceLabel(row: InventoryGroupRow) {
+  const purpose = getInventoryPurposeLabel(row).toLowerCase();
+  if (/cookie compliance|consent management|consent_management/.test(purpose)) {
+    return "Contextual" satisfies InventoryEvidenceLabel;
+  }
   const category = getRuntimeInventoryMacroCategory(row).toLowerCase();
-  if (category === "essential" || category === "functional") return "Essential";
-  if (category === "review") return "Review";
-  return "Non-essential";
+  if (category === "essential" || category === "functional") return "Essential" satisfies InventoryEvidenceLabel;
+  if (category === "review") return "Review" satisfies InventoryEvidenceLabel;
+  return "Non-essential" satisfies InventoryEvidenceLabel;
 }
 
 function InventoryEvidenceCell({ row }: { row: InventoryGroupRow }) {
   const evidence = getInventoryEvidenceLabel(row);
   const tone = evidence === "Essential"
     ? "bg-blue-100 text-blue-700"
+    : evidence === "Contextual"
+      ? "bg-sky-100 text-sky-700"
     : evidence === "Review"
       ? "bg-amber-100 text-amber-800"
       : "bg-red-100 text-red-700";
@@ -940,17 +951,19 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
   ).length;
   const necessaryCount = rows.filter((row) => {
     const category = getRuntimeInventoryMacroCategory(row).toLowerCase();
-    return category === "essential" || category === "functional";
+    return (category === "essential" || category === "functional") && getInventoryEvidenceLabel(row) !== "Contextual";
   }).length;
+  const contextualCount = rows.filter((row) => getInventoryEvidenceLabel(row) === "Contextual").length;
   const reviewCount = rows.filter((row) => getRuntimeInventoryMacroCategory(row).toLowerCase() === "review").length;
-  const nonEssentialCount = Math.max(0, rows.length - necessaryCount - reviewCount);
+  const nonEssentialCount = Math.max(0, rows.length - necessaryCount - contextualCount - reviewCount);
 
-  const totalClassified = necessaryCount + nonEssentialCount + reviewCount;
+  const totalClassified = necessaryCount + contextualCount + nonEssentialCount + reviewCount;
   const necessaryShare = totalClassified > 0 ? (necessaryCount / totalClassified) * 100 : 0;
+  const contextualShare = totalClassified > 0 ? (contextualCount / totalClassified) * 100 : 0;
   const nonEssentialShare = totalClassified > 0 ? (nonEssentialCount / totalClassified) * 100 : 0;
   const reviewShare = totalClassified > 0 ? (reviewCount / totalClassified) * 100 : 0;
   const donut = totalClassified > 0
-    ? `conic-gradient(#ef4444 0 ${nonEssentialShare}%, #f59e0b ${nonEssentialShare}% ${nonEssentialShare + reviewShare}%, #3b82f6 ${nonEssentialShare + reviewShare}% 100%)`
+    ? `conic-gradient(#ef4444 0 ${nonEssentialShare}%, #f59e0b ${nonEssentialShare}% ${nonEssentialShare + reviewShare}%, #38bdf8 ${nonEssentialShare + reviewShare}% ${nonEssentialShare + reviewShare + contextualShare}%, #3b82f6 ${nonEssentialShare + reviewShare + contextualShare}% 100%)`
     : "conic-gradient(#cbd5e1 0 100%)";
 
   return (
@@ -980,6 +993,12 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
             <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Essential</span>
             <InfoTip align="end" placement="bottom" text="Essential or functional activity retained as necessary context." />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{necessaryCount}</span>
+          </div>
+          <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="contextual" role="button" tabIndex={0}>
+            <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500" />
+            <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Contextual</span>
+            <InfoTip align="end" placement="bottom" text="Consent-management or other context-dependent evidence that identifies site behavior without itself proving non-essential tracking." />
+            <span className="ml-auto text-[11px] font-semibold text-slate-700">{contextualCount}</span>
           </div>
         </div>
       </div>
@@ -3615,6 +3634,127 @@ function deriveDiscoveredPrivacyPolicySurfaceFallbacks(
   }));
 }
 
+function deriveRetainedPolicySummarySurfaceFallbacks(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  existingSurfaces: ExecutivePolicySurface[]
+): ExecutivePolicySurface[] {
+  const summary = getPolicyDisclosureSummary(runtimeArtifacts);
+  if (!summary) {
+    return [];
+  }
+
+  const existingLabels = new Set(existingSurfaces.map((surface) => surface.pageLabel.toLowerCase()));
+  const disclosedCookieNames = uniqueStrings([
+    ...getRecordStringArray(summary, "disclosedCookieNames"),
+    ...getRecordStringArray(summary, "disclosed_cookie_names")
+  ]);
+  const inputs: Array<{
+    details: string[];
+    pageLabel: "Privacy policy" | "Cookie policy";
+    present: boolean;
+    urls: string[];
+  }> = [
+    {
+      pageLabel: "Privacy policy",
+      present:
+        getRecordBoolean(summary, "privacyPolicyPresent") === true ||
+        getRecordBoolean(summary, "privacy_policy_present") === true,
+      urls: uniqueStrings([
+        ...getRecordStringArray(summary, "privacyPolicyUrls"),
+        ...getRecordStringArray(summary, "privacy_policy_urls")
+      ]),
+      details: ["Privacy-policy surface and URL were retained by scanner evidence."]
+    },
+    {
+      pageLabel: "Cookie policy",
+      present:
+        getRecordBoolean(summary, "cookiePolicyPresent") === true ||
+        getRecordBoolean(summary, "cookie_policy_present") === true,
+      urls: uniqueStrings([
+        ...getRecordStringArray(summary, "cookiePolicyUrls"),
+        ...getRecordStringArray(summary, "cookie_policy_urls")
+      ]),
+      details: [
+        "Cookie-policy surface and URL were retained by scanner evidence.",
+        disclosedCookieNames.length > 0
+          ? `Named-cookie inventory retained (${disclosedCookieNames.length} cookies).`
+          : null
+      ].filter((value): value is string => Boolean(value))
+    }
+  ];
+
+  return inputs.flatMap<ExecutivePolicySurface>((input) => {
+    if (!input.present || existingLabels.has(input.pageLabel.toLowerCase())) {
+      return [];
+    }
+    if (input.urls.length === 0) {
+      return [{
+        details: input.details,
+        pageLabel: input.pageLabel,
+        pageUrl: null
+      }];
+    }
+    return input.urls.slice(0, 3).map((pageUrl) => ({
+      details: input.details,
+      pageLabel: input.pageLabel,
+      pageUrl
+    }));
+  });
+}
+
+function deriveChecklistPolicySurfaceFallbacks(
+  checklistRows: GdprEprivacyCoverageChecklistItem[] | null | undefined,
+  existingSurfaces: ExecutivePolicySurface[]
+): ExecutivePolicySurface[] {
+  if (!checklistRows) {
+    return [];
+  }
+
+  const existingLabels = new Set(existingSurfaces.map((surface) => surface.pageLabel.toLowerCase()));
+  return checklistRows.flatMap<ExecutivePolicySurface>((row) => {
+    if (row.status !== "Observed") {
+      return [];
+    }
+
+    const retainedEvidence = row.criticalEvidence.retainedEvidence;
+    if (row.id === "privacy_notice_availability" && !existingLabels.has("privacy policy")) {
+      const urls = uniqueStrings([
+        ...getRecordStringArray(retainedEvidence, "privacyPolicyUrls"),
+        ...getRecordStringArray(retainedEvidence, "privacy_policy_urls")
+      ]);
+      return (urls.length > 0 ? urls.slice(0, 3) : [null]).map((pageUrl) => ({
+        details: ["Reachable privacy-notice surface retained by the canonical GDPR/ePrivacy checklist evidence."],
+        pageLabel: "Privacy policy",
+        pageUrl
+      }));
+    }
+
+    if (row.id === "cookie_notice_policy_availability" && !existingLabels.has("cookie policy")) {
+      const urls = uniqueStrings([
+        ...getRecordStringArray(retainedEvidence, "cookiePolicyUrls"),
+        ...getRecordStringArray(retainedEvidence, "cookie_policy_urls")
+      ]);
+      const disclosedCookieNames = uniqueStrings([
+        ...getRecordStringArray(retainedEvidence, "disclosedCookieNames"),
+        ...getRecordStringArray(retainedEvidence, "disclosed_cookie_names")
+      ]);
+      const details = [
+        "Cookie-policy surface was retained by the canonical GDPR/ePrivacy checklist evidence.",
+        disclosedCookieNames.length > 0
+          ? `Named-cookie inventory retained (${disclosedCookieNames.length} cookies).`
+          : null
+      ].filter((value): value is string => Boolean(value));
+      return (urls.length > 0 ? urls.slice(0, 3) : [null]).map((pageUrl) => ({
+        details,
+        pageLabel: "Cookie policy",
+        pageUrl
+      }));
+    }
+
+    return [];
+  });
+}
+
 const EXECUTIVE_RETENTION_HEADING_PATTERN =
   /\b(?:how long (?:we )?(?:keep|retain)|retention(?: period)?|data retention|storage period|retaining your information)\b/i;
 const EXECUTIVE_RETENTION_LIFECYCLE_PATTERN =
@@ -3720,7 +3860,9 @@ function selectExecutiveRetainedPolicySectionSummary(input: {
 export function deriveExecutivePolicySurfaces(
   policyEnrichments: Array<Record<string, unknown>>,
   snapshot?: Record<string, unknown> | null,
-  runtimeArtifacts?: Record<string, unknown> | null
+  runtimeArtifacts?: Record<string, unknown> | null,
+  checklistRows?: GdprEprivacyCoverageChecklistItem[] | null,
+  requestedDomain?: string | null
 ): ExecutivePolicySurface[] {
   const enrichedSurfaces = policyEnrichments
     .filter(isExecutivePolicySurfaceRow)
@@ -3769,10 +3911,28 @@ export function deriveExecutivePolicySurfaces(
       };
     })
     .filter((surface) => surface.pageUrl || surface.details.length > 0);
+  const retainedSummarySurfaces = deriveRetainedPolicySummarySurfaceFallbacks(
+    runtimeArtifacts,
+    enrichedSurfaces
+  );
+  const checklistSurfaces = deriveChecklistPolicySurfaceFallbacks(
+    checklistRows,
+    [...enrichedSurfaces, ...retainedSummarySurfaces]
+  );
+  const snapshotFallbackSurfaces = deriveSnapshotPolicySurfaceFallbacks(
+    snapshot,
+    [...enrichedSurfaces, ...retainedSummarySurfaces, ...checklistSurfaces],
+    runtimeArtifacts
+  );
   const combinedSurfaces = [
     ...enrichedSurfaces,
-    ...deriveSnapshotPolicySurfaceFallbacks(snapshot, enrichedSurfaces, runtimeArtifacts),
-    ...deriveDiscoveredPrivacyPolicySurfaceFallbacks(runtimeArtifacts, enrichedSurfaces)
+    ...retainedSummarySurfaces,
+    ...checklistSurfaces,
+    ...snapshotFallbackSurfaces,
+    ...deriveDiscoveredPrivacyPolicySurfaceFallbacks(
+      runtimeArtifacts,
+      [...enrichedSurfaces, ...retainedSummarySurfaces, ...checklistSurfaces, ...snapshotFallbackSurfaces]
+    )
   ];
   const scanIsNonRepresentative = Boolean(
     snapshot && (
@@ -3785,11 +3945,16 @@ export function deriveExecutivePolicySurfaces(
   if (scanIsNonRepresentative) {
     return [];
   }
-  const siteDomain = snapshot
-    ? getRecordString(snapshot, "registered_domain") ?? getRecordString(snapshot, "domain")
-    : null;
+  const siteDomain =
+    requestedDomain ??
+    (snapshot
+      ? getRecordString(snapshot, "registered_domain") ?? getRecordString(snapshot, "domain")
+      : null);
   const dedupedSurfaces = Array.from(combinedSurfaces.reduce((byUrl, surface) => {
-    const key = normalizePolicySurfaceUrlForCompare(surface.pageUrl) ?? `${surface.pageLabel}:${surface.details.join("|")}`;
+    const normalizedUrl = normalizePolicySurfaceUrlForCompare(surface.pageUrl);
+    const key = normalizedUrl
+      ? `${surface.pageLabel.toLowerCase()}:${normalizedUrl}`
+      : `${surface.pageLabel}:${surface.details.join("|")}`;
     const existing = byUrl.get(key);
     if (!existing) {
       byUrl.set(key, surface);
@@ -7366,7 +7531,6 @@ export async function SharedScanDetailView({
     executiveAccessLimitationNotice
   });
   const isNoGoReport = executiveAccessLimitationNotice?.finding.id === "scan_quality_visual_no_go";
-  const executivePolicySurfaces = deriveExecutivePolicySurfaces(scanRecord.policyEnrichment, scanRecord.snapshot, runtimeArtifacts);
   const executiveScanInterruptions = deriveExecutiveScanInterruptions(scanRecord.snapshot, scanRecord.events);
   const executiveRuntimeMetricsReliable = scanRecord.snapshot?.runtime_counts_retained !== false;
   const executiveCoverageLevel =
@@ -7412,6 +7576,13 @@ export async function SharedScanDetailView({
     unifiedFindings: findingEvidenceDiagnostics
   });
   const reportableGdprEprivacyCoverageChecklist = getReportableGdprEprivacyCoverageItems(gdprEprivacyCoverageChecklist);
+  const executivePolicySurfaces = deriveExecutivePolicySurfaces(
+    scanRecord.policyEnrichment,
+    scanRecord.snapshot,
+    runtimeArtifacts,
+    gdprEprivacyCoverageChecklist,
+    scanRecord.scan.domainHostname
+  );
   const consentSurfaceCoverageItem = gdprEprivacyCoverageChecklist.find((item) => item.id === "consent_surface_observed");
   const executiveCookieBannerPresent =
     consentSurfaceCoverageItem?.status === "Observed"

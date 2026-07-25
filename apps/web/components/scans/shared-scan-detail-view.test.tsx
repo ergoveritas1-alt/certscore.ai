@@ -6,6 +6,7 @@ import {
   SCAN_NO_GO_REASON_CODES,
   SCAN_NO_GO_REASON_PRESENTATIONS
 } from "@website-signal-risk-scanner/shared";
+import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 
 const require = createRequire(import.meta.url);
 const serverOnlyPath = require.resolve("server-only");
@@ -664,7 +665,9 @@ async function loadDeriveExecutivePolicySurfaces() {
     deriveExecutivePolicySurfaces: (
       policyEnrichments: Array<Record<string, unknown>>,
       snapshot?: Record<string, unknown> | null,
-      runtimeArtifacts?: Record<string, unknown> | null
+      runtimeArtifacts?: Record<string, unknown> | null,
+      checklistRows?: GdprEprivacyCoverageChecklistItem[] | null,
+      requestedDomain?: string | null
     ) => Array<{ details: string[]; pageLabel: string; pageUrl: string | null }>;
   }).deriveExecutivePolicySurfaces;
 }
@@ -1214,6 +1217,161 @@ test("deriveExecutivePolicySurfaces shows discovered privacy links without claim
     pageLabel: "Privacy policy link",
     pageUrl: "https://example.test/privacy"
   }]);
+});
+
+test("deriveExecutivePolicySurfaces retains cookie and privacy surfaces from the canonical policy summary", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+  const surfaces = deriveExecutivePolicySurfaces([
+    {
+      id: "terms",
+      page_type: "terms_of_service",
+      page_url: "https://www.oxfam.org/en/terms-and-conditions",
+      policy_summary_short: "Terms retained."
+    }
+  ], {
+    domain: "oxfam.org"
+  }, {
+    policyDisclosureSummary: {
+      cookiePolicyPresent: true,
+      cookiePolicyUrls: ["https://www.oxfam.org/en/cookies"],
+      disclosedCookieNames: ["__stripe_mid", "_gid", "fundraiseup_cid"],
+      privacyPolicyPresent: true,
+      privacyPolicyUrls: ["https://www.oxfam.org/en/privacy-policy"]
+    }
+  });
+
+  assert.deepEqual(
+    surfaces.map((surface) => surface.pageLabel),
+    ["Privacy policy", "Cookie policy", "Terms of service"]
+  );
+  assert.deepEqual(
+    surfaces.map((surface) => surface.pageUrl),
+    [
+      "https://www.oxfam.org/en/privacy-policy",
+      "https://www.oxfam.org/en/cookies",
+      "https://www.oxfam.org/en/terms-and-conditions"
+    ]
+  );
+  assert.match(
+    surfaces.find((surface) => surface.pageLabel === "Cookie policy")?.details.join(" ") ?? "",
+    /Named-cookie inventory retained \(3 cookies\)/i
+  );
+});
+
+test("deriveExecutivePolicySurfaces uses the projected cookie-policy checklist evidence when overview inputs are thin", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+  const surfaces = deriveExecutivePolicySurfaces([
+    {
+      id: "terms",
+      page_type: "terms_of_service",
+      page_url: "https://www.oxfamamerica.org/privacy-legal/",
+      policy_summary_short: "Terms retained."
+    }
+  ], {
+    domain: "oxfamamerica.org"
+  }, {}, [
+    {
+      assessmentStatus: "checked",
+      criticalEvidence: {
+        missingOrIncompleteSourceSignals: [],
+        pipeline: {
+          concernPolicyKey: "cookie_notice_policy_availability",
+          projectionStage: "coverage_policy",
+          wc01NormalizedConcernKey: "cookie_notice_policy_availability",
+          ws01EvidenceRole: "policy_surface_observation"
+        },
+        projectedFindings: [],
+        retainedEvidence: {
+          cookiePolicyPresent: true,
+          cookiePolicyUrls: ["https://www.oxfam.org/en/cookies"],
+          disclosedCookieNames: ["__stripe_mid", "_gid", "fundraiseup_cid"]
+        },
+        statusBasis: "A named-cookie inventory was retained."
+      },
+      evidenceRefs: [],
+      evidenceState: "observed",
+      explanation: "Cookie policy availability",
+      id: "cookie_notice_policy_availability",
+      label: "Cookie notice / cookie policy availability",
+      limitation: "A named-cookie inventory was retained.",
+      note: "Observed",
+      status: "Observed",
+      tone: "neutral"
+    }
+  ], "www.oxfam.org");
+
+  assert.deepEqual(
+    surfaces.map((surface) => surface.pageLabel),
+    ["Cookie policy"]
+  );
+  assert.equal(
+    surfaces.find((surface) => surface.pageLabel === "Cookie policy")?.pageUrl,
+    "https://www.oxfam.org/en/cookies"
+  );
+  assert.match(
+    surfaces.find((surface) => surface.pageLabel === "Cookie policy")?.details.join(" ") ?? "",
+    /Named-cookie inventory retained \(3 cookies\)/i
+  );
+});
+
+test("deriveExecutivePolicySurfaces preserves observed privacy and cookie surfaces when retained URLs are unavailable", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+  const makeObservedPolicyRow = (
+    id: "privacy_notice_availability" | "cookie_notice_policy_availability",
+    label: string
+  ): GdprEprivacyCoverageChecklistItem => ({
+    assessmentStatus: "checked",
+    criticalEvidence: {
+      missingOrIncompleteSourceSignals: [],
+      pipeline: {
+        concernPolicyKey: `gdpr_eprivacy_coverage.${id}.observed`,
+        projectionStage: "unified_finding",
+        wc01NormalizedConcernKey: `gdpr_eprivacy.coverage.${id}`,
+        ws01EvidenceRole: "policy_surface_observation"
+      },
+      projectedFindings: [],
+      retainedEvidence: {
+        status: "Observed"
+      },
+      statusBasis: "Canonical unified finding projected for this row."
+    },
+    evidenceRefs: [],
+    evidenceState: "observed",
+    explanation: label,
+    id,
+    label,
+    limitation: "Canonical unified finding projected for this row.",
+    note: "Observed",
+    status: "Observed",
+    tone: "neutral"
+  });
+
+  const surfaces = deriveExecutivePolicySurfaces([
+    {
+      id: "terms",
+      page_type: "terms_of_service",
+      page_url: "https://www.oxfam.org/en/terms-and-conditions",
+      policy_summary_short: "Terms retained."
+    }
+  ], {
+    domain: "oxfam.org"
+  }, {}, [
+    makeObservedPolicyRow("privacy_notice_availability", "Privacy notice link/surface discovered"),
+    makeObservedPolicyRow("cookie_notice_policy_availability", "Cookie notice / cookie policy availability")
+  ], "www.oxfam.org");
+
+  assert.deepEqual(
+    surfaces.map((surface) => surface.pageLabel),
+    ["Terms of service", "Privacy policy", "Cookie policy"]
+  );
+  assert.equal(
+    surfaces.find((surface) => surface.pageLabel === "Privacy policy")?.pageUrl,
+    null
+  );
+  assert.equal(
+    surfaces.find((surface) => surface.pageLabel === "Cookie policy")?.pageUrl,
+    null
+  );
 });
 
 test("deriveExecutivePolicySurfaces prefers retention sections over security-only policy excerpts", async () => {

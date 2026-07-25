@@ -1,4 +1,9 @@
 import {
+  evaluateLegalFrameworkValidity,
+  hasStaleLegalFrameworkReference,
+  hasSubstantiveProcessingPurposesEvidence,
+} from "@certscore/contracts";
+import {
   getReportUnifiedFinding,
   getReportUnifiedFindingByAlias,
   getReportUnifiedFindingForSignal,
@@ -165,6 +170,7 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "weak_policy_anchor"
   | "boilerplate_policy_anchor"
   | "policy_semantic_review_incomplete"
+  | "stale_legal_framework_reference_observed"
   | "runtime_tracking_review_incomplete"
   | "runtime_page_context_invalid"
   | "possible_policy_runtime_mismatch"
@@ -2512,6 +2518,27 @@ function getGdprTransparencyArticle13Signals(summary: Record<string, unknown> | 
   return getPlainRecordArray(summary?.article13DisclosureSignals ?? summary?.article13_disclosure_signals);
 }
 
+function getGdprTransparencyScanDate(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+) {
+  const scanMetadata = getRuntimeRecord(runtimeArtifacts, [
+    "scanMetadata",
+    "scan_metadata",
+  ]);
+  const policySummary = getPolicyDisclosureSummaryForGdprTransparency(runtimeArtifacts);
+  return (
+    getRuntimeString(runtimeArtifacts, [
+      "scanStartedAt",
+      "scan_started_at",
+      "startedAt",
+      "started_at",
+    ]) ??
+    getRuntimeString(scanMetadata, ["startedAt", "started_at"]) ??
+    getRuntimeString(policySummary, ["scanStartedAt", "scan_started_at"]) ??
+    null
+  );
+}
+
 function getGdprTransparencyArticle13ConcernState(
   signal: Record<string, unknown>
 ): Exclude<GdprTransparencyArticle13ConcernState, "missing"> {
@@ -2567,7 +2594,23 @@ function buildGdprTransparencyArticle13Concerns(
         getStringValue(signal.selectedPolicySectionUrl ?? signal.selected_policy_section_url) ??
         getStringValue(signal.surfaceUrl ?? signal.surface_url);
       const locale = getStringValue(signal.matchedLocale ?? signal.matched_locale);
-      const state = getGdprTransparencyArticle13ConcernState(signal);
+      const frameworkValidityMatches = evaluateLegalFrameworkValidity(
+        evidenceText ?? "",
+        getGdprTransparencyScanDate(runtimeArtifacts),
+      );
+      const staleLegalFrameworkReferenceObserved =
+        hasStaleLegalFrameworkReference(frameworkValidityMatches);
+      const processingPurposesEvidenceSubstantive =
+        topic !== "processing_purposes" ||
+        frameworkValidityMatches.length === 0 ||
+        hasSubstantiveProcessingPurposesEvidence(evidenceText ?? "");
+      const extractedState = getGdprTransparencyArticle13ConcernState(signal);
+      const state =
+        !processingPurposesEvidenceSubstantive && extractedState === "sufficient"
+          ? "ambiguous"
+          : staleLegalFrameworkReferenceObserved && topic === "international_transfers"
+            ? "partial"
+            : extractedState;
       const evidence = uniqueStrings([evidenceText, sourceUrl]);
 
       return buildConcernFromSharedInput({
@@ -2589,6 +2632,7 @@ function buildGdprTransparencyArticle13Concerns(
           gdprTransparencyArticle13Evidence: true,
           gdprTransparencyArticle13Topic: topic,
           gdprTransparencyEvidenceProfile: profile,
+          legalFrameworkValidityMatches: frameworkValidityMatches,
           matchStrength: getStringValue(signal.matchStrength ?? signal.match_strength),
           matchedLocale: locale,
           matchedTerm: getStringValue(signal.matchedTerm ?? signal.matched_term),
@@ -2600,7 +2644,9 @@ function buildGdprTransparencyArticle13Concerns(
           signalKey: `privacy.gdpr_transparency.article13.${topic}`,
           sourceUrl,
           sourceUrls: sourceUrl ? [sourceUrl] : [],
-          policySnippets: evidenceText ? [evidenceText] : []
+          policySnippets: evidenceText ? [evidenceText] : [],
+          processingPurposesEvidenceSubstantive,
+          staleLegalFrameworkReferenceObserved
         },
         severity: "low",
         signalKey: `privacy.gdpr_transparency.article13.${topic}`,

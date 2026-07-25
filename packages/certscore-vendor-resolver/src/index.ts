@@ -159,6 +159,28 @@ interface VendorRule {
 
 const rules: VendorRule[] = [
   {
+    entity: "Drupal",
+    vendor: "Drupal",
+    product: "Drupal EU Cookie Compliance module, non-TCF",
+    purpose: "consent_management",
+    regulatoryRelevance: ["consent_management", "preference_tooling"],
+    confidence: 0.96,
+    urlPatterns: [
+      /(?:^|\/)modules\/contrib\/eu_cookie_compliance(?:\/|[?#]|$)/i,
+      /(?:^|\/)libraries\/eu_cookie_compliance(?:\/|[?#]|$)/i,
+      /eu_cookie_compliance(?:\.min)?\.js(?:[?#]|$)/i,
+    ],
+    cookiePatterns: [/^cookie-agreed(?:-.+)?$/i],
+    globalPatterns: [/^drupalSettings\.eu_cookie_compliance$/i],
+    domSelectorPatterns: [
+      /^#sliding-popup$/i,
+      /^\.eu-cookie-compliance-banner$/i,
+      /^\[id\*=['"]?eu-cookie-compliance/i,
+      /^\[class\*=['"]?eu-cookie-compliance/i,
+    ],
+    basisLabel: "drupal_eu_cookie_compliance_module",
+  },
+  {
     entity: "Borlabs GmbH",
     vendor: "Borlabs",
     product: "Borlabs Cookie CMP",

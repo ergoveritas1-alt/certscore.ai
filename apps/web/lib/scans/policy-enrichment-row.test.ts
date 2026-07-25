@@ -48,3 +48,18 @@ test("public policy projection keeps at most five first-party, semantically usef
   assert.equal(surfaces.filter((surface) => surface.url?.includes("informativa_arubaspa.pdf")).length, 1);
   assert.equal(surfaces[0]?.url, "https://www.aruba.it/informativa_arubaspa.pdf");
 });
+
+test("public policy projection preserves URL-less canonical surfaces alongside first-party links", () => {
+  const surfaces = prioritizePublicPolicySurfaces([
+    { type: "privacy_policy", url: null },
+    { type: "cookie_policy", url: null },
+    { type: "terms_of_service", url: "https://www.oxfam.org/en/terms-and-conditions" },
+    { type: "privacy_policy", url: "https://vendor.example/privacy" }
+  ], { siteDomain: "oxfam.org" });
+
+  assert.deepEqual(surfaces, [
+    { type: "terms_of_service", url: "https://www.oxfam.org/en/terms-and-conditions" },
+    { type: "privacy_policy", url: null },
+    { type: "cookie_policy", url: null }
+  ]);
+});

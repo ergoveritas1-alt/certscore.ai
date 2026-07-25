@@ -742,6 +742,63 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects common international tran
   );
 });
 
+test("Privacy Shield wording is transfer review evidence and not processing-purpose credit", () => {
+  const excerpt = "Our payment provider is certified under the EU-US Privacy Shield.";
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [{
+      createdAt: "2026-07-25T12:00:00.000Z",
+      eventType: "scan.completed",
+      metadataJson: {}
+    }],
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            confidence: 0.94,
+            disclosureType: "processing_purposes",
+            evidenceText: excerpt,
+            selectedEvidenceStrength: "strong",
+            source: "deterministic",
+            status: "observed"
+          },
+          {
+            confidence: 0.94,
+            disclosureType: "international_transfers",
+            evidenceText: excerpt,
+            selectedEvidenceStrength: "strong",
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: excerpt
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.notEqual(outcomes.processing_purposes_disclosure?.status, "Observed");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Review signal");
+  assert.match(
+    outcomes.international_transfers_disclosure?.limitation ?? "",
+    /obsolete EU-US Privacy Shield reference/i,
+  );
+  assert.equal(
+    outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence
+      .staleLegalFrameworkReferenceObserved,
+    true,
+  );
+  assert.match(
+    retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText ?? "",
+    /Privacy Shield/i,
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes confirms outside-region recipient disclosure with agreement safeguards", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -2440,6 +2497,33 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained consent surfaces a
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes distinguishes a CMP signal from an unconfirmed consent surface", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      cmp_framework_signal_observed: true,
+      cmp_runtime_signal_labels: ["HubSpot Banner"],
+      cmp_vendor_name: "HubSpot CMP",
+      consentSurfaceInspection: {
+        coverageStatus: "partial",
+        inspectionCompleted: false,
+        inspectedPreInteraction: true,
+        outcome: "inspection_incomplete"
+      },
+      consent_surface_observed: false
+    }
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Not confirmed");
+  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /consent-management signal was observed from HubSpot CMP/i);
+  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /actionable first-layer consent surface was not confirmed/i);
+  assert.deepEqual(
+    outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceDecisionStates,
+    ["cmp_runtime_signal_without_confirmed_surface"]
+  );
+  assert.equal(outcomes.cmp_framework_signal_observed?.status, "Observed");
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats complete no-surface inspection as authoritative", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -2553,8 +2637,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not turn an incomplete conse
       rowId
     );
   }
-  assert.equal(outcomes.consent_surface_observed?.status, "Not testable");
-  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /inspection did not complete/i);
+  assert.equal(outcomes.consent_surface_observed?.status, "Not confirmed");
+  assert.match(
+    outcomes.consent_surface_observed?.limitation ?? "",
+    /consent-management signal was observed.*actionable first-layer consent surface was not confirmed/i
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes preserves positive controls despite partial consent coverage", () => {
@@ -3727,6 +3814,63 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained cookie topics in 
   );
   assert.match(
     outcomes.cookie_notice_policy_availability?.limitation ?? "",
+    /granular named-cookie inventory or preference interface was not confirmed/i
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes reports retained named-cookie inventory separately from preferences", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        cookiePolicyPresent: true,
+        cookiePolicyUrls: ["https://www.oxfam.org/en/cookies"],
+        policyCookieDisclosures: [
+          {
+            cookieName: "__stripe_mid",
+            provider: "Stripe",
+            duration: "1 year",
+            purpose: "Necessary for credit card transactions."
+          },
+          {
+            cookieName: "_gid",
+            provider: "google.com",
+            duration: "1 day",
+            purpose: "Registers a unique analytics identifier."
+          },
+          {
+            cookieName: "fundraiseup_cid",
+            provider: "Fundraise Up",
+            duration: "10 years",
+            purpose: "Persistent anti-fraud and analytics identifier."
+          }
+        ],
+        retainedCookiePolicyTextExcerpt: "Cookie name Provider Expiry Purpose"
+      }
+    },
+    snapshot: {
+      cookie_policy_present: true
+    }
+  });
+  const outcome = outcomes.cookie_notice_policy_availability;
+
+  assert.equal(outcome?.status, "Observed");
+  assert.equal(
+    outcome?.criticalEvidence.retainedEvidence.granularCookieInventoryConfirmed,
+    true
+  );
+  assert.equal(
+    outcome?.criticalEvidence.retainedEvidence.preferenceInterfaceConfirmed,
+    false
+  );
+  assert.deepEqual(
+    outcome?.criticalEvidence.retainedEvidence.disclosedCookieNames,
+    ["__stripe_mid", "_gid", "fundraiseup_cid"]
+  );
+  assert.match(outcome?.limitation ?? "", /named-cookie inventory were retained/i);
+  assert.match(outcome?.limitation ?? "", /separate cookie preference interface was not confirmed/i);
+  assert.doesNotMatch(
+    outcome?.limitation ?? "",
     /granular named-cookie inventory or preference interface was not confirmed/i
   );
 });

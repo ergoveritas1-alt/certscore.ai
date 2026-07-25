@@ -53,6 +53,7 @@ function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
       ],
       retainedEvidence: {
         sessionReplayEvidence: {
+          firstSeenMs: 2410,
           preConsentObserved: false,
           vendors: ["Microsoft Clarity", "Hotjar", "Contentsquare"]
         },
@@ -521,7 +522,7 @@ test("GdprEprivacyCoverageChecklistCard renders concise session replay evidence 
 
   assert.match(
     html,
-    /Session replay or behavioral analytics signals were observed: Microsoft Clarity, Hotjar, and Contentsquare\./
+    /Session replay or behavioral analytics signals were observed: Microsoft Clarity, Hotjar, and Contentsquare; first seen 2\.41s after scan start\./
   );
   assert.match(html, /Review summary/);
   assert.match(html, /GDPR\/ePrivacy score is weighted from evidence-gated checklist rows/);

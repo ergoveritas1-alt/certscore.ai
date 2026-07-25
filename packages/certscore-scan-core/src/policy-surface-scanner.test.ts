@@ -9,6 +9,7 @@ import { createArtifactWriter } from "./artifact-writer.js";
 import {
   canonicalWwwPolicyUrlVariant,
   countRecoveredPolicySurfaceObservations,
+  extractPolicyCookieDisclosures,
   extractPolicySections,
   gdprTransparencyTopicCandidatesFromRetainedPolicySections,
   isFetchablePolicyCandidateForPolicySurface,
@@ -807,6 +808,85 @@ test("policy section extraction preserves structured table rows for canonical mu
     ])
   );
   assert.equal(evidence.every((row) => row.status === "diagnostic_only" && row.productionCredit === false), true);
+});
+
+test("cookie disclosure extraction retains Oxfam-style named-cookie tables", () => {
+  const sourceUrl = "https://www.oxfam.org/en/cookies";
+  const html = `
+    <main>
+      <h1>Cookies</h1>
+      <h2>Essential cookies</h2>
+      <table>
+        <tr><th>Cookie name</th><th>Provider</th><th>Expiry</th><th>Purpose</th></tr>
+        <tr><td>__stripe_mid</td><td>Stripe</td><td>1 year</td><td>Necessary for credit card transactions.</td></tr>
+        <tr><td>__stripe_sid</td><td>Stripe</td><td>1 year</td><td>Necessary for credit card transactions.</td></tr>
+        <tr><td>_ga</td><td>google.com</td><td>2 years</td><td>Registers a unique analytics identifier.</td></tr>
+        <tr><td>_gid</td><td>google.com</td><td>1 day</td><td>Registers a unique analytics identifier.</td></tr>
+        <tr><td>_gat</td><td>google.com</td><td>1 day</td><td>Throttles the analytics request rate.</td></tr>
+        <tr><td>fundraiseup_cid</td><td>Fundraise Up</td><td>10 years</td><td>Persistent anti-fraud and analytics identifier.</td></tr>
+        <tr><td>fundraiseup_session</td><td>Fundraise Up</td><td>Session</td><td>Temporary session identifier.</td></tr>
+        <tr><td>CookieConsent</td><td>Oxfam.org</td><td>1 year</td><td>Stores the user's consent state.</td></tr>
+      </table>
+      <h2>Non-essential cookies</h2>
+      <table>
+        <tr><th>Cookie name</th><th>Provider</th><th>Expiry</th><th>Purpose</th></tr>
+        <tr><td>VISITOR_INFO1_LIVE</td><td>youtube.com</td><td>179 days</td><td>Estimates bandwidth for embedded videos.</td></tr>
+      </table>
+    </main>`;
+  const retainedPolicySections = extractPolicySections({
+    html,
+    sourceUrl,
+    visibleText: "Cookies Essential cookies Non-essential cookies",
+  });
+  const disclosures = extractPolicyCookieDisclosures({
+    html,
+    retainedPolicySections,
+    sourceUrl,
+  });
+
+  assert.deepEqual(
+    disclosures.map((row) => row.cookieName),
+    [
+      "__stripe_mid",
+      "__stripe_sid",
+      "_ga",
+      "_gid",
+      "_gat",
+      "fundraiseup_cid",
+      "fundraiseup_session",
+      "CookieConsent",
+      "VISITOR_INFO1_LIVE",
+    ],
+  );
+  assert.equal(disclosures.find((row) => row.cookieName === "_ga")?.category, "essential");
+  assert.equal(
+    disclosures.find((row) => row.cookieName === "VISITOR_INFO1_LIVE")?.category,
+    "non_essential",
+  );
+  assert.equal(
+    disclosures.every((row) =>
+      row.parserProvenance === "policy_cookie_table_dom.v1" &&
+      row.sourceUrl === sourceUrl &&
+      row.evidenceRef.startsWith("policy_cookie_")
+    ),
+    true,
+  );
+});
+
+test("cookie disclosure extraction rejects generic non-cookie tables", () => {
+  const html = `
+    <table>
+      <tr><th>Name</th><th>Provider</th><th>Description</th></tr>
+      <tr><td>Donation service</td><td>Example</td><td>Processes donations.</td></tr>
+    </table>`;
+  assert.deepEqual(
+    extractPolicyCookieDisclosures({
+      html,
+      retainedPolicySections: [],
+      sourceUrl: "https://example.test/services",
+    }),
+    [],
+  );
 });
 
 test("policySurfaceScanner derives all canonical GDPR Transparency candidates for the twenty-one expansion locales", () => {

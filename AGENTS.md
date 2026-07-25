@@ -114,6 +114,8 @@ If a module needs different thresholds, severity, or status treatment, express t
 
 For CertScore v2 endpoint/vendor attribution, use `packages/certscore-vendor-resolver` as the canonical resolver home. Do not add local endpoint or vendor lists inside scan modules, report adapters, dry-run bridges, or docs when the classification belongs in the resolver.
 
+`packages/certscore-contracts/src/legal-framework-validity.ts` `LEGAL_FRAMEWORK_VALIDITY_REGISTRY` is the canonical registry for named, time-sensitive legal or regulatory frameworks recognized in retained policy text. Use it for framework identity, aliases, subject area, effective dates, invalidation or supersession dates, successor relationships, authoritative source metadata, and safe review wording. Do not add checklist-specific or display-specific stale-framework lists. Framework status must be evaluated relative to the scan date and carried through typed evidence, normalized concern, concern policy, and checklist/finding projection.
+
 Multilingual privacy-surface and consent-control coverage supports the 40 typed locales enumerated by `SUPPORTED_PRIVACY_EVIDENCE_LOCALES`. These surfaces and controls must use `PRIVACY_EVIDENCE_LOCALE_REGISTRY` plus their canonical classifiers. GDPR Transparency topic extraction has its separately calibrated locale set in `SUPPORTED_GDPR_TRANSPARENCY_LOCALES` and must use its canonical topic classifier. Localized text should normalize to typed evidence before findings. Do not add display-layer phrase lists, raw text shortcuts, or consent-clicking runtime behavior for multilingual coverage.
 
 Consent UI control discovery must use the canonical consent-control label classifier/registry for label-based classification of accept, reject, options/manage, and privacy opt-out controls. Do not add feature-specific or display-specific accept/reject/options regexes when the same rule belongs in the canonical classifier. New language terms, CMP label variants, or consent-control synonyms should be added to the canonical registry with typed intent, locale, match strength, optional variant, and focused tests.
@@ -131,6 +133,18 @@ Display copy may explain retained evidence and the already-determined policy/che
 Executive summaries and top findings may rank, allowlist, suppress, or group already-projected findings only. Top findings should be traceable to unified finding IDs or checklist/regulatory projection rows. Do not create executive-only findings from raw signals or display context.
 
 DB repair and backfill scripts may repair records, but must not create findings that bypass normalized concern construction, concern policy, and unified finding/checklist projection.
+
+When retained evidence includes a resolved vendor and reliable first-seen timing, finding and checklist descriptors should identify the vendor and first-seen time. Keep this descriptive only: missing display detail must not change finding eligibility or cause display code to infer a vendor or timestamp.
+
+Evidence Mix uses `Essential` only for genuinely necessary functional, security, authentication, transaction, or service-delivery runtime activity. Use `Contextual` for consent-management, disclosure, governance, policy-surface, or page-context evidence that explains the scan but is not itself essential runtime activity. CMP identity or banner context is `Contextual`; a genuinely necessary functional runtime request remains `Essential`.
+
+### Policy semantic validity
+
+Policy review must keep four questions separate: whether disclosure text exists, whether the evidence is relevant to the checklist topic, whether a named time-sensitive mechanism was current on the scan date, and whether legal compliance has been established. Evidence for one topic must not satisfy another topic merely because it appears nearby in the same excerpt.
+
+Invalidated, superseded, or not-yet-effective framework references are retained evidence and should produce an evidence-scoped review signal. They must not receive unqualified `Observed` credit, positive scoring that hides the stale reference, or customer-facing language implying that the named mechanism establishes compliance. Current framework or safeguard language may support disclosure presence, but does not by itself prove that the site qualifies for or correctly implements that mechanism.
+
+Implement policy-validity rules in the shared evidence and policy pipeline, with deterministic fixtures covering topic separation and scan-date transitions. Do not implement validity checks as display-only keyword matching, Nano-only judgment, or executive-summary-only findings.
 
 ### Legal conclusion language
 

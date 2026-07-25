@@ -102,7 +102,12 @@ export function prioritizePublicPolicySurfaces<T extends PublicPolicySurfaceProj
   const firstParty = deduped.filter((surface) =>
     Boolean(siteDomain && policySurfaceRegistrableDomain(surface.url) === siteDomain)
   );
-  const eligible = firstParty.length > 0 ? firstParty : deduped;
+  const eligible = firstParty.length > 0
+    ? deduped.filter((surface) =>
+        surface.url === null ||
+        policySurfaceRegistrableDomain(surface.url) === siteDomain
+      )
+    : deduped;
   const ranked = eligible
     .map((surface, index) => ({ index, score: publicPolicySurfaceScore(surface, siteDomain), surface }))
     .sort((left, right) => right.score - left.score || left.index - right.index);

@@ -1041,6 +1041,38 @@ test("resolves first-party Borlabs Cookie runtime markers as consent management"
   assert.ok(borlabs.matchSources.some((source) => source.matchedField === "dom_selector"));
 });
 
+test("resolves Drupal EU Cookie Compliance runtime markers as non-TCF consent management", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "script",
+      url: "https://www.example.org/modules/contrib/eu_cookie_compliance/js/eu_cookie_compliance.js",
+      hostname: "www.example.org",
+    },
+    {
+      type: "cmp_runtime",
+      globalName: "drupalSettings.eu_cookie_compliance",
+      matchSource: "cmp_runtime_probe",
+    },
+    {
+      type: "cmp_runtime",
+      domSelector: "#sliding-popup",
+      matchSource: "cmp_runtime_probe",
+    },
+  ]);
+
+  assertResolved(
+    observations,
+    "Drupal",
+    "Drupal EU Cookie Compliance module, non-TCF",
+    "consent_management",
+  );
+  const drupal = observations.find((observation) => observation.vendor === "Drupal");
+  assert.ok(drupal);
+  assert.equal(resolveVendorDisplayCategory(drupal), "Cookie compliance");
+  assert.ok(drupal.matchSources.some((source) => source.matchedField === "global_name"));
+  assert.ok(drupal.matchSources.some((source) => source.matchedField === "dom_selector"));
+});
+
 test("resolves an exact self-hosted Borlabs runtime asset without waiting for DOM access", () => {
   const observations = resolveVendorObservations([
     {
