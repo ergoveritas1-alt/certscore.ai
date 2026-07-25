@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { SCAN_FROM_VALUES, formatScanFromLabel } from "@website-signal-risk-scanner/shared";
 import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/scans/scan-from-icons";
@@ -93,6 +94,199 @@ function accessLabel(request: {
   return request.accessPostureClass || request.adminSummaryGeneratedAt ? "Clear" : "—";
 }
 
+type AdminPulseFilterState = {
+  activeAccess: string;
+  activeFreshness: string;
+  activeIndustry: string;
+  activeLanguage: string;
+  activeOutcome: string;
+  activeQuery: string | null;
+  activeRoute: AdminApiRoute | null;
+  activeScanFrom: string;
+  activeStatus: AdminPulseRequestStatus | null;
+  activeTimeSpan: (typeof timeSpans)[number];
+  hasFilters: boolean;
+};
+
+async function AdminPulseOverview() {
+  const counts = await withServerTiming("app.admin.api_activity.counts", () => getAdminPulseOverviewCounts());
+
+  return (
+    <p className="text-sm text-slate-500">
+      {counts.total} requests · {counts.completed} completed · {counts.queuedOrRunning} active · {counts.rateLimited} rate
+      limited
+    </p>
+  );
+}
+
+function AdminPulseOverviewFallback() {
+  return <div aria-label="Loading API activity totals" className="h-5 w-72 animate-pulse rounded bg-slate-100" />;
+}
+
+async function AdminPulseFilters({
+  activeAccess,
+  activeFreshness,
+  activeIndustry,
+  activeLanguage,
+  activeOutcome,
+  activeQuery,
+  activeRoute,
+  activeScanFrom,
+  activeStatus,
+  activeTimeSpan,
+  hasFilters
+}: AdminPulseFilterState) {
+  const filterOptions = await withServerTiming("app.admin.api_activity.filters", () => getAdminPulseFilterOptions());
+
+  return (
+    <AdminScansFilterForm basePath="/app/admin/pulse" clearHref="/app/admin/pulse" hasFilters={hasFilters}>
+      <input
+        aria-label="Filter by domain, scan ID, email, requester, or IP; use field not-equal syntax to exclude"
+        className="h-10 min-w-[28rem] flex-[1_1_32rem] rounded-lg border border-slate-300 bg-white px-3 text-sm"
+        defaultValue={activeQuery ?? ""}
+        name="q"
+        placeholder="Domain, scan_id, email, requester, IP · exclude: ip!=66.*"
+      />
+      <select
+        aria-label="Filter API activity by status"
+        className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs"
+        defaultValue={activeStatus ?? ""}
+        name="status"
+      >
+        <option value="">Any status</option>
+        {statuses.map((status) => (
+          <option key={status} value={status}>
+            {formatLabel(status)}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter API activity by request route"
+        className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs"
+        defaultValue={activeRoute ?? ""}
+        name="route"
+      >
+        <option value="">Any route</option>
+        {ADMIN_API_ROUTES.map((route) => (
+          <option key={route} value={route}>
+            {route}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter API activity by freshness"
+        className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs"
+        defaultValue={activeFreshness}
+        name="freshness"
+      >
+        <option value="any">Any freshness</option>
+        {freshnesses.slice(1).map((freshness) => (
+          <option key={freshness} value={freshness}>
+            {freshness === "forced_fresh" ? "Forced fresh" : freshness === "reused" ? "Reused <24h" : "Fresh"}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter API activity by access posture"
+        className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs"
+        defaultValue={activeAccess}
+        name="access"
+      >
+        <option value="any">Any access</option>
+        {accessValues.slice(1).map((access) => (
+          <option key={access} value={access}>
+            {access === "robots_limited" ? "Robots-limited" : access === "captcha" ? "CAPTCHA" : formatLabel(access)}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter API activity by outcome"
+        className="h-10 w-[12rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs"
+        defaultValue={activeOutcome}
+        name="outcome"
+      >
+        <option value="">Any outcome</option>
+        {filterOptions.outcomes.map((outcome) => (
+          <option key={outcome} value={outcome}>
+            {outcomeLabel(
+              outcome,
+              outcome.startsWith("reachability_blocked") ||
+                ["robots_restricted", "transport_failure", "timeout_navigation", "unknown_access_limitation", "domain_inactive_or_unstable"].includes(
+                  outcome
+                )
+            )}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter API activity by language"
+        className="h-10 w-[7rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs"
+        defaultValue={activeLanguage}
+        name="language"
+      >
+        <option value="">Any language</option>
+        {filterOptions.languages.map((language) => (
+          <option key={language} value={language}>
+            {language}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter API activity by industry"
+        className="h-10 w-[10.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs"
+        defaultValue={activeIndustry}
+        name="industry"
+      >
+        <option value="">Any industry</option>
+        {filterOptions.industries.map((industry) => (
+          <option key={industry} value={industry}>
+            {industry}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter API activity by origin"
+        className="h-10 w-[7.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs"
+        defaultValue={activeScanFrom}
+        name="scanFrom"
+      >
+        <option value="any">Any origin</option>
+        {SCAN_FROM_VALUES.map((scanFrom) => (
+          <option key={scanFrom} value={scanFrom}>
+            {formatScanFromLabel(scanFrom)}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter API activity by time span"
+        className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs"
+        defaultValue={activeTimeSpan}
+        name="timeSpan"
+      >
+        {timeSpans.map((timeSpan) => (
+          <option key={timeSpan} value={timeSpan}>
+            {timeSpan === "all"
+              ? "All time"
+              : timeSpan === "4h"
+                ? "Past 4 hours"
+                : timeSpan === "12h"
+                  ? "Past 12 hours"
+                  : timeSpan === "24h"
+                    ? "Past 24 hours"
+                    : timeSpan === "7d"
+                      ? "Past 7 days"
+                      : "Past 31 days"}
+          </option>
+        ))}
+      </select>
+    </AdminScansFilterForm>
+  );
+}
+
+function AdminPulseFiltersFallback() {
+  return <div aria-label="Loading API activity filters" className="h-10 w-full animate-pulse rounded-lg bg-slate-100" />;
+}
+
 export default async function AdminPulsePage({ searchParams }: AdminPulsePageProps) {
   const resolved = searchParams ? await searchParams : {};
   const activeStatus = normalizeStatus(resolved.status);
@@ -109,11 +303,9 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const pageSize = normalizePageSize(resolved.perPage);
   const page = normalizePage(resolved.page);
   const requestListInput = { limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan };
-  const [counts, filterOptions, requestPage] = await withServerTiming("app.admin.api_activity", () => Promise.all([
-    getAdminPulseOverviewCounts(),
-    getAdminPulseFilterOptions(),
+  const requestPage = await withServerTiming("app.admin.api_activity.rows", () =>
     listAdminPulseRequestsPage(requestListInput)
-  ]));
+  );
   const filteredTotal = requestPage.totalCount;
   const requests = requestPage.items;
   const pageCount = Math.max(1, Math.ceil(filteredTotal / pageSize));
@@ -127,24 +319,27 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
             <CardTitle>API Activity</CardTitle>
             <p className="text-sm text-slate-500">Logical programmatic requests across Pulse, MCP, SDK, and other integrations. Caller IP is the client or server that reached CertScore—not the scanned site. SDK/MCP result-fetch follow-ups are grouped with their initiating request.</p>
           </div>
-          <p className="text-sm text-slate-500">
-            {counts.total} requests · {counts.completed} completed · {counts.queuedOrRunning} active · {counts.rateLimited} rate limited
-          </p>
+          <Suspense fallback={<AdminPulseOverviewFallback />}>
+            <AdminPulseOverview />
+          </Suspense>
         </div>
       </CardHeader>
       <CardContent className="space-y-3 pt-0">
-        <AdminScansFilterForm basePath="/app/admin/pulse" clearHref="/app/admin/pulse" hasFilters={hasFilters}>
-          <input aria-label="Filter by domain, scan ID, email, requester, or IP; use field not-equal syntax to exclude" className="h-10 min-w-[28rem] flex-[1_1_32rem] rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery ?? ""} name="q" placeholder="Domain, scan_id, email, requester, IP · exclude: ip!=66.*" />
-          <select aria-label="Filter API activity by status" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeStatus ?? ""} name="status"><option value="">Any status</option>{statuses.map((status) => <option key={status} value={status}>{formatLabel(status)}</option>)}</select>
-          <select aria-label="Filter API activity by request route" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeRoute ?? ""} name="route"><option value="">Any route</option>{ADMIN_API_ROUTES.map((route) => <option key={route} value={route}>{route}</option>)}</select>
-          <select aria-label="Filter API activity by freshness" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeFreshness} name="freshness"><option value="any">Any freshness</option>{freshnesses.slice(1).map((freshness) => <option key={freshness} value={freshness}>{freshness === "forced_fresh" ? "Forced fresh" : freshness === "reused" ? "Reused <24h" : "Fresh"}</option>)}</select>
-          <select aria-label="Filter API activity by access posture" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeAccess} name="access"><option value="any">Any access</option>{accessValues.slice(1).map((access) => <option key={access} value={access}>{access === "robots_limited" ? "Robots-limited" : access === "captcha" ? "CAPTCHA" : formatLabel(access)}</option>)}</select>
-          <select aria-label="Filter API activity by outcome" className="h-10 w-[12rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeOutcome} name="outcome"><option value="">Any outcome</option>{filterOptions.outcomes.map((outcome) => <option key={outcome} value={outcome}>{outcomeLabel(outcome, outcome.startsWith("reachability_blocked") || ["robots_restricted", "transport_failure", "timeout_navigation", "unknown_access_limitation", "domain_inactive_or_unstable"].includes(outcome))}</option>)}</select>
-          <select aria-label="Filter API activity by language" className="h-10 w-[7rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeLanguage} name="language"><option value="">Any language</option>{filterOptions.languages.map((language) => <option key={language} value={language}>{language}</option>)}</select>
-          <select aria-label="Filter API activity by industry" className="h-10 w-[10.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeIndustry} name="industry"><option value="">Any industry</option>{filterOptions.industries.map((industry) => <option key={industry} value={industry}>{industry}</option>)}</select>
-          <select aria-label="Filter API activity by origin" className="h-10 w-[7.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeScanFrom} name="scanFrom"><option value="any">Any origin</option>{SCAN_FROM_VALUES.map((scanFrom) => <option key={scanFrom} value={scanFrom}>{formatScanFromLabel(scanFrom)}</option>)}</select>
-          <select aria-label="Filter API activity by time span" className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeTimeSpan} name="timeSpan">{timeSpans.map((timeSpan) => <option key={timeSpan} value={timeSpan}>{timeSpan === "all" ? "All time" : timeSpan === "4h" ? "Past 4 hours" : timeSpan === "12h" ? "Past 12 hours" : timeSpan === "24h" ? "Past 24 hours" : timeSpan === "7d" ? "Past 7 days" : "Past 31 days"}</option>)}</select>
-        </AdminScansFilterForm>
+        <Suspense fallback={<AdminPulseFiltersFallback />}>
+          <AdminPulseFilters
+            activeAccess={activeAccess}
+            activeFreshness={activeFreshness}
+            activeIndustry={activeIndustry}
+            activeLanguage={activeLanguage}
+            activeOutcome={activeOutcome}
+            activeQuery={activeQuery}
+            activeRoute={activeRoute}
+            activeScanFrom={activeScanFrom}
+            activeStatus={activeStatus}
+            activeTimeSpan={activeTimeSpan}
+            hasFilters={hasFilters}
+          />
+        </Suspense>
 
         <PaginationControls
           basePath="/app/admin/pulse"

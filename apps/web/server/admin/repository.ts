@@ -77,6 +77,16 @@ export type AdminScanOrganizationRow = {
   name: string;
 };
 
+export type AdminScanDetailSummaryRow = AdminScanQueryRow & {
+  accessibility_rule_count: number;
+  change_count: number;
+  domain_hostname: string | null;
+  organization_name: string | null;
+  page_count: number;
+  snapshot: Record<string, unknown> | null;
+  tracker_vendor_count: number;
+};
+
 export type AdminScanSnapshotRow = {
   admin_industry_label?: string | null;
   admin_summary_generated_at?: string | null;
@@ -1157,100 +1167,42 @@ export async function persistAdminScanSummary(input: {
   }
 }
 
-export async function loadAdminScanDetailData(scanId: string): Promise<{
-  accessibilityRuleCounts: Array<Record<string, unknown>>;
-  changes: Array<Record<string, unknown>>;
-  domain: AdminScanDomainRow | null;
-  organization: AdminScanOrganizationRow | null;
-  localV2DagLambdaEvents: Array<Record<string, unknown>>;
-  pages: Array<Record<string, unknown>>;
-  policyEnrichment: Array<Record<string, unknown>>;
-  policyReviewQueue: Array<Record<string, unknown>>;
-  runtimeArtifacts: Record<string, unknown> | null;
-  runtimeContextEvents: Array<Record<string, unknown>>;
-  scan: AdminScanQueryRow | null;
-  snapshot: Record<string, unknown> | null;
-  trackerVendors: Array<Record<string, unknown>>;
-}> {
-  const scan = await queryOne<AdminScanQueryRow>(
-    `select id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_requested, pages_scanned, scan_config_json
-       from scans
-      where id = $1`,
+export async function loadAdminScanDetailSummaryData(scanId: string): Promise<AdminScanDetailSummaryRow | null> {
+  return queryOne<AdminScanDetailSummaryRow>(
+    `select s.id,
+            s.organization_id,
+            s.domain_id,
+            s.scan_type,
+            s.status,
+            s.created_at,
+            s.started_at,
+            s.completed_at,
+            s.pages_requested,
+            s.pages_scanned,
+            s.scan_config_json,
+            d.hostname as domain_hostname,
+            o.name as organization_name,
+            to_jsonb(ss) as snapshot,
+            (select count(*)::int from scan_tracker_vendors stv where stv.scan_id = s.id) as tracker_vendor_count,
+            (select count(*)::int from scan_accessibility_rule_counts sarc where sarc.scan_id = s.id) as accessibility_rule_count,
+            (select count(*)::int from scan_pages sp where sp.scan_id = s.id) as page_count,
+            (select count(*)::int from compliance_change_events cce where cce.scan_id_current = s.id) as change_count
+       from scans s
+       left join domains d on d.id = s.domain_id
+       left join organizations o on o.id = s.organization_id
+       left join scan_snapshots ss on ss.scan_id = s.id
+      where s.id = $1`,
     [scanId],
     { readOnly: true }
   );
+}
 
-  if (!scan) {
-    return {
-      accessibilityRuleCounts: [],
-      changes: [],
-      domain: null,
-      localV2DagLambdaEvents: [],
-      organization: null,
-      pages: [],
-      policyEnrichment: [],
-      policyReviewQueue: [],
-      runtimeArtifacts: null,
-      runtimeContextEvents: [],
-      scan: null,
-      snapshot: null,
-      trackerVendors: []
-    };
-  }
-
-  const [
-    snapshot,
-    trackerVendors,
-    accessibilityRuleCounts,
-    pages,
-    changes,
-    domain,
-    organization,
-    runtimeArtifacts,
-    runtimeContextEvents,
-    localV2DagLambdaEvents,
-    policyEnrichment,
-    policyReviewQueue
-  ] = await Promise.all([
-    queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [scanId], { readOnly: true }),
-    query<Record<string, unknown>>(
-      `select vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, before_consent, script_host, matched_signature_id
-         from scan_tracker_vendors
-        where scan_id = $1
-        order by vendor_name asc`,
-      [scanId],
-      { readOnly: true }
-    ).then((result) => result.rows),
-    query<Record<string, unknown>>(
-      `select rule_code, rule_group, severity, instance_count
-         from scan_accessibility_rule_counts
-        where scan_id = $1
-        order by instance_count desc`,
-      [scanId],
-      { readOnly: true }
-    ).then((result) => result.rows),
-    query<Record<string, unknown>>(
-      `select page_type, page_url, fetch_status, fetched_via, normalized_content_hash, title_hash, page_language
-         from scan_pages
-        where scan_id = $1
-        order by page_type asc`,
-      [scanId],
-      { readOnly: true }
-    ).then((result) => result.rows),
-    query<Record<string, unknown>>(
-      `select event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp
-         from compliance_change_events
-        where scan_id_current = $1
-        order by event_timestamp desc`,
-      [scanId],
-      { readOnly: true }
-    ).then((result) => result.rows),
-    scan.domain_id
-      ? queryOne<AdminScanDomainRow>(`select hostname from domains where id = $1`, [scan.domain_id], { readOnly: true })
-      : Promise.resolve(null),
-    scan.organization_id
-      ? queryOne<AdminScanOrganizationRow>(`select name from organizations where id = $1`, [scan.organization_id], { readOnly: true })
-      : Promise.resolve(null),
+export async function loadAdminScanRuntimeDiagnosticsData(scanId: string): Promise<{
+  localV2DagLambdaEvents: Array<Record<string, unknown>>;
+  runtimeArtifacts: Record<string, unknown> | null;
+  runtimeContextEvents: Array<Record<string, unknown>>;
+}> {
+  const [runtimeArtifacts, runtimeContextEvents, localV2DagLambdaEvents] = await Promise.all([
     queryOne<Record<string, unknown>>(
       `select sra.*,
               coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
@@ -1267,7 +1219,8 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
          from scan_events
         where scan_id = $1
           and event_type = 'scanner.runtime_context'
-        order by created_at desc`,
+        order by created_at desc
+        limit 1`,
       [scanId],
       { readOnly: true }
     ).then((result) => result.rows),
@@ -1283,23 +1236,76 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
             'v2_lambda_result.received',
             'v2_lambda_result.failed'
           )
-        order by created_at asc`,
+        order by created_at asc
+        limit 25`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows)
+  ]);
+
+  return {
+    localV2DagLambdaEvents,
+    runtimeArtifacts,
+    runtimeContextEvents
+  };
+}
+
+export async function loadAdminScanReviewDiagnosticsData(scanId: string): Promise<{
+  policyReviewQueue: Array<Record<string, unknown>>;
+}> {
+  const policyReviewQueue = await query<Record<string, unknown>>(
+    `select *
+       from policy_review_queue
+      where scan_id = $1
+      order by created_at asc
+      limit 100`,
+    [scanId],
+    { readOnly: true }
+  ).then((result) => result.rows);
+
+  return { policyReviewQueue };
+}
+
+export async function loadAdminScanInventoryDiagnosticsData(scanId: string): Promise<{
+  accessibilityRuleCounts: Array<Record<string, unknown>>;
+  changes: Array<Record<string, unknown>>;
+  pages: Array<Record<string, unknown>>;
+  trackerVendors: Array<Record<string, unknown>>;
+}> {
+  const [trackerVendors, accessibilityRuleCounts, pages, changes] = await Promise.all([
+    query<Record<string, unknown>>(
+      `select vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, before_consent, script_host, matched_signature_id
+         from scan_tracker_vendors
+        where scan_id = $1
+        order by vendor_name asc
+        limit 250`,
       [scanId],
       { readOnly: true }
     ).then((result) => result.rows),
     query<Record<string, unknown>>(
-      `select *
-         from policy_enrichment
+      `select rule_code, rule_group, severity, instance_count
+         from scan_accessibility_rule_counts
         where scan_id = $1
-        order by created_at asc`,
+        order by instance_count desc
+        limit 250`,
       [scanId],
       { readOnly: true }
     ).then((result) => result.rows),
     query<Record<string, unknown>>(
-      `select *
-         from policy_review_queue
+      `select page_type, page_url, fetch_status, fetched_via, normalized_content_hash, title_hash, page_language
+         from scan_pages
         where scan_id = $1
-        order by created_at asc`,
+        order by page_type asc
+        limit 100`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp
+         from compliance_change_events
+        where scan_id_current = $1
+        order by event_timestamp desc
+        limit 100`,
       [scanId],
       { readOnly: true }
     ).then((result) => result.rows)
@@ -1308,16 +1314,7 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
   return {
     accessibilityRuleCounts,
     changes,
-    domain,
-    localV2DagLambdaEvents,
-    organization,
     pages,
-    policyEnrichment,
-    policyReviewQueue,
-    runtimeArtifacts,
-    runtimeContextEvents,
-    scan,
-    snapshot,
     trackerVendors
   };
 }

@@ -62,7 +62,9 @@ test("API activity navigation is read-only and does not repair summaries", async
   assert.doesNotMatch(listSource, /materializeAdminScanSummar/);
   assert.doesNotMatch(pageSource, /materializeAdminScanSummaries/);
   assert.doesNotMatch(pageSource, /summary_repair/);
-  assert.match(pageSource, /Promise\.all\(\[/);
+  assert.doesNotMatch(pageSource, /Promise\.all\(\[/);
+  assert.match(pageSource, /<Suspense fallback=\{<AdminPulseOverviewFallback \/>}/);
+  assert.match(pageSource, /<Suspense fallback=\{<AdminPulseFiltersFallback \/>}/);
   assert.match(pageSource, /listAdminPulseRequestsPage\(requestListInput\)/);
 });
 

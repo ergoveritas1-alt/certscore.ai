@@ -10,7 +10,6 @@ import {
 import { adminApiRouteSql, classifyAdminApiRoute, type AdminApiRoute } from "../../lib/admin/api-route";
 import { requesterIpAttributionFromContext, type RequesterIpAttributionSource } from "../../lib/admin/requester-ip-attribution";
 import { inferPrimaryLanguage, type PrimaryLanguageConfidence, type PrimaryLanguageSource } from "../../lib/scans/primary-language";
-import { ensurePulseTables } from "../pulse/schema";
 import { adminNoGoSql, projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
 import { loadCachedAdminScanFilterOptions } from "./admin-query-cache";
 import { normalizeAdminActivityFilter, parseAdminActivitySearch } from "../../lib/admin/activity-search";
@@ -18,6 +17,7 @@ import { requirePlatformAdminContext } from "./platform-admin";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
 import { selectConfiguredCustomerGdprEprivacyScore } from "../scans/customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
+import { withServerTiming } from "../performance/log-server-timing";
 
 export type AdminPulseRequestStatus =
   | "queued"
@@ -140,7 +140,6 @@ export type AdminPulseOverviewCounts = {
 
 const loadCachedAdminPulseOverviewCounts = unstable_cache(
   async () => {
-    await ensurePulseTables();
     const result = await queryOne<{
       completed: number;
       evidence_json_downloads: number;
@@ -500,7 +499,6 @@ export async function listAdminPulseRequestsPage(input: AdminPulseRequestListInp
   totalCount: number;
 }> {
   await requirePlatformAdminContext();
-  await ensurePulseTables();
   const limit = Math.max(1, Math.min(100, input.limit ?? 20));
   const offset = Math.max(0, input.offset ?? 0);
   const parsedSearch = parseAdminActivitySearch(input.query);
@@ -630,7 +628,6 @@ export async function countAdminPulseRequests(input: {
   route?: AdminApiRoute | null;
 } = {}): Promise<number> {
   await requirePlatformAdminContext();
-  await ensurePulseTables();
   const result = await queryOne<{ total_count: number }>(
     `select count(*)::int as total_count, max($10::int) as requested_limit, max($11::int) as requested_offset
        from pulse_requests pr
@@ -668,7 +665,6 @@ export async function getAdminPulseFilterOptions() {
 
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {
   await requirePlatformAdminContext();
-  await ensurePulseTables();
   const [request, feedbackRows, artifactDownloadRows] = await Promise.all([
     queryOne<Record<string, unknown>>(
       `select pr.public_id,
@@ -849,9 +845,9 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
 
 export async function listAdminPulseRequestsForScan(scanId: string): Promise<AdminPulseRequestListItem[]> {
   await requirePlatformAdminContext();
-  await ensurePulseTables();
-  const rows = await query<Record<string, unknown>>(
-    `select pr.public_id,
+  const rows = await withServerTiming("app.admin.scan-detail.pulse", () =>
+    query<Record<string, unknown>>(
+      `select pr.public_id,
             pr.job_id,
             pr.requested_url,
             pr.normalized_domain,
@@ -904,9 +900,10 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
        ) pad on true
       where pr.scan_id = $1
       order by pr.requested_at desc
-      limit 25`,
-    [scanId],
-    { readOnly: true }
+        limit 25`,
+      [scanId],
+      { readOnly: true }
+    )
   );
 
   return applyConfiguredScores(rows.rows.map((row) => mapPulseRequestRow(row)));

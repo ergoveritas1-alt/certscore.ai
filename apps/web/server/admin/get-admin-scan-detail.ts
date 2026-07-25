@@ -16,14 +16,20 @@ import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { deriveDisplayCreatedAt } from "../scans/display-state";
-import { loadAdminScanDetailData } from "./repository";
+import { withServerTiming } from "../performance/log-server-timing";
+import {
+  loadAdminScanDetailSummaryData,
+  loadAdminScanInventoryDiagnosticsData,
+  loadAdminScanReviewDiagnosticsData,
+  loadAdminScanRuntimeDiagnosticsData
+} from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
 import {
   mapAdminLocalV2DagLambdaEvent,
   type AdminLocalV2DagLambdaEvent
 } from "./local-v2-dag-lambda-events";
 
-export type AdminScanDetail = {
+export type AdminScanSummary = {
   accessPostureSummary: {
     accessPostureClass: AccessPostureClass | null;
     highestSuccessfulTier: ScanExecutionTier | null;
@@ -32,6 +38,45 @@ export type AdminScanDetail = {
     recoverableFindingClasses: RecoverableFindingClass[];
     stopTier: ScanExecutionTier | null;
   };
+  collectedRowCounts: {
+    accessibilityRules: number;
+    changes: number;
+    pages: number;
+    trackerVendors: number;
+  };
+  domainHostname: string | null;
+  organizationName: string | null;
+  agencyMappings: AgencyMapping[];
+  scan: {
+    completedAt: string | null;
+    createdAt: string;
+    id: string;
+    pagesRequested: number;
+    pagesScanned: number;
+    scanConfigJson: Record<string, unknown> | null;
+    scanFromLabel: string;
+    scanFromValue: string;
+    scanType: string;
+    status: string;
+  };
+  snapshot: Record<string, unknown> | null;
+};
+
+export type AdminScanRuntimeDiagnostics = {
+  localV2DagLambdaEvents: AdminLocalV2DagLambdaEvent[];
+  runtimeArtifacts: Record<string, unknown> | null;
+  runtimeContextEvents: Array<{
+    createdAt: string | null;
+    message: string | null;
+    metadataJson: Record<string, unknown> | null;
+  }>;
+};
+
+export type AdminScanReviewDiagnostics = {
+  policyReviewQueue: Array<Record<string, unknown>>;
+};
+
+export type AdminScanInventoryDiagnostics = {
   accessibilityRuleCounts: Array<{
     instanceCount: number;
     ruleCode: string;
@@ -47,12 +92,6 @@ export type AdminScanDetail = {
     oldValueText: string | null;
     severity: string;
   }>;
-  domainHostname: string | null;
-  organizationName: string | null;
-  agencyMappings: AgencyMapping[];
-  localV2DagLambdaEvents: AdminLocalV2DagLambdaEvent[];
-  policyEnrichment: Array<Record<string, unknown>>;
-  policyReviewQueue: Array<Record<string, unknown>>;
   pages: Array<{
     fetchStatus: string;
     fetchedVia: string;
@@ -62,25 +101,6 @@ export type AdminScanDetail = {
     pageUrl: string;
     titleHash: string | null;
   }>;
-  runtimeArtifacts: Record<string, unknown> | null;
-  runtimeContextEvents: Array<{
-    createdAt: string | null;
-    message: string | null;
-    metadataJson: Record<string, unknown> | null;
-  }>;
-  scan: {
-    completedAt: string | null;
-    createdAt: string;
-    id: string;
-    pagesRequested: number;
-    pagesScanned: number;
-    scanConfigJson: Record<string, unknown> | null;
-    scanFromLabel: string;
-    scanFromValue: string;
-    scanType: string;
-    status: string;
-  };
-  snapshot: Record<string, unknown> | null;
   trackerVendors: Array<{
     beforeConsent: boolean;
     confidence: number;
@@ -173,29 +193,16 @@ function nullifyEmptySnapshotHashes(snapshot: Record<string, unknown>) {
   return next;
 }
 
-export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetail | null> {
+export async function getAdminScanSummary(scanId: string): Promise<AdminScanSummary | null> {
   await requirePlatformAdminContext();
-  const {
-    accessibilityRuleCounts,
-    changes,
-    domain,
-    localV2DagLambdaEvents,
-    organization,
-    pages,
-    policyEnrichment,
-    policyReviewQueue,
-    runtimeArtifacts,
-    runtimeContextEvents,
-    scan,
-    snapshot,
-    trackerVendors
-  } = await loadAdminScanDetailData(scanId);
+  const scan = await withServerTiming("app.admin.scan-detail.summary", () => loadAdminScanDetailSummaryData(scanId));
 
   if (!scan) {
     return null;
   }
 
   const scanRow = scan;
+  const snapshot = scan.snapshot;
 
   const accessPostureClass =
     typeof (snapshot as Record<string, unknown> | null)?.access_posture_class === "string"
@@ -272,13 +279,29 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
       scanFromLabel: scanFromDisplay.label,
       scanFromValue: scanFromDisplay.value
     },
-    domainHostname: (domain as { hostname: string } | null)?.hostname ?? null,
-    organizationName: (organization as { name: string } | null)?.name ?? null,
+    collectedRowCounts: {
+      accessibilityRules: Number(scan.accessibility_rule_count ?? 0),
+      changes: Number(scan.change_count ?? 0),
+      pages: Number(scan.page_count ?? 0),
+      trackerVendors: Number(scan.tracker_vendor_count ?? 0)
+    },
+    domainHostname: scan.domain_hostname,
+    organizationName: scan.organization_name,
     snapshot: snapshot ? nullifyEmptySnapshotHashes(stripRecord(snapshot as Record<string, unknown>)) : null,
     agencyMappings: snapshot
       ? buildAgencyMappings(buildAgencyMappingSource(stripRecord(snapshot as Record<string, unknown>)))
-      : [],
-    policyEnrichment: ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row)),
+      : []
+  };
+}
+
+export async function getAdminScanRuntimeDiagnostics(scanId: string): Promise<AdminScanRuntimeDiagnostics> {
+  await requirePlatformAdminContext();
+  const { localV2DagLambdaEvents, runtimeArtifacts, runtimeContextEvents } = await withServerTiming(
+    "app.admin.scan-detail.runtime",
+    () => loadAdminScanRuntimeDiagnosticsData(scanId)
+  );
+
+  return {
     localV2DagLambdaEvents: ((localV2DagLambdaEvents ?? []) as Array<Record<string, unknown>>).map(mapAdminLocalV2DagLambdaEvent),
     runtimeContextEvents: ((runtimeContextEvents ?? []) as Array<Record<string, unknown>>).map((row) => ({
       createdAt: typeof row.created_at === "string" ? row.created_at : null,
@@ -288,6 +311,17 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
           ? (row.metadata_json as Record<string, unknown>)
           : null
     })),
+    runtimeArtifacts: runtimeArtifacts ? stripRecord(runtimeArtifacts as Record<string, unknown>) : null
+  };
+}
+
+export async function getAdminScanReviewDiagnostics(scanId: string): Promise<AdminScanReviewDiagnostics> {
+  await requirePlatformAdminContext();
+  const { policyReviewQueue } = await withServerTiming("app.admin.scan-detail.review", () =>
+    loadAdminScanReviewDiagnosticsData(scanId)
+  );
+
+  return {
     policyReviewQueue: ((policyReviewQueue ?? []) as Array<Record<string, unknown>>).map((row) => {
       const strippedRow = stripTimestampFields(row);
       const savedReviewerNotes = normalizePolicyReviewNote(
@@ -318,8 +352,18 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
         standard_reviewer_note: standardReviewerNote,
         verdict_overridden_by_scope_guardrail: resolvedVerdict.verdictOverriddenByScopeGuardrail
       };
-    }),
-    runtimeArtifacts: runtimeArtifacts ? stripRecord(runtimeArtifacts as Record<string, unknown>) : null,
+    })
+  };
+}
+
+export async function getAdminScanInventoryDiagnostics(scanId: string): Promise<AdminScanInventoryDiagnostics> {
+  await requirePlatformAdminContext();
+  const { accessibilityRuleCounts, changes, pages, trackerVendors } = await withServerTiming(
+    "app.admin.scan-detail.inventory",
+    () => loadAdminScanInventoryDiagnosticsData(scanId)
+  );
+
+  return {
     trackerVendors: ((trackerVendors ?? []) as Array<Record<string, unknown>>).map((tracker) => ({
       vendorName: String(tracker.vendor_name),
       vendorCategory: String(tracker.vendor_category),
