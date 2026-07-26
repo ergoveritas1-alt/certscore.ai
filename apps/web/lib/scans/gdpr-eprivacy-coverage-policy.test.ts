@@ -95,6 +95,54 @@ function makeGdprTransparencyConcerns(signals: Array<Record<string, unknown>>, p
   });
 }
 
+function makeProcessingPurposesModelReviewArtifact(evidenceExcerpt: string) {
+  return {
+    contractVersion: "policy_model_review.v2",
+    mode: "enforced",
+    status: "completed",
+    scanId: "scan-model-review-1",
+    cacheKey: "a".repeat(64),
+    rows: [
+      {
+        topic: "processing_purposes",
+        status: "observed",
+        confidence: 0.96,
+        sourceDocumentIds: ["policy-1"],
+        sourceUrls: ["https://example.test/privacy"],
+        evidenceExcerpts: [evidenceExcerpt],
+        conflictingExcerpts: [],
+        reasonCodes: ["policy_review_invariants_applied_v1"],
+        rationale:
+          "A directly relevant processing-purpose passage passed the production invariants."
+      }
+    ],
+    deterministicLegalFrameworkSignals: [],
+    deterministicPolicyReviewSignals: [],
+    failureReason: null,
+    provenance: {
+      role: "review",
+      provider: "openai",
+      requestedModel: "gpt-5.4-mini",
+      resolvedModel: "gpt-5.4-mini",
+      taskType: "policy_semantic_review",
+      promptVersion: "policy_semantic_review.v4",
+      schemaVersion: "policy_semantic_review_output.v2",
+      inputRefs: ["policy-1"],
+      outputRefs: ["policy-1"],
+      contentHash: "b".repeat(64),
+      confidence: 0.96,
+      reasonCodes: ["approved_precision_first_production_projection_v1"],
+      uncertaintyNotes: [],
+      latencyMs: 10,
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+      usedForProductionProjection: true
+    },
+    productionEligible: true
+  };
+}
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks policy-dependent rows not testable when policy evidence is missing under limited coverage", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -199,6 +247,42 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit t
       `${rowId} should retain normalized concern provenance`
     );
   }
+});
+
+test("invariant-verified Mini evidence wins a checklist tie against deterministic placeholder evidence", () => {
+  const miniExcerpt =
+    "When you provide your information to us, we will only use it for the purposes for which it is provided.";
+  const runtimeArtifacts = {
+    policyDisclosureSummary: {
+      article13DisclosureSignals: [
+        makeGdprTransparencyArticle13Signal({
+          disclosureType: "processing_purposes",
+          evidenceText: "matched_processing_purposes"
+        })
+      ],
+      gdprTransparencyEvidenceProfile:
+        "gdpr_transparency_multilingual_article13_v1",
+      gdprTransparencyProductionEvidenceEnabled: true
+    },
+    policyModelReviewArtifact:
+      makeProcessingPurposesModelReviewArtifact(miniExcerpt)
+  };
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts,
+      validationFindings: []
+    }),
+    runtimeArtifacts,
+    snapshot: {}
+  });
+
+  assert.equal(outcomes.processing_purposes_disclosure?.status, "Observed");
+  assert.equal(
+    retainedArticle13Signal(outcomes.processing_purposes_disclosure!)?.evidenceText,
+    miniExcerpt
+  );
 });
 
 test("twenty-two expansion locales capture all topics through classifier, adapter, normalized concerns, and checklist policy", () => {

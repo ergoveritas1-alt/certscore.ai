@@ -1390,7 +1390,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
-    if (/operator_relationship|policyRightsSignals|rights_signals?|policyBoilerplateSignals|policyPositiveSnippetKeys|policy_positive_snippet_keys/i.test(key)) {
+    if (/operator_relationship|policyRightsSignals|rights_signals?|policyBoilerplateSignals|policyPositiveSnippetKeys|policy_positive_snippet_keys|classifierReasonCodes|classifier_reason_codes|reasonCodes|reason_codes/i.test(key)) {
       addEntity(entities, key, stringValues);
       continue;
     }

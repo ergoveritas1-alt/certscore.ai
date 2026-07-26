@@ -5673,14 +5673,39 @@ function getGdprTransparencyArticle13ChecklistConcern(
         topic !== null &&
         GDPR_TRANSPARENCY_ARTICLE13_TOPIC_TO_ROW_ID[topic] === rowId;
     })
-    .sort((left, right) =>
-      gdprTransparencyChecklistEligibilityScore(right.regulatoryChecklistEligibility) -
-      gdprTransparencyChecklistEligibilityScore(left.regulatoryChecklistEligibility)
-    )[0] ?? null;
+    .sort((left, right) => {
+      const eligibilityDifference =
+        gdprTransparencyChecklistEligibilityScore(right.regulatoryChecklistEligibility) -
+        gdprTransparencyChecklistEligibilityScore(left.regulatoryChecklistEligibility);
+      if (eligibilityDifference !== 0) {
+        return eligibilityDifference;
+      }
+      return (
+        gdprTransparencyModelReviewEvidenceScore(right) -
+        gdprTransparencyModelReviewEvidenceScore(left)
+      );
+    })[0] ?? null;
 }
 
 function gdprTransparencyChecklistEligibilityScore(value: unknown) {
   return value === "observed" ? 2 : value === "review_signal" ? 1 : 0;
+}
+
+function gdprTransparencyModelReviewEvidenceScore(
+  concern: NonNullable<GdprEprivacyCoveragePolicyInput["normalizedConcerns"]>[number]
+) {
+  const rawEvidence = concern.evidenceBundle.rawEvidence;
+  return rawEvidence?.gdprTransparencyModelReviewEvidence === true &&
+    getString(rawEvidence, [
+      "productionCreditProfile",
+      "production_credit_profile"
+    ]) === "gdpr_transparency_mini_review_v1" &&
+    getString(rawEvidence, [
+      "classifierProvenance",
+      "classifier_provenance"
+    ]) === "mini_policy_semantic_review.v2"
+      ? 1
+      : 0;
 }
 
 function getGdprTransparencyStaleLegalFrameworkConcern(
@@ -5757,7 +5782,10 @@ function buildGdprTransparencyArticle13ConcernOutcome(
     "gdpr_transparency_article13_topic"
   ]) ?? config.disclosureType ?? "unknown";
   const sourceUrl = getString(rawEvidence, ["sourceUrl", "source_url"]);
-  const evidenceText = concern.evidenceBundle.policySnippets[0] ?? null;
+  const evidenceText =
+    getStringArray(rawEvidence, ["policySnippets", "policy_snippets"])[0] ??
+    concern.evidenceBundle.policySnippets[0] ??
+    null;
   const locale = getString(rawEvidence, ["matchedLocale", "matched_locale"]);
   const state = getString(rawEvidence, [
     "gdprTransparencyArticle13ConcernState",
