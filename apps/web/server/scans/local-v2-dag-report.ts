@@ -2887,6 +2887,7 @@ function summarizeTransportSecurity(bundle: CanonicalEvidenceBundle) {
     sampledPageUrls: observation.sampledPageUrls ?? [],
     tlsProbeAttempted: observation.tlsProbe?.attempted === true,
     tlsProbeErrorCategory: observation.tlsProbe?.errorCategory,
+    tlsProbeErrorMessage: observation.tlsProbe?.errorMessage,
     validTlsCertificate: observation.summary?.validTlsCertificate ?? null,
   };
 }

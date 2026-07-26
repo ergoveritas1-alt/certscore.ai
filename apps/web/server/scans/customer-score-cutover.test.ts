@@ -80,8 +80,13 @@ const candidate = assessment({
   scoreVersion: GDPR_EPRIVACY_SHADOW_LUNA_DECISION.modelVersion
 });
 
-test("unset, legacy, and invalid modes fail closed to the legacy assessment", () => {
-  for (const rawMode of [undefined, "legacy", "typo"]) {
+test("the posture candidate is the default while legacy remains an explicit rollback", () => {
+  const selected = selectCustomerGdprEprivacyScore({ candidateAssessment: candidate, legacyAssessment: legacy });
+  assert.equal(selected.assessment, candidate);
+  assert.equal(selected.effectiveMode, "approved_candidate");
+  assert.equal(selected.label, "GDPR/ePrivacy posture");
+
+  for (const rawMode of ["legacy", "typo"]) {
     const selected = selectCustomerGdprEprivacyScore({ candidateAssessment: candidate, legacyAssessment: legacy, rawMode });
     assert.equal(selected.assessment, legacy);
     assert.equal(selected.effectiveMode, "legacy");
@@ -89,14 +94,14 @@ test("unset, legacy, and invalid modes fail closed to the legacy assessment", ()
   }
 });
 
-test("the candidate flag cannot bypass Luna approval", () => {
+test("the explicit customer cutover override can select the candidate before Luna packet completion", () => {
   const selected = selectCustomerGdprEprivacyScore({
     candidateAssessment: candidate,
     legacyAssessment: legacy,
     rawMode: "approved_candidate"
   });
-  assert.equal(selected.assessment, legacy);
-  assert.equal(selected.selectionReason, "luna_approval_missing");
+  assert.equal(selected.assessment, candidate);
+  assert.equal(selected.selectionReason, "explicit_cutover_override_selected");
 });
 
 test("approved mode requires the exact approved kind and version", () => {

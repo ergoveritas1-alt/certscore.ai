@@ -95,7 +95,7 @@ test("adding a score-eligible finding never increases posture score", () => {
   assert.ok((high.postureScore ?? -1) <= (medium.postureScore ?? -1));
 });
 
-test("coverage limits withhold posture score without erasing observed risk", () => {
+test("coverage limits retain a posture score and an explicit coverage warning", () => {
   const result = deriveCanonicalShadowScore({
     coverageRows: [
       COVERAGE_ROWS[0]!,
@@ -106,7 +106,7 @@ test("coverage limits withhold posture score without erasing observed risk", () 
   });
 
   assert.equal(result.observedRiskIndex, 30);
-  assert.equal(result.postureScore, null);
+  assert.equal(result.postureScore, 54);
   assert.equal(result.coverageConfidence, "low");
   assert.deepEqual(result.coverageBreakdown, {
     applicableWeight: 2,
@@ -143,7 +143,7 @@ test("coverage breakdown excludes not-applicable rows from the denominator", () 
   });
 });
 
-test("medium coverage cannot produce a posture score when no eligible finding anchors the result", () => {
+test("medium coverage retains a no-finding posture score with an explicit coverage warning", () => {
   const result = deriveCanonicalShadowScore({
     coverageRows: [
       { assessmentStatus: "checked", evidenceState: "observed", rowId: "privacy_notice_availability" },
@@ -157,7 +157,7 @@ test("medium coverage cannot produce a posture score when no eligible finding an
 
   assert.equal(result.coverageRatio, 0.75);
   assert.equal(result.observedRiskIndex, 0);
-  assert.equal(result.postureScore, null);
+  assert.equal(result.postureScore, 100);
   assert.deepEqual(result.withheldReasons, ["coverage_below_no_finding_threshold"]);
 });
 

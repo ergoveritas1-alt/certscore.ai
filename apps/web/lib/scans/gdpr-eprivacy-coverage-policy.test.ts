@@ -2691,6 +2691,30 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats complete no-surface inspec
   );
 });
 
+test("a complete no-surface inspection takes precedence over a separate CMP runtime signal", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      cmp_framework_signal_observed: true,
+      cmp_runtime_signal_labels: ["HubSpot Banner"],
+      cmp_vendor_name: "HubSpot CMP",
+      consentSurfaceInspection: {
+        coverageStatus: "complete",
+        inspectedPreInteraction: true,
+        inspectionCompleted: true,
+        outcome: "no_surface_observed_complete_coverage",
+        consentSurfaceObserved: false,
+        actionableControlObserved: false,
+        observedAtMs: 6400
+      },
+      consent_surface_observed: false
+    }
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Not observed");
+  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /completed pre-interaction.*did not observe/i);
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps a typed limited surface observed while leaving controls unconfirmed", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -6755,6 +6779,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not turn TLS probe operation
         pageHttpsObserved: true,
         validTlsCertificate: false,
         tlsProbeErrorCategory: "timeout",
+        tlsProbeErrorMessage: "strict TLS probe timed out",
         httpRedirectsToHttps: true,
         mixedContentObserved: false,
         insecureFormTransportObserved: false,
@@ -6764,6 +6789,34 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not turn TLS probe operation
 
   assert.equal(outcomes.transport_security_tls_certificate?.status, "Not testable");
   assert.match(outcomes.transport_security_tls_certificate?.criticalEvidence.statusBasis ?? "", /operational error.*timeout/i);
+  assert.match(outcomes.transport_security_tls_certificate?.criticalEvidence.statusBasis ?? "", /strict TLS probe timed out/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes retains certificate probe failure detail", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      transportSecuritySummary: {
+        evidenceRetained: true,
+        evidenceRefs: ["ref_transport_security"],
+        pageHttpsObserved: true,
+        validTlsCertificate: false,
+        tlsProbeErrorCategory: "tls_or_certificate_failure",
+        tlsProbeErrorMessage: "Hostname/IP does not match certificate's altnames",
+        httpRedirectsToHttps: true,
+        mixedContentObserved: false,
+        insecureFormTransportObserved: false,
+      }
+    }
+  });
+
+  const outcome = outcomes.transport_security_tls_certificate;
+  assert.equal(outcome?.status, "Gap observed");
+  assert.match(outcome?.limitation ?? "", /Hostname\/IP does not match certificate's altnames/i);
+  assert.equal(
+    outcome?.criticalEvidence.retainedEvidence.tlsProbeErrorMessage,
+    "Hostname/IP does not match certificate's altnames"
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks transport-security rows not testable without typed evidence", () => {

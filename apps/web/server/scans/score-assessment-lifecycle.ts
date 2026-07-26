@@ -4,15 +4,11 @@ import { buildCanonicalGdprEprivacyShadowProjection } from "../../lib/pulse/proj
 import { getAnonymousScanById, getScanById } from "./get-scan-by-id";
 import { materializeLocalV2DagScanDetail } from "./local-v2-dag-report";
 import {
-  buildApprovedGdprEprivacyPostureVersionedAssessmentInput,
+  buildOverriddenGdprEprivacyPostureVersionedAssessmentInput,
   buildLegacyGdprEprivacyVersionedAssessmentInput,
   buildShadowGdprEprivacyVersionedAssessmentInput,
   LEGACY_GDPR_EPRIVACY_SCORE_VERSION
 } from "./score-assessment-projection";
-import {
-  GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
-  isLunaScoreDecisionApprovedForModel
-} from "../../lib/scans/canonical-shadow-score-luna-decision";
 import {
   hasVersionedScoreAssessment,
   persistVersionedScoreAssessment
@@ -123,24 +119,19 @@ export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
     await persistCanonicalShadowScoreComparison(shadowArtifact);
     shadowReason = shadowPersisted.inserted ? "inserted" : "already_persisted";
 
-    if (isLunaScoreDecisionApprovedForModel(
-      GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
-      shadowArtifact.candidate.modelVersion
-    )) {
-      const postureAlreadyPersisted = await hasVersionedScoreAssessment({
-        scanId: input.scanId,
-        scoreKind: "gdpr_eprivacy_posture",
-        scoreVersion: shadowArtifact.candidate.modelVersion
-      });
-      const posturePersisted = postureAlreadyPersisted
-        ? { createdAt: null, id: null, inserted: false }
-        : await persistVersionedScoreAssessment(buildApprovedGdprEprivacyPostureVersionedAssessmentInput({
-            artifact: shadowArtifact,
-            scoredAt
-          }));
-      postureInserted = posturePersisted.inserted;
-      postureReason = posturePersisted.inserted ? "inserted" : "already_persisted";
-    }
+    const postureAlreadyPersisted = await hasVersionedScoreAssessment({
+      scanId: input.scanId,
+      scoreKind: "gdpr_eprivacy_posture",
+      scoreVersion: shadowArtifact.candidate.modelVersion
+    });
+    const posturePersisted = postureAlreadyPersisted
+      ? { createdAt: null, id: null, inserted: false }
+      : await persistVersionedScoreAssessment(buildOverriddenGdprEprivacyPostureVersionedAssessmentInput({
+          artifact: shadowArtifact,
+          scoredAt
+        }));
+    postureInserted = posturePersisted.inserted;
+    postureReason = posturePersisted.inserted ? "inserted" : "already_persisted";
   } catch (error) {
     console.error("[score-assessment] candidate shadow persistence failed", {
       error: error instanceof Error ? error.message : String(error),

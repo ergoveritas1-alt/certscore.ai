@@ -830,7 +830,11 @@ export function DomainScanForm({
             aria-label={inputLabel}
           />
           {mode === "full" ? (
-            <div className={variant === "homepage-hero" ? "absolute right-[8.25rem] top-1/2 -translate-y-1/2 scale-150 sm:right-[8.75rem]" : compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[8rem] top-1/2 -translate-y-1/2"}>
+            <div className={variant === "homepage-hero"
+              ? `absolute ${isSubmitting ? "right-[10rem] sm:right-[10.5rem]" : "right-[8.25rem] sm:right-[8.75rem]"} top-1/2 -translate-y-1/2 scale-150`
+              : compact
+              ? `absolute ${isSubmitting ? "right-[8.5rem]" : "right-[5.9rem]"} top-1/2 -translate-y-1/2`
+              : `absolute ${isSubmitting ? "right-[10.25rem]" : "right-[8rem]"} top-1/2 -translate-y-1/2`}>
               <ScanFromSelect
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
@@ -867,12 +871,12 @@ export function DomainScanForm({
             aria-label={buttonLabel}
             className={
               variant === "homepage-hero"
-                ? "absolute right-1.5 top-1/2 h-11 w-[118px] -translate-y-1/2 rounded-[13px] border border-emerald-300/70 bg-[linear-gradient(135deg,#45c957_0%,#56bd58_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(34,197,94,0.28)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-emerald-300/40 sm:h-[52px] sm:w-[126px] sm:text-base"
+                ? `absolute right-1.5 top-1/2 h-11 ${isSubmitting ? "w-[8.5rem] sm:w-[9rem]" : "w-[118px] sm:w-[126px]"} -translate-y-1/2 rounded-[13px] border border-emerald-300/70 bg-[linear-gradient(135deg,#45c957_0%,#56bd58_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(34,197,94,0.28)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-emerald-300/40 sm:h-[52px] sm:text-base`
                 : compact
                 ? scanButtonArmed
-                  ? "absolute right-2 top-1/2 h-8 min-w-[4.5rem] -translate-y-1/2 rounded-full border border-sky-600 bg-[linear-gradient(180deg,#38bdf8_0%,#0284c7_100%)] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_3px_0_0_rgba(3,105,161,0.55),0_10px_22px_-7px_rgba(14,165,233,0.7)] ring-1 ring-sky-300/70 transition-all duration-150 hover:-translate-y-[calc(50%+1px)] hover:scale-[1.03] hover:border-sky-500 hover:brightness-110 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_4px_0_0_rgba(3,105,161,0.5),0_13px_24px_-7px_rgba(14,165,233,0.8)] active:translate-y-[calc(-50%+1px)] active:scale-[0.99] active:shadow-[inset_0_2px_3px_rgba(3,105,161,0.4),0_1px_0_0_rgba(3,105,161,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 disabled:!opacity-100"
+                  ? `absolute right-2 top-1/2 h-8 ${isSubmitting ? "w-[7.5rem]" : "min-w-[4.5rem]"} -translate-y-1/2 rounded-full border border-sky-600 bg-[linear-gradient(180deg,#38bdf8_0%,#0284c7_100%)] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_3px_0_0_rgba(3,105,161,0.55),0_10px_22px_-7px_rgba(14,165,233,0.7)] ring-1 ring-sky-300/70 transition-all duration-150 hover:-translate-y-[calc(50%+1px)] hover:scale-[1.03] hover:border-sky-500 hover:brightness-110 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_4px_0_0_rgba(3,105,161,0.5),0_13px_24px_-7px_rgba(14,165,233,0.8)] active:translate-y-[calc(-50%+1px)] active:scale-[0.99] active:shadow-[inset_0_2px_3px_rgba(3,105,161,0.4),0_1px_0_0_rgba(3,105,161,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 disabled:!opacity-100`
                   : "absolute right-2 top-1/2 h-8 min-w-[4.5rem] -translate-y-1/2 rounded-full border border-sky-300 bg-[linear-gradient(180deg,#93c5fd_0%,#3b82f6_100%)] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_3px_0_0_rgba(29,78,216,0.4),0_8px_16px_-8px_rgba(37,99,235,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:ring-offset-2 disabled:!opacity-100"
-                : "absolute right-3 top-1/2 h-11 w-[104px] -translate-y-1/2 rounded-xl border-0 bg-[linear-gradient(135deg,#47b54a_0%,#5ec158_58%,#7ccf79_100%)] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(71,181,74,0.16)] hover:brightness-[1.04]"
+                : `absolute right-3 top-1/2 h-11 ${isSubmitting ? "w-[8.5rem]" : "w-[104px]"} -translate-y-1/2 rounded-xl border-0 bg-[linear-gradient(135deg,#47b54a_0%,#5ec158_58%,#7ccf79_100%)] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(71,181,74,0.16)] hover:brightness-[1.04]`
             }
             disabled={isSubmitting || !scanButtonArmed}
             type="submit"

@@ -1960,6 +1960,16 @@ function BenchmarkMetricCard(input: {
             deltaPositive: "text-amber-700",
             deltaNegative: "text-orange-700"
           }
+        : input.label === "Non-essential storage"
+          ? {
+              card: "bg-white",
+              rail: "bg-rose-100/90",
+              fill: "bg-rose-500/85",
+              marker: "bg-red-500 shadow-[0_0_0_3px_rgba(254,242,242,0.95)]",
+              value: "text-slate-950",
+              deltaPositive: "text-rose-700",
+              deltaNegative: "text-red-700"
+            }
         : {
             card: "bg-white",
             rail: "bg-emerald-100/90",

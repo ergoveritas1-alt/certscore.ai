@@ -323,7 +323,13 @@ export function deriveCanonicalShadowScore(input: {
       ? [`unconfigured_coverage_rows:${unconfiguredCoverageRows.join(",")}`]
       : [])
   ];
-  const postureScore = withheldReasons.length === 0 ? cappedPostureScore : null;
+  // Coverage warnings remain attached to the result for transparency, but do
+  // not suppress the bounded posture number. The product owner has approved
+  // showing the candidate score while calibration evidence is completed.
+  const scoreBlockingReasons = withheldReasons.filter((reason) =>
+    !reason.startsWith("coverage_below_")
+  );
+  const postureScore = scoreBlockingReasons.length === 0 ? cappedPostureScore : null;
   const postureBand = postureScore === null
     ? null
     : [...input.model.postureBands]
@@ -332,7 +338,7 @@ export function deriveCanonicalShadowScore(input: {
   if (postureScore !== null && postureBand === null) {
     withheldReasons.push("posture_band_unconfigured");
   }
-  const finalPostureScore = withheldReasons.length === 0 ? postureScore : null;
+  const finalPostureScore = scoreBlockingReasons.length === 0 ? postureScore : null;
   const contradictions = [
     ...(finalPostureScore !== null && uniqueFindings.some((finding) => finding.severity === "high") && finalPostureScore >= 75
       ? ["strong_posture_score_with_high_severity_finding"]

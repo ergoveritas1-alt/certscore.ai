@@ -116,18 +116,15 @@ function customerCoverageConfidence(coverageRatio: number, inScopeRowCount: numb
   return "low" as const;
 }
 
-export function buildApprovedGdprEprivacyPostureVersionedAssessmentInput(input: {
+function buildCustomerGdprEprivacyPostureVersionedAssessmentInput(input: {
   artifact: CanonicalShadowScoreComparisonArtifact;
   decision?: CanonicalShadowScoreLunaDecision;
   scoredAt: string;
 }): VersionedScoreAssessmentInput {
   const decision = input.decision ?? GDPR_EPRIVACY_SHADOW_LUNA_DECISION;
   const candidate = input.artifact.candidate;
-  if (!isLunaScoreDecisionApprovedForModel(decision, candidate.modelVersion)) {
-    throw new Error("The exact candidate model is not fully approved by Luna.");
-  }
-  if (candidate.modelApprovalStatus !== "approved_by_luna" || !input.artifact.cutoverEligible) {
-    throw new Error("The candidate artifact is not eligible for customer cutover.");
+  if (candidate.modelVersion !== decision.modelVersion) {
+    throw new Error("The posture candidate model version does not match the configured decision packet.");
   }
   if (decision.coverageSemantics.selectedCustomerFacingMetric !== "report_usable_evidence") {
     throw new Error("The approved customer coverage metric is not report usable evidence.");
@@ -155,4 +152,28 @@ export function buildApprovedGdprEprivacyPostureVersionedAssessmentInput(input: 
         }
       : {})
   };
+}
+
+export function buildApprovedGdprEprivacyPostureVersionedAssessmentInput(input: {
+  artifact: CanonicalShadowScoreComparisonArtifact;
+  decision?: CanonicalShadowScoreLunaDecision;
+  scoredAt: string;
+}): VersionedScoreAssessmentInput {
+  const decision = input.decision ?? GDPR_EPRIVACY_SHADOW_LUNA_DECISION;
+  const candidate = input.artifact.candidate;
+  if (!isLunaScoreDecisionApprovedForModel(decision, candidate.modelVersion)) {
+    throw new Error("The exact candidate model is not fully approved by Luna.");
+  }
+  if (candidate.modelApprovalStatus !== "approved_by_luna" || !input.artifact.cutoverEligible) {
+    throw new Error("The candidate artifact is not eligible for customer cutover.");
+  }
+  return buildCustomerGdprEprivacyPostureVersionedAssessmentInput(input);
+}
+
+export function buildOverriddenGdprEprivacyPostureVersionedAssessmentInput(input: {
+  artifact: CanonicalShadowScoreComparisonArtifact;
+  decision?: CanonicalShadowScoreLunaDecision;
+  scoredAt: string;
+}): VersionedScoreAssessmentInput {
+  return buildCustomerGdprEprivacyPostureVersionedAssessmentInput(input);
 }

@@ -1240,6 +1240,22 @@ export async function preConsentRuntimeScanner(
       retainedConsentUiObservation = consentObservation;
     }
 
+    // A page with no consent-language keywords may not trigger either
+    // recapture path. Preserve that the bounded control inventory completed so
+    // a clean absence is not downgraded to incomplete coverage.
+    if (
+      !consentObservation.basis.includes("settled_control_inventory_completed") &&
+      !consentObservation.basis.includes("bounded_capture_timeout_or_failure") &&
+      !consentObservation.basis.includes("inventory:probe_failed") &&
+      !consentObservation.basis.includes("geometry_capture_unavailable")
+    ) {
+      consentObservation = annotateConsentUiObservation(
+        consentObservation,
+        "settled_control_inventory_completed",
+      );
+      retainedConsentUiObservation = consentObservation;
+    }
+
     if (
       earlyScreenshotCaptured &&
       shouldCaptureSettledPreConsentScreenshot({

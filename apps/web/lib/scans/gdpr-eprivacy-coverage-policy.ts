@@ -1374,6 +1374,7 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
     sampledPageUrls: getStringArray(summary, ["sampledPageUrls", "sampled_page_urls"]).slice(0, 20),
     tlsProbeAttempted: getBoolean(summary, ["tlsProbeAttempted", "tls_probe_attempted"]),
     tlsProbeErrorCategory: getString(summary, ["tlsProbeErrorCategory", "tls_probe_error_category"]),
+    tlsProbeErrorMessage: getString(summary, ["tlsProbeErrorMessage", "tls_probe_error_message"]),
     validTlsCertificate: getBoolean(summary, ["validTlsCertificate", "valid_tls_certificate"]),
   });
 
@@ -1406,18 +1407,22 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
     (() => {
       const validTlsCertificate = getBoolean(summary, ["validTlsCertificate", "valid_tls_certificate"]);
       const tlsProbeErrorCategory = getString(summary, ["tlsProbeErrorCategory", "tls_probe_error_category"]);
+      const tlsProbeErrorMessage = getString(summary, ["tlsProbeErrorMessage", "tls_probe_error_message"]);
       if (validTlsCertificate === false && tlsProbeErrorCategory && tlsProbeErrorCategory !== "tls_or_certificate_failure") {
         return makeOutcome(
           "transport_security_tls_certificate",
           "Not testable",
-          `The TLS probe encountered an operational error (${tlsProbeErrorCategory}); this does not establish a certificate defect.`,
+          `The TLS probe encountered an operational error (${tlsProbeErrorCategory}${tlsProbeErrorMessage ? `: ${tlsProbeErrorMessage}` : ""}); this does not establish a certificate defect.`,
           transportEvidenceRef(summary),
           { retainedEvidence }
         );
       }
+      const tlsFailureDetail = tlsProbeErrorMessage
+        ? ` Probe response: ${tlsProbeErrorMessage}.`
+        : "";
       return transportOutcomeFromBoolean({
         falseStatus: "Gap observed",
-        falseText: "The strict TLS probe did not verify a valid certificate for the HTTPS origin.",
+        falseText: `The strict TLS probe did not verify a valid certificate for the HTTPS origin.${tlsFailureDetail}`,
         nullText: "The strict TLS probe was not retained or did not complete.",
         retainedEvidence,
         rowId: "transport_security_tls_certificate",
@@ -1588,7 +1593,10 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     getBoolean(consentSurfaceInspection, ["inspectedPreInteraction", "inspected_pre_interaction"]) === true;
 
   const cmpEvidence = getCmpFrameworkSignalEvidence(input);
-  if (cmpEvidence.cmpObserved && !consentSurfaceObserved) {
+  // A complete, typed no-surface inspection is stronger than a separate CMP
+  // runtime identity signal. CMP identity alone does not prove a visible
+  // banner, and must not downgrade an authoritative absence to Not confirmed.
+  if (cmpEvidence.cmpObserved && !consentSurfaceObserved && !completeNoSurfaceObservation) {
     return makeOutcome(
       "consent_surface_observed",
       "Not confirmed",

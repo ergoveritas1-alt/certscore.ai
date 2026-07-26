@@ -2207,6 +2207,11 @@ test("planned pre-consent baseline skips screenshots when no consent surface is 
 
     assert.equal(result.moduleRun.status, "completed");
     assert.equal(result.consentUiObservations[0]?.likelyPresent, false);
+    assert.equal(
+      result.consentUiObservations[0]?.basis.includes("settled_control_inventory_completed"),
+      true,
+      "a completed no-banner inspection must retain the settled inventory marker",
+    );
     assert.equal(result.cmpRuntimeObservations.length, 0);
     assert.equal(result.screenshots.length, 0);
     assert.equal(

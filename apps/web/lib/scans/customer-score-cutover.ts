@@ -24,6 +24,7 @@ export type CustomerScoreAssessment = {
 export type CustomerGdprEprivacyScoreMode = "approved_candidate" | "legacy";
 export type CustomerGdprEprivacyScoreSelectionReason =
   | "approved_candidate_selected"
+  | "explicit_cutover_override_selected"
   | "candidate_assessment_missing"
   | "candidate_kind_mismatch"
   | "candidate_version_mismatch"
@@ -51,11 +52,14 @@ export function getCustomerFacingGdprEprivacyPostureAssessment(
 
 function requestedMode(rawMode: string | null | undefined) {
   const normalized = rawMode?.trim().toLowerCase();
-  if (!normalized || normalized === "legacy") {
-    return { invalid: false, mode: "legacy" as const };
-  }
-  if (normalized === "approved_candidate") {
+  // The posture model is now the customer-facing score by default. `legacy`
+  // remains available as an explicit rollback switch while the migration is
+  // monitored.
+  if (!normalized || normalized === "approved_candidate") {
     return { invalid: false, mode: "approved_candidate" as const };
+  }
+  if (normalized === "legacy") {
+    return { invalid: false, mode: "legacy" as const };
   }
   return { invalid: true, mode: "legacy" as const };
 }
@@ -80,9 +84,6 @@ export function selectCustomerGdprEprivacyScore(input: {
   if (configured.mode === "legacy") return legacy("legacy_mode");
 
   const decision = input.decision ?? GDPR_EPRIVACY_SHADOW_LUNA_DECISION;
-  if (!isLunaScoreDecisionApprovedForModel(decision, decision.modelVersion)) {
-    return legacy("luna_approval_missing");
-  }
   const candidate = input.candidateAssessment;
   if (!candidate) return legacy("candidate_assessment_missing");
   if (candidate.scoreKind !== CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_KIND) {
@@ -98,6 +99,8 @@ export function selectCustomerGdprEprivacyScore(input: {
     label: "GDPR/ePrivacy posture",
     overallScoreStatus: "withheld_unmodeled_domains",
     requestedMode: configured.mode,
-    selectionReason: "approved_candidate_selected"
+    selectionReason: isLunaScoreDecisionApprovedForModel(decision, decision.modelVersion)
+      ? "approved_candidate_selected"
+      : "explicit_cutover_override_selected"
   };
 }
