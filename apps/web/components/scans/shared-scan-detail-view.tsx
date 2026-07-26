@@ -117,6 +117,7 @@ import {
   isMeaningfulPolicyText,
   normalizePolicySnippet
 } from "../../lib/scans/policy-snippet-normalization";
+import { getProductionPolicyModelReviewRevision } from "../../lib/scans/policy-model-review-revision";
 import {
   getPolicyEvidenceSnippets,
   getPolicyActionableFlags,
@@ -6241,7 +6242,8 @@ function getScanReportRenderRevision(scanRecord: ScanDetailResponse) {
     scanRecord.signalHits.length,
     scanRecord.signals.length,
     scanRecord.validationFindings.length,
-    scanRecord.snapshot?.report_finding_count ?? ""
+    scanRecord.snapshot?.report_finding_count ?? "",
+    getProductionPolicyModelReviewRevision(scanRecord.runtimeArtifacts)
   ].join(":");
 }
 

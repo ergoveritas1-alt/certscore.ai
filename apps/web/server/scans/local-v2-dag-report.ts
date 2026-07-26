@@ -37,6 +37,7 @@ import {
   normalizeGdprTransparencyProductionEvidenceProfile,
   type GdprTransparencyProductionEvidenceProfile
 } from "../../lib/scans/gdpr-transparency-production-profile";
+import { getProductionPolicyModelReviewRevision } from "../../lib/scans/policy-model-review-revision";
 import {
   inferDirectEndpointVendorFromUrl,
   isPromotionGradePreconsentRequestRow
@@ -4514,6 +4515,7 @@ export async function materializeLocalV2DagScanDetail(
       scanRecord.scan.id,
       input.scanArtifactSha256,
       input.manifestArtifactSha256 ?? "no-manifest",
+      getProductionPolicyModelReviewRevision(scanRecord.runtimeArtifacts),
       options.requireBundle === true ? "required" : "optional"
     ],
     { revalidate: 3600 }

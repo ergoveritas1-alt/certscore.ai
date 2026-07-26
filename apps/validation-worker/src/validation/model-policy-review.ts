@@ -1489,6 +1489,6 @@ export function summarizePolicyReviewArtifact(artifact: PolicyModelReviewArtifac
     promptTokens: artifact.provenance.promptTokens,
     completionTokens: artifact.provenance.completionTokens,
     totalTokens: artifact.provenance.totalTokens,
-    productionEligible: false
+    productionEligible: artifact.productionEligible
   };
 }

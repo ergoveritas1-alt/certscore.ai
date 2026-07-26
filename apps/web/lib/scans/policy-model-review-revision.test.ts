@@ -4,16 +4,15 @@ import {
   policyModelReviewArtifactSchema,
   POLICY_REVIEW_TOPIC_DEFINITIONS
 } from "@certscore/contracts";
-import { summarizePolicyReviewArtifact } from "./model-policy-review";
-import { finalizeArtifactProjectionMode } from "./model-policy-review-runner";
+import { getProductionPolicyModelReviewRevision } from "./policy-model-review-revision";
 
-function artifact() {
+function artifact(cacheKey = "a".repeat(64)) {
   return policyModelReviewArtifactSchema.parse({
     contractVersion: "policy_model_review.v2",
-    mode: "shadow",
+    mode: "enforced",
     status: "completed",
     scanId: "scan-1",
-    cacheKey: "a".repeat(64),
+    cacheKey,
     rows: Object.keys(POLICY_REVIEW_TOPIC_DEFINITIONS).map((topic) => ({
       topic,
       status: "observed",
@@ -34,45 +33,48 @@ function artifact() {
       requestedModel: "gpt-5.4-mini",
       resolvedModel: "gpt-5.4-mini",
       taskType: "policy_semantic_review",
-      promptVersion: "policy_semantic_review.v2",
+      promptVersion: "policy_semantic_review.v4",
       schemaVersion: "policy_semantic_review_output.v2",
       inputRefs: [],
       outputRefs: [],
       contentHash: "b".repeat(64),
       confidence: 0.95,
-      reasonCodes: [],
+      reasonCodes: ["approved_precision_first_production_projection_v1"],
       uncertaintyNotes: [],
       latencyMs: 1,
       promptTokens: 1,
       completionTokens: 1,
       totalTokens: 2,
-      usedForProductionProjection: false
+      usedForProductionProjection: true
     },
-    productionEligible: false
+    productionEligible: true
   });
 }
 
-test("enforced invariant-verified review becomes production-projectable", () => {
-  const finalized = finalizeArtifactProjectionMode({
-    artifact: artifact(),
-    mode: "enforced"
-  });
-  assert.equal(finalized.productionEligible, true);
-  assert.equal(finalized.provenance.usedForProductionProjection, true);
-  assert.ok(
-    finalized.provenance.reasonCodes.includes(
-      "approved_precision_first_production_projection_v1"
-    )
+test("returns a stable sentinel without a production-projectable review", () => {
+  assert.equal(
+    getProductionPolicyModelReviewRevision(null),
+    "no-production-policy-model-review"
   );
-  assert.equal(summarizePolicyReviewArtifact(finalized).productionEligible, true);
+  assert.equal(
+    getProductionPolicyModelReviewRevision({
+      policyModelReviewArtifact: {
+        cacheKey: "unvalidated"
+      }
+    }),
+    "no-production-policy-model-review"
+  );
 });
 
-test("shadow review remains non-production", () => {
-  const finalized = finalizeArtifactProjectionMode({
-    artifact: artifact(),
-    mode: "shadow"
+test("changes the report revision when a production review changes", () => {
+  const first = getProductionPolicyModelReviewRevision({
+    policyModelReviewArtifact: artifact()
   });
-  assert.equal(finalized.productionEligible, false);
-  assert.equal(finalized.provenance.usedForProductionProjection, false);
-  assert.equal(summarizePolicyReviewArtifact(finalized).productionEligible, false);
+  const second = getProductionPolicyModelReviewRevision({
+    policy_model_review_artifact: artifact("c".repeat(64))
+  });
+
+  assert.match(first, /^production-policy-model-review:a{64}:/);
+  assert.match(second, /^production-policy-model-review:c{64}:/);
+  assert.notEqual(first, second);
 });
