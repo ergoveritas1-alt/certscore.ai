@@ -18,7 +18,6 @@ const RISK_SIGNAL_ROW_IDS = new Set([
   "analytics_vendor_observed",
   "session_replay_fingerprinting_review",
   "device_identification_fingerprinting_signal_observed",
-  "third_party_service_connection_pre_consent",
   "third_party_iframe_pre_consent",
   "social_media_embed_pre_consent",
   "embedded_content_pre_consent"
@@ -49,7 +48,6 @@ const NEUTRAL_WHEN_OBSERVED_ROW_IDS = new Set([
 const POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS = new Set([
   "pre_consent_cookies_storage",
   "pre_consent_third_party_tracking",
-  "third_party_service_connection_pre_consent",
   "third_party_iframe_pre_consent",
   "social_media_embed_pre_consent",
   "embedded_content_pre_consent"
@@ -362,7 +360,6 @@ function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem)
       return "potential_concern";
     case "device_identification_fingerprinting_signal_observed":
       return getDeviceIdentificationDirection(item);
-    case "third_party_service_connection_pre_consent":
     case "third_party_iframe_pre_consent":
     case "embedded_content_pre_consent":
       return getEmbeddedContentDirection(item);

@@ -1988,7 +1988,7 @@ function BenchmarkMetricCard(input: {
       : null;
   const metricNote = input.label === "Non-essential storage"
     ? [
-        "Non-essential cookie/storage observations before a recorded consent action. Essential and unclassified storage are excluded from this metric.",
+        "Counts non-essential storage found before consent. Essential storage is excluded.",
         input.note
       ].filter(Boolean).join(" ")
     : input.label === "Pre-consent storage"
@@ -2022,10 +2022,12 @@ function BenchmarkMetricCard(input: {
         <div className="flex items-end gap-1.5">
           <span className={`text-[2.15rem] font-semibold leading-none tracking-tight ${actualValue === null && isScoreMetric ? "text-slate-500 text-[1.35rem]" : tone.value}`}>{displayValue}</span>
           {input.maxValue && actualValue !== null ? <span className="pb-0.5 text-[1.35rem] leading-none text-slate-500">/100</span> : null}
-          <span className="pb-1">
-            <span className="sr-only">{benchmarkValue !== null ? `Expected ${benchmarkValue}` : "Expected benchmark unavailable"}</span>
-            {benchmarkTooltip ? <InfoTip align="start" placement="bottom" text={benchmarkTooltip} /> : null}
-          </span>
+          {benchmarkTooltip ? (
+            <span className="pb-1">
+              {benchmarkValue !== null ? <span className="sr-only">Expected {benchmarkValue}</span> : null}
+              <InfoTip align="start" placement="bottom" text={benchmarkTooltip} />
+            </span>
+          ) : null}
         </div>
         {inlineMetricNote ? <p className="mt-1.5 text-[10px] leading-4 text-slate-500">{inlineMetricNote}</p> : null}
       </div>
@@ -4315,7 +4317,7 @@ export function ExecutiveSummaryCard(input: {
     findings: regulatoryFindingInput
   });
   const unclassifiedStorageInfoNote = (input.unclassifiedPreConsentStorageCount ?? 0) > 0
-    ? `${input.unclassifiedPreConsentStorageCount} additional pre-consent storage record${input.unclassifiedPreConsentStorageCount === 1 ? " remains" : "s remain"} unclassified. These records are retained in the Pre-consent Cookies & Trackers table under their Unknown classification and may be grouped by vendor, purpose, and domain.`
+    ? `${input.unclassifiedPreConsentStorageCount} unclassified record${input.unclassifiedPreConsentStorageCount === 1 ? " was" : "s were"} found but not counted; ${input.unclassifiedPreConsentStorageCount === 1 ? "it appears" : "they appear"} as "Unknown" in the Pre-consent Cookies & Trackers table.`
     : null;
   const storageMetricInfoNote = [cookieCountMismatchNote, unclassifiedStorageInfoNote]
     .filter((note): note is string => Boolean(note))

@@ -712,7 +712,7 @@ function InventoryPartyAttributionDonut({ rows }: { rows: InventoryGroupRow[] })
           <div key={segment.filter} className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter={segment.filter} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
             <span className="truncate text-[11px] font-medium text-slate-500">{segment.label}</span>
-            <InfoTip align="end" placement="bottom" text={`Inventory rows whose Party value is ${segment.label.toLowerCase()}.`} />
+            <InfoTip align="end" placement="top" text={`Inventory rows whose Party value is ${segment.label.toLowerCase()}.`} />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{segment.count}</span>
           </div>
         ))}
@@ -783,7 +783,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
           <div key={purpose} className="flex min-h-5 min-w-0 cursor-pointer items-center gap-2 rounded-md px-1 py-0 transition-colors hover:bg-slate-100" data-inventory-filter={purpose.toLowerCase()} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: chartSegments.find((segment) => segment.label === purpose)?.color ?? "#64748b" }} />
             <span className="min-w-0 truncate text-xs font-medium text-slate-600">{purpose}</span>
-            <InfoTip align="end" placement="bottom" text={`Rows classified with the ${purpose.toLowerCase()} purpose.`} />
+            <InfoTip align="end" placement="top" text={`Rows classified with the ${purpose.toLowerCase()} purpose.`} />
             <span className="ml-auto text-xs font-semibold text-slate-800">{count}</span>
           </div>
         )) : (
@@ -965,25 +965,25 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
           <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="non-essential" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
             <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Non-essential</span>
-            <InfoTip align="end" placement="bottom" text="Advertising, analytics, marketing, personalization, or other non-essential activity." />
+            <InfoTip align="start" placement="top" text="Advertising, analytics, marketing, personalization, or other non-essential activity." />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{nonEssentialCount}</span>
           </div>
           <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="review" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
             <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Review</span>
-            <InfoTip align="end" placement="bottom" text="Unknown, ambiguous, or insufficiently classified evidence needing review." />
+            <InfoTip align="start" placement="top" text="Unknown, ambiguous, or insufficiently classified evidence needing review." />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{reviewCount}</span>
           </div>
           <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="necessary" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
             <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Essential</span>
-            <InfoTip align="end" placement="bottom" text="Activity with an explicit retained necessity or security basis in the tested context." />
+            <InfoTip align="start" placement="top" text="Activity with an explicit retained necessity or security basis in the tested context." />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{necessaryCount}</span>
           </div>
           <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="contextual" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500" />
             <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Contextual</span>
-            <InfoTip align="end" placement="bottom" text="Consent-management, payment, authentication, CDN, functional, or other context-dependent activity without an explicit retained necessity basis." />
+            <InfoTip align="start" placement="top" text="Consent-management, payment, authentication, CDN, functional, or other context-dependent activity without an explicit retained necessity basis." />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{contextualCount}</span>
           </div>
         </div>
@@ -1742,7 +1742,7 @@ function deriveConsentGatingPolicyAnchor(row: Record<string, unknown> | null) {
 
 function deriveConsentGatingPolicyAnchorFromRows(rows: Array<Record<string, unknown>>) {
   const privacyPolicyAnchor = rows
-    .filter((row) => getPolicyPageType(row) === "privacy_policy" || getPolicyPageType(row) === "cookie_policy")
+    .filter((row) => getPolicyPageType(row) === "privacy_policy" || getPolicyPageType(row) === "cookie_policy" || getPolicyPageType(row) === "cookie_settings")
     .map((row) => deriveConsentGatingPolicyAnchor(row))
     .find(Boolean);
   if (privacyPolicyAnchor) {
@@ -3358,7 +3358,7 @@ function humanizePolicyFlag(flag: string) {
 
 function isReportPolicySurfaceRow(row: Record<string, unknown>) {
   const pageType = String(getPolicyPageType(row) ?? "");
-  if (pageType !== "privacy_policy" && pageType !== "terms_of_service" && pageType !== "cookie_policy") {
+  if (pageType !== "privacy_policy" && pageType !== "terms_of_service" && pageType !== "cookie_policy" && pageType !== "cookie_settings") {
     return false;
   }
   return !(pageType === "cookie_policy" && isGenericBrowserCookieHelpUrl(getPolicyPageUrl(row)));
@@ -3433,7 +3433,9 @@ function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, un
             ? "Privacy policy"
             : pageType === "terms_of_service"
               ? "Terms of service"
-              : "Cookie policy",
+              : pageType === "cookie_settings"
+                ? "Cookie preferences"
+                : "Cookie policy",
         pageUrl,
         summary,
         topics
@@ -3442,7 +3444,7 @@ function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, un
     .filter((item) => item.summary || item.topics.length > 0 || item.flags.length > 0);
 }
 
-function getSnapshotPolicySurfaceLabel(pageType: "privacy_policy" | "terms_of_service" | "cookie_policy") {
+function getSnapshotPolicySurfaceLabel(pageType: "privacy_policy" | "terms_of_service" | "cookie_policy" | "cookie_settings") {
   switch (pageType) {
     case "privacy_policy":
       return "Privacy policy";
@@ -3450,6 +3452,8 @@ function getSnapshotPolicySurfaceLabel(pageType: "privacy_policy" | "terms_of_se
       return "Terms of service";
     case "cookie_policy":
       return "Cookie policy";
+    case "cookie_settings":
+      return "Cookie preferences";
   }
 }
 
@@ -3529,7 +3533,7 @@ function getRuntimeKeyPageDiscoverySummary(runtimeArtifacts: Record<string, unkn
 
 function getVerifiedKeyPageSurface(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
-  pageType: "privacy_policy" | "terms_of_service" | "cookie_policy"
+  pageType: "privacy_policy" | "terms_of_service" | "cookie_policy" | "cookie_settings"
 ) {
   const summary = getRuntimeKeyPageDiscoverySummary(runtimeArtifacts);
   const pageSummaries = [
@@ -3558,7 +3562,7 @@ function deriveSnapshotPolicySurfaceFallbacks(
 
   const existingLabels = new Set(existingSurfaces.map((surface) => surface.pageLabel.toLowerCase()));
   const fallbackInputs: Array<{
-    pageType: "privacy_policy" | "terms_of_service" | "cookie_policy";
+    pageType: "privacy_policy" | "terms_of_service" | "cookie_policy" | "cookie_settings";
     present: boolean;
   }> = [
     { pageType: "privacy_policy", present: snapshot.privacy_policy_present === true },
@@ -3586,7 +3590,10 @@ function deriveSnapshotPolicySurfaceFallbacks(
         pageUrl
       };
     })
-    .filter((surface) => !existingLabels.has(surface.pageLabel.toLowerCase()));
+    .filter((surface) =>
+      !existingLabels.has(surface.pageLabel.toLowerCase()) &&
+      !hasExistingPolicySurfaceUrl(existingSurfaces, surface.pageUrl)
+    );
 }
 
 function deriveDiscoveredPrivacyPolicySurfaceFallbacks(
@@ -3680,12 +3687,22 @@ function deriveRetainedPolicySummarySurfaceFallbacks(
         pageUrl: null
       }];
     }
-    return input.urls.slice(0, 3).map((pageUrl) => ({
-      details: input.details,
-      pageLabel: input.pageLabel,
-      pageUrl
-    }));
+    return input.urls
+      .slice(0, 3)
+      .filter((pageUrl) => !hasExistingPolicySurfaceUrl(existingSurfaces, pageUrl))
+      .map((pageUrl) => ({
+        details: input.details,
+        pageLabel: input.pageLabel,
+        pageUrl
+      }));
   });
+}
+
+function hasExistingPolicySurfaceUrl(existingSurfaces: ExecutivePolicySurface[], pageUrl: string | null) {
+  const normalizedUrl = normalizePolicySurfaceUrlForCompare(pageUrl);
+  return normalizedUrl !== null && existingSurfaces.some((surface) =>
+    normalizePolicySurfaceUrlForCompare(surface.pageUrl) === normalizedUrl
+  );
 }
 
 function deriveChecklistPolicySurfaceFallbacks(
@@ -3704,11 +3721,12 @@ function deriveChecklistPolicySurfaceFallbacks(
 
     const retainedEvidence = row.criticalEvidence.retainedEvidence;
     if (row.id === "privacy_notice_availability" && !existingLabels.has("privacy policy")) {
-      const urls = uniqueStrings([
+      const rawUrls = uniqueStrings([
         ...getRecordStringArray(retainedEvidence, "privacyPolicyUrls"),
         ...getRecordStringArray(retainedEvidence, "privacy_policy_urls")
       ]);
-      return (urls.length > 0 ? urls.slice(0, 3) : [null]).map((pageUrl) => ({
+      const urls = rawUrls.filter((pageUrl) => !hasExistingPolicySurfaceUrl(existingSurfaces, pageUrl));
+      return (rawUrls.length > 0 ? urls.slice(0, 3) : [null]).map((pageUrl) => ({
         details: ["Reachable privacy-notice surface retained by the canonical GDPR/ePrivacy checklist evidence."],
         pageLabel: "Privacy policy",
         pageUrl
@@ -3716,10 +3734,11 @@ function deriveChecklistPolicySurfaceFallbacks(
     }
 
     if (row.id === "cookie_notice_policy_availability" && !existingLabels.has("cookie policy")) {
-      const urls = uniqueStrings([
+      const rawUrls = uniqueStrings([
         ...getRecordStringArray(retainedEvidence, "cookiePolicyUrls"),
         ...getRecordStringArray(retainedEvidence, "cookie_policy_urls")
       ]);
+      const urls = rawUrls.filter((pageUrl) => !hasExistingPolicySurfaceUrl(existingSurfaces, pageUrl));
       const disclosedCookieNames = uniqueStrings([
         ...getRecordStringArray(retainedEvidence, "disclosedCookieNames"),
         ...getRecordStringArray(retainedEvidence, "disclosed_cookie_names")
@@ -3730,7 +3749,7 @@ function deriveChecklistPolicySurfaceFallbacks(
           ? `Named-cookie inventory retained (${disclosedCookieNames.length} cookies).`
           : null
       ].filter((value): value is string => Boolean(value));
-      return (urls.length > 0 ? urls.slice(0, 3) : [null]).map((pageUrl) => ({
+      return (rawUrls.length > 0 ? urls.slice(0, 3) : [null]).map((pageUrl) => ({
         details,
         pageLabel: "Cookie policy",
         pageUrl
@@ -3757,10 +3776,15 @@ function normalizePolicySurfaceUrlForCompare(value: string | null | undefined) {
     const url = new URL(value);
     url.hash = "";
     url.search = "";
+    url.pathname = url.pathname.replace(/^\/-\/[a-z]{2}(?:-[a-z]{2})?\//i, "/");
     return url.toString().replace(/\/$/, "").toLowerCase();
   } catch {
-    return value.trim().replace(/[#?].*$/, "").replace(/\/$/, "").toLowerCase() || null;
+    return value.trim().replace(/^https?:\/\/[^/]+\/-\/[a-z]{2}(?:-[a-z]{2})?\//i, (prefix) => prefix.replace(/-\/[a-z]{2}(?:-[a-z]{2})?\/$/i, "/")).replace(/[#?].*$/, "").replace(/\/$/, "").toLowerCase() || null;
   }
+}
+
+function isCookiePreferencePolicySurfaceUrl(value: string | null | undefined) {
+  return Boolean(value && /\/(?:privacy|cookie)[-_]?(?:prefs?|preferences?|settings?)(?:\/|$)/i.test(value));
 }
 
 function isSecurityOnlyPolicySnippet(value: string | null | undefined) {
@@ -3833,7 +3857,7 @@ function selectExecutiveRetainedPolicySectionSummary(input: {
   const generalRetention = retentionSections.find((section) =>
     !/cookie/i.test(`${getRecordString(section, "heading") ?? ""} ${getRecordString(section, "textExcerpt") ?? getRecordString(section, "text_excerpt") ?? ""}`)
   );
-  const selectedSection = input.pageType === "cookie_policy"
+  const selectedSection = input.pageType === "cookie_policy" || input.pageType === "cookie_settings"
     ? cookieSpecific ?? retentionSections[0]
     : generalRetention ?? retentionSections[0];
   if (!selectedSection) {
@@ -3853,8 +3877,10 @@ export function deriveExecutivePolicySurfaces(
   const enrichedSurfaces = policyEnrichments
     .filter(isExecutivePolicySurfaceRow)
     .map((row) => {
-      const pageType = String(getPolicyPageType(row) ?? "");
       const pageUrl = getPolicyPageUrl(row);
+      const pageType = isCookiePreferencePolicySurfaceUrl(pageUrl)
+        ? "cookie_settings"
+        : String(getPolicyPageType(row) ?? "");
       const summary = selectExecutiveRetainedPolicySectionSummary({
         pageType,
         pageUrl,
@@ -3892,7 +3918,9 @@ export function deriveExecutivePolicySurfaces(
             ? "Privacy policy"
             : pageType === "terms_of_service"
               ? "Terms of service"
-              : "Cookie policy",
+              : pageType === "cookie_settings"
+                ? "Cookie preferences"
+                : "Cookie policy",
         pageUrl
       };
     })

@@ -82,7 +82,6 @@ const GDPR_EPRIVACY_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   session_replay_fingerprinting_review: { weight: 3 },
   supervisory_authority_complaint_disclosure: { weight: 5 },
   third_party_iframe_pre_consent: { weight: 5 },
-  third_party_service_connection_pre_consent: { weight: 5 },
   transport_security_form_transport: { weight: 5 },
   transport_security_http_redirect: { weight: 5 },
   transport_security_https_delivery: { weight: 5 },

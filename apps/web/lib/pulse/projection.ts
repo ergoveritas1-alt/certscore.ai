@@ -784,7 +784,6 @@ function eventEvidencePhase(event: Record<string, unknown>) {
 const REGULATORY_RUNTIME_WRAPPER_ROW_IDS = new Set([
   "pre_consent_third_party_tracking",
   "pre_consent_cookies_storage",
-  "third_party_service_connection_pre_consent",
   "social_media_embed_pre_consent",
   "embedded_content_pre_consent",
   "session_replay_fingerprinting_review",

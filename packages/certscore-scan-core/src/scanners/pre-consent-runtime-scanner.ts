@@ -6598,7 +6598,7 @@ async function captureTransportSecurityObservation(input: {
         : [];
     }),
   ].slice(0, 25);
-  const { httpProbe, tlsProbe } = input.networkProbes;
+  const { httpProbe, tlsProbe, tlsCertificateObservations } = input.networkProbes;
   const observation: TransportSecurityObservation = {
     observationId: "transport_security_pre_consent",
     observedAtMs: elapsed(input.scanStartedAtMs),
@@ -6613,6 +6613,7 @@ async function captureTransportSecurityObservation(input: {
     pageHttpsObserved: schemeOf(pageUrl) === "https",
     httpProbe,
     tlsProbe,
+    tlsCertificateObservations,
     mixedContent: {
       loadedHttpSubresources,
       blockedHttpSubresources,
@@ -6653,6 +6654,7 @@ type TransportNetworkProbes = {
   durationMs: number;
   httpProbe: TransportSecurityObservation["httpProbe"];
   tlsProbe: TransportSecurityObservation["tlsProbe"];
+  tlsCertificateObservations: TransportSecurityObservation["tlsCertificateObservations"];
 };
 
 function availableTransportSecurityObservation(input: {
@@ -6677,6 +6679,7 @@ function availableTransportSecurityObservation(input: {
     pageHttpsObserved: pageScheme === "https",
     httpProbe: input.networkProbes.httpProbe,
     tlsProbe: input.networkProbes.tlsProbe,
+    tlsCertificateObservations: input.networkProbes.tlsCertificateObservations,
     mixedContent: {
       loadedHttpSubresources: [],
       blockedHttpSubresources: [],
@@ -6707,10 +6710,16 @@ async function startTransportNetworkProbes(
     probeHttpRedirect(normalizedUrl, signal, deadlineAtMs),
     probeStrictTls(normalizedUrl, signal, deadlineAtMs),
   ]);
+  const tlsRedirectProbe = httpProbe.finalUrl && httpProbe.finalScheme === "https" && httpProbe.finalUrl !== tlsProbe.inputUrl
+    ? await probeStrictTls(httpProbe.finalUrl, signal, deadlineAtMs)
+    : null;
   return {
     durationMs: Date.now() - startedAtMs,
     httpProbe,
     tlsProbe,
+    tlsCertificateObservations: certificateObservationsFromTlsProbes(
+      [tlsProbe, ...(tlsRedirectProbe ? [tlsRedirectProbe] : [])],
+    ),
   };
 }
 
@@ -6742,6 +6751,7 @@ function emptyTransportSecurityObservation(input: {
       errorCategory: "unknown",
       errorMessage: input.reason,
     },
+    tlsCertificateObservations: [],
     mixedContent: {
       loadedHttpSubresources: [],
       blockedHttpSubresources: [],
@@ -6786,23 +6796,12 @@ async function probeHttpRedirect(
           finalUrl: sanitizeTransportUrl(currentUrl),
           finalScheme: schemeOf(currentUrl),
           redirectChain: redirectChain.map((url) => sanitizeTransportUrl(url)).slice(0, 12),
-          redirectedToHttps: schemeOf(currentUrl) === "https" && redirectChain.length > 1,
+          redirectedToHttps: redirectChain.some((url) => schemeOf(url) === "https") && redirectChain.length > 1,
         };
       }
 
       const nextUrl = new URL(location, currentUrl).toString();
       redirectChain.push(nextUrl);
-      if (schemeOf(nextUrl) === "https") {
-        return {
-          attempted: true,
-          inputUrl: sanitizeTransportUrl(inputUrl),
-          status: response.status,
-          finalUrl: sanitizeTransportUrl(nextUrl),
-          finalScheme: "https",
-          redirectChain: redirectChain.map((url) => sanitizeTransportUrl(url)).slice(0, 12),
-          redirectedToHttps: true,
-        };
-      }
       currentUrl = nextUrl;
     }
 
@@ -6812,7 +6811,7 @@ async function probeHttpRedirect(
       finalUrl: sanitizeTransportUrl(currentUrl),
       finalScheme: schemeOf(currentUrl),
       redirectChain: redirectChain.map((url) => sanitizeTransportUrl(url)).slice(0, 12),
-      redirectedToHttps: schemeOf(currentUrl) === "https" && redirectChain.length > 1,
+      redirectedToHttps: redirectChain.some((url) => schemeOf(url) === "https") && redirectChain.length > 1,
       errorCategory: "http_error",
       errorMessage: "redirect_chain_limit_reached",
     };
@@ -6855,14 +6854,19 @@ export async function probeStrictTls(
     const socket = tlsConnect({
       host: parsed.hostname,
       port: parsed.port ? Number(parsed.port) : 443,
-      rejectUnauthorized: true,
+      // Complete the handshake so the presented certificate can be retained even
+      // when Node reports an authorization failure. `socket.authorized` remains
+      // the authoritative strict-verification result below.
+      rejectUnauthorized: false,
       ...(isIP(parsed.hostname) ? {} : { servername: parsed.hostname }),
     }, () => {
+      const certificate = readPeerCertificate(socket);
       settle({
         attempted: true,
         inputUrl: sanitizeTransportUrl(inputUrl),
         finalUrl: sanitizeTransportUrl(inputUrl),
         validCertificate: socket.authorized,
+        ...certificate,
         ...(socket.authorized
           ? {}
           : {
@@ -6888,15 +6892,89 @@ export async function probeStrictTls(
     }, Math.max(1, Math.min(5_000, deadlineAtMs - Date.now())));
     socket.on("error", (error) => {
       const errorCategory = classifyTransportProbeError(error);
+      const certificate = readPeerCertificate(socket);
       settle({
         attempted: true,
         inputUrl: sanitizeTransportUrl(inputUrl),
         ...(errorCategory === "tls_or_certificate_failure" ? { validCertificate: false } : {}),
+        ...certificate,
         errorCategory,
         errorMessage: boundedProbeError(error),
       });
     });
   });
+}
+
+function readPeerCertificate(socket: ReturnType<typeof tlsConnect>): Pick<TransportSecurityObservation["tlsProbe"], "certificateSubject" | "certificateIssuer" | "certificateValidFrom" | "certificateValidTo" | "certificateChainCount"> {
+  try {
+    const peer = socket.getPeerCertificate(true) as {
+      subject?: Record<string, unknown>;
+      issuer?: Record<string, unknown>;
+      valid_from?: unknown;
+      valid_to?: unknown;
+      issuerCertificate?: unknown;
+    };
+    if (!peer || typeof peer !== "object" || Object.keys(peer).length === 0) {
+      return {};
+    }
+
+    let chainCertificateCount = 0;
+    let current: typeof peer | null = peer;
+    const seen = new Set<unknown>();
+    while (current && chainCertificateCount < 32 && !seen.has(current)) {
+      seen.add(current);
+      chainCertificateCount += 1;
+      current = current.issuerCertificate && typeof current.issuerCertificate === "object"
+        ? current.issuerCertificate as typeof peer
+        : null;
+    }
+
+    return {
+      certificateSubject: certificateName(peer.subject),
+      certificateIssuer: certificateName(peer.issuer),
+      certificateValidFrom: boundedCertificateDate(peer.valid_from),
+      certificateValidTo: boundedCertificateDate(peer.valid_to),
+      certificateChainCount: chainCertificateCount,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function certificateName(value: Record<string, unknown> | undefined) {
+  if (!value) return undefined;
+  const parts = ["CN", "O", "OU"]
+    .map((key) => typeof value[key] === "string" ? `${key}=${value[key]}` : null)
+    .filter((part): part is string => Boolean(part));
+  return parts.length > 0 ? parts.join(", ").slice(0, 240) : undefined;
+}
+
+function boundedCertificateDate(value: unknown) {
+  return typeof value === "string" && value.length <= 40 ? value : undefined;
+}
+
+function certificateObservationsFromTlsProbes(
+  probes: Array<TransportSecurityObservation["tlsProbe"]>,
+): TransportSecurityObservation["tlsCertificateObservations"] {
+  const seenUrls = new Set<string>();
+  return probes
+    .filter((probe): probe is typeof probe & { inputUrl: string } => Boolean(probe.inputUrl))
+    .filter((probe) => {
+      if (seenUrls.has(probe.inputUrl)) return false;
+      seenUrls.add(probe.inputUrl);
+      return true;
+    })
+    .map((probe) => ({
+      inputUrl: probe.inputUrl,
+      validCertificate: probe.validCertificate,
+      subject: probe.certificateSubject,
+      issuer: probe.certificateIssuer,
+      validFrom: probe.certificateValidFrom,
+      validTo: probe.certificateValidTo,
+      chainCertificateCount: probe.certificateChainCount,
+    }))
+    .filter((observation) => observation.subject || observation.issuer || observation.validFrom || observation.validTo)
+    .slice(0, 4);
 }
 
 async function fetchWithTimeout(url: string, timeoutMs: number, signal?: AbortSignal) {

@@ -38,7 +38,6 @@ const GDPR_EPRIVACY_SHADOW_COVERAGE_ROW_WEIGHTS = {
   social_media_embed_pre_consent: 1,
   supervisory_authority_complaint_disclosure: 1,
   third_party_iframe_pre_consent: 1,
-  third_party_service_connection_pre_consent: 1,
   transport_security_form_transport: 1,
   transport_security_http_redirect: 1,
   transport_security_https_delivery: 1,
@@ -123,6 +122,16 @@ export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL = {
   familyMaximumRiskPoints: {
     ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL.familyMaximumRiskPoints,
     rights_gap: 30
+  },
+  findingRiskPointOverrides: {
+    forced_consent_interaction: 20,
+    fingerprinting_related_signals_observed: 18,
+    policy_behavior_contradiction_detected: 32,
+    pre_consent_tracking_detected: 32,
+    probable_fingerprinting: 26,
+    reject_tracking_persists_after_reject: 36,
+    sensitive_data_collection_with_third_party_tracking_present: 36,
+    third_party_tracking_pre_consent: 32
   },
   version: "gdpr-eprivacy-shadow.candidate-v3-rights-max-30.pending-luna"
 } as const satisfies CanonicalShadowScoreModel;

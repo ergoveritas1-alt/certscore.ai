@@ -122,7 +122,6 @@ const REPORT_ROW_GROUPS = [
       "advertising_retargeting_vendor_signal_observed",
       "retargeting_behavioral_advertising_signal_observed",
       "analytics_vendor_observed",
-      "third_party_service_connection_pre_consent",
       "third_party_iframe_pre_consent",
       "social_media_embed_pre_consent",
       "embedded_content_pre_consent"
@@ -192,10 +191,10 @@ function getGdprTransparencyPolicyReviewPayload(item: GdprEprivacyCoverageCheckl
   const rowSpecificSectionEvidence =
     getRecord(evidence.rowSpecificSectionEvidence) ??
     getRecord(evidence.row_specific_section_evidence);
-  const summary = getRecord(evidence.policySurfaceSummary) ?? getRecord(evidence.policy_surface_summary);
-  if (!summary) {
-    return null;
-  }
+  const summary =
+    getRecord(evidence.policySurfaceSummary) ??
+    getRecord(evidence.policy_surface_summary) ??
+    {};
   const fullRetainedPolicyText =
     getString(summary.retainedPrivacyPolicyTextExcerpt) ??
     getString(summary.retained_privacy_policy_text_excerpt) ??
@@ -264,6 +263,12 @@ function getGdprTransparencyPolicyReviewPayload(item: GdprEprivacyCoverageCheckl
     return null;
   }
   const sourceUrl = [
+    getString(rowSpecificSectionEvidence?.selectedPolicySectionUrl),
+    getString(rowSpecificSectionEvidence?.selected_policy_section_url),
+    getString(article13Signal?.selectedPolicySectionUrl),
+    getString(article13Signal?.selected_policy_section_url),
+    getString(article13Signal?.sourceUrl),
+    getString(article13Signal?.source_url),
     ...getStringArray(summary.privacyPolicyUrls),
     ...getStringArray(summary.privacy_policy_urls),
     getString(summary.selectedPolicySectionUrl),
@@ -1245,12 +1250,6 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
       : "No analytics or measurement vendor signal was observed in the retained runtime context.";
   }
 
-  if (item.id === "third_party_service_connection_pre_consent") {
-    return item.status === "Gap observed" || item.status === "Observed" || item.status === "Review signal"
-      ? "Known 3rd party embed or service connections were retained before a recorded consent action."
-      : "No known 3rd party embed or service connection was observed before a recorded consent action.";
-  }
-
   if (item.id === "third_party_iframe_pre_consent") {
     return item.status === "Gap observed" || item.status === "Observed" || item.status === "Review signal"
       ? "Known 3rd party iframe embeds were retained before a recorded consent action."
@@ -1687,33 +1686,25 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     ]);
   }
 
-  if (item.id === "third_party_service_connection_pre_consent" || item.id === "third_party_iframe_pre_consent") {
+  if (item.id === "third_party_iframe_pre_consent") {
     const hosts = uniqueStrings([
       ...getStringArrayFromEvidenceKeys(evidence, ["embeddedContentHosts", "embedded_content_hosts", "embeddedHosts", "embedded_hosts"]),
       ...getNestedRecordStrings(evidence.embeddedContentObservations, ["host", "hostname", "domain"])
     ]).slice(0, 4);
     const purposeParts = getEmbeddedContentPurposeParts(evidence);
     if (evidenceLabel === "Not observed") {
-      return item.id === "third_party_iframe_pre_consent"
-        ? "No eligible 3rd party iframe embed was observed before a recorded consent action."
-        : "No eligible 3rd party embed or service connection was observed before a recorded consent action.";
+      return "No eligible 3rd party iframe embed was observed before a recorded consent action.";
     }
     if (purposeParts.length > 0) {
       return joinRationaleParts([
-        item.id === "third_party_iframe_pre_consent"
-          ? `3rd party iframe embeds loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`
-          : `3rd party embed or service connections occurred before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`,
+        `3rd party iframe embeds loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`,
         formatFirstSeenPhrase(firstSeenMs)
       ]);
     }
     return joinRationaleParts([
       hosts.length > 0
-        ? item.id === "third_party_iframe_pre_consent"
-          ? `3rd party iframe embeds loaded before any recorded consent action: ${formatList(hosts)}`
-          : `3rd party embed or service connections occurred before any recorded consent action: ${formatList(hosts)}`
-        : item.id === "third_party_iframe_pre_consent"
-          ? "3rd party iframe embeds loaded before any recorded consent action"
-          : "3rd party embed or service connections occurred before any recorded consent action",
+        ? `3rd party iframe embeds loaded before any recorded consent action: ${formatList(hosts)}`
+        : "3rd party iframe embeds loaded before any recorded consent action",
       formatFirstSeenPhrase(firstSeenMs)
     ]);
   }

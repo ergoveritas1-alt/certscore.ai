@@ -28,6 +28,7 @@ export type CanonicalShadowScoreModel = {
     minimumSeverity: CanonicalShadowScoreSeverity;
   }>;
   familyMaximumRiskPoints: Record<string, number>;
+  findingRiskPointOverrides?: Record<string, number>;
   minimumCoverageRatioForNoFindingPostureScore: number;
   minimumCoverageRatioForPostureScore: number;
   postureBands: Array<{
@@ -112,6 +113,10 @@ function strongestSeverity(findings: CanonicalShadowScoreFinding[]) {
   );
 }
 
+function findingRiskPoints(model: CanonicalShadowScoreModel, finding: CanonicalShadowScoreFinding) {
+  return model.findingRiskPointOverrides?.[finding.findingId] ?? model.severityRiskPoints[finding.severity];
+}
+
 function capMatchesFinding(
   cap: CanonicalShadowScoreModel["criticalPostureCaps"][number],
   finding: CanonicalShadowScoreFinding
@@ -162,6 +167,11 @@ export function auditCanonicalShadowScoreModel(input: {
     input.model.severityRiskPoints.medium < input.model.severityRiskPoints.low
       ? ["severityRiskPoints.monotonicity"]
       : []),
+    ...Object.entries(input.model.findingRiskPointOverrides ?? {}).flatMap(([findingId, points]) =>
+      !findingId.trim() || !Number.isFinite(points) || points < 0 || points > 100
+        ? [`findingRiskPointOverrides.${findingId || "missing_id"}`]
+        : []
+    ),
     ...(new Set(capIds).size !== capIds.length ? ["criticalPostureCaps.duplicate_cap_id"] : []),
     ...input.model.criticalPostureCaps.flatMap((cap) =>
       !cap.capId.trim() ||
@@ -266,11 +276,27 @@ export function deriveCanonicalShadowScore(input: {
       if (familyMaximum === undefined) {
         throw new Error(`Canonical shadow score family is not configured: ${family}`);
       }
+      const distinctFindings = [...findings.reduce((byFindingId, finding) => {
+        const existing = byFindingId.get(finding.findingId);
+        if (!existing || SEVERITY_RANK[finding.severity] > SEVERITY_RANK[existing.severity]) {
+          byFindingId.set(finding.findingId, finding);
+        }
+        return byFindingId;
+      }, new Map<string, CanonicalShadowScoreFinding>()).values()];
+      const primaryFinding = [...distinctFindings].sort((left, right) =>
+        findingRiskPoints(input.model, right) - findingRiskPoints(input.model, left) ||
+        SEVERITY_RANK[right.severity] - SEVERITY_RANK[left.severity] ||
+        left.findingId.localeCompare(right.findingId)
+      )[0];
+      const primaryFindingId = primaryFinding?.findingId;
+      const additionalRiskPoints = distinctFindings
+        .filter((finding) => finding.findingId !== primaryFindingId)
+        .reduce((total, finding) => total + Math.max(1, Math.round(findingRiskPoints(input.model, finding) / 3)), 0);
       return {
         family,
         findingIds: [...new Set(findings.map((finding) => finding.findingId))].sort(),
         riskPoints: Math.min(
-          input.model.severityRiskPoints[strongest],
+          (primaryFinding ? findingRiskPoints(input.model, primaryFinding) : input.model.severityRiskPoints[strongest]) + additionalRiskPoints,
           familyMaximum
         ),
         strongestSeverity: strongest

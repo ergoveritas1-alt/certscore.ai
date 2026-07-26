@@ -572,6 +572,16 @@ export const transportSecurityFormObservationSchema = z.object({
   hasSensitiveFieldHint: z.boolean().default(false),
 });
 
+const transportCertificateObservationSchema = z.object({
+  inputUrl: transportUrlSchema,
+  validCertificate: z.boolean().optional(),
+  subject: z.string().max(240).optional(),
+  issuer: z.string().max(240).optional(),
+  validFrom: z.string().max(40).optional(),
+  validTo: z.string().max(40).optional(),
+  chainCertificateCount: z.number().int().nonnegative().max(32).optional(),
+});
+
 export const transportSecurityObservationSchema = z.object({
   observationId: z.string(),
   observedAtMs: z.number().int().nonnegative(),
@@ -600,9 +610,15 @@ export const transportSecurityObservationSchema = z.object({
     inputUrl: transportUrlSchema.optional(),
     validCertificate: z.boolean().optional(),
     finalUrl: transportUrlSchema.optional(),
+    certificateSubject: z.string().max(240).optional(),
+    certificateIssuer: z.string().max(240).optional(),
+    certificateValidFrom: z.string().max(40).optional(),
+    certificateValidTo: z.string().max(40).optional(),
+    certificateChainCount: z.number().int().nonnegative().max(32).optional(),
     errorCategory: transportProbeErrorCategorySchema.optional(),
     errorMessage: z.string().max(240).optional(),
   }),
+  tlsCertificateObservations: z.array(transportCertificateObservationSchema).max(4).default([]),
   mixedContent: z.object({
     loadedHttpSubresources: z.array(transportSecuritySubresourceSchema).max(25).default([]),
     blockedHttpSubresources: z.array(transportSecuritySubresourceSchema).max(25).default([]),
@@ -1376,6 +1392,8 @@ export const policySurfaceObservationSchema = z.object({
     "scan_budget_exhausted",
     "low_quality_access_challenge",
     "insufficient_policy_text",
+    "content_decoding_failed",
+    "decompressed_body_too_large",
   ]).optional(),
   matchedLocale: supportedPrivacyEvidenceLocaleSchema.optional(),
   classifierProvenance: z.literal("privacy_surface_classifier.v1").optional(),
@@ -1758,6 +1776,8 @@ export const policySurfaceInspectionOutcomeSchema = z.object({
     "indeterminate_limited_coverage",
   ]),
   coverageStatus: z.enum(["complete", "limited"]),
+  linkDiscoveryCoverageStatus: z.enum(["complete", "limited"]).default("limited"),
+  documentRetrievalCoverageStatus: z.enum(["usable", "insufficient", "limited"]).default("limited"),
   inspectionCompleted: z.boolean(),
   privacyPolicyObserved: z.boolean(),
   observedSurfaceTypes: z.array(policySurfaceObservationSchema.shape.surfaceType).max(16).default([]),
@@ -1778,18 +1798,36 @@ export function derivePolicySurfaceInspectionOutcome(input: {
   const privacyPolicyObserved = retainedObservations.some((observation) =>
     observation.surfaceType === "privacy_policy"
   );
+  const usablePrivacyDocumentRetained = observations.some((observation) =>
+    observation.surfaceType === "privacy_policy" &&
+    observation.status === "fetched" &&
+    observation.documentEvaluationState !== "insufficient"
+  );
   const inspectionCompleted = policyRun?.status === "completed";
   const limitationKeys = [
     !policyRun ? "policy_surface_inspection_runtime_not_run" : null,
     policyRun && policyRun.status !== "completed"
       ? `policy_surface_inspection_runtime_${policyRun.status}`
       : null,
+    privacyPolicyObserved && !usablePrivacyDocumentRetained
+      ? "privacy_policy_link_observed_document_not_retained"
+      : null,
   ].filter((value): value is string => value !== null)
     .filter((value, index, values) => values.indexOf(value) === index)
     .slice(0, 16);
-  const coverageStatus = privacyPolicyObserved || inspectionCompleted
+  const linkDiscoveryCoverageStatus = privacyPolicyObserved || inspectionCompleted
     ? "complete" as const
     : "limited" as const;
+  const documentRetrievalCoverageStatus = usablePrivacyDocumentRetained
+    ? "usable" as const
+    : privacyPolicyObserved
+      ? "insufficient" as const
+      : inspectionCompleted
+        ? "insufficient" as const
+        : "limited" as const;
+  const coverageStatus = privacyPolicyObserved && !usablePrivacyDocumentRetained
+    ? "limited" as const
+    : linkDiscoveryCoverageStatus;
   const outcome = privacyPolicyObserved
     ? "privacy_policy_observed" as const
     : inspectionCompleted
@@ -1799,6 +1837,8 @@ export function derivePolicySurfaceInspectionOutcome(input: {
   return policySurfaceInspectionOutcomeSchema.parse({
     outcome,
     coverageStatus,
+    linkDiscoveryCoverageStatus,
+    documentRetrievalCoverageStatus,
     inspectionCompleted,
     privacyPolicyObserved,
     observedSurfaceTypes: [...new Set(retainedObservations.map((observation) => observation.surfaceType))],

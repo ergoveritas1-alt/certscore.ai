@@ -19,6 +19,11 @@ import { Resolver } from "node:dns/promises";
 import { isIP } from "node:net";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
+import {
+  brotliDecompressSync,
+  gunzipSync,
+  inflateSync,
+} from "node:zlib";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
@@ -61,6 +66,7 @@ const MAX_POLICY_SURFACE_TEXT_ARTIFACT_CHARS = 256_000;
 const MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS = 1_000_000;
 const MAX_FETCHED_TEXT_CHARS = 500_000;
 const MAX_POLICY_TEXT_RESPONSE_BYTES = 2_500_000;
+const MAX_POLICY_DECOMPRESSED_BYTES = 2_500_000;
 const MAX_POLICY_PDF_BYTES = 2_500_000;
 const MAX_POLICY_PDF_PAGES = 12;
 const MAX_POLICY_PDF_TEXT_CHARS = 500_000;
@@ -122,7 +128,25 @@ export function policySurfaceObservationsFromRetainedRenderedLinks(input: {
   links: RetainedRenderedPolicyLink[];
   evidenceRef?: EvidenceRef;
 }): PolicySurfaceObservation[] {
-  const observations = input.links.flatMap((link, index): PolicySurfaceObservation[] => {
+  const observations = policySurfaceCandidatesFromRetainedRenderedLinks(input.links).map((candidate) =>
+    observationFromCandidate(candidate, {
+      status: "observed",
+      confidence: Math.max(
+        candidate.deterministicMatchStrength === "direct" ? 0.9 : 0.72,
+        candidate.deterministicScore,
+      ),
+      evidenceRefs: input.evidenceRef ? [input.evidenceRef] : [],
+    })
+  );
+  const combinedAliases = privacyAliasesForCombinedPrivacyCookieSurfaces(observations);
+  return mergePolicySurfaceObservations([], [...observations, ...combinedAliases]);
+}
+
+function policySurfaceCandidatesFromRetainedRenderedLinks(
+  links: RetainedRenderedPolicyLink[],
+  observationOnly = true,
+): PolicySurfaceCandidate[] {
+  return links.flatMap((link, index): PolicySurfaceCandidate[] => {
     const deterministic = classifySurface({ linkText: link.linkText, url: link.href });
     if (deterministic.surfaceType === "unknown" || deterministic.score <= 0.2) return [];
     const candidate: PolicySurfaceCandidate = {
@@ -136,7 +160,7 @@ export function policySurfaceObservationsFromRetainedRenderedLinks(input: {
       fetchable: true,
       clickable: true,
       mayLeadToConsentControls: isPreferenceControlSurface(deterministic.surfaceType, link.linkText),
-      observationOnly: true,
+      observationOnly,
       deterministicSurfaceType: deterministic.surfaceType,
       deterministicScore: deterministic.score,
       deterministicKeywordMatches: deterministic.keywords,
@@ -147,17 +171,8 @@ export function policySurfaceObservationsFromRetainedRenderedLinks(input: {
           ? "header_link"
           : "page_text_link",
     };
-    return [observationFromCandidate(candidate, {
-      status: "observed",
-      confidence: Math.max(
-        deterministic.matchStrength === "direct" ? 0.9 : 0.72,
-        deterministic.score,
-      ),
-      evidenceRefs: input.evidenceRef ? [input.evidenceRef] : [],
-    })];
+    return [candidate];
   });
-  const combinedAliases = privacyAliasesForCombinedPrivacyCookieSurfaces(observations);
-  return mergePolicySurfaceObservations([], [...observations, ...combinedAliases]);
 }
 
 export function mergePolicySurfaceObservations(
@@ -192,7 +207,7 @@ export function countRecoveredPolicySurfaceObservations(
 }
 
 function policySurfaceObservationKey(observation: PolicySurfaceObservation): string {
-  return `${observation.surfaceType}:${observation.normalizedUrl ?? observation.url}`;
+  return `${observation.surfaceType}:${canonicalPolicyUrlIdentity(observation.normalizedUrl ?? observation.url)}`;
 }
 
 function policyObservationRank(observation: PolicySurfaceObservation): number {
@@ -315,6 +330,8 @@ interface PolicyDocumentFetchCaches {
 
 type PolicyFetchAttemptOutcome =
   | "fetched"
+  | "content_decoding_failed"
+  | "decompressed_body_too_large"
   | "http_error"
   | "network_error"
   | "timeout"
@@ -330,6 +347,10 @@ interface PolicyFetchAttemptDiagnostic {
   outcome: PolicyFetchAttemptOutcome;
   httpStatus?: number;
   contentType?: string;
+  contentEncoding?: string;
+  compressedSizeBytes?: number;
+  decompressedSizeBytes?: number;
+  decodingOutcome?: "identity" | "gzip" | "br" | "deflate" | "failed" | "too_large";
 }
 
 interface PolicyFetchDiagnostic {
@@ -346,6 +367,7 @@ interface PolicyFetchDiagnostic {
 interface PolicyFetchDiagnosticsCollector {
   homepageFetch?: PolicyFetchDiagnostic;
   failedFetches: PolicyFetchDiagnostic[];
+  successfulFetches: PolicyFetchDiagnostic[];
   protectedObservedFetchAttempts: number;
   renderedRecoveryAttempts: number;
   renderedRecoverySuccesses: number;
@@ -389,6 +411,7 @@ export async function policySurfaceScanner(
   };
   const policyFetchDiagnostics: PolicyFetchDiagnosticsCollector = {
     failedFetches: [],
+    successfulFetches: [],
     protectedObservedFetchAttempts: 0,
     renderedRecoveryAttempts: 0,
     renderedRecoverySuccesses: 0,
@@ -942,6 +965,133 @@ export async function policySurfaceScanner(
   }
 }
 
+export async function recoverPolicyDocumentsFromRetainedRenderedLinks(input: {
+  scannerInput: PolicySurfaceScannerInput;
+  links: RetainedRenderedPolicyLink[];
+  existingObservations: PolicySurfaceObservation[];
+  evidenceRef?: EvidenceRef;
+}): Promise<{
+  artifactRefs: ArtifactRef[];
+  observations: PolicySurfaceObservation[];
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
+}> {
+  const usablePrivacyDocumentRetained = input.existingObservations.some((observation) =>
+    observation.surfaceType === "privacy_policy" &&
+    observation.status === "fetched" &&
+    observation.documentEvaluationState !== "insufficient"
+  );
+  if (usablePrivacyDocumentRetained || input.links.length === 0) {
+    return { artifactRefs: [], observations: [], timingBreakdown: [] };
+  }
+
+  const moduleStartedAtMs = Date.now();
+  const timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
+  const diagnostics: PolicyFetchDiagnosticsCollector = {
+    failedFetches: [],
+    successfulFetches: [],
+    protectedObservedFetchAttempts: 0,
+    renderedRecoveryAttempts: 0,
+    renderedRecoverySuccesses: 0,
+    seenFailureKeys: new Set(),
+  };
+  const browserRuntime = createPolicyBrowserRuntime(input.scannerInput.browser);
+  const recoveryInput: PolicySurfaceScannerInput = {
+    ...input.scannerInput,
+    absoluteDeadlineAtMs: moduleStartedAtMs + 6_000,
+    internalBudgetMs: 6_000,
+  };
+  const fetchCaches: PolicyDocumentFetchCaches = {
+    browserRuntime,
+    diagnostics,
+    direct: new Map(),
+    rendered: new Map(),
+    runRenderedFetch: createConcurrencyLimiter(POLICY_RENDERED_FETCH_CONCURRENCY),
+  };
+  try {
+    const existingKeys = new Set(input.existingObservations
+      .filter((observation) => observation.status === "fetched")
+      .map(policySurfaceObservationKey));
+    const candidates = prioritizePolicyCandidateEvaluation(
+      policySurfaceCandidatesFromRetainedRenderedLinks(input.links, false)
+        .map((candidate) => ({
+          ...candidate,
+          normalizedUrl: canonicalPolicyUrlIdentity(candidate.normalizedUrl),
+        })),
+    )
+      .filter((candidate) =>
+        candidate.deterministicSurfaceType === "privacy_policy" ||
+        candidate.deterministicSurfaceType === "cookie_policy"
+      )
+      .filter((candidate) =>
+        !existingKeys.has(`${candidate.deterministicSurfaceType}:${canonicalPolicyUrlIdentity(candidate.normalizedUrl)}`)
+      )
+      .slice(0, 3);
+    if (candidates.length === 0) {
+      return { artifactRefs: [], observations: [], timingBreakdown };
+    }
+    const recovered = await fetchPolicyCandidateGroup({
+      input: recoveryInput,
+      fetchCaches,
+      timingBreakdown,
+      moduleStartedAtMs,
+      rankedCandidates: candidates,
+      labelPrefix: "rendered-link recovery",
+      policySurfaceTextArtifactBudget: {
+        remainingChars: MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS,
+      },
+    });
+    const observations = recovered.observations.map((observation) => ({
+      ...observation,
+      evidenceRefs: input.evidenceRef
+        ? uniqueEvidenceRefs([...(observation.evidenceRefs ?? []), input.evidenceRef])
+        : observation.evidenceRefs,
+    }));
+    const diagnosticsPath = await input.scannerInput.artifactWriter.writeJsonArtifact(
+      "PolicyRenderedLinkRecoveryDiagnostics.json",
+      {
+        artifactVersion: "policy_rendered_link_recovery_diagnostics.v1",
+        generatedAt: new Date().toISOString(),
+        candidateCount: candidates.length,
+        fetchedCount: observations.filter((observation) => observation.status === "fetched").length,
+        usableDocumentCount: observations.filter((observation) =>
+          observation.documentEvaluationState === "usable"
+        ).length,
+        protectedObservedFetchAttempts: diagnostics.protectedObservedFetchAttempts,
+        renderedRecoveryAttempts: diagnostics.renderedRecoveryAttempts,
+        renderedRecoverySuccesses: diagnostics.renderedRecoverySuccesses,
+        failedFetches: diagnostics.failedFetches,
+        successfulFetches: diagnostics.successfulFetches,
+        durationMs: Date.now() - moduleStartedAtMs,
+      },
+    );
+    return {
+      observations,
+      timingBreakdown,
+      artifactRefs: [
+        ...recovered.artifactRefs,
+        {
+          artifactId: "policy_rendered_link_recovery_diagnostics",
+          artifactType: "json",
+          path: diagnosticsPath,
+          createdAt: new Date().toISOString(),
+          sourceScanner: SOURCE_SCANNER,
+          scenario: SCENARIO,
+          sensitivity: "internal_only",
+          redactionStatus: "internal_only",
+          relatedEventIds: [],
+          label: "Rendered policy-link recovery diagnostics",
+        },
+      ],
+    };
+  } finally {
+    await boundedCleanup(Promise.allSettled([
+      ...fetchCaches.direct.values(),
+      ...fetchCaches.rendered.values(),
+    ]), 500);
+    await boundedCleanup(browserRuntime.close());
+  }
+}
+
 function privacyAliasesForCombinedPrivacyCookieSurfaces(
   observations: PolicySurfaceObservation[],
 ): PolicySurfaceObservation[] {
@@ -1039,6 +1189,7 @@ async function writePolicyCaptureDiagnostics(input: {
     },
     homepageFetch: input.policyFetchDiagnostics.homepageFetch,
     failedFetches: input.policyFetchDiagnostics.failedFetches,
+    successfulFetches: input.policyFetchDiagnostics.successfulFetches,
     candidateSummary: summarizePolicyCandidates(input.candidates ?? []),
     winningSurfaceUrls: coreSurfaces
       .map((observation) => observation.normalizedUrl ?? observation.url)
@@ -1094,7 +1245,13 @@ function recordPolicyFetchDiagnostic(
   if (input.stage === "homepage") {
     collector.homepageFetch = diagnostic;
   }
-  if (input.result.ok || collector.failedFetches.length >= MAX_POLICY_FETCH_DIAGNOSTICS) {
+  if (input.result.ok) {
+    if (input.stage !== "homepage" && collector.successfulFetches.length < MAX_POLICY_FETCH_DIAGNOSTICS) {
+      collector.successfulFetches.push(diagnostic);
+    }
+    return;
+  }
+  if (collector.failedFetches.length >= MAX_POLICY_FETCH_DIAGNOSTICS) {
     return;
   }
   const failureKey = JSON.stringify([
@@ -1112,12 +1269,7 @@ function recordPolicyFetchDiagnostic(
 
 function boundedDiagnosticUrl(value: string): string {
   try {
-    const parsed = new URL(value);
-    parsed.username = "";
-    parsed.password = "";
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString().slice(0, 500);
+    return canonicalPolicyUrlIdentity(value).slice(0, 500);
   } catch {
     return value.replace(/[?#].*$/, "").slice(0, 500);
   }
@@ -1242,7 +1394,7 @@ function policyEvaluationCandidateKey(candidate: PolicySurfaceCandidate): string
     return `${candidate.normalizedUrl}#${candidate.selector}`;
   }
   try {
-    const parsed = new URL(candidate.normalizedUrl);
+    const parsed = new URL(canonicalPolicyUrlIdentity(candidate.normalizedUrl));
     if (parsed.hash && classifyPrivacySurface({ url: parsed.toString() }).surfaceType === "unknown") {
       parsed.hash = "";
     }
@@ -3463,6 +3615,16 @@ function uniqueStrings(values: string[]): string[] {
   return values.filter((value, index) => values.indexOf(value) === index);
 }
 
+function uniqueEvidenceRefs(values: EvidenceRef[]): EvidenceRef[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = `${value.refId}:${value.artifactId ?? ""}:${value.path ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function highValueSecondaryCandidatesFromPolicyPage(
   baseUrl: string,
   html: string,
@@ -4820,9 +4982,31 @@ function fetchRenderedPolicyDocumentSingleFlight(
 }
 
 function policyDocumentFetchCacheKey(value: string): string {
+  return canonicalPolicyUrlIdentity(value);
+}
+
+const POLICY_TRACKING_QUERY_PARAM = /^(?:utm_.+|ref|ref_|referrer|source|campaign|campaignid|tag|linkcode|creative|creativeasin|ascsubtag|pf_rd_.+)$/i;
+const POLICY_SENSITIVE_QUERY_PARAM = /(?:token|secret|password|passwd|email|session|auth|signature|sig|key)$/i;
+
+export function canonicalPolicyUrlIdentity(value: string): string {
   try {
     const parsed = new URL(value);
+    parsed.username = "";
+    parsed.password = "";
     parsed.hash = "";
+    const retained = [...parsed.searchParams.entries()]
+      .filter(([name]) =>
+        !POLICY_TRACKING_QUERY_PARAM.test(name) &&
+        !POLICY_SENSITIVE_QUERY_PARAM.test(name)
+      )
+      .sort(([leftName, leftValue], [rightName, rightValue]) =>
+        leftName.localeCompare(rightName) || leftValue.localeCompare(rightValue)
+      );
+    parsed.search = "";
+    for (const [name, parameterValue] of retained) {
+      parsed.searchParams.append(name, parameterValue);
+    }
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
     return parsed.toString();
   } catch {
     return value.replace(/#.*$/, "");
@@ -4877,6 +5061,7 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
   try {
     const response = await requestBoundedPolicyResponse(url, controller.signal);
     const contentType = response.headers.get("content-type") ?? "";
+    const contentEncoding = response.headers.get("content-encoding") ?? "";
     const attemptBase = {
       mode: "direct" as const,
       requestedUrl: url,
@@ -4930,12 +5115,33 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
         text: await extractPdfPolicyText(body),
       };
     }
+    const decodedBody = decodeBoundedPolicyResponseBody(body, contentEncoding);
+    const decodingAttempt = {
+      ...(contentEncoding ? { contentEncoding: contentEncoding.slice(0, 40) } : {}),
+      compressedSizeBytes: body.byteLength,
+      decompressedSizeBytes: decodedBody.body?.byteLength,
+      decodingOutcome: decodedBody.outcome,
+    };
+    if (!decodedBody.ok) {
+      return {
+        attempts: [{
+          ...attemptBase,
+          ...decodingAttempt,
+          outcome: decodedBody.outcome === "too_large"
+            ? "decompressed_body_too_large"
+            : "content_decoding_failed",
+        }],
+        ok: false,
+        status: response.status,
+        text: "",
+      };
+    }
     return {
-      attempts: [{ ...attemptBase, outcome: "fetched" }],
+      attempts: [{ ...attemptBase, ...decodingAttempt, outcome: "fetched" }],
       documentFormat: "text",
       ok: true,
       status: response.status,
-      text: boundedFetchedText(decodeFetchedPolicyText(body, contentType), MAX_FETCHED_TEXT_CHARS),
+      text: boundedFetchedText(decodeFetchedPolicyText(decodedBody.body, contentType), MAX_FETCHED_TEXT_CHARS),
     };
   } catch (error) {
     const outcome: PolicyFetchAttemptOutcome =
@@ -4996,6 +5202,7 @@ export async function requestBoundedPolicyResponse(
     const request = (parsed.protocol === "https:" ? httpsRequest : httpRequest)({
       headers: {
         accept: "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,*/*;q=0.7",
+        "accept-encoding": "identity",
         "accept-language": "en-US,en;q=0.8,de;q=0.7,fr;q=0.7,es;q=0.7,it;q=0.7,nl;q=0.7,pl;q=0.7",
         host: parsed.host,
         "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
@@ -5267,6 +5474,88 @@ function decodeFetchedPolicyText(body: Uint8Array, contentType: string): string 
   return replacementCharacterRatio(windowsDecoded) < replacementCharacterRatio(decoded)
     ? windowsDecoded
     : decoded;
+}
+
+type PolicyResponseDecodingResult =
+  | {
+      body: Uint8Array;
+      ok: true;
+      outcome: "identity" | "gzip" | "br" | "deflate";
+    }
+  | {
+      body?: undefined;
+      ok: false;
+      outcome: "failed" | "too_large";
+    };
+
+export function decodeBoundedPolicyResponseBody(
+  body: Uint8Array,
+  contentEncodingHeader = "",
+): PolicyResponseDecodingResult {
+  const contentEncoding = contentEncodingHeader.split(",")[0]?.trim().toLowerCase() ?? "";
+  const magicEncoding = compressionEncodingFromMagic(body);
+  const declaredEncoding = (
+    contentEncoding === "gzip" || contentEncoding === "x-gzip"
+      ? "gzip"
+      : contentEncoding === "br"
+        ? "br"
+        : contentEncoding === "deflate"
+          ? "deflate"
+          : "identity"
+  );
+  const encoding = magicEncoding ?? (
+    declaredEncoding !== "identity" && looksLikePlainPolicyTextBytes(body)
+      ? "identity"
+      : declaredEncoding
+  );
+  if (encoding === "identity") {
+    return body.byteLength <= MAX_POLICY_DECOMPRESSED_BYTES
+      ? { body, ok: true, outcome: "identity" }
+      : { ok: false, outcome: "too_large" };
+  }
+  try {
+    const options = { maxOutputLength: MAX_POLICY_DECOMPRESSED_BYTES };
+    const decoded = encoding === "gzip"
+      ? gunzipSync(body, options)
+      : encoding === "br"
+        ? brotliDecompressSync(body, options)
+        : inflateSync(body, options);
+    if (decoded.byteLength > MAX_POLICY_DECOMPRESSED_BYTES) {
+      return { ok: false, outcome: "too_large" };
+    }
+    return { body: decoded, ok: true, outcome: encoding };
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error
+      ? String(error.code)
+      : "";
+    return /BUFFER_TOO_LARGE|OUT_OF_RANGE/i.test(code)
+      ? { ok: false, outcome: "too_large" }
+      : { ok: false, outcome: "failed" };
+  }
+}
+
+function compressionEncodingFromMagic(body: Uint8Array): "gzip" | "deflate" | null {
+  if (body[0] === 0x1f && body[1] === 0x8b) return "gzip";
+  if (
+    body.length >= 2 &&
+    body[0] === 0x78 &&
+    (((body[0] << 8) + (body[1] ?? 0)) % 31 === 0)
+  ) {
+    return "deflate";
+  }
+  return null;
+}
+
+function looksLikePlainPolicyTextBytes(body: Uint8Array): boolean {
+  const prefix = body.subarray(0, Math.min(body.byteLength, 512));
+  if (prefix.byteLength === 0) return true;
+  let printable = 0;
+  for (const value of prefix) {
+    if (value === 0x09 || value === 0x0a || value === 0x0d || (value >= 0x20 && value <= 0x7e)) {
+      printable += 1;
+    }
+  }
+  return printable / prefix.byteLength >= 0.92;
 }
 
 function charsetFromContentType(contentType: string): string | null {

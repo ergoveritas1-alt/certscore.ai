@@ -279,7 +279,7 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
   });
 
   assert.deepEqual(
-    items.slice(0, 22).map((item) => item.id),
+    items.slice(0, 21).map((item) => item.id),
     [
       "consent_surface_observed",
       "cmp_framework_signal_observed",
@@ -292,7 +292,6 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
       "advertising_retargeting_vendor_signal_observed",
       "retargeting_behavioral_advertising_signal_observed",
       "analytics_vendor_observed",
-      "third_party_service_connection_pre_consent",
       "third_party_iframe_pre_consent",
       "social_media_embed_pre_consent",
       "embedded_content_pre_consent",
@@ -3158,5 +3157,5 @@ test("deriveGdprEprivacyReviewSummary excludes invalid 404 and footer excerpts f
   });
 
   const summary = deriveGdprEprivacyReviewSummary(items);
-  assert.match(summary.coverageText, /^36 of 38 in-scope rows had usable automated evidence\./);
+  assert.match(summary.coverageText, /^35 of 37 in-scope rows had usable automated evidence\./);
 });

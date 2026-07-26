@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import { createServer } from "node:http";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { gzipSync } from "node:zlib";
 import type { Browser } from "playwright";
 import { classifyPrivacySurface } from "@certscore/contracts";
 import { createArtifactWriter } from "./artifact-writer.js";
@@ -20,6 +23,7 @@ import {
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
   policySurfaceObservationsFromRetainedRenderedLinks,
   retainedArticle13SectionEvidenceFromSections,
+  recoverPolicyDocumentsFromRetainedRenderedLinks,
   resolvePolicyVisibleText,
   shouldUseDirectPolicyDocumentText,
   stripConsentSurfacePreambleFromPolicyText,
@@ -60,6 +64,97 @@ test("policySurfaceScanner recognizes bounded GDPR notice links from EU/EEA cont
     isGdprNoticeSupplementLink("About us", "https://example.test/about", "Learn more about our team."),
     false,
   );
+});
+
+test("browser-recovered privacy links receive a bounded canonical document fetch", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-recovery-"));
+  try {
+    const homepageUrl = server.urlFor("generic-cdn-noise");
+    const privacyUrl = server.urlFor("policy-article13-long");
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const links = [{
+      domLocation: "footer" as const,
+      href: `${privacyUrl}?nodeId=privacy-main&ref_=footer_privacy`,
+      linkText: "Privacy Notice",
+      pageUrl: homepageUrl,
+    }];
+    const existingObservations = policySurfaceObservationsFromRetainedRenderedLinks({ links });
+    const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: homepageUrl,
+        normalizedUrl: homepageUrl,
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 6_000,
+        artifactWriter,
+        nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      },
+      links,
+      existingObservations,
+    });
+    const privacy = recovered.observations.find((observation) =>
+      observation.surfaceType === "privacy_policy"
+    );
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.documentEvaluationState, "usable");
+    assert.match(privacy?.normalizedUrl ?? "", /nodeId=privacy-main/);
+    assert.doesNotMatch(privacy?.normalizedUrl ?? "", /ref_=/);
+    assert.ok((privacy?.gdprTransparencyTopicCandidates.length ?? 0) > 0);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("policySurfaceScanner decodes compressed policy HTML before topic extraction", async () => {
+  const policyText = Array.from({ length: 20 }, () =>
+    "We process personal data for defined purposes under contract, consent, legal obligation, and legitimate interests. " +
+    "Recipients include service providers. We retain data for defined periods. You may exercise access, deletion, correction, portability, restriction, and objection rights. " +
+    "International transfers use standard contractual clauses. Contact the controller and data protection officer or complain to the supervisory authority."
+  ).join(" ");
+  const server = createServer((request, response) => {
+    if (request.url === "/privacy") {
+      const body = gzipSync(`<!doctype html><html><body><h1>Privacy Notice</h1><p>${policyText}</p></body></html>`);
+      response.writeHead(200, {
+        "content-encoding": "gzip",
+        "content-type": "text/html; charset=utf-8",
+      });
+      response.end(body);
+      return;
+    }
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end('<!doctype html><html><body><footer><a href="/privacy">Privacy Notice</a></footer></body></html>');
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-gzip-"));
+  try {
+    const url = `http://127.0.0.1:${address.port}/`;
+    const result = await policySurfaceScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 6_000,
+      artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "privacy_policy" && observation.status === "fetched"
+    );
+
+    assert.ok(privacy);
+    assert.doesNotMatch(privacy.textExcerpt ?? "", /\uFFFD/);
+    assert.ok(privacy.gdprTransparencyTopicCandidates.length > 0);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve())
+    );
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("substantive direct policy text avoids supplemental policy resolution", async () => {

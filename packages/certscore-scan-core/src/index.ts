@@ -52,6 +52,7 @@ import {
   mergePolicySurfaceObservations,
   policySurfaceObservationsFromRetainedRenderedLinks,
   policySurfaceScanner,
+  recoverPolicyDocumentsFromRetainedRenderedLinks,
   type PolicySurfaceScannerResult,
 } from "./scanners/policy-surface-scanner.js";
 import { chromiumContextOptions, chromiumLaunchOptions, chromiumProxyOptions } from "./playwright-runtime.js";
@@ -623,6 +624,38 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       policySurfaceResult.policySurfaceObservations,
       retainedRenderedPolicyObservations,
     );
+    const renderedDocumentRecovery = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: input.url,
+        normalizedUrl,
+        scanStartedAtMs: startedAtMs,
+        internalBudgetMs: 6_000,
+        artifactWriter,
+        browser: sharedBrowser,
+        nanoAssistProvider: nanoPolicyAssistProvider,
+        discoveryMode: "fast",
+        signal: input.signal,
+      },
+      links: preConsentResult.renderedPolicyLinks,
+      existingObservations: policySurfaceResult.policySurfaceObservations,
+      evidenceRef: renderedPolicyEvidenceRef,
+    });
+    if (renderedDocumentRecovery.observations.length > 0) {
+      policySurfaceResult.policySurfaceObservations = mergePolicySurfaceObservations(
+        policySurfaceResult.policySurfaceObservations,
+        renderedDocumentRecovery.observations,
+      );
+      policySurfaceResult.artifactRefs.push(...renderedDocumentRecovery.artifactRefs);
+      policySurfaceResult.moduleRun.timingBreakdown = [
+        ...(policySurfaceResult.moduleRun.timingBreakdown ?? []),
+        ...renderedDocumentRecovery.timingBreakdown,
+      ].slice(0, MAX_MODULE_TIMING_BREAKDOWN_ENTRIES);
+      policySurfaceResult.moduleRun.completedAt = new Date().toISOString();
+      policySurfaceResult.moduleRun.durationMs = Math.max(
+        policySurfaceResult.moduleRun.durationMs ?? 0,
+        Date.now() - Date.parse(policySurfaceResult.moduleRun.startedAt),
+      );
+    }
     if (recoveredPolicySurfaceCount > 0) {
       if (["failed", "not_testable", "skipped_budget"].includes(policySurfaceResult.moduleRun.status)) {
         policySurfaceResult.moduleRun.status = "partial";

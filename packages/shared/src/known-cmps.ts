@@ -59,6 +59,21 @@ export type KnownCmpDetectionInput = {
 export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
     aliases: [
+      "Amazon Privacy Preferences",
+      "Amazon Cookies and Advertising Choices",
+      "Cookies and Advertising Choices"
+    ],
+    canonicalName: "Amazon Privacy Preferences",
+    domains: [],
+    domSelectors: [],
+    evidenceTreatment: "cmp_infrastructure",
+    reopenControlHints: ["amazon privacy preferences", "cookies and advertising choices", "cookie notice"],
+    role: "consent management platform",
+    standards: [],
+    urlPatterns: [/\/(?:privacyprefs)\/(?:retail|customize)(?:\/|[?#]|$)/i]
+  },
+  {
+    aliases: [
       "Drupal EU Cookie Compliance",
       "EU Cookie Compliance",
       "Drupal Cookie Compliance",

@@ -806,7 +806,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps generic contact excerpts ou
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes detects common international transfer disclosure wording from retained policy text", () => {
+test("retained transfer text remains not confirmed without an approved row witness", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -823,14 +823,48 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects common international tran
     }
   });
 
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Observed");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
   assert.match(
-    retainedArticle13Signal(outcomes.international_transfers_disclosure!)!.evidenceText ?? "",
+    String(outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? ""),
     /third countries outside the EEA/i
   );
   assert.equal(
-    retainedArticle13Signal(outcomes.international_transfers_disclosure!)!.source,
-    "wc01_retained_policy_text_match"
+    outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
+    "not_confirmed_without_approved_evidence_witness"
+  );
+});
+
+test("international transfer disclosure uses retained section context when the short signal excerpt is truncated", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://www.amazon.de/gp/help/customer/display.html?nodeId=GX7NJQ4ZB8MHFRNJ"],
+        retainedPrivacyPolicyTextExcerpt: "Amazon Privacy Notice. " + "This notice explains how Amazon processes personal information and applies to the services described here. ".repeat(40),
+        policyTextExtractionHealth: {
+          policyTextExtractionStatus: "ok",
+          extractedTextLength: 3200
+        },
+        article13DisclosureSignals: [{
+          disclosureType: "international_transfers",
+          status: "observed",
+          confidence: 0.92,
+          source: "deterministic",
+          evidenceText: "EU-US and Swiss-US Data Privacy Framework. Amazon.com, Inc. and certain of its controlled US affiliates",
+          selectedPolicySectionHeading: "EU-US and Swiss-US Data Privacy Framework",
+          selectedPolicySectionExcerpt: "EU-US and Swiss-US Data Privacy Framework. Amazon.com, Inc. and certain of its controlled US affiliates participate in the EU-US Data Privacy Framework regarding collection, use, and retention of personal information from the EEA."
+        }]
+      }
+    },
+    snapshot: { privacy_policy_present: true }
+  });
+
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Observed", JSON.stringify(outcomes.international_transfers_disclosure, null, 2));
+  assert.match(
+    retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText ?? "",
+    /Data Privacy Framework/i
   );
 });
 
@@ -941,7 +975,7 @@ test("discarded Privacy Shield evidence projects a transfer review signal withou
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes confirms outside-region recipient disclosure with agreement safeguards", () => {
+test("outside-region recipient text remains not confirmed without an approved row witness", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -958,14 +992,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes confirms outside-region recipient
     }
   });
 
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Observed");
-  const signal = retainedArticle13Signal(outcomes.international_transfers_disclosure!);
-  assert.match(signal?.evidenceText ?? "", /Sometimes they may also be outside the EEA/i);
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
   assert.match(
-    signal?.supportingTransferSafeguardsContext ?? "",
-    /agreements with our service providers and business partners, to ensure that your personal information is protected, both within and outside the EEA/i
+    String(outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? ""),
+    /outside the EEA/i
   );
-  assert.equal(signal?.source, "wc01_retained_policy_text_match");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes does not confirm international transfers from geography-only consent law language", () => {
@@ -997,7 +1028,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not confirm international tr
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes confirms explicit international transfer disclosure examples", () => {
+test("explicit transfer text still requires an approved row witness", () => {
   const examples = [
     "We may transfer your personal data outside the EEA/UK.",
     "Where we transfer personal data internationally, we rely on Standard Contractual Clauses.",
@@ -1020,9 +1051,9 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes confirms explicit international t
       }
     });
 
-    assert.equal(outcomes.international_transfers_disclosure?.status, "Observed", excerpt);
+    assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed", excerpt);
     assert.match(
-      retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText ?? "",
+      String(outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? ""),
       /transfer|stored|processed|standard contractual clauses/i
     );
   }
@@ -1081,6 +1112,56 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps weak legal basis Article 13
     outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved,
     "not_confirmed_row_specific_extraction"
   );
+});
+
+test("retention-only legal-obligation evidence does not promote the legal-basis row", () => {
+  const retentionExcerpt =
+    "Additional Information About Data Retention. After you close your Amazon account, we will delete your personal information, except if we need it to comply with our legal obligations and defend our rights. We retain such information for as long as required by law.";
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [{
+          confidence: 0.82,
+          disclosureType: "legal_basis",
+          evidenceText: retentionExcerpt,
+          matchedTerm: "comply with our legal obligations",
+          productionCredit: false,
+          selectedEvidenceStrength: "limited",
+          selectedPolicySectionExcerpt: retentionExcerpt,
+          selectedPolicySectionHeading: "Additional Information About Data Retention",
+          source: "deterministic",
+          status: "diagnostic_only"
+        }],
+        policyTextCoverageMode: "section_targeted",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://www.amazon.de/gp/help/customer/display.html?nodeId=GX7NJQ4ZB8MHFRNJ"],
+        retainedArticle13SectionEvidence: [{
+          coverageArea: "legal_basis",
+          evidenceSource: "deterministic",
+          selectedEvidenceStrength: "limited",
+          selectedPolicySectionExcerpt: retentionExcerpt,
+          selectedPolicySectionHeading: "Additional Information About Data Retention",
+          signalObserved: "not_observed"
+        }],
+        retainedPolicySections: [{
+          heading: "Additional Information About Data Retention",
+          sourceUrl: "https://www.amazon.de/gp/help/customer/display.html?nodeId=GX7NJQ4ZB8MHFRNJ",
+          textExcerpt: retentionExcerpt
+        }],
+        retainedPrivacyPolicyTextExcerpt: `${retentionExcerpt} ${"Additional privacy notice context. ".repeat(100)}`
+      }
+    },
+    snapshot: { privacy_policy_present: true }
+  });
+
+  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
+  assert.notEqual(
+    outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved,
+    true
+  );
+  assert.equal(outcomes.retention_disclosure_observed?.status, "Observed");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes requires row-specific recipient/vendor category evidence", () => {
@@ -1251,7 +1332,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps financial-incentive text ou
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes observes explicit automated decision disclosure text", () => {
+test("explicit automated-decision text remains review-only without an approved row witness", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -1268,7 +1349,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes observes explicit automated decis
     }
   });
 
-  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Observed");
+  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Review signal");
   assert.match(
     retainedArticle13Signal(outcomes.automated_decision_making_profiling_disclosure!)?.evidenceText ?? "",
     /solely on automated processing/i
@@ -1292,7 +1373,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat deletion rights as
     }
   });
 
-  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Observed");
+  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Not confirmed");
   assert.notEqual(outcomes.retention_disclosure_observed?.status, "Observed");
 });
 
@@ -1709,7 +1790,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats thin policy extraction as 
   assert.match(outcomes.legal_basis_disclosure_observed?.limitation ?? "", /did not extract enough usable policy text/i);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes recognizes a dedicated privacy email in a thin reachable policy shell", () => {
+test("a dedicated privacy email in a thin policy shell remains not confirmed without a row witness", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -1728,13 +1809,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes recognizes a dedicated privacy em
     snapshot: { privacy_policy_present: true }
   });
 
-  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Observed");
-  assert.match(outcomes.dpo_contact_point_disclosure?.evidenceRefs.join(" ") ?? "", /privacy\.department@example\.test/i);
-  assert.equal(outcomes.dpo_contact_point_disclosure?.criticalEvidence.retainedEvidence.formalDpoDesignationConfirmed, false);
+  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Not confirmed");
   assert.equal(outcomes.controller_contact_disclosure?.status, "Not confirmed");
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes retains a Chief Privacy Officer as a privacy contact without claiming a GDPR DPO", () => {
+test("Chief Privacy Officer text remains not confirmed without a row witness", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -1750,13 +1829,10 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes retains a Chief Privacy Officer a
     snapshot: { privacy_policy_present: true }
   });
 
-  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Observed");
-  assert.match(outcomes.dpo_contact_point_disclosure?.evidenceRefs.join(" ") ?? "", /Chief Privacy Officer/i);
-  assert.equal(outcomes.dpo_contact_point_disclosure?.criticalEvidence.retainedEvidence.formalDpoDesignationConfirmed, false);
-  assert.match(outcomes.dpo_contact_point_disclosure?.limitation ?? "", /does not by itself establish.*formally designated DPO/i);
+  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Not confirmed");
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes evaluates a substantive privacy notice row by row", () => {
+test("substantive raw policy text does not bypass row-specific evidence witnesses", () => {
   const policyText = [
     "Example Registry is the data controller. Contact our privacy office at privacy@example.test.",
     "We collect and use personal information to provide services, secure accounts, answer requests, and improve our services.",
@@ -1779,14 +1855,17 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes evaluates a substantive privacy n
     snapshot: { privacy_policy_present: true }
   });
 
-  assert.equal(outcomes.controller_contact_disclosure?.status, "Observed");
-  assert.equal(outcomes.processing_purposes_disclosure?.status, "Observed");
-  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Observed");
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Observed");
-  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Observed");
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Observed");
-  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Observed");
-  assert.equal(outcomes.dpo_contact_point_disclosure?.criticalEvidence.retainedEvidence.formalDpoDesignationConfirmed, false);
+  for (const rowId of [
+    "controller_contact_disclosure",
+    "processing_purposes_disclosure",
+    "recipients_vendor_categories_disclosure",
+    "international_transfers_disclosure",
+    "data_subject_rights_disclosure",
+    "retention_disclosure_observed",
+    "dpo_contact_point_disclosure"
+  ] as const) {
+    assert.notEqual(outcomes[rowId]?.status, "Observed", rowId);
+  }
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes reports unsupported policy language explicitly", () => {
@@ -2171,7 +2250,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes rejects code/config excerpts as G
   assert.match(outcomes.data_subject_rights_disclosure?.limitation ?? "", /low-quality or non-policy content/i);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes credits Google-like mature policy disclosures without domain-specific rules", () => {
+test("mature policy text still requires row-specific evidence witnesses", () => {
   const policyText = [
     "Privacy Policy Privacy & Terms Overview Terms of Service Technologies FAQ Introduction Privacy & Terms Overview FAQ",
     "We use personal information to provide our services, maintain and improve them, develop new services, and personalize content, ads, and tailored search results.",
@@ -2198,18 +2277,18 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes credits Google-like mature policy
     }
   });
 
-  assert.equal(outcomes.processing_purposes_disclosure?.status, "Observed");
-  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Observed");
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Observed");
-  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Observed");
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Observed");
-  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Observed");
-  assert.equal(outcomes.supervisory_authority_complaint_disclosure?.status, "Observed");
+  assert.equal(outcomes.processing_purposes_disclosure?.status, "Not confirmed");
+  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
+  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
+  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Not confirmed");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
+  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Not confirmed");
+  assert.equal(outcomes.supervisory_authority_complaint_disclosure?.status, "Not confirmed");
   assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Review signal");
 
-  const controllerText = retainedArticle13Signal(outcomes.controller_contact_disclosure!)?.evidenceText ?? "";
-  const retentionText = retainedArticle13Signal(outcomes.retention_disclosure_observed!)?.evidenceText ?? "";
-  const transferText = retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText ?? "";
+  const controllerText = String(outcomes.controller_contact_disclosure?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? "");
+  const retentionText = String(outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? "");
+  const transferText = String(outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? "");
   const automatedText = retainedArticle13Signal(outcomes.automated_decision_making_profiling_disclosure!)?.evidenceText ?? "";
   assert.match(controllerText, /contact Google about privacy questions/i);
   assert.doesNotMatch(controllerText, /^Privacy Policy Privacy & Terms/i);
@@ -2316,7 +2395,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat a retention TOC he
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes prefers substantive policy excerpts over boilerplate", () => {
+test("candidate policy evidence prefers substantive excerpts over boilerplate", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -2335,8 +2414,10 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes prefers substantive policy excerp
     }
   });
 
-  const retentionText = retainedArticle13Signal(outcomes.retention_disclosure_observed!)?.evidenceText ?? "";
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Observed");
+  const retentionText = String(
+    outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? ""
+  );
+  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
   assert.match(retentionText, /Retaining your information/i);
   assert.doesNotMatch(retentionText, /^Privacy & Terms Privacy Policy Overview/i);
 });
@@ -4374,7 +4455,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
 
   assert.equal(embeddedOutcomes.embedded_content_pre_consent?.status, "Review signal");
   assert.match(embeddedOutcomes.embedded_content_pre_consent?.limitation ?? "", /potentially concerning runtime behavior/i);
-  assert.equal(embeddedOutcomes.third_party_service_connection_pre_consent?.status, "Gap observed");
   assert.equal(embeddedOutcomes.third_party_iframe_pre_consent?.status, "Gap observed");
   assert.deepEqual(
     embeddedOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.embeddedContentHosts,
@@ -4409,11 +4489,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
   });
 
   assert.equal(mixedPurposeEmbeddedOutcomes.embedded_content_pre_consent?.status, "Review signal");
-  assert.equal(mixedPurposeEmbeddedOutcomes.third_party_service_connection_pre_consent?.status, "Gap observed");
-  assert.deepEqual(
-    mixedPurposeEmbeddedOutcomes.third_party_service_connection_pre_consent?.criticalEvidence.retainedEvidence.embeddedContentHosts,
-    ["imasdk.googleapis.com"]
-  );
   assert.deepEqual(
     mixedPurposeEmbeddedOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.embeddedContentPurposeBuckets,
     {
@@ -4448,7 +4523,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
   });
 
   assert.equal(cmpLocatorOutcomes.embedded_content_pre_consent?.status, "Not observed");
-  assert.equal(cmpLocatorOutcomes.third_party_service_connection_pre_consent?.status, "Not observed");
   assert.equal(cmpLocatorOutcomes.third_party_iframe_pre_consent?.status, "Not observed");
   assert.equal(
     cmpLocatorOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.preConsentIframeCount,
@@ -4490,16 +4564,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
   });
 
   assert.equal(highConfidenceEmbeddedOutcomes.embedded_content_pre_consent?.status, "Review signal");
-  assert.equal(highConfidenceEmbeddedOutcomes.third_party_service_connection_pre_consent?.status, "Gap observed");
   assert.equal(highConfidenceEmbeddedOutcomes.third_party_iframe_pre_consent?.status, "Gap observed");
-  assert.deepEqual(
-    highConfidenceEmbeddedOutcomes.third_party_service_connection_pre_consent?.criticalEvidence.retainedEvidence.serviceConnectionExamples,
-    [
-      { host: "google.com", requestUrl: "https://www.google.com/maps/embed", firstSeenMs: 210, initiatorType: null },
-      { host: "facebook.com", requestUrl: "https://www.facebook.com/plugins/page.php", firstSeenMs: 230, initiatorType: null },
-      { host: "calendly.com", requestUrl: "https://calendly.com/example/demo", firstSeenMs: 250, initiatorType: null }
-    ]
-  );
   assert.deepEqual(
     highConfidenceEmbeddedOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.embeddedContentPurposeBuckets,
     {
@@ -4539,7 +4604,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
   });
 
   assert.equal(nonEligibleIframeOutcomes.embedded_content_pre_consent?.status, "Not observed");
-  assert.equal(nonEligibleIframeOutcomes.third_party_service_connection_pre_consent?.status, "Not observed");
   assert.equal(nonEligibleIframeOutcomes.third_party_iframe_pre_consent?.status, "Not observed");
   assert.equal(
     nonEligibleIframeOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.preConsentIframeCount,
@@ -4572,57 +4636,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
   });
 
   assert.equal(fontOnlyOutcomes.embedded_content_pre_consent?.status, "Not observed");
-  assert.equal(fontOnlyOutcomes.third_party_service_connection_pre_consent?.status, "Not observed");
   assert.equal(fontOnlyOutcomes.third_party_iframe_pre_consent?.status, "Not observed");
-});
-
-test("iFIT Salesforce embedded messaging requests support the third-party service connection row", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      hybridRuntimeEvidence: {
-        requestPurposeClassificationConfidence: [
-          {
-            category: "customer_support",
-            firstSeenMs: 8_982,
-            hostname: "iconfitness.my.site.com",
-            preConsent: true,
-            requestUrl: "https://iconfitness.my.site.com/embeddedservice/menu/assets/js/bootstrap.min.js",
-            runtimePhase: "pre_consent",
-            vendor: "Salesforce Embedded Service Chat"
-          },
-          {
-            category: "customer_support",
-            firstSeenMs: 9_041,
-            hostname: "iconfitness.my.salesforce-scrt.com",
-            preConsent: true,
-            requestUrl: "https://iconfitness.my.salesforce-scrt.com/embeddedservice/v1/embedded-service-config",
-            runtimePhase: "pre_consent",
-            vendor: "Salesforce Messaging for In-App and Web"
-          }
-        ]
-      }
-    }
-  });
-
-  assert.equal(outcomes.third_party_service_connection_pre_consent?.status, "Gap observed");
-  assert.deepEqual(
-    outcomes.third_party_service_connection_pre_consent?.criticalEvidence.retainedEvidence.serviceConnectionExamples,
-    [
-      {
-        firstSeenMs: 8_982,
-        host: "iconfitness.my.site.com",
-        initiatorType: null,
-        requestUrl: "https://iconfitness.my.site.com/embeddedservice/menu/assets/js/bootstrap.min.js"
-      },
-      {
-        firstSeenMs: 9_041,
-        host: "iconfitness.my.salesforce-scrt.com",
-        initiatorType: null,
-        requestUrl: "https://iconfitness.my.salesforce-scrt.com/embeddedservice/v1/embedded-service-config"
-      }
-    ]
-  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes classifies social and media embeds before consent from runtime evidence only", () => {
@@ -4734,7 +4748,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes classifies social and media embed
   });
   assert.equal(youtubeLibraryOutcomes.social_media_embed_pre_consent?.status, "Not observed");
   assert.equal(youtubeLibraryOutcomes.embedded_content_pre_consent?.status, "Not observed");
-  assert.equal(youtubeLibraryOutcomes.third_party_service_connection_pre_consent?.status, "Not observed");
 
   const youtubeOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -6817,6 +6830,80 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes retains certificate probe failure
     outcome?.criticalEvidence.retainedEvidence.tlsProbeErrorMessage,
     "Hostname/IP does not match certificate's altnames"
   );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes explains certificate-chain probe gaps explicitly", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      transportSecuritySummary: {
+        evidenceRetained: true,
+        evidenceRefs: ["ref_transport_security"],
+        pageHttpsObserved: true,
+        validTlsCertificate: false,
+        tlsProbeErrorCategory: "tls_or_certificate_failure",
+        tlsProbeErrorMessage: "unable to verify the first certificate",
+        httpRedirectsToHttps: true,
+        mixedContentObserved: false,
+        insecureFormTransportObserved: false,
+      }
+    }
+  });
+
+  const explanation = outcomes.transport_security_tls_certificate?.limitation ?? "";
+  assert.equal(outcomes.transport_security_tls_certificate?.status, "Gap observed");
+  assert.match(explanation, /valid certificate chain/i);
+  assert.match(explanation, /Probe response: UNABLE_TO_VERIFY_LEAF_SIGNATURE\./);
+  assert.match(explanation, /incomplete issuer chain or a scanner trust-store difference/i);
+  assert.match(explanation, /does not by itself confirm that the site certificate is invalid/i);
+  assert.match(explanation, /standard client/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes includes retained certificate expiry dates in the TLS finding", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      transportSecuritySummary: {
+        evidenceRetained: true,
+        evidenceRefs: ["ref_transport_security"],
+        pageHttpsObserved: true,
+        validTlsCertificate: false,
+        tlsProbeErrorCategory: "tls_or_certificate_failure",
+        tlsProbeErrorMessage: "unable to verify the first certificate",
+        tlsCertificateObservations: [
+          {
+            inputUrl: "https://caltech.edu/",
+            subject: "CN=caltech.edu, O=California Institute of Technology",
+            validTo: "Dec 27 23:59:59 2026 GMT"
+          },
+          {
+            inputUrl: "https://www.caltech.edu/",
+            subject: "CN=www.caltech.edu, O=California Institute of Technology",
+            validTo: "Dec 04 23:59:59 2026 GMT"
+          }
+        ],
+        httpRedirectsToHttps: true,
+        mixedContentObserved: false,
+        insecureFormTransportObserved: false,
+      }
+    }
+  });
+
+  const outcome = outcomes.transport_security_tls_certificate;
+  assert.match(outcome?.limitation ?? "", /caltech\.edu.*Dec 27, 2026/i);
+  assert.match(outcome?.limitation ?? "", /www\.caltech\.edu.*Dec 4, 2026/i);
+  assert.deepEqual(outcome?.criticalEvidence.retainedEvidence.tlsCertificateObservations, [
+    {
+      inputUrl: "https://caltech.edu/",
+      subject: "CN=caltech.edu, O=California Institute of Technology",
+      validTo: "Dec 27 23:59:59 2026 GMT"
+    },
+    {
+      inputUrl: "https://www.caltech.edu/",
+      subject: "CN=www.caltech.edu, O=California Institute of Technology",
+      validTo: "Dec 04 23:59:59 2026 GMT"
+    }
+  ]);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks transport-security rows not testable without typed evidence", () => {

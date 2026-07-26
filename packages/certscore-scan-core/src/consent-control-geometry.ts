@@ -531,7 +531,7 @@ function buildCmpEvidence(input: RawGeometryCapture): ConsentControlCmpEvidence 
     domSelectors: input.domSelectors,
     jsGlobals: input.globals,
     textSnippets: input.textSnippets,
-    urls: input.scripts,
+    urls: unique([...input.scripts, input.pageUrl]),
   });
   const detections = rawDetections.map((detection) => ({
     ...detection,

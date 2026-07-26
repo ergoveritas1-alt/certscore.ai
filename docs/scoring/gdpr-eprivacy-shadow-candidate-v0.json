@@ -34,7 +34,6 @@
     "social_media_embed_pre_consent": 1,
     "supervisory_authority_complaint_disclosure": 1,
     "third_party_iframe_pre_consent": 1,
-    "third_party_service_connection_pre_consent": 1,
     "transport_security_form_transport": 1,
     "transport_security_http_redirect": 1,
     "transport_security_https_delivery": 1,

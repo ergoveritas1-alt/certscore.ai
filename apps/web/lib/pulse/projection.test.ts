@@ -215,7 +215,6 @@ test("Pulse evidence JSON includes diagnostic metadata and projection warnings",
   assert.match(source, /canonicalResolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION/);
   assert.match(source, /projectionWarnings/);
   assert.match(source, /regulatory_gap_runtime_anchor_from_retained_checklist_evidence/);
-  assert.match(source, /third_party_service_connection_pre_consent/);
   assert.match(source, /social_media_embed_pre_consent/);
   assert.match(source, /session_replay_fingerprinting_review/);
   assert.match(source, /retainedEvidencePointer/);

@@ -34,7 +34,6 @@
     "social_media_embed_pre_consent": 1,
     "supervisory_authority_complaint_disclosure": 1,
     "third_party_iframe_pre_consent": 1,
-    "third_party_service_connection_pre_consent": 1,
     "transport_security_form_transport": 1,
     "transport_security_http_redirect": 1,
     "transport_security_https_delivery": 1,
@@ -66,6 +65,16 @@
     "contradiction": 35,
     "rights_gap": 30,
     "sensitive_data": 35
+  },
+  "findingRiskPointOverrides": {
+    "forced_consent_interaction": 20,
+    "fingerprinting_related_signals_observed": 18,
+    "policy_behavior_contradiction_detected": 32,
+    "pre_consent_tracking_detected": 32,
+    "probable_fingerprinting": 26,
+    "reject_tracking_persists_after_reject": 36,
+    "sensitive_data_collection_with_third_party_tracking_present": 36,
+    "third_party_tracking_pre_consent": 32
   },
   "minimumCoverageRatioForNoFindingPostureScore": 0.9,
   "minimumCoverageRatioForPostureScore": 0.7,

@@ -67,6 +67,28 @@ export function hasSubstantiveProcessingPurposesEvidence(value: string) {
   );
 }
 
+export function hasSubstantiveLegalBasisEvidence(value: string) {
+  const text = normalizeArticle13Whitespace(value);
+  const explicitBasisFraming =
+    /\b(?:legal bas(?:is|es)|lawful bas(?:is|es)|basis for processing|article\s*6|pursuant to article\s*6)\b/i.test(text);
+  if (explicitBasisFraming) {
+    return true;
+  }
+
+  const processingContext =
+    /\b(?:process|processing|use|using|collect|collecting|hold|holding)\b.{0,100}\b(?:personal data|personal information|your data|your information|data|information)\b/i.test(text) ||
+    /\b(?:personal data|personal information|your data|your information)\b.{0,100}\b(?:process|processing|processed|use|used|collect|collected|hold|held)\b/i.test(text);
+  if (!processingContext) {
+    return false;
+  }
+
+  const basisRelationship =
+    /\b(?:rely|relies|based|basis|necessary|needed|required)\b.{0,100}\b(?:consent|contract|legal obligation|legitimate interest|public task|public interest|vital interest)\b/i.test(text) ||
+    /\b(?:consent|performance of (?:a )?contract|contractual necessity|legal obligation|legitimate interests?|public task|public interest|vital interests?)\b.{0,100}\b(?:basis|process|processing|use|collect|hold|necessary|required)\b/i.test(text) ||
+    /\b(?:we|the controller)\s+(?:process|use|collect|hold)\b.{0,160}\b(?:with your consent|to (?:perform|fulfil|fulfill) (?:a|our) contract|to comply with (?:a|our) legal obligation|for our legitimate interests?|in the public interest|to protect vital interests?)\b/i.test(text);
+  return basisRelationship;
+}
+
 export function article13DisclosureRejectReason(
   value: string,
   disclosureType: Article13DisclosureType | string | undefined,
@@ -347,7 +369,7 @@ function hasScanCoreRowSpecificArticle13Terms(
     case "processing_purposes":
       return hasSubstantiveProcessingPurposesEvidence(text);
     case "legal_basis":
-      return /\b(?:legal basis|lawful basis|legitimate interests?|performance of (?:a )?contract|contractual necessity|legal obligation|public task|public interest|vital interests?|with your consent|consent to)\b/i.test(text);
+      return hasSubstantiveLegalBasisEvidence(text);
     case "recipients_or_vendor_categories":
       return /\b(?:recipients|service providers|processors|vendors?|partners|affiliates|third parties|third-party|advertising partners?|analytics providers?)\b/i.test(text);
     case "data_retention":
@@ -380,7 +402,7 @@ function hasRetainedReportRowSpecificArticle13Terms(
     case "processing_purposes":
       return hasSubstantiveProcessingPurposesEvidence(text);
     case "legal_basis":
-      return /\b(?:legal basis|lawful basis|legitimate interests?|performance of (?:a )?contract|contractual necessity|legal obligation|public task|public interest|vital interests?|with your consent|consent to)\b/i.test(text);
+      return hasSubstantiveLegalBasisEvidence(text);
     case "recipients_or_vendor_categories":
       return /\b(?:recipients|service providers|processors|vendors?|partners|affiliates|third parties|third-party|advertising partners?|analytics providers?)\b/i.test(text);
     case "data_retention":
@@ -408,6 +430,13 @@ function hasLocalizedArticle13EvidenceContext(
   const normalized = normalizeArticle13Whitespace(value);
   const canonicalMatch = classifyGdprTransparencyTopics({ text: normalized }).matches
     .find((match) => match.topic === disclosureType);
+  if (
+    canonicalMatch?.matchedLocale === "en" &&
+    disclosureType === "legal_basis" &&
+    !hasSubstantiveLegalBasisEvidence(normalized)
+  ) {
+    return false;
+  }
   if (canonicalMatch && disclosureType !== "dpo_contact") {
     return true;
   }

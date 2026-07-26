@@ -4,6 +4,7 @@ import {
   classifyConsentControlLabel,
   evaluateLegalFrameworkValidity,
   hasStaleLegalFrameworkReference,
+  hasSubstantiveLegalBasisEvidence,
   hasSubstantiveProcessingPurposesEvidence,
 } from "@certscore/contracts";
 import type { NormalizedConcern } from "./normalized-concerns";
@@ -266,6 +267,30 @@ function transportEvidenceMissingGap(rowId: string) {
     "missing",
     "Required to evaluate this transport-security checklist row from retained scanner evidence rather than URL display inference."
   );
+}
+
+function formatCertificateExpiry(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(parsed);
+}
+
+function certificateExpiryEvidence(summary: Record<string, unknown> | null | undefined) {
+  return getObjectArray(summary, ["tlsCertificateObservations", "tls_certificate_observations"])
+    .slice(0, 4)
+    .map((observation) => {
+      const url = getString(observation, ["inputUrl", "input_url"]);
+      const subject = getString(observation, ["subject"]);
+      const validTo = getString(observation, ["validTo", "valid_to"]);
+      if (!url || !validTo) return null;
+      return `${url} presented${subject ? ` ${subject}` : " a"} certificate expiring ${formatCertificateExpiry(validTo)}`;
+    })
+    .filter((value): value is string => Boolean(value));
 }
 
 function transportOutcomeFromBoolean(input: {
@@ -1375,6 +1400,8 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
     tlsProbeAttempted: getBoolean(summary, ["tlsProbeAttempted", "tls_probe_attempted"]),
     tlsProbeErrorCategory: getString(summary, ["tlsProbeErrorCategory", "tls_probe_error_category"]),
     tlsProbeErrorMessage: getString(summary, ["tlsProbeErrorMessage", "tls_probe_error_message"]),
+    tlsCertificateObservations: getObjectArray(summary, ["tlsCertificateObservations", "tls_certificate_observations"])
+      .slice(0, 4),
     validTlsCertificate: getBoolean(summary, ["validTlsCertificate", "valid_tls_certificate"]),
   });
 
@@ -1408,6 +1435,7 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
       const validTlsCertificate = getBoolean(summary, ["validTlsCertificate", "valid_tls_certificate"]);
       const tlsProbeErrorCategory = getString(summary, ["tlsProbeErrorCategory", "tls_probe_error_category"]);
       const tlsProbeErrorMessage = getString(summary, ["tlsProbeErrorMessage", "tls_probe_error_message"]);
+      const certificateExpiryDetails = certificateExpiryEvidence(summary);
       if (validTlsCertificate === false && tlsProbeErrorCategory && tlsProbeErrorCategory !== "tls_or_certificate_failure") {
         return makeOutcome(
           "transport_security_tls_certificate",
@@ -1417,12 +1445,24 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
           { retainedEvidence }
         );
       }
-      const tlsFailureDetail = tlsProbeErrorMessage
-        ? ` Probe response: ${tlsProbeErrorMessage}.`
+      const isCertificateChainFailure = Boolean(
+        tlsProbeErrorMessage && /unable to verify (?:the )?(?:first certificate|leaf signature)|unable to get local issuer certificate|certificate chain/i.test(tlsProbeErrorMessage),
+      );
+      const probeResponse = isCertificateChainFailure
+        ? "UNABLE_TO_VERIFY_LEAF_SIGNATURE"
+        : tlsProbeErrorMessage;
+      const tlsFailureDetail = probeResponse
+        ? ` Probe response: ${probeResponse}.`
+        : "";
+      const tlsChainReviewNote = isCertificateChainFailure
+        ? " This is a strict probe certificate-chain verification result; it may reflect an incomplete issuer chain or a scanner trust-store difference and does not by itself confirm that the site certificate is invalid. Compare the served certificate and chain with a standard client before treating this as a site defect."
+        : "";
+      const certificateDetails = certificateExpiryDetails.length > 0
+        ? ` Retained certificate evidence: ${certificateExpiryDetails.join("; ")}.`
         : "";
       return transportOutcomeFromBoolean({
         falseStatus: "Gap observed",
-        falseText: `The strict TLS probe did not verify a valid certificate for the HTTPS origin.${tlsFailureDetail}`,
+        falseText: `The strict TLS probe did not verify a valid certificate chain for the HTTPS origin.${tlsFailureDetail}${certificateDetails}${tlsChainReviewNote}`,
         nullText: "The strict TLS probe was not retained or did not complete.",
         retainedEvidence,
         rowId: "transport_security_tls_certificate",
@@ -3424,82 +3464,6 @@ function deriveThirdPartyIframePreConsentOutcome(input: GdprEprivacyCoveragePoli
             "row-specific 3rd party iframe inventory",
             "missing",
             "Required to determine whether known 3rd party iframes loaded before consent."
-          )
-        ],
-        retainedEvidence: {
-          runtimeCaptureCompleted: true
-        }
-      }
-    );
-  }
-
-  return null;
-}
-
-function deriveThirdPartyServiceConnectionPreConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
-  const evidence = getEmbeddedThirdPartyEvidence(input);
-  const observedCount = evidence.highConfidenceObservations.length;
-
-  if (observedCount > 0) {
-    const serviceConnectionExamples = evidence.highConfidenceObservations.slice(0, 8).map((row) => {
-      const requestUrl = getString(row, ["requestUrl", "request_url", "frameUrl", "frame_url", "url"]);
-      return {
-        host: getHostnameFromMaybeUrl(getString(row, ["hostname", "host", "domain"]) ?? requestUrl),
-        requestUrl: boundedRuntimeEvidenceUrl(requestUrl),
-        firstSeenMs: getNumber(row, ["firstSeenMs", "first_seen_ms", "observedAtMs", "observed_at_ms", "timestampMs", "timestamp_ms", "tsMs", "ts_ms"]),
-        initiatorType: getString(row, ["initiatorType", "initiator_type", "resourceType", "resource_type"]),
-      };
-    });
-    return makeOutcome(
-      "third_party_service_connection_pre_consent",
-      "Gap observed",
-      "Known embedded 3rd party service connections were retained before a recorded consent action on the scanned page.",
-      [
-        `3rd party service observations: ${observedCount}`,
-        ...evidence.highConfidenceServiceHosts.map((host) => `Service host: ${host}`).slice(0, 5),
-        "Evidence: retained pre-consent embedded-service requests/iframes"
-      ],
-      {
-        retainedEvidence: {
-          embeddedContentHosts: compactArray(evidence.highConfidenceServiceHosts, 8),
-          embeddedContentObservedMs: compactArray(evidence.observedMs, 6),
-          embeddedContentPurposeBuckets: evidence.purposeBuckets,
-          firstEmbeddedContentObservedMs: evidence.observedMs[0] ?? null,
-          serviceConnectionObservationCount: observedCount,
-          serviceConnectionExamples
-        }
-      }
-    );
-  }
-
-  if (hasEmbeddedContentRuntimeCoverage(input)) {
-    return makeOutcome(
-      "third_party_service_connection_pre_consent",
-      "Not observed",
-      "Retained iframe/request inventory did not show known embedded 3rd party service connections before a recorded consent action.",
-      ["Evidence: retained pre-consent embedded-service inventory"],
-      {
-        retainedEvidence: {
-          embeddedContentObservationCount: 0,
-          runtimeCaptureCompleted: hasRuntimeCapture(input)
-        }
-      }
-    );
-  }
-
-  if (hasRuntimeCapture(input)) {
-    return makeOutcome(
-      "third_party_service_connection_pre_consent",
-      "Not testable",
-      "Runtime capture completed, but row-specific embedded-service request/iframe inventory was not retained.",
-      ["Evidence gap: embedded-service inventory not retained"],
-      {
-        missingOrIncompleteSourceSignals: [
-          sourceGap(
-            "runtimeArtifacts.embeddedContentSummary",
-            "row-specific embedded-service request/iframe inventory",
-            "missing",
-            "Required to determine whether known 3rd party services connected before consent."
           )
         ],
         retainedEvidence: {
@@ -5517,9 +5481,6 @@ const RECIPIENT_DISCLOSURE_VERBS =
 const CONTROLLER_CONTACT_DISCLOSURE_PATTERN =
   /data controller|\bcontroller\b|privacy (?:contact|office|team|questions|rights)|data protection(?: office| officer)?|contact (?:our )?(?:privacy|data protection)|contact (?:google|us).{0,80}(?:privacy|data protection)|privacy@/i;
 
-const DEDICATED_PRIVACY_CONTACT_PATTERN =
-  /(?:privacy (?:questions?|requests?|inquiries|enquiries)|contact (?:our )?(?:privacy|data protection)|(?:chief )?privacy (?:officer|office|team|contact)|data protection (?:office|contact|officer)).{0,180}(?:[a-z0-9._%+-]*privacy[a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}|mailto:)|\b[a-z0-9._%+-]*privacy[a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}\b/i;
-
 const PROCESSING_PURPOSES_DISCLOSURE_PATTERN =
   /purposes? of (?:the )?(?:processing|collection|use)|why we (?:use|process|collect)|\b(?:we|[a-z][a-z0-9&.'’-]*(?:\s+[a-z][a-z0-9&.'’-]*){0,5})\s+(?:(?:use|uses|process|processes|collect|collects)\s+(?:and\s+use\s+)?|describes?\s+processing\s+)(?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|personalize (?:content|ads|advertising|services|experience)|tailored search results|measure (?:performance|advertising)|perform analytics/i;
 
@@ -5542,7 +5503,7 @@ const DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN =
   /your rights|data subject rights|right to (?:access|delete|erase|erasure|rectif|object|restrict|port)|rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port)|access.{0,80}(?:your )?(?:personal )?(?:data|information)|delete your information|delete.{0,80}(?:your )?(?:personal )?(?:data|information)|erasure|correct (?:your )?(?:personal )?(?:data|information)|rectif|portability|object to|restrict (?:the )?processing|export.{0,80}(?:your )?(?:data|information)|review and update|my activity|google takeout|request to remove content|privacy controls|download a copy/i;
 
 const INTERNATIONAL_TRANSFERS_DISCLOSURE_PATTERN =
-  /data transfers?|international transfer|cross-border transfer|transfer.{0,120}(?:personal data|personal information|information|data).{0,160}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies))|(?:personal data|personal information|information|data).{0,120}(?:transfer|transferred|stored|processed|accessed|shared|protected).{0,180}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|usa|eea|european economic area|uk|united kingdom)|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,240}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries)|agreements?.{0,240}(?:personal data|personal information|information|data).{0,240}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|(?:stored|processed|accessed|shared).{0,120}(?:in|from).{0,80}(?:united states|usa|other countries|countries outside|third countries|foreign countries)|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|standard contractual|contractual clauses|sccs?|adequacy|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|transfer mechanisms?|data transfer framework|dpf|privacy shield/i;
+  /data transfers?|international transfer|cross-border transfer|transfer.{0,120}(?:personal data|personal information|information|data).{0,160}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies))|(?:personal data|personal information|information|data).{0,120}(?:transfer|transferred|stored|processed|accessed|shared|protected).{0,180}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|usa|eea|european economic area|uk|united kingdom)|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,240}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries)|agreements?.{0,240}(?:personal data|personal information|information|data).{0,240}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|(?:stored|processed|accessed|shared).{0,120}(?:in|from).{0,80}(?:united states|usa|other countries|countries outside|third countries|foreign countries)|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|standard contractual|contractual clauses|sccs?|adequacy|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|transfer mechanisms?|data transfer framework|data privacy framework|dpf|privacy shield/i;
 
 const SUPERVISORY_AUTHORITY_DISCLOSURE_PATTERN =
   /supervisory authority|data protection authority|local data protection authorit(?:y|ies)|lodge a complaint|formal written complaints?|resolve any complaints?|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority|regulatory authorities|regulators?|ico|cnil|dpc/i;
@@ -6606,6 +6567,9 @@ function isPolicyDisclosureEvidenceUsable(value: string, disclosureType: string 
   if (disclosureType === "processing_purposes") {
     return hasSubstantiveProcessingPurposesEvidence(text);
   }
+  if (disclosureType === "legal_basis") {
+    return hasSubstantiveLegalBasisEvidence(text);
+  }
   return true;
 }
 
@@ -6736,7 +6700,7 @@ function hasSubstantiveInternationalTransferDisclosure(value: string) {
   return /\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted)\b.{0,180}\b(?:personal data|personal information|information|data)\b.{0,220}\b(?:outside|international|across countries|other countries|third countries|foreign countries|united states|usa|eea|european economic area|uk|united kingdom)\b/i.test(body) ||
     /\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted)\b.{0,220}\b(?:outside|international|across countries|other countries|third countries|foreign countries|united states|usa|eea|european economic area|uk|united kingdom)\b/i.test(body) ||
     /\b(?:stored|processed|accessed|shared|hosted)\b.{0,120}\b(?:in|from)\b.{0,120}\b(?:united states|usa|other countries|countries outside|third countries|foreign countries)\b/i.test(body) ||
-    /\b(?:standard contractual clauses?|sccs?|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|data transfer framework|dpf|privacy shield|transfer mechanisms?|legal frameworks relating to the transfer of data)\b/i.test(body);
+    /\b(?:standard contractual clauses?|sccs?|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|data transfer framework|data privacy framework|dpf|privacy shield|transfer mechanisms?|legal frameworks relating to the transfer of data)\b/i.test(body);
 }
 
 function looksLikeCodeOrConfigText(value: string) {
@@ -7059,7 +7023,11 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
     : getValidatedRowSpecificPolicyEvidence(summary, config.disclosureType);
   const article13SignalStatus = getString(article13Signal, ["status"]);
   const requiresRowSpecificEvidence = policyDisclosureRequiresRowEvidence(config.rowId);
-  const article13SignalEvidenceText = getString(article13Signal, ["evidenceText", "evidence_text"]) ?? "";
+  const article13SignalEvidenceText = uniqueStrings([
+    getString(article13Signal, ["evidenceText", "evidence_text"]),
+    getString(article13Signal, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]),
+    getString(article13Signal, ["selectedPolicySectionHeading", "selected_policy_section_heading"]),
+  ].filter((value): value is string => Boolean(value))).join(" ");
   const automatedArticle13SignalEvidenceMatches =
     config.rowId === "automated_decision_making_profiling_disclosure"
       ? Boolean(policyTextMatchEvidence(article13SignalEvidenceText, ARTICLE_22_AUTOMATED_DECISION_DISCLOSURE_PATTERN, config.disclosureType))
@@ -7069,7 +7037,12 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
     (
       config.rowId === "automated_decision_making_profiling_disclosure"
         ? automatedArticle13SignalEvidenceMatches
-        : Boolean(policyTextMatchEvidence(article13SignalEvidenceText, config.textPattern, config.disclosureType))
+        : Boolean(policyTextMatchEvidence(article13SignalEvidenceText, config.textPattern, config.disclosureType)) ||
+          (
+            Boolean(article13SignalEvidenceText) &&
+            config.textPattern.test(article13SignalEvidenceText) &&
+            isPolicyDisclosureEvidenceUsable(article13SignalEvidenceText, config.disclosureType)
+          )
     );
   const article13SignalObserved = extractionOk && article13SignalStatus === "observed" && article13SignalEvidenceMatches;
   const article13SignalPartial =
@@ -7092,15 +7065,11 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   const observed =
     config.rowId === "automated_decision_making_profiling_disclosure"
       ? (
-          (directSignal === true && (Boolean(automatedArticle22TextMatchEvidence) || article13SignalObserved)) ||
-          article13SignalObserved ||
-          Boolean(automatedArticle22TextMatchEvidence)
+          article13SignalObserved
         )
       : (
-          (directSignal === true && (!requiresRowSpecificEvidence || Boolean(textMatchEvidence) || article13SignalObserved)) ||
           Boolean(rowSpecificSectionEvidence) ||
-          article13SignalObserved ||
-          Boolean(textMatchEvidence)
+          article13SignalObserved
         );
 
   if (observed || (config.rowId === "privacy_notice_availability" && privacyPolicyPresent)) {
@@ -7418,29 +7387,43 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
     );
   }
 
-  if (config.rowId === "dpo_contact_point_disclosure") {
-    const dedicatedPrivacyContact = policyTextMatchEvidence(text, DEDICATED_PRIVACY_CONTACT_PATTERN, "dpo_contact");
-    if (dedicatedPrivacyContact) {
-      return makeOutcome(
-        config.rowId,
-        "Observed",
-        "A dedicated privacy contact point was retained. This confirms a privacy-contact path but does not by itself establish that the contact is a formally designated DPO.",
-        [
-          "Evidence: dedicated privacy contact point",
-          `Excerpt: ${dedicatedPrivacyContact}`,
-          ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
+  const unapprovedCandidateEvidence =
+    config.rowId === "automated_decision_making_profiling_disclosure"
+      ? automatedArticle22TextMatchEvidence
+      : textMatchEvidence;
+  if (unapprovedCandidateEvidence) {
+    return makeOutcome(
+      config.rowId,
+      "Not confirmed",
+      `${config.label} candidate language was retained, but no production-approved row-specific evidence witness confirmed this disclosure.`,
+      [
+        `Evidence: candidate ${config.label}`,
+        `Excerpt: ${unapprovedCandidateEvidence}`,
+        ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"])
+          .map((url) => `Policy URL: ${url}`)
+          .slice(0, 2)
+      ],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "CertScore.policyDisclosureExtraction.approvedEvidenceWitness",
+            `production-approved row-specific ${config.label.toLowerCase()} evidence`,
+            "candidate text match only",
+            "Required before projecting this transparency row as Observed.",
+            "CertScore.ai"
+          )
         ],
-        {
-          retainedEvidence: {
-            policyTextExtractionHealth: extractionHealth,
-            policySurfaceSummary: summary,
-            privacyContactEvidence: dedicatedPrivacyContact,
-            signalObserved: true,
-            formalDpoDesignationConfirmed: false
-          }
+        retainedEvidence: {
+          article13Signal,
+          candidatePolicyExcerpt: unapprovedCandidateEvidence,
+          policyTextExtractionHealth: extractionHealth,
+          policySurfaceSummary: summary,
+          selectedEvidenceStrength: "limited",
+          signalObserved: "not_confirmed_without_approved_evidence_witness",
+          supportSource: "retained_policy_text_candidate"
         }
-      );
-    }
+      }
+    );
   }
 
   if (policySurfaceIsThinOrErrored(summary)) {
@@ -9474,7 +9457,6 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveSensitiveSurfaceOutcome(input),
     deriveSessionReplayFingerprintingOutcome(input),
     deriveDeviceFingerprintingSignalOutcome(input),
-    deriveThirdPartyServiceConnectionPreConsentOutcome(input),
     deriveThirdPartyIframePreConsentOutcome(input),
     deriveSocialMediaEmbedPreConsentOutcome(input),
     deriveEmbeddedThirdPartyContentPreConsentOutcome(input),

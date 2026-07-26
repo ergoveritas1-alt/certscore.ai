@@ -46,7 +46,6 @@ export const GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_REGISTRY = [
   { required: true, rowId: "social_media_embed_pre_consent" },
   { required: true, rowId: "supervisory_authority_complaint_disclosure" },
   { required: true, rowId: "third_party_iframe_pre_consent" },
-  { required: true, rowId: "third_party_service_connection_pre_consent" },
   { required: true, rowId: "transport_security_form_transport" },
   { required: true, rowId: "transport_security_http_redirect" },
   { required: true, rowId: "transport_security_https_delivery" },

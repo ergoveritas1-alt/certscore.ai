@@ -627,6 +627,10 @@ function normalizePolicyPageType(surfaceType: string) {
 type LocalV2PolicySurface = NonNullable<CanonicalEvidenceBundle["policySurfaceObservations"]>[number];
 const MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13 = 2_500;
 
+function isCookiePreferenceSurfaceUrl(value: string | null | undefined) {
+  return Boolean(value && /\/(?:privacy|cookie)[-_]?(?:prefs?|preferences?|settings?)(?:\/|$)/i.test(value));
+}
+
 function canonicalPolicySurfaceUrl(surface: LocalV2PolicySurface, fallbackBaseUrl: string | null) {
   const rawUrl = firstString(surface.normalizedUrl, surface.url);
   if (!rawUrl) {
@@ -641,6 +645,7 @@ function canonicalPolicySurfaceUrl(surface: LocalV2PolicySurface, fallbackBaseUr
     parsed.hash = semanticFragment;
     parsed.hostname = parsed.hostname.replace(/^www\./i, "").toLowerCase();
     parsed.pathname = parsed.pathname.replace(/\/+$/g, "") || "/";
+    parsed.pathname = parsed.pathname.replace(/^\/-\/[a-z]{2}(?:-[a-z]{2})?\//i, "/");
     if (semanticFragment && /^\/[a-z]{2}(?:-[a-z]{2})?\/policy$/i.test(parsed.pathname)) {
       parsed.pathname = "/policy";
     }
@@ -729,7 +734,7 @@ function policySurfaceEvidenceWeight(surface: LocalV2PolicySurface, pageUrl: str
 }
 
 export function dedupePolicySurfaces(surfaces: readonly LocalV2PolicySurface[], fallbackBaseUrl: string | null) {
-  const retained = new Map<string, { pageUrl: string | null; surface: LocalV2PolicySurface }>();
+  const retained = new Map<string, { pageUrl: string | null; surface: LocalV2PolicySurface; aliasUrls?: string[] }>();
 
   for (const surface of surfaces) {
     if (!isReportablePolicySurface(surface)) {
@@ -737,10 +742,28 @@ export function dedupePolicySurfaces(surfaces: readonly LocalV2PolicySurface[], 
     }
 
     const pageUrl = canonicalPolicySurfaceUrl(surface, fallbackBaseUrl);
-    const key = policySurfaceDeduplicationKey(surface, fallbackBaseUrl);
+    const rawPageUrl = firstString(surface.normalizedUrl, surface.url);
+    let sourcePageUrl = pageUrl;
+    if (rawPageUrl) {
+      try {
+        sourcePageUrl = (fallbackBaseUrl ? new URL(rawPageUrl, fallbackBaseUrl) : new URL(rawPageUrl)).toString();
+      } catch {
+        sourcePageUrl = rawPageUrl;
+      }
+    }
+    const projectedSurface = isCookiePreferenceSurfaceUrl(pageUrl) && surface.surfaceType === "cookie_policy"
+      ? { ...surface, surfaceType: "cookie_settings" as const }
+      : surface;
+    const key = policySurfaceDeduplicationKey(projectedSurface, fallbackBaseUrl);
     const existing = retained.get(key);
-    if (!existing || policySurfaceEvidenceWeight(surface, pageUrl) > policySurfaceEvidenceWeight(existing.surface, existing.pageUrl)) {
-      retained.set(key, { pageUrl, surface });
+    const aliasUrls = uniqueStrings([
+      ...(existing?.aliasUrls ?? []),
+      sourcePageUrl,
+    ]);
+    if (!existing || policySurfaceEvidenceWeight(projectedSurface, pageUrl) > policySurfaceEvidenceWeight(existing.surface, existing.pageUrl)) {
+      retained.set(key, { pageUrl, surface: projectedSurface, aliasUrls });
+    } else {
+      retained.set(key, { ...existing, aliasUrls });
     }
   }
 
@@ -2827,6 +2850,7 @@ function summarizeTransportSecurity(bundle: CanonicalEvidenceBundle) {
       observedCount: 0,
       pageHttpsObserved: null,
       sampledPageUrls: [],
+      tlsCertificateObservations: [],
       validTlsCertificate: null,
       httpRedirectsToHttps: null,
     };
@@ -2888,6 +2912,7 @@ function summarizeTransportSecurity(bundle: CanonicalEvidenceBundle) {
     tlsProbeAttempted: observation.tlsProbe?.attempted === true,
     tlsProbeErrorCategory: observation.tlsProbe?.errorCategory,
     tlsProbeErrorMessage: observation.tlsProbe?.errorMessage,
+    tlsCertificateObservations: (observation.tlsCertificateObservations ?? []).slice(0, 4),
     validTlsCertificate: observation.summary?.validTlsCertificate ?? null,
   };
 }
@@ -4186,10 +4211,11 @@ function buildMaterializedLocalV2Detail(
     key_page_discovery_summary: {
       pageSummaries: [privacySurface, termsSurface, cookieSurface]
         .filter((row): row is NonNullable<typeof row> => Boolean(row))
-        .map(({ pageUrl, surface }) => ({
+        .map(({ pageUrl, surface, aliasUrls }) => ({
           bestCandidateUrl: pageUrl ?? surface.normalizedUrl ?? surface.url,
           pageType: surface.surfaceType,
           successfulUrl: pageUrl ?? surface.normalizedUrl ?? surface.url,
+          aliasUrls,
           surfaceDetected: true,
           surfaceState: "linked_and_verified"
         }))
@@ -4324,12 +4350,14 @@ function buildMaterializedLocalV2Detail(
     ...(cookieSurface ? { cookie_policy_present: true } : {}),
     ...(termsSurface ? { terms_of_service_present: true } : {})
   };
-  const policyEnrichmentRows = verifiedPolicySurfaces.map(({ pageUrl, surface }) => ({
+  const policyEnrichmentRows = verifiedPolicySurfaces.map(({ pageUrl, surface, aliasUrls }) => ({
     id: `local-v2-${surface.observationId}`,
     pageType: normalizePolicyPageType(surface.surfaceType),
     pageUrl: pageUrl ?? surface.normalizedUrl ?? surface.url,
     page_type: normalizePolicyPageType(surface.surfaceType),
     page_url: pageUrl ?? surface.normalizedUrl ?? surface.url,
+    policyAliasUrls: aliasUrls,
+    policy_alias_urls: aliasUrls,
     lastUpdatedText: surface.lastUpdatedText ?? null,
     policy_last_updated_text: surface.lastUpdatedText ?? null,
     policyActionableFlags: surface.mentionedControls ?? [],

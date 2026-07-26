@@ -33,6 +33,19 @@ test("registry includes first-wave CMP vendors", () => {
     assert.ok(names.includes(name), `${name} should be in the known CMP registry`);
   }
   assert.ok(names.includes("Drupal EU Cookie Compliance module, non-TCF"));
+  assert.ok(names.includes("Amazon Privacy Preferences"));
+});
+
+test("detects Amazon Privacy Preferences from first-party consent evidence", () => {
+  const [detection] = detectKnownCmps({
+    urls: ["https://www.amazon.de/privacyprefs/retail/v3/banner?pagePath=%2F"],
+    textSnippets: ["Cookies and Advertising Choices"],
+  });
+
+  assert.equal(detection?.canonicalName, "Amazon Privacy Preferences");
+  assert.equal(detection?.confidence, 0.95);
+  assert.ok(detection?.matchedSignals.some((signal) => signal.source === "script"));
+  assert.ok(detection?.matchedSignals.some((signal) => signal.source === "alias" || signal.source === "text"));
 });
 
 test("detects Drupal EU Cookie Compliance from first-party runtime markers", () => {

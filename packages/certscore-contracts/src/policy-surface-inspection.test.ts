@@ -21,6 +21,8 @@ test("policy inspection distinguishes a completed negative search from limited c
   });
   assert.equal(completed.outcome, "no_privacy_policy_observed_complete_coverage");
   assert.equal(completed.coverageStatus, "complete");
+  assert.equal(completed.linkDiscoveryCoverageStatus, "complete");
+  assert.equal(completed.documentRetrievalCoverageStatus, "insufficient");
   assert.equal(completed.inspectionCompleted, true);
   assert.deepEqual(completed.limitationKeys, []);
 
@@ -30,6 +32,8 @@ test("policy inspection distinguishes a completed negative search from limited c
   });
   assert.equal(failed.outcome, "indeterminate_limited_coverage");
   assert.equal(failed.coverageStatus, "limited");
+  assert.equal(failed.linkDiscoveryCoverageStatus, "limited");
+  assert.equal(failed.documentRetrievalCoverageStatus, "limited");
   assert.equal(failed.inspectionCompleted, false);
   assert.deepEqual(failed.limitationKeys, ["policy_surface_inspection_runtime_failed"]);
 });
@@ -69,7 +73,54 @@ test("retained privacy-policy evidence remains complete when later policy work i
 
   assert.equal(outcome.outcome, "privacy_policy_observed");
   assert.equal(outcome.coverageStatus, "complete");
+  assert.equal(outcome.linkDiscoveryCoverageStatus, "complete");
+  assert.equal(outcome.documentRetrievalCoverageStatus, "usable");
   assert.equal(outcome.inspectionCompleted, false);
   assert.equal(outcome.privacyPolicyObserved, true);
   assert.deepEqual(outcome.observedSurfaceTypes, ["privacy_policy"]);
+});
+
+test("an observed policy link does not claim usable document coverage", () => {
+  const outcome = derivePolicySurfaceInspectionOutcome({
+    modulesRun: [moduleRun("completed")],
+    policySurfaceObservations: [{
+      observationId: "privacy-link-only",
+      sourceScanner: "policy_surface",
+      scenario: "policy_surface_review",
+      consentStateAtTime: "not_applicable",
+      url: "https://example.test/privacy",
+      normalizedUrl: "https://example.test/privacy",
+      surfaceType: "privacy_policy",
+      discoveryMethod: "footer_link",
+      status: "observed",
+      linkObservationState: "observed",
+      documentFetchState: "not_attempted",
+      documentEvaluationState: "not_attempted",
+      evidenceRefs: [],
+      artifactRefs: [],
+      boundedTextExcerptIds: [],
+      observedTopics: [],
+      article13DisclosureSignals: [],
+      discardedArticle13DisclosureSignals: [],
+      gdprTransparencyTopicCandidates: [],
+      retainedPolicySections: [],
+      policyCookieDisclosures: [],
+      retainedArticle13SectionEvidence: [],
+      mentionedVendors: [],
+      mentionedPurposes: [],
+      mentionedRights: [],
+      mentionedControls: [],
+      assistMetadata: [],
+      confidence: 0.9,
+      directVsInferred: "direct",
+    }],
+  });
+
+  assert.equal(outcome.outcome, "privacy_policy_observed");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.equal(outcome.linkDiscoveryCoverageStatus, "complete");
+  assert.equal(outcome.documentRetrievalCoverageStatus, "insufficient");
+  assert.deepEqual(outcome.limitationKeys, [
+    "privacy_policy_link_observed_document_not_retained",
+  ]);
 });

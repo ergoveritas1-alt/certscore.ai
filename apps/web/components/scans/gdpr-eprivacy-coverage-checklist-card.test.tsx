@@ -997,6 +997,38 @@ test("GdprEprivacyCoverageChecklistCard shows captured policy review button for 
   assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Pre-consent 3rd party tracking"/);
 });
 
+test("observed transparency witnesses remain reviewable without a duplicated policy summary", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "checked",
+          criticalEvidence: {
+            retainedEvidence: {
+              article13Signal: {
+                disclosureType: "legal_basis",
+                evidenceText:
+                  "We process personal data based on consent, contractual necessity, legal obligations, and legitimate interests.",
+                sourceUrl: "https://example.test/privacy",
+                status: "observed"
+              },
+              signalObserved: true
+            }
+          },
+          evidenceState: "observed",
+          id: "legal_basis_disclosure_observed",
+          label: "Legal basis disclosure",
+          status: "Observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /aria-label="Open captured privacy policy for Legal basis disclosure"/);
+});
+
 test("GdprEprivacyCoverageChecklistCard shows policy review for every not-confirmed transparency row with retained summary snippets", () => {
   const rows = [
     ["controller_contact_disclosure", "Controller/contact disclosure", "controller_contact", "The controller of your information is Example Media, and you can contact privacy@example.test about this policy."],
@@ -1492,22 +1524,6 @@ test("GdprEprivacyCoverageChecklistCard renders 3rd party service rows under a t
             }
           },
           evidenceState: "observed",
-          id: "third_party_service_connection_pre_consent",
-          label: "3rd party service connections before consent",
-          status: "Gap observed"
-        }),
-        makeChecklistItem({
-          assessmentStatus: "gap_observed",
-          criticalEvidence: {
-            retainedEvidence: {
-              embeddedContentHosts: ["youtube.com"],
-              embeddedContentPurposeBuckets: {
-                mediaEmbed: ["youtube.com"]
-              },
-              firstEmbeddedContentObservedMs: 928
-            }
-          },
-          evidenceState: "observed",
           id: "third_party_iframe_pre_consent",
           label: "3rd party iframes before consent",
           status: "Gap observed"
@@ -1519,7 +1535,6 @@ test("GdprEprivacyCoverageChecklistCard renders 3rd party service rows under a t
 
   assert.match(html, /3rd Party Services/);
   assert.match(html, /Scan-context note/);
-  assert.match(html, /3rd party service connections before consent/);
   assert.match(html, /3rd party iframes before consent/);
 });
 

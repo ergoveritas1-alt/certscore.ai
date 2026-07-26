@@ -59,7 +59,7 @@ function finding(overrides: Partial<CanonicalShadowScoreFinding> = {}): Canonica
   };
 }
 
-test("shadow scoring deduplicates findings at the canonical family boundary", () => {
+test("shadow scoring adds severity-aware increments for distinct findings in one family", () => {
   const oneFinding = deriveCanonicalShadowScore({ coverageRows: COVERAGE_ROWS, findings: [finding()], model: MODEL });
   const siblingFindings = deriveCanonicalShadowScore({
     coverageRows: COVERAGE_ROWS,
@@ -67,12 +67,49 @@ test("shadow scoring deduplicates findings at the canonical family boundary", ()
     model: MODEL
   });
 
-  assert.equal(oneFinding.observedRiskIndex, siblingFindings.observedRiskIndex);
+  assert.equal(oneFinding.observedRiskIndex, 30);
+  assert.equal(siblingFindings.observedRiskIndex, 35);
+  assert.equal(
+    deriveCanonicalShadowScore({
+      coverageRows: COVERAGE_ROWS,
+      findings: [finding(), finding({ findingId: "second_high", severity: "high" })],
+      model: MODEL
+    }).observedRiskIndex,
+    40
+  );
+  assert.equal(
+    deriveCanonicalShadowScore({
+      coverageRows: COVERAGE_ROWS,
+      findings: [finding(), finding({ findingId: "low_signal", severity: "low" })],
+      model: MODEL
+    }).observedRiskIndex,
+    32
+  );
   assert.equal(siblingFindings.familyContributions.length, 1);
   assert.deepEqual(siblingFindings.familyContributions[0]?.findingIds, [
     "pre_consent_tracking_detected",
     "third_party_tracking_pre_consent"
   ]);
+});
+
+test("specific finding overrides can tune qualitative severity without changing the family cap", () => {
+  const result = deriveCanonicalShadowScore({
+    coverageRows: COVERAGE_ROWS,
+    findings: [
+      finding({ findingId: "high_impact_medium", severity: "medium" }),
+      finding({ findingId: "low_impact_high", severity: "high" })
+    ],
+    model: {
+      ...MODEL,
+      findingRiskPointOverrides: {
+        high_impact_medium: 24,
+        low_impact_high: 8
+      }
+    }
+  });
+
+  assert.equal(result.observedRiskIndex, 27);
+  assert.equal(result.familyContributions[0]?.riskPoints, 27);
 });
 
 test("adding a score-eligible finding never increases posture score", () => {

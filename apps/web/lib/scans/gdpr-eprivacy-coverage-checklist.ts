@@ -234,15 +234,6 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
-    id: "third_party_service_connection_pre_consent",
-    label: "3rd party service connections before consent",
-    explanation: "Whether retained scanner evidence showed known 3rd party embed/service connections before a recorded consent action.",
-    findingIds: [],
-    defaultFindingStatus: "Gap observed",
-    notObservedText: "No known 3rd party embed/service connection was retained before a recorded consent action.",
-    requiresPublicWebCoverage: true
-  },
-  {
     id: "third_party_iframe_pre_consent",
     label: "3rd party iframes before consent",
     explanation: "Whether retained scanner evidence showed known 3rd party iframe embeds before a recorded consent action.",

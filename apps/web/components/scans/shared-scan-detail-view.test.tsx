@@ -1202,6 +1202,45 @@ test("deriveExecutivePolicySurfaces keeps generic label when there is only one p
   );
 });
 
+test("deriveExecutivePolicySurfaces dedupes Amazon locale cookie aliases and labels preferences separately", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+
+  const surfaces = deriveExecutivePolicySurfaces([
+    {
+      id: "cookie-direct",
+      page_type: "cookie_policy",
+      page_url: "https://www.amazon.de/gp/help/customer/display.html?nodeId=201890250",
+      policy_summary_short: "Cookie policy retained."
+    },
+    {
+      id: "cookie-locale-alias",
+      page_type: "cookie_policy",
+      page_url: "https://www.amazon.de/-/en/gp/help/customer/display.html?nodeId=201890250",
+      policy_summary_short: "Cookie policy retained."
+    },
+    {
+      id: "privacy-preferences",
+      page_type: "cookie_policy",
+      page_url: "https://www.amazon.de/privacyprefs/customize?language=en&oCT=ads",
+      policy_summary_short: "Cookie preferences retained."
+    }
+  ]);
+
+  assert.deepEqual(
+    surfaces.map((surface) => ({ label: surface.pageLabel, url: surface.pageUrl })),
+    [
+      {
+        label: "Cookie policy",
+        url: "https://www.amazon.de/gp/help/customer/display.html?nodeId=201890250"
+      },
+      {
+        label: "Cookie preferences",
+        url: "https://www.amazon.de/privacyprefs/customize?language=en&oCT=ads"
+      }
+    ]
+  );
+});
+
 test("deriveExecutivePolicySurfaces shows discovered privacy links without claiming document evaluation", async () => {
   const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
   const surfaces = deriveExecutivePolicySurfaces([], {}, {
@@ -1256,6 +1295,50 @@ test("deriveExecutivePolicySurfaces retains cookie and privacy surfaces from the
     surfaces.find((surface) => surface.pageLabel === "Cookie policy")?.details.join(" ") ?? "",
     /Named-cookie inventory retained \(3 cookies\)/i
   );
+});
+
+test("deriveExecutivePolicySurfaces skips a cookie fallback when its URL is already retained", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+  const sharedUrl = "https://caltech.edu/privacy-notice";
+  const surfaces = deriveExecutivePolicySurfaces([
+    {
+      id: "privacy-notice",
+      page_type: "privacy_policy",
+      page_url: sharedUrl,
+      policy_summary_short: "Privacy notice retained."
+    }
+  ], {}, {}, [{
+    assessmentStatus: "checked",
+    criticalEvidence: {
+      missingOrIncompleteSourceSignals: [],
+      pipeline: {
+        concernPolicyKey: "cookie_notice_policy_availability",
+        projectionStage: "coverage_policy",
+        wc01NormalizedConcernKey: "cookie_notice_policy_availability",
+        ws01EvidenceRole: "policy_surface_observation"
+      },
+      projectedFindings: [],
+      retainedEvidence: {
+        cookiePolicyPresent: true,
+        cookiePolicyUrls: [sharedUrl]
+      },
+      statusBasis: "A durable cookie disclosure surface was retained."
+    },
+    evidenceRefs: [],
+    evidenceState: "observed",
+    explanation: "Cookie policy availability",
+    id: "cookie_notice_policy_availability",
+    label: "Cookie notice / cookie policy availability",
+    limitation: "",
+    note: "Observed",
+    status: "Observed",
+    tone: "neutral"
+  } as GdprEprivacyCoverageChecklistItem]);
+
+  assert.equal(surfaces.length, 1);
+  assert.equal(surfaces[0]?.pageUrl, sharedUrl);
+  assert.equal(surfaces[0]?.pageLabel, "Privacy policy");
+  assert.doesNotMatch(surfaces[0]?.details.join(" ") ?? "", /Cookie-policy surface was retained/i);
 });
 
 test("deriveExecutivePolicySurfaces uses the projected cookie-policy checklist evidence when overview inputs are thin", async () => {

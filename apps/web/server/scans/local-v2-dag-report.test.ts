@@ -563,6 +563,8 @@ test("canonical report counters dedupe repeated cookie writes and request rows",
     policySurfaceInspection: {
       outcome: "indeterminate_limited_coverage",
       coverageStatus: "limited",
+      linkDiscoveryCoverageStatus: "limited",
+      documentRetrievalCoverageStatus: "limited",
       inspectionCompleted: false,
       privacyPolicyObserved: false,
       observedSurfaceTypes: [],
@@ -575,6 +577,8 @@ test("canonical report counters dedupe repeated cookie writes and request rows",
     policySurfaceInspection: {
       outcome: "no_privacy_policy_observed_complete_coverage",
       coverageStatus: "complete",
+      linkDiscoveryCoverageStatus: "complete",
+      documentRetrievalCoverageStatus: "insufficient",
       inspectionCompleted: true,
       privacyPolicyObserved: false,
       observedSurfaceTypes: [],
@@ -1133,6 +1137,60 @@ test("dedupePolicySurfaces collapses equivalent privacy URLs before report proje
     [
       { pageUrl: "https://cnn.com/privacy", type: "privacy_policy" },
       { pageUrl: "https://cnn.com/terms", type: "terms" }
+    ]
+  );
+});
+
+test("dedupePolicySurfaces canonicalizes locale aliases and separates cookie preferences", async () => {
+  const { dedupePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "cookie-direct",
+      surfaceType: "cookie_policy",
+      url: "https://www.amazon.de/gp/help/customer/display.html?nodeId=201890250",
+      title: "Cookie policy",
+      confidence: 0.76,
+      textExcerpt: "Cookie policy text"
+    },
+    {
+      observationId: "cookie-locale-alias",
+      surfaceType: "cookie_policy",
+      url: "https://www.amazon.de/-/en/gp/help/customer/display.html?nodeId=201890250",
+      title: "Cookie policy",
+      confidence: 0.76,
+      textExcerpt: "Cookie policy text"
+    },
+    {
+      observationId: "cookie-preferences",
+      surfaceType: "cookie_policy",
+      url: "https://www.amazon.de/privacyprefs/customize?language=en&oCT=ads",
+      title: "Privacy preferences",
+      confidence: 0.82,
+      textExcerpt: "Cookie preferences"
+    }
+  ] as never, "https://amazon.de/");
+
+  assert.equal(surfaces.length, 2);
+  assert.deepEqual(
+    surfaces.map((row) => ({
+      pageUrl: row.pageUrl,
+      type: row.surface.surfaceType,
+      aliases: row.aliasUrls
+    })),
+    [
+      {
+        pageUrl: "https://amazon.de/gp/help/customer/display.html?nodeId=201890250",
+        type: "cookie_policy",
+        aliases: [
+          "https://www.amazon.de/gp/help/customer/display.html?nodeId=201890250",
+          "https://www.amazon.de/-/en/gp/help/customer/display.html?nodeId=201890250"
+        ]
+      },
+      {
+        pageUrl: "https://amazon.de/privacyprefs/customize?language=en&oCT=ads",
+        type: "cookie_settings",
+        aliases: ["https://www.amazon.de/privacyprefs/customize?language=en&oCT=ads"]
+      }
     ]
   );
 });

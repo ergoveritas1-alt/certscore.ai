@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   article13DisclosureRejectReason,
+  hasSubstantiveLegalBasisEvidence,
   hasSubstantiveProcessingPurposesEvidence,
   isArticle13DisclosureEvidenceUsable,
   type Article13DisclosureRejectionMode,
@@ -42,6 +43,33 @@ test("retention-purpose wording does not qualify as processing-purposes evidence
       mode: "retained_report",
     }),
     "insufficient_row_specific_terms",
+  );
+});
+
+test("retention legal-obligation wording does not qualify as legal-basis evidence", () => {
+  const retentionText =
+    "Additional Information About Data Retention. After you close your account, we will delete your personal information, except if we need it to comply with our legal obligations and defend our rights. We retain such information for as long as required by law.";
+
+  assert.equal(hasSubstantiveLegalBasisEvidence(retentionText), false);
+  for (const mode of rejectionModes) {
+    assert.equal(
+      article13DisclosureRejectReason(retentionText, "legal_basis", { mode }),
+      "insufficient_row_specific_terms",
+      `${mode} should reject retention-only legal-obligation wording as legal-basis evidence`,
+    );
+  }
+});
+
+test("processing-linked legal obligations qualify as legal-basis evidence", () => {
+  const legalBasisText =
+    "We process your personal data to perform our contract, comply with our legal obligations, and pursue our legitimate interests.";
+
+  assert.equal(hasSubstantiveLegalBasisEvidence(legalBasisText), true);
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(legalBasisText, "legal_basis", {
+      mode: "retained_report",
+    }),
+    true,
   );
 });
 
