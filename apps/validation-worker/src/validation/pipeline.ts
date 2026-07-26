@@ -23,6 +23,7 @@ import {
   listRecentValidationRuns,
   loadCompletedScanArtifacts,
   loadNanoDocRetrievalInputs,
+  loadLatestCompletedV2LambdaResultMetadata,
   loadReusableNanoDocumentExtractions,
   loadNanoSignalEnrichmentInputs,
   loadValidationRunFindings,
@@ -57,9 +58,14 @@ import { runAccessibilityValidationJob } from "./run-accessibility-validation-jo
 import { deriveFinancialCommercialExpectedFindingIds } from "@website-signal-risk-scanner/validation-shared";
 import { cleanupRuntimeScanArtifacts, getRuntimeScanArtifactOptions } from "./runtime-scan-artifacts";
 import {
-  buildPolicyReviewPacket
+  buildPolicyReviewPacket,
+  buildPolicyReviewPacketFromCanonicalBundle
 } from "./model-policy-review";
 import { runPolicyReviewPacket } from "./model-policy-review-runner";
+import {
+  extractCanonicalPolicyReviewPointer,
+  loadCanonicalBundleForPolicyReview
+} from "./canonical-policy-review-input";
 
 export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 
@@ -118,7 +124,7 @@ async function runPolicyModelReview(input: {
     typeof input.artifacts.snapshot?.domain === "string"
       ? input.artifacts.snapshot.domain
       : null;
-  const packet = buildPolicyReviewPacket({
+  const legacyPacket = buildPolicyReviewPacket({
     documentSources: input.artifacts.documentSources,
     evidenceCoverage: {
       coverageLimitations: input.artifacts.runtimeArtifacts?.coverageLimitations,
@@ -144,11 +150,26 @@ async function runPolicyModelReview(input: {
     scanDate,
     scanId: input.scanId
   });
+  const lambdaResultMetadata = await loadLatestCompletedV2LambdaResultMetadata(input.scanId);
+  const canonicalPointer = extractCanonicalPolicyReviewPointer(lambdaResultMetadata);
+  let canonicalPacket = null;
+  if (canonicalPointer) {
+    const canonicalBundle = await loadCanonicalBundleForPolicyReview({
+      pointer: canonicalPointer
+    });
+    canonicalPacket = buildPolicyReviewPacketFromCanonicalBundle(canonicalBundle, {
+      scanId: input.scanId
+    });
+  }
+  const packet = canonicalPacket ?? legacyPacket;
   if (!packet) {
     return {
       cacheHit: false,
       reviewStatus: "skipped",
-      skipReason: "no_retained_policy_documents"
+      skipReason: "no_retained_policy_documents",
+      sourceMode: canonicalPointer
+        ? "canonical_evidence_bundle_without_usable_policy"
+        : "legacy_document_sources_without_usable_policy"
     };
   }
 
@@ -158,7 +179,12 @@ async function runPolicyModelReview(input: {
     model: env.CERTSCORE_REVIEW_MODEL,
     packet
   });
-  return result.summary;
+  return {
+    ...result.summary,
+    sourceMode: canonicalPacket
+      ? "verified_canonical_evidence_bundle"
+      : "legacy_document_sources"
+  };
 }
 
 function sleep(ms: number) {

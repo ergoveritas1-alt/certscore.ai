@@ -1723,6 +1723,23 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
   };
 }
 
+export async function loadLatestCompletedV2LambdaResultMetadata(scanId: string) {
+  const row = await queryOne<{ metadata_json: Record<string, unknown> | null }>(
+    `
+      select metadata_json
+      from scan_events
+      where scan_id = $1
+        and event_type = 'v2_lambda_result.received'
+        and metadata_json->>'resultStatus' = 'completed'
+      order by created_at desc
+      limit 1
+    `,
+    [scanId],
+    { readOnly: true }
+  );
+  return row?.metadata_json ?? null;
+}
+
 export async function loadNanoDocRetrievalInputs(scanId: string): Promise<NanoDocRetrievalInput> {
   const scan = await queryOne<Record<string, unknown>>(
     `select id, status, created_at, started_at, completed_at, error_message, domain_id from scans where id = $1`,
