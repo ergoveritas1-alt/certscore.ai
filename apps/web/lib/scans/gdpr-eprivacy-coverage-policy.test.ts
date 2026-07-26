@@ -52,7 +52,11 @@ function makeGdprTransparencyArticle13Signal(input: {
   selectedEvidenceStrength?: string;
   status?: string;
 }) {
-  const evidenceText = input.evidenceText ?? "Localized bounded Article 13 evidence about personal data processing.";
+  const evidenceText = input.evidenceText ?? (
+    input.disclosureType === "processing_purposes"
+      ? "Die Zwecke der Verarbeitung personenbezogener Daten umfassen die Bereitstellung angeforderter Dienste und die Beantwortung von Anfragen."
+      : "Localized bounded Article 13 evidence about personal data processing."
+  );
   return {
     classifierProvenance: "gdpr_transparency_topic_classifier.v1",
     classifierReasonCodes: [`matched_${input.disclosureType}`],
@@ -62,7 +66,11 @@ function makeGdprTransparencyArticle13Signal(input: {
     evidenceText,
     matchStrength: "direct",
     matchedLocale: input.matchedLocale ?? "de",
-    matchedTerm: input.matchedTerm ?? "personenbezogene daten",
+    matchedTerm: input.matchedTerm ?? (
+      input.disclosureType === "processing_purposes"
+        ? "zwecke der verarbeitung personenbezogener daten"
+        : "personenbezogene daten"
+    ),
     productionCredit: input.productionCredit ?? true,
     productionCreditProfile: input.productionCreditProfile ?? "gdpr_transparency_multilingual_article13_v1",
     selectedEvidenceStrength: input.selectedEvidenceStrength ?? "strong",
@@ -796,6 +804,56 @@ test("Privacy Shield wording is transfer review evidence and not processing-purp
   assert.match(
     retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText ?? "",
     /Privacy Shield/i,
+  );
+});
+
+test("discarded Privacy Shield evidence projects a transfer review signal without turning retention text into purposes evidence", () => {
+  const summary = {
+    legalFrameworkValidityMatches: [
+      {
+        canonicalId: "eu_us_privacy_shield",
+        canonicalName: "EU-US Privacy Shield",
+        canonicalStatus: "invalidated",
+        effectiveFrom: "2016-07-12",
+        evidenceText:
+          "Our payment provider is certified under the EU-US Privacy Shield.",
+        invalidatedFrom: "2020-07-16",
+        matchedAlias: "EU-US Privacy Shield",
+        reviewMessage:
+          "An obsolete EU-US Privacy Shield reference was observed.",
+        sourceUrl: "https://example.test/privacy",
+        statusAtScan: "invalidated",
+        subjectArea: "international_data_transfers"
+      }
+    ],
+    privacyPolicyPresent: true,
+    privacyPolicyTextCharacterCount: 3200,
+    privacyPolicyUrls: ["https://example.test/privacy"],
+    retainedPrivacyPolicyTextExcerpt:
+      "How long do we keep your data? We retain it as long as necessary for the purpose for which it was collected.",
+    staleLegalFrameworkReferenceObserved: true
+  };
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: { policyDisclosureSummary: summary },
+    validationFindings: []
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns,
+    runtimeArtifacts: { policyDisclosureSummary: summary },
+    snapshot: { privacy_policy_present: true }
+  });
+
+  assert.notEqual(outcomes.processing_purposes_disclosure?.status, "Observed");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Review signal");
+  assert.match(
+    outcomes.international_transfers_disclosure?.limitation ?? "",
+    /obsolete EU-US Privacy Shield reference/i
+  );
+  assert.match(
+    outcomes.international_transfers_disclosure?.evidenceRefs.join(" ") ?? "",
+    /Privacy Shield/i
   );
 });
 

@@ -142,6 +142,7 @@ import {
   buildRuntimeInventoryGroupRows,
   buildTrackerInventoryGroupRows,
   buildTrackerInventoryRows,
+  classifyInventoryEvidence,
   deriveInventoryMacroCategory,
   formatGroupedParty,
   getInventoryGroupRowRenderKey,
@@ -451,8 +452,6 @@ const CONSENT_REVIEW_PRIORITY_LABELS: Record<ConsentReviewPriority, string> = {
   review_needed: "Review"
 };
 
-type InventoryEvidenceLabel = "Contextual" | "Essential" | "Non-essential" | "Review";
-
 const CONSENT_REVIEW_PRIORITY_INFOTIPS: Record<ConsentReviewPriority, string> = {
   contextual: "Observed activity from categories commonly associated with site operation, security, payment, authentication, consent management, CDN/static delivery, or other context-dependent functions.",
   high: "Pre-consent activity from a category commonly associated with advertising, audience measurement, retargeting, behavioral tracking, session replay, or fingerprinting.",
@@ -584,7 +583,7 @@ function formatCookieLifespan(seconds: number | null) {
 }
 
 function getInventoryTypeDisclosureClasses(row: InventoryGroupRow) {
-  const evidence = getInventoryEvidenceLabel(row);
+  const evidence = classifyInventoryEvidence(row);
   if (evidence === "Essential") {
     return "border-sky-300 bg-gradient-to-b from-white to-blue-50/70 text-blue-700 shadow-[0_2px_0_0_rgb(191_219_254)] hover:border-sky-500 hover:from-blue-50/80 hover:to-blue-100/70 hover:shadow-[0_3px_0_0_rgb(147_197_253)] group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-blue-50/80 group-open/cookie-detail:shadow-none";
   }
@@ -817,7 +816,7 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
       getInventoryPurposeLabel(row),
-      getInventoryEvidenceLabel(row),
+      classifyInventoryEvidence(row),
       formatFirstSeenMs(row.firstSeenMs),
       row.cookieNames.join(", ") || "—",
       row.domains.join(", ") || "—",
@@ -920,19 +919,8 @@ function getRuntimeInventoryMacroCategory(row: InventoryGroupRow) {
   });
 }
 
-function getInventoryEvidenceLabel(row: InventoryGroupRow) {
-  const purpose = getInventoryPurposeLabel(row).toLowerCase();
-  if (/cookie compliance|consent management|consent_management/.test(purpose)) {
-    return "Contextual" satisfies InventoryEvidenceLabel;
-  }
-  const category = getRuntimeInventoryMacroCategory(row).toLowerCase();
-  if (category === "essential" || category === "functional") return "Essential" satisfies InventoryEvidenceLabel;
-  if (category === "review") return "Review" satisfies InventoryEvidenceLabel;
-  return "Non-essential" satisfies InventoryEvidenceLabel;
-}
-
 function InventoryEvidenceCell({ row }: { row: InventoryGroupRow }) {
-  const evidence = getInventoryEvidenceLabel(row);
+  const evidence = classifyInventoryEvidence(row);
   const tone = evidence === "Essential"
     ? "bg-blue-100 text-blue-700"
     : evidence === "Contextual"
@@ -949,12 +937,9 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
       ? row.preConsent && row.firstSeenMs !== null
       : row.firstSeenMs !== null || /snapshot|pre-consent/i.test(row.timingEvidence ?? "")
   ).length;
-  const necessaryCount = rows.filter((row) => {
-    const category = getRuntimeInventoryMacroCategory(row).toLowerCase();
-    return (category === "essential" || category === "functional") && getInventoryEvidenceLabel(row) !== "Contextual";
-  }).length;
-  const contextualCount = rows.filter((row) => getInventoryEvidenceLabel(row) === "Contextual").length;
-  const reviewCount = rows.filter((row) => getRuntimeInventoryMacroCategory(row).toLowerCase() === "review").length;
+  const necessaryCount = rows.filter((row) => classifyInventoryEvidence(row) === "Essential").length;
+  const contextualCount = rows.filter((row) => classifyInventoryEvidence(row) === "Contextual").length;
+  const reviewCount = rows.filter((row) => classifyInventoryEvidence(row) === "Review").length;
   const nonEssentialCount = Math.max(0, rows.length - necessaryCount - contextualCount - reviewCount);
 
   const totalClassified = necessaryCount + contextualCount + nonEssentialCount + reviewCount;
@@ -991,13 +976,13 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
           <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="necessary" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
             <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Essential</span>
-            <InfoTip align="end" placement="bottom" text="Essential or functional activity retained as necessary context." />
+            <InfoTip align="end" placement="bottom" text="Activity with an explicit retained necessity or security basis in the tested context." />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{necessaryCount}</span>
           </div>
           <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="contextual" role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500" />
             <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Contextual</span>
-            <InfoTip align="end" placement="bottom" text="Consent-management or other context-dependent evidence that identifies site behavior without itself proving non-essential tracking." />
+            <InfoTip align="end" placement="bottom" text="Consent-management, payment, authentication, CDN, functional, or other context-dependent activity without an explicit retained necessity basis." />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{contextualCount}</span>
           </div>
         </div>
@@ -6238,8 +6223,8 @@ type ScanReportRenderProjection = {
 // Keep only the compact projection for a short completed-report viewing window.
 // The bounded revision check avoids rebuilding the much larger canonical analyst
 // draft tree during reloads and nearby report switches without retaining that tree.
-const SCAN_REPORT_RENDER_PROJECTION_CACHE_TTL_MS = 60_000;
-const SCAN_REPORT_RENDER_PROJECTION_CACHE_MAX_ENTRIES = 3;
+const SCAN_REPORT_RENDER_PROJECTION_CACHE_TTL_MS = 120_000;
+const SCAN_REPORT_RENDER_PROJECTION_CACHE_MAX_ENTRIES = 6;
 const scanReportRenderProjectionCache = new Map<string, {
   expiresAt: number;
   projection: ScanReportRenderProjection;

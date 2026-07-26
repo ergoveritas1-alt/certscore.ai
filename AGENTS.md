@@ -51,9 +51,54 @@ report-adapter projects internal artifacts
 web app presents only after separate approval
 ```
 
+### Model-assisted review roles
+
+Use explicit model roles rather than treating every task as generic Nano enrichment:
+
+```text
+deterministic evidence and registries
+→ Nano extraction / routine triage
+→ Mini interpretation when semantics or conflicts require it
+→ optional bounded escalation
+→ internal shadow artifact
+```
+
+- `CERTSCORE_EXTRACTION_MODEL` defaults to `gpt-5.4-nano`.
+- `CERTSCORE_REVIEW_MODEL` defaults to `gpt-5.4-mini`.
+- `CERTSCORE_ESCALATION_MODEL` is optional and has no default.
+- Mini review and escalation are disabled by default.
+- `CERTSCORE_MODEL_REVIEW_MODE` defaults to `shadow`.
+
+Keep passage location, candidate-topic extraction, normalization, evidence compression, and routine taxonomy triage on the extraction role. Use the review role for substantive policy interpretation, contradictory evidence, legal-basis wording, retention, transfers, rights, vendor disclosure, and policy/runtime consistency. Use escalation only for bounded high-impact or conflicting cases that remain inconclusive or low-confidence after review.
+
+Model outputs must use strict structured schemas, application-side validation, explicit provenance, bounded inputs/outputs, and safe failed/inconclusive states. Batch policy and finding review where possible and cache policy review by canonical content hash, contract version, prompt version, schema version, and model.
+
+Deterministic code remains authoritative for observed runtime facts, timestamps, canonical registries, legal-framework dates/validity, thresholds, severity, finding eligibility, scoring, and display projection. Model-review artifacts must remain internal and non-production until a separate production integration is explicitly approved.
+
+Model-review rollout evaluation must fail closed and must record review provenance honestly. `independently_reviewed` is reserved for evidence-only human review. `human_adjudicated` may be used when a named product owner reviews the retained evidence and a multi-model comparison, then personally decides every label. Human-adjudicated labels count for the approved precision-first observed-only production scope, but they must not be relabeled as independent review. The stricter full-status rollout gate still requires its canonical balance, coverage, precision, recall, and exact-agreement thresholds.
+
+Independent policy-review labels must be created from evidence-only reviewer packets that omit Mini/Nano outputs, provisional labels, model-derived candidate classifications, and other reviewers' decisions. Bind every response to the packet's retained-evidence hash, require a named human reviewer plus explicit no-model/no-provisional-label attestations, require topic-level rationale and valid evidence references, and fail closed on evidence drift or malformed responses. Ingestion must write a review candidate rather than silently overwriting the canonical corpus.
+
 The v2 packages and artifacts are not production report integration by default. V2 shadow, allowlist dry-run, concern-input dry-run, policy simulation, normalized-concern candidate, comparison, reviewer-packet, and evidence-preview outputs must remain artifact-only, internal-only, and non-persistent unless the user explicitly approves a separate production integration proposal.
 
 Do not wire v2 outputs into production report cards, checklist builders, executive summaries, top findings, scoring, regulatory lenses, persisted normalized concerns, unified findings, or customer-facing copy without explicit approval. Do not map v2 dry-run rows directly to `gap_observed`.
+
+The product owner approved one narrow production integration on July 25, 2026:
+completed `gpt-5.4-mini` policy-semantic review may supplement GDPR
+Transparency checklist coverage only when the artifact is in `enforced` mode,
+is explicitly production-projectable, and every projected `observed` row has
+passed the versioned deterministic topic-relevance, target-ownership,
+coverage, retained-evidence, and confidence invariants. This approval does not
+allow model output to create absence findings, scoring changes, executive/top
+findings, legal conclusions, or direct display-layer findings. The approved
+path remains persisted typed artifact -> normalized concern -> concern policy
+-> checklist projection. Shadow, failed, incomplete, low-confidence,
+ambiguous, conflicting, and insufficient-evidence rows remain non-production.
+The owner also confirmed that their July 25 review covered all 200 topic rows
+in the 25-case corpus. Those rows are canonical `human_adjudicated` calibration
+labels. The approved observed-only scope is production-eligible when its
+precision-first gate passes even if the separate full-status rollout gate
+remains blocked by recall or exact agreement.
 
 Sensitive-context labels in v2 are review routing metadata only. They must not create stronger findings, customer-facing language, legal conclusions, or production eligibility.
 
@@ -142,7 +187,17 @@ Evidence Mix uses `Essential` only for genuinely necessary functional, security,
 
 Policy review must keep four questions separate: whether disclosure text exists, whether the evidence is relevant to the checklist topic, whether a named time-sensitive mechanism was current on the scan date, and whether legal compliance has been established. Evidence for one topic must not satisfy another topic merely because it appears nearby in the same excerpt.
 
+Policy-review absence labels are coverage-gated. `not_observed_with_sufficient_coverage` is permitted only when the governing target source was retained, the document is usable and attributable to the target or a confirmed first-party brand, the relevant section is complete and untruncated, material linked supplements were retained or shown irrelevant, and any required runtime lane is usable. Otherwise use `insufficient_retained_evidence`. Caveats in rationale text must not rescue an absence label whose deterministic coverage preconditions failed.
+
+Keep evidence-presence topics distinct from completeness or adequacy. One retained named vendor, recipient category, substantive right, or cookie/storage identifier may establish the corresponding presence signal; it does not establish that the disclosure or inventory is complete. Name findings for the evidence they prove. Canonical policy-review display labels are `Processing-purpose disclosure`, `Processing legal-basis language`, `Retention period or substantive criteria`, `International-transfer disclosure`, `Named vendors or recipient categories`, `Substantive privacy-rights signals`, `Observed cookie/storage names`, and `Policy/runtime comparison`.
+
+`Policy/runtime comparison` is a comparison result, not a generic disclosure-presence row. Compare a specific retained policy promise only with a directly comparable runtime fact in the same jurisdiction and consent state. Use typed outcomes equivalent to no material mismatch retained, material contradiction retained, insufficient comparison evidence, or ambiguous comparison. Mutual silence is not alignment.
+
+Policy-document ownership is part of evidence quality. Retain typed owner entity, target relationship, confidence, and reason codes. A service-provider or unrelated policy may be retained as vendor evidence but must not establish the scanned target's policy coverage or support a target-policy absence conclusion.
+
 Invalidated, superseded, or not-yet-effective framework references are retained evidence and should produce an evidence-scoped review signal. They must not receive unqualified `Observed` credit, positive scoring that hides the stale reference, or customer-facing language implying that the named mechanism establishes compliance. Current framework or safeguard language may support disclosure presence, but does not by itself prove that the site qualifies for or correctly implements that mechanism.
+
+International-transfer disclosure presence and transfer-framework validity are separate checks. An obsolete framework reference must produce the deterministic `Outdated transfer framework referenced` review signal and must not, by itself, turn an otherwise supported international-transfer disclosure row into `conflicting`.
 
 Implement policy-validity rules in the shared evidence and policy pipeline, with deterministic fixtures covering topic separation and scan-date transitions. Do not implement validity checks as display-only keyword matching, Nano-only judgment, or executive-summary-only findings.
 
@@ -218,7 +273,7 @@ WC01/
 - **Database:** PostgreSQL (raw SQL via `pg` package; no ORM)
 - **Storage:** AWS S3-compatible (AWS SDK v3 + presigned URLs)
 - **Browser automation:** Playwright (Chromium) — used by validation worker
-- **LLM integration:** OpenAI API (configurable models; default `gpt-5.4-nano` / `gpt-5.4-nano`)
+- **LLM integration:** OpenAI API with role-based routing (`gpt-5.4-nano` extraction, `gpt-5.4-mini` review, optional escalation)
 - **Validation / Schema:** Zod
 - **Testing:** Node.js built-in test runner (`node --test`) executed through `tsx`
 - **CI/CD:** GitHub Actions

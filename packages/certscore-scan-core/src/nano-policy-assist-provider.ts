@@ -90,7 +90,11 @@ export function createOpenAiNanoPolicyAssistProviderFromEnv(
   }
   return createOpenAiNanoPolicyAssistProvider({
     apiKey,
-    model: env.CERTSCORE_V2_NANO_POLICY_MODEL?.trim() || env.VALIDATION_NANO_MODEL?.trim() || DEFAULT_NANO_MODEL,
+    model:
+      env.CERTSCORE_V2_NANO_POLICY_MODEL?.trim() ||
+      env.CERTSCORE_EXTRACTION_MODEL?.trim() ||
+      env.VALIDATION_NANO_MODEL?.trim() ||
+      DEFAULT_NANO_MODEL,
   });
 }
 

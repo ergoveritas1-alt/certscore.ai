@@ -1679,7 +1679,7 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
     .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } }));
 
   const [scan, snapshot, runtimeArtifacts, policyEnrichments, policyReviewQueue] = await Promise.all([
-    queryOne<Record<string, unknown>>(`select id, status, scan_type, created_at, started_at, completed_at, error_message from scans where id = $1`, [scanId], { readOnly: true }),
+    queryOne<Record<string, unknown>>(`select id, status, scan_type, created_at, started_at, completed_at, error_message, scan_config_json from scans where id = $1`, [scanId], { readOnly: true }),
     queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [scanId], { readOnly: true }),
     queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),
     query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1 order by created_at asc`, [scanId], { readOnly: true }).then((result) => result.rows),
@@ -1715,6 +1715,7 @@ export async function loadNanoSignalEnrichmentInputs(scanId: string) {
       error_message?: string | null;
       id?: string;
       scan_type?: string | null;
+      scan_config_json?: Record<string, unknown> | null;
       started_at?: string | null;
       status?: string | null;
     } | null) ?? null,
@@ -2779,6 +2780,114 @@ export async function loadReusableNanoDocumentExtractions(input: {
     const contentHash = typeof metadata.content_hash === "string" ? metadata.content_hash : null;
     return typeof contentHash === "string" && contentHash.length > 0;
   });
+}
+
+export async function loadReusableModelReviewArtifact(input: {
+  cacheKey: string;
+  reviewKind: "policy_semantic" | "finding_validation" | "vendor_attribution";
+}) {
+  try {
+    return await queryOne<Record<string, unknown>>(
+      `
+        select *
+        from scan_model_review_artifacts
+        where review_kind = $1
+          and cache_key = $2
+          and review_status = 'completed'
+        order by updated_at desc
+        limit 1
+      `,
+      [input.reviewKind, input.cacheKey],
+      { readOnly: true }
+    );
+  } catch (error) {
+    const shaped = { message: getErrorMessage(error) };
+    if (isMissingOptionalTableError(shaped)) {
+      return null;
+    }
+    throw new Error(`Failed to load reusable ${input.reviewKind} model review: ${shaped.message}`);
+  }
+}
+
+export async function upsertScanModelReviewArtifact(input: {
+  cacheKey: string;
+  contentHash: string;
+  contractVersion: string;
+  metrics: Record<string, unknown>;
+  modelRole: "extraction" | "review" | "escalation";
+  promptVersion: string;
+  requestedModel: string;
+  resolvedModel: string;
+  review: Record<string, unknown>;
+  reviewKind: "policy_semantic" | "finding_validation" | "vendor_attribution";
+  reviewMode: "shadow" | "enforced";
+  reviewStatus: "completed" | "failed" | "skipped";
+  scanId: string;
+  sourceDocumentIds?: string[];
+}) {
+  try {
+    await query(
+      `
+        insert into scan_model_review_artifacts (
+          scan_id,
+          review_kind,
+          review_mode,
+          cache_key,
+          content_hash,
+          contract_version,
+          prompt_version,
+          model_role,
+          requested_model,
+          resolved_model,
+          review_status,
+          source_document_ids,
+          review_json,
+          metrics_json,
+          updated_at
+        )
+        values (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::text[], $13, $14, $15
+        )
+        on conflict (scan_id, review_kind, cache_key) do update
+          set review_mode = excluded.review_mode,
+              content_hash = excluded.content_hash,
+              contract_version = excluded.contract_version,
+              prompt_version = excluded.prompt_version,
+              model_role = excluded.model_role,
+              requested_model = excluded.requested_model,
+              resolved_model = excluded.resolved_model,
+              review_status = excluded.review_status,
+              source_document_ids = excluded.source_document_ids,
+              review_json = excluded.review_json,
+              metrics_json = excluded.metrics_json,
+              updated_at = excluded.updated_at
+      `,
+      [
+        input.scanId,
+        input.reviewKind,
+        input.reviewMode,
+        input.cacheKey,
+        input.contentHash,
+        input.contractVersion,
+        input.promptVersion,
+        input.modelRole,
+        input.requestedModel,
+        input.resolvedModel,
+        input.reviewStatus,
+        input.sourceDocumentIds ?? [],
+        sanitizeJsonPersistenceValue(input.review),
+        sanitizeJsonPersistenceValue(input.metrics),
+        new Date().toISOString()
+      ]
+    );
+  } catch (error) {
+    const shaped = { message: getErrorMessage(error) };
+    if (isMissingOptionalTableError(shaped)) {
+      return false;
+    }
+    throw new Error(`Failed to persist ${input.reviewKind} model review for scan ${input.scanId}: ${shaped.message}`);
+  }
+  return true;
 }
 
 export async function persistDerivedNanoPolicySignals(input: {

@@ -2376,6 +2376,54 @@ test("summarizePolicySurfaces separates weak Article 13 candidates from validate
   ), true);
 });
 
+test("summarizePolicySurfaces retains stale transfer frameworks even when the source candidate was discarded", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const staleExcerpt = [
+    "Our payment provider is certified under the EU-US Privacy Shield.",
+    "When you provide your information to us, we will only use the information for the purposes for which it is provided."
+  ].join(" ");
+  const retentionExcerpt =
+    "How long do we keep your data? We retain it as long as necessary for the purpose for which it was collected.";
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "oxfam-like-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy",
+      normalizedUrl: "https://example.test/privacy",
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: `${retentionExcerpt} ${staleExcerpt}`,
+      discardedArticle13DisclosureSignals: [
+        {
+          confidence: 0.75,
+          disclosureType: "processing_purposes",
+          evidenceText: staleExcerpt,
+          rejectReason: "insufficient_row_specific_terms",
+          source: "deterministic",
+          status: "discarded"
+        }
+      ]
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", {
+    scanStartedAt: "2026-07-25T12:00:00.000Z"
+  });
+
+  assert.equal(summary.staleLegalFrameworkReferenceObserved, true);
+  assert.equal(summary.legalFrameworkValidityMatches.length, 1);
+  assert.equal(summary.legalFrameworkValidityMatches[0]?.canonicalId, "eu_us_privacy_shield");
+  assert.equal(summary.legalFrameworkValidityMatches[0]?.statusAtScan, "invalidated");
+  assert.match(summary.legalFrameworkValidityMatches[0]?.evidenceText ?? "", /Privacy Shield/i);
+  assert.equal(
+    summary.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "processing_purposes" &&
+      /How long do we keep/i.test(signal.evidenceText ?? "")
+    ),
+    false
+  );
+});
+
 test("summarizePolicySurfaces accepts GDPR Transparency candidates by default", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const legacySignalText = "The legal basis for processing your personal data includes consent, contract, and legitimate interests.";

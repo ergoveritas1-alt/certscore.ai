@@ -6,6 +6,7 @@ import {
   buildTrackerInventoryGroupRows,
   suppressUnsupportedCmpAliasRows,
   buildTrackerInventoryRows,
+  classifyInventoryEvidence,
   deriveInventoryMacroCategory,
   getInventoryGroupRowRenderKey,
   getTrackerConsentReviewPriority,
@@ -100,6 +101,35 @@ test("derives Fable macro categories without replacing detailed purposes", () =>
   assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "jQuery CDN" }), "Essential");
   assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "Instagram CDN" }), "Functional");
   assert.equal(deriveInventoryMacroCategory({ purpose: "Unknown", priority: "review_needed", vendor: "unresolved.example" }), "Review");
+});
+
+test("keeps context-dependent runtime activity out of Essential evidence without a necessity basis", () => {
+  const base = {
+    macroCategory: "Essential" as const,
+    priority: "contextual" as const,
+    purposes: [] as string[]
+  };
+
+  assert.equal(classifyInventoryEvidence({ ...base, purpose: "Payment processors" }), "Contextual");
+  assert.equal(classifyInventoryEvidence({ ...base, purpose: "Authentication" }), "Contextual");
+  assert.equal(classifyInventoryEvidence({ ...base, purpose: "Consent management" }), "Contextual");
+  assert.equal(classifyInventoryEvidence({ ...base, purpose: "Necessary" }), "Essential");
+  assert.equal(classifyInventoryEvidence({ ...base, purpose: "Security" }), "Essential");
+});
+
+test("keeps risk and review classifications ahead of contextual macro categories", () => {
+  assert.equal(classifyInventoryEvidence({
+    macroCategory: "Functional",
+    priority: "medium",
+    purpose: "Tag management",
+    purposes: []
+  }), "Non-essential");
+  assert.equal(classifyInventoryEvidence({
+    macroCategory: "Review",
+    priority: "review_needed",
+    purpose: "Unknown",
+    purposes: []
+  }), "Review");
 });
 
 test("classifies pre-consent audience measurement as high-risk tracker evidence", () => {

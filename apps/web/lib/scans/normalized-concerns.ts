@@ -1,7 +1,9 @@
 import {
+  classifyGdprTransparencyTopics,
   evaluateLegalFrameworkValidity,
   hasStaleLegalFrameworkReference,
   hasSubstantiveProcessingPurposesEvidence,
+  policyModelReviewArtifactSchema,
 } from "@certscore/contracts";
 import {
   getReportUnifiedFinding,
@@ -2602,8 +2604,10 @@ function buildGdprTransparencyArticle13Concerns(
         hasStaleLegalFrameworkReference(frameworkValidityMatches);
       const processingPurposesEvidenceSubstantive =
         topic !== "processing_purposes" ||
-        frameworkValidityMatches.length === 0 ||
-        hasSubstantiveProcessingPurposesEvidence(evidenceText ?? "");
+        hasSubstantiveProcessingPurposesEvidence(evidenceText ?? "") ||
+        classifyGdprTransparencyTopics({
+          text: evidenceText ?? "",
+        }).matches.some((match) => match.topic === "processing_purposes");
       const extractedState = getGdprTransparencyArticle13ConcernState(signal);
       const state =
         !processingPurposesEvidenceSubstantive && extractedState === "sufficient"
@@ -2656,6 +2660,157 @@ function buildGdprTransparencyArticle13Concerns(
         title: `GDPR Transparency Article 13 topic observed: ${topic}`
       });
     });
+}
+
+const GDPR_TRANSPARENCY_MINI_REVIEW_PROFILE =
+  "gdpr_transparency_mini_review_v1";
+
+const POLICY_MODEL_TOPIC_TO_GDPR_TRANSPARENCY_TOPIC = {
+  processing_purposes: "processing_purposes",
+  legal_basis: "legal_basis",
+  data_retention: "data_retention",
+  international_transfers: "international_transfers",
+  vendor_disclosures: "recipients_or_vendor_categories",
+  data_subject_rights: "data_subject_rights",
+} as const;
+
+function buildGdprTransparencyModelReviewConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const rawArtifact = getRuntimeRecord(runtimeArtifacts, [
+    "policyModelReviewArtifact",
+    "policy_model_review_artifact"
+  ]);
+  const parsed = policyModelReviewArtifactSchema.safeParse(rawArtifact);
+  if (
+    !parsed.success ||
+    parsed.data.mode !== "enforced" ||
+    parsed.data.status !== "completed" ||
+    !parsed.data.productionEligible ||
+    !parsed.data.provenance.usedForProductionProjection
+  ) {
+    return [];
+  }
+
+  return parsed.data.rows.flatMap((row) => {
+    const topic =
+      POLICY_MODEL_TOPIC_TO_GDPR_TRANSPARENCY_TOPIC[
+        row.topic as keyof typeof POLICY_MODEL_TOPIC_TO_GDPR_TRANSPARENCY_TOPIC
+      ];
+    if (
+      !topic ||
+      row.status !== "observed" ||
+      row.confidence < 0.85 ||
+      row.evidenceExcerpts.length === 0 ||
+      !row.reasonCodes.includes("policy_review_invariants_applied_v1")
+    ) {
+      return [];
+    }
+
+    const evidenceText = row.evidenceExcerpts[0] ?? null;
+    const sourceUrl = row.sourceUrls[0] ?? null;
+    return [buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "Mini-assisted policy review retained a directly relevant passage that passed deterministic topic, ownership, coverage, and evidence invariants.",
+      domainContext,
+      evidence: uniqueStrings([evidenceText, sourceUrl]),
+      observedValue: "sufficient",
+      originKey: `gdpr_transparency.article13.${topic}`,
+      originType: "runtime_artifact",
+      rawEvidence: {
+        classifierProvenance: "mini_policy_semantic_review.v2",
+        classifierReasonCodes: row.reasonCodes,
+        confidence: row.confidence,
+        gdprTransparencyArticle13ConcernState: "sufficient",
+        gdprTransparencyArticle13Evidence: true,
+        gdprTransparencyArticle13Topic: topic,
+        gdprTransparencyEvidenceProfile:
+          GDPR_TRANSPARENCY_MINI_REVIEW_PROFILE,
+        gdprTransparencyModelReviewEvidence: true,
+        modelRequested: parsed.data.provenance.requestedModel,
+        modelResolved: parsed.data.provenance.resolvedModel,
+        pageType: "privacy_policy",
+        policyIsPrimarySource: true,
+        policySnippets: [evidenceText],
+        productionCredit: true,
+        productionCreditProfile: GDPR_TRANSPARENCY_MINI_REVIEW_PROFILE,
+        selectedEvidenceStrength: "strong",
+        signalKey: `privacy.gdpr_transparency.article13.${topic}`,
+        sourceDocumentIds: row.sourceDocumentIds,
+        sourceUrl,
+        sourceUrls: row.sourceUrls,
+      },
+      severity: "low",
+      signalKey: `privacy.gdpr_transparency.article13.${topic}`,
+      signalLabel: `GDPR Transparency policy topic observed: ${topic}`,
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: `GDPR Transparency policy topic observed: ${topic}`
+    })];
+  });
+}
+
+function buildGdprTransparencyLegalFrameworkValidityConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const summary = getPolicyDisclosureSummaryForGdprTransparency(runtimeArtifacts);
+  const matches = getPlainRecordArray(
+    summary?.legalFrameworkValidityMatches ??
+    summary?.legal_framework_validity_matches
+  );
+
+  return matches.flatMap((match) => {
+    const statusAtScan = getStringValue(match.statusAtScan ?? match.status_at_scan);
+    if (
+      statusAtScan !== "invalidated" &&
+      statusAtScan !== "superseded" &&
+      statusAtScan !== "not_yet_effective"
+    ) {
+      return [];
+    }
+
+    const canonicalId =
+      getStringValue(match.canonicalId ?? match.canonical_id) ?? "unknown";
+    const canonicalName =
+      getStringValue(match.canonicalName ?? match.canonical_name) ??
+      "time-sensitive legal framework";
+    const evidenceText = getStringValue(match.evidenceText ?? match.evidence_text);
+    const sourceUrl = getStringValue(match.sourceUrl ?? match.source_url);
+    const reviewMessage = getStringValue(match.reviewMessage ?? match.review_message);
+
+    return [buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        reviewMessage ??
+        `A ${statusAtScan.replaceAll("_", " ")} legal-framework reference was retained and requires policy review.`,
+      domainContext,
+      evidence: uniqueStrings([evidenceText, sourceUrl]),
+      observedValue: statusAtScan,
+      originKey: `gdpr_transparency.legal_framework_validity.${canonicalId}`,
+      originType: "runtime_artifact",
+      rawEvidence: {
+        gdprTransparencyLegalFrameworkValidityEvidence: true,
+        legalFrameworkValidityMatch: match,
+        legalFrameworkValidityMatches: [match],
+        pageType: "privacy_policy",
+        policyIsPrimarySource: true,
+        policySnippets: evidenceText ? [evidenceText] : [],
+        signalKey: "privacy.gdpr_transparency.stale_legal_framework_reference",
+        sourceUrl,
+        sourceUrls: sourceUrl ? [sourceUrl] : [],
+        staleLegalFrameworkReferenceObserved: true,
+      },
+      severity: "medium",
+      signalKey: "privacy.gdpr_transparency.stale_legal_framework_reference",
+      signalLabel: `Stale legal-framework reference observed: ${canonicalName}`,
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: `Stale legal-framework reference observed: ${canonicalName}`,
+    })];
+  });
 }
 
 const SCAN_NO_GO_CONFIDENCE_THRESHOLD = 0.9;
@@ -2842,7 +2997,9 @@ export function buildNormalizedConcerns(input: {
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCmpLoadOrderConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRtbCookieSyncConcerns(input.runtimeArtifacts, input.domainContext),
-    ...buildGdprTransparencyArticle13Concerns(input.runtimeArtifacts, input.domainContext)
+    ...buildGdprTransparencyArticle13Concerns(input.runtimeArtifacts, input.domainContext),
+    ...buildGdprTransparencyModelReviewConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildGdprTransparencyLegalFrameworkValidityConcerns(input.runtimeArtifacts, input.domainContext)
   ];
 
   return [

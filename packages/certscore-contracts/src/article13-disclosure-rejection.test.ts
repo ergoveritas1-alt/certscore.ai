@@ -32,6 +32,28 @@ test("Privacy Shield transfer wording does not qualify as processing-purposes ev
   );
 });
 
+test("retention-purpose wording does not qualify as processing-purposes evidence", () => {
+  const retentionText =
+    "How long do we keep your data? We retain it as long as necessary for the purpose for which it was collected.";
+
+  assert.equal(hasSubstantiveProcessingPurposesEvidence(retentionText), false);
+  assert.equal(
+    article13DisclosureRejectReason(retentionText, "processing_purposes", {
+      mode: "retained_report",
+    }),
+    "insufficient_row_specific_terms",
+  );
+});
+
+test("named-controller purpose statements qualify as processing-purposes evidence", () => {
+  assert.equal(
+    hasSubstantiveProcessingPurposesEvidence(
+      "Aruba processes personal data to handle contact requests, provide contracted services, protect network security, and prevent fraud.",
+    ),
+    true,
+  );
+});
+
 test("Article 13 rejection contract rejects navigation chrome consistently across modes", () => {
   const navigation =
     "Skip to main content Privacy Policy Overview Terms of Service Technologies FAQ Privacy Terms Search Menu";

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { unstable_cache } from "next/cache";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
@@ -46,27 +47,37 @@ type ScanDetailPageProps = {
 const RECENT_SCAN_REUSED_MESSAGE =
   "Recently scanned. Select Fresh re-scan to run a new scan.";
 
+const COMPLETED_SCAN_DETAIL_CACHE_VERSION = "completed-scan-detail-v1";
+const COMPLETED_SCAN_DETAIL_CACHE_SECONDS = 15;
+
+function getCachedCompletedScanById(scanId: string) {
+  return unstable_cache(
+    () => withServerTiming("app.scan_detail.record_cache_miss", () => getPublicScanById(scanId)),
+    [COMPLETED_SCAN_DETAIL_CACHE_VERSION, scanId],
+    { revalidate: COMPLETED_SCAN_DETAIL_CACHE_SECONDS }
+  )();
+}
+
 function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanStatusProjection }) {
   return (
-    <div className="space-y-8" aria-busy="true" aria-live="polite">
+    <div className="space-y-7" aria-busy="true" aria-live="polite">
       <div>
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">CertScore.ai scan</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
           Scan: {statusProjection.domainHostname?.trim() || "website"}
         </h1>
-        <p className="mt-2 text-sm text-slate-500">Loading the completed scan report…</p>
+        <p className="mt-2 text-sm text-slate-500">The scan is complete. Preparing its retained evidence and review.</p>
       </div>
-      <div className="grid gap-4 md:grid-cols-3">
-        {["Overall score", "3rd-party requests", "Non-essential storage"].map((label) => (
-          <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</p>
-            <div className="mt-4 h-9 w-24 animate-pulse rounded-lg bg-slate-100" />
-          </div>
-        ))}
-      </div>
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="h-5 w-40 animate-pulse rounded bg-slate-100" />
-        <div className="mt-5 h-28 animate-pulse rounded-xl bg-slate-50" />
+      <div className="min-h-[48vh] rounded-2xl border border-sky-100 bg-sky-50/60 px-6 py-10">
+        <div className="mx-auto flex max-w-xl flex-col items-center text-center">
+          <span className="flex h-11 w-11 items-center justify-center rounded-full border border-sky-200 bg-white">
+            <span className="h-3 w-3 animate-pulse rounded-full bg-sky-500" />
+          </span>
+          <p className="mt-4 text-base font-semibold text-slate-900">Building the report view</p>
+          <p className="mt-1 max-w-md text-sm leading-6 text-slate-600">
+            Loading the evidence summary, cookies and trackers, and privacy review.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -115,6 +126,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
           organization={organization}
           recentScanReused={recentScanReused}
           scanId={scanId}
+          statusProjection={statusProjection}
           user={user}
         />
       </Suspense>
@@ -128,6 +140,7 @@ async function ScanDetailReportContent({
   organization,
   recentScanReused,
   scanId,
+  statusProjection,
   user
 }: {
   isPlatformAdmin: boolean;
@@ -135,13 +148,24 @@ async function ScanDetailReportContent({
   organization: Awaited<ReturnType<typeof getDashboardContext>>["organization"];
   recentScanReused: boolean;
   scanId: string;
+  statusProjection: ScanStatusProjection;
   user: Awaited<ReturnType<typeof getDashboardContext>>["user"];
 }) {
+  const completedAtMs = statusProjection.completedAt ? Date.parse(statusProjection.completedAt) : Number.NaN;
+  const completedLongEnoughForShortCache =
+    Number.isFinite(completedAtMs) && Date.now() - completedAtMs >= 60_000;
+  const canUseShortCompletedRecordCache =
+    statusProjection.status === "completed" &&
+    (statusProjection.reportReady || completedLongEnoughForShortCache);
   let [scanRecord, organizationSettings] = await Promise.all([
     withServerTiming("app.scan_detail.record", () =>
-      isPlatformAdmin
-        ? getPublicScanById(scanId)
-        : getScanById({ organizationId: organization.id, scanId, viewerEmail: user.email })
+      // The lightweight status lookup above has already established viewer
+      // access; only stable completed records use this shared short cache.
+      canUseShortCompletedRecordCache
+        ? getCachedCompletedScanById(scanId)
+        : isPlatformAdmin
+          ? getPublicScanById(scanId)
+          : getScanById({ organizationId: organization.id, scanId, viewerEmail: user.email })
     ),
     getOrganizationSettings(organization.id)
   ]);

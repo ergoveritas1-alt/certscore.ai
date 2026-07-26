@@ -5513,7 +5513,7 @@ const DEDICATED_PRIVACY_CONTACT_PATTERN =
   /(?:privacy (?:questions?|requests?|inquiries|enquiries)|contact (?:our )?(?:privacy|data protection)|(?:chief )?privacy (?:officer|office|team|contact)|data protection (?:office|contact|officer)).{0,180}(?:[a-z0-9._%+-]*privacy[a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}|mailto:)|\b[a-z0-9._%+-]*privacy[a-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]{2,}\b/i;
 
 const PROCESSING_PURPOSES_DISCLOSURE_PATTERN =
-  /purpose(?:s)? (?:of|for|we|to)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|provide (?:our )?services|personalize (?:content|ads|advertising|services|experience)|tailored search results|measure (?:performance|advertising)|perform analytics/i;
+  /purposes? of (?:the )?(?:processing|collection|use)|why we (?:use|process|collect)|\b(?:we|[a-z][a-z0-9&.'’-]*(?:\s+[a-z][a-z0-9&.'’-]*){0,5})\s+(?:(?:use|uses|process|processes|collect|collects)\s+(?:and\s+use\s+)?|describes?\s+processing\s+)(?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|personalize (?:content|ads|advertising|services|experience)|tailored search results|measure (?:performance|advertising)|perform analytics/i;
 
 const RETENTION_DISCLOSURE_PATTERN =
   /retaining your information|retain(?:ing)? (?:the |your |personal )?(?:data|information)|retained for|deleted or anonymized|deletion|retention periods?|legal purposes|fraud and abuse prevention|retention criteria|storage period|retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)|delete your information.{0,120}(?:retention|retain|retained|deleted|anonymized)|keep your.{0,100}(?:as long as necessary|required by law|for)|stored for|kept for|how long|expires?|as long as necessary|speicherdauer|aufbewahrung|solange|gespeichert|durée de conservation|conserv(?:é|e|és|ées)|durée conforme|dispositions légales|plazo de conservación|conservamos|periodo di conservazione|conserviamo|bewaartermijn|bewaren|okres przechowywania|przechowujemy/i;
@@ -5647,16 +5647,29 @@ function getGdprTransparencyArticle13ChecklistConcern(
         "gdprTransparencyArticle13Topic",
         "gdpr_transparency_article13_topic"
       ]);
+      const productionCreditProfile = getString(rawEvidence, [
+        "productionCreditProfile",
+        "production_credit_profile"
+      ]);
+      const classifierProvenance = getString(rawEvidence, [
+        "classifierProvenance",
+        "classifier_provenance"
+      ]);
+      const approvedDeterministicEvidence =
+        productionCreditProfile ===
+          "gdpr_transparency_multilingual_article13_v1" &&
+        classifierProvenance === "gdpr_transparency_topic_classifier.v1";
+      const approvedModelReviewEvidence =
+        rawEvidence?.gdprTransparencyModelReviewEvidence === true &&
+        productionCreditProfile === "gdpr_transparency_mini_review_v1" &&
+        classifierProvenance === "mini_policy_semantic_review.v2";
       return concern.originKey === `gdpr_transparency.article13.${topic}` &&
         concern.originType === "runtime_artifact" &&
         concern.promotionEligibility === "internal_only" &&
         concern.externalSurfacingEligibility === "audit_only" &&
         rawEvidence?.gdprTransparencyArticle13Evidence === true &&
         rawEvidence.productionCredit === true &&
-        getString(rawEvidence, ["productionCreditProfile", "production_credit_profile"]) ===
-          "gdpr_transparency_multilingual_article13_v1" &&
-        getString(rawEvidence, ["classifierProvenance", "classifier_provenance"]) ===
-          "gdpr_transparency_topic_classifier.v1" &&
+        (approvedDeterministicEvidence || approvedModelReviewEvidence) &&
         topic !== null &&
         GDPR_TRANSPARENCY_ARTICLE13_TOPIC_TO_ROW_ID[topic] === rowId;
     })
@@ -5670,10 +5683,69 @@ function gdprTransparencyChecklistEligibilityScore(value: unknown) {
   return value === "observed" ? 2 : value === "review_signal" ? 1 : 0;
 }
 
+function getGdprTransparencyStaleLegalFrameworkConcern(
+  input: GdprEprivacyCoveragePolicyInput
+) {
+  return (input.normalizedConcerns ?? []).find((concern) => {
+    const rawEvidence = concern.evidenceBundle.rawEvidence;
+    return concern.originKey.startsWith("gdpr_transparency.legal_framework_validity.") &&
+      concern.originType === "runtime_artifact" &&
+      concern.promotionEligibility === "internal_only" &&
+      concern.externalSurfacingEligibility === "audit_only" &&
+      concern.regulatoryChecklistEligibility === "review_signal" &&
+      rawEvidence?.gdprTransparencyLegalFrameworkValidityEvidence === true &&
+      getBoolean(rawEvidence, [
+        "staleLegalFrameworkReferenceObserved",
+        "stale_legal_framework_reference_observed"
+      ]) === true;
+  }) ?? null;
+}
+
 function buildGdprTransparencyArticle13ConcernOutcome(
   input: GdprEprivacyCoveragePolicyInput,
   config: PolicyDisclosureRowConfig
 ) {
+  const staleFrameworkConcern =
+    config.rowId === "international_transfers_disclosure"
+      ? getGdprTransparencyStaleLegalFrameworkConcern(input)
+      : null;
+  if (staleFrameworkConcern) {
+    const rawEvidence = staleFrameworkConcern.evidenceBundle.rawEvidence ?? {};
+    const matches = getObjectArray(rawEvidence, [
+      "legalFrameworkValidityMatches",
+      "legal_framework_validity_matches"
+    ]);
+    const evidenceText = staleFrameworkConcern.evidenceBundle.policySnippets[0] ?? null;
+    const sourceUrl = getString(rawEvidence, ["sourceUrl", "source_url"]);
+    const reviewMessage =
+      matches
+        .map((match) => getString(match, ["reviewMessage", "review_message"]))
+        .find(Boolean) ??
+      staleFrameworkConcern.description;
+    return makeOutcome(
+      config.rowId,
+      "Review signal",
+      reviewMessage,
+      [
+        "Evidence: outdated or invalid transfer-framework reference",
+        evidenceText ? `Excerpt: ${evidenceText}` : null,
+        sourceUrl ? `Policy URL: ${sourceUrl}` : null
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          gdprTransparencyLegalFrameworkValidityConcern: {
+            canonicalConcernKey: staleFrameworkConcern.canonicalConcernKey,
+            originKey: staleFrameworkConcern.originKey,
+            regulatoryChecklistEligibility:
+              staleFrameworkConcern.regulatoryChecklistEligibility
+          },
+          legalFrameworkValidityMatches: matches,
+          signalObserved: "stale_legal_framework_reference"
+        }
+      }
+    );
+  }
+
   const concern = getGdprTransparencyArticle13ChecklistConcern(input, config.rowId);
   if (!concern || concern.regulatoryChecklistEligibility === "none") {
     return null;
@@ -6171,6 +6243,29 @@ function policyTextMatchEvidence(text: string, pattern: RegExp, disclosureType?:
     return null;
   }
   const normalized = cleanPolicyDisclosureEvidenceText(text);
+  if (disclosureType === "processing_purposes") {
+    const purposeCandidates = normalized
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence, index, sentences) =>
+        cleanPolicyDisclosureEvidenceText([
+          index > 0 ? sentences[index - 1] : null,
+          sentence,
+          index + 1 < sentences.length ? sentences[index + 1] : null,
+        ].filter((value): value is string => Boolean(value)).join(" "))
+      )
+      .filter((candidate) =>
+        candidate.length >= 35 &&
+        hasSubstantiveProcessingPurposesEvidence(candidate) &&
+        !isPolicyChromeOrTocExcerpt(candidate)
+      )
+      .sort((left, right) =>
+        scorePolicyDisclosureEvidenceText(right, disclosureType) -
+        scorePolicyDisclosureEvidenceText(left, disclosureType)
+      );
+    if (purposeCandidates[0]) {
+      return purposeCandidates[0].slice(0, 620).trimEnd();
+    }
+  }
   const chunks = buildPolicySectionChunks(normalized, sourceUrl);
   const matches = chunks.flatMap((chunk) => {
     const regex = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`);
@@ -6473,13 +6568,7 @@ function isPolicyDisclosureEvidenceUsable(value: string, disclosureType: string 
     return false;
   }
   if (disclosureType === "processing_purposes") {
-    const frameworkMatches = evaluateLegalFrameworkValidity(text);
-    if (
-      frameworkMatches.length > 0 &&
-      !hasSubstantiveProcessingPurposesEvidence(text)
-    ) {
-      return false;
-    }
+    return hasSubstantiveProcessingPurposesEvidence(text);
   }
   return true;
 }

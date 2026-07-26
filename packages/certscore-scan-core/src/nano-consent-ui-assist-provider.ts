@@ -34,7 +34,11 @@ export function createOpenAiNanoConsentUiAssistProviderFromEnv(
   }
   return createOpenAiNanoConsentUiAssistProvider({
     apiKey,
-    model: env.CERTSCORE_V2_NANO_CONSENT_UI_MODEL?.trim() || env.VALIDATION_NANO_MODEL?.trim() || DEFAULT_NANO_MODEL,
+    model:
+      env.CERTSCORE_V2_NANO_CONSENT_UI_MODEL?.trim() ||
+      env.CERTSCORE_EXTRACTION_MODEL?.trim() ||
+      env.VALIDATION_NANO_MODEL?.trim() ||
+      DEFAULT_NANO_MODEL,
   });
 }
 

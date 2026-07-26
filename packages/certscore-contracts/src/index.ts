@@ -11,6 +11,7 @@ export * from "./legal-framework-validity";
 export * from "./privacy-surface-classifier";
 export * from "./privacy-evidence-locale-registry";
 export * from "./supported-languages";
+export * from "./model-assistance";
 
 export const directVsInferredSchema = z.enum([
   "direct",
@@ -730,7 +731,10 @@ export const consentActionCandidateSchema = z.object({
   screenshotArtifactRefs: z.array(artifactRefSchema).default([]),
   assistMetadata: z.array(z.object({
     assistId: z.string(),
-    modelAssistProvider: z.literal("nano"),
+    modelAssistProvider: z.string().min(1).max(120),
+    modelAssistRole: z.enum(["extraction", "review", "escalation"]).optional(),
+    requestedModel: z.string().min(1).max(120).optional(),
+    resolvedModel: z.string().min(1).max(120).optional(),
     assistType: z.literal("consent_ui_classification"),
     confidence: confidenceSchema,
     uncertaintyNotes: z.array(z.string()).default([]),
@@ -1340,6 +1344,24 @@ export const policySurfaceObservationSchema = z.object({
   linkObservationState: z.enum(["observed", "candidate", "not_observed"]).optional(),
   documentFetchState: z.enum(["not_attempted", "fetched", "failed", "skipped_budget"]).optional(),
   documentEvaluationState: z.enum(["not_attempted", "usable", "insufficient", "blocked"]).optional(),
+  documentOwnerEntity: z.string().max(240).optional(),
+  targetRelationship: z.enum([
+    "target_controller",
+    "first_party_brand",
+    "service_provider",
+    "unrelated",
+    "unknown",
+  ]).optional(),
+  ownershipConfidence: z.number().min(0).max(1).optional(),
+  ownershipReasonCodes: z.array(z.string().max(120)).max(12).optional(),
+  contentCoverage: z.object({
+    status: z.enum(["complete", "partial", "truncated", "malformed"]),
+    sourceTextChars: z.number().int().nonnegative(),
+    extractedSectionCount: z.number().int().nonnegative(),
+    retainedSectionCount: z.number().int().nonnegative(),
+    retainedTableRowCount: z.number().int().nonnegative(),
+    limitationKeys: z.array(z.string().max(120)).max(16).default([]),
+  }).optional(),
   httpStatus: z.number().int().optional(),
   finalUrl: z.string().optional(),
   redirectChain: z.array(z.string().max(500)).max(8).optional(),
@@ -1476,6 +1498,8 @@ export const policySurfaceObservationSchema = z.object({
     sourceUrl: z.string(),
     heading: z.string().max(160),
     textExcerpt: z.string().max(1_200),
+    sourceTextChars: z.number().int().nonnegative().optional(),
+    extractionState: z.enum(["complete", "truncated", "malformed"]).optional(),
     charStart: z.number().int().nonnegative().optional(),
     charEnd: z.number().int().nonnegative().optional(),
     quality: z.enum(["strong", "partial", "limited"]).default("partial"),
@@ -1511,7 +1535,10 @@ export const policySurfaceObservationSchema = z.object({
   artifactRefs: z.array(artifactRefSchema).default([]),
   assistMetadata: z.array(z.object({
     assistId: z.string(),
-    modelAssistProvider: z.literal("nano"),
+    modelAssistProvider: z.string().min(1).max(120),
+    modelAssistRole: z.enum(["extraction", "review", "escalation"]).optional(),
+    requestedModel: z.string().min(1).max(120).optional(),
+    resolvedModel: z.string().min(1).max(120).optional(),
     assistType: z.enum([
       "link_classification",
       "topic_extraction",

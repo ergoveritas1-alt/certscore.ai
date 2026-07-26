@@ -1236,6 +1236,7 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
   documentSources: Array<Record<string, unknown>>;
   events: ScanEventQueryRow[];
   macroEnrichment: Record<string, unknown> | null;
+  modelPolicyReviewArtifact: Record<string, unknown> | null;
   pageEvidence: Array<Record<string, unknown>>;
   policyEnrichment: Array<Record<string, unknown>>;
   policyReviewQueue: Array<Record<string, unknown>>;
@@ -1259,6 +1260,7 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
     policyEnrichment,
     policyReviewQueue,
     documentSources,
+    modelPolicyReviewResult,
     macroEnrichmentResult,
     pageEvidenceResult,
     signalHitsResult,
@@ -1338,6 +1340,22 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
       [scanId],
       { readOnly: true }
     ).then((result) => result.rows),
+    queryOne<Record<string, unknown>>(
+      `select review_json
+         from scan_model_review_artifacts
+        where scan_id = $1
+          and review_kind = 'policy_semantic'
+          and review_mode = 'enforced'
+          and review_status = 'completed'
+        order by updated_at desc
+        limit 1`,
+      [scanId],
+      { readOnly: true }
+    ).then((row) => ({ data: row, error: null as QueryErrorLike }))
+      .catch((error) => ({
+        data: null,
+        error: { message: getErrorMessage(error) } as QueryErrorLike
+      })),
     queryOne<Record<string, unknown>>(`select * from scan_macro_enrichments where scan_id = $1`, [scanId], { readOnly: true }).then(
       (row) => ({ data: row, error: null as QueryErrorLike })
     ).catch((error) => ({ data: null, error: { message: getErrorMessage(error) } as QueryErrorLike })),
@@ -1371,6 +1389,11 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
   if (macroEnrichmentResult.error && !isMissingOptionalTableError(macroEnrichmentResult.error)) {
     throw new Error(`Failed to load scan macro enrichment: ${macroEnrichmentResult.error.message}`);
   }
+  if (modelPolicyReviewResult.error && !isMissingOptionalTableError(modelPolicyReviewResult.error)) {
+    throw new Error(
+      `Failed to load scan policy model review: ${modelPolicyReviewResult.error.message}`
+    );
+  }
   if (pageEvidenceResult.error && !isMissingOptionalTableError(pageEvidenceResult.error)) {
     throw new Error(`Failed to load scan page evidence: ${pageEvidenceResult.error.message}`);
   }
@@ -1384,6 +1407,12 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
     documentSources,
     events,
     macroEnrichment: macroEnrichmentResult.data ?? null,
+    modelPolicyReviewArtifact:
+      modelPolicyReviewResult.data?.review_json &&
+      typeof modelPolicyReviewResult.data.review_json === "object" &&
+      !Array.isArray(modelPolicyReviewResult.data.review_json)
+        ? modelPolicyReviewResult.data.review_json as Record<string, unknown>
+        : null,
     pageEvidence: pageEvidenceResult.data,
     policyEnrichment,
     policyReviewQueue,

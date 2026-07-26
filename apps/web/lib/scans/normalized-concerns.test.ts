@@ -1556,7 +1556,12 @@ function makeApprovedGdprTransparencyArticle13Signal(
   } = {}
 ) {
   const disclosureType = input.disclosureType ?? "legal_basis";
-  const evidenceText = input.evidenceText ?? "La base juridica del tratamiento de datos personales incluye el consentimiento y el contrato.";
+  const isProcessingPurposes = disclosureType === "processing_purposes";
+  const evidenceText = input.evidenceText ?? (
+    isProcessingPurposes
+      ? "Utilizamos sus datos personales para prestar los servicios solicitados y responder a sus solicitudes."
+      : "La base juridica del tratamiento de datos personales incluye el consentimiento y el contrato."
+  );
   return {
     classifierProvenance: "gdpr_transparency_topic_classifier.v1",
     classifierReasonCodes: [`matched_${disclosureType}`],
@@ -1566,7 +1571,7 @@ function makeApprovedGdprTransparencyArticle13Signal(
     evidenceText,
     matchStrength: "direct",
     matchedLocale: input.matchedLocale ?? "es",
-    matchedTerm: "base juridica",
+    matchedTerm: isProcessingPurposes ? "utilizamos sus datos personales para" : "base juridica",
     productionCredit: input.productionCredit ?? true,
     productionCreditProfile: input.productionCreditProfile ?? "gdpr_transparency_multilingual_article13_v1",
     selectedEvidenceStrength: "strong",
@@ -1792,6 +1797,48 @@ test("GDPR Transparency concerns keep stale transfer frameworks as review-only e
   );
 });
 
+test("retained discarded policy evidence creates a stale legal-framework review concern", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        legalFrameworkValidityMatches: [
+          {
+            canonicalId: "eu_us_privacy_shield",
+            canonicalName: "EU-US Privacy Shield",
+            canonicalStatus: "invalidated",
+            effectiveFrom: "2016-07-12",
+            evidenceText:
+              "Our payment provider is certified under the EU-US Privacy Shield.",
+            invalidatedFrom: "2020-07-16",
+            matchedAlias: "EU-US Privacy Shield",
+            reviewMessage:
+              "An obsolete EU-US Privacy Shield reference was observed.",
+            sourceUrl: "https://example.test/privacy",
+            statusAtScan: "invalidated",
+            subjectArea: "international_data_transfers"
+          }
+        ],
+        staleLegalFrameworkReferenceObserved: true
+      }
+    },
+    validationFindings: []
+  });
+  const concern = concerns.find((item) =>
+    item.originKey ===
+    "gdpr_transparency.legal_framework_validity.eu_us_privacy_shield"
+  );
+
+  assert.ok(concern);
+  assert.equal(concern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  assert.deepEqual(concern.negativeEvidenceFlags, [
+    "stale_legal_framework_reference_observed"
+  ]);
+  assert.match(concern.evidenceBundle.policySnippets[0] ?? "", /Privacy Shield/i);
+});
+
 test("off-topic Privacy Shield wording receives no processing-purposes checklist credit", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],
@@ -1899,6 +1946,102 @@ test("English legacy normalized concern behavior is preserved with legacy Articl
   );
   assert.equal(
     withLegacyArticle13Summary.some((concern) => concern.originKey.startsWith("gdpr_transparency.article13.")),
+    false
+  );
+});
+
+function makeProductionPolicyModelReviewArtifact(
+  overrides: Record<string, unknown> = {}
+) {
+  return {
+    contractVersion: "policy_model_review.v2",
+    mode: "enforced",
+    status: "completed",
+    scanId: "scan-model-review-1",
+    cacheKey: "a".repeat(64),
+    rows: [
+      {
+        topic: "legal_basis",
+        status: "observed",
+        confidence: 0.96,
+        sourceDocumentIds: ["policy-1"],
+        sourceUrls: ["https://example.com/privacy"],
+        evidenceExcerpts: [
+          "We process personal data based on consent, contract, and legal obligations."
+        ],
+        conflictingExcerpts: [],
+        reasonCodes: ["policy_review_invariants_applied_v1"],
+        rationale:
+          "A directly relevant legal-basis passage passed the production invariants."
+      }
+    ],
+    deterministicLegalFrameworkSignals: [],
+    deterministicPolicyReviewSignals: [],
+    failureReason: null,
+    provenance: {
+      role: "review",
+      provider: "openai",
+      requestedModel: "gpt-5.4-mini",
+      resolvedModel: "gpt-5.4-mini",
+      taskType: "policy_semantic_review",
+      promptVersion: "policy_semantic_review.v2",
+      schemaVersion: "policy_semantic_review_output.v2",
+      inputRefs: ["policy-1"],
+      outputRefs: ["policy-1"],
+      contentHash: "b".repeat(64),
+      confidence: 0.96,
+      reasonCodes: ["approved_precision_first_production_projection_v1"],
+      uncertaintyNotes: [],
+      latencyMs: 10,
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+      usedForProductionProjection: true
+    },
+    productionEligible: true,
+    ...overrides
+  };
+}
+
+test("enforced invariant-verified Mini policy review creates checklist-only normalized evidence", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyModelReviewArtifact: makeProductionPolicyModelReviewArtifact()
+    },
+    validationFindings: []
+  });
+  const concern = concerns.find(
+    (candidate) =>
+      candidate.originKey === "gdpr_transparency.article13.legal_basis"
+  );
+
+  assert.ok(concern);
+  assert.equal(concern.regulatoryChecklistEligibility, "observed");
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  assert.equal(
+    concern.evidenceBundle.rawEvidence?.classifierProvenance,
+    "mini_policy_semantic_review.v2"
+  );
+});
+
+test("shadow or non-production Mini policy review cannot create normalized evidence", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyModelReviewArtifact: makeProductionPolicyModelReviewArtifact({
+        mode: "shadow",
+        productionEligible: false
+      })
+    },
+    validationFindings: []
+  });
+
+  assert.equal(
+    concerns.some((concern) =>
+      concern.originKey === "gdpr_transparency.article13.legal_basis"
+    ),
     false
   );
 });

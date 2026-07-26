@@ -36,3 +36,16 @@ test("lightweight status API resolves public shared-link access before selecting
   assert.match(source, /getPublicScanStatusProjection/);
   assert.doesNotMatch(source, /bootstrapAppUserSession/);
 });
+
+test("completed dashboard reports use an honest loading state and a short stable-record cache", async () => {
+  const source = await readFile("apps/web/app/app/scans/[scanId]/page.tsx", "utf8");
+  const loadingStateStart = source.indexOf("function ScanDetailLoadingState");
+  const loadingStateEnd = source.indexOf("function canViewCapturedImage", loadingStateStart);
+  const loadingState = source.slice(loadingStateStart, loadingStateEnd);
+
+  assert.match(loadingState, /Building the report view/);
+  assert.match(loadingState, /Loading the evidence summary, cookies and trackers, and privacy review/);
+  assert.doesNotMatch(loadingState, /Overall score|3rd-party requests|Non-essential storage/);
+  assert.match(source, /COMPLETED_SCAN_DETAIL_CACHE_SECONDS = 15/);
+  assert.match(source, /statusProjection\\.reportReady \\|\\| completedLongEnoughForShortCache/);
+});

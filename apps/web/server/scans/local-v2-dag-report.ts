@@ -14,6 +14,8 @@ import {
   classifyConsentControlLabel,
   deriveConsentSurfaceInspectionOutcome,
   derivePolicySurfaceInspectionOutcome,
+  evaluateLegalFrameworkValidity,
+  hasStaleLegalFrameworkReference,
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type CanonicalEvidenceBundle,
   type NormalizedVendorObservation,
@@ -2077,6 +2079,7 @@ export function summarizePolicySurfaces(
     gdprTransparencyEvidenceProfile?: GdprTransparencyProductionEvidenceProfile | string | null;
     homepageNoGo?: boolean;
     primaryLanguage?: string | null;
+    scanStartedAt?: string | null;
   } = {}
 ) {
   const gdprTransparencyEvidenceProfile = normalizeGdprTransparencyProductionEvidenceProfile(
@@ -2311,6 +2314,39 @@ export function summarizePolicySurfaces(
       textExcerpt: section.textExcerpt,
     }))
   ).slice(0, 80);
+  const legalFrameworkValidityMatches = [
+    ...new Map(
+      article13Surfaces.flatMap((row) => {
+        const sourceUrl =
+          row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url;
+        const policyTexts = uniqueStrings([
+          readPolicySurfaceTextArtifact(row.surface),
+          firstString(row.surface.textExcerpt),
+          ...(row.surface.retainedPolicySections ?? []).map((section) =>
+            firstString(section.textExcerpt)
+          ),
+          ...(row.surface.article13DisclosureSignals ?? []).map((signal) =>
+            firstString(signal.evidenceText)
+          ),
+          ...(row.surface.discardedArticle13DisclosureSignals ?? []).map((signal) =>
+            firstString(signal.evidenceText)
+          ),
+        ]);
+        return policyTexts.flatMap((policyText) =>
+          evaluateLegalFrameworkValidity(policyText, options.scanStartedAt).map((match) => ({
+            ...match,
+            evidenceText:
+              buildPolicyEvidenceContextExcerpt(policyText, match.matchedAlias) ??
+              match.matchedAlias,
+            sourceUrl,
+          }))
+        );
+      }).map((match) => [
+        `${match.canonicalId}\u0000${match.statusAtScan}\u0000${match.sourceUrl}`,
+        match,
+      ])
+    ).values(),
+  ].slice(0, 20);
   const retainedArticle13SectionEvidence = dedupePolicyDisclosureRows(article13Surfaces.flatMap((row) =>
     (row.surface.retainedArticle13SectionEvidence ?? []).map((evidence) => ({
       coverageArea: evidence.coverageArea,
@@ -2351,6 +2387,9 @@ export function summarizePolicySurfaces(
       .filter((signal) => signal.status === "partial")
       .map((signal) => signal.disclosureType)),
     discardedArticle13DisclosureSignals,
+    legalFrameworkValidityMatches,
+    staleLegalFrameworkReferenceObserved:
+      hasStaleLegalFrameworkReference(legalFrameworkValidityMatches),
     gdprTransparencyEvidenceProfile,
     gdprTransparencyProductionEvidenceDiagnostics,
     gdprTransparencyProductionEvidenceEnabled,
@@ -2383,6 +2422,7 @@ export function summarizePolicySurfaces(
     privacyPolicyTextCharacterCount: text.length,
     privacyPolicyUrls: uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
     processingErrorObserved,
+    scanStartedAt: options.scanStartedAt ?? null,
     retainedCookiePolicyTextExcerpt: buildRetainedPolicyDisclosureText(cookiePolicyText),
     retainedPrivacyPolicyTextExcerpt: buildRetainedPolicyDisclosureText(text),
     validatedDisclosureTypesObserved: uniqueStrings(dedupedArticle13DisclosureSignals
@@ -3663,6 +3703,7 @@ function buildMaterializedLocalV2Detail(
     gdprTransparencyEvidenceProfile,
     homepageNoGo: Boolean(localV2NoGo),
     primaryLanguage: getLocalV2PrimaryLanguage(bundle),
+    scanStartedAt: bundle.startedAt,
   });
   const verifiedPolicySurfaces = policySurfaces.filter((row) =>
     row.surface.surfaceType !== "privacy_policy" || isEvaluatedPrivacyPolicySurface(row.surface)

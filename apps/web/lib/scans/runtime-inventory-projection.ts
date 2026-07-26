@@ -31,6 +31,7 @@ import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 export type ConsentReviewPriority = RuntimeCookieReviewPriority;
 export type InventoryConfidence = RuntimeCookieInventoryConfidence;
 export type InventoryMacroCategory = "Advertising" | "Analytics" | "Essential" | "Functional" | "Review";
+export type InventoryEvidenceClassification = "Contextual" | "Essential" | "Non-essential" | "Review";
 
 export type PreConsentDataFlow = {
   controllingEntity: {
@@ -854,6 +855,35 @@ export function deriveInventoryMacroCategory(input: {
     return "Analytics";
   }
   return "Review";
+}
+
+export function classifyInventoryEvidence(
+  row: Pick<InventoryGroupRow, "macroCategory" | "priority" | "purpose" | "purposes">
+): InventoryEvidenceClassification {
+  if (row.priority === "high" || row.priority === "medium") {
+    return "Non-essential";
+  }
+  if (row.priority === "review_needed" || row.macroCategory === "Review") {
+    return "Review";
+  }
+
+  const purposeTokens = getInventoryPurposeTokens([row.purpose, ...row.purposes]);
+  if (
+    purposeTokens.has("cookie_compliance") ||
+    purposeTokens.has("consent") ||
+    purposeTokens.has("consent_management")
+  ) {
+    return "Contextual";
+  }
+
+  // A functional-looking category does not prove the observed activity was
+  // necessary in this page context. Payment, authentication, CDN, and generic
+  // functional activity remain contextual without an explicit necessity basis.
+  if (purposeTokens.has("necessary") || purposeTokens.has("security")) {
+    return "Essential";
+  }
+
+  return "Contextual";
 }
 
 export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {

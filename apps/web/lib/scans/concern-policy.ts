@@ -2219,14 +2219,41 @@ function hasStableLinkedDiscoveryPath(rawEvidence: Record<string, unknown> | nul
 }
 
 function isGdprTransparencyArticle13EvidenceConcern(rawEvidence: Record<string, unknown> | null | undefined) {
+  const profile = getFirstString(rawEvidence, [
+    "gdprTransparencyEvidenceProfile",
+    "gdpr_transparency_evidence_profile"
+  ]);
+  const creditProfile = getFirstString(rawEvidence, [
+    "productionCreditProfile",
+    "production_credit_profile"
+  ]);
+  const provenance = getFirstString(rawEvidence, [
+    "classifierProvenance",
+    "classifier_provenance"
+  ]);
+  const approvedDeterministicEvidence =
+    profile === "gdpr_transparency_multilingual_article13_v1" &&
+    creditProfile === "gdpr_transparency_multilingual_article13_v1" &&
+    provenance === "gdpr_transparency_topic_classifier.v1";
+  const approvedModelReviewEvidence =
+    rawEvidence?.gdprTransparencyModelReviewEvidence === true &&
+    profile === "gdpr_transparency_mini_review_v1" &&
+    creditProfile === "gdpr_transparency_mini_review_v1" &&
+    provenance === "mini_policy_semantic_review.v2";
+
   return rawEvidence?.gdprTransparencyArticle13Evidence === true &&
-    getFirstString(rawEvidence, ["gdprTransparencyEvidenceProfile", "gdpr_transparency_evidence_profile"]) ===
-      "gdpr_transparency_multilingual_article13_v1" &&
     rawEvidence.productionCredit === true &&
-    getFirstString(rawEvidence, ["productionCreditProfile", "production_credit_profile"]) ===
-      "gdpr_transparency_multilingual_article13_v1" &&
-    getFirstString(rawEvidence, ["classifierProvenance", "classifier_provenance"]) ===
-      "gdpr_transparency_topic_classifier.v1";
+    (approvedDeterministicEvidence || approvedModelReviewEvidence);
+}
+
+function isGdprTransparencyLegalFrameworkValidityConcern(
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  return rawEvidence?.gdprTransparencyLegalFrameworkValidityEvidence === true &&
+    getBooleanEvidence(rawEvidence, [
+      "staleLegalFrameworkReferenceObserved",
+      "stale_legal_framework_reference_observed"
+    ]) === true;
 }
 
 function getGdprTransparencyArticle13ChecklistEligibility(
@@ -3278,6 +3305,17 @@ export function deriveConcernPolicy(input: {
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "internal_only"
+    };
+  }
+
+  if (isGdprTransparencyLegalFrameworkValidityConcern(input.rawEvidence)) {
+    negativeEvidenceFlags.add("stale_legal_framework_reference_observed");
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility: "review_signal"
     };
   }
 

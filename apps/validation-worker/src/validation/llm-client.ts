@@ -16,9 +16,16 @@ type OpenAiJsonPayload = {
     role: "system" | "user" | "assistant";
   }>;
   model?: string;
-  response_format?: {
-    type: "json_object";
-  };
+  response_format?:
+    | { type: "json_object" }
+    | {
+        type: "json_schema";
+        json_schema: {
+          name: string;
+          strict: true;
+          schema: Record<string, unknown>;
+        };
+      };
   temperature?: number;
 };
 
@@ -126,7 +133,7 @@ export async function validateFindingWithLlm(input: {
 
   if (!env.OPENAI_API_KEY) {
     return buildFallbackValidationVerdict({
-      model: env.VALIDATION_OPENAI_MODEL,
+      model: env.CERTSCORE_REVIEW_MODEL,
       note: "The validation worker could not call the model because OPENAI_API_KEY is not configured."
     });
   }
@@ -135,9 +142,8 @@ export async function validateFindingWithLlm(input: {
   try {
     payload = await callOpenAiJsonWithQuotaFallback({
       apiKey: env.OPENAI_API_KEY,
-      fallbackModel: env.VALIDATION_NANO_MODEL,
       payload: {
-        model: env.VALIDATION_OPENAI_MODEL,
+        model: env.CERTSCORE_REVIEW_MODEL,
         temperature: 0,
         response_format: {
           type: "json_object"
@@ -166,7 +172,7 @@ export async function validateFindingWithLlm(input: {
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Unknown OpenAI validation error.";
     return buildFallbackValidationVerdict({
-      model: env.VALIDATION_NANO_MODEL || env.VALIDATION_OPENAI_MODEL,
+      model: env.CERTSCORE_REVIEW_MODEL,
       note: `The validation worker could not complete the model call and fell back to inconclusive review. ${reason}`
     });
   }
@@ -187,7 +193,7 @@ export async function validateFindingWithLlm(input: {
         ? Math.max(0, Math.min(1, parsed.confidence))
         : 0.5,
     evidence: parsed.evidence ?? {},
-    model: payload.model ?? env.VALIDATION_OPENAI_MODEL,
+    model: payload.model ?? env.CERTSCORE_REVIEW_MODEL,
     promptVersion: VALIDATION_PROMPT_VERSION,
     rationale: parsed.rationale ?? "No rationale returned.",
     verdict
@@ -222,7 +228,7 @@ function buildFallbackFinancialJudgeVerdict(note: string) {
       financialJudgeVerdict: fallbackVerdict,
       note
     },
-    model: env.VALIDATION_NANO_MODEL || env.VALIDATION_OPENAI_MODEL,
+    model: env.CERTSCORE_REVIEW_MODEL,
     promptVersion: VALIDATION_PROMPT_VERSION,
     rationale: note,
     verdict: validationVerdictForFinancialJudge(fallbackVerdict.verdict)
@@ -243,9 +249,8 @@ export async function validateFinancialFindingWithLlm(input: FinancialJudgeInput
   try {
     payload = await callOpenAiJsonWithQuotaFallback({
       apiKey: env.OPENAI_API_KEY,
-      fallbackModel: env.VALIDATION_NANO_MODEL,
       payload: {
-        model: env.VALIDATION_OPENAI_MODEL,
+        model: env.CERTSCORE_REVIEW_MODEL,
         temperature: 0,
         response_format: {
           type: "json_object"
@@ -281,9 +286,257 @@ export async function validateFinancialFindingWithLlm(input: FinancialJudgeInput
     evidence: {
       financialJudgeVerdict: judge
     },
-    model: payload.model ?? env.VALIDATION_OPENAI_MODEL,
+    model: payload.model ?? env.CERTSCORE_REVIEW_MODEL,
     promptVersion: VALIDATION_PROMPT_VERSION,
     rationale: `Financial judge ${judge.verdict.replaceAll("_", " ")} (${judge.rationaleCode}).`,
     verdict
   };
+}
+
+export type BatchedValidationFinding = {
+  finding: Record<string, unknown>;
+  findingId: string;
+  routingReasonCodes: string[];
+};
+
+export type BatchedValidationVerdict = {
+  agreementScore: ValidationAgreementScore;
+  confidence: number;
+  evidence: Record<string, unknown>;
+  findingId: string;
+  model: string;
+  promptVersion: string;
+  rationale: string;
+  verdict: "supported" | "inconclusive" | "not_supported";
+};
+
+const validationBatchJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["verdicts"],
+  properties: {
+    verdicts: {
+      type: "array",
+      maxItems: 20,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["findingId", "verdict", "confidence", "rationale", "evidence"],
+        properties: {
+          findingId: { type: "string", maxLength: 120 },
+          verdict: {
+            type: "string",
+            enum: ["supported", "inconclusive", "not_supported"]
+          },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
+          rationale: { type: "string", maxLength: 1_000 },
+          evidence: {
+            type: "object",
+            additionalProperties: false,
+            required: ["supportingRefs", "conflictingRefs", "reasonCodes"],
+            properties: {
+              supportingRefs: {
+                type: "array",
+                maxItems: 20,
+                items: { type: "string", maxLength: 500 }
+              },
+              conflictingRefs: {
+                type: "array",
+                maxItems: 20,
+                items: { type: "string", maxLength: 500 }
+              },
+              reasonCodes: {
+                type: "array",
+                maxItems: 20,
+                items: { type: "string", maxLength: 120 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+} as const;
+
+function boundedJson(value: unknown, maxChars: number) {
+  const serialized = JSON.stringify(value);
+  if (serialized.length <= maxChars) {
+    return serialized;
+  }
+  return `${serialized.slice(0, maxChars)}…[bounded]`;
+}
+
+function buildBatchFallbacks(input: {
+  items: BatchedValidationFinding[];
+  model: string;
+  note: string;
+}): Map<string, BatchedValidationVerdict> {
+  return new Map<string, BatchedValidationVerdict>(
+    input.items.map((item) => {
+      const fallback = buildFallbackValidationVerdict({
+        model: input.model,
+        note: input.note
+      });
+      return [
+        item.findingId,
+        {
+          ...fallback,
+          findingId: item.findingId,
+          evidence: {
+            ...fallback.evidence,
+            modelRoleFailure: true,
+            routingReasonCodes: item.routingReasonCodes
+          }
+        }
+      ];
+    })
+  );
+}
+
+export async function validateFindingsBatchWithLlm(input: {
+  domain: string;
+  items: BatchedValidationFinding[];
+  modelRole: "extraction" | "review" | "escalation";
+  scanEvidence: Record<string, unknown>;
+}) {
+  const env = getWorkerEnv();
+  const model =
+    input.modelRole === "extraction"
+      ? env.CERTSCORE_EXTRACTION_MODEL
+      : input.modelRole === "escalation"
+        ? env.CERTSCORE_ESCALATION_MODEL
+        : env.CERTSCORE_REVIEW_MODEL;
+  if (input.items.length === 0) {
+    return new Map<string, BatchedValidationVerdict>();
+  }
+  if (!model) {
+    return buildBatchFallbacks({
+      items: input.items,
+      model: input.modelRole,
+      note: `No ${input.modelRole} model is configured; the batched review is inconclusive.`
+    });
+  }
+  if (!env.OPENAI_API_KEY) {
+    return buildBatchFallbacks({
+      items: input.items,
+      model,
+      note: "OPENAI_API_KEY is not configured; the batched review is inconclusive."
+    });
+  }
+
+  let payload: OpenAiJsonResponse;
+  try {
+    payload = await callOpenAiJson({
+      apiKey: env.OPENAI_API_KEY,
+      payload: {
+        model,
+        temperature: 0,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "validation_finding_batch",
+            strict: true,
+            schema: validationBatchJsonSchema
+          }
+        },
+        messages: [
+          {
+            role: "system",
+            content: [
+              "Review retained website-scan findings as bounded evidence questions.",
+              "Return one result for every findingId.",
+              "Verdict must be supported, inconclusive, or not_supported.",
+              "Do not invent evidence, legal conclusions, vendors, timing, or runtime facts.",
+              "Prefer direct evidence over adjacent keywords.",
+              "A passage about retention does not prove processing purposes.",
+              "A transfer framework reference does not prove processing purposes.",
+              "When evidence conflicts, capture the conflict and use inconclusive unless the direct evidence resolves it.",
+              "This output is advisory and cannot create or upgrade a production finding."
+            ].join(" ")
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              domain: input.domain,
+              modelRole: input.modelRole,
+              retainedScanEvidenceJsonExcerpt: boundedJson(input.scanEvidence, 18_000),
+              findings: input.items.map((item) => ({
+                findingId: item.findingId,
+                findingJsonExcerpt: boundedJson(item.finding, 8_000),
+                routingReasonCodes: item.routingReasonCodes
+              }))
+            })
+          }
+        ]
+      }
+    });
+  } catch (error) {
+    return buildBatchFallbacks({
+      items: input.items,
+      model,
+      note: `The ${input.modelRole} batch failed safely: ${error instanceof Error ? error.message : "unknown error"}`
+    });
+  }
+
+  try {
+    const parsed = JSON.parse(extractJson(payload.choices?.[0]?.message?.content ?? "")) as {
+      verdicts?: Array<{
+        confidence?: number;
+        evidence?: Record<string, unknown>;
+        findingId?: string;
+        rationale?: string;
+        verdict?: "supported" | "inconclusive" | "not_supported";
+      }>;
+    };
+    const expectedIds = new Set(input.items.map((item) => item.findingId));
+    const result = new Map<string, BatchedValidationVerdict>();
+    for (const row of parsed.verdicts ?? []) {
+      if (
+        typeof row.findingId !== "string" ||
+        !expectedIds.has(row.findingId) ||
+        result.has(row.findingId)
+      ) {
+        continue;
+      }
+      const verdict =
+        row.verdict === "supported" || row.verdict === "not_supported"
+          ? row.verdict
+          : "inconclusive";
+      result.set(row.findingId, {
+        agreementScore: agreementScoreForVerdict(verdict),
+        confidence:
+          typeof row.confidence === "number" && Number.isFinite(row.confidence)
+            ? Math.max(0, Math.min(1, row.confidence))
+            : 0.5,
+        evidence: {
+          ...(row.evidence ?? {}),
+          modelRole: input.modelRole,
+          usedForProductionProjection: false
+        },
+        findingId: row.findingId,
+        model: payload.model ?? model,
+        promptVersion: `${VALIDATION_PROMPT_VERSION}.batch.v1`,
+        rationale: row.rationale ?? "No rationale returned.",
+        verdict
+      });
+    }
+    const missing = input.items.filter((item) => !result.has(item.findingId));
+    const fallbacks = buildBatchFallbacks({
+      items: missing,
+      model,
+      note: `The ${input.modelRole} batch omitted this finding and was treated as inconclusive.`
+    });
+    for (const [findingId, verdict] of fallbacks) {
+      result.set(findingId, verdict);
+    }
+    return result;
+  } catch (error) {
+    return buildBatchFallbacks({
+      items: input.items,
+      model,
+      note: `The ${input.modelRole} batch returned malformed structured output and was treated as inconclusive. ${
+        error instanceof Error ? error.message : ""
+      }`
+    });
+  }
 }

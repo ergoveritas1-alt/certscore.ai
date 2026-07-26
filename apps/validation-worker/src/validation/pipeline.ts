@@ -36,7 +36,14 @@ import {
   updateValidationRun,
   upsertValidationVerdict
 } from "./repository";
-import { validateFinancialFindingWithLlm, validateFindingWithLlm } from "./llm-client";
+import {
+  validateFindingsBatchWithLlm,
+  type BatchedValidationVerdict
+} from "./llm-client";
+import {
+  routeValidationFinding,
+  shouldEscalateValidationVerdict
+} from "./model-routing";
 import { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 import {
   extractNanoDocumentSourceWithLlm,
@@ -49,6 +56,10 @@ import { getWorkerEnv } from "../env";
 import { runAccessibilityValidationJob } from "./run-accessibility-validation-job";
 import { deriveFinancialCommercialExpectedFindingIds } from "@website-signal-risk-scanner/validation-shared";
 import { cleanupRuntimeScanArtifacts, getRuntimeScanArtifactOptions } from "./runtime-scan-artifacts";
+import {
+  buildPolicyReviewPacket
+} from "./model-policy-review";
+import { runPolicyReviewPacket } from "./model-policy-review-runner";
 
 export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 
@@ -60,12 +71,7 @@ const NANO_SIGNAL_TERMINAL_STATUS_RECHECK_MS = 1_000;
 const NANO_SIGNAL_ENRICHMENT_POLL_MS = 2_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
-const VALIDATION_VERDICT_BATCH_SIZE = 3;
-const FINANCIAL_JUDGE_CANDIDATE_IDS = new Set([
-  "fee_disclosure_present",
-  "apr_or_interest_rate_disclosure_present",
-  "past_performance_disclaimer_present"
-]);
+const VALIDATION_VERDICT_BATCH_SIZE = 12;
 
 const FINANCIAL_COMMERCIAL_SIGNAL_KEYS = new Set([
   "financial.performance_claim_text_present",
@@ -89,6 +95,71 @@ const FINANCIAL_COMMERCIAL_SIGNAL_KEYS = new Set([
   "commercial.promo_price_or_free_claim_present",
   "commercial.variable_fee_language_present_without_explanation"
 ]);
+
+async function runPolicyModelReview(input: {
+  artifacts: Awaited<ReturnType<typeof loadNanoSignalEnrichmentInputs>>;
+  scanId: string;
+}) {
+  const env = getWorkerEnv();
+  if (!env.CERTSCORE_MINI_REVIEW_ENABLED) {
+    return null;
+  }
+
+  const scanDate =
+    typeof input.artifacts.scan?.completed_at === "string"
+      ? input.artifacts.scan.completed_at
+      : typeof input.artifacts.scan?.started_at === "string"
+        ? input.artifacts.scan.started_at
+        : typeof input.artifacts.scan?.created_at === "string"
+          ? input.artifacts.scan.created_at
+          : null;
+  const scanConfig = input.artifacts.scan?.scan_config_json ?? {};
+  const snapshotDomain =
+    typeof input.artifacts.snapshot?.domain === "string"
+      ? input.artifacts.snapshot.domain
+      : null;
+  const packet = buildPolicyReviewPacket({
+    documentSources: input.artifacts.documentSources,
+    evidenceCoverage: {
+      coverageLimitations: input.artifacts.runtimeArtifacts?.coverageLimitations,
+      policySurfaceInspection: input.artifacts.runtimeArtifacts?.policySurfaceInspection,
+      runtimeCoverage: input.artifacts.runtimeArtifacts?.runtimeCoverage,
+    },
+    policyCandidates: input.artifacts.policySemanticRows,
+    runtimeArtifacts: input.artifacts.runtimeArtifacts,
+    scanContext: {
+      region:
+        typeof scanConfig.region === "string"
+          ? scanConfig.region
+          : null,
+      targetUrl:
+        typeof scanConfig.normalizedUrl === "string"
+          ? scanConfig.normalizedUrl
+          : typeof scanConfig.url === "string"
+            ? scanConfig.url
+            : snapshotDomain
+              ? `https://${snapshotDomain}/`
+              : null,
+    },
+    scanDate,
+    scanId: input.scanId
+  });
+  if (!packet) {
+    return {
+      cacheHit: false,
+      reviewStatus: "skipped",
+      skipReason: "no_retained_policy_documents"
+    };
+  }
+
+  const result = await runPolicyReviewPacket({
+    apiKey: env.OPENAI_API_KEY,
+    mode: env.CERTSCORE_MODEL_REVIEW_MODE,
+    model: env.CERTSCORE_REVIEW_MODEL,
+    packet
+  });
+  return result.summary;
+}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -6623,6 +6694,14 @@ export async function processNanoSignalEnrichmentJob(input: {
     scanId,
     snapshot: artifacts.snapshot
   });
+  const modelPolicyReviewSummary = await runPolicyModelReview({
+    artifacts,
+    scanId
+  }).catch((error) => ({
+    cacheHit: false,
+    reviewStatus: "failed",
+    failureReason: error instanceof Error ? error.message : "Unknown policy model-review failure."
+  }));
 
   await appendScanWorkflowEvent({
     eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
@@ -6646,6 +6725,7 @@ export async function processNanoSignalEnrichmentJob(input: {
       freshExtractionFailedCount,
       freshExtractionPromptTokenCount,
       freshExtractionTotalTokenCount,
+      ...(modelPolicyReviewSummary ? { modelPolicyReview: modelPolicyReviewSummary } : {}),
       ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
       scanStartedAt: startedAt,
       stage: "nano_doc_signals",
@@ -6860,98 +6940,103 @@ export async function processValidationVerdictJob(validationRunId: string) {
 
     const findings = await loadValidationRunFindings(validationRunId);
     const scanArtifacts = await loadCompletedScanArtifacts(run.scan_id);
+    const compactScanEvidence = {
+      policyEnrichments: scanArtifacts.policyEnrichments,
+      preconsentViolations: scanArtifacts.preconsentViolations,
+      runtimeArtifacts: scanArtifacts.runtimeArtifacts,
+      snapshot: scanArtifacts.snapshot,
+      trackerVendors: scanArtifacts.trackerVendors
+    };
+    const routedFindings = findings.map((finding) => {
+      const rawEvidence = (finding.evidence_json ?? {}) as Record<string, unknown>;
+      const findingPacket = {
+        category: finding.category,
+        description: finding.description,
+        evidence: rawEvidence,
+        findingFamily: finding.finding_family,
+        pageUrl: finding.page_url ?? null,
+        ruleKey: typeof finding.rule_key === "string" ? finding.rule_key : "",
+        severity: finding.severity,
+        title: finding.title
+      };
+      return {
+        finding,
+        findingPacket,
+        route: routeValidationFinding(findingPacket)
+      };
+    });
+    const verdicts = new Map<string, BatchedValidationVerdict>();
 
-    for (const batch of chunkRows(findings, VALIDATION_VERDICT_BATCH_SIZE)) {
-      await Promise.all(
-        batch.map(async (finding) => {
-          const rawEvidence = (finding.evidence_json ?? {}) as Record<string, unknown>;
-          const ruleKey = typeof finding.rule_key === "string" ? finding.rule_key : "";
-          const verdict =
-            ruleKey.startsWith("financial_review.") &&
-            typeof rawEvidence.unifiedFindingId === "string" &&
-            FINANCIAL_JUDGE_CANDIDATE_IDS.has(rawEvidence.unifiedFindingId)
-              ? await validateFinancialFindingWithLlm({
-                  candidateFindingId: rawEvidence.unifiedFindingId as
-                    | "fee_disclosure_present"
-                    | "apr_or_interest_rate_disclosure_present"
-                    | "past_performance_disclaimer_present",
-                  evidence: {
-                    exactMatchTerm: typeof rawEvidence.matchedPhrase === "string" ? rawEvidence.matchedPhrase : null,
-                    matchedPhrases:
-                      Array.isArray(rawEvidence.matchedPhrases)
-                        ? (rawEvidence.matchedPhrases as unknown[]).filter((value): value is string => typeof value === "string")
-                        : typeof rawEvidence.matchedPhrase === "string"
-                          ? [rawEvidence.matchedPhrase]
-                          : [],
-                    pageClassification:
-                      rawEvidence.pageClassification === "financial_offer" ||
-                      rawEvidence.pageClassification === "quasi_financial_offer" ||
-                      rawEvidence.pageClassification === "pricing_or_fees" ||
-                      rawEvidence.pageClassification === "disclosure_or_legal" ||
-                      rawEvidence.pageClassification === "identity_or_contact"
-                        ? rawEvidence.pageClassification
-                        : "unknown",
-                    pageUrl: typeof rawEvidence.pageUrl === "string" ? rawEvidence.pageUrl : null,
-                    signalKeys: Array.isArray(rawEvidence.supportingSignals)
-                      ? (rawEvidence.supportingSignals as unknown[]).filter((value): value is string => typeof value === "string")
-                      : typeof rawEvidence.signalKey === "string"
-                        ? [rawEvidence.signalKey]
-                        : [],
-                    snippets: Array.isArray(rawEvidence.policySnippets)
-                      ? (rawEvidence.policySnippets as unknown[]).filter((value): value is string => typeof value === "string")
-                      : typeof rawEvidence.matchedSnippet === "string"
-                        ? [rawEvidence.matchedSnippet]
-                        : [],
-                    sourceUrls: Array.isArray(rawEvidence.sourceUrls)
-                      ? (rawEvidence.sourceUrls as unknown[]).filter((value): value is string => typeof value === "string")
-                      : typeof rawEvidence.pageUrl === "string"
-                        ? [rawEvidence.pageUrl]
-                        : [],
-                    supportingHeadings: Array.isArray(rawEvidence.supportingHeadings)
-                      ? (rawEvidence.supportingHeadings as unknown[]).filter((value): value is string => typeof value === "string")
-                      : []
-                  },
-                  negativeEvidenceFlags: Array.isArray(rawEvidence.negativeEvidenceFlags)
-                    ? (rawEvidence.negativeEvidenceFlags as unknown[]).filter((value): value is string => typeof value === "string")
-                    : [],
-                  scanContext: {
-                    domain: run.hostname,
-                    pageType: typeof rawEvidence.pageType === "string" ? rawEvidence.pageType : null
-                  }
-                })
-              : await validateFindingWithLlm({
-                  domain: run.hostname,
-                  finding: {
-                    category: finding.category,
-                    description: finding.description,
-                    evidence: rawEvidence,
-                    pageUrl: finding.page_url ?? null,
-                    ruleKey,
-                    severity: finding.severity,
-                    title: finding.title
-                  },
-                  scanEvidence: {
-                    pages: scanArtifacts.pages,
-                    policyEnrichments: scanArtifacts.policyEnrichments,
-                    preconsentViolations: scanArtifacts.preconsentViolations,
-                    runtimeArtifacts: scanArtifacts.runtimeArtifacts,
-                    snapshot: scanArtifacts.snapshot,
-                    trackerVendors: scanArtifacts.trackerVendors
-                  }
-                });
+    for (const modelRole of ["extraction", "review"] as const) {
+      const candidates = routedFindings.filter((entry) => entry.route.primaryRole === modelRole);
+      for (const batch of chunkRows(candidates, VALIDATION_VERDICT_BATCH_SIZE)) {
+        const batchVerdicts = await validateFindingsBatchWithLlm({
+          domain: run.hostname,
+          items: batch.map((entry) => ({
+            finding: entry.findingPacket,
+            findingId: String(entry.finding.id),
+            routingReasonCodes: entry.route.reasonCodes
+          })),
+          modelRole,
+          scanEvidence: compactScanEvidence
+        });
+        for (const [findingId, verdict] of batchVerdicts) {
+          verdicts.set(findingId, verdict);
+        }
+      }
+    }
 
-          await upsertValidationVerdict({
-            agreementScore: verdict.agreementScore,
-            confidence: verdict.confidence,
-            evidence: verdict.evidence,
-            model: verdict.model,
-            promptVersion: verdict.promptVersion,
-            rationale: verdict.rationale,
-            validationRunFindingId: String(finding.id),
-            verdict: verdict.verdict
-          });
-        })
-      );
+    const workerEnv = getWorkerEnv();
+    if (workerEnv.CERTSCORE_ESCALATION_ENABLED && workerEnv.CERTSCORE_ESCALATION_MODEL) {
+      const escalationCandidates = routedFindings.filter((entry) => {
+        const verdict = verdicts.get(String(entry.finding.id));
+        return verdict
+          ? shouldEscalateValidationVerdict({
+              confidence: verdict.confidence,
+              route: entry.route,
+              verdict: verdict.verdict
+            })
+          : entry.route.escalationEligible;
+      });
+      for (const batch of chunkRows(escalationCandidates, VALIDATION_VERDICT_BATCH_SIZE)) {
+        const escalated = await validateFindingsBatchWithLlm({
+          domain: run.hostname,
+          items: batch.map((entry) => ({
+            finding: entry.findingPacket,
+            findingId: String(entry.finding.id),
+            routingReasonCodes: [...entry.route.reasonCodes, "selective_escalation"]
+          })),
+          modelRole: "escalation",
+          scanEvidence: compactScanEvidence
+        });
+        for (const [findingId, verdict] of escalated) {
+          verdicts.set(findingId, verdict);
+        }
+      }
+    }
+
+    for (const entry of routedFindings) {
+      const findingId = String(entry.finding.id);
+      const verdict = verdicts.get(findingId);
+      if (!verdict) {
+        continue;
+      }
+      await upsertValidationVerdict({
+        agreementScore: verdict.agreementScore,
+        confidence: verdict.confidence,
+        evidence: {
+          ...verdict.evidence,
+          modelRouting: {
+            ...entry.route,
+            reviewMode: workerEnv.CERTSCORE_MODEL_REVIEW_MODE
+          }
+        },
+        model: verdict.model,
+        promptVersion: verdict.promptVersion,
+        rationale: verdict.rationale,
+        validationRunFindingId: findingId,
+        verdict: verdict.verdict
+      });
     }
 
     await finalizeValidationRun(validationRunId);

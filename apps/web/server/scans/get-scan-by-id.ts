@@ -1,5 +1,6 @@
 "use server";
 
+import { policyModelReviewArtifactSchema } from "@certscore/contracts";
 import {
   type AccessPostureClass,
   type BlockPageClassification,
@@ -712,6 +713,7 @@ async function loadScanDetailRecord(input: {
     documentSources,
     events,
     macroEnrichment,
+    modelPolicyReviewArtifact,
     pageEvidence,
     policyEnrichment,
     policyReviewQueue,
@@ -1251,19 +1253,36 @@ async function loadScanDetailRecord(input: {
   const normalizedRuntimeArtifacts = browserExtensionRuntimeArtifacts
     ? withHybridRuntimeArtifactFallbacks(browserExtensionRuntimeArtifacts) ?? browserExtensionRuntimeArtifacts
     : null;
+  const parsedModelPolicyReview =
+    policyModelReviewArtifactSchema.safeParse(modelPolicyReviewArtifact);
+  const productionModelPolicyReview =
+    parsedModelPolicyReview.success &&
+    parsedModelPolicyReview.data.mode === "enforced" &&
+    parsedModelPolicyReview.data.status === "completed" &&
+    parsedModelPolicyReview.data.productionEligible &&
+    parsedModelPolicyReview.data.provenance.usedForProductionProjection
+      ? parsedModelPolicyReview.data
+      : null;
+  const modelReviewBackedRuntimeArtifacts = productionModelPolicyReview
+    ? {
+        ...(normalizedRuntimeArtifacts ?? {}),
+        policy_model_review_artifact: productionModelPolicyReview,
+        policyModelReviewArtifact: productionModelPolicyReview
+      }
+    : normalizedRuntimeArtifacts;
   const runtimeVendorDisclosureEvidence = deriveRuntimeVendorDisclosureEvidenceFromRetainedSources({
     documentSources: normalizedDocumentSources,
-    runtimeArtifacts: normalizedRuntimeArtifacts,
+    runtimeArtifacts: modelReviewBackedRuntimeArtifacts,
     trackerVendors: normalizedTrackerVendors
   });
   const reportRuntimeArtifacts =
-    normalizedRuntimeArtifacts && runtimeVendorDisclosureEvidence.length > 0
+    modelReviewBackedRuntimeArtifacts && runtimeVendorDisclosureEvidence.length > 0
       ? {
-          ...normalizedRuntimeArtifacts,
+          ...modelReviewBackedRuntimeArtifacts,
           runtime_vendor_disclosure_evidence: runtimeVendorDisclosureEvidence,
           runtimeVendorDisclosureEvidence: runtimeVendorDisclosureEvidence
         }
-      : normalizedRuntimeArtifacts;
+      : modelReviewBackedRuntimeArtifacts;
   const hybridRuntimeSignalPopulations = getHybridNanoSignalPopulations(reportRuntimeArtifacts).map((signal) => ({
     ...signal,
     observedAt: signal.observedAt ?? scanObservedAt,
