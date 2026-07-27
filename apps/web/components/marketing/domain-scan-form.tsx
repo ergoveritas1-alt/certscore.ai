@@ -769,6 +769,14 @@ export function DomainScanForm({
         return;
       }
 
+      // Reused reports can navigate to the same scan-detail shell with only a
+      // query-string change, so the form may stay mounted across navigation.
+      // Clear its transient submit state before pushing that destination.
+      if (payload.reusedExistingScan) {
+        isSubmittingRef.current = false;
+        setIsSubmitting(false);
+      }
+
       if (payload.scanId) {
         saveActiveScanSession({
           campaignAttribution: campaignAttribution ?? undefined,

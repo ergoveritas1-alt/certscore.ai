@@ -2,7 +2,7 @@ import { isMeaningfulPolicyText } from "./policy-snippet-normalization";
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 
 export type PolicyEnrichmentRow = Record<string, unknown>;
-export const MAX_PUBLIC_POLICY_SURFACES = 5;
+export const MAX_PUBLIC_POLICY_SURFACES = 4;
 
 export type PublicPolicySurfaceProjection = {
   type: string;

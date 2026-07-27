@@ -4,6 +4,7 @@ import {
   deriveGdprEprivacyCoverageChecklist,
   type GdprEprivacyCoverageChecklistItem
 } from "./gdpr-eprivacy-coverage-checklist";
+import { getEvidenceLabel } from "./gdpr-eprivacy-assessment-direction";
 import {
   deriveGdprEprivacyCoveragePolicyOutcomes,
   type GdprEprivacyCoverageOutcome
@@ -1479,6 +1480,45 @@ test("deriveGdprEprivacyCoverageChecklist keeps missing reject as a gap when pre
   assert.equal(rejectPath.assessmentStatus, "gap_observed");
   assert.equal(rejectPath.evidenceState, "not_observed");
   assert.match(rejectPath.limitation ?? "", /did not retain a first-layer reject/i);
+});
+
+test("completed no-surface inspection with pre-consent activity presents missing decline as a partial concern", () => {
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    normalizedConcerns: [],
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        networkSummary: {
+          preConsentThirdPartyRequestCount: 4
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: false,
+        gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+        rejectAvailableOnFirstLayer: false
+      }
+    },
+    scanCompleted: true,
+    snapshot: {
+      cookie_banner_present: false,
+      third_party_request_count: 4
+    }
+  });
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const rejectPath = byId(items, "reject_all_path_availability");
+  assert.equal(rejectPath.status, "Review signal");
+  assert.equal(rejectPath.assessmentStatus, "review_signal");
+  assert.equal(rejectPath.evidenceState, "observed");
+  assert.equal(getEvidenceLabel(rejectPath), "Partial concern");
+  assert.match(rejectPath.limitation ?? "", /meaningful opportunity to refuse/i);
+  assert.equal(byId(items, "accept_consent_control").status, "Not observed");
+  assert.equal(byId(items, "options_settings_preferences_control").status, "Not observed");
 });
 
 test("deriveGdprEprivacyCoverageChecklist keeps missing reject as a gap without relying on policy reason strings", () => {

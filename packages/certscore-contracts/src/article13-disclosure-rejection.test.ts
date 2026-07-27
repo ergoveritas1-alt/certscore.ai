@@ -33,6 +33,21 @@ test("Privacy Shield transfer wording does not qualify as processing-purposes ev
   );
 });
 
+test("passive purpose disclosures for enquiries and applications qualify as processing-purpose evidence", () => {
+  for (const text of [
+    "Your details from the form, including the contact details you provide, will be stored by us for the purpose of processing the enquiry and follow-up questions.",
+    "Application documents are stored in our recruiting system to process your application and contact you about the role.",
+    "Part of the data is collected to ensure error-free provision of the website. Other data may be used to analyse your user behaviour.",
+  ]) {
+    assert.equal(hasSubstantiveProcessingPurposesEvidence(text), true, text);
+    assert.equal(
+      article13DisclosureRejectReason(text, "processing_purposes", { mode: "retained_report" }),
+      null,
+      text,
+    );
+  }
+});
+
 test("retention-purpose wording does not qualify as processing-purposes evidence", () => {
   const retentionText =
     "How long do we keep your data? We retain it as long as necessary for the purpose for which it was collected.";

@@ -6,7 +6,175 @@ import path from "node:path";
 import test from "node:test";
 import { createArtifactWriter } from "./artifact-writer.js";
 import type { ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
-import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
+import {
+  preConsentRuntimeScanner,
+  reconcileConsentUiObservationWithCompletedGeometry,
+} from "./scanners/pre-consent-runtime-scanner.js";
+
+const rapidOxfamStyleObservation = {
+  observationId: "consent_ui_pre_consent",
+  observedAtMs: 7_813,
+  captureStatus: "observed" as const,
+  captureDiagnostics: {
+    completedChannels: [],
+    timedOutChannels: [],
+    failedChannels: [],
+  },
+  likelyPresent: true,
+  basis: [
+    "inventory:rapid_first_layer_controls",
+    "control:accept_all:Accept all cookies",
+    "control:reject_all:Accept only essential cookies",
+    "control:manage_preferences:Cookie Settings",
+  ],
+  textExcerpt: "Cookie Settings Accept all cookies Accept only essential cookies Learn More",
+  layerInspected: "first_layer" as const,
+  visibleChoiceLabels: [
+    "Cookie Settings",
+    "Accept all cookies",
+    "Accept only essential cookies",
+    "Learn More",
+  ],
+  defaultToggleStatesObserved: null,
+  nonEssentialDefaultsOff: null,
+  defaultTogglePurposeLabels: [],
+  precheckedOptionalPurposeCount: 0,
+  precheckedOptionalPurposeLabels: [],
+  acceptControlObserved: true,
+  rejectControlObserved: true,
+  managePreferencesControlObserved: true,
+  controls: [
+    { actionType: "manage_preferences" as const, label: "Cookie Settings", visible: true },
+    { actionType: "accept_all" as const, label: "Accept all cookies", visible: true },
+    { actionType: "reject_all" as const, label: "Accept only essential cookies", visible: true },
+    { actionType: "manage_preferences" as const, label: "Learn More", visible: true },
+  ],
+  inventoryDiagnostics: {
+    candidateContainerCount: 1,
+    candidateControlCount: 4,
+    retainedControlCount: 4,
+    inventorySources: ["viewport" as const],
+    candidateLabels: [
+      "Cookie Settings",
+      "Accept all cookies",
+      "Accept only essential cookies",
+      "Learn More",
+    ],
+    rejectionReasons: [],
+    timingMarkers: ["rapid_first_layer_inventory"],
+  },
+  evidenceRefs: [],
+  confidence: 0.86,
+};
+
+function oxfamStyleGeometry(): ConsentControlGeometryArtifact {
+  return {
+    artifactVersion: "consent_control_geometry.v1",
+    sourceScanner: "consent_control_geometry_diagnostic",
+    pageUrl: "https://www.oxfamamerica.org/",
+    capturedAt: "2026-07-26T21:21:00.000Z",
+    viewport: { width: 1366, height: 900 },
+    cmp: {
+      detected: true,
+      name: "TrustArc",
+      confidence: 0.65,
+      reasonCodes: [],
+      matchedSignals: [],
+      detections: [],
+    },
+    containers: [],
+    candidates: [{
+      candidateId: "candidate_learn_more",
+      label: "Learn More",
+      normalizedLabel: "learn more",
+      actionType: "other",
+      tagName: "a",
+      selectorHint: "a.cmpnt-button",
+      layer: "first_layer",
+      frameContext: {
+        frameKind: "main_frame",
+        frameUrl: "https://www.oxfamamerica.org/",
+      },
+      enabled: true,
+      computedStyle: {
+        display: "inline-block",
+        visibility: "hidden",
+        opacity: "1",
+        pointerEvents: "none",
+        position: "relative",
+        zIndex: "auto",
+      },
+      boundingBox: {
+        x: 800,
+        y: 530,
+        width: 200,
+        height: 50,
+        top: 530,
+        right: 1_000,
+        bottom: 580,
+        left: 800,
+      },
+      viewport: { width: 1366, height: 900 },
+      intersectsViewport: true,
+      clippedByScrollableAncestor: false,
+      occlusion: {
+        center: false,
+        topLeft: false,
+        topRight: false,
+        bottomLeft: false,
+        bottomRight: false,
+        checkedPoints: 5,
+        hitSelectorHints: [],
+      },
+      classifierReasonCodes: ["no_term_match"],
+      classifierConfidence: 0.2,
+      decisionStatus: "hidden",
+      reasons: ["hidden_or_zero_area"],
+    }],
+    summary: {
+      firstLayerAccept: false,
+      firstLayerReject: false,
+      firstLayerOptions: false,
+      cmpDetected: true,
+      cmpName: "TrustArc",
+      confidence: 0.65,
+      limitations: ["cmp_detected_without_visible_first_layer_controls"],
+    },
+  };
+}
+
+test("completed geometry cannot erase stronger structured A/R/O evidence", () => {
+  const reconciled = reconcileConsentUiObservationWithCompletedGeometry({
+    current: rapidOxfamStyleObservation,
+    geometry: oxfamStyleGeometry(),
+    geometryAccessLoaded: true,
+    pageUrl: "https://www.oxfamamerica.org/",
+    scanStartedAtMs: Date.now() - 10_000,
+  });
+
+  assert.equal(reconciled.captureStatus, "observed");
+  assert.equal(reconciled.likelyPresent, true);
+  assert.equal(reconciled.acceptControlObserved, true);
+  assert.equal(reconciled.rejectControlObserved, true);
+  assert.equal(reconciled.managePreferencesControlObserved, true);
+  assert.equal(reconciled.controls.length, 4);
+  assert.ok(reconciled.basis.includes("geometry:did_not_corroborate_structured_controls"));
+});
+
+test("geometry from a different final document marks coverage incomplete without erasing structured evidence", () => {
+  const reconciled = reconcileConsentUiObservationWithCompletedGeometry({
+    current: rapidOxfamStyleObservation,
+    geometry: oxfamStyleGeometry(),
+    geometryAccessLoaded: true,
+    pageUrl: "https://www.oxfam.org/en",
+    scanStartedAtMs: Date.now() - 10_000,
+  });
+
+  assert.equal(reconciled.captureStatus, "incomplete");
+  assert.equal(reconciled.likelyPresent, true);
+  assert.equal(reconciled.controls.length, 4);
+  assert.ok(reconciled.basis.includes("geometry:document_mismatch_not_authoritative"));
+});
 
 test("pre-consent scanner recaptures below-fold consent geometry before proof screenshot", async () => {
   const server = await startServer(`
@@ -138,17 +306,11 @@ test("pre-consent scanner retains a proof screenshot for deeply nested animated 
     assert.equal(result.consentUiObservations[0]?.rejectControlObserved, true);
     assert.equal(result.consentUiObservations[0]?.managePreferencesControlObserved, true);
     assert.ok(
-      result.consentUiObservations[0]?.inventoryDiagnostics?.timingMarkers.some((marker) =>
-        marker === "rapid_inventory_completed" || marker === "accessibility_tree_early_inventory_completed"
-      ),
+      result.consentUiObservations[0]?.basis.includes("geometry:confirmed_first_layer_controls"),
       JSON.stringify(result.consentUiObservations[0], null, 2),
     );
     assert.ok(
-      result.consentUiObservations[0]?.inventoryDiagnostics?.timingMarkers.some((marker) =>
-        marker === "rapid_first_layer_inventory" ||
-        marker === "rapid_cmp_poll" ||
-        marker === "accessibility_tree_early_inventory"
-      ),
+      result.consentUiObservations[0]?.basis.includes("geometry:confirmed_first_layer_controls"),
       JSON.stringify(result.consentUiObservations[0], null, 2),
     );
     assert.deepEqual(

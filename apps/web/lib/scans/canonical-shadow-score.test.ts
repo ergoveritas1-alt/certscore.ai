@@ -112,6 +112,99 @@ test("specific finding overrides can tune qualitative severity without changing 
   assert.equal(result.familyContributions[0]?.riskPoints, 27);
 });
 
+test("checklist review signals apply bounded deterministic penalties without stacking related rows", () => {
+  const model: CanonicalShadowScoreModel = {
+    ...MODEL,
+    checklistReviewRisk: {
+      defaultRiskPoints: 1,
+      maximumRiskPoints: 25,
+      rowOverrides: {
+        international_transfers_disclosure: {
+          group: "international_transfer_disclosure",
+          riskPoints: 10
+        },
+        pre_consent_cookies_storage: {
+          coveredByFindingFamily: "consent_tracking",
+          group: "pre_consent_runtime",
+          riskPoints: 12
+        },
+        pre_consent_third_party_tracking: {
+          coveredByFindingFamily: "consent_tracking",
+          group: "pre_consent_runtime",
+          riskPoints: 15
+        },
+        reject_all_path_availability: {
+          coveredByFindingFamily: "consent_tracking",
+          group: "pre_consent_runtime",
+          riskPoints: 10
+        }
+      }
+    },
+    coverageRowWeights: {
+      ...MODEL.coverageRowWeights,
+      international_transfers_disclosure: 1,
+      pre_consent_cookies_storage: 1
+    }
+  };
+  const rows: CanonicalShadowCoverageRow[] = [
+    { assessmentStatus: "review_signal", evidenceState: "observed", rowId: "pre_consent_cookies_storage" },
+    { assessmentStatus: "review_signal", evidenceState: "observed", rowId: "pre_consent_third_party_tracking" },
+    { assessmentStatus: "review_signal", evidenceState: "not_observed", rowId: "reject_all_path_availability" },
+    { assessmentStatus: "review_signal", evidenceState: "observed", rowId: "international_transfers_disclosure" },
+    { assessmentStatus: "review_signal", evidenceState: "observed", rowId: "retention_disclosure_observed" }
+  ];
+  const result = deriveCanonicalShadowScore({ coverageRows: rows, findings: [], model });
+
+  assert.equal(result.observedRiskIndex, 25);
+  assert.equal(result.postureScore, 75);
+  assert.equal(result.checklistReviewRiskPoints, 25);
+  assert.deepEqual(result.checklistReviewContributions, [
+    {
+      group: "pre_consent_runtime",
+      riskPoints: 15,
+      rowIds: ["pre_consent_cookies_storage", "pre_consent_third_party_tracking", "reject_all_path_availability"]
+    },
+    {
+      group: "international_transfer_disclosure",
+      riskPoints: 10,
+      rowIds: ["international_transfers_disclosure"]
+    },
+    {
+      group: "row:retention_disclosure_observed",
+      riskPoints: 1,
+      rowIds: ["retention_disclosure_observed"]
+    }
+  ]);
+});
+
+test("a scored consent-tracking finding replaces the related checklist review penalty", () => {
+  const result = deriveCanonicalShadowScore({
+    coverageRows: [{
+      assessmentStatus: "review_signal",
+      evidenceState: "observed",
+      rowId: "pre_consent_third_party_tracking"
+    }],
+    findings: [finding({ severity: "medium" })],
+    model: {
+      ...MODEL,
+      checklistReviewRisk: {
+        defaultRiskPoints: 1,
+        maximumRiskPoints: 25,
+        rowOverrides: {
+          pre_consent_third_party_tracking: {
+            coveredByFindingFamily: "consent_tracking",
+            group: "pre_consent_runtime",
+            riskPoints: 15
+          }
+        }
+      }
+    }
+  });
+
+  assert.equal(result.observedRiskIndex, 15);
+  assert.deepEqual(result.checklistReviewContributions, []);
+});
+
 test("adding a score-eligible finding never increases posture score", () => {
   const baseline = deriveCanonicalShadowScore({ coverageRows: COVERAGE_ROWS, findings: [], model: MODEL });
   const medium = deriveCanonicalShadowScore({

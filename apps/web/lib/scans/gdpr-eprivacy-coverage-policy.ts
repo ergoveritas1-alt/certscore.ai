@@ -269,7 +269,7 @@ function transportEvidenceMissingGap(rowId: string) {
   );
 }
 
-function formatCertificateExpiry(value: string) {
+function formatCertificateDate(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return new Intl.DateTimeFormat("en-US", {
@@ -280,15 +280,46 @@ function formatCertificateExpiry(value: string) {
   }).format(parsed);
 }
 
-function certificateExpiryEvidence(summary: Record<string, unknown> | null | undefined) {
+function formatCertificateValidity(validFrom: string | null, validTo: string | null) {
+  const parsedFrom = validFrom ? new Date(validFrom) : null;
+  const parsedTo = validTo ? new Date(validTo) : null;
+
+  if (
+    parsedFrom &&
+    !Number.isNaN(parsedFrom.getTime()) &&
+    parsedTo &&
+    !Number.isNaN(parsedTo.getTime()) &&
+    validFrom &&
+    validTo
+  ) {
+    const fromYear = parsedFrom.getUTCFullYear();
+    const toYear = parsedTo.getUTCFullYear();
+    if (fromYear === toYear) {
+      const monthDayFormatter = new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      });
+      return `valid ${monthDayFormatter.format(parsedFrom)}–${monthDayFormatter.format(parsedTo)}, ${fromYear}`;
+    }
+    return `valid ${formatCertificateDate(validFrom)}–${formatCertificateDate(validTo)}`;
+  }
+  if (validTo) return `expiring ${formatCertificateDate(validTo)}`;
+  if (validFrom) return `starting ${formatCertificateDate(validFrom)}`;
+  return null;
+}
+
+function certificateValidityEvidence(summary: Record<string, unknown> | null | undefined) {
   return getObjectArray(summary, ["tlsCertificateObservations", "tls_certificate_observations"])
     .slice(0, 4)
     .map((observation) => {
       const url = getString(observation, ["inputUrl", "input_url"]);
       const subject = getString(observation, ["subject"]);
+      const validFrom = getString(observation, ["validFrom", "valid_from"]);
       const validTo = getString(observation, ["validTo", "valid_to"]);
-      if (!url || !validTo) return null;
-      return `${url} presented${subject ? ` ${subject}` : " a"} certificate expiring ${formatCertificateExpiry(validTo)}`;
+      const validity = formatCertificateValidity(validFrom, validTo);
+      if (!url || !validity) return null;
+      return `${url} presented${subject ? ` ${subject}` : " a"} certificate ${validity}`;
     })
     .filter((value): value is string => Boolean(value));
 }
@@ -339,6 +370,17 @@ function hasTypedConsentSurfaceObservation(input: GdprEprivacyCoveragePolicyInpu
     ["actionable_surface_observed", "non_actionable_surface_observed"].includes(
       getString(inspection, ["outcome"]) ?? "",
     )
+  );
+}
+
+function hasCompleteNoConsentSurfaceObservation(input: GdprEprivacyCoveragePolicyInput) {
+  const inspection = getConsentSurfaceInspection(input.runtimeArtifacts);
+  return (
+    getString(inspection, ["outcome"]) === "no_surface_observed_complete_coverage" &&
+    getString(inspection, ["coverageStatus", "coverage_status"]) === "complete" &&
+    getBoolean(inspection, ["inspectionCompleted", "inspection_completed"]) === true &&
+    getBoolean(inspection, ["inspectedPreInteraction", "inspected_pre_interaction"]) === true &&
+    getBoolean(inspection, ["consentSurfaceObserved", "consent_surface_observed"]) === false
   );
 }
 
@@ -1435,7 +1477,7 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
       const validTlsCertificate = getBoolean(summary, ["validTlsCertificate", "valid_tls_certificate"]);
       const tlsProbeErrorCategory = getString(summary, ["tlsProbeErrorCategory", "tls_probe_error_category"]);
       const tlsProbeErrorMessage = getString(summary, ["tlsProbeErrorMessage", "tls_probe_error_message"]);
-      const certificateExpiryDetails = certificateExpiryEvidence(summary);
+      const certificateValidityDetails = certificateValidityEvidence(summary);
       if (validTlsCertificate === false && tlsProbeErrorCategory && tlsProbeErrorCategory !== "tls_or_certificate_failure") {
         return makeOutcome(
           "transport_security_tls_certificate",
@@ -1457,8 +1499,8 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
       const tlsChainReviewNote = isCertificateChainFailure
         ? " This is a strict probe certificate-chain verification result; it may reflect an incomplete issuer chain or a scanner trust-store difference and does not by itself confirm that the site certificate is invalid. Compare the served certificate and chain with a standard client before treating this as a site defect."
         : "";
-      const certificateDetails = certificateExpiryDetails.length > 0
-        ? ` Retained certificate evidence: ${certificateExpiryDetails.join("; ")}.`
+      const certificateDetails = certificateValidityDetails.length > 0
+        ? ` Retained certificate evidence: ${certificateValidityDetails.join("; ")}.`
         : "";
       return transportOutcomeFromBoolean({
         falseStatus: "Gap observed",
@@ -1467,7 +1509,7 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
         retainedEvidence,
         rowId: "transport_security_tls_certificate",
         trueStatus: "Observed",
-        trueText: "The strict TLS probe verified the HTTPS origin certificate.",
+        trueText: `The strict TLS probe verified the HTTPS origin certificate.${certificateDetails}`,
         value: validTlsCertificate,
       });
     })(),
@@ -3590,6 +3632,9 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
 
   if (firstLayerGdprBannerConfirmed === false) {
     const preconsentCookieOrTrackingActivityObserved = hasObservedPreconsentCookieOrTrackingActivity(input);
+    const ambiguousConsentSurfaceObserved =
+      !hasCompleteNoConsentSurfaceObservation(input) &&
+      (cmpEvidence.cmpObserved || firstLayerChoiceEvidence.bannerLikeSurfaceObserved);
     if (
       !firstLayerChoiceEvidence.bannerLikeSurfaceObserved &&
       !preconsentCookieOrTrackingActivityObserved
@@ -3616,12 +3661,18 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     if (preconsentCookieOrTrackingActivityObserved) {
       return makeOutcome(
         "reject_all_path_availability",
-        "Not confirmed",
-        "CertScore.ai retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Reject-path availability cannot be assessed from tracking activity alone.",
+        ambiguousConsentSurfaceObserved ? "Not confirmed" : "Review signal",
+        ambiguousConsentSurfaceObserved
+          ? "CertScore.ai retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Reject-path availability cannot be assessed from tracking activity alone."
+          : "Potential concern: non-essential pre-consent cookie or tracking activity was retained, but the completed inspection did not observe a GDPR/ePrivacy consent surface, CMP, or reject/decline opportunity. Review whether users had a meaningful opportunity to refuse consent-requiring storage or tracking.",
         [
           "Evidence: retained pre-consent cookie/tracking activity",
-          "Evidence: no structured first-layer reject option retained",
-          "Reason: no_confirmed_first_layer_cookie_consent_banner"
+          ambiguousConsentSurfaceObserved
+            ? "Evidence: no structured first-layer reject option retained"
+            : "Evidence: no consent/CMP surface or reject/decline opportunity retained",
+          ambiguousConsentSurfaceObserved
+            ? "Reason: no_confirmed_first_layer_cookie_consent_banner"
+            : "Reason: no_refusal_opportunity_observed_with_preconsent_activity"
         ],
         {
           retainedEvidence: {
@@ -3631,7 +3682,9 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
             firstLayerCookieConsentBannerObserved: false,
             gdprEprivacyConsentSurfaceObserved: "unconfirmed",
             preconsentCookieOrTrackingActivityObserved: true,
-            reason: "no_reject_option_retained_with_preconsent_activity",
+            reason: ambiguousConsentSurfaceObserved
+              ? "no_reject_option_retained_with_preconsent_activity"
+              : "no_refusal_opportunity_observed_with_preconsent_activity",
             rejectControlObserved: false,
             rejectPathAvailabilityEvidenceRetained: false
           }
@@ -3958,6 +4011,9 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
   }
 
   if (evidence.firstLayerCookieConsentBannerObserved === false) {
+    const ambiguousConsentSurfaceObserved =
+      !hasCompleteNoConsentSurfaceObservation(input) &&
+      (cmpEvidence.cmpObserved || getFirstLayerConsentChoiceEvidence(input).bannerLikeSurfaceObserved);
     if (!preconsentCookieOrTrackingActivityObserved) {
       return makeOutcome(
         "options_settings_preferences_control",
@@ -3981,12 +4037,18 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
 
     return makeOutcome(
       "options_settings_preferences_control",
-      preconsentCookieOrTrackingActivityObserved ? "Not confirmed" : "Not observed",
-      "CertScore.ai retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Options/settings/preferences availability cannot be assessed from tracking activity alone.",
+      ambiguousConsentSurfaceObserved ? "Not confirmed" : "Not observed",
+      ambiguousConsentSurfaceObserved
+        ? "CertScore.ai retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Options/settings/preferences availability cannot be assessed from tracking activity alone."
+        : "No first-layer GDPR/ePrivacy consent surface or CMP was observed in the completed inspection. An options, settings, or preferences control was therefore not observed; pre-consent cookie/tracking activity is reported separately.",
       [
         "Evidence: retained pre-consent cookie/tracking activity",
-        "Evidence: no structured first-layer options/settings/preferences control retained",
-        "Reason: no_confirmed_first_layer_cookie_consent_banner"
+        ambiguousConsentSurfaceObserved
+          ? "Evidence: no structured first-layer options/settings/preferences control retained"
+          : "Evidence: no consent/CMP surface retained",
+        ambiguousConsentSurfaceObserved
+          ? "Reason: no_confirmed_first_layer_cookie_consent_banner"
+          : "Reason: no_consent_surface_or_cmp_observed"
       ],
       {
         retainedEvidence: {
@@ -3998,7 +4060,9 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
           optionsControlObserved: false,
           optionsControlEvidenceRetained: false,
           preconsentCookieOrTrackingActivityObserved: true,
-          reason: "no_options_control_retained_with_preconsent_activity"
+          reason: ambiguousConsentSurfaceObserved
+            ? "no_options_control_retained_with_preconsent_activity"
+            : "no_consent_surface_or_cmp_observed"
         }
       }
     );
@@ -4166,6 +4230,9 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
   }
 
   if (evidence.firstLayerCookieConsentBannerObserved === false) {
+    const ambiguousConsentSurfaceObserved =
+      !hasCompleteNoConsentSurfaceObservation(input) &&
+      (cmpEvidence.cmpObserved || getFirstLayerConsentChoiceEvidence(input).bannerLikeSurfaceObserved);
     if (!preconsentCookieOrTrackingActivityObserved) {
       return makeOutcome(
         "accept_consent_control",
@@ -4189,12 +4256,18 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
 
     return makeOutcome(
       "accept_consent_control",
-      preconsentCookieOrTrackingActivityObserved ? "Not confirmed" : "Not observed",
-      "CertScore.ai retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Accept-control availability cannot be assessed from tracking activity alone.",
+      ambiguousConsentSurfaceObserved ? "Not confirmed" : "Not observed",
+      ambiguousConsentSurfaceObserved
+        ? "CertScore.ai retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Accept-control availability cannot be assessed from tracking activity alone."
+        : "No first-layer GDPR/ePrivacy consent surface or CMP was observed in the completed inspection. An accept control was therefore not observed; pre-consent cookie/tracking activity is reported separately.",
       [
         "Evidence: retained pre-consent cookie/tracking activity",
-        "Evidence: no structured first-layer accept consent control retained",
-        "Reason: no_confirmed_first_layer_cookie_consent_banner"
+        ambiguousConsentSurfaceObserved
+          ? "Evidence: no structured first-layer accept consent control retained"
+          : "Evidence: no consent/CMP surface retained",
+        ambiguousConsentSurfaceObserved
+          ? "Reason: no_confirmed_first_layer_cookie_consent_banner"
+          : "Reason: no_consent_surface_or_cmp_observed"
       ],
       {
         retainedEvidence: {
@@ -4206,7 +4279,9 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
           firstLayerCookieConsentBannerObserved: false,
           gdprEprivacyConsentSurfaceObserved: "unconfirmed",
           preconsentCookieOrTrackingActivityObserved: true,
-          reason: "no_accept_control_retained_with_preconsent_activity"
+          reason: ambiguousConsentSurfaceObserved
+            ? "no_accept_control_retained_with_preconsent_activity"
+            : "no_consent_surface_or_cmp_observed"
         }
       }
     );

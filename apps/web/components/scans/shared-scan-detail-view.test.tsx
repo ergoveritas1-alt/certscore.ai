@@ -60,7 +60,7 @@ test("customer-facing scan detail calculates the current canonical model as its 
 
   assert.match(source, /buildCanonicalShadowScoreInput\(input\)/);
   assert.match(source, /deriveCanonicalShadowScore\(\{/);
-  assert.match(source, /model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL/);
+  assert.match(source, /model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL/);
   assert.match(source, /\? canonicalOverallScore\s+: null/);
   assert.doesNotMatch(source, /getCustomerFacingGdprEprivacyPostureAssessment/);
   assert.match(source, /scoreLabel="Overall score"/);

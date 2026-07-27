@@ -19,6 +19,15 @@ export type CanonicalShadowCoverageRow = {
 
 export type CanonicalShadowScoreModel = {
   approvalStatus: "pending_luna" | "approved_by_luna";
+  checklistReviewRisk?: {
+    defaultRiskPoints: number;
+    maximumRiskPoints: number;
+    rowOverrides?: Record<string, {
+      coveredByFindingFamily?: string;
+      group?: string;
+      riskPoints: number;
+    }>;
+  };
   coverageRowWeights: Record<string, number>;
   criticalPostureCaps: Array<{
     capId: string;
@@ -63,6 +72,12 @@ export type CanonicalShadowScoreResult = {
   };
   coverageRatio: number;
   cutoverEligible: boolean;
+  checklistReviewContributions: Array<{
+    group: string;
+    riskPoints: number;
+    rowIds: string[];
+  }>;
+  checklistReviewRiskPoints: number;
   familyContributions: Array<{
     family: string;
     findingIds: string[];
@@ -150,6 +165,32 @@ export function auditCanonicalShadowScoreModel(input: {
   const invalidGlobalSettings = [
     ...(!["pending_luna", "approved_by_luna"].includes(input.model.approvalStatus) ? ["approvalStatus"] : []),
     ...(!input.model.version.trim() ? ["version"] : []),
+    ...(input.model.checklistReviewRisk !== undefined &&
+    (
+      !Number.isFinite(input.model.checklistReviewRisk.defaultRiskPoints) ||
+      input.model.checklistReviewRisk.defaultRiskPoints < 0 ||
+      input.model.checklistReviewRisk.defaultRiskPoints > 100
+    )
+      ? ["checklistReviewRisk.defaultRiskPoints"]
+      : []),
+    ...(input.model.checklistReviewRisk !== undefined &&
+    (
+      !Number.isFinite(input.model.checklistReviewRisk.maximumRiskPoints) ||
+      input.model.checklistReviewRisk.maximumRiskPoints < 0 ||
+      input.model.checklistReviewRisk.maximumRiskPoints > 100
+    )
+      ? ["checklistReviewRisk.maximumRiskPoints"]
+      : []),
+    ...Object.entries(input.model.checklistReviewRisk?.rowOverrides ?? {}).flatMap(([rowId, rule]) =>
+      !rowId.trim() ||
+      !Number.isFinite(rule.riskPoints) ||
+      rule.riskPoints < 0 ||
+      rule.riskPoints > 100 ||
+      (rule.group !== undefined && !rule.group.trim()) ||
+      (rule.coveredByFindingFamily !== undefined && !configuredFamilies.includes(rule.coveredByFindingFamily))
+        ? [`checklistReviewRisk.rowOverrides.${rowId || "missing_id"}`]
+        : []
+    ),
     ...(!Number.isFinite(input.model.minimumCoverageRatioForPostureScore) ||
     input.model.minimumCoverageRatioForPostureScore < 0 ||
     input.model.minimumCoverageRatioForPostureScore > 1
@@ -304,8 +345,33 @@ export function deriveCanonicalShadowScore(input: {
     })
     .sort((left, right) => right.riskPoints - left.riskPoints || left.family.localeCompare(right.family));
 
+  const findingFamilies = new Set(familyContributions.map((contribution) => contribution.family));
+  const checklistReviewGroups = new Map<string, { riskPoints: number; rowIds: string[] }>();
+  if (input.model.checklistReviewRisk) {
+    for (const row of boundedCoverageRows.filter((candidate) => candidate.assessmentStatus === "review_signal")) {
+      const override = input.model.checklistReviewRisk.rowOverrides?.[row.rowId];
+      if (override?.coveredByFindingFamily && findingFamilies.has(override.coveredByFindingFamily)) {
+        continue;
+      }
+      const group = override?.group ?? `row:${row.rowId}`;
+      const riskPoints = override?.riskPoints ?? input.model.checklistReviewRisk.defaultRiskPoints;
+      const existing = checklistReviewGroups.get(group);
+      checklistReviewGroups.set(group, {
+        riskPoints: Math.max(existing?.riskPoints ?? 0, riskPoints),
+        rowIds: [...new Set([...(existing?.rowIds ?? []), row.rowId])].sort()
+      });
+    }
+  }
+  const checklistReviewContributions = [...checklistReviewGroups.entries()]
+    .map(([group, contribution]) => ({ group, ...contribution }))
+    .sort((left, right) => right.riskPoints - left.riskPoints || left.group.localeCompare(right.group));
+  const checklistReviewRiskPoints = Math.min(
+    input.model.checklistReviewRisk?.maximumRiskPoints ?? 0,
+    checklistReviewContributions.reduce((total, contribution) => total + contribution.riskPoints, 0)
+  );
   const observedRiskIndex = boundedScore(
-    familyContributions.reduce((total, contribution) => total + contribution.riskPoints, 0)
+    familyContributions.reduce((total, contribution) => total + contribution.riskPoints, 0) +
+      checklistReviewRiskPoints
   );
   const appliedCaps = input.model.criticalPostureCaps.flatMap((cap) => {
     const triggeringFindingIds = uniqueFindings
@@ -396,6 +462,8 @@ export function deriveCanonicalShadowScore(input: {
     coverageConfidence: coverageConfidence(coverageRatio, applicableRows.length),
     coverageRatio,
     cutoverEligible: input.model.approvalStatus === "approved_by_luna" && contradictions.length === 0 && finalPostureScore !== null,
+    checklistReviewContributions,
+    checklistReviewRiskPoints,
     familyContributions,
     inputFindingIds: [...new Set(uniqueFindings.map((finding) => finding.findingId))].sort(),
     inputRowIds: [...new Set(boundedCoverageRows.map((row) => row.rowId))].sort(),

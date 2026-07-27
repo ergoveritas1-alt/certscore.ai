@@ -1882,6 +1882,16 @@ export async function preConsentRuntimeScanner(
           productionFindingIntegration: false,
         });
         consentGeometryDiagnosticWritten = true;
+        consentObservation = reconcileConsentUiObservationWithCompletedGeometry({
+          artifactPath: geometryArtifactPath,
+          current: consentObservation,
+          geometry,
+          geometryAccessLoaded: access.status === "loaded",
+          pageUrl: safePageUrl(page, effectiveNavigationUrl),
+          scanStartedAtMs: input.scanStartedAtMs,
+          text: domText,
+        });
+        retainedConsentUiObservation = consentObservation;
         if (
           geometry.pageUrl !== "about:blank" &&
           geometry.viewport.width > 0 &&
@@ -1896,20 +1906,6 @@ export async function preConsentRuntimeScanner(
           consentObservation = annotateConsentUiObservation(
             consentObservation,
             "geometry:captured",
-          );
-          retainedConsentUiObservation = consentObservation;
-        }
-        const geometryConsentObservation = consentUiObservationFromConfirmedGeometryControls({
-          artifactPath: geometryArtifactPath,
-          geometry,
-          scanStartedAtMs: input.scanStartedAtMs,
-          text: domText,
-        });
-        if (geometryConsentObservation && isStrongerConsentUiObservation(geometryConsentObservation, consentObservation)) {
-          consentObservation = mergeConsentUiObservations(
-            consentObservation,
-            geometryConsentObservation,
-            "geometry:confirmed_first_layer_controls",
           );
           retainedConsentUiObservation = consentObservation;
         }
@@ -4287,11 +4283,16 @@ async function readRapidFirstLayerConsentUiObservation(
     const visibleInFirstLayer = (element) => {
       const rect = element.getBoundingClientRect();
       const style = window.getComputedStyle(element);
+      const centerX = Math.max(0, Math.min(window.innerWidth - 1, rect.left + rect.width / 2));
+      const centerY = Math.max(0, Math.min(window.innerHeight - 1, rect.top + rect.height / 2));
+      const centerHit = document.elementFromPoint(centerX, centerY);
       return rect.width > 0 && rect.height > 0 &&
         rect.top <= window.innerHeight + 200 && rect.bottom >= -200 &&
         style.visibility !== "hidden" && style.display !== "none" &&
+        style.pointerEvents !== "none" &&
         element.getAttribute("aria-hidden") !== "true" &&
-        Number.parseFloat(style.opacity || "1") > 0.05;
+        Number.parseFloat(style.opacity || "1") > 0.05 &&
+        (!centerHit || centerHit === element || element.contains(centerHit));
     };
     const consentContextFor = (element) => {
       let current = element;
@@ -8291,6 +8292,97 @@ function isAroGeometryAction(
   return actionType === "accept_all" ||
     actionType === "reject_all" ||
     actionType === "manage_preferences";
+}
+
+function canonicalGeometryDocumentIdentity(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    if (!/^https?:$/.test(url.protocol)) {
+      return null;
+    }
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return `${url.protocol}//${url.host.toLowerCase()}${pathname}`;
+  } catch {
+    return null;
+  }
+}
+
+export function reconcileConsentUiObservationWithCompletedGeometry(input: {
+  artifactPath?: string;
+  current: ConsentUiObservation;
+  geometry: ConsentControlGeometryArtifact;
+  geometryAccessLoaded: boolean;
+  pageUrl: string;
+  scanStartedAtMs: number;
+  text?: string;
+}): ConsentUiObservation {
+  const geometryComplete =
+    input.geometryAccessLoaded &&
+    input.geometry.summary.confidence > 0 &&
+    input.geometry.pageUrl !== "about:blank" &&
+    input.geometry.viewport.width > 0 &&
+    input.geometry.viewport.height > 0;
+  if (!geometryComplete) {
+    return annotateConsentUiObservation(input.current, "geometry:incomplete_not_authoritative");
+  }
+
+  const geometryDocument = canonicalGeometryDocumentIdentity(input.geometry.pageUrl);
+  const currentDocument = canonicalGeometryDocumentIdentity(input.pageUrl);
+  if (geometryDocument && currentDocument && geometryDocument !== currentDocument) {
+    return {
+      ...input.current,
+      captureStatus: "incomplete",
+      captureDiagnostics: {
+        completedChannels: unique([
+          ...(input.current.captureDiagnostics?.completedChannels ?? []),
+          "geometry",
+        ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["completedChannels"],
+        timedOutChannels: input.current.captureDiagnostics?.timedOutChannels ?? [],
+        failedChannels: input.current.captureDiagnostics?.failedChannels ?? [],
+      },
+      basis: unique([
+        ...input.current.basis,
+        "geometry:document_mismatch_not_authoritative",
+      ]),
+      inventoryDiagnostics: {
+        candidateContainerCount: input.current.inventoryDiagnostics?.candidateContainerCount ?? 0,
+        candidateControlCount: input.current.inventoryDiagnostics?.candidateControlCount ?? 0,
+        retainedControlCount: input.current.inventoryDiagnostics?.retainedControlCount ??
+          input.current.controls.length,
+        inventorySources: input.current.inventoryDiagnostics?.inventorySources ?? [],
+        candidateLabels: input.current.inventoryDiagnostics?.candidateLabels ?? [],
+        rejectionReasons: input.current.inventoryDiagnostics?.rejectionReasons ?? [],
+        timingMarkers: unique([
+          ...(input.current.inventoryDiagnostics?.timingMarkers ?? []),
+          "geometry_document_mismatch",
+        ]),
+      },
+    };
+  }
+
+  const geometryObservation = consentUiObservationFromConfirmedGeometryControls({
+    artifactPath: input.artifactPath,
+    geometry: input.geometry,
+    scanStartedAtMs: input.scanStartedAtMs,
+    text: input.text,
+  });
+  if (geometryObservation) {
+    return mergeConsentUiObservations(
+      input.current,
+      geometryObservation,
+      "geometry:confirmed_first_layer_controls",
+    );
+  }
+
+  return annotateConsentUiObservation(
+    input.current,
+    input.current.controls.length > 0
+      ? "geometry:did_not_corroborate_structured_controls"
+      : "geometry:no_visible_first_layer_controls",
+  );
 }
 
 export function consentUiObservationFromConfirmedGeometryControls(input: {

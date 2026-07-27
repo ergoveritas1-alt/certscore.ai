@@ -3596,7 +3596,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes makes reject path not testable wi
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes does not infer missing reject from tracking without a confirmed banner", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats A/R/O as not observed when no consent surface or CMP was observed", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -3621,15 +3621,23 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not infer missing reject fro
   });
 
   const rejectPath = outcomes.reject_all_path_availability;
-  assert.equal(rejectPath?.status, "Not confirmed");
-  assert.match(rejectPath?.limitation ?? "", /cannot be assessed from tracking activity alone/i);
+  assert.equal(rejectPath?.status, "Review signal");
+  assert.match(rejectPath?.limitation ?? "", /Potential concern.*no.*consent surface, CMP, or reject\/decline opportunity/i);
   assert.equal(rejectPath?.criticalEvidence.retainedEvidence.preconsentCookieOrTrackingActivityObserved, true);
   assert.equal(rejectPath?.criticalEvidence.retainedEvidence.rejectControlObserved, false);
   assert.equal(rejectPath?.criticalEvidence.retainedEvidence.rejectPathAvailabilityEvidenceRetained, false);
   assert.equal(
     rejectPath?.criticalEvidence.retainedEvidence.reason,
-    "no_reject_option_retained_with_preconsent_activity"
+    "no_refusal_opportunity_observed_with_preconsent_activity"
   );
+
+  for (const rowId of ["accept_consent_control", "options_settings_preferences_control"] as const) {
+    const outcome = outcomes[rowId];
+    assert.equal(outcome?.status, "Not observed", rowId);
+    assert.match(outcome?.limitation ?? "", /no first-layer.*consent surface or CMP was observed/i, rowId);
+    assert.equal(outcome?.criticalEvidence.retainedEvidence.preconsentCookieOrTrackingActivityObserved, true, rowId);
+    assert.equal(outcome?.criticalEvidence.retainedEvidence.reason, "no_consent_surface_or_cmp_observed", rowId);
+  }
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps aggregate-only before-consent storage inventory in review", () => {
@@ -6744,6 +6752,14 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes emits transport-security observed
         httpRedirectsToHttps: true,
         mixedContentObserved: false,
         insecureFormTransportObserved: false,
+        tlsCertificateObservations: [
+          {
+            inputUrl: "https://example.com/",
+            subject: "CN=example.com",
+            validFrom: "Jun 22 01:12:16 2026 GMT",
+            validTo: "Sep 20 01:12:15 2026 GMT"
+          }
+        ],
         sampledPageUrls: ["https://example.com/"]
       }
     }
@@ -6751,6 +6767,10 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes emits transport-security observed
 
   assert.equal(outcomes.transport_security_https_delivery?.status, "Observed");
   assert.equal(outcomes.transport_security_tls_certificate?.status, "Observed");
+  assert.match(
+    outcomes.transport_security_tls_certificate?.limitation ?? "",
+    /example\.com.*certificate valid Jun 22–Sep 20, 2026/i
+  );
   assert.equal(outcomes.transport_security_http_redirect?.status, "Observed");
   assert.equal(outcomes.transport_security_mixed_content?.status, "Observed");
   assert.equal(outcomes.transport_security_form_transport?.status, "Observed");
@@ -6859,7 +6879,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes explains certificate-chain probe 
   assert.match(explanation, /standard client/i);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes includes retained certificate expiry dates in the TLS finding", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes includes compact retained certificate validity in the TLS finding", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -6874,11 +6894,13 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes includes retained certificate exp
           {
             inputUrl: "https://caltech.edu/",
             subject: "CN=caltech.edu, O=California Institute of Technology",
+            validFrom: "Mar 22 23:59:59 2026 GMT",
             validTo: "Dec 27 23:59:59 2026 GMT"
           },
           {
             inputUrl: "https://www.caltech.edu/",
             subject: "CN=www.caltech.edu, O=California Institute of Technology",
+            validFrom: "Mar 01 23:59:59 2026 GMT",
             validTo: "Dec 04 23:59:59 2026 GMT"
           }
         ],
@@ -6890,17 +6912,19 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes includes retained certificate exp
   });
 
   const outcome = outcomes.transport_security_tls_certificate;
-  assert.match(outcome?.limitation ?? "", /caltech\.edu.*Dec 27, 2026/i);
-  assert.match(outcome?.limitation ?? "", /www\.caltech\.edu.*Dec 4, 2026/i);
+  assert.match(outcome?.limitation ?? "", /caltech\.edu.*certificate valid Mar 22–Dec 27, 2026/i);
+  assert.match(outcome?.limitation ?? "", /www\.caltech\.edu.*certificate valid Mar 1–Dec 4, 2026/i);
   assert.deepEqual(outcome?.criticalEvidence.retainedEvidence.tlsCertificateObservations, [
     {
       inputUrl: "https://caltech.edu/",
       subject: "CN=caltech.edu, O=California Institute of Technology",
+      validFrom: "Mar 22 23:59:59 2026 GMT",
       validTo: "Dec 27 23:59:59 2026 GMT"
     },
     {
       inputUrl: "https://www.caltech.edu/",
       subject: "CN=www.caltech.edu, O=California Institute of Technology",
+      validFrom: "Mar 01 23:59:59 2026 GMT",
       validTo: "Dec 04 23:59:59 2026 GMT"
     }
   ]);

@@ -7,7 +7,7 @@ import {
   GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_IDS,
   GDPR_EPRIVACY_SHADOW_SCORE_ELIGIBLE_FAMILIES
 } from "../../lib/scans/canonical-shadow-score-input";
-import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL } from "../../lib/scans/canonical-shadow-score-model";
+import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL } from "../../lib/scans/canonical-shadow-score-model";
 import { runCanonicalShadowScore } from "../../lib/scans/canonical-shadow-score-run";
 import { deriveGdprEprivacyUsableCoverageSummary } from "../../lib/scans/gdpr-eprivacy-review-summary";
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
@@ -86,7 +86,7 @@ export function buildMaterializedScanCanonicalShadowScore(
       scoreSource: projection.legacyScoreAssessment.scoreSource,
       scoreVersion: projection.legacyScoreAssessment.scoreVersion
     },
-    model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL,
+    model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL,
     scanId: materializedRecord.scan.id,
     scoreEligibleCoverageRowIds: [...GDPR_EPRIVACY_SHADOW_SCORE_COVERAGE_ROW_IDS],
     scoreEligibleFamilies: [...GDPR_EPRIVACY_SHADOW_SCORE_ELIGIBLE_FAMILIES]

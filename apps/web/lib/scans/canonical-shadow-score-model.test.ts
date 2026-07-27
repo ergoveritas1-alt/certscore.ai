@@ -6,7 +6,9 @@ import {
   GDPR_EPRIVACY_SHADOW_CANDIDATE_V0_MODEL,
   GDPR_EPRIVACY_SHADOW_CANDIDATE_V1_MODEL,
   GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL,
-  GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL
+  GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL,
+  GDPR_EPRIVACY_SHADOW_CANDIDATE_V4_MODEL,
+  GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL
 } from "./canonical-shadow-score-model";
 
 test("the editable Luna candidate JSON stays identical to the runtime shadow model", async () => {
@@ -74,6 +76,58 @@ test("the selected Luna calibration candidate-v3 JSON matches runtime and resolv
     { action: result.actionLabel, posture: result.posture, risk: result.observedRiskIndex, score: result.postureScore },
     { action: "Review", posture: "Watch", risk: 30, score: 70 }
   );
+});
+
+test("candidate-v4 gives ordinary reviews a small penalty and priority partial concerns stronger grouped penalties", () => {
+  const rows = Object.keys(GDPR_EPRIVACY_SHADOW_CANDIDATE_V4_MODEL.coverageRowWeights).map((rowId) => ({
+    assessmentStatus: (
+      rowId === "pre_consent_cookies_storage" ||
+      rowId === "pre_consent_third_party_tracking" ||
+      rowId === "reject_all_path_availability" ||
+      rowId === "international_transfers_disclosure" ||
+      rowId === "processing_purposes_disclosure"
+        ? "review_signal"
+        : "checked"
+    ) as "review_signal" | "checked",
+    evidenceState: "observed" as const,
+    rowId
+  }));
+  const result = deriveCanonicalShadowScore({
+    coverageRows: rows,
+    findings: [],
+    model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V4_MODEL
+  });
+
+  assert.equal(result.observedRiskIndex, 25);
+  assert.equal(result.postureScore, 75);
+  assert.equal(result.checklistReviewContributions.find((row) => row.group === "pre_consent_runtime")?.riskPoints, 15);
+  assert.deepEqual(
+    result.checklistReviewContributions.find((row) => row.group === "pre_consent_runtime")?.rowIds,
+    ["pre_consent_cookies_storage", "pre_consent_third_party_tracking", "reject_all_path_availability"]
+  );
+  assert.equal(result.checklistReviewContributions.find((row) => row.group === "international_transfer_disclosure")?.riskPoints, 10);
+  assert.equal(GDPR_EPRIVACY_SHADOW_CANDIDATE_V4_MODEL.approvalStatus, "pending_luna");
+});
+
+test("candidate-v5 removes posture caps and scores entirely from deterministic deductions", () => {
+  const result = deriveCanonicalShadowScore({
+    coverageRows: Object.keys(GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL.coverageRowWeights).map((rowId) => ({
+      assessmentStatus: "checked" as const,
+      evidenceState: "observed" as const,
+      rowId
+    })),
+    findings: [{
+      family: "consent_tracking",
+      findingId: "preconsent_tracking",
+      severity: "high"
+    }],
+    model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL
+  });
+
+  assert.equal(result.observedRiskIndex, 30);
+  assert.equal(result.postureScore, 70);
+  assert.deepEqual(result.appliedCaps, []);
+  assert.deepEqual(GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL.criticalPostureCaps, []);
 });
 
 test("the active Luna candidate JSON stays identical to the runtime shadow model", async () => {

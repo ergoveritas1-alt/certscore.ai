@@ -3,6 +3,7 @@ import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   classifyGdprTransparencyTopics,
   classifyPrivacySurface,
+  hasSubstantiveProcessingPurposesEvidence,
   type DirectVsInferred,
   type EvidenceRef,
   type PolicyCookieDisclosureObservation,
@@ -4308,9 +4309,21 @@ const ARTICLE13_SECTION_PROFILES: Array<{
   },
   {
     disclosureType: "processing_purposes",
-    headingPatterns: [/processing purposes?/i, /purposes? of processing/i, /why we (?:collect|use|process)/i],
-    textPatterns: [/purposes?/i, /why we (?:collect|use|process)/i, /we (?:collect|use|process).{0,120}(?:to|for)/i],
-    observedPattern: /purposes? of processing|processing purposes?|why we (?:collect|use|process)|we (?:collect|use|process).{0,120}(?:to|for)/i,
+    headingPatterns: [
+      /processing purposes?/i,
+      /purposes? of processing/i,
+      /why we (?:collect|use|process)/i,
+      /what do we use (?:your )?(?:personal )?(?:data|information) for/i,
+      /contact form|appointments?|request by (?:e-?mail|telephone|fax)|online application/i,
+    ],
+    textPatterns: [
+      /purposes?/i,
+      /why we (?:collect|use|process)/i,
+      /what do we use (?:your )?(?:personal )?(?:data|information) for/i,
+      /we (?:collect|use|process|store).{0,120}(?:to|for)/i,
+      /(?:data|information|details|application documents).{0,120}(?:used|processed|collected|stored).{0,120}(?:to|for)/i,
+    ],
+    observedPattern: /purposes? of processing|processing purposes?|why we (?:collect|use|process)|what do we use (?:your )?(?:personal )?(?:data|information) for|we (?:collect|use|process|store).{0,120}(?:to|for)|(?:data|information|details|application documents).{0,120}(?:used|processed|collected|stored).{0,120}(?:to|for)/i,
   },
   {
     disclosureType: "legal_basis",
@@ -6177,6 +6190,12 @@ function bestSectionForProfile(
     }
     if (profile.observedPattern.test(section.textExcerpt)) score += 5;
     profile.observedPattern.lastIndex = 0;
+    if (
+      profile.disclosureType === "processing_purposes" &&
+      hasSubstantiveProcessingPurposesEvidence(haystack)
+    ) {
+      score += 8;
+    }
     if (profile.partialPattern?.test(section.textExcerpt)) score += 3;
     if (profile.partialPattern) profile.partialPattern.lastIndex = 0;
     if (profile.subjectScope === "controller") {
@@ -6203,7 +6222,9 @@ function controllerSubjectSectionScore(section: RetainedPolicySection): number {
     : false;
   const externalSubjectFramingObserved =
     /(?:data protection officer|datenschutzbeauftragte[rsn]?|dpo).{0,160}(?:service provider|platform operator|plattformbetreiber|third party|anbieter|provider)/i.test(text) ||
-    /(?:service provider|platform operator|plattformbetreiber|third party|anbieter|provider).{0,160}(?:data protection officer|datenschutzbeauftragte[rsn]?|dpo)/i.test(text);
+    /(?:service provider|platform operator|plattformbetreiber|third party|anbieter|provider).{0,160}(?:data protection officer|datenschutzbeauftragte[rsn]?|dpo)/i.test(text) ||
+    /(?:linkedin|xing|facebook|instagram|platform operator|plattformbetreiber).{0,180}(?:jointly operated|joint controller|controller)/i.test(text) ||
+    /(?:jointly operated|joint controller|controller).{0,180}(?:linkedin|xing|facebook|instagram|platform operator|plattformbetreiber)/i.test(text);
   const privacyServiceMarketingObserved =
     /(?:data protection officer|dpo)[-\s]*(?:as a service|service)|(?:our|managed)\s+(?:dpo|data protection)\s+services?/i.test(text);
 
@@ -6219,8 +6240,15 @@ function bestSectionExcerptForProfile(
 ): string {
   const text = normalizeWhitespace(section.textExcerpt);
   const preferredPatterns: Partial<Record<Article13DisclosureType, RegExp[]>> = {
-    controller_contact: [/(?:we|our organization|[A-Z][A-Za-z ]{2,80}) (?:is|are) the (?:data )?controller.{0,220}(?:contact|privacy@|data protection)/i],
-    processing_purposes: [/we (?:collect|use|process).{0,220}(?:to|for) /i],
+    controller_contact: [
+      /information on (?:the )?controller.{0,360}(?:e-?mail|email|tel(?:ephone)?|address|@[a-z0-9.-]+\.[a-z]{2,})/i,
+      /(?:we|our organization|[A-Z][A-Za-z ]{2,80}) (?:is|are) the (?:data )?controller.{0,220}(?:contact|privacy@|data protection)/i,
+    ],
+    processing_purposes: [
+      /what do we use (?:your )?(?:personal )?(?:data|information) for.{0,360}/i,
+      /we (?:collect|use|process|store).{0,220}(?:to|for) /i,
+      /(?:your details|contact details|application data|application documents|(?:the )?data).{0,180}(?:used|processed|collected|stored).{0,180}(?:to|for(?: the purpose of)?).{0,240}/i,
+    ],
     legal_basis: [/(?:our )?(?:legal|lawful) bases? (?:are|include).{0,260}(?:contract|legitimate interests?|legal obligations?|consent|public task|vital interests?)/i],
     data_retention: [/we retain.{0,260}(?:as long as|period|criteria|delete|anonymi[sz]e)/i],
     international_transfers: [/(?:we|our service providers?|our processors?) (?:transfer|store|process).{0,300}(?:outside|other countries|third countr(?:y|ies)|international).{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i, /(?:international|cross-border|third-country) transfers?.{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i],
@@ -6269,6 +6297,13 @@ function sectionEvidenceStatus(
   );
   if (localizedClassifierMatch) {
     return "not_confirmed";
+  }
+  if (
+    profile.disclosureType === "processing_purposes" &&
+    hasSubstantiveProcessingPurposesEvidence(excerpt) &&
+    isArticle13DisclosureEvidenceUsable(excerpt, profile.disclosureType)
+  ) {
+    return "observed";
   }
   if (profile.observedPattern.test(excerpt) && isArticle13DisclosureEvidenceUsable(excerpt, profile.disclosureType)) {
     profile.observedPattern.lastIndex = 0;

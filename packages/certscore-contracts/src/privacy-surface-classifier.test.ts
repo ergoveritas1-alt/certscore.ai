@@ -134,6 +134,31 @@ test("requires policy context for an ambiguous French privacy label", () => {
   assert.equal(classification.reasonCodes.includes("policy_context_satisfied"), true);
 });
 
+test("does not classify generic data-protection marketing or customer stories as privacy policies", () => {
+  for (const input of [
+    {
+      linkText: "Efficient Data Protection Management at finstreet",
+      url: "https://example.test/customer-stories/finstreet/",
+      surroundingText: "Customer story about building a data protection program from scratch.",
+    },
+    {
+      linkText: "Data Protection",
+      url: "https://example.test/security-advisory/dataprivacy/",
+      surroundingText: "Explore our consulting and managed security services.",
+    },
+  ]) {
+    assert.equal(classifyPrivacySurface(input).surfaceType, "unknown", input.url);
+  }
+
+  const policy = classifyPrivacySurface({
+    linkText: "Data Protection",
+    url: "https://example.test/legal/data-protection",
+    surroundingText: "Legal policy notice for processing personal data.",
+  });
+  assert.equal(policy.surfaceType, "privacy_policy");
+  assert.equal(policy.reasonCodes.includes("policy_context_satisfied"), true);
+});
+
 test("classifies canonical terms surfaces across supported locales", () => {
   const examples = [
     ["Terms", "en"],

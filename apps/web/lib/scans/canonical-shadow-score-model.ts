@@ -135,3 +135,41 @@ export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL = {
   },
   version: "gdpr-eprivacy-shadow.candidate-v3-rights-max-30.pending-luna"
 } as const satisfies CanonicalShadowScoreModel;
+
+export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V4_MODEL = {
+  ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL,
+  approvalStatus: "pending_luna",
+  checklistReviewRisk: {
+    defaultRiskPoints: 1,
+    maximumRiskPoints: 25,
+    rowOverrides: {
+      international_transfers_disclosure: {
+        group: "international_transfer_disclosure",
+        riskPoints: 10
+      },
+      pre_consent_cookies_storage: {
+        coveredByFindingFamily: "consent_tracking",
+        group: "pre_consent_runtime",
+        riskPoints: 12
+      },
+      pre_consent_third_party_tracking: {
+        coveredByFindingFamily: "consent_tracking",
+        group: "pre_consent_runtime",
+        riskPoints: 15
+      },
+      reject_all_path_availability: {
+        coveredByFindingFamily: "consent_tracking",
+        group: "pre_consent_runtime",
+        riskPoints: 10
+      }
+    }
+  },
+  version: "gdpr-eprivacy-shadow.candidate-v4-checklist-review.pending-luna"
+} as const satisfies CanonicalShadowScoreModel;
+
+export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL = {
+  ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V4_MODEL,
+  approvalStatus: "pending_luna",
+  criticalPostureCaps: [],
+  version: "gdpr-eprivacy-shadow.candidate-v5-no-caps.pending-luna"
+} as const satisfies CanonicalShadowScoreModel;

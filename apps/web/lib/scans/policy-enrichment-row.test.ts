@@ -30,7 +30,7 @@ test("getPolicyActionableFlags filters mixed raw arrays down to strings", () => 
   assert.deepEqual(result, ["low_confidence", "llm_provider_error"]);
 });
 
-test("public policy projection keeps at most five first-party, semantically useful surfaces", () => {
+test("public policy projection keeps at most four first-party, semantically useful surfaces", () => {
   const surfaces = prioritizePublicPolicySurfaces([
     { type: "privacy_policy", url: "https://www.aruba.it/informativa_arubaspa.pdf" },
     { type: "cookie_policy", url: "https://www.aruba.it/cookie-policy.aspx" },
@@ -43,7 +43,7 @@ test("public policy projection keeps at most five first-party, semantically usef
     { type: "privacy_policy", url: "https://www.aruba.it/informativa_arubaspa.pdf#section" }
   ], { siteDomain: "aruba.it" });
 
-  assert.equal(surfaces.length, 5);
+  assert.equal(surfaces.length, 4);
   assert.ok(surfaces.every((surface) => new URL(surface.url!).hostname.endsWith("aruba.it")));
   assert.equal(surfaces.filter((surface) => surface.url?.includes("informativa_arubaspa.pdf")).length, 1);
   assert.equal(surfaces[0]?.url, "https://www.aruba.it/informativa_arubaspa.pdf");

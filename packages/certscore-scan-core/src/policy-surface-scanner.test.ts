@@ -2877,7 +2877,7 @@ test("policySurfaceScanner confirms international transfer disclosure from recip
   });
 });
 
-test("retained policy sections prefer controller identity over DPO service marketing and isolate transfer prose from URL lists", () => {
+test("retained policy sections prefer the governing controller and retain passive processing-purpose disclosures", () => {
   const sourceUrl = "https://sits.example/privacy-policy/";
   const evidence = retainedArticle13SectionEvidenceFromSections([
     {
@@ -2898,21 +2898,42 @@ test("retained policy sections prefer controller identity over DPO service marke
     },
     {
       sourceUrl,
+      heading: "LinkedIn fanpage controller",
+      textExcerpt: "Our LinkedIn fanpage is jointly operated with the platform operator. LinkedIn is a joint controller for its platform processing.",
+      charStart: 302,
+      charEnd: 425,
+      quality: "partial",
+    },
+    {
+      sourceUrl,
+      heading: "Contact form and appointments",
+      textExcerpt: "Your details from the form, including the contact details you provide, will be stored by us for the purpose of processing the enquiry and follow-up questions.",
+      charStart: 426,
+      charEnd: 580,
+      quality: "partial",
+    },
+    {
+      sourceUrl,
       heading: "Data transfers",
       textExcerpt: "Data transfers to third countries are secured by an adequacy decision pursuant to Art. 45 GDPR or by appropriate safeguards pursuant to Art. 46 GDPR. https://vendor.example/privacy https://vendor.example/help https://vendor.example/contact https://vendor.example/legal https://vendor.example/settings https://vendor.example/faq https://vendor.example/about https://vendor.example/more",
-      charStart: 302,
-      charEnd: 700,
+      charStart: 581,
+      charEnd: 980,
       quality: "strong",
     },
   ]);
 
   const controller = evidence.find((row) => row.coverageArea === "controller_contact");
+  const purposes = evidence.find((row) => row.coverageArea === "processing_purposes");
   const transfers = evidence.find((row) => row.coverageArea === "international_transfers");
 
   assert.equal(controller?.signalObserved, "observed");
   assert.equal(controller?.selectedPolicySectionHeading, "Information on the controller");
   assert.match(controller?.selectedPolicySectionExcerpt ?? "", /SITS Group AG|INFO@SITS\.EXAMPLE/i);
   assert.doesNotMatch(controller?.selectedPolicySectionExcerpt ?? "", /DPO-as-a-Service/i);
+  assert.doesNotMatch(controller?.selectedPolicySectionExcerpt ?? "", /LinkedIn/i);
+  assert.equal(purposes?.signalObserved, "observed");
+  assert.equal(purposes?.selectedPolicySectionHeading, "Contact form and appointments");
+  assert.match(purposes?.selectedPolicySectionExcerpt ?? "", /processing the enquiry and follow-up questions/i);
   assert.equal(transfers?.signalObserved, "observed");
   assert.match(transfers?.selectedPolicySectionExcerpt ?? "", /Art\. 45 GDPR|Art\. 46 GDPR/i);
   assert.doesNotMatch(transfers?.selectedPolicySectionExcerpt ?? "", /vendor\.example/i);

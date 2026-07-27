@@ -188,7 +188,7 @@ import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-e
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
 import { buildCanonicalShadowScoreInput } from "../../lib/scans/canonical-shadow-score-input";
 import { deriveCanonicalShadowScore } from "../../lib/scans/canonical-shadow-score";
-import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL } from "../../lib/scans/canonical-shadow-score-model";
+import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL } from "../../lib/scans/canonical-shadow-score-model";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import {
@@ -209,7 +209,7 @@ export function deriveCanonicalOverallScoreForReport(input: {
     const scoreInput = buildCanonicalShadowScoreInput(input);
     return deriveCanonicalShadowScore({
       ...scoreInput,
-      model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL
+      model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL
     }).postureScore;
   } catch {
     return null;
@@ -602,7 +602,7 @@ function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
     return <InventoryTypeIcon type={row.type} />;
   }
   return (
-    <details className="group/cookie-detail relative z-10 open:z-40">
+    <details className="group/cookie-detail relative z-10 open:z-40" name="preconsent-inventory-evidence">
       <summary
         aria-label={`Show retained vendor evidence for ${row.vendor}`}
         className={`inline-flex h-8 min-w-[3.5rem] cursor-pointer list-none items-center justify-center rounded-lg border px-1.5 transition-all duration-150 hover:-translate-y-px active:translate-y-px active:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 group-open/cookie-detail:translate-y-px marker:hidden [&::-webkit-details-marker]:hidden ${getInventoryTypeDisclosureClasses(row)}`}
@@ -615,7 +615,7 @@ function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
           </svg>
         </span>
       </summary>
-      <div className="absolute left-0 top-full z-50 mt-2 w-[34rem] max-w-[80vw] rounded-xl border border-slate-200 bg-white p-3 shadow-[0_18px_42px_-16px_rgba(15,23,42,0.45)]">
+      <div className="relative mt-2 w-[34rem] max-w-[80vw] rounded-xl border border-slate-200 bg-white p-3 shadow-[0_18px_42px_-16px_rgba(15,23,42,0.45)]">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Retained vendor evidence</p>
         <dl className="mb-2 grid grid-cols-[7rem_1fr] gap-x-2 rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] leading-4 text-slate-600">
           <dt className="font-medium text-slate-500">Products</dt><dd>{row.rawProducts.join(", ") || row.vendor}</dd>
@@ -874,13 +874,12 @@ function InventoryDataFlowCell({ row }: { row: InventoryGroupRow }) {
               {countryFlag(headquartersCountry)} HQ
             </span>
           ) : provider ? <span className="truncate max-w-[7rem]">{provider}</span> : null}
-          <span
-            aria-label="Server location context"
-            className="inline-flex h-[11px] w-[11px] items-center justify-center rounded-full border border-slate-300 text-[7px] font-semibold leading-none text-slate-500"
-            title={`Server country was not retained for this endpoint; the flag indicates controlling-entity headquarters, not server storage location.${provider ? ` Network provider: ${provider}.` : ""}`}
-          >
-            i
-          </span>
+          <InfoTip
+            align="end"
+            className="shrink-0"
+            placement="top"
+            text={`Server country was not retained for this endpoint; the flag indicates controlling-entity headquarters, not server storage location.${provider ? ` Network provider: ${provider}.` : ""}`}
+          />
         </span>
       )}
       {flow.idSync ? <span className="rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">ID sync</span> : null}
@@ -1011,7 +1010,14 @@ function RuntimeInventoryTable({
       <details className="group/inventory relative overflow-visible rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]" open>
         <summary className="flex min-h-[4.75rem] cursor-pointer list-none flex-wrap items-center gap-3 px-3.5 py-4 pr-14 marker:hidden [&::-webkit-details-marker]:hidden lg:px-5 lg:pr-16">
           <ScanReportDisclosureIcon className="group-open/inventory:rotate-90" />
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Pre-consent Cookies & Trackers</p>
+          <p className="inline-flex items-center gap-1.5 text-sm font-medium uppercase tracking-[0.18em] text-slate-500">
+            Pre-consent Cookies &amp; Trackers (grouped)
+            <InfoTip
+              align="start"
+              placement="top"
+              text="Related cookies, trackers, requests, and storage records are grouped by recognized vendor or entity. Grouped rows may be fewer than the total observed records because multiple records can belong to the same service."
+            />
+          </p>
         </summary>
         <CopyJsonButton
           className="absolute right-3 top-4 z-20 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-950 lg:right-5"
@@ -1059,7 +1065,12 @@ function RuntimeInventoryTable({
                   <th title="Observed purpose classification" className="sticky top-0 z-20 w-[130px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
                   <th title="Consent evidence classification" className="sticky top-0 z-20 w-[105px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Evidence</th>
                   <th title="Elapsed time from scan start to observation" className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
-                  <th className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Cookies</th>
+                  <th title="Names retained for the grouped vendor or entity; tracker rows may include associated cookie names." className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">
+                    <span className="inline-flex items-center gap-1">
+                      Name(s)
+                      <InfoTip align="start" placement="top" text="Names retained for the grouped vendor or entity. Tracker rows may include associated cookie names; a dash means no name was retained." />
+                    </span>
+                  </th>
                   <th className="sticky top-0 z-20 w-[150px] max-w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Domain</th>
                   <th className="sticky top-0 z-20 w-[120px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Server location</th>
                   <th className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Confidence</th>

@@ -2695,7 +2695,10 @@ function selectArticle13PrivacySurfaces(
     )
     .map(({ row }) => row);
   if (canonicalPrivacyNotices.length > 0) {
-    return prioritizeGeneralScope(generalPrivacySurfaces.filter((row) => !isPrivacyServiceMarketingSurface(row)));
+    return prioritizeGeneralScope(generalPrivacySurfaces.filter((row) =>
+      !isPrivacyServiceMarketingSurface(row) &&
+      !isNonPolicyEditorialSurface(row)
+    ));
   }
   return prioritizeGeneralScope(generalPrivacySurfaces.length > 0 ? generalPrivacySurfaces : privacySurfaces);
 }
@@ -2714,6 +2717,21 @@ function isPrivacyServiceMarketingSurface(row: ReturnType<typeof dedupePolicySur
     row.surface.url,
   ].filter(Boolean).join(" ");
   return /(?:DPO|data protection officer)[-\s]*(?:as a service|service)|(?:data privacy|data protection)\s+(?:services?|solutions?|consulting)|(?:our|managed)\s+(?:DPO|data protection)\s+services?/i.test(evidence);
+}
+
+function isNonPolicyEditorialSurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
+  const url = [
+    row.pageUrl,
+    row.surface.normalizedUrl,
+    row.surface.url,
+  ].filter(Boolean).join(" ");
+  const label = [
+    row.surface.title,
+    row.surface.linkText,
+    row.surface.surroundingTextExcerpt,
+  ].filter(Boolean).join(" ");
+  return /\/(?:customer-stories|customer-story|case-studies|case-study|success-stories|blog|news|insights)(?:\/|$)/i.test(url) ||
+    /\b(?:customer story|case study|success story)\b/i.test(label);
 }
 
 function isCanonicalPrivacyNoticeSurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
@@ -2921,6 +2939,55 @@ function consentGeometrySummary(geometryEvidence: Record<string, unknown> | null
   return isRecord(geometryEvidence?.summary) ? geometryEvidence.summary : null;
 }
 
+type ConsentGeometryAssessmentStatus =
+  | "complete"
+  | "document_mismatch"
+  | "incomplete";
+
+function canonicalConsentDocumentIdentity(value: unknown) {
+  const raw = getString(value);
+  if (!raw) {
+    return null;
+  }
+  try {
+    const url = new URL(raw);
+    if (!/^https?:$/.test(url.protocol)) {
+      return null;
+    }
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return `${url.protocol}//${url.host.toLowerCase()}${pathname}`;
+  } catch {
+    return null;
+  }
+}
+
+function consentGeometryAssessmentStatus(
+  bundle: CanonicalEvidenceBundle,
+  geometryEvidence: Record<string, unknown> | null | undefined
+): ConsentGeometryAssessmentStatus {
+  const summary = consentGeometrySummary(geometryEvidence);
+  const access = getRecord(geometryEvidence, "access");
+  const geometryDocument = canonicalConsentDocumentIdentity(geometryEvidence?.pageUrl);
+  const finalDocument = canonicalConsentDocumentIdentity(getLocalV2FinalDocumentUrl(bundle));
+  const complete =
+    typeof summary?.firstLayerAccept === "boolean" &&
+    typeof summary.firstLayerReject === "boolean" &&
+    typeof summary.firstLayerOptions === "boolean" &&
+    typeof summary.confidence === "number" &&
+    summary.confidence > 0 &&
+    Array.isArray(geometryEvidence?.candidates) &&
+    (access === null || getString(access.status) === "loaded") &&
+    geometryDocument !== null &&
+    finalDocument !== null;
+  if (!complete) {
+    return "incomplete";
+  }
+
+  return geometryDocument !== finalDocument
+    ? "document_mismatch"
+    : "complete";
+}
+
 function consentGeometryCmpName(geometryEvidence: Record<string, unknown> | null | undefined) {
   const summary = consentGeometrySummary(geometryEvidence);
   if (summary?.cmpDetected !== true) {
@@ -2965,23 +3032,166 @@ function actionTypeFromRetainedGeometryCandidate(candidate: Record<string, unkno
   };
 }
 
-function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<string, unknown> | null | undefined) {
+function geometryCandidateMatchesDocument(
+  candidate: Record<string, unknown>,
+  geometryEvidence: Record<string, unknown>
+) {
+  const frameContext = getRecord(candidate, "frameContext");
+  const frameDocument = canonicalConsentDocumentIdentity(frameContext?.frameUrl);
+  const geometryDocument = canonicalConsentDocumentIdentity(geometryEvidence.pageUrl);
+  return !frameDocument || !geometryDocument || frameDocument === geometryDocument;
+}
+
+function geometryCandidateIsConfirmedVisible(
+  candidate: Record<string, unknown>,
+  geometryEvidence: Record<string, unknown>
+) {
+  const computedStyle = getRecord(candidate, "computedStyle");
+  return (
+    getString(candidate.decisionStatus) === "confirmed_visible" &&
+    candidate.enabled !== false &&
+    candidate.intersectsViewport === true &&
+    positiveGeometryBox(candidate) &&
+    computedStyle?.display !== "none" &&
+    computedStyle?.visibility !== "hidden" &&
+    computedStyle?.pointerEvents !== "none" &&
+    !(typeof computedStyle?.opacity === "string" && Number.parseFloat(computedStyle.opacity) <= 0.05) &&
+    candidate.clippedByScrollableAncestor !== true &&
+    geometryCandidateMatchesDocument(candidate, geometryEvidence)
+  );
+}
+
+function hasStrongConsentModalContainerEvidence(container: Record<string, unknown>) {
+  const context = [
+    getString(container.selectorHint),
+    getString(container.id),
+    getString(container.classes),
+    getString(container.role),
+    getString(container.ariaLabel),
+    getString(container.textExcerpt),
+    getString(container.htmlExcerpt)
+  ].filter(Boolean).join(" ");
+  const hasConsentContext =
+    /cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|personal data/i.test(context);
+  const hasModalSemantics =
+    /\b(?:alert)?dialog\b|aria-modal\s*=\s*["']?true|data-borlabs-cookie-consent-required/i.test(context);
+  const hasOverlayStyling =
+    /(?:position\s*:\s*fixed|\bfixed\b|w-screen|h-screen|inset-0|z-max|dialog-backdrop|cookiebox)/i.test(context);
+  return hasConsentContext && (hasModalSemantics || hasOverlayStyling);
+}
+
+function reconciledConsentModalContainerIds(
+  geometryEvidence: Record<string, unknown> | null | undefined
+) {
+  const reconciled = new Set<string>();
+  if (!geometryEvidence) {
+    return reconciled;
+  }
   const summary = consentGeometrySummary(geometryEvidence);
+  const hasConsentContext = summary?.cmpDetected === true ||
+    getObjectArray(geometryEvidence.containers).some((container) =>
+      /cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|personal data/i.test(
+        getString(container.textExcerpt) ?? ""
+      )
+    );
+  const containersById = new Map(
+    getObjectArray(geometryEvidence.containers).flatMap((container) => {
+      const containerId = getString(container.containerId);
+      return containerId ? [[containerId, container] as const] : [];
+    })
+  );
+  const actionsByContainer = new Map<string, Set<string>>();
+  for (const candidate of getObjectArray(geometryEvidence.candidates)) {
+    const containerId = getString(candidate.containerId);
+    if (
+      !containerId ||
+      candidate.layer !== "page_body" ||
+      !geometryCandidateIsConfirmedVisible(candidate, geometryEvidence)
+    ) {
+      continue;
+    }
+    const { actionType } = actionTypeFromRetainedGeometryCandidate(candidate, hasConsentContext);
+    if (
+      actionType !== "accept_all" &&
+      actionType !== "reject_all" &&
+      actionType !== "manage_preferences"
+    ) {
+      continue;
+    }
+    const actions = actionsByContainer.get(containerId) ?? new Set<string>();
+    actions.add(actionType);
+    actionsByContainer.set(containerId, actions);
+  }
+  for (const [containerId, actions] of actionsByContainer) {
+    const container = containersById.get(containerId);
+    if (
+      container &&
+      hasStrongConsentModalContainerEvidence(container) &&
+      actions.has("accept_all") &&
+      (actions.has("reject_all") || actions.has("manage_preferences"))
+    ) {
+      reconciled.add(containerId);
+    }
+  }
+  return reconciled;
+}
+
+function hasAmbiguousVisibleConsentControlCandidate(
+  geometryEvidence: Record<string, unknown> | null | undefined
+) {
+  if (!geometryEvidence) {
+    return false;
+  }
+  const summary = consentGeometrySummary(geometryEvidence);
+  const hasConsentContext = summary?.cmpDetected === true ||
+    getObjectArray(geometryEvidence.containers).some((container) =>
+      /cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|personal data/i.test(
+        getString(container.textExcerpt) ?? ""
+      )
+    );
+  const reconciledContainerIds = reconciledConsentModalContainerIds(geometryEvidence);
+  return getObjectArray(geometryEvidence.candidates).some((candidate) => {
+    const { actionType } = actionTypeFromRetainedGeometryCandidate(candidate, hasConsentContext);
+    const containerId = getString(candidate.containerId);
+    const canonicalAction =
+      actionType === "accept_all" ||
+      actionType === "reject_all" ||
+      actionType === "manage_preferences" ||
+      actionType === "save_preferences";
+    return (
+      canonicalAction &&
+      candidate.layer !== "first_layer" &&
+      (!containerId || !reconciledContainerIds.has(containerId)) &&
+      geometryCandidateIsConfirmedVisible(candidate, geometryEvidence)
+    );
+  });
+}
+
+function summarizeGeometryFirstLayerConsentChoices(
+  geometryEvidence: Record<string, unknown> | null | undefined
+) {
+  const summary = consentGeometrySummary(geometryEvidence);
+  if (!geometryEvidence) {
+    return null;
+  }
   const hasConsentContext = summary?.cmpDetected === true ||
     getObjectArray(geometryEvidence?.containers).some((container) =>
       /cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|personal data/i.test(
         getString(container.textExcerpt) ?? ""
       )
     );
+  const reconciledContainerIds = reconciledConsentModalContainerIds(geometryEvidence);
   const controls = getObjectArray(geometryEvidence?.candidates)
     .map((candidate) => {
       const label = getString(candidate.label);
       const { actionType, classification } = actionTypeFromRetainedGeometryCandidate(candidate, hasConsentContext);
+      const containerId = getString(candidate.containerId);
       const geometryVisible =
-        candidate.layer === "first_layer" &&
-        candidate.enabled !== false &&
-        candidate.intersectsViewport !== false &&
-        positiveGeometryBox(candidate);
+        (
+          candidate.layer === "first_layer" ||
+          Boolean(containerId && reconciledContainerIds.has(containerId))
+        ) &&
+        geometryCandidateIsConfirmedVisible(candidate, geometryEvidence);
       const retainedDecision = getString(candidate.decisionStatus);
       const canonicalAction =
         actionType === "accept_all" ||
@@ -2992,10 +3202,7 @@ function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<stri
           : null;
       const visible =
         geometryVisible &&
-        (
-          retainedDecision === "confirmed_visible" ||
-          (retainedDecision === "ambiguous" && canonicalAction !== null)
-        );
+        retainedDecision === "confirmed_visible";
       return label && visible && canonicalAction
         ? {
             actionType: canonicalAction,
@@ -3012,10 +3219,6 @@ function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<stri
         : null;
     })
     .filter((control): control is NonNullable<typeof control> => control !== null);
-  if (controls.length === 0 && summary?.cmpDetected !== true) {
-    return null;
-  }
-
   const acceptLabels = uniqueStrings(controls
     .filter((control) => control.actionType === "accept_all")
     .map((control) => control.label));
@@ -3042,7 +3245,8 @@ function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<stri
     precheckedOptionalPurposeLabels: [],
     rejectControlObserved: rejectLabels.length > 0,
     rejectLabels,
-    visibleChoiceLabels
+    visibleChoiceLabels,
+    geometryAssessment: "complete" as const
   };
 }
 
@@ -3073,6 +3277,7 @@ export function summarizeFirstLayerConsentChoices(
     null;
   const defaultToggleEvidence = summarizeConsentDefaultToggleEvidence(observation);
   const geometryChoices = summarizeGeometryFirstLayerConsentChoices(geometryEvidence);
+  const geometryStatus = consentGeometryAssessmentStatus(bundle, geometryEvidence);
   const controls = (observation?.controls ?? []).flatMap((control) => {
     const label = getString(control?.label);
     return label && control?.visible !== false ? [{ ...control, label }] : [];
@@ -3128,37 +3333,189 @@ export function summarizeFirstLayerConsentChoices(
     textSnippet: boundedTextExcerpt(observation.textExcerpt),
     visibleChoiceLabels
   };
-  if (geometryChoices?.actionableControlInventoryRetained !== true) {
-    return canonicalChoices;
+  if (geometryStatus === "document_mismatch") {
+    return {
+      acceptControlObserved: false,
+      acceptLabels: [],
+      actionableControlInventoryRetained: false,
+      capturedBeforeInteraction: true,
+      controls: [],
+      ...defaultToggleEvidence,
+      geometryAssessment: "document_mismatch" as const,
+      layerInspected: "unknown" as const,
+      managePreferencesControlObserved: false,
+      preferenceLabels: [],
+      rejectControlObserved: false,
+      rejectLabels: [],
+      visibleChoiceLabels: []
+    };
+  }
+  if (geometryStatus === "incomplete") {
+    return {
+      acceptControlObserved: false,
+      acceptLabels: [],
+      actionableControlInventoryRetained: false,
+      capturedBeforeInteraction: true,
+      controls: [],
+      defaultTogglePurposeLabels: [],
+      defaultToggleStatesObserved: null,
+      geometryAssessment: "incomplete" as const,
+      layerInspected: "unknown" as const,
+      managePreferencesControlObserved: false,
+      nonEssentialDefaultsOff: null,
+      preferenceLabels: [],
+      precheckedOptionalPurposeCount: 0,
+      precheckedOptionalPurposeLabels: [],
+      rejectControlObserved: false,
+      rejectLabels: [],
+      visibleChoiceLabels: []
+    };
+  }
+  if (geometryStatus === "complete" && geometryChoices) {
+    return {
+      ...geometryChoices,
+      ...defaultToggleEvidence
+    };
+  }
+  return canonicalChoices;
+}
+
+export function reconcileConsentSurfaceInspectionWithGeometry(
+  bundle: CanonicalEvidenceBundle,
+  geometryEvidence: Record<string, unknown> | null | undefined,
+  inspection: ReturnType<typeof deriveConsentSurfaceInspectionOutcome>
+) {
+  // The canonical bundle may already contain a completed, geometry-backed
+  // consent observation. A missing optional auxiliary mirror must not erase
+  // that retained structured evidence.
+  if (!geometryEvidence) {
+    const completedCanonicalFirstLayerInventory =
+      inspection.inspectionCompleted === true &&
+      inspection.coverageStatus === "complete" &&
+      inspection.consentSurfaceObserved === true &&
+      inspection.actionableControlObserved === true &&
+      (bundle.consentUiObservations ?? []).some((observation) =>
+        observation.likelyPresent === true &&
+        observation.layerInspected === "first_layer" &&
+        (observation.controls ?? []).some((control) =>
+          control.visible !== false &&
+          (
+            control.actionType === "accept_all" ||
+            control.actionType === "reject_all" ||
+            control.actionType === "manage_preferences" ||
+            control.actionType === "save_preferences"
+          )
+        )
+      );
+    if (
+      completedCanonicalFirstLayerInventory ||
+      (!inspection.consentSurfaceObserved && !inspection.actionableControlObserved)
+    ) {
+      return inspection;
+    }
+    return {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage" as const,
+      coverageStatus: "limited" as const,
+      inspectionCompleted: false,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      limitationKeys: uniqueStrings([
+        ...inspection.limitationKeys,
+        "consent_control_geometry_incomplete"
+      ])
+    };
+  }
+  const geometryStatus = consentGeometryAssessmentStatus(bundle, geometryEvidence);
+  if (geometryStatus === "incomplete") {
+    if (!inspection.consentSurfaceObserved && !inspection.actionableControlObserved) {
+      return inspection;
+    }
+    return {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage" as const,
+      coverageStatus: "limited" as const,
+      inspectionCompleted: false,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      limitationKeys: uniqueStrings([
+        ...inspection.limitationKeys,
+        "consent_control_geometry_incomplete"
+      ])
+    };
+  }
+  if (geometryStatus === "document_mismatch") {
+    return {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage" as const,
+      coverageStatus: "limited" as const,
+      inspectionCompleted: false,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      limitationKeys: uniqueStrings([
+        ...inspection.limitationKeys,
+        "consent_control_geometry_document_mismatch"
+      ])
+    };
   }
 
-  const mergedControls = [...canonicalChoices.controls, ...geometryChoices.controls]
-    .filter((control, index, rows) => rows.findIndex((candidate) =>
-      candidate.actionType === control.actionType &&
-      candidate.label.trim().toLowerCase() === control.label.trim().toLowerCase()
-    ) === index)
-    .slice(0, 12);
+  const choices = summarizeGeometryFirstLayerConsentChoices(geometryEvidence);
+  const actionableControlObserved = choices?.actionableControlInventoryRetained === true;
+  if (actionableControlObserved) {
+    return {
+      ...inspection,
+      outcome: "actionable_surface_observed" as const,
+      consentSurfaceObserved: true,
+      actionableControlObserved: true
+    };
+  }
+
+  const ambiguousVisibleConsentControlCandidate =
+    hasAmbiguousVisibleConsentControlCandidate(geometryEvidence);
+  if (ambiguousVisibleConsentControlCandidate) {
+    return {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage" as const,
+      coverageStatus: "limited" as const,
+      inspectionCompleted: false,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      limitationKeys: uniqueStrings([
+        ...inspection.limitationKeys,
+        "consent_control_geometry_visible_candidate_layer_ambiguous"
+      ])
+    };
+  }
+
+  const geometryResolvedLimitationKeys = new Set([
+    "cmp_runtime_without_actionable_surface",
+    "consent_surface_inspection_settled_inventory_missing"
+  ]);
+  const inspectionAlreadyComplete =
+    inspection.inspectionCompleted &&
+    inspection.coverageStatus === "complete";
+  const geometryResolvesEveryLimitation =
+    inspection.limitationKeys.length > 0 &&
+    inspection.limitationKeys.every((key) => geometryResolvedLimitationKeys.has(key));
+  if (!inspectionAlreadyComplete && !geometryResolvesEveryLimitation) {
+    return {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage" as const,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false
+    };
+  }
+
   return {
-    ...geometryChoices,
-    ...canonicalChoices,
-    acceptControlObserved: canonicalChoices.acceptControlObserved || geometryChoices.acceptControlObserved,
-    acceptLabels: uniqueStrings([...canonicalChoices.acceptLabels, ...geometryChoices.acceptLabels]),
-    actionableControlInventoryRetained:
-      canonicalChoices.actionableControlInventoryRetained || geometryChoices.actionableControlInventoryRetained,
-    controls: mergedControls,
-    layerInspected:
-      canonicalChoices.layerInspected === "first_layer" || geometryChoices.layerInspected === "first_layer"
-        ? "first_layer"
-        : canonicalChoices.layerInspected,
-    managePreferencesControlObserved:
-      canonicalChoices.managePreferencesControlObserved || geometryChoices.managePreferencesControlObserved,
-    preferenceLabels: uniqueStrings([...canonicalChoices.preferenceLabels, ...geometryChoices.preferenceLabels]),
-    rejectControlObserved: canonicalChoices.rejectControlObserved || geometryChoices.rejectControlObserved,
-    rejectLabels: uniqueStrings([...canonicalChoices.rejectLabels, ...geometryChoices.rejectLabels]),
-    visibleChoiceLabels: uniqueStrings([
-      ...canonicalChoices.visibleChoiceLabels,
-      ...geometryChoices.visibleChoiceLabels
-    ]).slice(0, 12)
+    ...inspection,
+    outcome: "no_surface_observed_complete_coverage" as const,
+    coverageStatus: "complete" as const,
+    inspectionCompleted: true,
+    inspectedPreInteraction: true,
+    consentSurfaceObserved: false,
+    actionableControlObserved: false,
+    evidenceSources: uniqueStrings([...inspection.evidenceSources, "geometry"]),
+    limitationKeys: inspection.limitationKeys.filter((key) => !geometryResolvedLimitationKeys.has(key))
   };
 }
 
@@ -3642,21 +3999,25 @@ function buildMaterializedLocalV2Detail(
       : runtimeLimitationKeys;
   const consentRuntimeEvidenceReportable = !localV2NoGo && preConsentRuntimeReliable;
   const runtimeEvidenceReportable = !localV2NoGo && effectiveRuntimeCountsRetained;
-  const consentSurfaceInspection = deriveConsentSurfaceInspectionOutcome({
-    cmpRuntimeObservations: bundle.cmpRuntimeObservations,
-    consentUiObservations: bundle.consentUiObservations,
-    domSnapshots: bundle.domSnapshots,
-    modulesRun: bundle.modulesRun,
-    runtimeCoverage: bundle.runtimeCoverage
-      ? {
-          ...bundle.runtimeCoverage,
-          coverageStatus: effectiveRuntimeCoverageStatus ?? bundle.runtimeCoverage.coverageStatus,
-          limitationKeys: effectiveRuntimeLimitationKeys,
-        }
-      : undefined,
-    screenshots: bundle.screenshots,
-    visualCapture: bundle.visualCapture,
-  });
+  const consentSurfaceInspection = reconcileConsentSurfaceInspectionWithGeometry(
+    bundle,
+    options.consentControlGeometryEvidence,
+    deriveConsentSurfaceInspectionOutcome({
+      cmpRuntimeObservations: bundle.cmpRuntimeObservations,
+      consentUiObservations: bundle.consentUiObservations,
+      domSnapshots: bundle.domSnapshots,
+      modulesRun: bundle.modulesRun,
+      runtimeCoverage: bundle.runtimeCoverage
+        ? {
+            ...bundle.runtimeCoverage,
+            coverageStatus: effectiveRuntimeCoverageStatus ?? bundle.runtimeCoverage.coverageStatus,
+            limitationKeys: effectiveRuntimeLimitationKeys,
+          }
+        : undefined,
+      screenshots: bundle.screenshots,
+      visualCapture: bundle.visualCapture,
+    })
+  );
   const primaryAssessmentEventIds = new Set([
     ...networkEvents.map((event) => event.eventId),
     ...cookieEvents.map((event) => event.eventId),
@@ -4470,7 +4831,7 @@ function buildMaterializedLocalV2Detail(
   };
 }
 
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v1";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v4";
 
 async function materializeLocalV2DagScanDetailUncached(
   scanRecord: ScanDetailResponse,
@@ -4533,7 +4894,8 @@ export async function materializeLocalV2DagScanDetail(
   // navigation does not reread S3 and repeat the full projection on every hit.
   // Local/test records without a verified artifact identity stay uncached so
   // fixtures and local out-dir development remain fully deterministic.
-  if (!input.scanArtifactUri || !input.scanArtifactSha256) {
+  const localOutDirActive = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
+  if (localOutDirActive || !input.scanArtifactUri || !input.scanArtifactSha256) {
     return materializeLocalV2DagScanDetailUncached(scanRecord, options);
   }
 
