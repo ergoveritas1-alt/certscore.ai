@@ -15,6 +15,7 @@ import {
   requesterIpAttributionFromContext,
   requesterIpAttributionFromEvents,
   requesterIpAttributionFromRequest,
+  type RequesterIpAttribution,
   type RequesterIpAttributionSource
 } from "../../lib/admin/requester-ip-attribution";
 import { deriveDisplayCreatedAt } from "../scans/display-state";
@@ -26,19 +27,47 @@ import {
   loadBlockedRunTelemetryRows,
   type AdminBlockedRunTelemetryRow,
   type AdminScanDiagnosticEventRow as ScanDiagnosticEventRow,
+  type AdminScanSnapshotRow,
   type AdminScanRequestRow as ScanRequestRow
 } from "./repository";
 import { projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
 import { requirePlatformAdminContext } from "./platform-admin";
-import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
 import { selectConfiguredCustomerGdprEprivacyScore } from "../scans/customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
+import { shouldUseLocalV2DagScanTool } from "../scans/local-v2-dag-scan-config";
 import { withServerTiming } from "../performance/log-server-timing";
 import {
   loadCachedAdminScanFilterOptions,
   loadCachedAdminScanOverviewCounts
 } from "./admin-query-cache";
+
+function scannerEgressFromScanConfig(scanConfig: Record<string, unknown> | null | undefined) {
+  if (shouldUseLocalV2DagScanTool()) {
+    return { id: null, provider: null };
+  }
+  const execution = scanConfig?.execution;
+  const lambda = execution && typeof execution === "object" && !Array.isArray(execution)
+    ? (execution as Record<string, unknown>).v2DagLambda
+    : null;
+  const provenance = lambda && typeof lambda === "object" && !Array.isArray(lambda)
+    ? (lambda as Record<string, unknown>).runtimeProvenance
+    : null;
+  const record = provenance && typeof provenance === "object" && !Array.isArray(provenance)
+    ? provenance as Record<string, unknown>
+    : null;
+  return {
+    id: typeof record?.egressId === "string" && record.egressId.trim() ? record.egressId : null,
+    provider: typeof record?.egressProvider === "string" && record.egressProvider.trim() ? record.egressProvider : null
+  };
+}
+
+function adminRequesterIpAttribution(values: RequesterIpAttribution[]) {
+  if (shouldUseLocalV2DagScanTool()) {
+    return { sourceIp: null, ipHash: null, source: "missing" as const };
+  }
+  return mergeRequesterIpAttributions(...values);
+}
 
 export type AdminScanListItem = {
   accessPostureClass: AccessPostureClass | null;
@@ -59,6 +88,7 @@ export type AdminScanListItem = {
   scoreSource: string | null;
   scoreVersion: string | null;
   cmpVendorName: string | null;
+  consentAro: AdminConsentAro | null;
   completedAt: string | null;
   createdAt: string;
   domainHostname: string | null;
@@ -109,6 +139,12 @@ export type AdminScanListItem = {
   stopTier: ScanExecutionTier | null;
   totalSignals: number | null;
   topFindingCount: number | null;
+};
+
+export type AdminConsentAro = {
+  accept: boolean | null;
+  reject: boolean | null;
+  options: boolean | null;
 };
 
 export type AdminScanOverviewMetrics = {
@@ -219,24 +255,32 @@ export async function listAdminScansPage(
 
   const scanItems: AdminScanListItem[] = scanRows.map((scan) => {
     const snapshot = snapshotMap.get(scan.id) ?? null;
+    const overviewSnapshot = snapshot;
     const runtimeArtifact = runtimeArtifactMap.get(scan.id) ?? null;
+    const configEgress = scannerEgressFromScanConfig(scan.scan_config_json);
+    const scannerEgress = shouldUseLocalV2DagScanTool()
+      ? { id: null, provider: null }
+      : {
+          id: scan.egress_id ?? overviewSnapshot?.egress_id ?? configEgress.id,
+          provider: scan.egress_provider ?? overviewSnapshot?.egress_type ?? configEgress.provider
+        };
     const linkedRequest = requestByLinkedScanId.get(scan.id) ?? null;
     const pulseAttribution = pulseAttributionMap.get(scan.id) ?? null;
     const normalizedAccessPosture = normalizeAccessPostureSummary({
-      accessPostureClass: snapshot?.access_posture_class ?? null,
-      highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
-      homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
+      accessPostureClass: overviewSnapshot?.access_posture_class ?? null,
+      highestSuccessfulTier: overviewSnapshot?.highest_successful_tier ?? null,
+      homepageFetchHttpStatus: overviewSnapshot?.homepage_fetch_http_status ?? null,
       homepageFetchStatus: null,
       pagesScanned: scan.pages_scanned,
-      recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? [],
-      stopTier: snapshot?.stop_tier ?? null,
-      totalSignals: snapshot?.total_signals ?? null
+      recoverableFindingClasses: overviewSnapshot?.recoverable_finding_classes ?? [],
+      stopTier: overviewSnapshot?.stop_tier ?? null,
+      totalSignals: overviewSnapshot?.total_signals ?? null
     });
     const accessPosture = deriveAccessPosturePresentation({
       accessPostureClass: normalizedAccessPosture.accessPostureClass,
       highestSuccessfulTier: normalizedAccessPosture.highestSuccessfulTier,
       stopTier: normalizedAccessPosture.stopTier,
-      totalSignals: snapshot?.total_signals ?? null,
+      totalSignals: overviewSnapshot?.total_signals ?? null,
       pagesScanned: scan.pages_scanned,
       recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses
     });
@@ -246,15 +290,15 @@ export async function listAdminScansPage(
       createdAt: scan.created_at,
       startedAt: null
     });
-    const requesterIpAttribution = mergeRequesterIpAttributions(
+    const requesterIpAttribution = adminRequesterIpAttribution([
       requesterIpAttributionFromRequest(linkedRequest),
       requesterIpAttributionFromContext(pulseAttribution?.request_context ?? null, "pulse_context"),
       requesterIpAttributionFromEvents(diagnosticEventMap.get(scan.id) ?? [])
-    );
+    ]);
     const primaryLanguage = inferPrimaryLanguage({
       declaredLanguages: [scan.page_language, ...(scan.page_languages ?? [])],
-      persistedPrimaryLanguages: [snapshot?.site_language_primary],
-      matchedLocales: [snapshot?.site_language_primary],
+      persistedPrimaryLanguages: [overviewSnapshot?.site_language_primary],
+      matchedLocales: [overviewSnapshot?.site_language_primary],
       urls: [
         scan.domain_id ? domainMap.get(scan.domain_id)?.hostname : null,
         linkedRequest?.requested_url,
@@ -263,13 +307,14 @@ export async function listAdminScansPage(
     });
     const noGo = projectAdminNoGo({
       accessPostureClass: normalizedAccessPosture.accessPostureClass,
-      blockedFlag: snapshot?.blocked_flag,
-      captchaFlag: snapshot?.captcha_flag,
-      runtimeAssessment: runtimeArtifact?.scan_no_go_assessment ?? snapshot?.scan_no_go_assessment,
-      snapshotOutcome: snapshot?.scan_outcome,
-      visualAccessReview: runtimeArtifact?.visual_access_review ?? snapshot?.visual_access_review,
-      snapshotRuntimeAssessment: snapshot?.scan_no_go_assessment,
-      snapshotVisualAccessReview: snapshot?.visual_access_review
+      blockedFlag: overviewSnapshot?.blocked_flag,
+      captchaFlag: overviewSnapshot?.captcha_flag,
+      runtimeAssessment: runtimeArtifact?.scan_no_go_assessment ?? overviewSnapshot?.scan_no_go_assessment,
+      snapshotOutcome: overviewSnapshot?.scan_outcome,
+      snapshotStopReasonCode: overviewSnapshot?.stop_reason_code,
+      visualAccessReview: runtimeArtifact?.visual_access_review ?? overviewSnapshot?.visual_access_review,
+      snapshotRuntimeAssessment: overviewSnapshot?.scan_no_go_assessment,
+      snapshotVisualAccessReview: overviewSnapshot?.visual_access_review
     });
     const scoreSelection = selectConfiguredCustomerGdprEprivacyScore({
       candidateAssessment: candidateScoreAssessmentMap.get(scan.id) ?? null,
@@ -278,14 +323,12 @@ export async function listAdminScansPage(
     const scoreAssessment = noGo.isNoGo ? null : scoreSelection.assessment;
     const displayedScore = noGo.isNoGo
       ? null
-      : scoreAssessment
-        ? scoreAssessment.scoreValue
-        : snapshot?.certscore_overall ?? null;
+      : overviewSnapshot?.certscore_overall ?? scoreAssessment?.scoreValue ?? null;
 
     return {
       activityAt: displayCreatedAt,
       activityId: `scan:${scan.id}`,
-      adminSummaryGeneratedAt: snapshot?.admin_summary_generated_at ?? null,
+      adminSummaryGeneratedAt: overviewSnapshot?.admin_summary_generated_at ?? null,
       scanId: scan.id,
       rowKind: "scan",
       linkedScanId: scan.id,
@@ -309,10 +352,13 @@ export async function listAdminScansPage(
       scanType: scan.scan_type,
       scanFromLabel: getScanFromDisplay(scan.scan_config_json).label,
       scanFromValue: getScanFromDisplay(scan.scan_config_json).value,
-      scanOutcome: snapshot?.scan_outcome ?? null,
-      scannerEgressId: snapshot?.egress_id ?? null,
-      scannerEgressProvider: snapshot?.egress_type ?? null,
-      trancoRank: snapshot?.tranco_rank ?? trancoRankFromScanConfig(scan.scan_config_json),
+      scanOutcome: noGo.isNoGo && overviewSnapshot?.stop_reason_code
+        ? overviewSnapshot.stop_reason_code
+        : overviewSnapshot?.scan_outcome ?? null,
+      consentAro: consentAroFromSnapshot(overviewSnapshot),
+      scannerEgressId: scannerEgress.id,
+      scannerEgressProvider: scannerEgress.provider,
+      trancoRank: overviewSnapshot?.tranco_rank ?? null,
       source: typeof scan.scan_config_json?.source === "string" ? scan.scan_config_json.source : null,
       status: scan.status,
       createdAt: displayCreatedAt,
@@ -320,33 +366,33 @@ export async function listAdminScansPage(
       completedAt: scan.completed_at,
       startedAt: scan.started_at,
       pagesScanned: scan.pages_scanned,
-      totalSignals: noGo.isNoGo ? null : snapshot?.total_signals ?? null,
-      topFindingCount: displayedScore === null
-        ? null
-        : snapshot?.top_finding_count ?? null,
-      findingCount: noGo.isNoGo ? null : snapshot?.report_finding_count ?? null,
+      totalSignals: noGo.isNoGo ? null : overviewSnapshot?.total_signals ?? null,
+      topFindingCount: displayedScore === null ? null : overviewSnapshot?.top_finding_count ?? null,
+      findingCount: noGo.isNoGo ? null : overviewSnapshot?.report_finding_count ?? null,
       freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? pulseAttribution?.request_context ?? null),
       certscoreOverall: displayedScore,
-      scoreCoverageConfidence: scoreAssessment?.coverageConfidence ?? null,
-      scoreCoverageRatio: scoreAssessment?.coverageRatio ?? null,
-      scoreLabel: scoreAssessment
-        ? scoreSelection.label
-        : displayedScore !== null
-          ? "Legacy scan score"
-          : null,
-      scoreScoredAt: scoreAssessment?.scoredAt ?? null,
-      scoreSource: scoreAssessment?.scoreSource ?? (displayedScore !== null ? "legacy.scan-snapshot" : null),
-      scoreVersion: scoreAssessment?.scoreVersion ?? null,
-      cmpVendorName: noGo.isNoGo ? null : snapshot?.cmp_vendor_name ?? null,
-      privacyPolicyPresent: noGo.isNoGo ? null : snapshot?.privacy_policy_present ?? null,
+      scoreCoverageConfidence: overviewSnapshot?.score_coverage_confidence as AdminScanListItem["scoreCoverageConfidence"] ?? scoreAssessment?.coverageConfidence ?? null,
+      scoreCoverageRatio: overviewSnapshot?.score_coverage_ratio ?? scoreAssessment?.coverageRatio ?? null,
+      scoreLabel: overviewSnapshot?.score_source === "canonical.gdpr_eprivacy"
+        ? "GDPR/ePrivacy posture"
+        : scoreAssessment
+          ? scoreSelection.label
+          : displayedScore !== null
+            ? "Legacy scan score"
+            : null,
+      scoreScoredAt: overviewSnapshot?.score_scored_at ?? scoreAssessment?.scoredAt ?? null,
+      scoreSource: overviewSnapshot?.score_source ?? scoreAssessment?.scoreSource ?? (displayedScore !== null ? "legacy.scan-snapshot" : null),
+      scoreVersion: overviewSnapshot?.score_version ?? scoreAssessment?.scoreVersion ?? null,
+      cmpVendorName: noGo.isNoGo ? null : overviewSnapshot?.cmp_vendor_name ?? null,
+      privacyPolicyPresent: noGo.isNoGo ? null : overviewSnapshot?.privacy_policy_present ?? null,
       primaryLanguage: primaryLanguage?.locale ?? null,
       primaryLanguageConfidence: primaryLanguage?.confidence ?? null,
       primaryLanguageSource: primaryLanguage?.source ?? null,
-      industry: snapshot?.admin_industry_label ?? null,
-      homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
-      robotsFetchHttpStatus: snapshot?.robots_fetch_http_status ?? null,
-      blockedFlag: snapshot?.blocked_flag ?? null,
-      captchaFlag: snapshot?.captcha_flag ?? null,
+      industry: overviewSnapshot?.admin_industry_label ?? null,
+      homepageFetchHttpStatus: overviewSnapshot?.homepage_fetch_http_status ?? null,
+      robotsFetchHttpStatus: overviewSnapshot?.robots_fetch_http_status ?? null,
+      blockedFlag: overviewSnapshot?.blocked_flag ?? null,
+      captchaFlag: overviewSnapshot?.captcha_flag ?? null,
       accessPostureClass: normalizedAccessPosture.accessPostureClass,
       highestSuccessfulTier: normalizedAccessPosture.highestSuccessfulTier,
       stopTier: normalizedAccessPosture.stopTier,
@@ -396,7 +442,9 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
   const requestContext = getNestedMetadataObject(request.request_context);
   const scanConfig = getNestedMetadataObject(request.scan_config_json);
   const scanFromDisplay = getScanFromDisplay(requestContext ?? scanConfig);
-  const requesterIpAttribution = requesterIpAttributionFromRequest(request);
+  const requesterIpAttribution = shouldUseLocalV2DagScanTool()
+    ? { sourceIp: null, ipHash: null, source: "missing" as const }
+    : requesterIpAttributionFromRequest(request);
   const primaryLanguage = linkedScan?.primaryLanguage
     ? {
         confidence: linkedScan.primaryLanguageConfidence,
@@ -406,12 +454,12 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     : inferPrimaryLanguage({ urls: [request.scan_domain_hostname, request.normalized_domain, request.requested_url] });
 
   return {
-    accessPostureClass: null,
+    accessPostureClass: linkedScan?.accessPostureClass ?? null,
     adminSummaryGeneratedAt: null,
     activityAt: request.requested_at,
     activityId: `request:${request.public_id}`,
-    blockedFlag: null,
-    captchaFlag: null,
+    blockedFlag: linkedScan?.blockedFlag ?? null,
+    captchaFlag: linkedScan?.captchaFlag ?? null,
     noGoFlag: linkedScan?.noGoFlag ?? false,
     noGoLimitationKind: linkedScan?.noGoLimitationKind ?? null,
     noGoReason: linkedScan?.noGoReason ?? null,
@@ -424,27 +472,28 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     scoreSource: linkedScan?.scoreSource ?? null,
     scoreVersion: linkedScan?.scoreVersion ?? null,
     cmpVendorName: linkedScan?.cmpVendorName ?? null,
-    completedAt: request.reused_completed_at,
+    consentAro: linkedScan?.consentAro ?? null,
+    completedAt: linkedScan?.completedAt ?? request.reused_completed_at,
     createdAt: request.requested_at,
     domainHostname: request.scan_domain_hostname ?? request.normalized_domain,
     domainId: null,
     findingCount: linkedScan?.findingCount ?? null,
     firstGeneratedAt: request.scan_created_at ?? request.reused_completed_at ?? null,
     freshRescanRequested: getFreshRescanRequested(request.request_context),
-    highestSuccessfulTier: null,
-    homepageFetchHttpStatus: null,
-    interruptionLabel: null,
-    interruptionReason: request.error_message,
+    highestSuccessfulTier: linkedScan?.highestSuccessfulTier ?? null,
+    homepageFetchHttpStatus: linkedScan?.homepageFetchHttpStatus ?? null,
+    interruptionLabel: linkedScan?.interruptionLabel ?? null,
+    interruptionReason: linkedScan?.interruptionReason ?? request.error_message,
     industry: linkedScan?.industry ?? null,
     linkedScanId,
     organizationName,
     organizationId: request.organization_id ?? request.scan_organization_id,
-    pagesScanned: 0,
+    pagesScanned: linkedScan?.pagesScanned ?? 0,
     privacyPolicyPresent: linkedScan?.privacyPolicyPresent ?? null,
     primaryLanguage: primaryLanguage?.locale ?? null,
     primaryLanguageConfidence: primaryLanguage?.confidence ?? null,
     primaryLanguageSource: primaryLanguage?.source ?? null,
-    recoverableFindingClasses: [],
+    recoverableFindingClasses: linkedScan?.recoverableFindingClasses ?? [],
     requestChannel: request.request_channel,
     requestPublicId: request.public_id,
     requestedAt: request.requested_at,
@@ -457,7 +506,7 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     requesterName: request.requester_name,
     reusedCompletedAt: request.reused_completed_at,
     reuseWindowHours: request.reuse_window_hours,
-    robotsFetchHttpStatus: null,
+    robotsFetchHttpStatus: linkedScan?.robotsFetchHttpStatus ?? null,
     rowKind: "request",
     scanId: linkedScanId ?? request.public_id,
     scanType: request.request_type,
@@ -470,10 +519,21 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     scanViewHref: getAdminAuthenticatedScanHref(linkedScanId),
     source: request.request_channel,
     status: request.status,
-    startedAt: request.scan_created_at,
-    stopTier: null,
+    startedAt: linkedScan?.startedAt ?? request.scan_created_at,
+    stopTier: linkedScan?.stopTier ?? null,
     totalSignals: linkedScan?.totalSignals ?? null,
     topFindingCount: linkedScan?.topFindingCount ?? null
+  };
+}
+
+function consentAroFromSnapshot(snapshot: AdminScanSnapshotRow | null): AdminConsentAro | null {
+  if (!snapshot || snapshot.consent_evidence_status === null || snapshot.consent_evidence_status === undefined) {
+    return null;
+  }
+  return {
+    accept: snapshot.consent_accept_observed ?? null,
+    reject: snapshot.consent_reject_observed ?? null,
+    options: snapshot.consent_options_observed ?? null
   };
 }
 

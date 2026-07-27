@@ -206,7 +206,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" },
                   { label: "Requester IP" }, { label: "Scanner egress" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
-                  { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
+                  { label: "A/R/O" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }
                 ].map(({ label, className }) => <th key={label} className={`border-b border-slate-200 px-2.5 py-1.5 font-semibold ${className ?? ""}`}>{label}</th>)}
               </tr>
@@ -221,7 +221,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                 });
                 const status = getOperationalStatus(scan);
                 const freshness = getScanFreshnessBadge(scan);
-                const duration = scan.rowKind === "scan" ? formatAdminScanDuration(scan) : null;
+                const duration = scan.linkedScanId ? formatAdminScanDuration(scan) : null;
                 const scanFromMarker = getScanFromMarkerInput(scan.scanFromValue);
                 return (
                   <tr key={scan.activityId} className="group h-[52px] hover:bg-slate-50/70">
@@ -241,6 +241,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                     <td className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.topFindingCount ?? "—"}</span></td>
                     <td className="px-2.5 py-1.5"><p className="whitespace-nowrap">Privacy {scan.privacyPolicyPresent === true ? "✓" : scan.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={scan.cmpVendorName ?? undefined}>CMP {scan.cmpVendorName ?? "—"}</p></td>
                     <td className="px-2.5 py-1.5"><span className={status.label === "No-go" || status.label === "Failed" ? "font-semibold text-rose-700" : "text-slate-700"}>{getAccessLabel(scan)}</span>{scan.interruptionLabel ? <p className="truncate text-[10px] text-slate-400" title={scan.interruptionReason ?? undefined}>{scan.interruptionLabel}</p> : null}</td>
+                    <td className="whitespace-nowrap px-2.5 py-1.5 font-medium text-slate-700" title="Accept / Reject / Options controls observed on the first consent layer">{scan.consentAro ? `A${scan.consentAro.accept === true ? "✓" : scan.consentAro.accept === false ? "—" : "?"} R${scan.consentAro.reject === true ? "✓" : scan.consentAro.reject === false ? "—" : "?"} O${scan.consentAro.options === true ? "✓" : scan.consentAro.options === false ? "—" : "?"}` : "—"}</td>
                     <td className={`px-2.5 py-1.5 font-medium ${duration && (duration.includes("m") || Number.parseFloat(duration) > 60) ? "text-amber-700" : "text-slate-800"}`}>{duration ?? (scan.status === "running" ? "Running" : "—")}</td>
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.scanOutcome ?? undefined}>{formatScanOutcome(scan.scanOutcome, scan.noGoFlag)}</td>
                     <td className="px-2.5 py-1.5" title={scan.scanFromLabel}><span aria-label={scan.scanFromLabel} className="inline-flex"><ScanFromMarker flag={"flag" in scanFromMarker ? scanFromMarker.flag : undefined} icon={"icon" in scanFromMarker ? scanFromMarker.icon : undefined} selected /></span></td>

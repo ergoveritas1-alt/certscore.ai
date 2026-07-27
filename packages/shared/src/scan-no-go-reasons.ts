@@ -330,6 +330,17 @@ export const SCAN_NO_GO_REASON_PRESENTATIONS: Record<ScanNoGoReasonCode, ScanNoG
 /** Canonical persisted scan outcomes that represent a terminal no-go result. */
 export const SCAN_NO_GO_SNAPSHOT_OUTCOMES = Array.from(new Set([
   "no_go",
+  "reachability_blocked_homepage_403",
+  "reachability_blocked_homepage_401",
+  "reachability_blocked_challenge_suspected",
+  "reachability_blocked_captcha",
+  "reachability_blocked_auth_wall",
+  "reachability_blocked_geo_or_reputation",
+  "transport_failure",
+  "timeout_navigation",
+  "unknown_access_limitation",
+  "domain_inactive_or_unstable",
+  "verification_incomplete",
   ...Object.values(SCAN_NO_GO_REASON_PRESENTATIONS).map((presentation) => presentation.snapshotScanOutcome),
 ]));
 
@@ -349,6 +360,17 @@ const LEGACY_SCAN_NO_GO_REASON_ALIASES: Record<string, ScanNoGoReasonCode> = {
   blank_page_no_visible_content: "blank_or_unusable_page",
   bot_challenge_visible: "captcha_or_challenge",
   challenge_or_robot_page: "captcha_or_challenge",
+  reachability_blocked_homepage_403: "access_denied_or_forbidden_page",
+  reachability_blocked_homepage_401: "access_denied_or_forbidden_page",
+  reachability_blocked_challenge_suspected: "captcha_or_challenge",
+  reachability_blocked_captcha: "captcha_or_challenge",
+  reachability_blocked_auth_wall: "access_denied_or_forbidden_page",
+  reachability_blocked_geo_or_reputation: "unsupported_region",
+  transport_failure: "navigation_transport_failure",
+  timeout_navigation: "loading_or_stalled",
+  unknown_access_limitation: "target_unreachable_or_unsuitable",
+  domain_inactive_or_unstable: "target_unreachable_or_unsuitable",
+  verification_incomplete: "navigation_transport_failure",
   maintenance_recharging_page: "maintenance_or_unavailable",
   visual_error_shell: "retained_visual_error_shell",
 };

@@ -87,7 +87,7 @@ export function OverviewScanHistoryCard({ scans }: OverviewScanHistoryCardProps)
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="table-fixed text-left text-xs" style={{ minWidth: "1125px" }}>
               <colgroup><col style={{ width: "40px" }} /><col style={{ width: "180px" }} /><col style={{ width: "75px" }} /><col style={{ width: "60px" }} /><col style={{ width: "205px" }} /><col style={{ width: "80px" }} /><col style={{ width: "60px" }} /><col style={{ width: "95px" }} /><col style={{ width: "155px" }} /><col style={{ width: "175px" }} /></colgroup>
-              <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr>{["Status", "Website", "Evidence score", "Top", "Privacy / CMP", "Time", "From", "Freshness", "Scanned", "Actions"].map((label) => <th className="border-b border-slate-200 px-2.5 py-1.5 font-semibold" key={label}>{label}</th>)}</tr></thead>
+              <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr>{["Status", "Website", "Score", "Top", "Privacy / CMP", "Time", "From", "Freshness", "Scanned", "Actions"].map((label) => <th className="border-b border-slate-200 px-2.5 py-1.5 font-semibold" key={label}>{label}</th>)}</tr></thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {visibleGroups.map((group) => {
                   const latest = group.scans[0];

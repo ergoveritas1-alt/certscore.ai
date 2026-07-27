@@ -14,9 +14,9 @@ import { adminNoGoSql, projectAdminNoGo, type AdminNoGoProjection } from "./admi
 import { loadCachedAdminScanFilterOptions } from "./admin-query-cache";
 import { normalizeAdminActivityFilter, parseAdminActivitySearch } from "../../lib/admin/activity-search";
 import { requirePlatformAdminContext } from "./platform-admin";
-import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
 import { selectConfiguredCustomerGdprEprivacyScore } from "../scans/customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
+import { shouldUseLocalV2DagScanTool } from "../scans/local-v2-dag-scan-config";
 import { withServerTiming } from "../performance/log-server-timing";
 
 export type AdminPulseRequestStatus =
@@ -40,6 +40,7 @@ export type AdminPulseRequestListItem = {
   noGoReason: string | null;
   noGoSource: AdminNoGoProjection["source"];
   cmpVendorName: string | null;
+  consentAro: { accept: boolean | null; reject: boolean | null; options: boolean | null } | null;
   completedAt: string | null;
   createdAt: string;
   detail: string | null;
@@ -207,6 +208,7 @@ const PULSE_NO_GO_SQL = adminNoGoSql({
   runtimeArtifacts: "sra",
   snapshotRuntimeAssessment: "ss.scan_no_go_assessment",
   snapshotOutcome: "ss.scan_outcome",
+  snapshotStopReasonCode: "ss.stop_reason_code",
   snapshotVisualAccessReview: "ss.visual_access_review",
   outcomesParameter: "$12"
 });
@@ -248,7 +250,7 @@ const PULSE_ACTIVITY_FILTER_SQL = `
     and ($6::text is null or coalesce(pr.request_context ->> 'scanFrom', s.scan_config_json ->> 'scanFrom', 'default') = $6)
     and ($7::timestamptz is null or pr.requested_at >= $7::timestamptz)
     and ($8::text is null or (case when coalesce(ss.captcha_flag, false) then 'captcha' when coalesce(ss.blocked_flag, false) or ss.access_posture_class = 'early_loss' then 'blocked' when ss.access_posture_class = 'robots_limited' then 'robots_limited' when ss.access_posture_class = 'degraded_but_useful' then 'limited' when ss.scan_id is not null then 'clear' else 'unknown' end) = $8)
-    and ($9::text is null or ss.scan_outcome = $9)
+    and ($9::text is null or coalesce(nullif(trim(ss.stop_reason_code), ''), ss.scan_outcome) = $9)
     and ($13::text[] is null or not (
       concat_ws(' ', coalesce(app_user.email, auth_user.email, api_key.created_by, ''), pr.requested_by::text) ilike any($13::text[])
     ))
@@ -314,10 +316,9 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
   const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
   const storedTopFindingIds = asStringArray(responseSummary.topFindingIds);
   const scanFromValue = normalizeScanFrom(requestContext.scanFrom ?? asRecord(row.scan_config_json).scanFrom);
-  const retainedScore =
-    typeof responseSummary.score === "number"
-      ? responseSummary.score
-      : typeof row.snapshot_score === "number" ? row.snapshot_score : null;
+  const retainedScore = typeof row.snapshot_score === "number"
+    ? row.snapshot_score
+    : typeof responseSummary.score === "number" ? responseSummary.score : null;
   const primaryLanguage = inferPrimaryLanguage({
     declaredLanguages: [
       typeof row.page_language === "string" ? row.page_language : null,
@@ -331,14 +332,18 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
       typeof row.requested_url === "string" ? row.requested_url : null
     ]
   });
-  const requesterIpAttribution = requesterIpAttributionFromContext(requestContext);
+  const requesterIpAttribution = shouldUseLocalV2DagScanTool()
+    ? { sourceIp: null, ipHash: null, source: "missing" as const }
+    : requesterIpAttributionFromContext(requestContext);
+  const snapshot = row;
   const noGo = projectAdminNoGo({
-    accessPostureClass: typeof row.access_posture_class === "string" ? row.access_posture_class : null,
-    blockedFlag: typeof row.blocked_flag === "boolean" ? row.blocked_flag : null,
-    captchaFlag: typeof row.captcha_flag === "boolean" ? row.captcha_flag : null,
+    accessPostureClass: typeof snapshot?.access_posture_class === "string" ? snapshot.access_posture_class as string : typeof row.access_posture_class === "string" ? row.access_posture_class : null,
+    blockedFlag: typeof snapshot?.blocked_flag === "boolean" ? snapshot.blocked_flag : typeof row.blocked_flag === "boolean" ? row.blocked_flag : null,
+    captchaFlag: typeof snapshot?.captcha_flag === "boolean" ? snapshot.captcha_flag : typeof row.captcha_flag === "boolean" ? row.captcha_flag : null,
     responseDisposition: typeof responseSummary.resultDisposition === "string" ? responseSummary.resultDisposition : null,
     runtimeAssessment: asRecord(row.scan_no_go_assessment),
-    snapshotOutcome: typeof row.scan_outcome === "string" ? row.scan_outcome : null,
+    snapshotOutcome: typeof snapshot?.scan_outcome === "string" ? snapshot.scan_outcome : typeof row.scan_outcome === "string" ? row.scan_outcome : null,
+    snapshotStopReasonCode: typeof snapshot?.stop_reason_code === "string" ? snapshot.stop_reason_code : null,
     visualAccessReview: asRecord(row.visual_access_review),
     snapshotRuntimeAssessment: asRecord(row.scan_no_go_assessment),
     snapshotVisualAccessReview: asRecord(row.visual_access_review)
@@ -357,7 +362,14 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     noGoFlag: noGo.isNoGo,
     noGoReason: noGo.reason,
     noGoSource: noGo.source,
-    cmpVendorName: noGo.isNoGo ? null : typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null,
+    cmpVendorName: noGo.isNoGo ? null : typeof snapshot?.cmp_vendor_name === "string" ? snapshot.cmp_vendor_name : typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null,
+    consentAro: row.consent_evidence_status === "observed" || row.consent_evidence_status === "unknown"
+      ? {
+          accept: typeof row.consent_accept_observed === "boolean" ? row.consent_accept_observed : null,
+          reject: typeof row.consent_reject_observed === "boolean" ? row.consent_reject_observed : null,
+          options: typeof row.consent_options_observed === "boolean" ? row.consent_options_observed : null
+        }
+      : null,
     createdAt: timestampString(row.created_at) ?? String(row.created_at),
     detail: getRequestContextString(requestContext, "detail"),
     elapsedSeconds:
@@ -371,7 +383,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     freshRescanRequested: getFreshRescanRequested(requestContext),
     freshness: getRequestContextString(requestContext, "freshness"),
     jobId: String(row.job_id),
-    industry: typeof row.admin_industry_label === "string" ? row.admin_industry_label : null,
+    industry: typeof snapshot?.admin_industry_label === "string" ? snapshot.admin_industry_label : typeof row.admin_industry_label === "string" ? row.admin_industry_label : null,
     normalizedDomain:
       typeof row.normalized_domain === "string"
         ? row.normalized_domain
@@ -386,20 +398,15 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     primaryLanguageSource: primaryLanguage?.source ?? null,
     privacyPolicyPresent: noGo.isNoGo
       ? null
-      : typeof row.privacy_policy_present === "boolean" ? row.privacy_policy_present : null,
+      : typeof snapshot?.privacy_policy_present === "boolean" ? snapshot.privacy_policy_present : typeof row.privacy_policy_present === "boolean" ? row.privacy_policy_present : null,
     resolutionMode: typeof row.resolution_mode === "string" ? row.resolution_mode : null,
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId,
-    scanOutcome: typeof row.scan_outcome === "string" ? row.scan_outcome : null,
-    trancoRank:
-      typeof row.tranco_rank === "number"
-        ? row.tranco_rank
-        : trancoRankFromScanConfig(
-            row.scan_config_json && typeof row.scan_config_json === "object" && !Array.isArray(row.scan_config_json)
-              ? row.scan_config_json as Record<string, unknown>
-              : null
-          ),
+    scanOutcome: noGo.isNoGo && typeof snapshot?.stop_reason_code === "string"
+      ? snapshot.stop_reason_code
+      : typeof snapshot?.scan_outcome === "string" ? snapshot.scan_outcome : typeof row.scan_outcome === "string" ? row.scan_outcome : null,
+    trancoRank: typeof row.tranco_rank === "number" ? row.tranco_rank : null,
     score,
     scanFromLabel: formatScanFromLabel(scanFromValue),
     scanFromValue,
@@ -414,19 +421,21 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
       ["queued", "running", "finalizing"].includes(String(row.status))
         ? String(row.scan_status)
         : String(row.status),
-    snapshotFindingCount: noGo.isNoGo ? null : typeof row.snapshot_finding_count === "number" ? row.snapshot_finding_count : null,
-    snapshotTotalSignals: noGo.isNoGo ? null : typeof row.snapshot_total_signals === "number" ? row.snapshot_total_signals : null,
+    snapshotFindingCount: noGo.isNoGo ? null : typeof snapshot?.report_finding_count === "number" ? snapshot.report_finding_count : typeof row.snapshot_finding_count === "number" ? row.snapshot_finding_count : null,
+    snapshotTotalSignals: noGo.isNoGo ? null : typeof snapshot?.total_signals === "number" ? snapshot.total_signals : typeof row.snapshot_total_signals === "number" ? row.snapshot_total_signals : null,
     summaryJsonDownloads: typeof row.summary_json_downloads === "number" ? row.summary_json_downloads : 0,
     evidenceJsonDownloads: typeof row.evidence_json_downloads === "number" ? row.evidence_json_downloads : 0,
     topFindingIds: storedTopFindingIds,
     topFindingCount:
       score === null
         ? null
-        : typeof row.top_finding_count === "number"
+        : typeof snapshot?.top_finding_count === "number"
+        ? snapshot.top_finding_count
+        : (typeof row.top_finding_count === "number"
         ? row.top_finding_count
         : storedTopFindingIds.length > 0
           ? storedTopFindingIds.length
-          : null
+          : null)
   };
 }
 
@@ -441,6 +450,9 @@ async function applyConfiguredScores(items: AdminPulseRequestListItem[]) {
     if (!item.scanId) return item;
     if (item.noGoFlag) {
       return { ...item, score: null, topFindingCount: null };
+    }
+    if (item.score !== null) {
+      return item;
     }
     const selection = selectConfiguredCustomerGdprEprivacyScore({
       candidateAssessment: postureScores.get(item.scanId) ?? null,
@@ -535,6 +547,7 @@ export async function listAdminPulseRequestsPage(input: AdminPulseRequestListInp
             pr.created_at,
             coalesce(app_user.email, auth_user.email, api_key.created_by) as requester_name,
             s.status as scan_status,
+            s.organization_id::text as scan_organization_id,
             s.completed_at as scan_completed_at,
             case
               when s.completed_at is not null and s.started_at is not null
@@ -547,12 +560,19 @@ export async function listAdminPulseRequestsPage(input: AdminPulseRequestListInp
             ss.admin_summary_generated_at,
             ss.certscore_overall::int as snapshot_score,
             ss.top_finding_count::int as top_finding_count,
+            ss.consent_accept_observed,
+            ss.consent_evidence_status,
+            ss.consent_options_observed,
+            ss.consent_reject_observed,
+            ss.score_source,
+            ss.score_version,
             ss.privacy_policy_present,
             ss.cmp_vendor_name,
             ss.access_posture_class,
             ss.blocked_flag,
             ss.captcha_flag,
               ss.scan_outcome,
+              ss.stop_reason_code,
               ss.tranco_rank,
             coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
             coalesce(sra.visual_access_review, ss.visual_access_review) as visual_access_review,
@@ -710,12 +730,19 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               ss.admin_summary_generated_at,
               ss.certscore_overall::int as snapshot_score,
               ss.top_finding_count::int as top_finding_count,
+              ss.consent_accept_observed,
+              ss.consent_evidence_status,
+              ss.consent_options_observed,
+              ss.consent_reject_observed,
+              ss.score_source,
+              ss.score_version,
               ss.privacy_policy_present,
               ss.cmp_vendor_name,
               ss.access_posture_class,
               ss.blocked_flag,
               ss.captcha_flag,
             ss.scan_outcome,
+            ss.stop_reason_code,
             ss.tranco_rank,
               coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
               coalesce(sra.visual_access_review, ss.visual_access_review) as visual_access_review,
@@ -866,12 +893,19 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             ss.certscore_overall::int as snapshot_score,
             ss.admin_summary_generated_at,
             ss.top_finding_count::int as top_finding_count,
+            ss.consent_accept_observed,
+            ss.consent_evidence_status,
+            ss.consent_options_observed,
+            ss.consent_reject_observed,
+            ss.score_source,
+            ss.score_version,
             ss.privacy_policy_present,
             ss.cmp_vendor_name,
             ss.access_posture_class,
             ss.blocked_flag,
             ss.captcha_flag,
             ss.scan_outcome,
+            ss.stop_reason_code,
             ss.tranco_rank,
             coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
             coalesce(sra.visual_access_review, ss.visual_access_review) as visual_access_review,

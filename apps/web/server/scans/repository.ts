@@ -186,13 +186,19 @@ export type OrganizationDomainCompletedScanRow = {
 export type OrganizationScanSnapshotRow = {
   access_posture_class: AccessPostureClass | null;
   accessibility_score: number | null;
+  admin_industry_label?: string | null;
   auth_wall_detected: boolean | null;
   blocked_flag: boolean | null;
   captcha_flag: boolean | null;
   certscore_overall: number | null;
   cmp_vendor_name: string | null;
+  consent_accept_observed?: boolean | null;
+  consent_evidence_status?: string | null;
+  consent_options_observed?: boolean | null;
+  consent_reject_observed?: boolean | null;
   consent_score: number | null;
   cookie_banner_present: boolean | null;
+  duration_ms?: number | null;
   highest_successful_tier: ScanExecutionTier | null;
   homepage_fetch_http_status: number | null;
   homepage_fetch_status: string | null;
@@ -203,6 +209,9 @@ export type OrganizationScanSnapshotRow = {
   recoverable_finding_classes: RecoverableFindingClass[] | null;
   regulatory_exposure_score: number | null;
   report_finding_count: number | null;
+  report_projection_computed_at?: string | null;
+  report_projection_status?: string | null;
+  report_projection_version?: string | null;
   robots_allowed: boolean | null;
   robots_fetch_http_status: number | null;
   robots_fetch_status: string | null;
@@ -216,6 +225,16 @@ export type OrganizationScanSnapshotRow = {
   stop_tier: ScanExecutionTier | null;
   total_signals: number;
   top_finding_count?: number | null;
+  score_coverage_confidence?: string | null;
+  score_coverage_ratio?: number | null;
+  score_scored_at?: string | null;
+  score_source?: string | null;
+  score_version?: string | null;
+  tranco_list_id?: string | null;
+  tranco_rank?: number | null;
+  tranco_snapshot_date?: string | null;
+  egress_id?: string | null;
+  egress_type?: string | null;
   verified_public_surfaces_count?: number | null;
   visual_access_review?: Record<string, unknown> | null;
 };
@@ -1700,7 +1719,11 @@ export async function loadOrganizationScanPageData(
   }))];
   const summaryScanIds = Array.from(
     scanRows.reduce((ids, scan) => {
-      const key = scan.domain_id ?? `scan:${scan.id}`;
+      // Use the same display-domain identity that the overview uses when it
+      // groups scans. Request-backed scans can have a raw domain_id that is
+      // different from the workspace/display domain, which otherwise leaves
+      // the latest overview row without its snapshot values.
+      const key = scan.display_domain_id ?? scan.domain_id ?? `scan:${scan.id}`;
       if (!ids.has(key)) {
         ids.set(key, scan.id);
       }

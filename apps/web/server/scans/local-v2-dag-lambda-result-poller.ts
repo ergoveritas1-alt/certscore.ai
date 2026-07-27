@@ -23,6 +23,7 @@ import {
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   getSqsQueueRegion,
   getLocalV2DagLambdaTargetEnvironment,
+  shouldUseLocalV2DagScanTool,
   type LocalV2DagLambdaTargetEnvironment
 } from "./local-v2-dag-scan-config";
 
@@ -422,6 +423,33 @@ export async function recordLocalV2DagLambdaResultEvent(
   );
   if (!context) {
     throw new Error(`Cannot record local v2 DAG Lambda result for unknown scan ${parsedMessage.scanId}.`);
+  }
+
+  if (shouldUseLocalV2DagScanTool()) {
+    if (parsedMessage.scannerRuntimeProvenance) {
+      const {
+        egressId: _egressId,
+        egressProvider: _egressProvider,
+        publicIpHash: _publicIpHash,
+        ...localRuntimeProvenance
+      } = parsedMessage.scannerRuntimeProvenance;
+      parsedMessage.scannerRuntimeProvenance = localRuntimeProvenance;
+    }
+    await query(
+      `update scans
+          set egress_id = null,
+              egress_provider = null
+        where id = $1`,
+      [parsedMessage.scanId]
+    );
+    await query(
+      `update scan_snapshots
+          set egress_id = null,
+              egress_type = null,
+              public_ip_hash = null
+        where scan_id = $1`,
+      [parsedMessage.scanId]
+    );
   }
 
   const artifactMirror = await mirrorLocalV2DagLambdaArtifacts({

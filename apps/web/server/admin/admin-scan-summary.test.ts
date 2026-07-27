@@ -46,7 +46,7 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   assert.match(source, /scan_completed_at/);
   assert.match(source, /ss\.top_finding_count::int as top_finding_count/);
   assert.match(source, /ss\.tranco_rank/);
-  assert.match(source, /trancoRankFromScanConfig/);
+  assert.match(source, /ss\.tranco_rank/);
   assert.match(source, /trancoRank:/);
   assert.match(source, /topFindingCount:/);
   assert.doesNotMatch(source, /materializeAdminScanSummar/);
@@ -109,8 +109,9 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
   assert.match(pageSource, /\{ label: "Requester IP" \}, \{ label: "Scanner egress" \}/);
   assert.match(pageSource, /Requester IP identifies who reached CertScore/);
   assert.match(pageSource, /scan\.scannerEgressId/);
-  assert.match(listSource, /scannerEgressId: snapshot\?\.egress_id/);
-  assert.match(repositorySource, /scan_outcome,\s+egress_id,\s+egress_type,/);
+  assert.match(listSource, /scannerEgressId: scannerEgress\.id/);
+  assert.match(listSource, /shouldUseLocalV2DagScanTool\(\)/);
+  assert.match(repositorySource, /scan_outcome,\s+stop_reason_code,\s+stop_reason_detail,\s+stop_reason_label,\s+egress_id,\s+egress_type,/);
 });
 
 test("Admin activity pagination supports a direct page jump", async () => {
@@ -153,8 +154,8 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
 
   assert.match(scansSource, /projectAdminNoGo/);
-  assert.match(scansSource, /runtimeAssessment: runtimeArtifact\?\.scan_no_go_assessment \?\? snapshot\?\.scan_no_go_assessment/);
-  assert.match(scansSource, /visualAccessReview: runtimeArtifact\?\.visual_access_review \?\? snapshot\?\.visual_access_review/);
+  assert.match(scansSource, /runtimeAssessment: runtimeArtifact\?\.scan_no_go_assessment \?\? overviewSnapshot\?\.scan_no_go_assessment/);
+  assert.match(scansSource, /visualAccessReview: runtimeArtifact\?\.visual_access_review \?\? overviewSnapshot\?\.visual_access_review/);
   assert.match(scansSource, /const scoreAssessment = noGo\.isNoGo \? null : scoreSelection\.assessment/);
   assert.match(pulseSource, /SCAN_NO_GO_SNAPSHOT_OUTCOMES/);
   assert.match(pulseSource, /PULSE_NO_GO_SQL/);

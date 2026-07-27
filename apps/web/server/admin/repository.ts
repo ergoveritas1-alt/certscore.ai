@@ -12,6 +12,8 @@ export type AdminScanQueryRow = {
   completed_at: string | null;
   created_at: string;
   domain_id: string | null;
+  egress_id?: string | null;
+  egress_provider?: string | null;
   id: string;
   organization_id: string | null;
   pages_requested?: number;
@@ -97,6 +99,11 @@ export type AdminScanSnapshotRow = {
   captcha_flag: boolean | null;
   certscore_overall: number | null;
   cmp_vendor_name?: string | null;
+  consent_accept_observed?: boolean | null;
+  consent_evidence_status?: string | null;
+  consent_options_observed?: boolean | null;
+  consent_reject_observed?: boolean | null;
+  duration_ms?: number | null;
   egress_id?: string | null;
   egress_type?: string | null;
   highest_successful_tier?: ScanExecutionTier | null;
@@ -105,6 +112,9 @@ export type AdminScanSnapshotRow = {
   legal_coverage_score?: number | null;
   normalized_body_hash?: string | null;
   report_finding_count?: number | null;
+  report_projection_computed_at?: string | null;
+  report_projection_status?: string | null;
+  report_projection_version?: string | null;
   privacy_policy_present?: boolean | null;
   recoverable_finding_classes?: RecoverableFindingClass[] | null;
   robots_fetch_http_status: number | null;
@@ -112,7 +122,17 @@ export type AdminScanSnapshotRow = {
   scan_outcome?: string | null;
   scan_no_go_assessment?: Record<string, unknown> | null;
   scan_timestamp?: string | null;
+  stop_reason_code?: string | null;
+  stop_reason_detail?: string | null;
+  stop_reason_label?: string | null;
+  score_coverage_confidence?: string | null;
+  score_coverage_ratio?: number | null;
+  score_scored_at?: string | null;
+  score_source?: string | null;
+  score_version?: string | null;
   tranco_rank?: number | null;
+  tranco_list_id?: string | null;
+  tranco_snapshot_date?: string | null;
   site_language_primary?: string | null;
   visual_access_review?: Record<string, unknown> | null;
   stop_tier?: ScanExecutionTier | null;
@@ -171,6 +191,7 @@ const SCAN_ACTIVITY_NO_GO_SQL = adminNoGoSql({
   runtimeArtifacts: "sra",
   snapshotRuntimeAssessment: "ss.scan_no_go_assessment",
   snapshotOutcome: "ss.scan_outcome",
+  snapshotStopReasonCode: "ss.stop_reason_code",
   snapshotVisualAccessReview: "ss.visual_access_review",
   outcomesParameter: "$12"
 });
@@ -250,7 +271,7 @@ function adminScanActivityBaseSql() {
         when s.id is not null then 'clear'
         else 'unknown'
       end as access_filter
-      ,ss.scan_outcome as outcome_filter
+      ,coalesce(nullif(trim(ss.stop_reason_code), ''), ss.scan_outcome) as outcome_filter
     from public.scans s
     left join public.domains d on d.id = s.domain_id
     left join public.industries ind on ind.id = d.industry_primary_id
@@ -371,7 +392,7 @@ function adminScanActivityBaseSql() {
         when s.id is not null then 'clear'
         else 'unknown'
       end as access_filter
-      ,ss.scan_outcome as outcome_filter
+      ,coalesce(nullif(trim(ss.stop_reason_code), ''), ss.scan_outcome) as outcome_filter
     from public.scan_requests sr
     left join public.scans s on s.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
     left join public.domains d on d.id = s.domain_id
@@ -557,9 +578,13 @@ export async function loadAdminScanFilterOptions(): Promise<AdminScanFilterOptio
       { readOnly: true }
     ),
     query<{ value: string }>(
-      `select distinct scan_outcome as value
-         from public.scan_snapshots
-        where nullif(trim(scan_outcome), '') is not null
+      `select distinct value
+         from (
+           select scan_outcome as value from public.scan_snapshots
+           union all
+           select stop_reason_code as value from public.scan_snapshots
+         ) outcomes
+        where nullif(trim(value), '') is not null
         order by value asc`,
       [],
       { readOnly: true }
@@ -809,6 +834,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
 }> {
   const scansResult = await query<AdminScanQueryRow>(
     `select id, organization_id, domain_id, scan_type, status, created_at, started_at, completed_at, pages_scanned, scan_config_json,
+            egress_id, egress_provider,
             (select sp.page_language
                from scan_pages sp
               where sp.scan_id = scans.id
@@ -915,6 +941,11 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
                   report_finding_count,
                   privacy_policy_present,
                   cmp_vendor_name,
+                  consent_accept_observed,
+                  consent_evidence_status,
+                  consent_options_observed,
+                  consent_reject_observed,
+                  duration_ms,
                   homepage_fetch_http_status,
                   robots_fetch_http_status,
                   blocked_flag,
@@ -927,9 +958,22 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
                   verified_public_surfaces_count,
                   site_language_primary,
                   scan_outcome,
+                  stop_reason_code,
+                  stop_reason_detail,
+                  stop_reason_label,
                   egress_id,
                   egress_type,
                   tranco_rank,
+                  tranco_list_id,
+                  tranco_snapshot_date,
+                  score_coverage_confidence,
+                  score_coverage_ratio,
+                  score_scored_at,
+                  score_source,
+                  score_version,
+                  report_projection_computed_at,
+                  report_projection_status,
+                  report_projection_version,
                   scan_no_go_assessment,
                   visual_access_review,
                   visual_evidence_artifacts

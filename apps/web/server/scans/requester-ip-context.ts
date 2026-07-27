@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { getTrustedRequestSourceIp } from "../../lib/request-source-ip";
+import { shouldUseLocalV2DagScanTool } from "./local-v2-dag-scan-config";
 
 export type ScanRequesterIpContext = {
   ipHash: string | null;
@@ -7,6 +8,9 @@ export type ScanRequesterIpContext = {
 };
 
 export function getScanRequesterIpContext(headers: Pick<Headers, "get">): ScanRequesterIpContext {
+  if (shouldUseLocalV2DagScanTool()) {
+    return { ipHash: null, sourceIp: null };
+  }
   const sourceIp = getTrustedRequestSourceIp(headers)?.slice(0, 120) ?? null;
 
   return {

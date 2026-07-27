@@ -179,18 +179,9 @@ import {
 } from "../../lib/scans/finding-evidence-contracts";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
-import {
-  deriveGdprEprivacyCoverageChecklist,
-  type GdprEprivacyCoverageChecklistInput,
-  type GdprEprivacyCoverageChecklistItem
-} from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
-import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
+import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
-import { buildCanonicalShadowScoreInput } from "../../lib/scans/canonical-shadow-score-input";
-import { deriveCanonicalShadowScore } from "../../lib/scans/canonical-shadow-score";
-import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V6_MODEL } from "../../lib/scans/canonical-shadow-score-model";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
-import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import {
   formatCollectionEndpointType,
 } from "../../lib/scans/tracker-risk";
@@ -198,23 +189,12 @@ import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { PendingButtonLink } from "../ui/pending-link";
 import { ViewerTimestamp } from "../time/viewer-timestamp";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
+import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
+import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "../../server/scans/scan-detail-checklist";
+export { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
+export { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "../../server/scans/scan-detail-checklist";
 
 export { getTrackerConsentReviewPriority };
-
-export function deriveCanonicalOverallScoreForReport(input: {
-  checklistRows: GdprEprivacyCoverageChecklistItem[];
-  unifiedFindings: UnifiedFindingDisplayPacket[];
-}) {
-  try {
-    const scoreInput = buildCanonicalShadowScoreInput(input);
-    return deriveCanonicalShadowScore({
-      ...scoreInput,
-      model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V6_MODEL
-    }).postureScore;
-  } catch {
-    return null;
-  }
-}
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
@@ -7033,45 +7013,6 @@ function ResultCategorySection(input: {
       {body}
     </CollapsibleSectionCard>
   );
-}
-
-export function deriveSharedScanDetailGdprEprivacyCoverageChecklist(input: {
-  coverageLimited: boolean;
-  events?: ScanDetailResponse["events"];
-  policyEnrichmentCount: number;
-  normalizedConcerns?: ScanReportUnifiedFindingState["normalizedConcerns"];
-  projectedFindings?: GdprEprivacyCoverageChecklistInput["projectedFindings"];
-  runtimeArtifacts: ScanDetailResponse["runtimeArtifacts"];
-  runtimeCookieRows?: RuntimeCookieEvidenceRow[];
-  runtimeTrackerPriorityRows?: GdprEprivacyCoverageChecklistInput["runtimeTrackerPriorityRows"];
-  scanCompleted: boolean;
-  snapshot: ScanDetailResponse["snapshot"];
-  unifiedFindings: UnifiedFindingDisplayPacket[];
-}): GdprEprivacyCoverageChecklistItem[] {
-  const runtimeArtifactNormalizedConcerns = input.normalizedConcerns ?? buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: input.runtimeArtifacts,
-    validationFindings: []
-  });
-  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    coverageLimited: input.coverageLimited,
-    events: input.events,
-    normalizedConcerns: runtimeArtifactNormalizedConcerns,
-    policyEnrichmentCount: input.policyEnrichmentCount,
-    runtimeArtifacts: input.runtimeArtifacts,
-    scanCompleted: input.scanCompleted,
-    snapshot: input.snapshot
-  });
-
-  return deriveGdprEprivacyCoverageChecklist({
-    coverageLimited: input.coverageLimited,
-    coverageOutcomes,
-    projectedFindings: input.projectedFindings,
-    runtimeCookieRows: input.runtimeCookieRows,
-    runtimeTrackerPriorityRows: input.runtimeTrackerPriorityRows,
-    scanCompleted: input.scanCompleted,
-    unifiedFindings: input.unifiedFindings
-  });
 }
 
 type SharedScanDetailViewProps = {

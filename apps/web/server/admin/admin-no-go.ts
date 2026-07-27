@@ -21,6 +21,7 @@ export type AdminNoGoProjectionInput = {
   runtimeAssessment?: JsonRecord;
   snapshotRuntimeAssessment?: JsonRecord;
   snapshotOutcome?: string | null;
+  snapshotStopReasonCode?: string | null;
   visualAccessReview?: JsonRecord;
   snapshotVisualAccessReview?: JsonRecord;
 };
@@ -42,13 +43,19 @@ function firstString(value: unknown) {
 }
 
 export function projectAdminNoGo(input: AdminNoGoProjectionInput): AdminNoGoProjection {
-  if (isScanNoGoSnapshotOutcome(input.snapshotOutcome)) {
+  const persistedNoGoReason = isScanNoGoSnapshotOutcome(input.snapshotOutcome)
+    ? input.snapshotOutcome
+    : isScanNoGoSnapshotOutcome(input.snapshotStopReasonCode)
+      ? input.snapshotStopReasonCode
+      : null;
+  if (persistedNoGoReason) {
+    const presentation = resolveScanNoGoPresentation(persistedNoGoReason);
     return {
       isNoGo: true,
-      limitationKind: input.snapshotOutcome === "no_go"
+      limitationKind: persistedNoGoReason === "no_go"
         ? null
-        : resolveScanNoGoPresentation(input.snapshotOutcome).limitationKind,
-      reason: input.snapshotOutcome ?? "no_go",
+        : presentation.limitationKind,
+      reason: persistedNoGoReason === "no_go" ? "No-go" : presentation.customerTitle,
       source: "snapshot",
     };
   }
@@ -106,6 +113,7 @@ export function adminNoGoSql(input: {
   runtimeArtifacts: string;
   snapshotRuntimeAssessment?: string;
   snapshotOutcome: string;
+  snapshotStopReasonCode?: string;
   snapshotVisualAccessReview?: string;
   outcomesParameter?: string;
 }) {
@@ -114,6 +122,7 @@ export function adminNoGoSql(input: {
     : "";
   return `(
     ${input.snapshotOutcome} = any(${input.outcomesParameter ?? "$5"}::text[])
+    ${input.snapshotStopReasonCode ? `or ${input.snapshotStopReasonCode} = any(${input.outcomesParameter ?? "$5"}::text[])` : ""}
     ${responseDisposition}
     or coalesce(${input.runtimeArtifacts}.scan_no_go_assessment ->> 'decision', ${input.runtimeArtifacts}.scan_no_go_assessment ->> 'scan_no_go_decision') = 'no_go'
     ${input.snapshotRuntimeAssessment ? `or coalesce(${input.snapshotRuntimeAssessment} ->> 'decision', ${input.snapshotRuntimeAssessment} ->> 'scan_no_go_decision') = 'no_go'` : ""}
