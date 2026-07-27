@@ -113,6 +113,9 @@ export function getLocalV2DagLambdaAwsRegionForScanFrom(value: unknown): LocalV2
   if (scanFrom === "eu_ie") {
     return "eu-west-1";
   }
+  if (scanFrom === "california") {
+    return "us-west-2";
+  }
   return "eu-central-1";
 }
 
@@ -123,6 +126,13 @@ function lambdaRegionEnv(input: { env: LocalV2DagScanEnv; scanFrom?: ScanFrom })
       enabled: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED ?? input.env.CERTSCORE_V2_DAG_LAMBDA_ENABLED,
       functionName: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_FUNCTION_NAME ?? input.env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME,
       resultQueueUrl: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL ?? input.env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL
+    };
+  }
+  if (scanFrom === "california") {
+    return {
+      enabled: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED ?? input.env.CERTSCORE_V2_DAG_LAMBDA_ENABLED,
+      functionName: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME ?? input.env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME,
+      resultQueueUrl: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL ?? input.env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL
     };
   }
   return {

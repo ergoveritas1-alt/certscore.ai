@@ -475,6 +475,13 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
       for (const result of results) {
         details[result.region] = `${formatDuration(result.durationMs)} ${result.imageUri}`;
       }
+      await run([
+        "node",
+        "--import",
+        "tsx",
+        "scripts/check-regional-scanner-parity.ts",
+      ]);
+      details.regionParity = "passed";
       return details;
     } finally {
       await rm(dockerConfigRoot, { force: true, recursive: true });

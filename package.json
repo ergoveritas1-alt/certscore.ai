@@ -32,6 +32,7 @@
     "ops:check:mcp-http-deploy": "node --import tsx ./scripts/check-mcp-http-deploy-readiness.ts",
     "ops:check:mcp-source": "node --import tsx ./scripts/verify-mcp-source-tracked.ts",
     "ops:check:no-scanner-ecs": "bash ./scripts/assert-no-scanner-ecs.sh",
+    "ops:check:scanner-region-parity": "node --import tsx ./scripts/check-regional-scanner-parity.ts",
     "deploy:all": "node --import tsx ./scripts/deploy-fast.ts all",
     "deploy:db": "node --import tsx ./scripts/deploy-fast.ts db",
     "deploy:scanners": "node --import tsx ./scripts/deploy-fast.ts scanners",

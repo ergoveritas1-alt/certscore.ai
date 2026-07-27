@@ -385,10 +385,13 @@ test("queued full-scan config uses location-specific Lambda functions and result
     CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED: "true",
     CERTSCORE_V2_DAG_LAMBDA_EU_IE_FUNCTION_NAME: "certscore-v2-dag-ie",
     CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results",
+    CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED: "true",
+    CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME: "certscore-v2-dag-california",
+    CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-california-results",
     NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     NODE_ENV: "development"
   } as const;
-  const build = (scanFrom: "eu_de" | "eu_ie") =>
+  const build = (scanFrom: "eu_de" | "eu_ie" | "california") =>
     buildQueuedFullScanConfig({
       env,
       hostname: "example.com",
@@ -401,8 +404,8 @@ test("queued full-scan config uses location-specific Lambda functions and result
     }).execution?.v2DagLambda as Record<string, unknown> | undefined;
 
   assert.deepEqual(
-    ["eu_de", "eu_ie"].map((scanFrom) => {
-      const v2DagLambda = build(scanFrom as "eu_de" | "eu_ie");
+    ["eu_de", "eu_ie", "california"].map((scanFrom) => {
+      const v2DagLambda = build(scanFrom as "eu_de" | "eu_ie" | "california");
       return {
         awsRegion: v2DagLambda?.awsRegion,
         functionName: v2DagLambda?.functionName,
@@ -419,6 +422,11 @@ test("queued full-scan config uses location-specific Lambda functions and result
         awsRegion: "eu-west-1",
         functionName: "certscore-v2-dag-ie",
         resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results"
+      },
+      {
+        awsRegion: "us-west-2",
+        functionName: "certscore-v2-dag-california",
+        resultQueueUrl: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-california-results"
       }
     ]
   );
