@@ -8,7 +8,8 @@ import {
   GDPR_EPRIVACY_SHADOW_CANDIDATE_V2_MODEL,
   GDPR_EPRIVACY_SHADOW_CANDIDATE_V3_MODEL,
   GDPR_EPRIVACY_SHADOW_CANDIDATE_V4_MODEL,
-  GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL
+  GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL,
+  GDPR_EPRIVACY_SHADOW_CANDIDATE_V6_MODEL
 } from "./canonical-shadow-score-model";
 
 test("the editable Luna candidate JSON stays identical to the runtime shadow model", async () => {
@@ -128,6 +129,31 @@ test("candidate-v5 removes posture caps and scores entirely from deterministic d
   assert.equal(result.postureScore, 70);
   assert.deepEqual(result.appliedCaps, []);
   assert.deepEqual(GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL.criticalPostureCaps, []);
+});
+
+test("candidate-v6 scores confirmed checklist gaps and keeps posture caps removed", () => {
+  const result = deriveCanonicalShadowScore({
+    coverageRows: Object.keys(GDPR_EPRIVACY_SHADOW_CANDIDATE_V6_MODEL.coverageRowWeights).map((rowId) => ({
+      assessmentStatus:
+        rowId === "privacy_notice_availability"
+          ? "gap_observed" as const
+          : rowId === "reject_all_path_availability"
+            ? "review_signal" as const
+            : "checked" as const,
+      evidenceState:
+        rowId === "privacy_notice_availability" || rowId === "reject_all_path_availability"
+          ? "not_observed" as const
+          : "observed" as const,
+      rowId
+    })),
+    findings: [],
+    model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V6_MODEL
+  });
+
+  assert.equal(result.observedRiskIndex, 30);
+  assert.equal(result.postureScore, 70);
+  assert.deepEqual(result.appliedCaps, []);
+  assert.deepEqual(GDPR_EPRIVACY_SHADOW_CANDIDATE_V6_MODEL.criticalPostureCaps, []);
 });
 
 test("the active Luna candidate JSON stays identical to the runtime shadow model", async () => {

@@ -173,3 +173,62 @@ export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL = {
   criticalPostureCaps: [],
   version: "gdpr-eprivacy-shadow.candidate-v5-no-caps.pending-luna"
 } as const satisfies CanonicalShadowScoreModel;
+
+export const GDPR_EPRIVACY_SHADOW_CANDIDATE_V6_MODEL = {
+  ...GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL,
+  approvalStatus: "pending_luna",
+  checklistReviewRisk: {
+    defaultRiskPoints: 1,
+    gapRiskMultiplier: 1.5,
+    maximumRiskPoints: 100,
+    rowOverrides: {
+      accept_consent_control: {
+        group: "consent_control_availability",
+        riskPoints: 5
+      },
+      consent_choice_quality: {
+        group: "consent_control_availability",
+        riskPoints: 8
+      },
+      consent_surface_observed: {
+        group: "consent_control_availability",
+        riskPoints: 15
+      },
+      cookie_notice_policy_availability: {
+        group: "policy_surface_absence",
+        riskPoints: 10
+      },
+      device_identification_fingerprinting_signal_observed: {
+        group: "device_identification_review",
+        riskPoints: 8
+      },
+      international_transfers_disclosure: {
+        group: "international_transfer_disclosure",
+        riskPoints: 10
+      },
+      options_settings_preferences_control: {
+        group: "consent_control_availability",
+        riskPoints: 7
+      },
+      pre_consent_cookies_storage: {
+        coveredByFindingFamily: "consent_tracking",
+        group: "pre_consent_runtime",
+        riskPoints: 15
+      },
+      pre_consent_third_party_tracking: {
+        coveredByFindingFamily: "consent_tracking",
+        group: "pre_consent_runtime",
+        riskPoints: 18
+      },
+      privacy_notice_availability: {
+        group: "policy_surface_absence",
+        riskPoints: 12
+      },
+      reject_all_path_availability: {
+        group: "consent_control_availability",
+        riskPoints: 12
+      }
+    }
+  },
+  version: "gdpr-eprivacy-shadow.candidate-v6-severity-calibrated-checklist-gaps.pending-luna"
+} as const satisfies CanonicalShadowScoreModel;

@@ -188,7 +188,7 @@ import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-e
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
 import { buildCanonicalShadowScoreInput } from "../../lib/scans/canonical-shadow-score-input";
 import { deriveCanonicalShadowScore } from "../../lib/scans/canonical-shadow-score";
-import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL } from "../../lib/scans/canonical-shadow-score-model";
+import { GDPR_EPRIVACY_SHADOW_CANDIDATE_V6_MODEL } from "../../lib/scans/canonical-shadow-score-model";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import {
@@ -209,7 +209,7 @@ export function deriveCanonicalOverallScoreForReport(input: {
     const scoreInput = buildCanonicalShadowScoreInput(input);
     return deriveCanonicalShadowScore({
       ...scoreInput,
-      model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V5_MODEL
+      model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V6_MODEL
     }).postureScore;
   } catch {
     return null;

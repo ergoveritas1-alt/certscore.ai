@@ -1512,6 +1512,40 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats guessed-only privacy notic
   assert.equal(outcomes.privacy_notice_availability?.criticalEvidence.retainedEvidence.signalObserved, "partial");
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes projects completed privacy-surface absence as a gap", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyDiscovered: false,
+        privacyPolicyEvaluationState: "not_discovered",
+        privacyPolicyPresent: false,
+        privacyPolicyTextCharacterCount: 0,
+        privacyPolicyUrls: []
+      },
+      policySurfaceInspection: {
+        coverageStatus: "complete",
+        documentRetrievalCoverageStatus: "insufficient",
+        inspectionCompleted: true,
+        linkDiscoveryCoverageStatus: "complete",
+        limitationKeys: [],
+        observedSurfaceTypes: [],
+        outcome: "no_privacy_policy_observed_complete_coverage",
+        privacyPolicyObserved: false
+      }
+    },
+    snapshot: {
+      privacy_policy_present: false
+    }
+  });
+
+  assert.equal(outcomes.privacy_notice_availability?.status, "Gap observed");
+  assert.match(
+    outcomes.privacy_notice_availability?.limitation ?? "",
+    /completed policy-surface inspection did not observe a reachable privacy notice/i
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps missing international transfer disclosure as review", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

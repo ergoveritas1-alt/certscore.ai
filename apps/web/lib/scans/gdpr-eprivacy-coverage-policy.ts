@@ -7439,6 +7439,31 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   }
 
   if (!privacyPolicyPresent) {
+    const policySurfaceInspection = getObject(input.runtimeArtifacts, [
+      "policySurfaceInspection",
+      "policy_surface_inspection"
+    ]);
+    const completeNoPrivacyPolicyObservation =
+      getString(policySurfaceInspection, ["outcome"]) === "no_privacy_policy_observed_complete_coverage" &&
+      getString(policySurfaceInspection, ["coverageStatus", "coverage_status"]) === "complete" &&
+      getBoolean(policySurfaceInspection, ["inspectionCompleted", "inspection_completed"]) === true &&
+      getBoolean(policySurfaceInspection, ["privacyPolicyObserved", "privacy_policy_observed"]) === false;
+    if (config.rowId === "privacy_notice_availability" && completeNoPrivacyPolicyObservation) {
+      return makeOutcome(
+        config.rowId,
+        "Gap observed",
+        "The completed policy-surface inspection did not observe a reachable privacy notice or privacy policy in the tested context.",
+        ["Evidence: complete policy-surface discovery inspection; no reachable privacy notice retained"],
+        {
+          retainedEvidence: {
+            policySurfaceInspection,
+            policySurfaceSummary: summary,
+            privacyPolicyEvaluationState: "not_discovered",
+            signalObserved: false
+          }
+        }
+      );
+    }
     const discoveryLimitation = privacyPolicyDiscoveryLimitation(summary, config.label);
     return makeOutcome(
       config.rowId,

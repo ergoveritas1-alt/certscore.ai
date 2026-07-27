@@ -997,7 +997,7 @@ test("canonical report counters dedupe repeated cookie writes and request rows",
       limitationKeys: ["policy_surface_inspection_runtime_failed"]
     },
     privacyPolicyPresent: false,
-    rawPrivacyPolicyCandidateCount: 0
+    unresolvedObservedPrivacyPolicyCandidateCount: 0
   }), false, "a failed policy module must not project an absent policy as complete coverage");
   assert.equal(deriveApplicablePolicyCoverageComplete({
     policySurfaceInspection: {
@@ -1011,8 +1011,77 @@ test("canonical report counters dedupe repeated cookie writes and request rows",
       limitationKeys: []
     },
     privacyPolicyPresent: false,
-    rawPrivacyPolicyCandidateCount: 0
+    unresolvedObservedPrivacyPolicyCandidateCount: 0
   }), true, "a completed bounded negative search remains complete coverage");
+  assert.equal(deriveApplicablePolicyCoverageComplete({
+    policySurfaceInspection: {
+      outcome: "no_privacy_policy_observed_complete_coverage",
+      coverageStatus: "complete",
+      linkDiscoveryCoverageStatus: "complete",
+      documentRetrievalCoverageStatus: "insufficient",
+      inspectionCompleted: true,
+      privacyPolicyObserved: false,
+      observedSurfaceTypes: [],
+      limitationKeys: []
+    },
+    privacyPolicyPresent: false,
+    unresolvedObservedPrivacyPolicyCandidateCount: 1
+  }), false, "an observed privacy link whose document remains unresolved must retain limited policy coverage");
+});
+
+test("settled geometry with no controls resolves an earlier consent inventory timeout", async () => {
+  const { reconcileConsentSurfaceInspectionWithGeometry } = await loadLocalV2DagReport();
+  const bundle = {
+    url: "https://example.test/",
+    normalizedUrl: "https://example.test/",
+    domSnapshots: [{
+      capturedAtMs: 11_000,
+      consentStateAtTime: "pre_consent",
+      textExcerpt: "Example homepage content without a consent surface.",
+      url: "https://www.example.test/",
+    }],
+  } as unknown as CanonicalEvidenceBundle;
+  const inspection = reconcileConsentSurfaceInspectionWithGeometry(
+    bundle,
+    {
+      artifactVersion: "consent_control_geometry.v1",
+      pageUrl: "https://www.example.test/",
+      candidates: [],
+      containers: [],
+      summary: {
+        cmpDetected: false,
+        confidence: 0.55,
+        firstLayerAccept: false,
+        firstLayerOptions: false,
+        firstLayerReject: false,
+        limitations: [],
+      },
+      access: { status: "loaded" },
+    },
+    {
+      outcome: "indeterminate_limited_coverage",
+      coverageStatus: "limited",
+      inspectionCompleted: false,
+      inspectedPreInteraction: true,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      observedAtMs: 10_000,
+      evidenceSources: ["consent_ui_observation", "dom_snapshot", "visual_capture"],
+      evidenceChannels: [],
+      limitationKeys: [
+        "consent_ui_capture_timed_out",
+        "consent_surface_inspection_observation_incomplete",
+        "consent_surface_inspection_settled_inventory_missing",
+      ],
+    } as never,
+  );
+
+  assert.equal(inspection.outcome, "no_surface_observed_complete_coverage");
+  assert.equal(inspection.coverageStatus, "complete");
+  assert.equal(inspection.inspectionCompleted, true);
+  assert.equal(inspection.consentSurfaceObserved, false);
+  assert.equal(inspection.actionableControlObserved, false);
+  assert.deepEqual(inspection.limitationKeys, []);
 });
 
 test("classifies script loading, ad collection, and identifier synchronization separately", async () => {

@@ -177,6 +177,57 @@ test("checklist review signals apply bounded deterministic penalties without sta
   ]);
 });
 
+test("confirmed checklist gaps deduct deterministic risk without stacking related rows", () => {
+  const model: CanonicalShadowScoreModel = {
+    ...MODEL,
+    checklistReviewRisk: {
+      defaultRiskPoints: 1,
+      gapRiskMultiplier: 1.5,
+      maximumRiskPoints: 100,
+      rowOverrides: {
+        cookie_notice_policy_availability: {
+          group: "policy_surface_absence",
+          riskPoints: 10
+        },
+        privacy_notice_availability: {
+          group: "policy_surface_absence",
+          riskPoints: 12
+        },
+        reject_all_path_availability: {
+          group: "consent_control_availability",
+          riskPoints: 12
+        }
+      }
+    },
+    coverageRowWeights: {
+      ...MODEL.coverageRowWeights,
+      cookie_notice_policy_availability: 1,
+      privacy_notice_availability: 1
+    }
+  };
+  const rows: CanonicalShadowCoverageRow[] = [
+    { assessmentStatus: "gap_observed", evidenceState: "not_observed", rowId: "privacy_notice_availability" },
+    { assessmentStatus: "gap_observed", evidenceState: "not_observed", rowId: "cookie_notice_policy_availability" },
+    { assessmentStatus: "review_signal", evidenceState: "not_observed", rowId: "reject_all_path_availability" }
+  ];
+  const result = deriveCanonicalShadowScore({ coverageRows: rows, findings: [], model });
+
+  assert.equal(result.observedRiskIndex, 30);
+  assert.equal(result.postureScore, 70);
+  assert.deepEqual(result.checklistReviewContributions, [
+    {
+      group: "policy_surface_absence",
+      riskPoints: 18,
+      rowIds: ["cookie_notice_policy_availability", "privacy_notice_availability"]
+    },
+    {
+      group: "consent_control_availability",
+      riskPoints: 12,
+      rowIds: ["reject_all_path_availability"]
+    }
+  ]);
+});
+
 test("a scored consent-tracking finding replaces the related checklist review penalty", () => {
   const result = deriveCanonicalShadowScore({
     coverageRows: [{

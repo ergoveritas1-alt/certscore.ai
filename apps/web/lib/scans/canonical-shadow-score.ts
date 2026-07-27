@@ -21,6 +21,7 @@ export type CanonicalShadowScoreModel = {
   approvalStatus: "pending_luna" | "approved_by_luna";
   checklistReviewRisk?: {
     defaultRiskPoints: number;
+    gapRiskMultiplier?: number;
     maximumRiskPoints: number;
     rowOverrides?: Record<string, {
       coveredByFindingFamily?: string;
@@ -180,6 +181,14 @@ export function auditCanonicalShadowScoreModel(input: {
       input.model.checklistReviewRisk.maximumRiskPoints > 100
     )
       ? ["checklistReviewRisk.maximumRiskPoints"]
+      : []),
+    ...(input.model.checklistReviewRisk?.gapRiskMultiplier !== undefined &&
+    (
+      !Number.isFinite(input.model.checklistReviewRisk.gapRiskMultiplier) ||
+      input.model.checklistReviewRisk.gapRiskMultiplier < 1 ||
+      input.model.checklistReviewRisk.gapRiskMultiplier > 5
+    )
+      ? ["checklistReviewRisk.gapRiskMultiplier"]
       : []),
     ...Object.entries(input.model.checklistReviewRisk?.rowOverrides ?? {}).flatMap(([rowId, rule]) =>
       !rowId.trim() ||
@@ -348,13 +357,20 @@ export function deriveCanonicalShadowScore(input: {
   const findingFamilies = new Set(familyContributions.map((contribution) => contribution.family));
   const checklistReviewGroups = new Map<string, { riskPoints: number; rowIds: string[] }>();
   if (input.model.checklistReviewRisk) {
-    for (const row of boundedCoverageRows.filter((candidate) => candidate.assessmentStatus === "review_signal")) {
+    for (const row of boundedCoverageRows.filter(
+      (candidate) =>
+        candidate.assessmentStatus === "review_signal" ||
+        candidate.assessmentStatus === "gap_observed"
+    )) {
       const override = input.model.checklistReviewRisk.rowOverrides?.[row.rowId];
       if (override?.coveredByFindingFamily && findingFamilies.has(override.coveredByFindingFamily)) {
         continue;
       }
       const group = override?.group ?? `row:${row.rowId}`;
-      const riskPoints = override?.riskPoints ?? input.model.checklistReviewRisk.defaultRiskPoints;
+      const baseRiskPoints = override?.riskPoints ?? input.model.checklistReviewRisk.defaultRiskPoints;
+      const riskPoints = row.assessmentStatus === "gap_observed"
+        ? Math.round(baseRiskPoints * (input.model.checklistReviewRisk.gapRiskMultiplier ?? 1))
+        : baseRiskPoints;
       const existing = checklistReviewGroups.get(group);
       checklistReviewGroups.set(group, {
         riskPoints: Math.max(existing?.riskPoints ?? 0, riskPoints),
