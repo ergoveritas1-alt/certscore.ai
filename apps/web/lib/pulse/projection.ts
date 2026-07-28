@@ -9,6 +9,7 @@ import type { CertScoreFinding } from "../scans/finding-registry";
 import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
 import { getAssessmentDirection, getEvidenceLabel } from "../scans/gdpr-eprivacy-assessment-direction";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../scans/gdpr-eprivacy-checklist-rationale";
+import { buildRegulatoryGapTopFindings } from "../scans/regulatory-gap-top-findings";
 import { buildNormalizedConcerns } from "../scans/normalized-concerns";
 import {
   buildPromotionGradePreconsentRequests,
@@ -389,7 +390,18 @@ function buildPulseReportSurface(input: {
   const neutralChecklistFindingIds = new Set(gdprEprivacyChecklist
     .filter((row) => row.status === "Not observed" || row.status === "Not confirmed" || row.status === "Not testable")
     .map((row) => `regulatory_gap__gdpr_eprivacy__${row.id}`));
+  const projectableChecklistRows = reportableGdprRows.filter(
+    (row) => row.assessmentStatus === "gap_observed"
+  );
+  const checklistFindings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      rows: projectableChecklistRows,
+      title: "GDPR / ePrivacy"
+    }
+  });
   const { allFindings, topFindings } = selectPublicPulseFindingsFromUnifiedProjection({
+    checklistFindings,
     findings: executive.findings,
     neutralChecklistFindingIds,
     topFindings: executive.topFindings
@@ -450,6 +462,7 @@ function buildPulseReportSurface(input: {
 }
 
 export function selectPublicPulseFindingsFromUnifiedProjection(input: {
+  checklistFindings?: CertScoreFinding[];
   findings: CertScoreFinding[];
   neutralChecklistFindingIds?: ReadonlySet<string>;
   topFindings: CertScoreFinding[];
@@ -460,9 +473,13 @@ export function selectPublicPulseFindingsFromUnifiedProjection(input: {
     finding.id !== "consent_dark_patterns_detected" &&
     !neutralChecklistFindingIds.has(finding.id);
 
+  const checklistFindings = (input.checklistFindings ?? []).filter(eligible);
+  const checklistFindingIds = new Set(checklistFindings.map((finding) => finding.id));
+  const canonicalFindings = input.findings.filter((finding) => eligible(finding) && !checklistFindingIds.has(finding.id));
+
   return {
-    allFindings: input.findings.filter(eligible),
-    topFindings: input.topFindings.filter(eligible)
+    allFindings: [...checklistFindings, ...canonicalFindings],
+    topFindings: checklistFindings.length > 0 ? checklistFindings : input.topFindings.filter(eligible)
   };
 }
 

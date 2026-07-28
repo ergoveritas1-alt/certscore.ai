@@ -64,7 +64,8 @@ test("Pulse projection does not cap top findings by detail level", () => {
 
   assert.match(source, /selectPublicPulseFindingsFromUnifiedProjection/);
   assert.match(source, /reportSurface\.topFindings\.map\(/);
-  assert.doesNotMatch(source, /buildRegulatoryGapTopFindings/);
+  assert.match(source, /buildRegulatoryGapTopFindings/);
+  assert.match(source, /row\.assessmentStatus === "gap_observed"/);
   assert.doesNotMatch(source, /topFindings = executive\.topFindings\.slice\(/);
   assert.doesNotMatch(source, /input\.detail === "tiny" \? 3 : 5/);
 });
@@ -141,6 +142,44 @@ test("CNN complete no-surface evidence cannot create API-only consent-control fi
     selected.allFindings.some((finding) => neutralChecklistFindingIds.has(finding.id)),
     false
   );
+});
+
+test("CNN typed first-layer evidence projects only the canonical decline gap", () => {
+  const canonicalFinding = {
+    confidence: "strong",
+    description: "Retained third-party tracking preceded a recorded affirmative choice.",
+    evidenceDetails: {},
+    id: "pre_consent_tracking_detected",
+    regulationTags: ["GDPR / ePrivacy"],
+    section: "Privacy & Tracking",
+    severity: "high",
+    title: "Pre-consent tracking"
+  } as unknown as import("../scans/finding-registry").CertScoreFinding;
+  const declineGap = {
+    ...canonicalFinding,
+    id: "regulatory_gap__gdpr_eprivacy__reject_all_path_availability",
+    title: "Decline consent control"
+  } as import("../scans/finding-registry").CertScoreFinding;
+  const neutralIds = new Set([
+    "regulatory_gap__gdpr_eprivacy__accept_consent_control",
+    "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control"
+  ]);
+
+  const selected = selectPublicPulseFindingsFromUnifiedProjection({
+    checklistFindings: [declineGap],
+    findings: [canonicalFinding],
+    neutralChecklistFindingIds: neutralIds,
+    topFindings: [canonicalFinding]
+  });
+
+  assert.deepEqual(selected.allFindings.map((finding) => finding.id), [
+    "regulatory_gap__gdpr_eprivacy__reject_all_path_availability",
+    "pre_consent_tracking_detected"
+  ]);
+  assert.deepEqual(selected.topFindings.map((finding) => finding.id), [
+    "regulatory_gap__gdpr_eprivacy__reject_all_path_availability"
+  ]);
+  assert.equal(selected.allFindings.some((finding) => neutralIds.has(finding.id)), false);
 });
 
 test("Pulse public API scope excludes non-GDPR product risk findings", () => {
