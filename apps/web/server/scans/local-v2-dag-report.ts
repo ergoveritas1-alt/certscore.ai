@@ -1023,6 +1023,7 @@ function resolvePolicyTextArtifactPath(rawPath: string) {
 
 function readPolicySurfaceTextArtifact(surface: LocalV2PolicySurface) {
   const artifactRefs = Array.isArray(surface.artifactRefs) ? surface.artifactRefs : [];
+  let hasPolicyTextArtifactReference = false;
   for (const ref of artifactRefs) {
     if (!isRecord(ref)) {
       continue;
@@ -1034,6 +1035,7 @@ function readPolicySurfaceTextArtifact(surface: LocalV2PolicySurface) {
     if (!artifactPath || !/policy_surface_text/i.test(`${artifactId ?? ""} ${label ?? ""} ${path.basename(artifactPath)}`)) {
       continue;
     }
+    hasPolicyTextArtifactReference = true;
     const resolved = resolvePolicyTextArtifactPath(artifactPath);
     if (!resolved) {
       continue;
@@ -1044,7 +1046,21 @@ function readPolicySurfaceTextArtifact(surface: LocalV2PolicySurface) {
       return null;
     }
   }
-  return null;
+  // Lambda bundles retain bounded policy excerpts inline while their local
+  // artifact paths point at the scanner filesystem. On production web,
+  // prefer that retained typed evidence when the local path is unavailable.
+  if (!hasPolicyTextArtifactReference) {
+    return null;
+  }
+  const inlineCandidates = [
+    ...(Array.isArray(surface.evidenceRefs) ? surface.evidenceRefs : [])
+      .map((reference) => firstString(reference.excerpt)),
+    ...(Array.isArray(surface.retainedPolicySections) ? surface.retainedPolicySections : [])
+      .map((section) => firstString(section.textExcerpt)),
+    ...(Array.isArray(surface.article13DisclosureSignals) ? surface.article13DisclosureSignals : [])
+      .map((signal) => firstString(signal.evidenceText)),
+  ].filter((value): value is string => Boolean(value));
+  return inlineCandidates.sort((left, right) => right.length - left.length)[0]?.slice(0, MAX_RETAINED_POLICY_DISCLOSURE_TEXT_CHARS) ?? null;
 }
 
 function findCaseInsensitiveTextIndex(source: string, needle: string) {
@@ -2169,7 +2185,10 @@ export function summarizePolicySurfaces(
       !isSpecializedPrivacySurfaceForDifferentAudience(row, rootDomain)
     )
   );
-  const text = article13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
+  const text = article13Surfaces
+    .map((row) => readPolicySurfaceTextArtifact(row.surface) ?? firstString(row.surface.textExcerpt))
+    .filter(Boolean)
+    .join("\n");
   const policyPrimaryLanguage = guessPrimaryLanguage({
     matchedLocales: article13Surfaces.flatMap((row) => [
       ...(row.surface.gdprTransparencyTopicCandidates ?? []).map((candidate) => candidate.matchedLocale),

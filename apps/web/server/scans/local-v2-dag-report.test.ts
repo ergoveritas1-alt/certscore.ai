@@ -2880,6 +2880,46 @@ test("summarizePolicySurfaces rejects script/config text as Article 13 policy ev
   ), true);
 });
 
+test("summarizePolicySurfaces uses retained Lambda policy excerpts when local artifact paths are unavailable", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const retainedPolicyExcerpt = [
+    "Warner Bros. Discovery Privacy Policy explains how we process personal information and how you can exercise your rights.",
+    "We describe the purposes of processing, lawful bases, recipients and vendor categories, retention, international transfers, and contact details for the controller.",
+    "You may contact our Data Protection Officer and lodge a complaint with the supervisory authority in your country.",
+  ].join(" ").repeat(12);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "cnn-wbd-privacy",
+    surfaceType: "privacy_policy",
+    url: "https://www.wbdprivacy.com/policycenter/b2c/en-us/",
+    normalizedUrl: "https://www.wbdprivacy.com/policycenter/b2c/en-us/",
+    confidence: 0.95,
+    status: "fetched",
+    textExcerpt: "short retained front-loaded excerpt",
+    evidenceRefs: [{
+      refId: "ref_policy",
+      excerpt: retainedPolicyExcerpt,
+    }],
+    artifactRefs: [{
+      artifactId: "policy_surface_text",
+      path: "/tmp/certscore-v2-dag-lambda/missing/policy_surface_text.txt",
+      label: "privacy_policy normalized text",
+    }],
+    article13DisclosureSignals: [{
+      disclosureType: "legal_basis",
+      status: "observed",
+      evidenceText: "purposes of processing, lawful bases, recipients and vendor categories",
+      confidence: 0.9,
+      source: "deterministic",
+    }],
+  }] as never, "cnn.com");
+
+  const summary = summarizePolicySurfaces(surfaces, "cnn.com");
+
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.equal(summary.article13DisclosureTypesObserved.includes("legal_basis"), true);
+  assert.equal(summary.privacyPolicyTextCharacterCount >= retainedPolicyExcerpt.length, true);
+});
+
 test("summarizePolicySurfaces accepts substantive Portuguese policy text and production-credit topic evidence", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const evidenceText = "A base legal para o tratamento de dados pessoais inclui consentimento, contrato e legítimo interesse.";
