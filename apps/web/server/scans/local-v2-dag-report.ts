@@ -4938,7 +4938,11 @@ function buildMaterializedLocalV2Detail(
   };
 }
 
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v5";
+// Bump whenever materialization semantics change. This cache contains the
+// fully derived report detail, so retaining an older entry can cause a
+// projection repair to persist stale evidence even after the projector is
+// deployed.
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v6";
 
 async function materializeLocalV2DagScanDetailUncached(
   scanRecord: ScanDetailResponse,
