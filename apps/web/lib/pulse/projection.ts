@@ -1559,6 +1559,52 @@ function buildSummaryArtifact(input: {
   };
 }
 
+function consentChoicesFromProjectedChecklistRows(rows: Array<{
+  assessmentStatus: string;
+  evidenceRefs?: string[];
+  id: string;
+  status: string;
+}>): Record<string, unknown> | null {
+  const controlIds = new Set([
+    "accept_consent_control",
+    "options_settings_preferences_control",
+    "reject_consent_control"
+  ]);
+  const controlRows = rows.filter((row) => controlIds.has(row.id));
+  if (controlRows.length === 0) return null;
+
+  const stateFor = (id: string) => {
+    const row = controlRows.find((candidate) => candidate.id === id);
+    if (!row) return null;
+    if (row.status === "Observed") return true;
+    if (row.status === "Not observed") return false;
+    return null;
+  };
+  const labelsFor = (id: string) => {
+    const row = controlRows.find((candidate) => candidate.id === id);
+    return (row?.evidenceRefs ?? [])
+      .filter((ref) => ref.startsWith("Visible choice:"))
+      .map((ref) => ref.slice("Visible choice:".length).trim())
+      .filter(Boolean);
+  };
+
+  return {
+    acceptControlObserved: stateFor("accept_consent_control"),
+    actionableControlInventoryRetained: controlRows.some((row) => row.evidenceRefs?.length),
+    capturedBeforeInteraction: true,
+    controlInventoryComplete: controlRows.every((row) => row.assessmentStatus === "checked"),
+    controls: [],
+    layerInspected: "first_layer",
+    managePreferencesControlObserved: stateFor("options_settings_preferences_control"),
+    rejectControlObserved: stateFor("reject_consent_control"),
+    visibleChoiceLabels: [
+      ...labelsFor("accept_consent_control"),
+      ...labelsFor("options_settings_preferences_control"),
+      ...labelsFor("reject_consent_control")
+    ]
+  };
+}
+
 function buildEvidenceArtifact(input: {
   allFindings: CertScoreFinding[];
   base: Record<string, unknown>;
@@ -1573,10 +1619,13 @@ function buildEvidenceArtifact(input: {
   const baseLinks = asRecord(input.base.links) ?? {};
   const runtimeArtifacts = asRecord(scanRecord.runtimeArtifacts);
   const hybrid = getHybridRuntimeEvidence(scanRecord.runtimeArtifacts);
-  const firstLayerConsentChoices =
+  const retainedFirstLayerConsentChoices =
     asRecord(recordValue(runtimeArtifacts, "firstLayerConsentChoices")) ??
     asRecord(recordValue(hybrid, "firstLayerConsentChoices")) ??
     asRecord(recordValue(hybrid, "first_layer_consent_choices"));
+  const firstLayerConsentChoices = retainedFirstLayerConsentChoices && Object.keys(retainedFirstLayerConsentChoices).length > 0
+    ? retainedFirstLayerConsentChoices
+    : consentChoicesFromProjectedChecklistRows(input.reportSurface.reportableGdprRows);
   const consentSummary = asRecord(recordValue(runtimeArtifacts, "consentSummary")) ?? asRecord(recordValue(runtimeArtifacts, "consent_summary")) ?? asRecord(recordValue(hybrid, "consentSummary")) ?? asRecord(recordValue(hybrid, "consent_summary"));
   const networkSummary = asRecord(recordValue(runtimeArtifacts, "networkSummary")) ?? asRecord(recordValue(runtimeArtifacts, "network_summary")) ?? asRecord(recordValue(hybrid, "networkSummary")) ?? asRecord(recordValue(hybrid, "network_summary"));
   const storageSummary = asRecord(recordValue(runtimeArtifacts, "storageSummary")) ?? asRecord(recordValue(runtimeArtifacts, "storage_summary")) ?? asRecord(recordValue(hybrid, "storageSummary")) ?? asRecord(recordValue(hybrid, "storage_summary"));
