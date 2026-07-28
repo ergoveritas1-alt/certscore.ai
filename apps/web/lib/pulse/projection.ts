@@ -1568,7 +1568,7 @@ function consentChoicesFromProjectedChecklistRows(rows: Array<{
   const controlIds = new Set([
     "accept_consent_control",
     "options_settings_preferences_control",
-    "reject_consent_control"
+    "reject_all_path_availability"
   ]);
   const controlRows = rows.filter((row) => controlIds.has(row.id));
   if (controlRows.length === 0) return null;
@@ -1577,7 +1577,7 @@ function consentChoicesFromProjectedChecklistRows(rows: Array<{
     const row = controlRows.find((candidate) => candidate.id === id);
     if (!row) return null;
     if (row.status === "Observed") return true;
-    if (row.status === "Not observed") return false;
+    if (row.status === "Not observed" || (id === "reject_all_path_availability" && row.status === "Gap observed")) return false;
     return null;
   };
   const labelsFor = (id: string) => {
@@ -1596,11 +1596,11 @@ function consentChoicesFromProjectedChecklistRows(rows: Array<{
     controls: [],
     layerInspected: "first_layer",
     managePreferencesControlObserved: stateFor("options_settings_preferences_control"),
-    rejectControlObserved: stateFor("reject_consent_control"),
+    rejectControlObserved: stateFor("reject_all_path_availability"),
     visibleChoiceLabels: [
       ...labelsFor("accept_consent_control"),
       ...labelsFor("options_settings_preferences_control"),
-      ...labelsFor("reject_consent_control")
+      ...labelsFor("reject_all_path_availability")
     ]
   };
 }
