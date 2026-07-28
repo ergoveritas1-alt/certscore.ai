@@ -1623,7 +1623,20 @@ function buildEvidenceArtifact(input: {
     asRecord(recordValue(runtimeArtifacts, "firstLayerConsentChoices")) ??
     asRecord(recordValue(hybrid, "firstLayerConsentChoices")) ??
     asRecord(recordValue(hybrid, "first_layer_consent_choices"));
-  const firstLayerConsentChoices = retainedFirstLayerConsentChoices && Object.keys(retainedFirstLayerConsentChoices).length > 0
+  const retainedControlRows = retainedFirstLayerConsentChoices && Array.isArray(retainedFirstLayerConsentChoices.controls)
+    ? retainedFirstLayerConsentChoices.controls
+    : [];
+  const retainedVisibleLabels = retainedFirstLayerConsentChoices && Array.isArray(retainedFirstLayerConsentChoices.visibleChoiceLabels)
+    ? retainedFirstLayerConsentChoices.visibleChoiceLabels
+    : [];
+  const hasRetainedConsentChoices = Boolean(
+    retainedFirstLayerConsentChoices &&
+    (retainedControlRows.length > 0 || retainedVisibleLabels.length > 0 || (
+      retainedFirstLayerConsentChoices.layerInspected === "first_layer" &&
+      retainedFirstLayerConsentChoices.actionableControlInventoryRetained === true
+    ))
+  );
+  const firstLayerConsentChoices = hasRetainedConsentChoices
     ? retainedFirstLayerConsentChoices
     : consentChoicesFromProjectedChecklistRows(input.reportSurface.reportableGdprRows);
   const consentSummary = asRecord(recordValue(runtimeArtifacts, "consentSummary")) ?? asRecord(recordValue(runtimeArtifacts, "consent_summary")) ?? asRecord(recordValue(hybrid, "consentSummary")) ?? asRecord(recordValue(hybrid, "consent_summary"));
