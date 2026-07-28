@@ -121,6 +121,28 @@ function FullJsonIcon() {
   );
 }
 
+function TextIcon({ label }: { label: string }) {
+  return <span aria-hidden="true" className="text-[9px] font-bold tracking-tight">{label}</span>;
+}
+
+export function buildSdkEvidenceSnippet(scanId: string) {
+  return [
+    'import { CertScoreClient } from "@certscore/sdk";',
+    "",
+    "const certscore = new CertScoreClient({",
+    "  apiKey: process.env.CERTSCORE_API_KEY",
+    "});",
+    `const evidence = await certscore.pulse.evidence(${JSON.stringify(scanId)});`
+  ].join("\n");
+}
+
+export function buildMcpEvidenceInvocation(scanId: string) {
+  return JSON.stringify({
+    tool: "get_evidence",
+    arguments: { scanId }
+  }, null, 2);
+}
+
 function VisualEvidenceIcon() {
   return (
     <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24">
@@ -493,24 +515,27 @@ export function ShareReportActions({
 }
 
 export function AgentSummaryActions({ domainLabel, scanId }: ShareReportActionsProps) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [copyState, setCopyState] = useState<{
+    label: string | null;
+    status: "idle" | "copied" | "failed";
+  }>({ label: null, status: "idle" });
   const [currentUrl, setCurrentUrl] = useState("");
 
   useEffect(() => {
     setCurrentUrl(window.location.href);
   }, []);
 
-  async function copyValue(value: string) {
+  async function copyValue(value: string, label: string) {
     try {
       if (!value || !navigator.clipboard) {
-        setCopyState("failed");
+        setCopyState({ label, status: "failed" });
         return;
       }
       await navigator.clipboard.writeText(value);
-      setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 2400);
+      setCopyState({ label, status: "copied" });
+      window.setTimeout(() => setCopyState({ label: null, status: "idle" }), 2400);
     } catch {
-      setCopyState("failed");
+      setCopyState({ label, status: "failed" });
     }
   }
 
@@ -536,24 +561,36 @@ export function AgentSummaryActions({ domainLabel, scanId }: ShareReportActionsP
               <ExternalLinkIcon />
               <IconTooltip label="View Pulse page" />
             </Link>
-            <button aria-label="Copy Pulse JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}`))} title="Copy Pulse JSON URL" type="button">
+            <button aria-label="Copy Pulse JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}`), "Pulse JSON URL")} title="Copy Pulse JSON URL" type="button">
               <JsonIcon />
               <IconTooltip label="Copy Pulse JSON URL" />
             </button>
-            <button aria-label="Copy Pulse Markdown URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&format=markdown`))} title="Copy Pulse Markdown URL" type="button">
+            <button aria-label="Copy Pulse Markdown URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&format=markdown`), "Pulse Markdown URL")} title="Copy Pulse Markdown URL" type="button">
               <MarkdownIcon />
               <IconTooltip label="Copy Pulse Markdown URL" />
             </button>
-            <button aria-label="Copy Full Pulse JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&detail=full`))} title="Copy Full Pulse JSON URL" type="button">
+            <button aria-label="Copy Evidence JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&detail=evidence`), "Evidence JSON URL")} title="Copy Evidence JSON URL" type="button">
+              <TextIcon label="EVD" />
+              <IconTooltip label="Copy Evidence JSON URL" />
+            </button>
+            <button aria-label="Copy Full Pulse JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&detail=full`), "Full Pulse JSON URL")} title="Copy Full Pulse JSON URL" type="button">
               <FullJsonIcon />
               <IconTooltip label="Copy Full Pulse JSON URL" />
             </button>
+            <button aria-label="Copy SDK evidence example" className={iconActionClassName()} onClick={() => copyValue(buildSdkEvidenceSnippet(scanId), "SDK evidence example")} title="Copy SDK evidence example" type="button">
+              <TextIcon label="SDK" />
+              <IconTooltip label="Copy SDK evidence example" />
+            </button>
+            <button aria-label="Copy MCP evidence invocation" className={iconActionClassName()} onClick={() => copyValue(buildMcpEvidenceInvocation(scanId), "MCP evidence invocation")} title="Copy MCP evidence invocation" type="button">
+              <TextIcon label="MCP" />
+              <IconTooltip label="Copy MCP evidence invocation" />
+            </button>
           </div>
         </div>
-        {copyState === "copied" ? <p className="mt-2 text-xs leading-5 text-emerald-700">Pulse URL copied.</p> : null}
-        {copyState === "failed" ? (
+        {copyState.status === "copied" ? <p className="mt-2 text-xs leading-5 text-emerald-700">{copyState.label} copied.</p> : null}
+        {copyState.status === "failed" ? (
           <p className="mt-2 text-xs leading-5 text-amber-700">
-            Copy was not available in this browser. Use the Pulse API links from this section.
+            Copy was not available in this browser. Open the Pulse API documentation for the equivalent request.
           </p>
         ) : null}
       </section>

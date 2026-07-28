@@ -26,7 +26,8 @@ const {
   getPulseExecutiveActionLabel,
   hasMeaningfulPolicyAnchor,
   isPublicPulseApiFinding,
-  projectedPolicySurfaceRows
+  projectedPolicySurfaceRows,
+  selectPublicPulseFindingsFromUnifiedProjection
 } = require("./projection") as typeof import("./projection");
 
 test("Pulse executive action label follows the same posture as the rendered report", () => {
@@ -61,11 +62,85 @@ function pulseScanRecord(overrides: Record<string, unknown> = {}) {
 test("Pulse projection does not cap top findings by detail level", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
-  assert.match(source, /const publicExecutiveTopFindings = executive\.topFindings\.filter\(\(finding\) =>/);
-  assert.match(source, /const topFindings = regulatoryGapTopFindings\.length > 0 \? regulatoryGapTopFindings : publicExecutiveTopFindings/);
+  assert.match(source, /selectPublicPulseFindingsFromUnifiedProjection/);
   assert.match(source, /reportSurface\.topFindings\.map\(/);
+  assert.doesNotMatch(source, /buildRegulatoryGapTopFindings/);
   assert.doesNotMatch(source, /topFindings = executive\.topFindings\.slice\(/);
   assert.doesNotMatch(source, /input\.detail === "tiny" \? 3 : 5/);
+});
+
+test("Pulse serializes canonical unified findings without promoting neutral checklist rows", () => {
+  const preConsentTracking = {
+    confidence: "strong",
+    description: "Retained runtime tracking evidence.",
+    evidenceDetails: {},
+    id: "pre_consent_tracking_detected",
+    regulationTags: ["GDPR / ePrivacy"],
+    section: "Privacy & Tracking",
+    severity: "high",
+    title: "Pre-consent tracking"
+  } as unknown as import("../scans/finding-registry").CertScoreFinding;
+  const apiOnlyChecklistPromotion = {
+    ...preConsentTracking,
+    id: "regulatory_gap__gdpr_eprivacy__accept_consent_control",
+    title: "Accept consent control"
+  } as import("../scans/finding-registry").CertScoreFinding;
+
+  const selected = selectPublicPulseFindingsFromUnifiedProjection({
+    findings: [preConsentTracking],
+    neutralChecklistFindingIds: new Set([apiOnlyChecklistPromotion.id]),
+    topFindings: [preConsentTracking]
+  });
+
+  assert.deepEqual(selected.allFindings.map((finding) => finding.id), ["pre_consent_tracking_detected"]);
+  assert.deepEqual(selected.topFindings.map((finding) => finding.id), ["pre_consent_tracking_detected"]);
+  assert.equal(selected.allFindings.some((finding) => finding.id === apiOnlyChecklistPromotion.id), false);
+});
+
+test("CNN complete no-surface evidence cannot create API-only consent-control findings", () => {
+  const canonicalFindings = [
+    {
+      confidence: "strong",
+      description: "CMP infrastructure loaded after retained third-party activity.",
+      evidenceDetails: {},
+      id: "cmp_load_order_gap",
+      regulationTags: ["GDPR / ePrivacy"],
+      section: "Privacy & Tracking",
+      severity: "medium",
+      title: "CMP load order"
+    },
+    {
+      confidence: "strong",
+      description: "Retained third-party tracking preceded a recorded affirmative choice.",
+      evidenceDetails: {},
+      id: "pre_consent_tracking_detected",
+      regulationTags: ["GDPR / ePrivacy"],
+      section: "Privacy & Tracking",
+      severity: "high",
+      title: "Pre-consent tracking"
+    }
+  ] as unknown as import("../scans/finding-registry").CertScoreFinding[];
+  const neutralChecklistFindingIds = new Set([
+    "regulatory_gap__gdpr_eprivacy__reject_all_path_availability",
+    "regulatory_gap__gdpr_eprivacy__accept_consent_control",
+    "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control"
+  ]);
+
+  const selected = selectPublicPulseFindingsFromUnifiedProjection({
+    findings: canonicalFindings,
+    neutralChecklistFindingIds,
+    topFindings: [canonicalFindings[1]!]
+  });
+
+  assert.deepEqual(selected.allFindings.map((finding) => finding.id), [
+    "cmp_load_order_gap",
+    "pre_consent_tracking_detected"
+  ]);
+  assert.deepEqual(selected.topFindings.map((finding) => finding.id), ["pre_consent_tracking_detected"]);
+  assert.equal(
+    selected.allFindings.some((finding) => neutralChecklistFindingIds.has(finding.id)),
+    false
+  );
 });
 
 test("Pulse public API scope excludes non-GDPR product risk findings", () => {
@@ -137,12 +212,16 @@ test("Pulse no-go state preserves every canonical reason", () => {
 
 test("Pulse route rejects unusable completed scan records before projection", () => {
   const source = readFileSync(new URL("../../app/api/v1/pulse/route.ts", import.meta.url), "utf8");
+  const pageSource = readFileSync(new URL("../../app/pulse/[domain]/page.tsx", import.meta.url), "utf8");
 
   assert.match(source, /loadPulseScanRecord/);
   assert.match(source, /assessPulseScanRecordQuality\(scanRecord\)/);
   assert.match(source, /pulseUnavailableResponse/);
   assert.match(source, /getRecentScanReuseEligibility/);
   assert.match(source, /bypassRecentScanReuse: forceNewScan/);
+  assert.match(source, /format === "markdown" \? "standard" : null/);
+  assert.match(pageSource, /getPublicScanRecord/);
+  assert.doesNotMatch(pageSource, /getAnonymousScanById/);
   assert.doesNotMatch(source, /recentScanWasUnusable/);
 });
 
@@ -155,17 +234,27 @@ test("Pulse projection exposes explicit counts for agent summaries", () => {
   assert.match(source, /counts: base\.counts/);
 });
 
-test("Pulse uses the same selected versioned GDPR/ePrivacy assessment as the report", () => {
+test("Pulse cache identity includes canonical report projection version and source hash", () => {
+  const projectionSource = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+  const routeSource = readFileSync(new URL("../../app/api/v1/pulse/route.ts", import.meta.url), "utf8");
+
+  assert.match(projectionSource, /reportProjectionVersion/);
+  assert.match(projectionSource, /reportProjectionSourceHash/);
+  assert.match(routeSource, /pulse\.meta\?\.reportProjectionVersion/);
+  assert.match(routeSource, /pulse\.meta\?\.reportProjectionSourceHash/);
+});
+
+test("Pulse uses the same canonical overall score model as the report", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
   assert.match(source, /gdprEprivacyScoreAssessment/);
-  assert.match(source, /getCustomerFacingGdprEprivacyPostureAssessment/);
+  assert.match(source, /deriveCanonicalOverallScoreForReport/);
   assert.match(source, /customerScoreAssessment/);
-  assert.match(source, /canonical_posture_assessment_unavailable/);
-  assert.doesNotMatch(source, /storedCustomerScoreAssessment \?\s*storedCustomerScoreAssessment\.scoreValue\s*:\s*gdprEprivacyScore/);
+  assert.match(source, /canonical_overall_score_unavailable/);
+  assert.doesNotMatch(source, /getCustomerFacingGdprEprivacyPostureAssessment/);
   assert.match(source, /coverageRatio: reportSurface\.customerScoreAssessment\.coverageRatio/);
   assert.match(source, /kind: reportSurface\.customerScoreAssessment\.scoreKind/);
-  assert.match(source, /metricLabel: reportSurface\.customerScoreAssessment\.scoreKind/);
+  assert.match(source, /metricLabel: "Overall score"/);
   assert.match(source, /selectedWithholdingReason/);
   assert.match(source, /version: reportSurface\.customerScoreAssessment\.scoreVersion/);
 });

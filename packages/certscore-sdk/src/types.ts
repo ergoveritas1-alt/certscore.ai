@@ -394,6 +394,8 @@ export interface PulseMeta {
   schemaVersion?: string;
   pulseVersion?: string;
   projectionVersion?: string;
+  reportProjectionVersion?: string | null;
+  reportProjectionSourceHash?: string | null;
   generatedAt?: string;
   source?: string;
   format?: PulseFormat;

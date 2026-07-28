@@ -74,7 +74,7 @@ async function main() {
   const docs = await get("/api-pulse");
   assert.equal(docs.response.status, 200);
   assert.match(docs.contentType, /^text\/html\b/);
-  assert.match(docs.bodyText, /CertScore Pulse API/);
+  assert.match(docs.bodyText, /CertScore(?:\.ai)? Pulse API/);
   results.push(docs);
 
   const health = await get("/api/v1/pulse-health");

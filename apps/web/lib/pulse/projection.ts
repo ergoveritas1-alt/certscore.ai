@@ -9,7 +9,6 @@ import type { CertScoreFinding } from "../scans/finding-registry";
 import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
 import { getAssessmentDirection, getEvidenceLabel } from "../scans/gdpr-eprivacy-assessment-direction";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../scans/gdpr-eprivacy-checklist-rationale";
-import { buildRegulatoryGapTopFindings } from "../scans/regulatory-gap-top-findings";
 import { buildNormalizedConcerns } from "../scans/normalized-concerns";
 import {
   buildPromotionGradePreconsentRequests,
@@ -33,14 +32,9 @@ import {
   suppressUnsupportedCmpAliasRows
 } from "../scans/runtime-inventory-projection";
 import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
-import {
-  CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_KIND,
-  CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_SOURCE,
-  getCustomerFacingGdprEprivacyPostureAssessment
-} from "../scans/customer-score-cutover";
-import { GDPR_EPRIVACY_SHADOW_LUNA_DECISION } from "../scans/canonical-shadow-score-luna-decision";
 import { meaningfulPolicySurfaceTitle, prioritizePublicPolicySurfaces } from "../scans/policy-enrichment-row";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
 import {
   getKnownCmpVendorForHost,
   getKnownCmpVendorName,
@@ -392,51 +386,33 @@ function buildPulseReportSurface(input: {
       note: statusBasis
     };
   });
-  const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
-    gdprEprivacyArea: {
-      id: "gdpr_eprivacy",
-      rows: reportableGdprRows,
-      title: "GDPR / ePrivacy"
-    }
-  });
-  const regulatoryGapFindingIds = new Set(regulatoryGapTopFindings.map((finding) => finding.id));
   const neutralChecklistFindingIds = new Set(gdprEprivacyChecklist
     .filter((row) => row.status === "Not observed" || row.status === "Not confirmed" || row.status === "Not testable")
     .map((row) => `regulatory_gap__gdpr_eprivacy__${row.id}`));
-  const publicExecutiveFindings = executive.findings.filter((finding) =>
-    isPublicPulseApiFinding(finding) &&
-    finding.id !== "consent_dark_patterns_detected" &&
-    !neutralChecklistFindingIds.has(finding.id)
-  );
-  const publicExecutiveTopFindings = executive.topFindings.filter((finding) =>
-    isPublicPulseApiFinding(finding) &&
-    finding.id !== "consent_dark_patterns_detected" &&
-    !neutralChecklistFindingIds.has(finding.id)
-  );
-  const allFindings = [
-    ...regulatoryGapTopFindings.filter((finding) => finding.id !== "consent_dark_patterns_detected"),
-    ...publicExecutiveFindings.filter((finding) => !regulatoryGapFindingIds.has(finding.id))
-  ];
-  const topFindings = regulatoryGapTopFindings.length > 0 ? regulatoryGapTopFindings : publicExecutiveTopFindings;
+  const { allFindings, topFindings } = selectPublicPulseFindingsFromUnifiedProjection({
+    findings: executive.findings,
+    neutralChecklistFindingIds,
+    topFindings: executive.topFindings
+  });
   const gdprEprivacyScoreAssessment = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: reportableGdprRows
   });
   const gdprEprivacyScore = gdprEprivacyScoreAssessment.score;
-  const storedCustomerScoreAssessment = getCustomerFacingGdprEprivacyPostureAssessment(
-    input.scanRecord.customerGdprEprivacyScoreSelection
-  );
-  const customerScoreAssessment = storedCustomerScoreAssessment ?? {
+  const score = boundedScore(deriveCanonicalOverallScoreForReport({
+    checklistRows: gdprEprivacyChecklist,
+    unifiedFindings: unifiedFindingPackets
+  }));
+  const customerScoreAssessment = {
     coverageConfidence: gdprEprivacyScoreAssessment.coverageConfidence,
     coverageRatio: gdprEprivacyScoreAssessment.coverageRatio,
-    scoreKind: CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_KIND,
-    scoreSource: CUSTOMER_GDPR_EPRIVACY_POSTURE_SCORE_SOURCE,
-    scoreStatus: "withheld" as const,
-    scoreValue: null,
-    scoreVersion: GDPR_EPRIVACY_SHADOW_LUNA_DECISION.modelVersion,
-    withholdingReason: "canonical_posture_assessment_unavailable"
+    scoreKind: "overall" as const,
+    scoreSource: stringValue(scanRecord.snapshot?.score_source) ?? "canonical.gdpr_eprivacy",
+    scoreStatus: score === null ? "withheld" as const : "scored" as const,
+    scoreValue: score,
+    scoreVersion: stringValue(scanRecord.snapshot?.score_version) ?? "gdpr-eprivacy-canonical-shadow-v6",
+    withholdingReason: score === null ? "canonical_overall_score_unavailable" : null
   };
-  const score = boundedScore(storedCustomerScoreAssessment?.scoreValue ?? null);
   const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerInventoryRows);
   const preConsentTrackerRows = groupedTrackerRows
     .filter((row) => row.firstSeenMs !== null)
@@ -470,6 +446,23 @@ function buildPulseReportSurface(input: {
     topFindings,
     trackerInventoryRows,
     unifiedFindingPackets
+  };
+}
+
+export function selectPublicPulseFindingsFromUnifiedProjection(input: {
+  findings: CertScoreFinding[];
+  neutralChecklistFindingIds?: ReadonlySet<string>;
+  topFindings: CertScoreFinding[];
+}) {
+  const neutralChecklistFindingIds = input.neutralChecklistFindingIds ?? new Set<string>();
+  const eligible = (finding: CertScoreFinding) =>
+    isPublicPulseApiFinding(finding) &&
+    finding.id !== "consent_dark_patterns_detected" &&
+    !neutralChecklistFindingIds.has(finding.id);
+
+  return {
+    allFindings: input.findings.filter(eligible),
+    topFindings: input.topFindings.filter(eligible)
   };
 }
 
@@ -1980,16 +1973,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const allThirdPartyRequestCount = finiteNumber(recordValue(networkSummary, "thirdPartyRequestCount")) ??
     reportSurface.presentationSummary.thirdPartyRequestCount;
   const trackerFootprintBreakdown = buildTrackerFootprintBreakdown(reportSurface);
-  const selectedScoreStatus = "scoreStatus" in reportSurface.customerScoreAssessment
-    ? reportSurface.customerScoreAssessment.scoreStatus
-    : score === null
-      ? "withheld"
-      : "scored";
-  const selectedWithholdingReason = "withholdingReason" in reportSurface.customerScoreAssessment
-    ? reportSurface.customerScoreAssessment.withholdingReason
-    : score === null
-      ? "evidence_score_withheld"
-      : null;
+  const selectedScoreStatus = reportSurface.customerScoreAssessment.scoreStatus;
+  const selectedWithholdingReason = reportSurface.customerScoreAssessment.withholdingReason;
   const executiveSummary = {
     completionSummary: summary.completionSummary,
     domain,
@@ -1999,9 +1984,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       coverageConfidence: reportSurface.customerScoreAssessment.coverageConfidence,
       coverageRatio: reportSurface.customerScoreAssessment.coverageRatio,
       kind: reportSurface.customerScoreAssessment.scoreKind,
-      metricLabel: reportSurface.customerScoreAssessment.scoreKind === "gdpr_eprivacy_posture"
-        ? "GDPR/ePrivacy posture"
-        : "GDPR/ePrivacy evidence",
+      metricLabel: "Overall score",
       source: reportSurface.customerScoreAssessment.scoreSource,
       status: selectedScoreStatus,
       version: reportSurface.customerScoreAssessment.scoreVersion,
@@ -2109,6 +2092,14 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       schemaVersion: PULSE_SCHEMA_VERSION,
       pulseVersion: PULSE_VERSION,
       projectionVersion: PULSE_PROJECTION_VERSION,
+      reportProjectionVersion:
+        typeof input.scanRecord.snapshot?.report_projection_version === "string"
+          ? input.scanRecord.snapshot.report_projection_version
+          : null,
+      reportProjectionSourceHash:
+        typeof input.scanRecord.snapshot?.report_projection_source_hash === "string"
+          ? input.scanRecord.snapshot.report_projection_source_hash
+          : null,
       canonicalResolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
       generatedAt: generated,
       source: PULSE_SOURCE,

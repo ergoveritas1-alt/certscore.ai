@@ -68,8 +68,13 @@ type PulseRouteOptions = {
   routeName?: string;
 };
 
-function etagFor(scanId: string, detail: string, format: string) {
-  return `"pulse-v1-scan-${scanId}-${detail}-${format}"`;
+function etagFor(pulse: any, scanId: string, detail: string, format: string) {
+  const pulseProjectionVersion = String(pulse.meta?.projectionVersion ?? "unknown").replace(/[^a-zA-Z0-9._-]/g, "");
+  const reportProjectionVersion = String(pulse.meta?.reportProjectionVersion ?? "unknown").replace(/[^a-zA-Z0-9._-]/g, "");
+  const reportProjectionHash = String(pulse.meta?.reportProjectionSourceHash ?? "no-source-hash")
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .slice(0, 16);
+  return `"${pulseProjectionVersion}-scan-${scanId}-${reportProjectionVersion}-${reportProjectionHash}-${detail}-${format}"`;
 }
 
 function diagnosticHeaders(route: string, requestId: string, headers?: HeadersInit) {
@@ -108,7 +113,7 @@ async function completedResponse(
       headers: diagnosticHeaders(options.routeName ?? "pulse", requestId, {
         "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
         "Content-Type": "text/markdown; charset=utf-8",
-        ETag: etagFor(scanId, pulse.meta.detail, "md")
+        ETag: etagFor(pulse, scanId, pulse.meta.detail, "md")
       })
     });
   }
@@ -138,7 +143,7 @@ async function completedResponse(
     headers: diagnosticHeaders(options.routeName ?? "pulse", requestId, {
       "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
       "Content-Type": "application/json; charset=utf-8",
-      ETag: etagFor(scanId, pulse.meta.detail, "json")
+      ETag: etagFor(pulse, scanId, pulse.meta.detail, "json")
     }),
     status: 200
   });
@@ -342,7 +347,12 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const gptAction = isGptActionRequest(url, options);
   const routeName = options.routeName ?? (gptAction ? "pulse-gpt" : "pulse");
   const format = gptAction ? parseGptPulseFormat(url) : parsePulseFormat(url.searchParams.get("format"));
-  const detail = parsePulseDetail(gptAction ? (url.searchParams.get("detail") ?? "summary") : url.searchParams.get("detail"));
+  const requestedDetail = url.searchParams.get("detail");
+  const detail = parsePulseDetail(
+    gptAction
+      ? (requestedDetail ?? "summary")
+      : requestedDetail ?? (format === "markdown" ? "standard" : null)
+  );
   const requestedFreshness = parsePulseFreshness(url.searchParams.get("freshness"));
   const freshness = gptAction ? "latest" : requestedFreshness;
   const waitSeconds = gptAction ? parseGptPulseWaitSeconds(url) : parsePulseWaitSeconds(url.searchParams.get("wait"));

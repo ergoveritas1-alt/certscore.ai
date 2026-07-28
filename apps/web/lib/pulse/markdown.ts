@@ -81,6 +81,9 @@ function safeLensStatus(value: unknown, options: { hasSurfacedFinding?: boolean 
 }
 
 function totalObservationCount(pulse: PulseMarkdownInput, findings: any[]) {
+  if (typeof pulse.counts?.totalObservationCount === "number") {
+    return pulse.counts.totalObservationCount;
+  }
   if (typeof pulse.publicReportProjection?.surfacedFindingCount === "number") {
     return pulse.publicReportProjection.surfacedFindingCount;
   }
@@ -88,6 +91,10 @@ function totalObservationCount(pulse: PulseMarkdownInput, findings: any[]) {
     return pulse.findings.length;
   }
   return findings.length;
+}
+
+function scoreDisplay(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? `${value}/100` : "Not available";
 }
 
 function compactFindings(findings: any[], options: { gptAction?: boolean } = {}) {
@@ -236,7 +243,7 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
     "| Field | Value |",
     "|---|---|",
     `| Domain | ${titleDomain} |`,
-    `| Score | ${pulse.summary?.score ?? "Not available"}/100 |`,
+    `| Score | ${scoreDisplay(pulse.summary?.score)} |`,
     `| Risk level | ${formatLabel(pulse.summary?.riskLevel)} |`,
     `| Issues to review | ${executiveIssueCount} |`,
     `| High-priority findings | ${highPriorityCount} |`,
@@ -268,7 +275,7 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
         ]
       : []),
     "",
-    `Executive report: ${metricValue(executive.score ?? pulse.summary?.score)}/100; ${executiveIssueCount} issue${executiveIssueCount === 1 ? "" : "s"} to review; ${metricValue(executive.thirdPartyRequests)} third-party requests; ${metricValue(executive.cookiesPreConsent)} cookies pre-consent.`,
+    `Executive report: ${scoreDisplay(executive.score ?? pulse.summary?.score)}; ${executiveIssueCount} issue${executiveIssueCount === 1 ? "" : "s"} to review; ${metricValue(executive.thirdPartyRequests)} third-party requests; ${metricValue(executive.cookiesPreConsent)} cookies pre-consent.`,
     `Signal snapshot: consent platform ${line(executive.consentPlatform)}; tracker footprint ${metricValue(executive.trackerFootprint?.vendors)} vendor${executive.trackerFootprint?.vendors === 1 ? "" : "s"}, ${metricValue(executive.trackerFootprint?.domains)} domain${executive.trackerFootprint?.domains === 1 ? "" : "s"}.`,
     ...(options.gptAction && isLimitedCoverage(pulse.coverage?.status)
       ? [
