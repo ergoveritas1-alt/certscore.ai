@@ -252,7 +252,12 @@ export function deriveMaterializedConsentControlAssessment(input: {
     ...retainedDocumentSnapshots.map((snapshot) => snapshot.documentId),
     ...retainedVisualDocumentIds,
     ...observations.map((observation) => observation.documentId).filter((value): value is string => Boolean(value)),
-    ...(geometry?.documentId ? [geometry.documentId] : []),
+    // An incomplete geometry diagnostic can retain the requested page URL
+    // without retaining any control evidence. It must not make a separately
+    // typed first-layer inventory look cross-document.
+    ...(geometry && (geometry.assessmentStatus === "complete" || (geometry.candidates?.length ?? 0) > 0) && geometry.documentId
+      ? [geometry.documentId]
+      : []),
   ]);
   const documentIdentityStatus =
     geometry?.assessmentStatus === "document_mismatch" ||

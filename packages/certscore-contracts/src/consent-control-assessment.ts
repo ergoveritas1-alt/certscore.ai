@@ -313,7 +313,10 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   ]);
   const observedIds = bounded([
     ...bundleObservedIds,
-    input.geometry?.documentId ?? "",
+    ...(input.geometry &&
+    (input.geometry.assessmentStatus === "complete" || (input.geometry.candidates?.length ?? 0) > 0)
+      ? [input.geometry.documentId ?? ""]
+      : []),
   ]);
   const documentStatus = input.document?.identityStatus ??
     (!canonicalId || bundleObservedIds.length === 0

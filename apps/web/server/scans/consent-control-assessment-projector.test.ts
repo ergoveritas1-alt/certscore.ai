@@ -262,6 +262,11 @@ test("CNN production artifact binds typed controls to the retained redirected sc
       observedAtMs: 16_194,
       outcome: "actionable_surface_observed",
     },
+    consentControlGeometryEvidence: {
+      artifactVersion: "consent_control_geometry.v1",
+      pageUrl: "https://cnn.com/",
+      candidates: [],
+    },
     finalUrl: "https://edition.cnn.com/",
     noGo: false,
     requestedUrl: "https://cnn.com/",
