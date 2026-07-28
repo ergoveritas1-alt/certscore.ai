@@ -88,6 +88,7 @@ import {
 } from "./scan-execution-provenance";
 import { selectConfiguredCustomerGdprEprivacyScore } from "./customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
+import { withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-projection";
 
 function normalizeTrackerScriptHostForDisplay(value: unknown) {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -1275,7 +1276,7 @@ async function loadScanDetailRecord(input: {
     runtimeArtifacts: modelReviewBackedRuntimeArtifacts,
     trackerVendors: normalizedTrackerVendors
   });
-  const reportRuntimeArtifacts =
+  const vendorDisclosureRuntimeArtifacts =
     modelReviewBackedRuntimeArtifacts && runtimeVendorDisclosureEvidence.length > 0
       ? {
           ...modelReviewBackedRuntimeArtifacts,
@@ -1283,6 +1284,10 @@ async function loadScanDetailRecord(input: {
           runtimeVendorDisclosureEvidence: runtimeVendorDisclosureEvidence
         }
       : modelReviewBackedRuntimeArtifacts;
+  const reportRuntimeArtifacts = withPersistedFirstLayerConsentEvidence(
+    vendorDisclosureRuntimeArtifacts,
+    normalizedSnapshot
+  );
   const hybridRuntimeSignalPopulations = getHybridNanoSignalPopulations(reportRuntimeArtifacts).map((signal) => ({
     ...signal,
     observedAt: signal.observedAt ?? scanObservedAt,

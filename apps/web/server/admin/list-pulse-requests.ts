@@ -10,7 +10,7 @@ import {
 import { adminApiRouteSql, classifyAdminApiRoute, type AdminApiRoute } from "../../lib/admin/api-route";
 import { requesterIpAttributionFromContext, type RequesterIpAttributionSource } from "../../lib/admin/requester-ip-attribution";
 import { inferPrimaryLanguage, type PrimaryLanguageConfidence, type PrimaryLanguageSource } from "../../lib/scans/primary-language";
-import { adminNoGoSql, projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
+import { adminNoGoSql, projectAdminNoGo, selectAdminActivityStatus, selectAdminScanOutcome, type AdminNoGoProjection } from "./admin-no-go";
 import { loadCachedAdminScanFilterOptions } from "./admin-query-cache";
 import { normalizeAdminActivityFilter, parseAdminActivitySearch } from "../../lib/admin/activity-search";
 import { requirePlatformAdminContext } from "./platform-admin";
@@ -363,7 +363,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     noGoReason: noGo.reason,
     noGoSource: noGo.source,
     cmpVendorName: noGo.isNoGo ? null : typeof snapshot?.cmp_vendor_name === "string" ? snapshot.cmp_vendor_name : typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null,
-    consentAro: row.consent_evidence_status === "observed" || row.consent_evidence_status === "unknown"
+    consentAro: !noGo.isNoGo && row.consent_evidence_status !== null && row.consent_evidence_status !== undefined
       ? {
           accept: typeof row.consent_accept_observed === "boolean" ? row.consent_accept_observed : null,
           reject: typeof row.consent_reject_observed === "boolean" ? row.consent_reject_observed : null,
@@ -403,9 +403,12 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId,
-    scanOutcome: noGo.isNoGo && typeof snapshot?.stop_reason_code === "string"
-      ? snapshot.stop_reason_code
-      : typeof snapshot?.scan_outcome === "string" ? snapshot.scan_outcome : typeof row.scan_outcome === "string" ? row.scan_outcome : null,
+    scanOutcome: selectAdminScanOutcome({
+      scanOutcome: typeof snapshot?.scan_outcome === "string" ? snapshot.scan_outcome : typeof row.scan_outcome === "string" ? row.scan_outcome : null,
+      stopReasonCode: typeof snapshot?.stop_reason_code === "string" ? snapshot.stop_reason_code : null,
+      noGoFlag: noGo.isNoGo,
+      status: typeof row.scan_status === "string" ? row.scan_status : typeof row.status === "string" ? row.status : null
+    }),
     trancoRank: typeof row.tranco_rank === "number" ? row.tranco_rank : null,
     score,
     scanFromLabel: formatScanFromLabel(scanFromValue),
@@ -416,11 +419,10 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     sourceIp: requesterIpAttribution.sourceIp,
     sourceIpHash: requesterIpAttribution.ipHash,
     sourceIpSource: requesterIpAttribution.source,
-    status:
-      ["completed", "completed_limited", "failed"].includes(String(row.scan_status)) &&
-      ["queued", "running", "finalizing"].includes(String(row.status))
-        ? String(row.scan_status)
-        : String(row.status),
+    status: selectAdminActivityStatus({
+      requestStatus: typeof row.status === "string" ? row.status : null,
+      scanStatus: typeof row.scan_status === "string" ? row.scan_status : null
+    }),
     snapshotFindingCount: noGo.isNoGo ? null : typeof snapshot?.report_finding_count === "number" ? snapshot.report_finding_count : typeof row.snapshot_finding_count === "number" ? row.snapshot_finding_count : null,
     snapshotTotalSignals: noGo.isNoGo ? null : typeof snapshot?.total_signals === "number" ? snapshot.total_signals : typeof row.snapshot_total_signals === "number" ? row.snapshot_total_signals : null,
     summaryJsonDownloads: typeof row.summary_json_downloads === "number" ? row.summary_json_downloads : 0,

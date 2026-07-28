@@ -255,6 +255,98 @@ test("summarizeFirstLayerConsentChoices uses only confirmed visible controls fro
   );
 });
 
+test("completed same-document geometry does not erase an earlier complete canonical control inventory", async () => {
+  const { summarizeFirstLayerConsentChoices } = await loadLocalV2DagReport();
+  const summary = summarizeFirstLayerConsentChoices({
+    normalizedUrl: "https://oxfam.org/",
+    url: "https://oxfam.org/",
+    domSnapshots: [{
+      capturedAtMs: 8_617,
+      consentStateAtTime: "pre_consent",
+      textExcerpt: "Cookie Settings",
+      url: "https://www.oxfam.org/en"
+    }],
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 7_758,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      controls: [
+        {
+          actionType: "manage_preferences",
+          classifierReasonCodes: ["matched_options"],
+          label: "Cookie Settings",
+          matchedTerm: "cookie settings",
+          visible: true
+        },
+        {
+          actionType: "accept_all",
+          classifierReasonCodes: ["matched_accept"],
+          label: "Accept all cookies",
+          matchedTerm: "accept all cookies",
+          visible: true
+        },
+        {
+          actionType: "reject_all",
+          classifierReasonCodes: ["matched_reject", "variant_necessary_only"],
+          classifierVariant: "necessary_only",
+          label: "Accept only essential cookies",
+          matchedTerm: "only essential",
+          visible: true
+        }
+      ],
+      inventoryDiagnostics: {
+        candidateContainerCount: 1,
+        candidateControlCount: 3,
+        retainedControlCount: 3,
+        inventorySources: ["viewport"],
+        candidateLabels: [
+          "Cookie Settings",
+          "Accept all cookies",
+          "Accept only essential cookies"
+        ],
+        rejectionReasons: [],
+        timingMarkers: ["rapid_inventory_completed"]
+      }
+    }]
+  } as unknown as CanonicalEvidenceBundle, {
+    artifactVersion: "consent_control_geometry.v1",
+    pageUrl: "https://www.oxfam.org/en",
+    candidates: [{
+      actionType: "manage_preferences",
+      boundingBox: { height: 41, width: 70 },
+      decisionStatus: "confirmed_visible",
+      enabled: true,
+      intersectsViewport: true,
+      label: "Cookie Settings",
+      layer: "first_layer",
+      matchedLocale: "en",
+      matchedTerm: "cookie settings",
+      matchStrength: "direct"
+    }],
+    summary: {
+      cmpDetected: true,
+      cmpName: "Drupal EU Cookie Compliance module, non-TCF",
+      confidence: 0.77,
+      firstLayerAccept: false,
+      firstLayerOptions: true,
+      firstLayerReject: false,
+      limitations: [
+        "accept_all:Accept all cookies:hidden",
+        "reject_all:Accept only essential cookies:hidden"
+      ]
+    }
+  }) as Record<string, unknown>;
+
+  assert.equal(summary.acceptControlObserved, true);
+  assert.equal(summary.rejectControlObserved, true);
+  assert.equal(summary.managePreferencesControlObserved, true);
+  assert.deepEqual(
+    (summary.controls as Array<{ label: string }>).map((control) => control.label),
+    ["Cookie Settings", "Accept all cookies", "Accept only essential cookies"]
+  );
+});
+
 test("Oxfam-style completed geometry prevents rapid-DOM controls from reaching GDPR/ePrivacy rows", async () => {
   const {
     reconcileConsentSurfaceInspectionWithGeometry,

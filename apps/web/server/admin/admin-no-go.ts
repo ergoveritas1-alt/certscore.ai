@@ -26,6 +26,51 @@ export type AdminNoGoProjectionInput = {
   snapshotVisualAccessReview?: JsonRecord;
 };
 
+/**
+ * Select the value shown in admin activity tables.
+ *
+ * A stop reason is more specific than a broad legacy outcome for a no-go
+ * scan. For normal scans, however, the canonical scan outcome remains the
+ * source of truth and a non-no-go stop reason must not replace it.
+ */
+export function selectAdminScanOutcome(input: {
+  scanOutcome?: string | null;
+  stopReasonCode?: string | null;
+  noGoFlag?: boolean;
+  status?: string | null;
+}) {
+  const scanOutcome = stringValue(input.scanOutcome);
+  const stopReasonCode = stringValue(input.stopReasonCode);
+  if (input.noGoFlag) {
+    return stopReasonCode ?? scanOutcome ?? "no_go";
+  }
+  if (scanOutcome) return scanOutcome;
+  if (input.status === "failed") return "failed";
+  return stopReasonCode;
+}
+
+export function selectAdminActivityStatus(input: {
+  requestStatus?: string | null;
+  scanStatus?: string | null;
+}) {
+  const requestStatus = stringValue(input.requestStatus) ?? "unknown";
+  const scanStatus = stringValue(input.scanStatus);
+  if (["failed", "expired", "rate_limited", "no_go"].includes(requestStatus)) {
+    return requestStatus;
+  }
+  // A terminal failed scan must not be hidden by a request row that was
+  // recorded as completed after the request was accepted.
+  if (scanStatus === "failed") return "failed";
+  if (
+    scanStatus &&
+    ["completed", "completed_limited"].includes(scanStatus) &&
+    ["queued", "running", "finalizing"].includes(requestStatus)
+  ) {
+    return scanStatus;
+  }
+  return requestStatus;
+}
+
 function record(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>

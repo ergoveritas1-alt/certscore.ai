@@ -412,7 +412,10 @@ function classifyVisibleLabels(labels: string[]): {
     });
     if (classification.intent === "accept") {
       output.accept = true;
-    } else if (classification.intent === "reject") {
+    } else if (
+      classification.intent === "reject" &&
+      classification.variant !== "reject_with_subscription"
+    ) {
       output.reject = true;
     } else if (classification.intent === "options") {
       output.options = true;

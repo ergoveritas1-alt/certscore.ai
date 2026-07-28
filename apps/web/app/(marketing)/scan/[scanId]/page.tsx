@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
@@ -24,6 +25,10 @@ import {
   getLocalV2DagReportInput,
   materializeLocalV2DagScanDetail
 } from "../../../../server/scans/local-v2-dag-report";
+import {
+  hasReadyScanReportProjection,
+  persistScanReportProjection
+} from "../../../../server/scans/scan-report-projection";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import {
   getPublicScanStatusProjection,
@@ -130,10 +135,21 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   }
 
   const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
+  const persistedReportProjectionReady = hasReadyScanReportProjection(scanRecord);
   const displayScanRecord =
-    localV2DagReportInput && scanRecord.scan.status === "completed"
+    localV2DagReportInput && scanRecord.scan.status === "completed" && !persistedReportProjectionReady
       ? await materializeLocalV2DagScanDetail(scanRecord)
       : scanRecord;
+  if (!persistedReportProjectionReady && displayScanRecord.scan.status === "completed") {
+    after(async () => {
+      await persistScanReportProjection(displayScanRecord, {
+        snapshot: scanRecord.snapshot,
+        runtimeArtifacts: scanRecord.runtimeArtifacts
+      }).catch((error) => {
+        console.error("Failed to refresh completed scan report projection", error);
+      });
+    });
+  }
   const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
     events: scanRecord.events,
     scanType: scanRecord.scan.scanType,

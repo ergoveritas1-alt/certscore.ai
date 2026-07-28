@@ -1,15 +1,41 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { consentControlAssessmentSchema, type ConsentControlAssessment } from "@certscore/contracts";
 import { query } from "@website-signal-risk-scanner/db";
 import type { ScanDetailResponse } from "./get-scan-by-id";
-import { shouldUseLocalV2DagScanTool } from "./local-v2-dag-scan-config";
+import {
+  LOCAL_V2_DAG_SCAN_PROCESSOR,
+  shouldUseLocalV2DagScanTool
+} from "./local-v2-dag-scan-config";
 import { lookupTrancoRankMetadata, trancoRankFromScanConfig } from "./tranco-rank-metadata";
 import { debugBuildScanReportUnifiedFindingStateForScan } from "../../lib/scans/scan-report-unified-findings";
 import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
 import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "./scan-detail-checklist";
+import {
+  buildPersistedFirstLayerConsentEvidence,
+  projectFirstLayerConsentChoices
+} from "./scan-report-consent-projection";
 
-export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v1";
+export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v4";
+
+/**
+ * The scan detail record already includes the scan_snapshots row. Once that
+ * row has been written by the completion/backfill path, it is the stable
+ * display read model and the detail page must not rebuild the v2 bundle just
+ * to rediscover values that are already persisted there.
+ */
+export function hasReadyScanReportProjection(scanRecord: Pick<ScanDetailResponse, "scan" | "snapshot">) {
+  const snapshot = scanRecord.snapshot;
+  return Boolean(
+    scanRecord.scan.status === "completed" &&
+    snapshot &&
+    snapshot.report_projection_status === "ready" &&
+    snapshot.report_projection_version === SCAN_REPORT_PROJECTION_VERSION &&
+    typeof snapshot.report_projection_computed_at === "string" &&
+    snapshot.report_projection_computed_at.length > 0
+  );
+}
 
 export type ScanReportProjectionRow = {
   access_posture_class: string | null;
@@ -17,9 +43,17 @@ export type ScanReportProjectionRow = {
   certscore_overall: number | null;
   cmp_vendor_name: string | null;
   consent_accept_observed: boolean | null;
+  consent_assessment_computed_at: string | null;
+  consent_assessment_source_hash: string | null;
+  consent_assessment_status: string | null;
+  consent_assessment_version: string | null;
+  consent_control_assessment: Record<string, unknown> | null;
+  consent_coverage_status: string | null;
   consent_evidence_status: string | null;
+  consent_control_evidence: Record<string, unknown> | null;
   consent_options_observed: boolean | null;
   consent_reject_observed: boolean | null;
+  consent_surface_status: string | null;
   duration_ms: number | null;
   egress_id: string | null;
   egress_type: string | null;
@@ -98,27 +132,58 @@ function booleanValue(value: unknown) {
   return typeof value === "boolean" ? value : null;
 }
 
-function firstLayerConsentChoices(scanRecord: ScanDetailResponse) {
+function rawFirstLayerConsentChoices(scanRecord: ScanDetailResponse) {
   const runtimeArtifacts = record(scanRecord.runtimeArtifacts);
   const materializedRecord = scanRecord as unknown as Record<string, unknown>;
   const hybrid = record(materializedRecord.hybridRuntimeEvidence) ?? record(materializedRecord.hybrid_runtime_evidence);
-  const choices = [
+  return [
     record(hybrid?.firstLayerConsentChoices),
     record(hybrid?.first_layer_consent_choices),
+    record(record(runtimeArtifacts?.hybridRuntimeEvidence)?.firstLayerConsentChoices),
+    record(record(runtimeArtifacts?.hybrid_runtime_evidence)?.first_layer_consent_choices),
     record(runtimeArtifacts?.firstLayerConsentChoices),
     record(runtimeArtifacts?.first_layer_consent_choices)
   ].find((value): value is Record<string, unknown> => Boolean(value));
+}
 
-  if (!choices) {
-    return null;
+function firstLayerConsentChoices(scanRecord: ScanDetailResponse) {
+  return projectFirstLayerConsentChoices(rawFirstLayerConsentChoices(scanRecord) ?? null);
+}
+
+function canonicalConsentAssessment(scanRecord: ScanDetailResponse): ConsentControlAssessment | null {
+  const runtimeArtifacts = record(scanRecord.runtimeArtifacts);
+  const hybrid = record(runtimeArtifacts?.hybridRuntimeEvidence) ?? record(runtimeArtifacts?.hybrid_runtime_evidence);
+  const candidates = [
+    record(scanRecord.snapshot)?.consent_control_assessment,
+    runtimeArtifacts?.consentControlAssessment,
+    runtimeArtifacts?.consent_control_assessment,
+    hybrid?.consentControlAssessment,
+    hybrid?.consent_control_assessment,
+  ];
+  for (const candidate of candidates) {
+    const parsed = consentControlAssessmentSchema.safeParse(candidate);
+    if (parsed.success && parsed.data.scan.scanId === scanRecord.scan.id) return parsed.data;
+  }
+  return null;
+}
+
+function assertCanonicalConsentProjectionInput(
+  scanRecord: ScanDetailResponse,
+  assessment: ConsentControlAssessment | null
+) {
+  const scanConfig = record(scanRecord.scan.scanConfigJson);
+  if (
+    scanRecord.scan.status !== "completed" ||
+    scanConfig?.processor !== LOCAL_V2_DAG_SCAN_PROCESSOR
+  ) {
+    return;
   }
 
-  return {
-    accept: booleanValue(choices.acceptControlObserved),
-    options: booleanValue(choices.managePreferencesControlObserved),
-    reject: booleanValue(choices.rejectControlObserved),
-    retained: choices.layerInspected === true || Object.keys(choices).length > 0
-  };
+  if (!assessment) {
+    throw new Error(
+      `Refusing to mark scan ${scanRecord.scan.id} report projection ready before ConsentControlAssessment v2 is materialized.`
+    );
+  }
 }
 
 type ScanReportProjectionSource = {
@@ -152,9 +217,17 @@ export async function loadScanReportProjectionRows(scanIds: string[]) {
             certscore_overall,
             cmp_vendor_name,
             consent_accept_observed,
+            consent_assessment_computed_at,
+            consent_assessment_source_hash,
+            consent_assessment_status,
+            consent_assessment_version,
+            consent_control_assessment,
+            consent_control_evidence,
+            consent_coverage_status,
             consent_evidence_status,
             consent_options_observed,
             consent_reject_observed,
+            consent_surface_status,
             duration_ms,
             egress_id,
             egress_type,
@@ -219,6 +292,8 @@ export async function deriveScanReportProjectionValue(
       })
     : null;
   const choices = firstLayerConsentChoices(scanRecord);
+  const assessment = canonicalConsentAssessment(scanRecord);
+  assertCanonicalConsentProjectionInput(scanRecord, assessment);
   const trancoFromConfig = trancoRankFromScanConfig(scanRecord.scan.scanConfigJson);
   const trancoMetadata = await lookupTrancoRankMetadata({
     hostname: scanRecord.scan.domainHostname,
@@ -235,10 +310,22 @@ export async function deriveScanReportProjectionValue(
     findingCount: reportState.globalUnifiedFindings.length || numberValue(snapshot?.report_finding_count),
     cmpVendorName: stringValue(snapshot?.cmp_vendor_name),
     privacyPolicyPresent: booleanValue(sourceSnapshot?.privacy_policy_present) ?? booleanValue(snapshot?.privacy_policy_present),
-    consentAcceptObserved: choices?.accept ?? null,
-    consentRejectObserved: choices?.reject ?? null,
-    consentOptionsObserved: choices?.options ?? null,
-    consentEvidenceStatus: choices?.retained ? "observed" : "unknown",
+    consentAcceptObserved: assessment
+      ? assessment.controls.accept.state === "observed" ? true : assessment.controls.accept.state === "not_observed" ? false : null
+      : choices?.retained ? choices.accept : null,
+    consentRejectObserved: assessment
+      ? assessment.controls.reject.state === "observed" ? true : assessment.controls.reject.state === "not_observed" ? false : null
+      : choices?.retained ? choices.reject : null,
+    consentOptionsObserved: assessment
+      ? assessment.controls.options.state === "observed" ? true : assessment.controls.options.state === "not_observed" ? false : null
+      : choices?.retained ? choices.options : null,
+    consentEvidenceStatus: assessment
+      ? assessment.surface.status === "observed_actionable" || assessment.surface.status === "observed_non_actionable"
+        ? "observed"
+        : assessment.surface.status === "not_observed"
+          ? "not_observed"
+          : "unknown"
+      : choices?.retained ? "observed" : "unknown",
     industry,
     primaryLanguage: stringValue(snapshot?.site_language_primary),
     scanOutcome: stringValue(sourceSnapshot?.scan_outcome),
@@ -265,6 +352,11 @@ export async function persistScanReportProjection(
   const snapshot = record(scanRecord.snapshot);
   const sourceSnapshot = record(source.snapshot) ?? snapshot;
   const sourceRuntimeArtifacts = record(source.runtimeArtifacts) ?? record(scanRecord.runtimeArtifacts);
+  const assessment = canonicalConsentAssessment(scanRecord);
+  assertCanonicalConsentProjectionInput(scanRecord, assessment);
+  const consentControlEvidence = buildPersistedFirstLayerConsentEvidence(
+    rawFirstLayerConsentChoices(scanRecord) ?? null
+  );
   const scanNoGoAssessment = record(sourceRuntimeArtifacts?.scan_no_go_assessment) ?? record(sourceRuntimeArtifacts?.scanNoGoAssessment) ?? record(sourceSnapshot?.scan_no_go_assessment);
   const visualAccessReview = record(sourceRuntimeArtifacts?.visual_access_review) ?? record(sourceRuntimeArtifacts?.visualAccessReview) ?? record(sourceSnapshot?.visual_access_review);
   const hash = sourceHash(scanRecord, value, source);
@@ -279,7 +371,12 @@ export async function persistScanReportProjection(
        tranco_list_id, tranco_snapshot_date, egress_id, egress_type,
        duration_ms, score_source, score_version, score_scored_at,
        consent_accept_observed, consent_reject_observed, consent_options_observed,
-       consent_evidence_status, scan_no_go_assessment, visual_access_review,
+       consent_evidence_status, consent_control_evidence,
+       consent_control_assessment, consent_assessment_version,
+       consent_assessment_status, consent_assessment_computed_at,
+       consent_assessment_source_hash, consent_coverage_status,
+       consent_surface_status,
+       scan_no_go_assessment, visual_access_review,
        report_projection_version, report_projection_status,
        report_projection_computed_at, report_projection_source_hash,
        report_projection_error
@@ -289,8 +386,10 @@ export async function persistScanReportProjection(
             coalesce(s.pages_scanned, 0),
             $2, $3, $4, $5, $6, $7, $8, $9, $10,
             $11, $12, $13, $14, $15::date, $16, $17, $18, $19, $20, $21::timestamptz,
-            $22, $23, $24, $25, $26::jsonb, $27::jsonb,
-            $28, 'ready', timezone('utc', now()), $29, null
+            $22, $23, $24, $25, $26::jsonb,
+            $31::jsonb, $32, $33, $34::timestamptz, $35, $36, $37,
+            $27::jsonb, $28::jsonb,
+            $29, 'ready', timezone('utc', now()), $30, null
        from public.scans s
       where s.id = $1::uuid
         and s.domain_id is not null
@@ -319,6 +418,14 @@ export async function persistScanReportProjection(
            consent_reject_observed = excluded.consent_reject_observed,
            consent_options_observed = excluded.consent_options_observed,
            consent_evidence_status = excluded.consent_evidence_status,
+           consent_control_evidence = excluded.consent_control_evidence,
+           consent_control_assessment = excluded.consent_control_assessment,
+           consent_assessment_version = excluded.consent_assessment_version,
+           consent_assessment_status = excluded.consent_assessment_status,
+           consent_assessment_computed_at = excluded.consent_assessment_computed_at,
+           consent_assessment_source_hash = excluded.consent_assessment_source_hash,
+           consent_coverage_status = excluded.consent_coverage_status,
+           consent_surface_status = excluded.consent_surface_status,
            scan_no_go_assessment = coalesce(excluded.scan_no_go_assessment, scan_snapshots.scan_no_go_assessment),
            visual_access_review = coalesce(excluded.visual_access_review, scan_snapshots.visual_access_review),
            report_projection_version = excluded.report_projection_version,
@@ -352,10 +459,18 @@ export async function persistScanReportProjection(
       value.consentRejectObserved,
       value.consentOptionsObserved,
       value.consentEvidenceStatus,
+      consentControlEvidence ? JSON.stringify(consentControlEvidence) : null,
       scanNoGoAssessment ? JSON.stringify(scanNoGoAssessment) : null,
       visualAccessReview ? JSON.stringify(visualAccessReview) : null,
       SCAN_REPORT_PROJECTION_VERSION,
-      hash
+      hash,
+      assessment ? JSON.stringify(assessment) : null,
+      assessment?.artifactVersion ?? null,
+      assessment?.assessmentStatus ?? null,
+      assessment?.provenance.computedAt ?? null,
+      assessment?.provenance.sourceHash ?? null,
+      assessment?.coverage.status ?? null,
+      assessment?.surface.status ?? null
     ]
   );
 

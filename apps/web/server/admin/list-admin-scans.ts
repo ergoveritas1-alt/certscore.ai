@@ -30,7 +30,7 @@ import {
   type AdminScanSnapshotRow,
   type AdminScanRequestRow as ScanRequestRow
 } from "./repository";
-import { projectAdminNoGo, type AdminNoGoProjection } from "./admin-no-go";
+import { projectAdminNoGo, selectAdminActivityStatus, selectAdminScanOutcome, type AdminNoGoProjection } from "./admin-no-go";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
 import { requirePlatformAdminContext } from "./platform-admin";
 import { selectConfiguredCustomerGdprEprivacyScore } from "../scans/customer-score-cutover-server";
@@ -352,9 +352,12 @@ export async function listAdminScansPage(
       scanType: scan.scan_type,
       scanFromLabel: getScanFromDisplay(scan.scan_config_json).label,
       scanFromValue: getScanFromDisplay(scan.scan_config_json).value,
-      scanOutcome: noGo.isNoGo && overviewSnapshot?.stop_reason_code
-        ? overviewSnapshot.stop_reason_code
-        : overviewSnapshot?.scan_outcome ?? null,
+      scanOutcome: selectAdminScanOutcome({
+        scanOutcome: overviewSnapshot?.scan_outcome,
+        stopReasonCode: overviewSnapshot?.stop_reason_code,
+        noGoFlag: noGo.isNoGo,
+        status: scan.status
+      }),
       consentAro: consentAroFromSnapshot(overviewSnapshot),
       scannerEgressId: scannerEgress.id,
       scannerEgressProvider: scannerEgress.provider,
@@ -518,7 +521,10 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     trancoRank: linkedScan?.trancoRank ?? null,
     scanViewHref: getAdminAuthenticatedScanHref(linkedScanId),
     source: request.request_channel,
-    status: request.status,
+    status: selectAdminActivityStatus({
+      requestStatus: request.status,
+      scanStatus: request.scan_status
+    }),
     startedAt: linkedScan?.startedAt ?? request.scan_created_at,
     stopTier: linkedScan?.stopTier ?? null,
     totalSignals: linkedScan?.totalSignals ?? null,

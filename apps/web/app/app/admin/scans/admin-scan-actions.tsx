@@ -33,6 +33,14 @@ function useAdminNavigation() {
 export function AdminNavigationProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [navigation, setNavigation] = useState<AdminNavigationState>(null);
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
+
+  // Keep the first client render identical to the server render. Reading
+  // document during render makes the portal branch environment-dependent and
+  // can trigger React hydration recovery before a navigation click occurs.
+  useEffect(() => {
+    setPortalHost(document.body);
+  }, []);
 
   useEffect(() => {
     setNavigation(null);
@@ -50,7 +58,7 @@ export function AdminNavigationProvider({ children }: { children: ReactNode }) {
     return true;
   }
 
-  const overlay = navigation && typeof document !== "undefined"
+  const overlay = navigation && portalHost
     ? createPortal(
       <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/45 backdrop-blur-sm" role="status" aria-live="polite">
         <div className="rounded-2xl border border-white/20 bg-white px-6 py-5 text-center shadow-2xl">
@@ -59,7 +67,7 @@ export function AdminNavigationProvider({ children }: { children: ReactNode }) {
           <p className="mt-1 text-xs text-slate-500">This will clear automatically if navigation cannot complete.</p>
         </div>
       </div>,
-      document.body
+      portalHost
     )
     : null;
 

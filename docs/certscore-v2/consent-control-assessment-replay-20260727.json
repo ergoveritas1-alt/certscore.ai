@@ -1,0 +1,54 @@
+{
+  "artifactType": "consent_control_assessment_replay_summary",
+  "artifactVersion": "1.0",
+  "generatedAt": "2026-07-27",
+  "readOnly": true,
+  "sourceRoot": "artifacts/local-v2-dag-scans",
+  "projector": "wc01.consent-control-assessment@1.0.0",
+  "summary": {
+    "bundlesDiscovered": 819,
+    "projected": 819,
+    "invalidBundles": 0,
+    "failed": 0,
+    "geometry": {
+      "complete_positive": 112,
+      "complete_negative": 211,
+      "document_mismatch": 16,
+      "incomplete": 10,
+      "missing": 470
+    },
+    "changedFromLegacy": 581,
+    "legacyFalseToUnknown": 510,
+    "positiveRetentions": 22,
+    "unknownFields": 1742,
+    "assessmentStatuses": {
+      "complete": 535,
+      "limited": 284,
+      "not_applicable": 0
+    },
+    "surfaceStatuses": {
+      "observed_actionable": 255,
+      "observed_non_actionable": 124,
+      "not_observed": 281,
+      "unknown": 159
+    }
+  },
+  "interpretation": {
+    "legacyFalseToUnknown": "The legacy geometry replacement path represented missing or incomplete evidence as false A/R/O values. The assessment correctly preserves these as unknown.",
+    "positiveRetentions": "The assessment retained valid earlier bundle controls when the later geometry state was collapsed, incomplete, or otherwise non-authoritative for erasure.",
+    "cutoverStatus": "blocked_pending_adjudication",
+    "blockers": [
+      "Adjudicate the 22 positive-retention cases before score/checklist cutover.",
+      "Confirm the 510 false-to-unknown conversions are expected legacy repairs, not capture regressions.",
+      "Add production adapter tests for legacy control observations that omit per-control layer metadata.",
+      "Run the replay against the Luna-approved A/R/O calibration labels before evaluating the 95% gate."
+    ]
+  },
+  "representativePositiveRetentions": [
+    { "scanId": "scan_1783650546457_carrefour.fr", "domain": "carrefour.fr", "geometry": "complete_negative", "retained": ["accept", "reject", "options"] },
+    { "scanId": "scan_1785100818346_oxfam.org", "domain": "oxfam.org", "geometry": "complete_negative", "retained": ["accept", "reject", "options"] },
+    { "scanId": "scan_1783654382356_ikea.com", "domain": "ikea.com", "geometry": "complete_negative", "retained": ["accept", "reject", "options"] },
+    { "scanId": "scan_1785082267688_amazon.de", "domain": "amazon.de", "geometry": "complete_positive", "retained": ["accept", "reject"] },
+    { "scanId": "scan_1783650010404_audi.com", "domain": "audi.com", "geometry": "complete_positive", "retained": ["accept"] }
+  ]
+}

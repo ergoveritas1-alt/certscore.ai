@@ -1470,9 +1470,9 @@ export async function preConsentRuntimeScanner(
     );
     retainedCmpRuntimeObservations = cmpRuntimeObservations;
     retainedConsentUiObservation = consentObservation;
+    const highConfidenceCmpRuntimeEvidence =
+      hasHighConfidenceDirectCmpRuntimeEvidence(cmpRuntimeObservations);
     if (shouldRecaptureConsentUiAfterCmpRuntime(consentObservation, domText, cmpRuntimeObservations)) {
-      const highConfidenceCmpRuntimeEvidence =
-        hasHighConfidenceDirectCmpRuntimeEvidence(cmpRuntimeObservations);
       const weakCmpRecaptureWaitMs = fastWait ? 2_250 : 2_750;
       const requestedRecaptureTimeoutMs = fastWait ? 2_500 : 3_000;
       const recaptureTimeoutMs = Math.min(requestedRecaptureTimeoutMs, remainingModuleBudgetMs());
@@ -1648,6 +1648,45 @@ export async function preConsentRuntimeScanner(
         );
       }
       retainedConsentUiObservation = consentObservation;
+    }
+    if (
+      !highConfidenceCmpRuntimeEvidence &&
+      !hasActionableConsentChoiceControl(consentObservation)
+    ) {
+      const pageAgeMs = Math.max(0, Date.now() - navigationStartedAtMs);
+      const waitToLateSurfaceGateMs = Math.min(
+        Math.max(0, CONSENT_GATE_INITIAL_MS - pageAgeMs),
+        remainingModuleBudgetMs(),
+      );
+      if (waitToLateSurfaceGateMs >= 500) {
+        await installConsentGateMutationProbe(page);
+        const lateSurfaceObservation = await recordBoundedTiming(
+          timingBreakdown,
+          "page evidence: late consent surface gate",
+          "Read-only navigation-relative inventory through the 10-second gate for delayed consent surfaces without an early CMP runtime marker.",
+          waitToLateSurfaceGateMs + 250,
+          () => detectConsentUi(
+            page,
+            input.scanStartedAtMs,
+            waitToLateSurfaceGateMs,
+            {
+              allowFullDocumentCmpControls: true,
+              waitForCompleteChoiceControls: true,
+              waitForControlsOnTextOnlySurface: true,
+            },
+          ),
+          () => consentObservation,
+        );
+        consentObservation = mergeConsentUiObservations(
+          consentObservation,
+          lateSurfaceObservation,
+          "adaptive_gate_inventory:10s_without_cmp_runtime",
+        );
+        if (hasActionableConsentChoiceControl(consentObservation)) {
+          domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
+        }
+        retainedConsentUiObservation = consentObservation;
+      }
     }
 
     const shouldCaptureScreenshot = shouldCapturePreConsentScreenshot({
@@ -1850,15 +1889,17 @@ export async function preConsentRuntimeScanner(
           }
         }
         if (
-          !hasConfirmedFirstLayerGeometryControls(geometry) &&
-          hasBelowFoldFirstLayerGeometryControls(geometry)
+          hasBelowFoldFirstLayerGeometryControls(geometry) ||
+          hasInternallyClippedFirstLayerGeometryControls(geometry)
         ) {
           const recapturedGeometry = await recaptureConsentGeometryAfterBoundedScroll(page, geometry, {
             screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
           });
           if (recapturedGeometry && confirmedFirstLayerGeometryControlCount(recapturedGeometry) > confirmedFirstLayerGeometryControlCount(geometry)) {
             recapturedGeometry.summary.limitations = [
-              "recapture:bounded_scroll_to_below_fold_first_layer_controls",
+              hasInternallyClippedFirstLayerGeometryControls(geometry)
+                ? "recapture:bounded_internal_scroll_to_first_layer_controls"
+                : "recapture:bounded_scroll_to_below_fold_first_layer_controls",
               ...recapturedGeometry.summary.limitations,
             ].slice(0, 12);
             geometry = recapturedGeometry;
@@ -8278,6 +8319,18 @@ function hasBelowFoldFirstLayerGeometryControls(geometry: ConsentControlGeometry
   );
 }
 
+function hasInternallyClippedFirstLayerGeometryControls(geometry: ConsentControlGeometryArtifact): boolean {
+  return geometry.candidates.some((candidate) =>
+    isAroGeometryAction(candidate.actionType) &&
+    candidate.layer === "first_layer" &&
+    candidate.decisionStatus === "clipped" &&
+    candidate.reasons.includes("clipped_by_scrollable_ancestor") &&
+    Boolean(candidate.scrollableAncestor?.selectorHint) &&
+    candidate.boundingBox.width > 0 &&
+    candidate.boundingBox.height > 0
+  );
+}
+
 type AroGeometryAction = Extract<
   ConsentControlGeometryArtifact["candidates"][number]["actionType"],
   "accept_all" | "reject_all" | "manage_preferences"
@@ -8499,33 +8552,131 @@ async function recaptureConsentGeometryAfterBoundedScroll(
     .filter((candidate) =>
       isAroGeometryAction(candidate.actionType) &&
       candidate.layer === "first_layer" &&
-      candidate.decisionStatus === "dom_present_not_visible" &&
-      candidate.reasons.includes("outside_viewport") &&
+      (
+        (
+          candidate.decisionStatus === "clipped" &&
+          candidate.reasons.includes("clipped_by_scrollable_ancestor") &&
+          Boolean(candidate.scrollableAncestor?.selectorHint)
+        ) ||
+        (
+          candidate.decisionStatus === "dom_present_not_visible" &&
+          candidate.reasons.includes("outside_viewport")
+        )
+      ) &&
       candidate.boundingBox.width > 0 &&
       candidate.boundingBox.height > 0
     )
-    .sort((left, right) => left.boundingBox.top - right.boundingBox.top)[0];
+    .sort((left, right) =>
+      (left.decisionStatus === "clipped" ? 0 : 1) -
+        (right.decisionStatus === "clipped" ? 0 : 1) ||
+      left.boundingBox.top - right.boundingBox.top
+    )[0];
   if (!target) {
     return null;
   }
 
-  const didScroll = await page.evaluate((top) => {
-    const before = window.scrollY;
-    const maxTop = Math.max(0, (document.scrollingElement?.scrollHeight ?? document.body.scrollHeight) - window.innerHeight);
-    const nextTop = Math.max(0, Math.min(maxTop, top - 96));
-    window.scrollTo(0, nextTop);
-    return Math.abs(window.scrollY - before) > 4;
-  }, target.boundingBox.top).catch(() => false);
+  const targetFrame = target.frameContext.frameKind === "main_frame"
+    ? page.mainFrame()
+    : page.frames().find((frame) => frame.url() === target.frameContext.frameUrl);
+  if (!targetFrame) {
+    return null;
+  }
+
+  const didScroll = target.decisionStatus === "clipped" && target.scrollableAncestor?.selectorHint
+    ? await targetFrame.evaluate(({ ancestorSelector, controlSelector }) => {
+        const ancestor = document.querySelector(ancestorSelector);
+        const control = document.querySelector(controlSelector);
+        if (!(ancestor instanceof HTMLElement) || !(control instanceof HTMLElement)) {
+          return false;
+        }
+        const before = ancestor.scrollTop;
+        const ancestorRect = ancestor.getBoundingClientRect();
+        const controlRect = control.getBoundingClientRect();
+        const relativeTop = controlRect.top - ancestorRect.top + ancestor.scrollTop;
+        const maxTop = Math.max(0, ancestor.scrollHeight - ancestor.clientHeight);
+        ancestor.scrollTop = Math.max(
+          0,
+          Math.min(maxTop, relativeTop - Math.max(16, ancestor.clientHeight / 2 - controlRect.height / 2)),
+        );
+        return Math.abs(ancestor.scrollTop - before) > 4;
+      }, {
+        ancestorSelector: target.scrollableAncestor.selectorHint,
+        controlSelector: target.selectorHint,
+      }).catch(() => false)
+    : await targetFrame.evaluate((top) => {
+        const before = window.scrollY;
+        const maxTop = Math.max(0, (document.scrollingElement?.scrollHeight ?? document.body.scrollHeight) - window.innerHeight);
+        const nextTop = Math.max(0, Math.min(maxTop, top - 96));
+        window.scrollTo(0, nextTop);
+        return Math.abs(window.scrollY - before) > 4;
+      }, target.boundingBox.top).catch(() => false);
 
   if (!didScroll) {
     return null;
   }
 
   await page.waitForTimeout(350).catch(() => undefined);
-  return captureConsentControlGeometry(page, {
+  const recaptured = await captureConsentControlGeometry(page, {
     screenshotArtifactRef: options.screenshotArtifactRef,
     timeoutMs: 2_000,
   });
+  return mergeConsentGeometryCaptures(geometry, recaptured);
+}
+
+function mergeConsentGeometryCaptures(
+  before: ConsentControlGeometryArtifact,
+  after: ConsentControlGeometryArtifact,
+): ConsentControlGeometryArtifact {
+  const candidates = [...before.candidates, ...after.candidates]
+    .sort((left, right) =>
+      (left.decisionStatus === "confirmed_visible" ? 0 : 1) -
+      (right.decisionStatus === "confirmed_visible" ? 0 : 1)
+    )
+    .filter((candidate, index, all) =>
+      all.findIndex((other) =>
+        other.actionType === candidate.actionType &&
+        other.normalizedLabel === candidate.normalizedLabel &&
+        other.selectorHint === candidate.selectorHint &&
+        other.frameContext.frameUrl === candidate.frameContext.frameUrl
+      ) === index
+    )
+    .slice(0, 96);
+  const confirmed = candidates.filter((candidate) =>
+    candidate.layer === "first_layer" &&
+    candidate.decisionStatus === "confirmed_visible"
+  );
+  const limitations = candidates
+    .filter((candidate) =>
+      isAroGeometryAction(candidate.actionType) &&
+      candidate.decisionStatus !== "confirmed_visible"
+    )
+    .map((candidate) => `${candidate.actionType}:${candidate.label}:${candidate.decisionStatus}`)
+    .slice(0, 12);
+  const cmp = after.cmp.confidence >= before.cmp.confidence ? after.cmp : before.cmp;
+  return {
+    ...after,
+    cmp,
+    containers: [...before.containers, ...after.containers]
+      .filter((container, index, all) =>
+        all.findIndex((other) =>
+          other.selectorHint === container.selectorHint &&
+          other.textExcerpt === container.textExcerpt
+        ) === index
+      )
+      .slice(0, 24),
+    candidates,
+    summary: {
+      firstLayerAccept: confirmed.some((candidate) => candidate.actionType === "accept_all"),
+      firstLayerReject: confirmed.some((candidate) => candidate.actionType === "reject_all"),
+      firstLayerOptions: confirmed.some((candidate) => candidate.actionType === "manage_preferences"),
+      cmpDetected: cmp.detected,
+      cmpName: cmp.name,
+      confidence: confirmed.length > 0
+        ? Math.max(before.summary.confidence, after.summary.confidence, 0.77)
+        : Math.max(before.summary.confidence, after.summary.confidence),
+      limitations,
+    },
+  };
 }
 
 function rewriteConsentGeometryScreenshotRefs(

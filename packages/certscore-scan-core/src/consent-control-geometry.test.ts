@@ -437,6 +437,22 @@ test("captures Italian first-layer accept, reject, and options controls", async 
   assert.equal(findCandidate(artifact, "Gestisci preferenze")?.actionType, "manage_preferences");
 });
 
+test("does not treat an Italian paid reject-and-subscribe alternative as free reject", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-modal="true" aria-label="Scelte cookie" style="position: fixed; inset: 60px; padding: 24px; background: white;">
+      <p>Puoi acconsentire, gestire le preferenze oppure rifiutare sottoscrivendo un abbonamento.</p>
+      <button>Accetta e continua</button>
+      <button>Preferenze</button>
+      <a href="/abbonati">Rifiuta e abbonati</a>
+    </section>
+  `);
+
+  assert.equal(findCandidate(artifact, "Accetta e continua")?.actionType, "accept_all");
+  assert.equal(findCandidate(artifact, "Preferenze")?.actionType, "manage_preferences");
+  assert.equal(findCandidate(artifact, "Rifiuta e abbonati")?.actionType, "other");
+  assert.equal(artifact.summary.firstLayerReject, false);
+});
+
 test("captures Spanish Didomi pay-or-consent controls rendered as styled elements", async () => {
   const artifact = await captureFixture(`
     <script src="https://sdk.privacy-center.org/loader.js"></script>

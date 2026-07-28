@@ -25,6 +25,10 @@ import {
   getLocalV2DagReportInput,
   materializeLocalV2DagScanDetail
 } from "../../../../server/scans/local-v2-dag-report";
+import {
+  hasReadyScanReportProjection,
+  persistScanReportProjection
+} from "../../../../server/scans/scan-report-projection";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import {
   getPublicScanStatusProjection,
@@ -175,10 +179,24 @@ async function ScanDetailReportContent({
   }
 
   const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
+  const persistedReportProjectionReady = hasReadyScanReportProjection(scanRecord);
   const displayScanRecord =
-    localV2DagReportInput && scanRecord.scan.status === "completed"
-      ? await withServerTiming("app.scan_detail.local_v2_report", () => materializeLocalV2DagScanDetail(scanRecord))
+    localV2DagReportInput && scanRecord.scan.status === "completed" && !persistedReportProjectionReady
+      ? await withServerTiming("app.scan_detail.local_v2_report_fallback", () => materializeLocalV2DagScanDetail(scanRecord))
       : scanRecord;
+
+  // Older scans may not have the shared projection yet. Serve the reliable
+  // materialized fallback, but never make the next page refresh pay that cost.
+  if (!persistedReportProjectionReady && displayScanRecord.scan.status === "completed") {
+    after(async () => {
+      await persistScanReportProjection(displayScanRecord, {
+        snapshot: scanRecord.snapshot,
+        runtimeArtifacts: scanRecord.runtimeArtifacts
+      }).catch((error) => {
+        console.error("Failed to refresh completed scan report projection", error);
+      });
+    });
+  }
   const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
     events: scanRecord.events,
     scanType: scanRecord.scan.scanType,

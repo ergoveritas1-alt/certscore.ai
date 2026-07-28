@@ -330,6 +330,19 @@ export const SCAN_NO_GO_REASON_PRESENTATIONS: Record<ScanNoGoReasonCode, ScanNoG
 /** Canonical persisted scan outcomes that represent a terminal no-go result. */
 export const SCAN_NO_GO_SNAPSHOT_OUTCOMES = Array.from(new Set([
   "no_go",
+  // Legacy snapshot values written before the canonical reason registry was
+  // introduced. Keep these readable so historical rows cannot regress to Go.
+  "reachability_blocked",
+  "robots_restricted",
+  "homepage_blocked_403",
+  "homepage_blocked_429",
+  "homepage_blocked",
+  "captcha",
+  "auth_wall",
+  "homepage_not_found",
+  "homepage_timeout",
+  "homepage_unreachable",
+  "no_pages_scanned",
   "reachability_blocked_homepage_403",
   "reachability_blocked_homepage_401",
   "reachability_blocked_challenge_suspected",
@@ -356,6 +369,17 @@ export function isScanNoGoSnapshotOutcome(value: string | null | undefined) {
 }
 
 const LEGACY_SCAN_NO_GO_REASON_ALIASES: Record<string, ScanNoGoReasonCode> = {
+  reachability_blocked: "access_denied_or_forbidden_page",
+  robots_restricted: "access_denied_or_forbidden_page",
+  homepage_blocked_403: "access_denied_or_forbidden_page",
+  homepage_blocked_429: "rate_limited_429",
+  homepage_blocked: "access_denied_or_forbidden_page",
+  captcha: "captcha_or_challenge",
+  auth_wall: "access_denied_or_forbidden_page",
+  homepage_not_found: "not_found_404",
+  homepage_timeout: "loading_or_stalled",
+  homepage_unreachable: "navigation_transport_failure",
+  no_pages_scanned: "target_unreachable_or_unsuitable",
   access_blocked: "access_denied_or_forbidden_page",
   blank_page_no_visible_content: "blank_or_unusable_page",
   bot_challenge_visible: "captcha_or_challenge",

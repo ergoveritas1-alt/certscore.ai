@@ -1433,6 +1433,44 @@ test("pre-consent runtime scanner waits briefly for late choice controls when CM
   }
 });
 
+test("pre-consent runtime scanner retains a delayed text-control banner without an early CMP marker", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-late-without-cmp-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-late-without-cmp-runtime"),
+      path.join(tempRoot, "consent-late-without-cmp-runtime"),
+      "fast",
+      "selective",
+      undefined,
+      20_000,
+    );
+    const observation = bundle.consentUiObservations[0];
+    const timingLabels = bundle.modulesRun[0]?.timingBreakdown?.map((entry) => entry.label) ?? [];
+
+    assert.equal(
+      bundle.cmpRuntimeObservations.some((cmp) => cmp.confidence >= 0.9),
+      false,
+      "fixture must exercise the no-early-CMP path",
+    );
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.basis.includes("adaptive_gate_inventory:10s_without_cmp_runtime"),
+      true,
+      "the navigation-relative late-surface gate should retain the delayed controls",
+    );
+    assert.equal(
+      timingLabels.includes("page evidence: late consent surface gate"),
+      true,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner recaptures late CMP choice controls when no initial controls are retained", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-late-cmp-choice-controls-"));

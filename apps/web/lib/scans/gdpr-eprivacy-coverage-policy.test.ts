@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyGdprTransparencyTopics } from "@certscore/contracts";
+import { classifyGdprTransparencyTopics, deriveConsentControlAssessment } from "@certscore/contracts";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
 import { GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE } from "./gdpr-transparency-production-profile";
 import { adaptGdprTransparencyTopicCandidatesForProduction } from "./gdpr-transparency-topic-evidence-adapter";
@@ -22,6 +22,87 @@ const completedInputBase = {
   coverageLimited: true,
   scanCompleted: true
 };
+
+function makeCanonicalConsentAssessment(input: {
+  controls?: Array<{
+    actionType: "accept_all" | "reject_all" | "manage_preferences";
+    intent: "accept" | "reject" | "options";
+    label: string;
+  }>;
+  coverage?: "complete" | "limited";
+  noGo?: boolean;
+  surface?: "observed_actionable" | "observed_non_actionable" | "not_observed";
+}) {
+  const finalUrl = "https://consent-assessment.example/";
+  const controls = input.controls ?? [];
+  return deriveConsentControlAssessment({
+    scan: {
+      scanId: "scan-consent-assessment",
+      requestedUrl: finalUrl,
+      finalUrl,
+      scanStatus: input.noGo ? "failed" : "completed",
+      noGo: input.noGo ?? false,
+    },
+    document: {
+      canonicalDocumentId: finalUrl,
+      observedDocumentIds: [finalUrl],
+      identityStatus: "matched",
+    },
+    observations: [{
+      observationId: "first-layer-inventory",
+      observedAtMs: 1_500,
+      likelyPresent: (input.surface ?? "observed_actionable") !== "not_observed",
+      layerInspected: "first_layer",
+      documentId: finalUrl,
+      captureStatus: controls.length > 0 ? "observed" : "no_evidence",
+      completedChannels: ["dom_inventory"],
+      incompleteChannels: input.coverage === "limited" ? ["geometry"] : [],
+      controls: controls.map((control, index) => ({
+        evidenceId: `control-${index}`,
+        ...control,
+        layer: "first_layer",
+        visible: true,
+        actionable: true,
+        observedAtMs: 1_500 + index,
+        documentId: finalUrl,
+        channels: ["dom_inventory"],
+        artifactRefs: ["CanonicalEvidenceBundle.json"],
+      })),
+    }],
+    geometry: input.coverage === "limited"
+      ? {
+          assessmentStatus: "incomplete",
+          documentId: finalUrl,
+          completedChannels: [],
+          incompleteChannels: ["geometry"],
+          candidates: [],
+        }
+      : {
+          assessmentStatus: "complete",
+          documentId: finalUrl,
+          completedChannels: ["geometry"],
+          incompleteChannels: [],
+          candidates: [],
+        },
+    surface: {
+      status: input.surface ?? "observed_actionable",
+      firstObservedAtMs: 1_500,
+      lastObservedAtMs: 1_500,
+      evidenceRefs: ["CanonicalEvidenceBundle.json"],
+    },
+    coverage: {
+      status: input.coverage ?? "complete",
+      requiredChannels: ["dom_inventory", "geometry"],
+      completedChannels: input.coverage === "limited" ? ["dom_inventory"] : ["dom_inventory", "geometry"],
+      incompleteChannels: input.coverage === "limited" ? ["geometry"] : [],
+    },
+    source: {
+      bundleVersion: "fixture",
+      geometryVersion: "fixture",
+      computedAt: "2026-07-27T00:00:00.000Z",
+    },
+  });
+}
 
 function retainedArticle13Signal(outcome: NonNullable<ReturnType<typeof deriveGdprEprivacyCoveragePolicyOutcomes>[string]>) {
   return outcome.criticalEvidence.retainedEvidence.article13Signal as
@@ -7000,4 +7081,118 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not project fallback-only tr
   assert.equal(outcomes.transport_security_http_redirect?.status, "Not testable");
   assert.equal(outcomes.transport_security_mixed_content?.status, "Not testable");
   assert.equal(outcomes.transport_security_form_transport?.status, "Not testable");
+});
+
+test("canonical consent assessment exclusively supplies current-scan A/R/O policy outcomes", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [
+      { actionType: "accept_all", intent: "accept", label: "Accept all cookies" },
+      { actionType: "manage_preferences", intent: "options", label: "Cookie settings" },
+    ],
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentControlAssessment: assessment,
+      // Conflicting compatibility fields must not manufacture a reject result.
+      rejectPathDepthAndAvailability: {
+        completeRejectPathAvailable: true,
+        firstLayerConsentChoices: {
+          rejectControlObserved: true,
+          visibleChoiceLabels: ["Reject all"],
+        },
+      },
+    },
+    snapshot: {
+      cookie_banner_present: true,
+    },
+  });
+
+  assert.equal(outcomes.accept_consent_control?.status, "Observed");
+  assert.equal(outcomes.reject_all_path_availability?.status, "Gap observed");
+  assert.equal(outcomes.options_settings_preferences_control?.status, "Observed");
+  assert.equal(
+    outcomes.reject_all_path_availability?.criticalEvidence.retainedEvidence.rejectControlObserved,
+    false,
+  );
+});
+
+test("limited canonical consent assessment cannot create missing-control findings", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    coverage: "limited",
+    controls: [
+      { actionType: "accept_all", intent: "accept", label: "Accept all cookies" },
+    ],
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentControlAssessment: assessment,
+      consentSurfaceObserved: true,
+    },
+    snapshot: {
+      cookie_banner_present: true,
+    },
+  });
+
+  assert.equal(outcomes.accept_consent_control?.status, "Observed");
+  assert.notEqual(outcomes.reject_all_path_availability?.status, "Gap observed");
+  assert.notEqual(outcomes.options_settings_preferences_control?.status, "Gap observed");
+  assert.notEqual(outcomes.consent_choice_quality?.status, "Gap observed");
+});
+
+test("complete no-surface assessment reports factual not-observed controls without creating control gaps", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [],
+    coverage: "complete",
+    surface: "not_observed",
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentControlAssessment: assessment,
+      consentSurfaceObserved: false,
+    },
+    snapshot: {
+      cookie_banner_present: false,
+    },
+  });
+
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.notEqual(outcomes.accept_consent_control?.status, "Gap observed");
+  assert.notEqual(outcomes.reject_all_path_availability?.status, "Gap observed");
+  assert.notEqual(outcomes.options_settings_preferences_control?.status, "Gap observed");
+  assert.notEqual(outcomes.consent_choice_quality?.status, "Gap observed");
+});
+
+test("no-go canonical consent assessment stays unknown despite conflicting compatibility evidence", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    noGo: true,
+    controls: [],
+    surface: "not_observed",
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentControlAssessment: assessment,
+      consentSurfaceObserved: true,
+      rejectPathDepthAndAvailability: {
+        firstLayerConsentChoices: {
+          acceptControlObserved: true,
+          controlInventoryComplete: true,
+          visibleChoiceLabels: ["Accept all"],
+        },
+      },
+    },
+    snapshot: {
+      cookie_banner_present: true,
+    },
+  });
+
+  assert.notEqual(outcomes.accept_consent_control?.status, "Gap observed");
+  assert.notEqual(outcomes.reject_all_path_availability?.status, "Gap observed");
+  assert.notEqual(outcomes.options_settings_preferences_control?.status, "Gap observed");
+  assert.notEqual(outcomes.consent_choice_quality?.status, "Gap observed");
 });

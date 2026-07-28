@@ -44,6 +44,7 @@ export type StaticFixturePage =
   | "consent-no-reject"
   | "consent-late-first-layer-controls"
   | "consent-late-first-layer-choice-controls"
+  | "consent-late-without-cmp-runtime"
   | "consent-late-cmp-choice-controls"
   | "consent-privacy-choice-surface-reject-success"
   | "consent-privacy-choice-only"
@@ -223,6 +224,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-no-reject": "consent-no-reject",
   "consent-late-first-layer-controls": "consent-late-first-layer-controls",
   "consent-late-first-layer-choice-controls": "consent-late-first-layer-choice-controls",
+  "consent-late-without-cmp-runtime": "consent-late-without-cmp-runtime",
   "consent-late-cmp-choice-controls": "consent-late-cmp-choice-controls",
   "consent-privacy-choice-surface-reject-success": "consent-privacy-choice-surface-reject-success",
   "consent-privacy-choice-only": "consent-privacy-choice-only",
@@ -1300,6 +1302,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     manage: caseName === "consent-manage-preferences",
     lateFirstLayerControls: caseName === "consent-late-first-layer-controls",
     lateFirstLayerChoiceControls: caseName === "consent-late-first-layer-choice-controls",
+    lateWithoutCmpRuntime: caseName === "consent-late-without-cmp-runtime",
     lateCmpChoiceControls: caseName === "consent-late-cmp-choice-controls",
     cmpScriptLateSettings: caseName === "consent-cmp-script-late-settings",
     cmpScriptOffscreenContextControls: caseName === "consent-cmp-script-offscreen-context-controls",
@@ -1398,6 +1401,21 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
           if (!target) return;
           target.innerHTML = '<button id="accept-all" type="button">Accept All</button><button id="reject-all" type="button">Reject All</button><button id="settings" type="button">Cookie settings</button>';
         }, 1100);
+      </script>
+    `;
+  }
+  if (options.lateWithoutCmpRuntime) {
+    return `
+      <section>
+        <p>Fixture page whose consent surface is injected after ordinary post-settle retries.</p>
+      </section>
+      <div id="late-consent-root"></div>
+      <script>
+        setTimeout(() => {
+          const target = document.getElementById("late-consent-root");
+          if (!target) return;
+          target.innerHTML = '<div id="late-consent-banner" role="dialog" aria-label="Cookie consent"><p>Choose how this site may use optional cookies.</p><span role="button" tabindex="0">Accept all cookies</span><span role="button" tabindex="0">Accept only essential cookies</span><span role="button" tabindex="0">Cookie settings</span></div>';
+        }, 6500);
       </script>
     `;
   }

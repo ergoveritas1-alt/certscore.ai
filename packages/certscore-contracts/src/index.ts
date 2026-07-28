@@ -12,6 +12,8 @@ export * from "./privacy-surface-classifier";
 export * from "./privacy-evidence-locale-registry";
 export * from "./supported-languages";
 export * from "./model-assistance";
+export * from "./consent-control-assessment";
+export * from "./consent-control-calibration";
 
 export const directVsInferredSchema = z.enum([
   "direct",

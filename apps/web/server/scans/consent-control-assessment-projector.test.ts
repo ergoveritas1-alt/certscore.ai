@@ -1,0 +1,214 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { deriveMaterializedConsentControlAssessment } from "./consent-control-assessment-projector";
+
+function bundle(
+  controls: Array<Record<string, unknown>>,
+  options: {
+    captureStatus?: "observed" | "no_evidence" | "incomplete";
+    defaultToggleStatesObserved?: boolean | null;
+    likelyPresent?: boolean;
+    nonEssentialDefaultsOff?: boolean | null;
+    precheckedOptionalPurposeCount?: number;
+  } = {},
+) {
+  return {
+    scanId: "scan-oxfam-fixture",
+    schemaVersion: "2.0",
+    completedAt: "2026-07-27T18:04:10.000Z",
+    url: "https://oxfam.org/en",
+    normalizedUrl: "https://oxfam.org/en",
+    domSnapshots: [{
+      artifactId: "dom-pre-consent",
+      capturedAtMs: 6_500,
+      consentStateAtTime: "pre_consent",
+      pagePhase: "settled",
+      path: "artifacts/dom-pre-consent.json",
+      url: "https://oxfam.org/en",
+    }],
+    consentUiObservations: [{
+      observationId: "consent-ui-pre-consent",
+      observedAtMs: 6_500,
+      likelyPresent: options.likelyPresent ?? true,
+      layerInspected: "first_layer",
+      captureStatus: options.captureStatus ?? "observed",
+      captureDiagnostics: {
+        completedChannels: ["dom_inventory"],
+        failedChannels: [],
+        timedOutChannels: [],
+      },
+      defaultToggleStatesObserved: options.defaultToggleStatesObserved,
+      nonEssentialDefaultsOff: options.nonEssentialDefaultsOff,
+      precheckedOptionalPurposeCount: options.precheckedOptionalPurposeCount,
+      controls,
+      evidenceRefs: [],
+    }],
+  } as unknown as CanonicalEvidenceBundle;
+}
+
+function completeInspection(outcome: string, observed: boolean) {
+  return {
+    actionableControlObserved: observed,
+    consentSurfaceObserved: observed,
+    coverageStatus: "complete",
+    evidenceChannels: [{
+      channel: "page_script_inventory",
+      status: observed ? "observed" : "not_observed",
+    }],
+    inspectionCompleted: true,
+    limitationKeys: [],
+    observedAtMs: 6_500,
+    outcome,
+  };
+}
+
+function geometry(candidates: Array<Record<string, unknown>>, summary = {
+  firstLayerAccept: true,
+  firstLayerReject: true,
+  firstLayerOptions: true,
+}) {
+  return {
+    artifactVersion: "2.0",
+    observedAtMs: 8_700,
+    pageUrl: "https://oxfam.org/en",
+    candidates,
+    summary: {
+      cmpDetected: true,
+      cmpName: "Drupal EU Cookie Compliance",
+      confidence: 0.96,
+      ...summary,
+    },
+  };
+}
+
+test("Oxfam A/R/O remains observed when a later same-document state is collapsed", () => {
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([
+      { actionType: "accept_all", label: "Accept all cookies", visible: true, layer: "first_layer" },
+      { actionType: "reject_all", label: "Accept only essential cookies", visible: true, layer: "first_layer" },
+      { actionType: "manage_preferences", label: "Cookie Settings", visible: true, layer: "first_layer" },
+    ]),
+    consentControlGeometryEvidence: geometry([], {
+      firstLayerAccept: false,
+      firstLayerReject: false,
+      firstLayerOptions: false,
+    }),
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: "https://oxfam.org/en",
+    noGo: false,
+    requestedUrl: "https://oxfam.org/en",
+  });
+
+  assert.equal(assessment.artifactVersion, "2.0");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+});
+
+test("complete same-document no-surface coverage produces factual not-observed values", () => {
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([], { captureStatus: "no_evidence", likelyPresent: false }),
+    consentControlGeometryEvidence: geometry([], {
+      firstLayerAccept: false,
+      firstLayerReject: false,
+      firstLayerOptions: false,
+    }),
+    consentSurfaceInspection: completeInspection("no_surface_observed_complete_coverage", false),
+    finalUrl: "https://oxfam.org/en",
+    noGo: false,
+    requestedUrl: "https://oxfam.org/en",
+  });
+
+  assert.equal(assessment.surface.status, "not_observed");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+});
+
+test("first-layer save with every observed optional default off is both options and necessary-only refusal", () => {
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([
+      {
+        actionType: "save_preferences",
+        label: "Save settings and proceed",
+        visible: true,
+        layer: "first_layer",
+      },
+    ], {
+      defaultToggleStatesObserved: true,
+      nonEssentialDefaultsOff: true,
+      precheckedOptionalPurposeCount: 0,
+    }),
+    consentControlGeometryEvidence: geometry([
+      {
+        candidateId: "save-settings",
+        actionType: "save_preferences",
+        label: "Save settings and proceed",
+        layer: "first_layer",
+        decisionStatus: "confirmed_visible",
+      },
+    ], {
+      firstLayerAccept: false,
+      firstLayerReject: false,
+      firstLayerOptions: true,
+    }),
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: "https://oxfam.org/en",
+    noGo: false,
+    requestedUrl: "https://oxfam.org/en",
+  });
+
+  assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.equal(
+    assessment.evidence.some((evidence) =>
+      evidence.intent === "reject" &&
+      evidence.classifier?.reasonCodes.includes("save_preferences_with_all_optional_defaults_off")
+    ),
+    true,
+  );
+});
+
+test("no-go evidence cannot create missing-control negatives", () => {
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([], { captureStatus: "incomplete", likelyPresent: false }),
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: {
+      coverageStatus: "limited",
+      evidenceChannels: [],
+      inspectionCompleted: false,
+      limitationKeys: ["scan_blocked"],
+      outcome: "inspection_incomplete",
+    },
+    finalUrl: "https://oxfam.org/en",
+    noGo: true,
+    noGoReasonCodes: ["bot_blocked"],
+    requestedUrl: "https://oxfam.org/en",
+  });
+
+  assert.equal(assessment.surface.status, "unknown");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
+});
+
+test("redirected-document evidence cannot be attributed to a different final document", () => {
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept all cookies", visible: true, layer: "first_layer" },
+  ]);
+  source.domSnapshots[0]!.url = "https://interstitial.example/choose-country";
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: "https://oxfam.org/en",
+    noGo: false,
+    requestedUrl: "https://oxfam.org/en",
+  });
+
+  assert.equal(assessment.document.identityStatus, "mismatched");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.surface.status, "unknown");
+});

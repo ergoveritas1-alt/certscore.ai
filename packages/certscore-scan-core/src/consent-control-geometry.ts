@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import {
   classifyConsentControlLabel,
+  consentControlTerms,
   isSupportedPrivacyEvidenceLocale,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   type ConsentControlClassifierProfile,
@@ -250,8 +251,12 @@ const CONSENT_CONTEXT_PATTERN = canonicalPhrasePattern([
   ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => entry.contextHints),
 ]);
 const MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN = CONSENT_CONTEXT_PATTERN;
-const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN =
-  /preference|preferences|settings|choices|options|purpose|purposes|präferenzen|einstellungen|auswahl|optionen|choix|paramètres|préférences|finalités|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|voorkeuren|instellingen|keuzes|doeleinden|ustawieni[ae]|preferencj[ae]|wybor(?:y|ów)|cel(?:e|ów)/i;
+const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN = canonicalPhrasePattern([
+  ...consentControlTerms
+    .filter((term) => term.intent === "options")
+    .map((term) => term.phrase),
+  ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => entry.contextHints),
+]);
 const POLICY_LINK_PATTERN = canonicalPhrasePattern(
   PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => [
     ...entry.privacyPolicyLabels,
@@ -288,6 +293,8 @@ export async function captureConsentControlGeometry(
   const frameInput = {
     candidateLimit: options.candidateLimit ?? DEFAULT_CANDIDATE_LIMIT,
     containerLimit: options.containerLimit ?? DEFAULT_CONTAINER_LIMIT,
+    consentPatternSource: CONSENT_CONTEXT_PATTERN.source,
+    controlLabelPatternSource: CANDIDATE_ACTION_PRIORITY_PATTERN.source,
     registrySelectors,
   };
   const mainFrame = page.mainFrame();
@@ -634,7 +641,9 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
     value: candidate.value,
     contextText: candidate.contextText,
     hasConsentContext: CONSENT_CONTEXT_PATTERN.test(candidate.contextText),
-    hasPreferenceContext: candidate.layer === "preference_center" || /preference|settings|privacy choices/i.test(candidate.contextText),
+    hasPreferenceContext:
+      candidate.layer === "preference_center" ||
+      MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN.test(candidate.contextText),
     localeHints: localeHintsForCandidate(candidate),
   });
 }
@@ -830,6 +839,8 @@ function normalizeLabel(label: string): string {
 function collectConsentGeometryInPage(input: {
   candidateLimit: number;
   containerLimit: number;
+  consentPatternSource: string;
+  controlLabelPatternSource: string;
   registrySelectors: string[];
 }): RawGeometryCapture {
   const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
@@ -843,9 +854,8 @@ function collectConsentGeometryInPage(input: {
     width: window.innerWidth,
     height: window.innerHeight,
   };
-  const consentPattern = /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|toestemming|voorkeuren|instellingen|keuzes|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|preferencj[ae]|ustawieni[ae]|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie/i;
-  const controlLabelPattern =
-    /accept|agree|allow|continue|ok|got it|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|save|cookie|cookies|analytics|necessary|essential|required|technical|akzeptieren|annehmen|ablehnen|einstellungen|verwalten|accepter|refuser|continuer|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|keuzes|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
+  const consentPattern = new RegExp(input.consentPatternSource, "iu");
+  const controlLabelPattern = new RegExp(input.controlLabelPatternSource, "iu");
   const containerSelector = [
     "[role='dialog']",
     "[aria-modal='true']",

@@ -244,6 +244,85 @@ test("pre-consent scanner recaptures below-fold consent geometry before proof sc
   }
 });
 
+test("pre-consent scanner scrolls within the same first-layer panel and retains controls from both views", async () => {
+  const server = await startServer(`
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { margin: 0; min-height: 900px; font-family: sans-serif; }
+          .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55); }
+          .cookie-panel {
+            position: fixed;
+            left: 260px;
+            top: 90px;
+            width: 720px;
+            height: 390px;
+            overflow-y: auto;
+            padding: 24px;
+            background: white;
+          }
+          .purpose { height: 220px; }
+          button { display: block; width: 100%; margin: 12px 0; padding: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="backdrop"></div>
+        <section class="cookie-panel" role="dialog" aria-modal="true" aria-label="Cookie settings">
+          <h2>Cookie settings</h2>
+          <p>Choose how optional analytics and advertising cookies may be used.</p>
+          <button id="preferences">Individual preferences</button>
+          <div class="purpose">Optional purpose controls and descriptions</div>
+          <button id="accept-all">Accept all cookies</button>
+          <button id="essential-only">Accept only essential cookies</button>
+        </section>
+      </body>
+    </html>
+  `);
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-internal-scroll-geometry-"));
+  try {
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url: server.url,
+      normalizedUrl: server.url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 9_000,
+      artifactWriter,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "never",
+      waitMode: "fast",
+    });
+
+    assert.equal(result.moduleRun.status, "completed", result.moduleRun.errors.join("; "));
+    const geometry = JSON.parse(
+      await readFile(path.join(tempRoot, "out", "ConsentControlGeometryEvidence.json"), "utf8"),
+    ) as ConsentControlGeometryArtifact;
+    assert.equal(geometry.summary.firstLayerAccept, true);
+    assert.equal(geometry.summary.firstLayerReject, true);
+    assert.equal(geometry.summary.firstLayerOptions, true);
+    assert.equal(
+      geometry.summary.limitations.includes("recapture:bounded_internal_scroll_to_first_layer_controls"),
+      true,
+    );
+    assert.ok(
+      geometry.candidates.some((candidate) =>
+        candidate.label === "Individual preferences" &&
+        candidate.decisionStatus === "confirmed_visible"
+      ),
+    );
+    assert.ok(
+      geometry.candidates.some((candidate) =>
+        candidate.label === "Accept only essential cookies" &&
+        candidate.decisionStatus === "confirmed_visible"
+      ),
+    );
+  } finally {
+    await closeServer(server.server);
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent scanner retains a proof screenshot for deeply nested animated Borlabs controls", async () => {
   const wrappers = Array.from({ length: 12 }, () => "<div class=\"brlbs-wrapper\">").join("");
   const closers = "</div>".repeat(12);

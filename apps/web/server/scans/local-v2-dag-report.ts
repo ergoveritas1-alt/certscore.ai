@@ -12,6 +12,7 @@ import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   classifyGdprTransparencyTopics,
   classifyConsentControlLabel,
+  type ConsentControlAssessment,
   deriveConsentSurfaceInspectionOutcome,
   derivePolicySurfaceInspectionOutcome,
   evaluateLegalFrameworkValidity,
@@ -44,6 +45,7 @@ import {
 } from "../../lib/scans/preconsent-public-evidence";
 import { guessPrimaryLanguage } from "../../lib/scans/primary-language";
 import type { ScanDetailResponse } from "./get-scan-by-id";
+import { deriveMaterializedConsentControlAssessment } from "./consent-control-assessment-projector";
 import {
   LOCAL_V2_DAG_LAMBDA_AWS_REGION,
   isLocalV2DagLambdaAwsRegion,
@@ -3268,6 +3270,79 @@ function summarizeConsentDefaultToggleEvidence(observation: CanonicalEvidenceBun
   };
 }
 
+function hasCompletedCanonicalFirstLayerControlInventory(
+  observation: CanonicalEvidenceBundle["consentUiObservations"][number] | null | undefined
+) {
+  if (
+    !observation ||
+    observation.likelyPresent !== true ||
+    observation.layerInspected !== "first_layer"
+  ) {
+    return false;
+  }
+
+  const diagnostics = isRecord(observation.inventoryDiagnostics)
+    ? observation.inventoryDiagnostics
+    : null;
+  const controls = (observation.controls ?? []).filter((control) =>
+    control.visible !== false &&
+    (
+      control.actionType === "accept_all" ||
+      control.actionType === "reject_all" ||
+      control.actionType === "manage_preferences" ||
+      control.actionType === "save_preferences"
+    )
+  );
+  const retainedControlCount = diagnostics?.retainedControlCount;
+  const rejectionReasons = Array.isArray(diagnostics?.rejectionReasons)
+    ? diagnostics.rejectionReasons
+    : null;
+
+  return (
+    controls.length > 0 &&
+    typeof retainedControlCount === "number" &&
+    retainedControlCount >= controls.length &&
+    rejectionReasons !== null &&
+    rejectionReasons.length === 0
+  );
+}
+
+function mergeCompletedFirstLayerConsentChoices(
+  canonicalChoices: Record<string, unknown>,
+  geometryChoices: Record<string, unknown>
+) {
+  const controls = [
+    ...getObjectArray(geometryChoices.controls),
+    ...getObjectArray(canonicalChoices.controls)
+  ].filter((control, index, all) => {
+    const key = `${getString(control.actionType) ?? "other"}:${getString(control.label)?.toLowerCase() ?? ""}`;
+    return all.findIndex((candidate) =>
+      `${getString(candidate.actionType) ?? "other"}:${getString(candidate.label)?.toLowerCase() ?? ""}` === key
+    ) === index;
+  }).slice(0, 12);
+  const labelsFor = (...actionTypes: string[]) => uniqueStrings(controls
+    .filter((control) => actionTypes.includes(getString(control.actionType) ?? ""))
+    .map((control) => getString(control.label)));
+  const acceptLabels = labelsFor("accept_all");
+  const rejectLabels = labelsFor("reject_all");
+  const preferenceLabels = labelsFor("manage_preferences", "save_preferences");
+
+  return {
+    ...canonicalChoices,
+    ...geometryChoices,
+    acceptControlObserved: acceptLabels.length > 0,
+    acceptLabels,
+    actionableControlInventoryRetained: controls.length > 0,
+    controls,
+    layerInspected: "first_layer" as const,
+    managePreferencesControlObserved: preferenceLabels.length > 0,
+    preferenceLabels,
+    rejectControlObserved: rejectLabels.length > 0,
+    rejectLabels,
+    visibleChoiceLabels: uniqueStrings(controls.map((control) => getString(control.label))).slice(0, 12)
+  };
+}
+
 export function summarizeFirstLayerConsentChoices(
   bundle: CanonicalEvidenceBundle,
   geometryEvidence?: Record<string, unknown> | null
@@ -3317,7 +3392,8 @@ export function summarizeFirstLayerConsentChoices(
       role: control.role,
       selectorHint: control.selectorHint,
       tagName: control.tagName,
-      variant: control.classifierVariant
+      variant: control.classifierVariant,
+      visible: control.visible === true
     })),
     ...defaultToggleEvidence,
     layerInspected: observation.layerInspected ?? (visibleChoiceLabels.length > 0 ? "first_layer" : "unknown"),
@@ -3372,6 +3448,12 @@ export function summarizeFirstLayerConsentChoices(
     };
   }
   if (geometryStatus === "complete" && geometryChoices) {
+    if (hasCompletedCanonicalFirstLayerControlInventory(observation)) {
+      return mergeCompletedFirstLayerConsentChoices(
+        canonicalChoices,
+        geometryChoices as Record<string, unknown>
+      );
+    }
     return {
       ...geometryChoices,
       ...defaultToggleEvidence
@@ -4081,6 +4163,20 @@ function buildMaterializedLocalV2Detail(
         url: safeLocalV2DocumentUrl(screenshot.url, canonicalDocumentUrl)
       }))
   };
+  const consentControlAssessment: ConsentControlAssessment = deriveMaterializedConsentControlAssessment({
+    bundle,
+    consentControlGeometryEvidence: options.consentControlGeometryEvidence,
+    consentSurfaceInspection,
+    finalUrl: canonicalDocumentUrl,
+    noGo: Boolean(localV2NoGo) ||
+      providedScanNoGoAssessment?.decision === "no_go" ||
+      providedVisualAccessReview?.go_no_go === "NO_GO",
+    noGoReasonCodes: uniqueStrings([
+      ...(localV2NoGo?.scanNoGoAssessment.reasonCodes ?? []),
+      ...(providedScanNoGoAssessment?.reasonCodes ?? []),
+    ]),
+    requestedUrl: requestedDocumentUrl,
+  });
   const policySurfaces = dedupePolicySurfaces(
     bundle.policySurfaceObservations ?? [],
     canonicalDocumentUrl
@@ -4320,6 +4416,8 @@ function buildMaterializedLocalV2Detail(
     };
   });
   const hybridRuntimeEvidence = {
+    consentControlAssessment,
+    consent_control_assessment: consentControlAssessment,
     consentSummary: {
       bannerPresent: assessedConsentSurfaceObserved,
       consentSurfaceObserved: assessedConsentSurfaceObserved,
@@ -4476,6 +4574,8 @@ function buildMaterializedLocalV2Detail(
       visual_access_review: localV2NoGo.visualAccessReview
     } : {}),
     consent_audit_completed: true,
+    consentControlAssessment,
+    consent_control_assessment: consentControlAssessment,
     consent_baseline_tracker_evidence_urls: runtimeEvidenceReportable ? promotionGradePreconsentRequestUrls : [],
     consent_baseline_tracker_vendor_names: runtimeEvidenceReportable ? promotionGradeVendorNames : [],
     consent_preconsent_violation_count: runtimeEvidenceReportable ? promotionGradeRequestPurposeRows.length : 0,

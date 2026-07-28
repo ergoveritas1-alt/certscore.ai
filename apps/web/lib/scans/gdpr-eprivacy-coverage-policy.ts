@@ -2,6 +2,7 @@ import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure"
 import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
 import {
   classifyConsentControlLabel,
+  consentControlAssessmentSchema,
   evaluateLegalFrameworkValidity,
   hasStaleLegalFrameworkReference,
   hasSubstantiveLegalBasisEvidence,
@@ -374,6 +375,16 @@ function hasTypedConsentSurfaceObservation(input: GdprEprivacyCoveragePolicyInpu
 }
 
 function hasCompleteNoConsentSurfaceObservation(input: GdprEprivacyCoveragePolicyInput) {
+  const assessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  if (assessment) {
+    return (
+      assessment.assessmentStatus === "complete" &&
+      assessment.coverage.status === "complete" &&
+      assessment.document.identityStatus === "matched" &&
+      assessment.scan.noGo === false &&
+      assessment.surface.status === "not_observed"
+    );
+  }
   const inspection = getConsentSurfaceInspection(input.runtimeArtifacts);
   return (
     getString(inspection, ["outcome"]) === "no_surface_observed_complete_coverage" &&
@@ -389,6 +400,46 @@ function makeIncompleteConsentSurfaceInspectionOutcome(
   rowId: string,
   controlLabel: string,
 ) {
+  const assessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  if (assessment) {
+    if (
+      assessment.assessmentStatus === "complete" &&
+      assessment.coverage.status === "complete" &&
+      assessment.document.identityStatus === "matched" &&
+      assessment.scan.noGo === false
+    ) {
+      return null;
+    }
+    const surfaceObserved =
+      assessment.surface.status === "observed_actionable" ||
+      assessment.surface.status === "observed_non_actionable";
+    return makeOutcome(
+      rowId,
+      surfaceObserved ? "Not confirmed" : "Not testable",
+      surfaceObserved
+        ? `A consent surface was retained, but ${controlLabel} was not established because the canonical first-layer assessment is incomplete.`
+        : `The canonical pre-interaction consent assessment is incomplete, so ${controlLabel} availability cannot be determined from retained evidence.`,
+      ["Evidence limitation: incomplete canonical consent-control assessment"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "runtimeArtifacts.consentControlAssessment.coverage.status",
+            "complete",
+            assessment.coverage.status,
+            `A complete canonical assessment is required before CertScore.ai can assess ${controlLabel} availability.`,
+          ),
+        ],
+        retainedEvidence: {
+          consentControlAssessmentStatus: assessment.assessmentStatus,
+          consentControlCoverageStatus: assessment.coverage.status,
+          consentControlDocumentIdentityStatus: assessment.document.identityStatus,
+          consentControlLimitations: assessment.limitations,
+          consentControlSurfaceStatus: assessment.surface.status,
+          scanNoGo: assessment.scan.noGo,
+        },
+      },
+    );
+  }
   const inspection = getConsentSurfaceInspection(input.runtimeArtifacts);
   if (!inspection) {
     return null;
@@ -874,6 +925,20 @@ function getFirstLayerConsentChoicesFromArtifacts(runtimeArtifacts: Record<strin
     getObject(runtimeArtifacts, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
 }
 
+function getConsentControlAssessmentFromArtifacts(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
+  for (const candidate of [
+    getObject(runtimeArtifacts, ["consentControlAssessment", "consent_control_assessment"]),
+    getObject(hybridRuntimeEvidence, ["consentControlAssessment", "consent_control_assessment"]),
+  ]) {
+    const parsed = consentControlAssessmentSchema.safeParse(candidate);
+    if (parsed.success) return parsed.data;
+  }
+  return null;
+}
+
 function getConsentPathControlLabels(
   consentUiPath: Record<string, unknown> | null,
   rejectPath: Record<string, unknown> | null
@@ -904,6 +969,39 @@ function getConsentPathControlLabels(
 }
 
 function getFirstLayerConsentChoiceEvidence(input: GdprEprivacyCoveragePolicyInput) {
+  const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  if (consentControlAssessment) {
+    const evidenceLabels = (intent: "accept" | "reject" | "options") =>
+      consentControlAssessment.evidence
+        .filter((row) => row.intent === intent && row.layer === "first_layer")
+        .map((row) => row.label)
+        .filter((label): label is string => Boolean(label));
+    const visibleChoiceLabels = uniqueStrings([
+      ...evidenceLabels("accept"),
+      ...evidenceLabels("reject"),
+      ...evidenceLabels("options"),
+    ]);
+    const surfaceObserved =
+      consentControlAssessment.surface.status === "observed_actionable" ||
+      consentControlAssessment.surface.status === "observed_non_actionable";
+    return {
+      acceptControlObserved: consentControlAssessment.controls.accept.state === "observed",
+      assessment: consentControlAssessment,
+      bannerLikeSurfaceObserved: surfaceObserved,
+      cookieNoticeTextObserved:
+        surfaceObserved &&
+        (
+          consentControlAssessment.controls.accept.state === "observed" ||
+          consentControlAssessment.controls.reject.state === "observed" ||
+          consentControlAssessment.controls.options.state === "observed"
+        ),
+      firstLayerChoices: null,
+      layerInspected: "first_layer",
+      rejectControlObserved: consentControlAssessment.controls.reject.state === "observed",
+      surfaceText: [],
+      visibleChoiceLabels: compactArray(visibleChoiceLabels, 8),
+    };
+  }
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const lifecycle = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
   const consentSummary = getObject(hybridRuntimeEvidence, ["consentSummary", "consent_summary"]);
@@ -972,6 +1070,7 @@ function getFirstLayerConsentChoiceEvidence(input: GdprEprivacyCoveragePolicyInp
 
   return {
     acceptControlObserved,
+    assessment: null,
     bannerLikeSurfaceObserved,
     cookieNoticeTextObserved,
     firstLayerChoices,
@@ -1092,6 +1191,31 @@ function serializeConsentControlEvidence(control: Record<string, unknown>) {
 }
 
 function getFirstLayerAcceptControlEvidence(input: GdprEprivacyCoveragePolicyInput) {
+  const assessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  if (assessment) {
+    const acceptEvidence = assessment.evidence.filter(
+      (row) => row.intent === "accept" && row.layer === "first_layer",
+    );
+    const labels = uniqueStrings(
+      acceptEvidence.map((row) => row.label).filter((label): label is string => Boolean(label)),
+    );
+    return {
+      acceptControlObserved: assessment.controls.accept.state === "observed",
+      acceptControls: acceptEvidence.slice(0, 6),
+      firstLayerChoices: null,
+      firstLayerCookieConsentBannerObserved: getExplicitFirstLayerGdprConsentBannerConfirmed(input),
+      layerInspected: "first_layer",
+      structuredControlInventoryRetained:
+        assessment.assessmentStatus === "complete" && assessment.coverage.status === "complete",
+      visibleAcceptLabels: labels,
+      visibleChoiceLabels: uniqueStrings(
+        assessment.evidence
+          .filter((row) => row.layer === "first_layer")
+          .map((row) => row.label)
+          .filter((label): label is string => Boolean(label)),
+      ),
+    };
+  }
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
   const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
   const layerInspected =
@@ -1116,6 +1240,31 @@ function getFirstLayerAcceptControlEvidence(input: GdprEprivacyCoveragePolicyInp
 }
 
 function getFirstLayerOptionsControlEvidence(input: GdprEprivacyCoveragePolicyInput) {
+  const assessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  if (assessment) {
+    const optionsEvidence = assessment.evidence.filter(
+      (row) => row.intent === "options" && row.layer === "first_layer",
+    );
+    const labels = uniqueStrings(
+      optionsEvidence.map((row) => row.label).filter((label): label is string => Boolean(label)),
+    );
+    return {
+      firstLayerChoices: null,
+      firstLayerCookieConsentBannerObserved: getExplicitFirstLayerGdprConsentBannerConfirmed(input),
+      layerInspected: "first_layer",
+      optionsControlObserved: assessment.controls.options.state === "observed",
+      optionsControls: optionsEvidence.slice(0, 6),
+      structuredControlInventoryRetained:
+        assessment.assessmentStatus === "complete" && assessment.coverage.status === "complete",
+      visibleChoiceLabels: uniqueStrings(
+        assessment.evidence
+          .filter((row) => row.layer === "first_layer")
+          .map((row) => row.label)
+          .filter((label): label is string => Boolean(label)),
+      ),
+      visibleOptionsLabels: labels,
+    };
+  }
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
   const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
   const layerInspected =
@@ -1220,6 +1369,23 @@ function hasRetainedInitialCookieConsentLayerEvidence(input: GdprEprivacyCoverag
 }
 
 function getExplicitFirstLayerGdprConsentBannerConfirmed(input: GdprEprivacyCoveragePolicyInput) {
+  const assessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  if (assessment) {
+    if (
+      assessment.surface.status === "observed_actionable" ||
+      assessment.surface.status === "observed_non_actionable"
+    ) {
+      return true;
+    }
+    if (
+      assessment.surface.status === "not_observed" &&
+      assessment.assessmentStatus === "complete" &&
+      assessment.coverage.status === "complete"
+    ) {
+      return false;
+    }
+    return null;
+  }
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const lifecycle = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
   const consentUiPath = getObject(hybridRuntimeEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
@@ -3549,25 +3715,32 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const rejectInteractionSucceeded =
     getBoolean(rejectPath, ["rejectInteractionSucceeded", "reject_interaction_succeeded"]) === true ||
     getBoolean(input.runtimeArtifacts, ["consent_reject_interaction_succeeded"]) === true;
-  const rejectPathAvailable =
-    rejectInteractionSucceeded ||
-    getBoolean(rejectPath, ["completeRejectPathAvailable", "complete_reject_path_available"]) === true ||
-    getBoolean(rejectPath, ["completeRejectPathDetected", "complete_reject_path_detected"]) === true ||
-    getBoolean(rejectPath, ["rejectEquivalentFound", "reject_equivalent_found"]) === true ||
-    getBoolean(rejectPath, ["rejectAvailableOnFirstLayer", "reject_available_on_first_layer"]) === true ||
-    getBoolean(firstLayerChoices, ["rejectVisibleOnFirstLayer", "reject_visible_on_first_layer"]) === true ||
-    structuredRejectControls.length > 0 ||
-    visibleRejectLabels.length > 0 ||
-    rejectAvailability === "available" ||
-    rejectAvailability === "reject_available_first_layer";
+  const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  const rejectPathAvailable = consentControlAssessment
+    ? consentControlAssessment.controls.reject.state === "observed"
+    : rejectInteractionSucceeded ||
+      getBoolean(rejectPath, ["completeRejectPathAvailable", "complete_reject_path_available"]) === true ||
+      getBoolean(rejectPath, ["completeRejectPathDetected", "complete_reject_path_detected"]) === true ||
+      getBoolean(rejectPath, ["rejectEquivalentFound", "reject_equivalent_found"]) === true ||
+      getBoolean(rejectPath, ["rejectAvailableOnFirstLayer", "reject_available_on_first_layer"]) === true ||
+      getBoolean(firstLayerChoices, ["rejectVisibleOnFirstLayer", "reject_visible_on_first_layer"]) === true ||
+      structuredRejectControls.length > 0 ||
+      visibleRejectLabels.length > 0 ||
+      rejectAvailability === "available" ||
+      rejectAvailability === "reject_available_first_layer";
   const firstLayerGdprBannerConfirmed = getExplicitFirstLayerGdprConsentBannerConfirmed(input);
   const noticeGateEvidence = getFirstLayerNoticeGateEvidence(input);
   const firstLayerChoiceEvidence = getFirstLayerConsentChoiceEvidence(input);
-  const firstLayerAcceptWithoutRejectObserved =
-    firstLayerChoiceEvidence.bannerLikeSurfaceObserved &&
-    firstLayerChoiceEvidence.cookieNoticeTextObserved &&
-    firstLayerChoiceEvidence.acceptControlObserved &&
-    !firstLayerChoiceEvidence.rejectControlObserved;
+  const firstLayerAcceptWithoutRejectObserved = consentControlAssessment
+    ? consentControlAssessment.assessmentStatus === "complete" &&
+      consentControlAssessment.coverage.status === "complete" &&
+      consentControlAssessment.surface.status === "observed_actionable" &&
+      consentControlAssessment.controls.accept.state === "observed" &&
+      consentControlAssessment.controls.reject.state === "not_observed"
+    : firstLayerChoiceEvidence.bannerLikeSurfaceObserved &&
+      firstLayerChoiceEvidence.cookieNoticeTextObserved &&
+      firstLayerChoiceEvidence.acceptControlObserved &&
+      !firstLayerChoiceEvidence.rejectControlObserved;
 
   if (!rejectPathAvailable) {
     const incompleteInspectionOutcome = makeIncompleteConsentSurfaceInspectionOutcome(
@@ -3580,7 +3753,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     }
   }
   
-  if (noticeGateEvidence.gateObserved) {
+  if (!consentControlAssessment && noticeGateEvidence.gateObserved) {
     return makeOutcome(
       "reject_all_path_availability",
       "Gap observed",
@@ -3949,6 +4122,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
 }
 
 function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
   const cmpEvidence = getCmpFrameworkSignalEvidence(input);
   const evidence = getFirstLayerOptionsControlEvidence(input);
@@ -3988,7 +4162,7 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
     return incompleteInspectionOutcome;
   }
 
-  if (noticeGateEvidence.gateObserved) {
+  if (!consentControlAssessment && noticeGateEvidence.gateObserved) {
     return makeOutcome(
       "options_settings_preferences_control",
       "Gap observed",
@@ -4098,7 +4272,13 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
     );
   }
 
-  if (evidence.structuredControlInventoryRetained) {
+  if (
+    evidence.structuredControlInventoryRetained &&
+    (
+      !consentControlAssessment ||
+      consentControlAssessment.surface.status === "observed_actionable"
+    )
+  ) {
     return makeOutcome(
       "options_settings_preferences_control",
       "Gap observed",
@@ -4168,6 +4348,7 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
 }
 
 function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
   const cmpEvidence = getCmpFrameworkSignalEvidence(input);
   const evidence = getFirstLayerAcceptControlEvidence(input);
@@ -4207,7 +4388,7 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
     return incompleteInspectionOutcome;
   }
 
-  if (noticeGateEvidence.gateObserved) {
+  if (!consentControlAssessment && noticeGateEvidence.gateObserved) {
     return makeOutcome(
       "accept_consent_control",
       "Gap observed",
@@ -4317,7 +4498,13 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
     );
   }
 
-  if (evidence.structuredControlInventoryRetained) {
+  if (
+    evidence.structuredControlInventoryRetained &&
+    (
+      !consentControlAssessment ||
+      consentControlAssessment.surface.status === "observed_actionable"
+    )
+  ) {
     return makeOutcome(
       "accept_consent_control",
       "Gap observed",
@@ -4386,69 +4573,80 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
   return null;
 }
 
-const ACCEPT_LABEL_PATTERN = /\b(?:accept|agree|allow|ok|got it|i accept|yes)\b/i;
-const REJECT_LABEL_PATTERN = /\b(?:decline|reject|refuse|deny|opt[-\s]?out|essential only|necessary only)\b/i;
-const MANAGE_PREFERENCES_LABEL_PATTERN =
+const LEGACY_ACCEPT_LABEL_PATTERN = /\b(?:accept|agree|allow|ok|got it|i accept|yes)\b/i;
+const LEGACY_REJECT_LABEL_PATTERN = /\b(?:decline|reject|refuse|deny|opt[-\s]?out|essential only|necessary only)\b/i;
+const LEGACY_MANAGE_PREFERENCES_LABEL_PATTERN =
   /\b(?:manage|settings|preferences?|customi[sz]e|choices?|options?|cookie center|preference center)\b/i;
 
 function getConsentChoiceQualityEvidence(input: GdprEprivacyCoveragePolicyInput) {
+  const assessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const lifecycle = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
   const consentUiPathEvidence = getObject(hybridRuntimeEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
   const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
   const consentPathControlLabels = getConsentPathControlLabels(consentUiPathEvidence, rejectPath);
-  const visibleChoiceLabels = uniqueStrings([
-    ...getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"]),
-    ...consentPathControlLabels.acceptLabels,
-    ...consentPathControlLabels.preferenceLabels,
-    ...consentPathControlLabels.rejectLabels
-  ]);
+  const visibleChoiceLabels = uniqueStrings(
+    assessment
+      ? assessment.evidence
+          .filter((row) => row.layer === "first_layer")
+          .map((row) => row.label)
+          .filter((label): label is string => Boolean(label))
+      : [
+          ...getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"]),
+          ...consentPathControlLabels.acceptLabels,
+          ...consentPathControlLabels.preferenceLabels,
+          ...consentPathControlLabels.rejectLabels
+        ],
+  );
   const firstLayerCookieConsentBannerObserved = getExplicitFirstLayerGdprConsentBannerConfirmed(input);
   const layerInspected =
     getString(firstLayerChoices, ["layerInspected", "layer_inspected"]) ??
     getString(rejectPath, ["layerInspected", "layer_inspected"]) ??
     getString(consentUiPathEvidence, ["layerInspected", "layer_inspected"]) ??
     getString(lifecycle, ["layerInspected", "layer_inspected"]);
-  const acceptControlObserved =
-    getBoolean(firstLayerChoices, [
-      "acceptControlObserved",
-      "accept_control_observed",
-      "acceptVisibleOnFirstLayer",
-      "accept_visible_on_first_layer"
-    ]) === true ||
-    consentPathControlLabels.acceptLabels.some((label) => ACCEPT_LABEL_PATTERN.test(label)) ||
-    visibleChoiceLabels.some((label) => ACCEPT_LABEL_PATTERN.test(label));
-  const rejectControlObserved =
-    getBoolean(firstLayerChoices, [
-      "rejectControlObserved",
-      "reject_control_observed",
-      "rejectVisibleOnFirstLayer",
-      "reject_visible_on_first_layer"
-    ]) === true ||
-    getBoolean(rejectPath, [
-      "rejectEquivalentFound",
-      "reject_equivalent_found",
-      "completeRejectPathAvailable",
-      "complete_reject_path_available"
-    ]) === true ||
-    consentPathControlLabels.rejectLabels.some((label) => REJECT_LABEL_PATTERN.test(label)) ||
-    visibleChoiceLabels.some((label) => REJECT_LABEL_PATTERN.test(label));
+  const acceptControlObserved = assessment
+    ? assessment.controls.accept.state === "observed"
+    : getBoolean(firstLayerChoices, [
+        "acceptControlObserved",
+        "accept_control_observed",
+        "acceptVisibleOnFirstLayer",
+        "accept_visible_on_first_layer"
+      ]) === true ||
+      consentPathControlLabels.acceptLabels.some((label) => LEGACY_ACCEPT_LABEL_PATTERN.test(label)) ||
+      visibleChoiceLabels.some((label) => LEGACY_ACCEPT_LABEL_PATTERN.test(label));
+  const rejectControlObserved = assessment
+    ? assessment.controls.reject.state === "observed"
+    : getBoolean(firstLayerChoices, [
+        "rejectControlObserved",
+        "reject_control_observed",
+        "rejectVisibleOnFirstLayer",
+        "reject_visible_on_first_layer"
+      ]) === true ||
+      getBoolean(rejectPath, [
+        "rejectEquivalentFound",
+        "reject_equivalent_found",
+        "completeRejectPathAvailable",
+        "complete_reject_path_available"
+      ]) === true ||
+      consentPathControlLabels.rejectLabels.some((label) => LEGACY_REJECT_LABEL_PATTERN.test(label)) ||
+      visibleChoiceLabels.some((label) => LEGACY_REJECT_LABEL_PATTERN.test(label));
   const rejectClickDepth = getNumber(rejectPath, [
     "rejectClickDepth",
     "reject_click_depth",
     "observedRejectPathDepth",
     "observed_reject_path_depth"
   ]);
-  const sameLayerRejectObserved =
-    getBoolean(firstLayerChoices, [
-      "sameLayerRejectObserved",
-      "same_layer_reject_observed",
-      "rejectVisibleOnFirstLayer",
-      "reject_visible_on_first_layer"
-    ]) === true ||
-    getBoolean(rejectPath, ["rejectAvailableOnFirstLayer", "reject_available_on_first_layer"]) === true ||
-    (rejectControlObserved === true && (layerInspected === "first_layer" || rejectClickDepth === 0 || rejectClickDepth === 1));
+  const sameLayerRejectObserved = assessment
+    ? assessment.controls.reject.state === "observed"
+    : getBoolean(firstLayerChoices, [
+        "sameLayerRejectObserved",
+        "same_layer_reject_observed",
+        "rejectVisibleOnFirstLayer",
+        "reject_visible_on_first_layer"
+      ]) === true ||
+      getBoolean(rejectPath, ["rejectAvailableOnFirstLayer", "reject_available_on_first_layer"]) === true ||
+      (rejectControlObserved === true && (layerInspected === "first_layer" || rejectClickDepth === 0 || rejectClickDepth === 1));
   const observedControlLabels = lifecycle ? getObservedPreferenceControlLabels(lifecycle) : [];
   const explicitManagePreferencesObserved =
     getBoolean(firstLayerChoices, [
@@ -4469,12 +4667,13 @@ function getConsentChoiceQualityEvidence(input: GdprEprivacyCoveragePolicyInput)
       "preferenceCenterReachableAfterInitialLayer",
       "preference_center_reachable_after_initial_layer"
     ]);
-  const managePreferencesObserved =
-    explicitManagePreferencesObserved ??
-    (
-      visibleChoiceLabels.some((label) => MANAGE_PREFERENCES_LABEL_PATTERN.test(label)) ||
-      observedControlLabels.some((label) => MANAGE_PREFERENCES_LABEL_PATTERN.test(label))
-    );
+  const managePreferencesObserved = assessment
+    ? assessment.controls.options.state === "observed"
+    : explicitManagePreferencesObserved ??
+      (
+        visibleChoiceLabels.some((label) => LEGACY_MANAGE_PREFERENCES_LABEL_PATTERN.test(label)) ||
+        observedControlLabels.some((label) => LEGACY_MANAGE_PREFERENCES_LABEL_PATTERN.test(label))
+      );
   const purposeCategoryControlsObserved =
     getBoolean(firstLayerChoices, ["purposeCategoryControlsObserved", "purpose_category_controls_observed"]) ??
     getBoolean(lifecycle, ["confirmedCookieCategoryControlsObserved", "confirmed_cookie_category_controls_observed"]);
@@ -4524,8 +4723,9 @@ function getConsentChoiceQualityEvidence(input: GdprEprivacyCoveragePolicyInput)
     getString(firstLayerChoices, ["selectedEvidenceStrength", "selected_evidence_strength"]) ??
     getString(rejectPath, ["selectedEvidenceStrength", "selected_evidence_strength"]) ??
     getString(lifecycle, ["selectedEvidenceStrength", "selected_evidence_strength"]);
-  const controlInventoryComplete =
-    getBoolean(firstLayerChoices, ["controlInventoryComplete", "control_inventory_complete"]) === true;
+  const controlInventoryComplete = assessment
+    ? assessment.assessmentStatus === "complete" && assessment.coverage.status === "complete"
+    : getBoolean(firstLayerChoices, ["controlInventoryComplete", "control_inventory_complete"]) === true;
 
   return {
     acceptControlObserved,
@@ -4553,6 +4753,7 @@ function getConsentChoiceQualityEvidence(input: GdprEprivacyCoveragePolicyInput)
 }
 
 function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
   const evidence = getConsentChoiceQualityEvidence(input);
   const noticeGateEvidence = getFirstLayerNoticeGateEvidence(input);
   const missingEvidenceNeeded = [
@@ -4578,7 +4779,7 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
     ? ` Retained first-layer controls included ${formatInlineList(evidence.visibleChoiceLabels.slice(0, 4))}.`
     : "";
 
-  if (noticeGateEvidence.gateObserved) {
+  if (!consentControlAssessment && noticeGateEvidence.gateObserved) {
     return makeOutcome(
       "consent_choice_quality",
       "Gap observed",
