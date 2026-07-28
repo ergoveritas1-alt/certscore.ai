@@ -82,6 +82,9 @@ function diagnosticHeaders(route: string, requestId: string, headers?: HeadersIn
   nextHeaders.set("X-CertScore.ai-Pulse", "v1");
   nextHeaders.set("X-CertScore.ai-Route", route);
   nextHeaders.set("X-CertScore.ai-Request-Id", requestId);
+  nextHeaders.set("X-CertScore-Pulse", "v1");
+  nextHeaders.set("X-CertScore-Route", route);
+  nextHeaders.set("X-CertScore-Request-Id", requestId);
   return applyPulseCors(nextHeaders);
 }
 

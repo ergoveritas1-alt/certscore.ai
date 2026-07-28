@@ -212,7 +212,12 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /application\/json/);
   assert.equal(response.headers.get("x-certscore-pulse"), "v1");
+  assert.equal(response.headers.get("x-certscore.ai-pulse"), "v1");
+  assert.equal(response.headers.get("x-certscore.ai-route"), "discovery");
+  assert.match(response.headers.get("x-certscore.ai-request-id") ?? "", /.+/);
+  assert.equal(response.headers.get("x-certscore-pulse"), "v1");
   assert.equal(response.headers.get("x-certscore-route"), "discovery");
+  assert.match(response.headers.get("x-certscore-request-id") ?? "", /.+/);
   assert.match(response.headers.get("x-certscore-request-id") ?? "", /.+/);
 
   const body = await response.json();

@@ -83,6 +83,9 @@ export function GET(request: Request) {
     headers: {
       "Cache-Control": "no-store",
       "Content-Type": "application/json; charset=utf-8",
+      "X-CertScore.ai-Pulse": "v1",
+      "X-CertScore.ai-Route": "discovery",
+      "X-CertScore.ai-Request-Id": id,
       "X-CertScore-Pulse": "v1",
       "X-CertScore-Route": "discovery",
       "X-CertScore-Request-Id": id,
