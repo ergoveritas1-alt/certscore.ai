@@ -143,8 +143,8 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   if (!persistedReportProjectionReady && displayScanRecord.scan.status === "completed") {
     after(async () => {
       await persistScanReportProjection(displayScanRecord, {
-        snapshot: scanRecord.snapshot,
-        runtimeArtifacts: scanRecord.runtimeArtifacts
+        snapshot: displayScanRecord.snapshot,
+        runtimeArtifacts: displayScanRecord.runtimeArtifacts
       }).catch((error) => {
         console.error("Failed to refresh completed scan report projection", error);
       });

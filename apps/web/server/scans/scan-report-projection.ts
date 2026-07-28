@@ -154,11 +154,13 @@ function canonicalConsentAssessment(scanRecord: ScanDetailResponse): ConsentCont
   const runtimeArtifacts = record(scanRecord.runtimeArtifacts);
   const hybrid = record(runtimeArtifacts?.hybridRuntimeEvidence) ?? record(runtimeArtifacts?.hybrid_runtime_evidence);
   const candidates = [
-    record(scanRecord.snapshot)?.consent_control_assessment,
     runtimeArtifacts?.consentControlAssessment,
     runtimeArtifacts?.consent_control_assessment,
     hybrid?.consentControlAssessment,
     hybrid?.consent_control_assessment,
+    // The snapshot is a persisted projection and may contain an older valid
+    // assessment while a fresh typed runtime artifact is being materialized.
+    record(scanRecord.snapshot)?.consent_control_assessment,
   ];
   for (const candidate of candidates) {
     const parsed = consentControlAssessmentSchema.safeParse(candidate);

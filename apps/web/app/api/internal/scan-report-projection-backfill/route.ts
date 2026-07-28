@@ -68,8 +68,8 @@ export async function POST(request: Request) {
         if (!rawDetail) throw new Error("scan detail was unavailable");
         const materialized = await materializeLocalV2DagScanDetail(rawDetail, { requireBundle: false });
         await persistScanReportProjection(materialized, {
-          snapshot: rawDetail.snapshot,
-          runtimeArtifacts: rawDetail.runtimeArtifacts
+          snapshot: materialized.snapshot,
+          runtimeArtifacts: materialized.runtimeArtifacts
         });
         projected += 1;
       } catch (error) {

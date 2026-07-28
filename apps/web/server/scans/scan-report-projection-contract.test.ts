@@ -22,6 +22,10 @@ test("scan report projection requires the canonical v2 consent assessment", asyn
   assert.match(source, /consent_control_assessment/);
   assert.match(source, /consent_coverage_status/);
   assert.match(source, /consent_surface_status/);
+  assert.match(
+    source,
+    /runtimeArtifacts\?\.consentControlAssessment[\s\S]*record\(scanRecord\.snapshot\)\?\.consent_control_assessment/
+  );
 });
 
 test("Oxfam retained controls survive the persisted report boundary", () => {
