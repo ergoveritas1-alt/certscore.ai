@@ -476,10 +476,13 @@ export function selectPublicPulseFindingsFromUnifiedProjection(input: {
   const checklistFindings = (input.checklistFindings ?? []).filter(eligible);
   const checklistFindingIds = new Set(checklistFindings.map((finding) => finding.id));
   const canonicalFindings = input.findings.filter((finding) => eligible(finding) && !checklistFindingIds.has(finding.id));
+  const canonicalTopFindings = input.topFindings.filter(
+    (finding) => eligible(finding) && !checklistFindingIds.has(finding.id)
+  );
 
   return {
     allFindings: [...checklistFindings, ...canonicalFindings],
-    topFindings: checklistFindings.length > 0 ? checklistFindings : input.topFindings.filter(eligible)
+    topFindings: [...checklistFindings, ...canonicalTopFindings]
   };
 }
 

@@ -177,7 +177,8 @@ test("CNN typed first-layer evidence projects only the canonical decline gap", (
     "pre_consent_tracking_detected"
   ]);
   assert.deepEqual(selected.topFindings.map((finding) => finding.id), [
-    "regulatory_gap__gdpr_eprivacy__reject_all_path_availability"
+    "regulatory_gap__gdpr_eprivacy__reject_all_path_availability",
+    "pre_consent_tracking_detected"
   ]);
   assert.equal(selected.allFindings.some((finding) => neutralIds.has(finding.id)), false);
 });
