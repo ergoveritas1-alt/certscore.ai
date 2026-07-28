@@ -2251,6 +2251,61 @@ test("policy projection rejects empty fetched documents and audience-specific pr
   assert.deepEqual(summary.article13DisclosureTypesObserved, []);
 });
 
+test("summarizePolicySurfaces retains CNN's general WBD policy when its text mentions a child-specific policy", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const retainedPolicyText = [
+    "Warner Bros. Discovery Privacy Policy. This Privacy Policy explains how we collect, use, retain, share, and protect personal information when people use our services.",
+    "The controller determines the purposes and means of processing, and individuals may contact us about their privacy rights, legal basis, recipients, and international transfers.",
+    "Children's Privacy Policy. Services aimed at children have additional information for parents and legal guardians."
+  ].join(" ").repeat(24);
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "cnn-wbd-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://www.wbdprivacy.com/policycenter/b2c/",
+      normalizedUrl: "https://www.wbdprivacy.com/policycenter/b2c/",
+      finalUrl: "https://www.wbdprivacy.com/policycenter/b2c/",
+      status: "fetched",
+      documentEvaluationState: "usable",
+      title: "b2c | WBD Privacy Center",
+      linkText: "Privacy Policy",
+      textExcerpt: retainedPolicyText,
+      article13DisclosureSignals: [
+        {
+          disclosureType: "controller_contact",
+          status: "observed",
+          evidenceText: "The controller determines the purposes and means of processing.",
+          confidence: 0.9,
+          source: "deterministic"
+        },
+        {
+          disclosureType: "legal_basis",
+          status: "observed",
+          evidenceText: "We explain the lawful basis on which we rely to process personal information.",
+          confidence: 0.9,
+          source: "deterministic"
+        }
+      ]
+    },
+    {
+      observationId: "cnn-edition-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://edition.cnn.com/privacy",
+      status: "observed",
+      linkObservationState: "observed"
+    }
+  ] as never, "https://edition.cnn.com/");
+
+  const summary = summarizePolicySurfaces(surfaces, "cnn.com", {
+    discoveredPolicySurfaces: surfaces.map((row) => row.surface)
+  });
+
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.deepEqual(summary.article13DisclosureTypesObserved, ["controller_contact", "legal_basis"]);
+  assert.deepEqual(summary.privacyPolicyUrls, ["https://wbdprivacy.com/policycenter/b2c"]);
+});
+
 test("summarizePolicySurfaces prefers general privacy notices over cookie-specific surfaces for Article 13", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const surfaces = dedupePolicySurfaces([
@@ -4403,6 +4458,8 @@ test("materializeLocalV2DagScanDetail reconciles canonical redirects, CMP traffi
     const network = hybrid.networkSummary as Record<string, unknown>;
     const consent = detail.runtimeArtifacts?.consentSummary as Record<string, unknown>;
     const choices = detail.runtimeArtifacts?.firstLayerConsentChoices as Record<string, unknown>;
+    const consentAssessment = detail.runtimeArtifacts?.consentControlAssessment as Record<string, unknown>;
+    const consentAssessmentScan = consentAssessment.scan as Record<string, unknown>;
 
     assert.equal(detail.accessPostureSummary?.finalEffectiveUrl, "https://www.cira.ca/en/cybersecurity/");
     assert.deepEqual(navigation.redirectChain, ["https://d-zone.ca/", "https://www.cira.ca/en/cybersecurity/"]);
@@ -4412,6 +4469,7 @@ test("materializeLocalV2DagScanDetail reconciles canonical redirects, CMP traffi
     assert.equal(choices.nonEssentialDefaultsOff, true);
     assert.deepEqual(choices.rejectLabels, ["Reject Non-Essential"]);
     assert.equal((choices.screenshotRefs as unknown[]).length, 1);
+    assert.equal(consentAssessmentScan.scanId, base.scan.id);
     assert.deepEqual(detail.policyEnrichment.map((row) => row.pageUrl), ["https://cira.ca/en/privacy-policy"]);
   } finally {
     if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;

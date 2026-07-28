@@ -354,19 +354,47 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   const requiredChannels = unique(input.coverage?.requiredChannels ?? DEFAULT_REQUIRED_CHANNELS);
   const completedChannels = unique(input.coverage?.completedChannels ?? observations.flatMap((observation) => observation.completedChannels ?? []));
   const incompleteChannels = unique(input.coverage?.incompleteChannels ?? observations.flatMap((observation) => observation.incompleteChannels ?? []));
-  const completeInventory =
-    coverageStatus === "complete" &&
-    requiredChannels.every((channel) => completedChannels.includes(channel)) &&
-    incompleteChannels.length === 0 &&
+  const geometryComplete = input.geometry?.assessmentStatus === "complete";
+  const firstLayerObservationRetained = observations.some((observation) =>
+    observation.layerInspected === "first_layer" &&
+    (
+      observation.captureStatus === "observed" ||
+      observation.captureStatus === "no_evidence" ||
+      observation.controls.some((control) =>
+        (control.layer ?? observation.layerInspected) === "first_layer"
+      )
+    )
+  );
+  const consentEvidenceCoverageComplete =
+    !noGo &&
+    documentStatus === "matched" &&
+    geometryComplete &&
     (
       input.surface?.status === "not_observed" ||
-      observations.some((observation) =>
-        observation.layerInspected === "first_layer" &&
-        (observation.captureStatus === "observed" || observation.captureStatus === "no_evidence")
-      )
-    ) &&
+      firstLayerObservationRetained ||
+      (input.geometry?.candidates?.length ?? 0) > 0
+    );
+  // Consent-control completeness is about the retained first-layer consent
+  // inventory. A partial unrelated runtime lane must not erase a factual
+  // not-observed result when the consent inventory and geometry are complete.
+  const effectiveCoverageStatus = consentEvidenceCoverageComplete ? "complete" : coverageStatus;
+  const effectiveCompletedChannels = unique([
+    ...completedChannels,
+    ...(firstLayerObservationRetained ? ["dom_inventory" as const] : []),
+    ...(geometryComplete ? ["geometry" as const] : []),
+  ]);
+  const effectiveIncompleteChannels = consentEvidenceCoverageComplete ? [] : incompleteChannels;
+  const completeInventory = consentEvidenceCoverageComplete || (
+    coverageStatus === "complete" &&
+    requiredChannels.every((channel) => effectiveCompletedChannels.includes(channel)) &&
+    effectiveIncompleteChannels.length === 0 &&
     !noGo &&
-    documentStatus === "matched";
+    documentStatus === "matched" &&
+    (
+      input.surface?.status === "not_observed" ||
+      firstLayerObservationRetained
+    )
+  );
   const assessmentBlocked = noGo || documentStatus !== "matched";
   const surfaceStatus = assessmentBlocked
     ? "unknown"
@@ -374,10 +402,10 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
       ? "observed_actionable"
       : surfaceObserved
         ? "observed_non_actionable"
-        : input.surface?.status === "not_observed" || coverageStatus === "complete"
+        : input.surface?.status === "not_observed" || effectiveCoverageStatus === "complete"
           ? "not_observed"
           : "unknown";
-  if (!surfaceObserved && coverageStatus !== "complete") limitations.push({ code: "surface_inspection_incomplete", detail: "No complete pre-interaction surface inspection was retained.", affectedFields: ["surface", "accept", "reject", "options"] });
+  if (!surfaceObserved && effectiveCoverageStatus !== "complete") limitations.push({ code: "surface_inspection_incomplete", detail: "No complete pre-interaction surface inspection was retained.", affectedFields: ["surface", "accept", "reject", "options"] });
 
   const contradictionRows: ConsentControlAssessment["contradictions"] = [];
   if (actionable && input.surface?.status === "not_observed") {
@@ -418,7 +446,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   return consentControlAssessmentSchema.parse({
     artifactType: "consent_control_assessment",
     artifactVersion: "2.0",
-    assessmentStatus: assessmentBlocked || coverageStatus !== "complete" ? "limited" : "complete",
+    assessmentStatus: assessmentBlocked || effectiveCoverageStatus !== "complete" ? "limited" : "complete",
     scan: {
       scanId: input.scan.scanId,
       requestedUrl: input.scan.requestedUrl ?? null,
@@ -440,10 +468,10 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     },
     controls: firstLayerResults,
     coverage: {
-      status: assessmentBlocked ? "none" : coverageStatus,
+      status: assessmentBlocked ? "none" : effectiveCoverageStatus,
       requiredChannels,
-      completedChannels,
-      incompleteChannels,
+      completedChannels: effectiveCompletedChannels,
+      incompleteChannels: effectiveIncompleteChannels,
       reasonCodes: reasons,
     },
     evidence,

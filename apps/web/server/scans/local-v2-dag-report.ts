@@ -2754,7 +2754,6 @@ function isSpecializedPrivacySurfaceForDifferentAudience(
   const evidence = [
     row.surface.title,
     row.surface.linkText,
-    row.surface.textExcerpt,
     row.pageUrl,
     row.surface.normalizedUrl,
     row.surface.url,
@@ -4176,6 +4175,7 @@ function buildMaterializedLocalV2Detail(
       ...(providedScanNoGoAssessment?.reasonCodes ?? []),
     ]),
     requestedUrl: requestedDocumentUrl,
+    scanId: scanRecord.scan.id,
   });
   const policySurfaces = dedupePolicySurfaces(
     bundle.policySurfaceObservations ?? [],

@@ -33,8 +33,9 @@ import {
 } from "./scanners/policy-surface-scanner.js";
 import { startStaticFixtureServer, type StaticFixturePage } from "./test-fixtures/static-server.js";
 
-test("builds a bounded canonical www retry for apex-host policy notices", () => {
+test("builds a bounded canonical www retry for policy notices", () => {
   assert.equal(canonicalWwwPolicyUrlVariant("https://publisher.example/legal/privacy-policy"), "https://www.publisher.example/legal/privacy-policy");
+  assert.equal(canonicalWwwPolicyUrlVariant("https://edition.cnn.com/privacy"), "https://www.cnn.com/privacy");
   assert.equal(canonicalWwwPolicyUrlVariant("https://www.publisher.example/legal/privacy-policy"), null);
   assert.equal(canonicalWwwPolicyUrlVariant("http://publisher.example/legal/privacy-policy"), null);
 });

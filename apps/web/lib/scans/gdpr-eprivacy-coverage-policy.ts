@@ -6236,11 +6236,18 @@ function getPolicyArticle13DisclosureSignal(
     return null;
   }
   const sanitizedCandidates = candidates
-    .map((signal) => sanitizePolicyArticle13Signal(signal))
-    .filter((signal) => isPolicyDisclosureEvidenceUsable(
-      getString(signal, ["evidenceText", "evidence_text"]) ?? "",
-      disclosureType
-    ));
+    .map((signal) => {
+      const sanitized = sanitizePolicyArticle13Signal(signal);
+      const retainedSectionExcerpt = getString(sanitized, [
+        "selectedPolicySectionExcerpt",
+        "selected_policy_section_excerpt"
+      ]);
+      const evidenceForValidation = retainedSectionExcerpt ?? getString(sanitized, ["evidenceText", "evidence_text"]);
+      return isPolicyDisclosureEvidenceUsable(evidenceForValidation ?? "", disclosureType)
+        ? sanitized
+        : null;
+    })
+    .filter((signal): signal is Record<string, unknown> => Boolean(signal));
   if (sanitizedCandidates.length === 0) {
     return null;
   }

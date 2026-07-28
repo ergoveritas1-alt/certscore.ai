@@ -120,6 +120,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
   noGo: boolean;
   noGoReasonCodes?: string[];
   requestedUrl?: string | null;
+  scanId?: string | null;
 }): ConsentControlAssessment {
   const canonicalDocumentId = normalizedDocumentId(
     input.finalUrl ??
@@ -128,7 +129,9 @@ export function deriveMaterializedConsentControlAssessment(input: {
     input.bundle.url,
   );
   const requestedUrl = normalizedDocumentId(input.requestedUrl ?? input.bundle.url);
-  const retainedDocumentSnapshots = input.bundle.domSnapshots
+  const observationTimestamp = (observation: { observedAtMs?: unknown }) =>
+    typeof observation.observedAtMs === "number" ? observation.observedAtMs : 0;
+  const retainedDocumentSnapshots = (input.bundle.domSnapshots ?? [])
     .map((snapshot) => ({
       capturedAtMs: snapshot.capturedAtMs,
       documentId: normalizedDocumentId(snapshot.url),
@@ -138,16 +141,16 @@ export function deriveMaterializedConsentControlAssessment(input: {
     )
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs);
   const geometry = geometryInput(input.consentControlGeometryEvidence, canonicalDocumentId);
-  const observations: ConsentControlAssessmentInput["observations"] = input.bundle.consentUiObservations.map((observation) => {
+  const observations: ConsentControlAssessmentInput["observations"] = (input.bundle.consentUiObservations ?? []).map((observation) => {
     const observationDocumentId =
       retainedDocumentSnapshots
-        .filter((snapshot) => snapshot.capturedAtMs <= observation.observedAtMs)
+        .filter((snapshot) => snapshot.capturedAtMs <= observationTimestamp(observation))
         .at(-1)?.documentId ??
       (retainedDocumentSnapshots.length === 1 ? retainedDocumentSnapshots[0]?.documentId : null) ??
       null;
     return {
       observationId: observation.observationId,
-      observedAtMs: observation.observedAtMs,
+      observedAtMs: observationTimestamp(observation),
       likelyPresent: observation.likelyPresent,
       layerInspected: observation.layerInspected,
       documentId: observationDocumentId,
@@ -157,8 +160,8 @@ export function deriveMaterializedConsentControlAssessment(input: {
         ...(observation.captureDiagnostics?.timedOutChannels ?? []),
         ...(observation.captureDiagnostics?.failedChannels ?? []),
       ],
-      evidenceRefs: observation.evidenceRefs.map((reference) => reference.refId),
-      controls: observation.controls.flatMap((control) => {
+      evidenceRefs: (observation.evidenceRefs ?? []).map((reference) => reference.refId),
+      controls: (observation.controls ?? []).flatMap((control) => {
         const evidenceId = control.artifactRef ?? `${observation.observationId}:${control.label}`;
         const layer = control.layer ?? observation.layerInspected;
         const candidate: ConsentControlAssessmentCandidate = {
@@ -173,7 +176,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           layer,
           visible: control.visible,
           actionable: control.visible === true && control.actionType !== "other",
-          observedAtMs: observation.observedAtMs,
+          observedAtMs: observationTimestamp(observation),
           documentId: observationDocumentId,
           channels: observation.captureDiagnostics?.completedChannels,
           artifactRefs: control.artifactRef ? [control.artifactRef] : [],
@@ -251,7 +254,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
 
   return deriveConsentControlAssessment({
     scan: {
-      scanId: input.bundle.scanId,
+      scanId: input.scanId ?? input.bundle.scanId,
       requestedUrl,
       finalUrl: canonicalDocumentId,
       scanStatus: "completed",

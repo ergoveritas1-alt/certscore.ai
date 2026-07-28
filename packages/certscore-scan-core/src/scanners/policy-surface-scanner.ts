@@ -378,10 +378,14 @@ interface PolicyFetchDiagnosticsCollector {
 export function canonicalWwwPolicyUrlVariant(value: string) {
   try {
     const variant = new URL(value);
-    if (variant.protocol !== "https:" || variant.hostname.startsWith("www.") || variant.hostname.split(".").length !== 2) {
+    if (variant.protocol !== "https:" || variant.hostname.startsWith("www.")) {
       return null;
     }
-    variant.hostname = `www.${variant.hostname}`;
+    const registrableDomain = getRegistrableDomainFromUrl(variant.toString());
+    if (!registrableDomain || (variant.hostname !== registrableDomain && !variant.hostname.endsWith(`.${registrableDomain}`))) {
+      return null;
+    }
+    variant.hostname = `www.${registrableDomain}`;
     return variant.toString();
   } catch {
     return null;
@@ -5190,6 +5194,64 @@ export async function requestBoundedPolicyResponse(
   redirectsRemaining = 5,
 ): Promise<BoundedPolicyResponse> {
   throwIfAborted(signal);
+  try {
+    return await requestBoundedPolicyResponseWithFetch(url, signal, redirectsRemaining);
+  } catch (error) {
+    throwIfAborted(signal);
+    // Keep the lower-level transport as a bounded compatibility fallback for
+    // runtimes where fetch is unavailable or cannot establish a connection.
+    // HTTP responses are returned by the fetch path and are never promoted
+    // solely because the fallback transport behaves differently.
+    if (error instanceof TypeError || error instanceof Error) {
+      return requestBoundedPolicyResponseWithNodeTransport(url, signal, redirectsRemaining);
+    }
+    throw error;
+  }
+}
+
+async function requestBoundedPolicyResponseWithFetch(
+  url: string,
+  signal: AbortSignal,
+  redirectsRemaining: number,
+): Promise<BoundedPolicyResponse> {
+  const response = await fetch(url, {
+    headers: {
+      accept: "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,*/*;q=0.7",
+      "accept-encoding": "identity",
+      "accept-language": "en-US,en;q=0.8,de;q=0.7,fr;q=0.6,es;q=0.5,it;q=0.4,nl;q=0.3,pl;q=0.2",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+    },
+    redirect: "manual",
+    signal,
+  });
+  const location = response.headers.get("location");
+  if (response.status >= 300 && response.status < 400 && location && redirectsRemaining > 0) {
+    await response.body?.cancel().catch(() => undefined);
+    return requestBoundedPolicyResponseWithFetch(
+      new URL(location, url).toString(),
+      signal,
+      redirectsRemaining - 1,
+    );
+  }
+  const { body, truncated } = await readBoundedResponseBody(
+    response,
+    MAX_POLICY_TEXT_RESPONSE_BYTES,
+    signal,
+  );
+  return {
+    body,
+    finalUrl: response.url || url,
+    headers: response.headers,
+    status: response.status,
+    truncated,
+  };
+}
+
+async function requestBoundedPolicyResponseWithNodeTransport(
+  url: string,
+  signal: AbortSignal,
+  redirectsRemaining: number,
+): Promise<BoundedPolicyResponse> {
   const parsed = new URL(url);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error(`Unsupported policy URL protocol: ${parsed.protocol}`);

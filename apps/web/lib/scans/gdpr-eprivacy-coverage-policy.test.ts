@@ -2323,6 +2323,44 @@ test("Aruba official privacy PDF fixture supports all nine row-specific transpar
   }
 });
 
+test("uses retained section context to validate a compact Article 13 scanner signal", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [{
+          confidence: 0.9,
+          disclosureType: "controller_contact",
+          evidenceText: "... Controller ...",
+          selectedPolicySectionExcerpt:
+            "Controller/contact. Warner Bros. Discovery is the controller for this service. You can contact our privacy team at privacy@example.com with questions about this policy.",
+          selectedPolicySectionUrl: "https://www.wbdprivacy.com/policycenter/b2c/",
+          source: "deterministic",
+          status: "observed"
+        }],
+        policyTextExtractionHealth: {
+          extractedTextLength: 12_001,
+          minimumTextLengthRequired: 2_500,
+          policySurfaceObserved: true,
+          policyTextExtractionStatus: "ok",
+          policyUrlRetained: true
+        },
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 12_001,
+        privacyPolicyUrls: ["https://www.wbdprivacy.com/policycenter/b2c/"],
+        retainedPrivacyPolicyTextExcerpt: "A usable privacy policy was retained. ".repeat(400)
+      }
+    },
+    snapshot: { privacy_policy_present: true }
+  });
+
+  assert.equal(outcomes.controller_contact_disclosure?.status, "Observed");
+  assert.match(
+    retainedArticle13Signal(outcomes.controller_contact_disclosure!)?.selectedPolicySectionExcerpt ?? "",
+    /Warner Bros\. Discovery is the controller/i
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes rejects code/config excerpts as GDPR Transparency evidence", () => {
   const codePolicyText = ";this.gbar_={CONFIG:[[[0,\"www.gstatic.com\",null,\"0\"]]]};_.z=function(a,b){Object.defineProperties(a,b)};var rights=function(){return Object.keys({access:1,delete:1})}; Copyright The Closure Library; ".repeat(40);
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({

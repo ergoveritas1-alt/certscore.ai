@@ -229,6 +229,43 @@ test("deeper-layer controls do not become first-layer A/R/O", () => {
   assert.equal(assessment.evidence.length, 0);
 });
 
+test("partial unrelated runtime coverage does not erase a complete first-layer control inventory", () => {
+  const input = baseInput();
+  input.observations = [{
+    observationId: "cnn-first-layer",
+    observedAtMs: 300,
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    captureStatus: "incomplete",
+    controls: [
+      candidate({ evidenceId: "accept", intent: "accept", label: "Accept All", layer: "first_layer" }),
+      candidate({ evidenceId: "options", intent: "options", label: "Show Purposes", layer: "first_layer" }),
+    ],
+  }];
+  input.geometry = {
+    assessmentStatus: "complete",
+    documentId: "https://oxfam.org/en",
+    completedChannels: ["geometry"],
+    incompleteChannels: [],
+    candidates: [],
+  };
+  input.coverage = {
+    status: "limited",
+    requiredChannels: ["dom_inventory", "geometry"],
+    completedChannels: ["geometry"],
+    incompleteChannels: ["dom_inventory"],
+    reasonCodes: ["pre_consent_runtime_incomplete"],
+  };
+
+  const assessment = deriveConsentControlAssessment(input);
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.coverage.status, "complete");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+});
+
 test("geometry document mismatch does not erase bundle evidence", () => {
   const input = baseInput();
   input.observations = [{

@@ -11,21 +11,23 @@ function bundle(
     likelyPresent?: boolean;
     nonEssentialDefaultsOff?: boolean | null;
     precheckedOptionalPurposeCount?: number;
+    url?: string;
   } = {},
 ) {
+  const url = options.url ?? "https://oxfam.org/en";
   return {
     scanId: "scan-oxfam-fixture",
     schemaVersion: "2.0",
     completedAt: "2026-07-27T18:04:10.000Z",
-    url: "https://oxfam.org/en",
-    normalizedUrl: "https://oxfam.org/en",
+    url,
+    normalizedUrl: url,
     domSnapshots: [{
       artifactId: "dom-pre-consent",
       capturedAtMs: 6_500,
       consentStateAtTime: "pre_consent",
       pagePhase: "settled",
       path: "artifacts/dom-pre-consent.json",
-      url: "https://oxfam.org/en",
+      url,
     }],
     consentUiObservations: [{
       observationId: "consent-ui-pre-consent",
@@ -104,6 +106,79 @@ test("Oxfam A/R/O remains observed when a later same-document state is collapsed
   assert.equal(assessment.controls.accept.state, "observed");
   assert.equal(assessment.controls.reject.state, "observed");
   assert.equal(assessment.controls.options.state, "observed");
+});
+
+test("CNN retained geometry keeps an explicitly inventoried missing reject as not_observed", () => {
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([
+      {
+        actionType: "accept_all",
+        label: "Accept All",
+        matchedTerm: "accept all",
+        matchedLocale: "en",
+        visible: true,
+        layer: "first_layer",
+      },
+      {
+        actionType: "manage_preferences",
+        label: "Show Purposes, Opens the preference center dialog",
+        matchedTerm: "preference center",
+        matchedLocale: "en",
+        visible: true,
+        layer: "first_layer",
+      },
+    ], { captureStatus: "incomplete", url: "https://edition.cnn.com/" }),
+    consentControlGeometryEvidence: {
+      artifactVersion: "consent_control_geometry.v1",
+      pageUrl: "https://edition.cnn.com/",
+      observedAtMs: 0,
+      candidates: [
+        {
+          candidateId: "candidate_1",
+          actionType: "accept_all",
+          label: "Accept All",
+          layer: "first_layer",
+          enabled: true,
+          decisionStatus: "confirmed_visible",
+        },
+        {
+          candidateId: "candidate_2",
+          actionType: "manage_preferences",
+          label: "Show Purposes, Opens the preference center dialog",
+          layer: "first_layer",
+          enabled: true,
+          decisionStatus: "confirmed_visible",
+        },
+      ],
+      summary: {
+        firstLayerAccept: true,
+        firstLayerReject: false,
+        firstLayerOptions: true,
+        cmpDetected: true,
+        cmpName: "OneTrust",
+        confidence: 0.89,
+      },
+    },
+    consentSurfaceInspection: {
+      actionableControlObserved: true,
+      consentSurfaceObserved: true,
+      coverageStatus: "complete",
+      inspectionCompleted: true,
+      limitationKeys: ["pre_consent_runtime_incomplete"],
+      observedAtMs: 26_870,
+      outcome: "actionable_surface_observed",
+    },
+    finalUrl: "https://edition.cnn.com/",
+    noGo: false,
+    requestedUrl: "https://cnn.com/",
+  });
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.surface.status, "observed_actionable");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.coverage.status, "complete");
 });
 
 test("complete same-document no-surface coverage produces factual not-observed values", () => {
