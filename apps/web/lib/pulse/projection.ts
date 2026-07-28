@@ -412,10 +412,15 @@ function buildPulseReportSurface(input: {
     rows: reportableGdprRows
   });
   const gdprEprivacyScore = gdprEprivacyScoreAssessment.score;
-  const score = boundedScore(deriveCanonicalOverallScoreForReport({
+  const canonicalScore = deriveCanonicalOverallScoreForReport({
     checklistRows: gdprEprivacyChecklist,
     unifiedFindings: unifiedFindingPackets
-  }));
+  });
+  const persistedReportScore =
+    scanRecord.snapshot?.report_projection_status === "ready"
+      ? finiteNumber(scanRecord.snapshot.certscore_overall)
+      : null;
+  const score = boundedScore(persistedReportScore ?? canonicalScore);
   const customerScoreAssessment = {
     coverageConfidence: gdprEprivacyScoreAssessment.coverageConfidence,
     coverageRatio: gdprEprivacyScoreAssessment.coverageRatio,
