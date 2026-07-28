@@ -36,6 +36,7 @@ import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-scor
 import { meaningfulPolicySurfaceTitle, prioritizePublicPolicySurfaces } from "../scans/policy-enrichment-row";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
+import { withPersistedFirstLayerConsentEvidence } from "../../server/scans/scan-report-consent-projection";
 import {
   getKnownCmpVendorForHost,
   getKnownCmpVendorName,
@@ -1905,20 +1906,27 @@ function buildConfidence(findings: CertScoreFinding[], coverageStatus: string) {
 }
 
 export function buildPulseProjection(input: PulseProjectionInput) {
+  const hydratedScanRecord = {
+    ...input.scanRecord,
+    runtimeArtifacts: withPersistedFirstLayerConsentEvidence(
+      asRecord(input.scanRecord.runtimeArtifacts),
+      asRecord(input.scanRecord.snapshot)
+    ) as ScanDetailResponse["runtimeArtifacts"]
+  } as ScanDetailResponse;
   const generated = generatedAt();
-  const scan = input.scanRecord.scan;
+  const scan = hydratedScanRecord.scan;
   const domain = scan.domainHostname ?? safeHostname(input.requestedUrl) ?? "unknown";
-  const pulseNoGoState = buildPulseNoGoState(input.scanRecord.runtimeArtifacts);
+  const pulseNoGoState = buildPulseNoGoState(hydratedScanRecord.runtimeArtifacts);
   const noGoProjection = pulseNoGoState
     ? { resultDisposition: pulseNoGoState.resultDisposition, noGo: pulseNoGoState.noGo }
     : null;
   const effectiveScanStatus = pulseNoGoState?.scanStatus ?? scan.status;
-  const coverage = deriveCoverage(input.scanRecord);
-  const quality = assessPulseScanRecordQuality(input.scanRecord);
-  const packets = buildScanReportUnifiedFindings(input.scanRecord);
+  const coverage = deriveCoverage(hydratedScanRecord);
+  const quality = assessPulseScanRecordQuality(hydratedScanRecord);
+  const packets = buildScanReportUnifiedFindings(hydratedScanRecord);
   const reportSurface = buildPulseReportSurface({
     coverageLimited: coverage.status !== "complete",
-    scanRecord: input.scanRecord,
+    scanRecord: hydratedScanRecord,
     unifiedFindingPackets: packets
   });
   const executive = reportSurface.executive;
@@ -1929,10 +1937,10 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     coverageLimitedByNoGo,
     noGo: noGoProjection?.noGo,
     runtimeCookieRows: reportSurface.runtimeCookieRows,
-    scannedPageUrl: input.scanRecord.accessPostureSummary?.finalEffectiveUrl ?? `https://${scan.domainHostname}/`
+    scannedPageUrl: hydratedScanRecord.accessPostureSummary?.finalEffectiveUrl ?? `https://${scan.domainHostname}/`
   }));
-  const benchmark = input.scanRecord.domainBenchmark
-    ? `${input.scanRecord.domainBenchmark.industry} / ${input.scanRecord.domainBenchmark.estimatedRankLabel}`
+  const benchmark = hydratedScanRecord.domainBenchmark
+    ? `${hydratedScanRecord.domainBenchmark.industry} / ${hydratedScanRecord.domainBenchmark.estimatedRankLabel}`
     : null;
   const summary = buildSummary({
     benchmark,
@@ -1949,14 +1957,14 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     summary.riskLevel = "unknown";
   }
   const topFindingCount = topFindings.length;
-  const evidenceHighlights = buildEvidenceHighlights(input.scanRecord, reportSurface.trackerInventoryRows);
+  const evidenceHighlights = buildEvidenceHighlights(hydratedScanRecord, reportSurface.trackerInventoryRows);
   const counts = buildPulseCounts({
     allFindingCount: allFindings.length,
     evidenceHighlights,
     executiveIssueCount: topFindings.length,
     topFindings
   });
-  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.scanRecord.runtimeArtifacts);
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(hydratedScanRecord.runtimeArtifacts);
   const storageSummary = asRecord(recordValue(hybridRuntimeEvidence, "storageSummary"));
   const networkSummary = asRecord(recordValue(hybridRuntimeEvidence, "networkSummary"));
   const hasClassifiedRuntimeStorageRows = reportSurface.runtimeCookieRows.length > 0;
@@ -1968,8 +1976,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     ? countUnclassifiedNonEssentialPreconsentStorageRows(reportSurface.runtimeCookieRows)
     : 0;
   const storedPreConsentCookieCount = finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
-    finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
-    finiteNumber(recordValue(input.scanRecord.snapshot, "initialCookieCount"));
+    finiteNumber(recordValue(hydratedScanRecord.snapshot, "initial_cookie_count")) ??
+    finiteNumber(recordValue(hydratedScanRecord.snapshot, "initialCookieCount"));
   const storageMetricStatus = hasClassifiedRuntimeStorageRows
     ? unclassifiedPreConsentStorageCount > 0
       ? "partially_classified"
@@ -1985,7 +1993,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     ? nonEssentialPreConsentStorageCount
     : storedPreConsentCookieCount ??
       0;
-  const policySurfaces = projectedPolicySurfaceRows(input.scanRecord).map(({ type, url }) => ({
+  const policySurfaces = projectedPolicySurfaceRows(hydratedScanRecord).map(({ type, url }) => ({
     type,
     title: meaningfulPolicySurfaceTitle(type, url),
     url
@@ -2030,7 +2038,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
           ? "Storage was scanned and none was detected in the reported scope."
           : "Storage was observed in the reported scope.",
     totalStorageRecordsPresentBeforeRecordedConsent: reportSurface.runtimeCookieRows.length,
-    consentPlatform: deriveConsentPlatform(input.scanRecord, reportSurface.presentationSummary),
+    consentPlatform: deriveConsentPlatform(hydratedScanRecord, reportSurface.presentationSummary),
     trackerFootprint: {
       vendors: trackerFootprintBreakdown.providerFamilies,
       domains: trackerFootprintBreakdown.domains,
@@ -2113,12 +2121,12 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       pulseVersion: PULSE_VERSION,
       projectionVersion: PULSE_PROJECTION_VERSION,
       reportProjectionVersion:
-        typeof input.scanRecord.snapshot?.report_projection_version === "string"
-          ? input.scanRecord.snapshot.report_projection_version
+        typeof hydratedScanRecord.snapshot?.report_projection_version === "string"
+          ? hydratedScanRecord.snapshot.report_projection_version
           : null,
       reportProjectionSourceHash:
-        typeof input.scanRecord.snapshot?.report_projection_source_hash === "string"
-          ? input.scanRecord.snapshot.report_projection_source_hash
+        typeof hydratedScanRecord.snapshot?.report_projection_source_hash === "string"
+          ? hydratedScanRecord.snapshot.report_projection_source_hash
           : null,
       canonicalResolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
       generatedAt: generated,
