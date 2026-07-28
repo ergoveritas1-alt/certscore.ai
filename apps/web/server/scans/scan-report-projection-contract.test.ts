@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { deriveConsentControlAssessment } from "@certscore/contracts";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import {
   buildPersistedFirstLayerConsentEvidence,
@@ -13,7 +14,7 @@ const projectionPath = "apps/web/server/scans/scan-report-projection.ts";
 test("scan report projection requires the canonical v2 consent assessment", async () => {
   const source = await readFile(projectionPath, "utf8");
 
-  assert.match(source, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v4"/);
+  assert.match(source, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v5"/);
   assert.match(source, /Refusing to mark scan .* report projection ready before ConsentControlAssessment v2 is materialized/);
   assert.match(source, /assessment\.controls\.accept\.state === "observed"/);
   assert.match(source, /assessment\.controls\.reject\.state === "observed"/);
@@ -91,6 +92,123 @@ test("Oxfam retained controls survive the persisted report boundary", () => {
     outcomes.reject_all_path_availability?.evidenceRefs.join(" ") ?? "",
     /Accept only essential cookies/
   );
+});
+
+test("runtime-retained typed assessment hydrates CNN-style visual evidence into A/R/O", () => {
+  const url = "https://edition.cnn.com/";
+  const assessment = deriveConsentControlAssessment({
+    scan: {
+      scanId: "scan-cnn-visual-evidence",
+      requestedUrl: url,
+      finalUrl: url,
+      scanStatus: "completed"
+    },
+    document: {
+      canonicalDocumentId: url,
+      observedDocumentIds: [url],
+      identityStatus: "matched"
+    },
+    observations: [{
+      observationId: "cnn-retained-consent-surface",
+      observedAtMs: 1_000,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      documentId: url,
+      captureStatus: "observed",
+      completedChannels: ["dom_inventory", "geometry"],
+      controls: [
+        {
+          evidenceId: "accept-all",
+          actionType: "accept_all",
+          intent: "accept",
+          label: "Accept All",
+          layer: "first_layer",
+          visible: true,
+          actionable: true,
+          observedAtMs: 1_001,
+          documentId: url,
+          channels: ["dom_inventory", "geometry"],
+          artifactRefs: ["CanonicalEvidenceBundle.json"]
+        },
+        {
+          evidenceId: "show-purposes",
+          actionType: "manage_preferences",
+          intent: "options",
+          label: "Show Purposes",
+          layer: "first_layer",
+          visible: true,
+          actionable: true,
+          observedAtMs: 1_002,
+          documentId: url,
+          channels: ["dom_inventory", "geometry"],
+          artifactRefs: ["CanonicalEvidenceBundle.json"]
+        }
+      ]
+    }],
+    geometry: {
+      assessmentStatus: "complete",
+      documentId: url,
+      completedChannels: ["dom_inventory", "geometry"],
+      incompleteChannels: [],
+      candidates: []
+    },
+    surface: {
+      status: "observed_actionable",
+      firstObservedAtMs: 1_000,
+      lastObservedAtMs: 1_002,
+      evidenceRefs: ["CanonicalEvidenceBundle.json"]
+    },
+    coverage: {
+      status: "complete",
+      requiredChannels: ["dom_inventory", "geometry"],
+      completedChannels: ["dom_inventory", "geometry"],
+      incompleteChannels: []
+    },
+    source: {
+      bundleVersion: "cnn-visual-regression",
+      geometryVersion: "consent_control_geometry.v1",
+      computedAt: "2026-07-28T00:00:00.000Z"
+    }
+  });
+
+  const hydrated = withPersistedFirstLayerConsentEvidence(
+    { hybridRuntimeEvidence: { consentControlAssessment: assessment } },
+    null
+  );
+  assert.equal(hydrated?.consentSurfaceObserved, true);
+  assert.deepEqual(hydrated?.firstLayerConsentChoices, {
+    acceptControlObserved: true,
+    actionableControlInventoryRetained: true,
+    controls: [
+      {
+        actionType: "accept_all",
+        classifierReasonCodes: [],
+        classifierVariant: null,
+        label: "Accept All",
+        matchedLocale: null,
+        matchedTerm: null,
+        matchStrength: null,
+        semanticRole: null,
+        visible: true
+      },
+      {
+        actionType: "manage_preferences",
+        classifierReasonCodes: [],
+        classifierVariant: null,
+        label: "Show Purposes",
+        matchedLocale: null,
+        matchedTerm: null,
+        matchStrength: null,
+        semanticRole: null,
+        visible: true
+      }
+    ],
+    geometryAssessment: "complete",
+    layerInspected: "first_layer",
+    managePreferencesControlObserved: true,
+    rejectControlObserved: false,
+    visibleChoiceLabels: ["Accept All", "Show Purposes"]
+  });
 });
 
 test("Oxfam first-layer controls project canonically to A/R/O", () => {

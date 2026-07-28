@@ -17,7 +17,7 @@ import {
   projectFirstLayerConsentChoices
 } from "./scan-report-consent-projection";
 
-export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v4";
+export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v5";
 
 /**
  * The scan detail record already includes the scan_snapshots row. Once that

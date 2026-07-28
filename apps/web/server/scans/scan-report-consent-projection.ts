@@ -147,8 +147,30 @@ export function withPersistedFirstLayerConsentEvidence(
   runtimeArtifacts: Record<string, unknown> | null,
   snapshot: Record<string, unknown> | null
 ) {
-  const parsedAssessment = consentControlAssessmentSchema.safeParse(snapshot?.consent_control_assessment);
-  const assessment = parsedAssessment.success ? parsedAssessment.data : null;
+  const runtimeHybrid = runtimeArtifacts?.hybridRuntimeEvidence &&
+    typeof runtimeArtifacts.hybridRuntimeEvidence === "object" &&
+    !Array.isArray(runtimeArtifacts.hybridRuntimeEvidence)
+      ? runtimeArtifacts.hybridRuntimeEvidence as Record<string, unknown>
+      : runtimeArtifacts?.hybrid_runtime_evidence &&
+          typeof runtimeArtifacts.hybrid_runtime_evidence === "object" &&
+          !Array.isArray(runtimeArtifacts.hybrid_runtime_evidence)
+        ? runtimeArtifacts.hybrid_runtime_evidence as Record<string, unknown>
+        : null;
+  const assessmentCandidates = [
+    snapshot?.consent_control_assessment,
+    runtimeArtifacts?.consentControlAssessment,
+    runtimeArtifacts?.consent_control_assessment,
+    runtimeHybrid?.consentControlAssessment,
+    runtimeHybrid?.consent_control_assessment,
+  ];
+  let assessment: ConsentControlAssessment | null = null;
+  for (const candidate of assessmentCandidates) {
+    const parsed = consentControlAssessmentSchema.safeParse(candidate);
+    if (parsed.success) {
+      assessment = parsed.data;
+      break;
+    }
+  }
   const legacyEvidence = snapshot?.consent_control_evidence;
   const evidence = assessment
     ? assessmentCompatibilityEvidence(assessment)
@@ -157,16 +179,7 @@ export function withPersistedFirstLayerConsentEvidence(
     return runtimeArtifacts;
   }
 
-  const existingHybrid =
-    runtimeArtifacts?.hybridRuntimeEvidence &&
-    typeof runtimeArtifacts.hybridRuntimeEvidence === "object" &&
-    !Array.isArray(runtimeArtifacts.hybridRuntimeEvidence)
-      ? runtimeArtifacts.hybridRuntimeEvidence as Record<string, unknown>
-      : runtimeArtifacts?.hybrid_runtime_evidence &&
-          typeof runtimeArtifacts.hybrid_runtime_evidence === "object" &&
-          !Array.isArray(runtimeArtifacts.hybrid_runtime_evidence)
-        ? runtimeArtifacts.hybrid_runtime_evidence as Record<string, unknown>
-        : {};
+  const existingHybrid = runtimeHybrid ?? {};
   const hybridRuntimeEvidence = {
     ...existingHybrid,
     firstLayerConsentChoices: evidence,

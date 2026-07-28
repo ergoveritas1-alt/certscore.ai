@@ -37,6 +37,9 @@ test("admin summary persistence retains structured no-go evidence and scan-linke
   assert.match(scanDetailSource, /normalizedSnapshot\.scan_no_go_assessment/);
   assert.match(migrationSource, /add column if not exists tranco_rank integer/);
   assert.match(migrationSource, /add column if not exists scan_no_go_assessment jsonb/);
+  assert.match(scanDetailSource, /mergePolicyDisclosureSummaries/);
+  assert.match(scanDetailSource, /article13DisclosureSignals/);
+  assert.match(scanDetailSource, /gdprTransparencyTopics/);
 });
 
 test("API activity resolves authenticated owners and linked scan enrichment", async () => {

@@ -90,6 +90,41 @@ import { selectConfiguredCustomerGdprEprivacyScore } from "./customer-score-cuto
 import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
 import { withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-projection";
 
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function mergePolicyDisclosureSummaries(
+  existing: Record<string, unknown> | null,
+  incoming: Record<string, unknown> | null
+) {
+  if (!existing) return incoming;
+  if (!incoming) return existing;
+
+  const merged: Record<string, unknown> = { ...incoming, ...existing };
+  for (const key of [
+    "article13DisclosureSignals",
+    "article13_disclosure_signals",
+    "gdprTransparencyTopics",
+    "gdpr_transparency_topics",
+    "gdprTransparencyTopicCandidates",
+    "gdpr_transparency_topic_candidates",
+  ]) {
+    const values = [existing[key], incoming[key]].flatMap((value) =>
+      Array.isArray(value) ? value : []
+    );
+    if (values.length > 0) {
+      const deduped = values.filter((value, index, all) =>
+        all.findIndex((candidate) => JSON.stringify(candidate) === JSON.stringify(value)) === index
+      );
+      merged[key] = deduped.slice(0, 200);
+    }
+  }
+  return merged;
+}
+
 function normalizeTrackerScriptHostForDisplay(value: unknown) {
   if (typeof value !== "string" || value.trim().length === 0) {
     return null;
@@ -1232,15 +1267,33 @@ async function loadScanDetailRecord(input: {
           const transportSecuritySummary =
             browserExtensionMaterialization.hybridRuntimeEvidencePatch.transportSecuritySummary;
           const mergedHybridRecord = mergedHybrid as Record<string, unknown>;
-          const policyDisclosureSummary =
-            mergedHybridRecord.policySurfaceSummary ?? mergedHybridRecord.policy_surface_summary;
+          const existingPolicySummary =
+            recordValue(snapshotBackedRuntimeArtifacts?.policyDisclosureSummary) ??
+            recordValue(snapshotBackedRuntimeArtifacts?.policy_disclosure_summary) ??
+            recordValue(snapshotBackedRuntimeArtifacts?.policySurfaceSummary) ??
+            recordValue(snapshotBackedRuntimeArtifacts?.policy_surface_summary);
+          const extensionPolicySummary =
+            recordValue(mergedHybridRecord.policySurfaceSummary) ??
+            recordValue(mergedHybridRecord.policy_surface_summary);
+          const policyDisclosureSummary = mergePolicyDisclosureSummaries(
+            existingPolicySummary,
+            extensionPolicySummary
+          );
 
           return {
             ...(snapshotBackedRuntimeArtifacts ?? {}),
             consent_baseline_tracker_evidence_urls: browserExtensionMaterialization.preconsentTrackerEvidenceUrls,
             consent_baseline_tracker_vendor_names: browserExtensionMaterialization.preconsentTrackerVendors,
             consent_preconsent_violation_count: browserExtensionMaterialization.preconsentViolationCount,
-            hybrid_runtime_evidence: mergedHybrid,
+            hybrid_runtime_evidence: {
+              ...mergedHybrid,
+              ...(policyDisclosureSummary
+                ? {
+                    policySurfaceSummary: policyDisclosureSummary,
+                    policy_surface_summary: policyDisclosureSummary,
+                  }
+                : {}),
+            },
             initial_cookie_count: browserExtensionMaterialization.cookieCountTotal,
             policy_disclosure_summary: policyDisclosureSummary,
             policyDisclosureSummary,
