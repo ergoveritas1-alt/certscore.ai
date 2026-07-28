@@ -140,6 +140,29 @@ export function deriveMaterializedConsentControlAssessment(input: {
       snapshot.documentId !== null
     )
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs);
+  const hasTypedFirstLayerInventory = (input.bundle.consentUiObservations ?? []).some((observation) =>
+    observation.captureStatus === "observed" &&
+    observation.likelyPresent === true &&
+    observation.layerInspected === "first_layer" &&
+    (observation.captureDiagnostics?.timedOutChannels?.length ?? 0) === 0 &&
+    (observation.captureDiagnostics?.failedChannels?.length ?? 0) === 0 &&
+    observation.controls.length > 0 &&
+    observation.controls.every((control) =>
+      control.visible === true &&
+      control.actionType !== "other" &&
+      (control.layer ?? observation.layerInspected) === "first_layer"
+    )
+  );
+  // A consent UI observation can be retained without a DOM snapshot. When
+  // every retained pre-consent visual artifact points at the same document,
+  // use that URL only to bind the already-typed control inventory to the
+  // redirected document. Do not classify controls from the screenshot.
+  const retainedVisualDocumentIds = hasTypedFirstLayerInventory ? unique((input.bundle.screenshots ?? [])
+    .map((screenshot) => normalizedDocumentId(screenshot.url))
+    .filter((value): value is string => Boolean(value))) : [];
+  const singleRetainedVisualDocumentId = retainedVisualDocumentIds.length === 1
+    ? retainedVisualDocumentIds[0] ?? null
+    : null;
   const geometry = geometryInput(input.consentControlGeometryEvidence, canonicalDocumentId);
   const observations: ConsentControlAssessmentInput["observations"] = (input.bundle.consentUiObservations ?? []).map((observation) => {
     const observationDocumentId =
@@ -147,6 +170,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
         .filter((snapshot) => snapshot.capturedAtMs <= observationTimestamp(observation))
         .at(-1)?.documentId ??
       (retainedDocumentSnapshots.length === 1 ? retainedDocumentSnapshots[0]?.documentId : null) ??
+      singleRetainedVisualDocumentId ??
       null;
     return {
       observationId: observation.observationId,
@@ -226,6 +250,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
   ]);
   const observedDocumentIds = unique([
     ...retainedDocumentSnapshots.map((snapshot) => snapshot.documentId),
+    ...retainedVisualDocumentIds,
     ...observations.map((observation) => observation.documentId).filter((value): value is string => Boolean(value)),
     ...(geometry?.documentId ? [geometry.documentId] : []),
   ]);
@@ -236,13 +261,20 @@ export function deriveMaterializedConsentControlAssessment(input: {
       : canonicalDocumentId && observedDocumentIds.length > 0
         ? "matched"
         : "unknown";
+  const typedFirstLayerInventoryComplete = hasTypedFirstLayerInventory;
+  const requiredChannels = typedFirstLayerInventoryComplete ? ["dom_inventory" as const] : REQUIRED_CHANNELS;
   const coverageComplete =
     !input.noGo &&
     documentIdentityStatus === "matched" &&
-    inspection?.inspectionCompleted === true &&
-    inspection.coverageStatus === "complete" &&
-    REQUIRED_CHANNELS.every((channel) => completedChannels.includes(channel)) &&
-    incompleteChannels.length === 0;
+    (
+      typedFirstLayerInventoryComplete ||
+      (
+        inspection?.inspectionCompleted === true &&
+        inspection.coverageStatus === "complete" &&
+        REQUIRED_CHANNELS.every((channel) => completedChannels.includes(channel)) &&
+        incompleteChannels.length === 0
+      )
+    );
   const surfaceStatus =
     inspection?.outcome === "actionable_surface_observed"
       ? "observed_actionable"
@@ -276,7 +308,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
     },
     coverage: {
       status: input.noGo ? "none" : coverageComplete ? "complete" : "limited",
-      requiredChannels: REQUIRED_CHANNELS,
+      requiredChannels,
       completedChannels,
       incompleteChannels,
       reasonCodes: unique([

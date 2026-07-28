@@ -181,6 +181,102 @@ test("CNN retained geometry keeps an explicitly inventoried missing reject as no
   assert.equal(assessment.coverage.status, "complete");
 });
 
+test("CNN production artifact binds typed controls to the retained redirected screenshot document", () => {
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: {
+      scanId: "scan_1785253386257_cnn.com",
+      schemaVersion: "2.0",
+      completedAt: "2026-07-28T15:43:41.691Z",
+      url: "https://cnn.com/",
+      normalizedUrl: "https://cnn.com/",
+      domSnapshots: [],
+      consentUiObservations: [{
+        observationId: "consent_ui_pre_consent",
+        observedAtMs: 16_194,
+        captureStatus: "observed",
+        captureDiagnostics: {
+          completedChannels: [],
+          timedOutChannels: [],
+          failedChannels: [],
+        },
+        likelyPresent: true,
+        basis: ["first_layer", "rapid_consent_surface"],
+        layerInspected: "first_layer",
+        controls: [
+          {
+            label: "Accept All",
+            actionType: "accept_all",
+            visible: true,
+            layer: "first_layer",
+            matchedTerm: "accept all",
+            matchedLocale: "en",
+            matchStrength: "direct",
+            classifierReasonCodes: [],
+          },
+          {
+            label: "Show Purposes, Opens the preference center dialog",
+            actionType: "manage_preferences",
+            visible: true,
+            layer: "first_layer",
+            matchedTerm: "preference center",
+            matchedLocale: "en",
+            matchStrength: "direct",
+            classifierReasonCodes: [],
+          },
+        ],
+      }],
+      screenshots: [
+        {
+          artifactId: "screenshot-pre-consent-1",
+          capturedAtMs: 11_636,
+          captureMethod: "primary_viewport_fallback",
+          path: "screenshots/pre-consent-1.png",
+          url: "https://edition.cnn.com/",
+          pagePhase: "pre_consent",
+          consentStateAtTime: "pre_consent",
+        },
+        {
+          artifactId: "screenshot-pre-consent-2",
+          capturedAtMs: 29_670,
+          captureMethod: "primary_viewport_fallback",
+          path: "screenshots/pre-consent-2.png",
+          url: "https://edition.cnn.com/",
+          pagePhase: "pre_consent",
+          consentStateAtTime: "pre_consent",
+        },
+      ],
+    } as unknown as CanonicalEvidenceBundle,
+    consentSurfaceInspection: {
+      actionableControlObserved: true,
+      consentSurfaceObserved: true,
+      coverageStatus: "limited",
+      evidenceChannels: [
+        { channel: "viewport_screenshot", status: "observed" },
+        { channel: "page_script_inventory", status: "observed" },
+        { channel: "cmp_runtime", status: "observed" },
+        { channel: "dom_snapshot", status: "inspection_incomplete" },
+        { channel: "geometry", status: "inspection_incomplete" },
+      ],
+      inspectionCompleted: false,
+      limitationKeys: ["pre_consent_runtime_partial", "consent_surface_inspection_runtime_partial"],
+      observedAtMs: 16_194,
+      outcome: "actionable_surface_observed",
+    },
+    finalUrl: "https://edition.cnn.com/",
+    noGo: false,
+    requestedUrl: "https://cnn.com/",
+  });
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.document.identityStatus, "matched");
+  assert.deepEqual(assessment.document.observedDocumentIds, ["https://edition.cnn.com/"]);
+  assert.equal(assessment.surface.status, "observed_actionable");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.coverage.status, "complete");
+});
+
 test("complete same-document no-surface coverage produces factual not-observed values", () => {
   const assessment = deriveMaterializedConsentControlAssessment({
     bundle: bundle([], { captureStatus: "no_evidence", likelyPresent: false }),

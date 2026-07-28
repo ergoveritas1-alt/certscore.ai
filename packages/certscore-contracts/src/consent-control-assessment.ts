@@ -355,6 +355,18 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   const completedChannels = unique(input.coverage?.completedChannels ?? observations.flatMap((observation) => observation.completedChannels ?? []));
   const incompleteChannels = unique(input.coverage?.incompleteChannels ?? observations.flatMap((observation) => observation.incompleteChannels ?? []));
   const geometryComplete = input.geometry?.assessmentStatus === "complete";
+  const firstLayerObservationComplete = observations.some((observation) =>
+    observation.captureStatus === "observed" &&
+    observation.likelyPresent === true &&
+    observation.layerInspected === "first_layer" &&
+    (observation.incompleteChannels?.length ?? 0) === 0 &&
+    observation.controls.length > 0 &&
+    observation.controls.every((control) =>
+      control.visible === true &&
+      control.actionable === true &&
+      (control.layer ?? observation.layerInspected) === "first_layer"
+    )
+  );
   const firstLayerObservationRetained = observations.some((observation) =>
     observation.layerInspected === "first_layer" &&
     (
@@ -368,12 +380,21 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   const consentEvidenceCoverageComplete =
     !noGo &&
     documentStatus === "matched" &&
-    geometryComplete &&
+    (geometryComplete || firstLayerObservationComplete) &&
     (
       input.surface?.status === "not_observed" ||
       firstLayerObservationRetained ||
       (input.geometry?.candidates?.length ?? 0) > 0
     );
+  const typedInventoryCoverageComplete =
+    !noGo &&
+    documentStatus === "matched" &&
+    coverageStatus === "complete" &&
+    requiredChannels.length === 1 &&
+    requiredChannels[0] === "dom_inventory" &&
+    firstLayerObservationRetained &&
+    bundleEvidence.length > 0;
+  const completeConsentInventory = consentEvidenceCoverageComplete || typedInventoryCoverageComplete;
   // Consent-control completeness is about the retained first-layer consent
   // inventory. A partial unrelated runtime lane must not erase a factual
   // not-observed result when the consent inventory and geometry are complete.
@@ -383,8 +404,8 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     ...(firstLayerObservationRetained ? ["dom_inventory" as const] : []),
     ...(geometryComplete ? ["geometry" as const] : []),
   ]);
-  const effectiveIncompleteChannels = consentEvidenceCoverageComplete ? [] : incompleteChannels;
-  const completeInventory = consentEvidenceCoverageComplete || (
+  const effectiveIncompleteChannels = completeConsentInventory ? [] : incompleteChannels;
+  const completeInventory = completeConsentInventory || (
     coverageStatus === "complete" &&
     requiredChannels.every((channel) => effectiveCompletedChannels.includes(channel)) &&
     effectiveIncompleteChannels.length === 0 &&
