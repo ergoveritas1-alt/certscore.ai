@@ -33,7 +33,6 @@ import {
 import { projectAdminNoGo, selectAdminActivityStatus, selectAdminScanOutcome, type AdminNoGoProjection } from "./admin-no-go";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
 import { requirePlatformAdminContext } from "./platform-admin";
-import { selectConfiguredCustomerGdprEprivacyScore } from "../scans/customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
 import { shouldUseLocalV2DagScanTool } from "../scans/local-v2-dag-scan-config";
 import { withServerTiming } from "../performance/log-server-timing";
@@ -84,7 +83,7 @@ export type AdminScanListItem = {
   certscoreOverall: number | null;
   scoreCoverageConfidence: "high" | "medium" | "low" | "insufficient" | null;
   scoreCoverageRatio: number | null;
-  scoreLabel: "GDPR/ePrivacy evidence" | "GDPR/ePrivacy posture" | "Legacy scan score" | null;
+  scoreLabel: "GDPR/ePrivacy evidence" | "Legacy scan score" | null;
   scoreScoredAt: string | null;
   scoreSource: string | null;
   scoreVersion: string | null;
@@ -169,7 +168,7 @@ export type AdminOverviewRecentScan = {
   scanType: string;
   scanId: string;
   scanOutcome: string | null;
-  scoreLabel: "GDPR/ePrivacy posture" | "Legacy scan score" | null;
+  scoreLabel: "GDPR/ePrivacy evidence" | "Legacy scan score" | null;
   startedAt: string | null;
   status: string;
   topFindingCount: number | null;
@@ -248,7 +247,7 @@ export async function listAdminOverviewScans(limit = 10): Promise<AdminOverviewR
     scanId: row.scan_id,
     scanOutcome: row.scan_outcome,
     scoreLabel: row.score_source === "canonical.gdpr_eprivacy"
-      ? "GDPR/ePrivacy posture"
+      ? "GDPR/ePrivacy evidence"
       : row.certscore_overall !== null
         ? "Legacy scan score"
         : null,
@@ -299,7 +298,7 @@ export async function listAdminScansPage(
     runtimeArtifacts,
     scanRows
   } = scanPageData;
-  const [pulseAttributionRows, legacyScoreAssessmentMap, candidateScoreAssessmentMap] = await withServerTiming(
+  const [pulseAttributionRows, legacyScoreAssessmentMap] = await withServerTiming(
     "app.admin.scans.score-attribution",
     () => Promise.all([
       loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id), null),
@@ -307,10 +306,6 @@ export async function listAdminScansPage(
         scanIds: scanRows.map((scan) => scan.id),
         scoreKind: "gdpr_eprivacy_evidence"
       }),
-      loadLatestVersionedScoreAssessments({
-        scanIds: scanRows.map((scan) => scan.id),
-        scoreKind: "gdpr_eprivacy_posture"
-      })
     ])
   );
   const pulseAttributionMap = new Map(pulseAttributionRows.map((row) => [row.scan_id, row] as const));
@@ -400,11 +395,7 @@ export async function listAdminScansPage(
       snapshotVisualAccessReview: overviewSnapshot?.visual_access_review,
       scannerEvidenceMissing: runtimeArtifact?.scanner_evidence_missing ?? false
     });
-    const scoreSelection = selectConfiguredCustomerGdprEprivacyScore({
-      candidateAssessment: candidateScoreAssessmentMap.get(scan.id) ?? null,
-      legacyAssessment: legacyScoreAssessmentMap.get(scan.id) ?? null
-    });
-    const scoreAssessment = noGo.isNoGo ? null : scoreSelection.assessment;
+    const scoreAssessment = noGo.isNoGo ? null : legacyScoreAssessmentMap.get(scan.id) ?? null;
     const displayedScore = noGo.isNoGo
       ? null
       : overviewSnapshot?.certscore_overall ?? scoreAssessment?.scoreValue ?? null;
@@ -467,9 +458,9 @@ export async function listAdminScansPage(
       scoreCoverageConfidence: overviewSnapshot?.score_coverage_confidence as AdminScanListItem["scoreCoverageConfidence"] ?? scoreAssessment?.coverageConfidence ?? null,
       scoreCoverageRatio: overviewSnapshot?.score_coverage_ratio ?? scoreAssessment?.coverageRatio ?? null,
       scoreLabel: overviewSnapshot?.score_source === "canonical.gdpr_eprivacy"
-        ? "GDPR/ePrivacy posture"
+        ? "GDPR/ePrivacy evidence"
         : scoreAssessment
-          ? scoreSelection.label
+          ? "GDPR/ePrivacy evidence"
           : displayedScore !== null
             ? "Legacy scan score"
             : null,

@@ -185,10 +185,15 @@ export function isPendingScanStatus(status: string) {
 }
 
 export function buildLightweightScanStatusResponse(projection: ScanStatusProjection) {
+  // The detail page has a bounded materialization fallback for completed
+  // reports. Expose the same viewability contract to the client poller so it
+  // can reload into that fallback instead of waiting forever for persistence.
+  const reportViewable =
+    projection.reportReady || hasReportProjectionGraceElapsed(projection);
   return {
     domain: projection.domainHostname,
     browserExtensionNormalizationReady: projection.browserExtensionNormalizationReady,
-    reportReadiness: { status: projection.reportReady ? "ready" : "finalizing" },
+    reportReadiness: { status: reportViewable ? "ready" : "finalizing" },
     scan: {
       completedAt: projection.completedAt,
       createdAt: projection.createdAt,

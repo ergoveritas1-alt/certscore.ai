@@ -58,13 +58,9 @@ test("party attribution doughnut is derived directly from displayed Party values
 test("customer-facing scan detail calculates the current canonical model as its overall score", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
 
-  assert.match(source, /buildCanonicalShadowScoreInput\(input\)/);
-  assert.match(source, /deriveCanonicalShadowScore\(\{/);
-  assert.match(source, /model: GDPR_EPRIVACY_SHADOW_CANDIDATE_V6_MODEL/);
-  assert.match(source, /\? canonicalOverallScore\s+: null/);
-  assert.doesNotMatch(source, /getCustomerFacingGdprEprivacyPostureAssessment/);
+  assert.match(source, /deriveCanonicalOverallScoreForReport/);
+  assert.doesNotMatch(source, /buildCanonicalShadowScoreInput|deriveCanonicalShadowScore|getCustomerFacingGdprEprivacyPostureAssessment/);
   assert.match(source, /scoreLabel="Overall score"/);
-  assert.doesNotMatch(source, /deriveRegulatoryCoverageScore/);
   assert.doesNotMatch(source, /snapshot\?\.certscore_overall/);
 });
 

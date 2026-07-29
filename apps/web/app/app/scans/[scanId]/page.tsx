@@ -274,14 +274,15 @@ async function ScanDetailReportContent({
                 <DomainScanForm
                   allowLocalExtensionScan
                   allowRestrictedScanOptions={allowRestrictedScanOptions}
-                  buttonLabel="Scan"
-                  compact
-                  defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
-                  inputLabel="Scan another website"
-                  inputPlaceholder="Enter another site"
-                  mode="full"
-                  scanSource="dashboard"
-                />
+                buttonLabel="Scan"
+                compact
+                defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
+                inputLabel="Scan another website"
+                inputPlaceholder="Enter another site"
+                key={displayScanRecord.scan.id}
+                mode="full"
+                scanSource="dashboard"
+              />
               </div>
             </div>
           ) : null

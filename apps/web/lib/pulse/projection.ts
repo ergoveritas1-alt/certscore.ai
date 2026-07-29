@@ -35,7 +35,6 @@ import {
 import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
 import { meaningfulPolicySurfaceTitle, prioritizePublicPolicySurfaces } from "../scans/policy-enrichment-row";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
-import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
 import { withPersistedFirstLayerConsentEvidence } from "../../server/scans/scan-report-consent-projection";
 import {
   getKnownCmpVendorForHost,
@@ -412,10 +411,7 @@ function buildPulseReportSurface(input: {
     rows: reportableGdprRows
   });
   const gdprEprivacyScore = gdprEprivacyScoreAssessment.score;
-  const canonicalScore = deriveCanonicalOverallScoreForReport({
-    checklistRows: gdprEprivacyChecklist,
-    unifiedFindings: unifiedFindingPackets
-  });
+  const canonicalScore = gdprEprivacyScoreAssessment.score;
   const persistedReportScore =
     scanRecord.snapshot?.report_projection_status === "ready"
       ? finiteNumber(scanRecord.snapshot.certscore_overall)
@@ -428,7 +424,7 @@ function buildPulseReportSurface(input: {
     scoreSource: stringValue(scanRecord.snapshot?.score_source) ?? "canonical.gdpr_eprivacy",
     scoreStatus: score === null ? "withheld" as const : "scored" as const,
     scoreValue: score,
-    scoreVersion: stringValue(scanRecord.snapshot?.score_version) ?? "gdpr-eprivacy-canonical-shadow-v6",
+    scoreVersion: stringValue(scanRecord.snapshot?.score_version) ?? "gdpr-eprivacy-evidence.legacy-v1",
     withholdingReason: score === null ? "canonical_overall_score_unavailable" : null
   };
   const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerInventoryRows);

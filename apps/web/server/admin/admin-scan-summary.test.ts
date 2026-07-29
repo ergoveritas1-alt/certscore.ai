@@ -78,8 +78,7 @@ test("API activity derives terminal state and score from canonical scan records"
   assert.match(source, /when s\.status in \('completed', 'failed'\)/);
   assert.match(source, /effective_status in \('completed', 'completed_limited'\)/);
   assert.match(source, /loadLatestVersionedScoreAssessments/);
-  assert.match(source, /selectConfiguredCustomerGdprEprivacyScore/);
-  assert.match(source, /score: selection\.assessment\.scoreValue/);
+  assert.match(source, /score: assessment\.scoreValue/);
 });
 
 test("completion materialization persists the admin summary before acknowledging success", async () => {

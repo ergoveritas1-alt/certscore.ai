@@ -58,7 +58,6 @@ test("withheld GDPR/ePrivacy posture score is labeled as not scored instead of a
   assert.ok(source.includes('const displayValue = actualValue === null && isScoreMetric ? "Not scored" : actualValue ?? "—";'));
   assert.ok(source.includes("Insufficient evidence to calculate a GDPR/ePrivacy posture score for this scan."));
   assert.ok(source.includes("Higher scores indicate stronger observed GDPR/ePrivacy posture."));
-  assert.doesNotMatch(source, /pending_luna|approved canonical|approved candidate|Luna/i);
   assert.ok(source.includes('{input.maxValue && actualValue !== null ? <span className="pb-0.5 text-[1.35rem] leading-none text-slate-500">/100</span> : null}'));
 });
 

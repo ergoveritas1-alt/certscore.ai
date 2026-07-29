@@ -86,7 +86,6 @@ import {
   buildScanExecutionProvenance,
   type ScanExecutionProvenanceRecord
 } from "./scan-execution-provenance";
-import { selectConfiguredCustomerGdprEprivacyScore } from "./customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
 import { withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-projection";
 
@@ -1468,23 +1467,13 @@ async function loadScanDetailRecord(input: {
         organizationId: scanOrganizationId,
         scanId: input.scanId
       });
-  const [legacyScoreAssessmentMap, candidateScoreAssessmentMap] = await Promise.all([
-    loadLatestVersionedScoreAssessments({
-      scanIds: [input.scanId],
-      scoreKind: "gdpr_eprivacy_evidence"
-    }),
-    loadLatestVersionedScoreAssessments({
-      scanIds: [input.scanId],
-      scoreKind: "gdpr_eprivacy_posture"
-    })
-  ]);
-  const customerGdprEprivacyScoreSelection = selectConfiguredCustomerGdprEprivacyScore({
-    candidateAssessment: candidateScoreAssessmentMap.get(input.scanId) ?? null,
-    legacyAssessment: legacyScoreAssessmentMap.get(input.scanId) ?? null
+  const legacyScoreAssessmentMap = await loadLatestVersionedScoreAssessments({
+    scanIds: [input.scanId],
+    scoreKind: "gdpr_eprivacy_evidence"
   });
 
   return {
-    customerGdprEprivacyScoreSelection,
+    legacyScoreAssessment: legacyScoreAssessmentMap.get(input.scanId) ?? null,
     accessPostureSummary: {
       accessPostureClass: accessPostureSummary.accessPostureClass,
       highestSuccessfulTier,

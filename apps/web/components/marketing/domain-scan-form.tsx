@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Input } from "@website-signal-risk-scanner/ui";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
 import { CERTSCORE_CHROME_EXTENSION_STORE_URL } from "../../lib/browser-extension";
@@ -359,6 +359,7 @@ export function DomainScanForm({
   emptySubmitDomain = "",
   helperText,
   inputLabel = "Website domain",
+  inputPlaceholder,
   mode = "preview",
   requestSource,
   sampleDomains = [],
@@ -366,6 +367,8 @@ export function DomainScanForm({
   variant = "default"
 }: DomainScanFormProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const canUseLocalExtensionScan = allowLocalExtensionScan && allowRestrictedScanOptions;
   const allowedDefaultScanFrom = restrictLocalExtensionScanFrom({
     allowLocalExtensionScan,
@@ -384,12 +387,32 @@ export function DomainScanForm({
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
   const [scanFrom, setScanFrom] = useState<ScanFrom>(allowedDefaultScanFrom);
   const [heroPlaceholder, setHeroPlaceholder] = useState(HERO_IDLE_PLACEHOLDER);
+  const staticPlaceholder = inputPlaceholder ?? HERO_IDLE_PLACEHOLDER;
   const isSubmittingRef = useRef(false);
   const scanProgress = useScanProgressClock(isSubmitting);
+  const recentScanReusedFromUrl = searchParams.get("recentScanReused") === "1";
   const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
   const scanButtonArmed = isValidScanTarget(effectiveSubmitDomain);
   const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
   const expectsRecentScanReuse = shouldExpectRecentScanReuse({ freshRescan, hasRecentReusableScan, mode });
+
+  useEffect(() => {
+    if (!recentScanReusedFromUrl) {
+      return;
+    }
+
+    setErrorMessage(RECENT_SCAN_REUSED_MESSAGE);
+    setMessageTone("info");
+  }, [recentScanReusedFromUrl]);
+
+  useEffect(() => {
+    if (!pathname.startsWith("/app/scans/") || recentScanReusedFromUrl) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setMessageTone("error");
+  }, [pathname, recentScanReusedFromUrl]);
 
   useEffect(() => {
     if (typeof window === "undefined" || window.location.pathname.startsWith("/scan/") || window.location.pathname.startsWith("/app/scans/")) {
@@ -444,6 +467,10 @@ export function DomainScanForm({
   }, [mode]);
 
   useEffect(() => {
+    if (variant !== "homepage-hero") {
+      return;
+    }
+
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setHeroPlaceholder(HERO_IDLE_PLACEHOLDER);
       return;
@@ -769,13 +796,11 @@ export function DomainScanForm({
         return;
       }
 
-      // Reused reports can navigate to the same scan-detail shell with only a
-      // query-string change, so the form may stay mounted across navigation.
-      // Clear its transient submit state before pushing that destination.
-      if (payload.reusedExistingScan) {
-        isSubmittingRef.current = false;
-        setIsSubmitting(false);
-      }
+      // Clear transient submit state before navigating to the result. This is
+      // important for fresh scans too: the report route can reuse this form
+      // instance while the new scan is being materialized.
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
 
       if (payload.scanId) {
         saveActiveScanSession({
@@ -832,7 +857,7 @@ export function DomainScanForm({
               setDomain(event.target.value);
               resetValidationState();
             }}
-            placeholder={heroPlaceholder}
+            placeholder={variant === "homepage-hero" ? heroPlaceholder : staticPlaceholder}
             type="text"
             value={domain}
             aria-label={inputLabel}
@@ -841,7 +866,7 @@ export function DomainScanForm({
             <div className={variant === "homepage-hero"
               ? `absolute ${isSubmitting ? "right-[10rem] sm:right-[10.5rem]" : "right-[8.75rem] sm:right-[9.25rem]"} top-1/2 -translate-y-1/2 scale-150`
               : compact
-              ? `absolute ${isSubmitting ? "right-[8.5rem]" : "right-[5.9rem]"} top-1/2 -translate-y-1/2`
+              ? `absolute ${isSubmitting ? "right-[8.5rem]" : "right-[5.9rem]"} top-1/2 z-10 -translate-y-1/2`
               : `absolute ${isSubmitting ? "right-[10.25rem]" : "right-[8rem]"} top-1/2 -translate-y-1/2`}>
               <ScanFromSelect
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
@@ -882,8 +907,8 @@ export function DomainScanForm({
                 ? `absolute right-1.5 top-1/2 h-11 ${isSubmitting ? "w-[8.5rem] sm:w-[9rem]" : "w-[118px] sm:w-[126px]"} -translate-y-1/2 rounded-[13px] border border-emerald-300/70 bg-[linear-gradient(135deg,#45c957_0%,#56bd58_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(34,197,94,0.28)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-emerald-300/40 sm:h-[52px] sm:text-base`
                 : compact
                 ? scanButtonArmed
-                  ? `absolute right-2 top-1/2 h-8 ${isSubmitting ? "w-[7.5rem]" : "min-w-[4.5rem]"} -translate-y-1/2 rounded-full border border-sky-600 bg-[linear-gradient(180deg,#38bdf8_0%,#0284c7_100%)] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_3px_0_0_rgba(3,105,161,0.55),0_10px_22px_-7px_rgba(14,165,233,0.7)] ring-1 ring-sky-300/70 transition-all duration-150 hover:-translate-y-[calc(50%+1px)] hover:scale-[1.03] hover:border-sky-500 hover:brightness-110 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_4px_0_0_rgba(3,105,161,0.5),0_13px_24px_-7px_rgba(14,165,233,0.8)] active:translate-y-[calc(-50%+1px)] active:scale-[0.99] active:shadow-[inset_0_2px_3px_rgba(3,105,161,0.4),0_1px_0_0_rgba(3,105,161,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 disabled:!opacity-100`
-                  : "absolute right-2 top-1/2 h-8 min-w-[4.5rem] -translate-y-1/2 rounded-full border border-sky-300 bg-[linear-gradient(180deg,#93c5fd_0%,#3b82f6_100%)] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_3px_0_0_rgba(29,78,216,0.4),0_8px_16px_-8px_rgba(37,99,235,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:ring-offset-2 disabled:!opacity-100"
+                  ? `scan-report-button scan-report-button-primary scan-form-button absolute right-2 top-1/2 z-20 h-8 ${isSubmitting ? "w-[7.5rem]" : "w-[4.5rem]"} -translate-y-1/2 rounded-full border border-sky-600 bg-[linear-gradient(180deg,#38bdf8_0%,#0284c7_100%)] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_3px_0_0_rgba(3,105,161,0.55),0_10px_22px_-7px_rgba(14,165,233,0.7)] ring-1 ring-sky-300/70 transition-[filter,box-shadow] duration-150 hover:-translate-y-1/2 hover:border-sky-500 hover:brightness-110 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_4px_0_0_rgba(3,105,161,0.5),0_13px_24px_-7px_rgba(14,165,233,0.8)] active:-translate-y-1/2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 disabled:!opacity-100`
+                  : "scan-report-button scan-report-button-primary absolute right-2 top-1/2 h-8 min-w-[4.5rem] -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(180deg,#38bdf8_0%,#0284c7_100%)] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_3px_0_0_rgba(3,105,161,0.55),0_10px_22px_-7px_rgba(14,165,233,0.7)] transition-[filter,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 disabled:!opacity-100"
                 : `absolute right-3 top-1/2 h-11 ${isSubmitting ? "w-[8.5rem]" : "w-[104px]"} -translate-y-1/2 rounded-xl border-0 bg-[linear-gradient(135deg,#47b54a_0%,#5ec158_58%,#7ccf79_100%)] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(71,181,74,0.16)] hover:brightness-[1.04]`
             }
             disabled={isSubmitting || !scanButtonArmed}

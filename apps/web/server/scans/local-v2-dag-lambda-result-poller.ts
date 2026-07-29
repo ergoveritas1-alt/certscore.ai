@@ -778,23 +778,18 @@ export async function recordLocalV2DagLambdaResultEvent(
     console.info(JSON.stringify({
       event: "scan.score_assessment.completion_persisted",
       legacyReason: scorePersistence.reason,
-      scanId: parsedMessage.scanId,
-      shadowModelVersion: "shadowModelVersion" in scorePersistence ? scorePersistence.shadowModelVersion : null,
-      shadowReason: "shadowReason" in scorePersistence ? scorePersistence.shadowReason : null
+      scanId: parsedMessage.scanId
     }));
   }
 }
 
 export function assertLocalV2DagCompletionScorePersistence(result: {
   reason: string;
-  shadowModelVersion?: string | null;
-  shadowReason?: string | null;
 }) {
   const legacyPersisted = result.reason === "inserted" || result.reason === "already_persisted";
-  const shadowPersisted = result.shadowReason === "inserted" || result.shadowReason === "already_persisted";
-  if (!legacyPersisted || !shadowPersisted || !result.shadowModelVersion) {
+  if (!legacyPersisted) {
     throw new Error(
-      `Completed scan score persistence is incomplete (legacy=${result.reason}, shadow=${result.shadowReason ?? "missing"}, model=${result.shadowModelVersion ?? "missing"}).`
+      `Completed scan score persistence is incomplete (legacy=${result.reason}).`
     );
   }
 }

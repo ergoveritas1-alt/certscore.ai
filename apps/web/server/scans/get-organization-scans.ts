@@ -10,7 +10,6 @@ import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homep
 import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveDisplayCreatedAt } from "./display-state";
-import { selectConfiguredCustomerGdprEprivacyScore } from "./customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
 import { projectAdminNoGo } from "../admin/admin-no-go";
 import {
@@ -379,16 +378,10 @@ async function loadOrganizationScans(
     signalCountMap,
     summaryScanIds
   } = await loadOrganizationScanPageData(organizationId, input);
-  const [legacyScoreAssessmentMap, candidateScoreAssessmentMap] = await Promise.all([
-    loadLatestVersionedScoreAssessments({
-      scanIds: scanRows.map((scan) => scan.id),
-      scoreKind: "gdpr_eprivacy_evidence"
-    }),
-    loadLatestVersionedScoreAssessments({
-      scanIds: scanRows.map((scan) => scan.id),
-      scoreKind: "gdpr_eprivacy_posture"
-    })
-  ]);
+  const legacyScoreAssessmentMap = await loadLatestVersionedScoreAssessments({
+    scanIds: scanRows.map((scan) => scan.id),
+    scoreKind: "gdpr_eprivacy_evidence"
+  });
 
   const domainMap = new Map(domains.map((domain) => [domain.id, domain]));
   const domainLastCompletedAtMap = new Map<string, string>();
@@ -512,10 +505,7 @@ async function loadOrganizationScans(
       startedAt: scan.started_at
     });
     const scanFromDisplay = getScanFromDisplay(scan.scan_config_json);
-    const scoreSelection = selectConfiguredCustomerGdprEprivacyScore({
-      candidateAssessment: candidateScoreAssessmentMap.get(scan.id) ?? null,
-      legacyAssessment: legacyScoreAssessmentMap.get(scan.id) ?? null
-    });
+    const scoreAssessment = legacyScoreAssessmentMap.get(scan.id) ?? null;
     const runtimeArtifact = runtimeArtifactMap.get(scan.id) ?? null;
     const noGo = projectAdminNoGo({
       accessPostureClass: normalizedAccessPosture.accessPostureClass,
@@ -527,15 +517,13 @@ async function loadOrganizationScans(
       visualAccessReview: runtimeArtifact?.visual_access_review ?? null,
       snapshotVisualAccessReview: overviewSnapshot?.visual_access_review ?? null
     });
-    const scoreAssessment = noGo.isNoGo
-      ? null
-      : scoreSelection.assessment;
+    const effectiveScoreAssessment = noGo.isNoGo ? null : scoreAssessment;
     const materializedScore = typeof overviewSnapshot?.certscore_overall === "number"
       ? overviewSnapshot.certscore_overall
       : null;
     const displayedScore = noGo.isNoGo
       ? null
-      : materializedScore ?? scoreAssessment?.scoreValue ?? null;
+      : materializedScore ?? effectiveScoreAssessment?.scoreValue ?? null;
     return {
         id: scan.id,
         domainActiveScanExists: latestDomainScan?.status === "queued" || latestDomainScan?.status === "running",
@@ -545,14 +533,14 @@ async function loadOrganizationScans(
           (domain?.last_scanned_at ?? scan.display_last_scanned_at ?? (displayDomainId ? domainLastCompletedAtMap.get(displayDomainId) : null)) ??
           null,
         certscoreOverall: displayedScore,
-        scoreCoverageConfidence: overviewSnapshot?.score_coverage_confidence as OrganizationScanListItem["scoreCoverageConfidence"] ?? scoreAssessment?.coverageConfidence ?? null,
-        scoreCoverageRatio: overviewSnapshot?.score_coverage_ratio ?? scoreAssessment?.coverageRatio ?? null,
+        scoreCoverageConfidence: overviewSnapshot?.score_coverage_confidence as OrganizationScanListItem["scoreCoverageConfidence"] ?? effectiveScoreAssessment?.coverageConfidence ?? null,
+        scoreCoverageRatio: overviewSnapshot?.score_coverage_ratio ?? effectiveScoreAssessment?.coverageRatio ?? null,
         scoreLabel: overviewSnapshot?.score_source === "canonical.gdpr_eprivacy"
           ? "GDPR/ePrivacy posture"
-          : scoreAssessment ? scoreSelection.label : null,
-        scoreScoredAt: overviewSnapshot?.score_scored_at ?? scoreAssessment?.scoredAt ?? null,
-        scoreSource: overviewSnapshot?.score_source ?? scoreAssessment?.scoreSource ?? null,
-        scoreVersion: overviewSnapshot?.score_version ?? scoreAssessment?.scoreVersion ?? null,
+          : effectiveScoreAssessment ? "GDPR/ePrivacy evidence" : null,
+        scoreScoredAt: overviewSnapshot?.score_scored_at ?? effectiveScoreAssessment?.scoredAt ?? null,
+        scoreSource: overviewSnapshot?.score_source ?? effectiveScoreAssessment?.scoreSource ?? null,
+        scoreVersion: overviewSnapshot?.score_version ?? effectiveScoreAssessment?.scoreVersion ?? null,
         regulatoryScore: noGo.isNoGo ? null : snapshot?.regulatory_exposure_score ?? null,
         privacyScore: noGo.isNoGo ? null : snapshot?.privacy_score ?? null,
         consentScore: noGo.isNoGo ? null : snapshot?.consent_score ?? null,

@@ -99,22 +99,17 @@ export type LocalV2DagLambdaResultPollerOptions = {
 };
 
 async function completedScanScoresExist(scanId: string) {
-  const row = await queryOne<{ legacy_exists: boolean; shadow_exists: boolean }>(
+  const row = await queryOne<{ legacy_exists: boolean }>(
     `select exists (
               select 1 from public.scan_score_assessments
                where scan_id = $1::uuid
                  and score_kind = 'gdpr_eprivacy_evidence'
                  and score_version = 'gdpr-eprivacy-evidence.legacy-v1'
-            ) as legacy_exists,
-            exists (
-              select 1 from public.scan_score_assessments
-               where scan_id = $1::uuid
-                 and score_kind = 'gdpr_eprivacy_risk_shadow'
-            ) as shadow_exists`,
+            ) as legacy_exists`,
     [scanId],
     { readOnly: true }
   );
-  return row?.legacy_exists === true && row.shadow_exists === true;
+  return row?.legacy_exists === true;
 }
 
 export async function ensureCompletedScanScoresPersisted(input: {
@@ -158,7 +153,7 @@ export async function ensureCompletedScanScoresPersisted(input: {
   }
   const result = await response.json() as { complete?: unknown };
   if (result.complete !== true || !(await completedScanScoresExist(input.scanId))) {
-    throw new Error("Score materialization endpoint did not confirm persisted legacy and shadow assessments.");
+    throw new Error("Score materialization endpoint did not confirm persisted legacy assessment.");
   }
   return { alreadyPersisted: false };
 }

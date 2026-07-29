@@ -24,8 +24,8 @@ export function PendingScanDetailView({
         </h1>
       </div>
       <ScanReportLoadingCard
-        description="We’re scanning the website and preparing the evidence report. This should only take a moment."
-        title="Preparing your report"
+        description="The scan is complete. We’re organizing the evidence into your report now, and it will open automatically when it’s ready."
+        title="Finishing your report"
       />
       <ScanStatusAutoRefresh
         pendingPostCompletionWork={pendingPostCompletionWork}

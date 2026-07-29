@@ -14,7 +14,6 @@ import { adminNoGoSql, projectAdminNoGo, selectAdminActivityStatus, selectAdminS
 import { loadCachedAdminScanFilterOptions } from "./admin-query-cache";
 import { normalizeAdminActivityFilter, parseAdminActivitySearch } from "../../lib/admin/activity-search";
 import { requirePlatformAdminContext } from "./platform-admin";
-import { selectConfiguredCustomerGdprEprivacyScore } from "../scans/customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
 import { shouldUseLocalV2DagScanTool } from "../scans/local-v2-dag-scan-config";
 import { withServerTiming } from "../performance/log-server-timing";
@@ -444,10 +443,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
 async function applyConfiguredScores(items: AdminPulseRequestListItem[]) {
   const scanIds = [...new Set(items.flatMap((item) => item.scanId ? [item.scanId] : []))];
   if (scanIds.length === 0) return items;
-  const [legacyScores, postureScores] = await Promise.all([
-    loadLatestVersionedScoreAssessments({ scanIds, scoreKind: "gdpr_eprivacy_evidence" }),
-    loadLatestVersionedScoreAssessments({ scanIds, scoreKind: "gdpr_eprivacy_posture" })
-  ]);
+  const legacyScores = await loadLatestVersionedScoreAssessments({ scanIds, scoreKind: "gdpr_eprivacy_evidence" });
   return items.map((item) => {
     if (!item.scanId) return item;
     if (item.noGoFlag) {
@@ -456,15 +452,12 @@ async function applyConfiguredScores(items: AdminPulseRequestListItem[]) {
     if (item.score !== null) {
       return item;
     }
-    const selection = selectConfiguredCustomerGdprEprivacyScore({
-      candidateAssessment: postureScores.get(item.scanId) ?? null,
-      legacyAssessment: legacyScores.get(item.scanId) ?? null
-    });
-    if (!selection.assessment) return item;
+    const assessment = legacyScores.get(item.scanId) ?? null;
+    if (!assessment) return item;
     return {
       ...item,
-      score: selection.assessment.scoreValue,
-      topFindingCount: selection.assessment.scoreValue === null ? null : item.topFindingCount
+      score: assessment.scoreValue,
+      topFindingCount: assessment.scoreValue === null ? null : item.topFindingCount
     };
   });
 }

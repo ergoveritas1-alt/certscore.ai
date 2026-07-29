@@ -310,7 +310,10 @@ export async function POST(request: Request) {
         })
       )
     );
-    const queuedScans = scans.filter((scan) => !scan.error && scan.scanId);
+    // Once a scan ID exists, the request was accepted and must never be
+    // reported as rejected-before-queueing. A later dispatch or bookkeeping
+    // error belongs to that scan's status/report flow.
+    const queuedScans = scans.filter((scan) => Boolean(scan.scanId));
 
     if (queuedScans.length === 0) {
       const error = scans.find((scan) => scan.error)?.error ?? "The full scan could not be started.";

@@ -594,30 +594,16 @@ test("local web poller records Lambda result before marking scan completed", asy
   assert.match(source, /pages_scanned = case when \$2::int = 0 then 0/);
 });
 
-test("completed Lambda results are not acknowledged without both immutable score projections", () => {
+test("completed Lambda results require only the active immutable score projection", () => {
   assert.doesNotThrow(() => assertLocalV2DagCompletionScorePersistence({
-    reason: "inserted",
-    shadowModelVersion: "candidate-v3",
-    shadowReason: "inserted"
+    reason: "inserted"
   }));
   assert.doesNotThrow(() => assertLocalV2DagCompletionScorePersistence({
-    reason: "already_persisted",
-    shadowModelVersion: "candidate-v3",
-    shadowReason: "already_persisted"
+    reason: "already_persisted"
   }));
   assert.throws(
     () => assertLocalV2DagCompletionScorePersistence({
-      reason: "scan_not_completed_or_missing",
-      shadowModelVersion: null,
-      shadowReason: null
-    }),
-    /score persistence is incomplete/
-  );
-  assert.throws(
-    () => assertLocalV2DagCompletionScorePersistence({
-      reason: "inserted",
-      shadowModelVersion: "candidate-v3",
-      shadowReason: "persistence_failed"
+      reason: "scan_not_completed_or_missing"
     }),
     /score persistence is incomplete/
   );

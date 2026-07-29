@@ -12,12 +12,8 @@ export const revalidate = 0;
 
 function complete(result: {
   reason: string;
-  shadowModelVersion?: string | null;
-  shadowReason?: string | null;
 }) {
-  return (result.reason === "inserted" || result.reason === "already_persisted") &&
-    (result.shadowReason === "inserted" || result.shadowReason === "already_persisted") &&
-    Boolean(result.shadowModelVersion);
+  return result.reason === "inserted" || result.reason === "already_persisted";
 }
 
 export async function POST(request: Request) {
@@ -38,9 +34,7 @@ export async function POST(request: Request) {
       scanId
     });
     if (!complete(result)) {
-      throw new Error(
-        `Score persistence incomplete (legacy=${result.reason}, shadow=${"shadowReason" in result ? result.shadowReason : "missing"}).`
-      );
+      throw new Error(`Score persistence incomplete (legacy=${result.reason}).`);
     }
     const adminSummary = await materializeAdminScanSummary(scanId, authorization.organizationId);
     if (!adminSummary) {
@@ -49,9 +43,7 @@ export async function POST(request: Request) {
     await completeScoreMaterializationRequest(scanId);
     return NextResponse.json({
       complete: true,
-      legacyReason: result.reason,
-      shadowModelVersion: "shadowModelVersion" in result ? result.shadowModelVersion : null,
-      shadowReason: "shadowReason" in result ? result.shadowReason : null
+      legacyReason: result.reason
     });
   } catch (error) {
     if (scanId && /^[0-9a-f-]{36}$/i.test(scanId)) {
