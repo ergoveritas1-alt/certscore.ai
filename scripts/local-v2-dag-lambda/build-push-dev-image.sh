@@ -15,6 +15,7 @@ push_runtime_base="${CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE:-false}"
 use_runtime_base="${CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE:-true}"
 build_cache_tag="${CERTSCORE_V2_DAG_LAMBDA_BUILD_CACHE_TAG:-buildcache}"
 runtime_base_cache_tag="${CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_CACHE_TAG:-runtime-base-cache}"
+skip_build_cache_push="${CERTSCORE_V2_DAG_LAMBDA_SKIP_BUILD_CACHE_PUSH:-false}"
 auth_only="${CERTSCORE_V2_DAG_LAMBDA_ECR_AUTH_ONLY:-false}"
 skip_ecr_login="${CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN:-false}"
 
@@ -109,6 +110,12 @@ EOF
     ;;
 esac
 
+build_cache_push_args=()
+case "${skip_build_cache_push}" in
+  1|true|TRUE|yes|YES) ;;
+  *) build_cache_push_args+=(--cache-to "type=registry,ref=${build_cache_image_uri},mode=max") ;;
+esac
+
 if [[ ${#runtime_base_build_args[@]} -gt 0 ]]; then
   docker buildx build \
     --platform "$platform" \
@@ -119,7 +126,7 @@ if [[ ${#runtime_base_build_args[@]} -gt 0 ]]; then
     --build-arg "BUILD_IMAGE_TAG=${build_image_tag}" \
     --build-arg "SCANNER_RUNTIME_VERSION=${scanner_runtime_version}" \
     --cache-from "type=registry,ref=${build_cache_image_uri}" \
-    --cache-to "type=registry,ref=${build_cache_image_uri},mode=max" \
+    "${build_cache_push_args[@]}" \
     -f "${repo_root}/apps/v2-dag-lambda/Dockerfile" \
     -t "$image_uri" \
     --push \
@@ -133,7 +140,7 @@ else
     --build-arg "BUILD_IMAGE_TAG=${build_image_tag}" \
     --build-arg "SCANNER_RUNTIME_VERSION=${scanner_runtime_version}" \
     --cache-from "type=registry,ref=${build_cache_image_uri}" \
-    --cache-to "type=registry,ref=${build_cache_image_uri},mode=max" \
+    "${build_cache_push_args[@]}" \
     -f "${repo_root}/apps/v2-dag-lambda/Dockerfile" \
     -t "$image_uri" \
     --push \

@@ -451,6 +451,7 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
           CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE: input.pushRuntimeBase ? "true" : "false",
           CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN: "true",
           CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE: useRuntimeBase ? "true" : "false",
+          CERTSCORE_V2_DAG_LAMBDA_SKIP_BUILD_CACHE_PUSH: "true",
           DOCKER_CONFIG: dockerConfigByRegion[SCANNER_BUILD_REGION]
         }
       });
