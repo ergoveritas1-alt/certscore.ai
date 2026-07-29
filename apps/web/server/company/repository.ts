@@ -140,10 +140,21 @@ export async function findCompanyBySlug(slug: string) {
   return queryOne<{ id: string }>("select id from organizations where slug = $1", [slug], { readOnly: true });
 }
 
+export async function findCompanyByName(name: string, excludeOrganizationId?: string) {
+  return queryOne<{ id: string }>(
+    `select id
+       from organizations
+      where lower(btrim(name)) = lower(btrim($1))
+        and ($2::uuid is null or id <> $2::uuid)`,
+    [name, excludeOrganizationId ?? null],
+    { readOnly: true }
+  );
+}
+
 export async function createCompany(input: { name: string; slug: string; userId?: string | null }) {
   const company = await queryOne<{ id: string }>(
-    `insert into organizations (name, slug)
-     values ($1, $2)
+    `insert into organizations (name, slug, plan)
+     values ($1, $2, 'team')
      returning id`,
     [input.name, input.slug]
   );
@@ -160,16 +171,32 @@ export async function createCompany(input: { name: string; slug: string; userId?
 }
 
 export async function addCompanyMembership(input: { organizationId: string; userId: string; role?: AssignableMembershipRole }) {
+  const existingMembership = await queryOne<{ organization_id: string }>(
+    `select organization_id
+       from organization_members
+      where user_id = $1`,
+    [input.userId],
+    { readOnly: true }
+  );
+  if (existingMembership) throw new Error("A user can belong to only one workspace.");
+
   const existing = await queryOne<{ count: number }>(
     `select count(*)::int as count from organization_members where organization_id = $1`,
     [input.organizationId]
   );
   const role = roleForNewCompanyMember(existing?.count ?? 0, input.role ?? "user");
-  await query(
-    `insert into organization_members (organization_id, user_id, role)
-     values ($1, $2, $3)`,
-    [input.organizationId, input.userId, role]
-  );
+  try {
+    await query(
+      `insert into organization_members (organization_id, user_id, role)
+       values ($1, $2, $3)`,
+      [input.organizationId, input.userId, role]
+    );
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      throw new Error("A user can belong to only one workspace.");
+    }
+    throw error;
+  }
   return role;
 }
 
@@ -217,4 +244,8 @@ export async function removeCompanyMembership(input: { organizationId: string; u
 
 export async function updateCompanyLogo(organizationId: string, logoStorageKey: string | null) {
   await query(`update organizations set logo_storage_key = $2 where id = $1`, [organizationId, logoStorageKey]);
+}
+
+export async function updateCompanyName(organizationId: string, name: string) {
+  await query(`update organizations set name = $2 where id = $1`, [organizationId, name]);
 }

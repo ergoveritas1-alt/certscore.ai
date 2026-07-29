@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { formatAdminDateTime } from "../../../lib/admin/date-time";
-import { getAdminScanOverviewMetrics, listAdminScans } from "../../../server/admin/list-admin-scans";
+import { getAdminScanOverviewMetrics, listAdminOverviewScans } from "../../../server/admin/list-admin-scans";
 import { getAdminUserOverview } from "../../../server/admin/list-admin-users";
 import { getMonitorSiteRequestCounts } from "../../../server/admin/list-monitor-site-requests";
 import { getAdminPulseOverviewCounts, listAdminPulseRequests } from "../../../server/admin/list-pulse-requests";
@@ -11,7 +11,7 @@ export default async function AdminOverviewPage() {
   const [userOverview, scans, scanMetrics, monitorRequestCounts, pulseCounts, pulseRequests] = await withServerTiming("app.admin.overview", () =>
     Promise.all([
       getAdminUserOverview({ limit: 8 }),
-      listAdminScans(10),
+      listAdminOverviewScans(10),
       getAdminScanOverviewMetrics(),
       getMonitorSiteRequestCounts(),
       getAdminPulseOverviewCounts(),
@@ -127,7 +127,7 @@ export default async function AdminOverviewPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {scans.slice(0, 8).map((scan) => (
-              <div key={scan.activityId} className="rounded-2xl border border-slate-200 p-4">
+              <div key={scan.scanId} className="rounded-2xl border border-slate-200 p-4">
                 <p className="font-medium text-slate-900">{scan.domainHostname ?? "Unknown domain"}</p>
                 <p className="text-sm text-slate-500">
                   {scan.organizationName ?? "Unknown workspace"} · {scan.scanType} · {scan.status} · Scan from {scan.scanFromLabel}
@@ -139,12 +139,12 @@ export default async function AdminOverviewPage() {
                 <p className="mt-1 text-xs text-slate-500">
                   {scan.completedAt && scan.startedAt
                     ? `${Math.max(0, (new Date(scan.completedAt).getTime() - new Date(scan.startedAt).getTime()) / 1000).toFixed(1)}s`
-                    : scan.status} · {formatAdminDateTime(scan.completedAt ?? scan.activityAt)}
+                    : scan.status} · {formatAdminDateTime(scan.completedAt ?? scan.startedAt)}
                 </p>
-                {scan.linkedScanId ? (
+                {scan.scanId ? (
                   <div className="mt-3">
                     <PendingButtonLink
-                      href={`/app/admin/scans/${scan.linkedScanId}`}
+                      href={`/app/admin/scans/${scan.scanId}`}
                       idleContent="Inspect snapshot"
                       pendingContent="Opening..."
                       prefetch={false}

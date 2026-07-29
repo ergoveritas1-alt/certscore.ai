@@ -9,7 +9,7 @@ type AdminLayoutProps = {
 const navItems = [
   { href: "/app/admin", label: "Overview" },
   { href: "/app/admin/users", label: "Users" },
-  { href: "/app/admin/companies", label: "Companies" },
+  { href: "/app/admin/companies", label: "Workspaces" },
   { href: "/app/admin/scans", label: "Scans" },
   { href: "/app/admin/pulse", label: "API activity" },
   { href: "/app/admin/monitor-requests", label: "Monitor Requests" }

@@ -118,6 +118,23 @@ export async function findOrganizationMembershipByUserId(
   }
 }
 
+export async function countAdvancedOrganizationMembers(organizationId: string): Promise<number> {
+  const row = await queryOne<{ count: string }>(
+    `select count(*)::text as count
+       from organization_members
+      where organization_id = $1
+        and role in ('advanced', 'admin')`,
+    [organizationId],
+    { readOnly: true }
+  );
+
+  return Number(row?.count ?? 0);
+}
+
+export async function deleteAppUserProfileById(userId: string): Promise<void> {
+  await queryOne(`delete from users where id = $1`, [userId]);
+}
+
 export async function createOrganization(input: {
   name: string;
   slug: string;

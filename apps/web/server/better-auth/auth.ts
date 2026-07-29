@@ -181,6 +181,9 @@ function createAuth(): BetterAuthInstance {
       google: getGoogleProviderConfig(env)
     },
     user: {
+      deleteUser: {
+        enabled: true
+      },
       fields: {
         createdAt: "created_at",
         emailVerified: "email_verified",

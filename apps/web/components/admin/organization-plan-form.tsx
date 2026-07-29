@@ -24,7 +24,7 @@ function PlanControls(props: Pick<OrganizationPlanFormProps, "defaultPlan" | "de
   return (
     <>
       <select
-        className="w-[108px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-wait disabled:opacity-60"
+        className="w-[96px] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 disabled:cursor-wait disabled:opacity-60"
         defaultValue={props.defaultPlan}
         disabled={pending}
         name="plan"
@@ -37,7 +37,7 @@ function PlanControls(props: Pick<OrganizationPlanFormProps, "defaultPlan" | "de
         ))}
       </select>
       <select
-        className="w-[128px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-wait disabled:opacity-60"
+        className="w-[110px] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 disabled:cursor-wait disabled:opacity-60"
         defaultValue={props.defaultPlanStatus}
         disabled={pending}
         name="planStatus"
@@ -57,7 +57,7 @@ export function OrganizationPlanForm({ action, defaultPlan, defaultPlanStatus, o
   const formKey = `${organizationId}:${defaultPlan}:${defaultPlanStatus}`;
 
   return (
-    <form action={action} className="grid items-start gap-2 md:grid-cols-[108px_128px]" key={formKey}>
+    <form action={action} className="grid items-start gap-1.5 md:grid-cols-[96px_110px]" key={formKey}>
       <input name="organizationId" type="hidden" value={organizationId} />
       <PlanControls defaultPlan={defaultPlan} defaultPlanStatus={defaultPlanStatus} />
     </form>

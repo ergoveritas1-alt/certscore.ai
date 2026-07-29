@@ -110,7 +110,8 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   if (!statusProjection) {
     notFound();
   }
-  if (isPendingScanStatus(statusProjection.status)) {
+  const waitingForReportProjection = statusProjection.status === "completed" && !statusProjection.reportReady;
+  if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
       <main className="min-h-screen bg-white">
         <SiteHeader />
@@ -118,10 +119,11 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
           <PendingScanDetailView
             createdAt={statusProjection.createdAt}
             domainHostname={statusProjection.domainHostname}
+            pendingPostCompletionWork={waitingForReportProjection}
             profile={statusProjection.profile}
             scanId={statusProjection.id}
             startedAt={statusProjection.startedAt}
-            status={statusProjection.status}
+            status={waitingForReportProjection ? "processing" : statusProjection.status}
           />
         </section>
         <SiteFooter />

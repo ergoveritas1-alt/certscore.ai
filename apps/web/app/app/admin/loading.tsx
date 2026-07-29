@@ -7,7 +7,7 @@ export default function AdminLoading() {
       </div>
 
       <nav aria-label="Admin sections" className="flex flex-wrap gap-2">
-        {["Overview", "Users", "Companies", "Scans", "API activity", "Monitor Requests"].map((label) => (
+        {["Overview", "Users", "Workspaces", "Scans", "API activity", "Monitor Requests"].map((label) => (
           <div key={label} className="h-9 w-24 animate-pulse rounded-full bg-slate-200" />
         ))}
       </nav>

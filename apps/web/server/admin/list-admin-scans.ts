@@ -41,6 +41,7 @@ import {
   loadCachedAdminScanFilterOptions,
   loadCachedAdminScanOverviewCounts
 } from "./admin-query-cache";
+import { query } from "@website-signal-risk-scanner/db";
 
 function scannerEgressFromScanConfig(scanConfig: Record<string, unknown> | null | undefined) {
   if (shouldUseLocalV2DagScanTool()) {
@@ -126,6 +127,7 @@ export type AdminScanListItem = {
   reuseWindowHours: number | null;
   rowKind: "scan" | "request";
   scanViewHref: string;
+  visualEvidenceHref: string | null;
   scanType: string;
   scanFromLabel: string;
   scanFromValue: string;
@@ -157,6 +159,23 @@ export type AdminScanOverviewMetrics = {
   totalScans: number;
 };
 
+export type AdminOverviewRecentScan = {
+  certscoreOverall: number | null;
+  cmpVendorName: string | null;
+  completedAt: string | null;
+  domainHostname: string | null;
+  organizationName: string | null;
+  scanFromLabel: string;
+  scanType: string;
+  scanId: string;
+  scanOutcome: string | null;
+  scoreLabel: "GDPR/ePrivacy posture" | "Legacy scan score" | null;
+  startedAt: string | null;
+  status: string;
+  topFindingCount: number | null;
+  privacyPolicyPresent: boolean | null;
+};
+
 export type BlockedRunTelemetry = {
   blockedCountByAsn: Array<{ asn: string; count: number }>;
   blockedCountByEgress: Array<{ egress: string; count: number }>;
@@ -174,6 +193,70 @@ export type AdminScanListTimeSpan = "all" | "4h" | "12h" | "24h" | "7d" | "31d";
 
 export async function listAdminScans(limit = 50, offset = 0, filters?: { email?: string | null; query?: string | null; status?: AdminScanListStatus }): Promise<AdminScanListItem[]> {
   return (await listAdminScansPage(limit, offset, filters)).items;
+}
+
+export async function listAdminOverviewScans(limit = 10): Promise<AdminOverviewRecentScan[]> {
+  await requirePlatformAdminContext();
+  const result = await query<{
+    certscore_overall: number | null;
+    cmp_vendor_name: string | null;
+    completed_at: string | null;
+    domain_hostname: string | null;
+    organization_name: string | null;
+    scan_config_json: Record<string, unknown> | null;
+    scan_id: string;
+    scan_outcome: string | null;
+    scan_type: string;
+    score_source: string | null;
+    started_at: string | null;
+    status: string;
+    top_finding_count: number | null;
+    privacy_policy_present: boolean | null;
+  }>(
+    `select s.id as scan_id,
+            s.status,
+            s.scan_type,
+            s.started_at,
+            s.completed_at,
+            s.scan_config_json,
+            d.hostname as domain_hostname,
+            org.name as organization_name,
+            ss.certscore_overall,
+            ss.top_finding_count,
+            ss.privacy_policy_present,
+            ss.cmp_vendor_name,
+            ss.scan_outcome,
+            ss.score_source
+       from public.scans s
+       left join public.domains d on d.id = s.domain_id
+       left join public.organizations org on org.id = s.organization_id
+       left join public.scan_snapshots ss on ss.scan_id = s.id
+      order by coalesce(s.completed_at, s.started_at, s.created_at) desc, s.created_at desc
+      limit $1`,
+    [Math.min(Math.max(limit, 1), 25)],
+    { readOnly: true }
+  );
+
+  return result.rows.map((row) => ({
+    certscoreOverall: row.certscore_overall,
+    cmpVendorName: row.cmp_vendor_name,
+    completedAt: row.completed_at,
+    domainHostname: row.domain_hostname,
+    organizationName: row.organization_name,
+    scanFromLabel: getScanFromDisplay(row.scan_config_json).label,
+    scanType: row.scan_type,
+    scanId: row.scan_id,
+    scanOutcome: row.scan_outcome,
+    scoreLabel: row.score_source === "canonical.gdpr_eprivacy"
+      ? "GDPR/ePrivacy posture"
+      : row.certscore_overall !== null
+        ? "Legacy scan score"
+        : null,
+    startedAt: row.started_at,
+    status: row.status,
+    topFindingCount: row.top_finding_count,
+    privacyPolicyPresent: row.privacy_policy_present
+  }));
 }
 
 export async function listAdminScansPage(
@@ -314,7 +397,8 @@ export async function listAdminScansPage(
       snapshotStopReasonCode: overviewSnapshot?.stop_reason_code,
       visualAccessReview: runtimeArtifact?.visual_access_review ?? overviewSnapshot?.visual_access_review,
       snapshotRuntimeAssessment: overviewSnapshot?.scan_no_go_assessment,
-      snapshotVisualAccessReview: overviewSnapshot?.visual_access_review
+      snapshotVisualAccessReview: overviewSnapshot?.visual_access_review,
+      scannerEvidenceMissing: runtimeArtifact?.scanner_evidence_missing ?? false
     });
     const scoreSelection = selectConfiguredCustomerGdprEprivacyScore({
       candidateAssessment: candidateScoreAssessmentMap.get(scan.id) ?? null,
@@ -349,6 +433,12 @@ export async function listAdminScansPage(
       requesterEmail: linkedRequest?.requester_email ?? pulseAttribution?.requester_email ?? null,
       requesterName: linkedRequest?.requester_name ?? pulseAttribution?.requester_name ?? null,
       scanViewHref: getAdminAuthenticatedScanHref(scan.id),
+      visualEvidenceHref: (() => {
+        const artifactId = runtimeArtifact?.visual_evidence_artifact_id ?? overviewSnapshot?.visual_evidence_artifact_id;
+        return artifactId
+          ? `/api/scans/${scan.id}/visual-evidence/${encodeURIComponent(artifactId)}`
+          : null;
+      })(),
       scanType: scan.scan_type,
       scanFromLabel: getScanFromDisplay(scan.scan_config_json).label,
       scanFromValue: getScanFromDisplay(scan.scan_config_json).value,
@@ -520,6 +610,7 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     scannerEgressProvider: linkedScan?.scannerEgressProvider ?? null,
     trancoRank: linkedScan?.trancoRank ?? null,
     scanViewHref: getAdminAuthenticatedScanHref(linkedScanId),
+    visualEvidenceHref: linkedScan?.visualEvidenceHref ?? null,
     source: request.request_channel,
     status: selectAdminActivityStatus({
       requestStatus: request.status,

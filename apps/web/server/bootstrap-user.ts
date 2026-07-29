@@ -56,7 +56,7 @@ function slugify(input: string) {
 }
 
 function getWorkspaceName(user: BootstrapSessionUser) {
-  return `${user.email ?? "New user"} workspace`;
+  return `SignalNest-${user.id.slice(0, 8)}`;
 }
 
 function getWorkspaceSlug(user: BootstrapSessionUser) {

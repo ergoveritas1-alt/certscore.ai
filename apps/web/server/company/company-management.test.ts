@@ -56,14 +56,60 @@ test("company invitations create passwordless accounts and send a password setup
   assert.doesNotMatch(settingsCompanyPage, /name="fullName"/);
 });
 
-test("company management navigation is limited to advanced company members", async () => {
+test("workspace management navigation is limited to platform admins", async () => {
   const shell = await readFile("apps/web/components/dashboard/app-shell.tsx", "utf8");
   const layout = await readFile("apps/web/app/app/layout.tsx", "utf8");
 
   assert.match(shell, /canManageCompany\?/);
-  assert.match(shell, /Manage company/);
+  assert.match(shell, /Manage workspace/);
   assert.match(shell, /\/app\/settings\/company/);
-  assert.match(layout, /getCompanyAccess\(\)/);
-  assert.match(layout, /membershipRole === "advanced"/);
-  assert.match(layout, /membershipRole === "admin"/);
+  assert.match(layout, /const canManageCompany = isPlatformAdmin/);
+});
+
+test("admin user deletion is protected and removes auth plus app records", async () => {
+  const action = await readFile("apps/web/server/admin/delete-user.ts", "utf8");
+  const page = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
+
+  assert.match(action, /requirePlatformAdminContext/);
+  assert.match(action, /userId === user\.id/);
+  assert.match(action, /isPlatformAdminEmail\(target\.email\)/);
+  assert.match(action, /advanced_member_count/);
+  assert.match(action, /delete from better_auth_users/);
+  assert.match(action, /delete from users/);
+  assert.match(page, /DeleteUserButton/);
+  assert.match(page, /deleteAdminUserFormAction/);
+});
+
+test("platform admins can assign unassigned users to a workspace", async () => {
+  const action = await readFile("apps/web/server/admin/assign-user-workspace.ts", "utf8");
+  const page = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
+
+  assert.match(action, /requirePlatformAdminContext/);
+  assert.match(action, /addCompanyMembership/);
+  assert.match(action, /organizationId/);
+  assert.match(action, /revalidatePath\("\/app\/admin\/users"\)/);
+  assert.match(page, /Assign workspace/);
+  assert.match(page, /assignUserWorkspaceFormAction/);
+});
+
+test("platform admins can send an existing user a password reset email", async () => {
+  const action = await readFile("apps/web/server/admin/send-user-password-reset.ts", "utf8");
+  const page = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
+  const auth = await readFile("apps/web/server/better-auth/auth.ts", "utf8");
+
+  assert.match(action, /requirePlatformAdminContext/);
+  assert.match(action, /findBetterAuthUserByEmail/);
+  assert.match(action, /sendPasswordSetupLink/);
+  assert.match(action, /password_reset_sent/);
+  assert.match(page, /Send reset link/);
+  assert.match(page, /Password reset email sent/);
+  assert.match(auth, /Reset your CertScore\.ai password/);
+});
+
+test("admin user activity counts are scoped to the user who submitted the scan", async () => {
+  const repository = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(repository, /scans\.submitted_by_user_id = selected_users\.id/);
+  assert.match(repository, /scans\.submitted_by_user_id = users\.id/);
+  assert.doesNotMatch(repository, /where scans\.organization_id = selected_memberships\.organization_id/);
 });

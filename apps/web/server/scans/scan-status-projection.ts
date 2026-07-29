@@ -65,11 +65,20 @@ const PROJECTION_SQL = `select s.id,
          nullif(s.scan_config_json ->> 'profile', ''),
          'standard'
        ) as profile
-       , exists (
-           select 1 from scan_events ready
-            where ready.scan_id = s.id
-              and ready.event_type in ('signals.merge_completed', 'findings.unified_derivation_completed')
-         ) as report_ready
+       , case
+           when s.scan_config_json ->> 'processor' = 'local-certscore-v2-dag-parallel-v1' then exists (
+             select 1 from scan_snapshots projection
+              where projection.scan_id = s.id
+                and projection.report_projection_status = 'ready'
+                and projection.report_projection_version = 'scan-report-projection-v6'
+                and projection.report_projection_computed_at is not null
+           )
+           else exists (
+             select 1 from scan_events ready
+              where ready.scan_id = s.id
+                and ready.event_type in ('signals.merge_completed', 'findings.unified_derivation_completed')
+           )
+         end as report_ready
        , exists (
            select 1 from scan_events normalized
             where normalized.scan_id = s.id

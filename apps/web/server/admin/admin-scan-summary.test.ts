@@ -166,6 +166,8 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   assert.match(pulseSource, /if \(item\.noGoFlag\)/);
   assert.match(repositorySource, /scan_no_go_assessment/);
   assert.match(repositorySource, /visual_access_review/);
+  assert.match(repositorySource, /scanner_evidence_missing/);
+  assert.match(repositorySource, /completed_scan_backfill/);
   assert.match(repositorySource, /from scans s\s+left join scan_snapshots ss on ss\.scan_id = s\.id\s+left join scan_runtime_artifacts sra on sra\.scan_id = s\.id/);
   assert.match(scansPage, /scan\.noGoFlag/);
   assert.match(scansPage, /label: "Tranco"/);

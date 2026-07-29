@@ -29,7 +29,7 @@ function normalizeFreshness(value: string | undefined): AdminScanListFreshness {
   return freshnesses.includes(value as AdminScanListFreshness) ? value as AdminScanListFreshness : "any";
 }
 function normalizeTimeSpan(value: string | undefined): AdminScanListTimeSpan {
-  return timeSpans.includes(value as AdminScanListTimeSpan) ? value as AdminScanListTimeSpan : "all";
+  return timeSpans.includes(value as AdminScanListTimeSpan) ? value as AdminScanListTimeSpan : "31d";
 }
 function normalizeAccess(value: string | undefined): AdminScanListAccess {
   return accessValues.includes(value as AdminScanListAccess) ? value as AdminScanListAccess : "any";
@@ -248,7 +248,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                     <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${freshness.className}`}>{freshness.label}</span></td>
                     <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700" title={scan.primaryLanguage ? `${scan.primaryLanguageConfidence ?? "unknown"} confidence · ${(scan.primaryLanguageSource ?? "unknown").replaceAll("_", " ")}` : "No reliable retained language evidence"}>{scan.primaryLanguage ?? "—"}</td>
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.industry ?? undefined}>{scan.industry ?? "—"}</td>
-                    <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 group-hover:bg-slate-50">{scan.linkedScanId && scan.scanViewHref ? <AdminScanActions compact scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} /> : <span className="text-slate-400">—</span>}</td>
+                    <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 group-hover:bg-slate-50">{scan.linkedScanId && scan.scanViewHref ? <AdminScanActions compact domainLabel={scan.domainHostname ?? scan.requestedUrl ?? "Scanned website"} scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} visualEvidenceHref={scan.visualEvidenceHref} /> : <span className="text-slate-400">—</span>}</td>
                   </tr>
                 );
               })}

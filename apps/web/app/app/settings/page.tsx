@@ -11,6 +11,7 @@ import { getDashboardScanUsage } from "../../../server/dashboard/get-dashboard-s
 import { getSystemHealth } from "../../../server/health/get-system-health";
 import { listIntegrationApiKeysForOrganization } from "../../../server/integrations/api-keys";
 import { getOrganizationSettings } from "../../../server/settings/get-organization-settings";
+import { deleteAccountFormAction } from "../../../server/settings/account-actions";
 import { loadSettingsActivity } from "../../../server/settings/repository";
 import {
   applyManualRescanLimitOverride,
@@ -104,9 +105,9 @@ export default async function SettingsPage() {
               <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">{formatPlanLabel(organization.plan)}</span>
             </div>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Manage scan defaults, account access, and your organization’s CertScore.ai capacity.</p>
-            <Link className="mt-4 inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-400" href="/app/settings/company">Manage company</Link>
+            {isPlatformAdmin ? <Link className="mt-4 inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-400" href="/app/settings/company">Manage workspace</Link> : null}
             <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500">
-              <span><strong className="font-semibold text-slate-700">Workspace</strong> {organization.name}</span>
+              {isPlatformAdmin ? <span><strong className="font-semibold text-slate-700">Workspace</strong> {organization.name}</span> : null}
               <span><strong className="font-semibold text-slate-700">Member since</strong> {formatDate(profile.created_at)}</span>
               <span><strong className="font-semibold text-slate-700">Status</strong> {formatPlanLabel(organization.planStatus)}</span>
               <span><strong className="font-semibold text-slate-700">Last login</strong> {formatDateTime(activity.last_login_at)}</span>
@@ -161,6 +162,21 @@ export default async function SettingsPage() {
           </Card>
         ) : null}
       </div>
+
+      <Card className="border border-rose-200 bg-rose-50/40 shadow-sm">
+        <CardHeader className="pb-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-rose-700">Danger zone</p>
+          <CardTitle>Delete account</CardTitle>
+          <p className="max-w-2xl text-sm leading-6 text-slate-600">Permanently remove your login, profile, and company membership. Company scans and workspace data will remain with the company.</p>
+        </CardHeader>
+        <CardContent>
+          <form action={deleteAccountFormAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="min-w-0 max-w-md flex-1 text-xs font-semibold text-slate-600">Enter your email to confirm<input autoComplete="email" className="mt-1 h-10 w-full rounded-lg border border-rose-200 bg-white px-3 text-sm font-normal" name="confirmationEmail" required type="email" /></label>
+            <button className="h-10 shrink-0 rounded-lg border border-rose-300 bg-white px-4 text-sm font-semibold text-rose-700 hover:bg-rose-100" type="submit">Delete my account</button>
+          </form>
+          <p className="mt-3 text-xs text-slate-500">Ensure there is at least one advanced company user before deleting your account.</p>
+        </CardContent>
+      </Card>
 
       {isPlatformAdmin ? (
         <section className="space-y-4 border-t border-slate-200 pt-6">

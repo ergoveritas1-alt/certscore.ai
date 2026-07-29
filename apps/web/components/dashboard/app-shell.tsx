@@ -139,6 +139,10 @@ function isItemActive(pathname: string, href: string) {
     return pathname === "/app";
   }
 
+  if (href === "/app/settings") {
+    return pathname === href;
+  }
+
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -167,7 +171,7 @@ export function AppShell({
     scanReportPathActive ? pathname : lastScanReportPath
   );
   const userInitial = userEmail.slice(0, 1).toUpperCase();
-  const displayOrganizationName = organizationName.replace(/\s+workspace$/i, "");
+  const displayOrganizationName = isPlatformAdmin ? organizationName.replace(/\s+workspace$/i, "") : "Your account";
   const displayPlan =
     plan === "free" ? "TRIAL" : plan === "individual" ? "STARTER" : plan === "pro" ? "PRO" : "CUSTOM";
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -179,7 +183,7 @@ export function AppShell({
         ? { ...item, href: scanViewHref }
         : item
     ),
-    ...(canManageCompany ? [{ href: "/app/settings/company", label: "Manage company", icon: CompanyIcon }] : []),
+    ...(canManageCompany ? [{ href: "/app/settings/company", label: "Manage workspace", icon: CompanyIcon }] : []),
     ...(isPlatformAdmin ? [{ href: "/app/admin", label: "Admin", icon: ShieldIcon }] : [])
   ];
 

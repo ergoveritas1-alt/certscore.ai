@@ -10,7 +10,7 @@ export type AdminNoGoProjection = {
   isNoGo: boolean;
   limitationKind: ScanNoGoLimitationKind | null;
   reason: string | null;
-  source: "snapshot" | "response" | "runtime_assessment" | "visual_review" | "access_posture" | "blocked" | "captcha" | null;
+  source: "snapshot" | "response" | "runtime_assessment" | "visual_review" | "access_posture" | "blocked" | "captcha" | "scanner_evidence" | null;
 };
 
 export type AdminNoGoProjectionInput = {
@@ -24,6 +24,7 @@ export type AdminNoGoProjectionInput = {
   snapshotStopReasonCode?: string | null;
   visualAccessReview?: JsonRecord;
   snapshotVisualAccessReview?: JsonRecord;
+  scannerEvidenceMissing?: boolean | null;
 };
 
 /**
@@ -147,6 +148,14 @@ export function projectAdminNoGo(input: AdminNoGoProjectionInput): AdminNoGoProj
   if (input.blockedFlag) {
     return { isNoGo: true, limitationKind: "scanner_access_limitation", reason: "Access blocked", source: "blocked" };
   }
+  if (input.scannerEvidenceMissing) {
+    return {
+      isNoGo: true,
+      limitationKind: "scanner_access_limitation",
+      reason: "No scanner evidence retained",
+      source: "scanner_evidence"
+    };
+  }
   return { isNoGo: false, limitationKind: null, reason: null, source: null };
 }
 
@@ -160,6 +169,7 @@ export function adminNoGoSql(input: {
   snapshotOutcome: string;
   snapshotStopReasonCode?: string;
   snapshotVisualAccessReview?: string;
+  scannerEvidenceMissing?: string;
   outcomesParameter?: string;
 }) {
   const responseDisposition = input.responseSummary
@@ -176,5 +186,6 @@ export function adminNoGoSql(input: {
     or ${input.accessPosture} = 'early_loss'
     or coalesce(${input.blockedFlag}, false)
     or coalesce(${input.captchaFlag}, false)
+    ${input.scannerEvidenceMissing ? `or ${input.scannerEvidenceMissing}` : ""}
   )`;
 }

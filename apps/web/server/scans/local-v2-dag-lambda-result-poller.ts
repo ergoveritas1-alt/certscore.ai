@@ -743,6 +743,31 @@ export async function recordLocalV2DagLambdaResultEvent(
     }
   }
   if (parsedMessage.status === "completed") {
+    // Build the persisted report read model before the status endpoint reports
+    // the scan as viewable. Otherwise the browser can navigate into the
+    // expensive request-time materialization path while this handoff is still
+    // finishing, which can surface as a transient origin/Cloudflare 502.
+    try {
+      const { getAnonymousScanById, getScanById } = await import("./get-scan-by-id");
+      const { materializeLocalV2DagScanDetail } = await import("./local-v2-dag-report");
+      const { persistScanReportProjection } = await import("./scan-report-projection");
+      const completedScan = context.organizationId
+        ? await getScanById({ organizationId: context.organizationId, scanId: parsedMessage.scanId })
+        : await getAnonymousScanById(parsedMessage.scanId);
+      if (completedScan) {
+        const materializedScan = await materializeLocalV2DagScanDetail(completedScan);
+        await persistScanReportProjection(materializedScan, {
+          snapshot: materializedScan.snapshot,
+          runtimeArtifacts: materializedScan.runtimeArtifacts
+        });
+      }
+    } catch (error) {
+      console.error(JSON.stringify({
+        event: "scan.report_projection.completion_persistence_failed",
+        scanId: parsedMessage.scanId,
+        error: error instanceof Error ? error.message : String(error)
+      }));
+    }
     const { persistCompletedLegacyGdprEprivacyAssessment } = await import("./score-assessment-lifecycle");
     const scorePersistence = await persistCompletedLegacyGdprEprivacyAssessment({
       organizationId: context.organizationId,

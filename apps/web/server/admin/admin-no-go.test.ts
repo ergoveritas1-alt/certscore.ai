@@ -51,6 +51,15 @@ test("operational access flags are a bounded final fallback", () => {
   assert.deepEqual(projectAdminNoGo({}), { isNoGo: false, limitationKind: null, reason: null, source: null });
 });
 
+test("completed recovery without scanner evidence is no-go", () => {
+  assert.deepEqual(projectAdminNoGo({ scannerEvidenceMissing: true }), {
+    isNoGo: true,
+    limitationKind: "scanner_access_limitation",
+    reason: "No scanner evidence retained",
+    source: "scanner_evidence"
+  });
+});
+
 test("legacy blocked outcomes still produce no-go status and specific outcome values", () => {
   const projection = projectAdminNoGo({
     snapshotOutcome: "reachability_blocked",

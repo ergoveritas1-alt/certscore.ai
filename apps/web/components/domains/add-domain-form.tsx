@@ -19,6 +19,8 @@ const initialState: CreateDomainActionState = {
 };
 
 const RECENT_SCAN_AVAILABILITY_CHECK_DELAY_MS = 350;
+const HERO_IDLE_PLACEHOLDER = "Enter website here:";
+const HERO_EXAMPLE_PLACEHOLDER = "yoursite.com";
 
 type AddDomainFormProps = {
   allowRestrictedScanOptions?: boolean;
@@ -56,6 +58,7 @@ export function AddDomainForm({
   const [apiHasRecentReusableScan, setApiHasRecentReusableScan] = useState(false);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [scanFrom, setScanFrom] = useState<ScanFrom>(defaultScanFrom);
+  const [placeholder, setPlaceholder] = useState(HERO_IDLE_PLACEHOLDER);
   const scanProgress = useScanProgressClock(isPending);
   const effectiveSubmitDomain = domain.trim();
   const normalizedDomain = normalizeDomainHint(effectiveSubmitDomain);
@@ -69,6 +72,54 @@ export function AddDomainForm({
       clearPendingScanStarted();
     }
   }, [state.error]);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setPlaceholder(HERO_IDLE_PLACEHOLDER);
+      return;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    function wait(durationMs: number) {
+      return new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, durationMs);
+      });
+    }
+
+    async function erase(value: string) {
+      for (let length = value.length - 1; length >= 0 && !cancelled; length -= 1) {
+        setPlaceholder(value.slice(0, length));
+        await wait(40);
+      }
+    }
+
+    async function type(value: string) {
+      for (let length = 1; length <= value.length && !cancelled; length += 1) {
+        setPlaceholder(value.slice(0, length));
+        await wait(90);
+      }
+    }
+
+    async function animatePlaceholder() {
+      await wait(3500);
+      while (!cancelled) {
+        await erase(HERO_IDLE_PLACEHOLDER);
+        await type(HERO_EXAMPLE_PLACEHOLDER);
+        await wait(3800);
+        await erase(HERO_EXAMPLE_PLACEHOLDER);
+        await type(HERO_IDLE_PLACEHOLDER);
+        await wait(6000);
+      }
+    }
+
+    void animatePlaceholder();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (!effectiveSubmitDomain || scanFrom === "local_extension") {
@@ -128,16 +179,16 @@ export function AddDomainForm({
         <div className="relative">
           <Input
             autoComplete="url"
-            className="h-16 rounded-[16px] border-[3px] border-sky-400 bg-white pl-6 pr-48 text-lg font-semibold text-slate-950 shadow-[0_0_0_1px_rgba(255,255,255,0.9),0_16px_42px_rgba(14,165,233,0.16)] placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-400/30"
+            className="h-12 rounded-[14px] border-2 border-sky-400 bg-white pl-4 pr-40 text-base font-semibold text-slate-950 shadow-[0_0_0_1px_rgba(255,255,255,0.9),0_10px_26px_rgba(14,165,233,0.12)] placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-400/30"
             id="domain"
             name="domain"
             onChange={(event) => setDomain(event.target.value)}
-            placeholder="example.com, yoursite.com"
+            placeholder={placeholder}
             required
             type="text"
             value={domain}
           />
-          <div className="absolute right-[8.75rem] top-1/2 -translate-y-1/2 scale-110">
+          <div className="absolute right-[6.75rem] top-1/2 -translate-y-1/2">
             <ScanFromSelect
               allowRestrictedScanOptions={allowRestrictedScanOptions}
               freshRescanValue={freshRescan}
@@ -150,22 +201,10 @@ export function AddDomainForm({
               value={scanFrom}
               variant="icon"
             />
-            <svg
-              aria-hidden="true"
-              className="pointer-events-none absolute -bottom-1.5 left-1/2 h-2 w-2 -translate-x-1/2 text-slate-500"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              viewBox="0 0 12 8"
-            >
-              <path d="m2 2 4 4 4-4" />
-            </svg>
           </div>
           <Button
-            aria-label="Scan now"
-            className="absolute right-1.5 top-1/2 h-12 w-[126px] -translate-y-1/2 rounded-[13px] border border-sky-300/70 bg-[linear-gradient(135deg,#38bdf8_0%,#0284c7_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(14,165,233,0.28)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-sky-300/40"
+            aria-label="Scan"
+            className="scan-report-button scan-report-button-primary absolute right-2 top-1/2 h-8 min-w-[4.5rem] -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(180deg,#38bdf8_0%,#0284c7_100%)] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_3px_0_0_rgba(3,105,161,0.55),0_10px_22px_-7px_rgba(14,165,233,0.7)] transition-all duration-150 hover:-translate-y-[calc(50%+1px)] hover:scale-[1.03] hover:border-sky-500 hover:brightness-110 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_4px_0_0_rgba(3,105,161,0.5),0_13px_24px_-7px_rgba(14,165,233,0.8)] active:translate-y-[calc(-50%+1px)] active:scale-[0.99] active:shadow-[inset_0_2px_3px_rgba(3,105,161,0.4),0_1px_0_0_rgba(3,105,161,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 disabled:!opacity-100"
             disabled={isPending}
             type="submit"
           >
@@ -174,7 +213,7 @@ export function AddDomainForm({
                 <ScanActivityIndicator />
                 <span>Scanning…</span>
               </span>
-            ) : "Scan now"}
+            ) : "Scan"}
           </Button>
         </div>
       </div>

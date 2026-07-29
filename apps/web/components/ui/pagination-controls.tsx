@@ -2,11 +2,11 @@ import Link from "next/link";
 import { Button } from "@website-signal-risk-scanner/ui";
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
-export const DEFAULT_PAGE_SIZE = 20;
+export const DEFAULT_PAGE_SIZE = 10;
 
-export function normalizePageSize(value: string | undefined | null) {
+export function normalizePageSize(value: string | undefined | null, fallback = DEFAULT_PAGE_SIZE) {
   const parsed = Number.parseInt(value ?? "", 10);
-  return PAGE_SIZE_OPTIONS.includes(parsed as (typeof PAGE_SIZE_OPTIONS)[number]) ? parsed : DEFAULT_PAGE_SIZE;
+  return PAGE_SIZE_OPTIONS.includes(parsed as (typeof PAGE_SIZE_OPTIONS)[number]) ? parsed : fallback;
 }
 
 export function normalizePage(value: string | undefined | null) {

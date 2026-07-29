@@ -10,6 +10,7 @@ import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-
 import { LocalV2DagScanProgressCard } from "../../../../components/scans/scan-submit-progress";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
+import { ScanReportLoadingCard } from "../../../../components/scans/scan-report-loading-card";
 import { ShareReportActions } from "../../../../components/scans/share-report-actions";
 import {
   hasPendingBrowserExtensionNormalization,
@@ -72,16 +73,11 @@ function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanSt
         </h1>
         <p className="mt-2 text-sm text-slate-500">The scan is complete. Preparing its retained evidence and review.</p>
       </div>
-      <div className="min-h-[48vh] rounded-2xl border border-sky-100 bg-sky-50/60 px-6 py-10">
-        <div className="mx-auto flex max-w-xl flex-col items-center text-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full border border-sky-200 bg-white">
-            <span className="h-3 w-3 animate-pulse rounded-full bg-sky-500" />
-          </span>
-          <p className="mt-4 text-base font-semibold text-slate-900">Building the report view</p>
-          <p className="mt-1 max-w-md text-sm leading-6 text-slate-600">
-            Loading the evidence summary, cookies and trackers, and privacy review.
-          </p>
-        </div>
+      <div className="flex min-h-[48vh] items-center justify-center rounded-2xl border border-sky-100 bg-sky-50/60 px-6 py-10">
+        <ScanReportLoadingCard
+          description="Loading the evidence summary, cookies and trackers, and privacy review."
+          title="Building the report view"
+        />
       </div>
     </div>
   );
@@ -105,17 +101,19 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   if (!statusProjection) {
     notFound();
   }
-  if (isPendingScanStatus(statusProjection.status)) {
+  const waitingForReportProjection = statusProjection.status === "completed" && !statusProjection.reportReady;
+  if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
       <>
         <PendingScanStartedEvent />
         <PendingScanDetailView
           createdAt={statusProjection.createdAt}
           domainHostname={statusProjection.domainHostname}
+          pendingPostCompletionWork={waitingForReportProjection}
           profile={statusProjection.profile}
           scanId={statusProjection.id}
           startedAt={statusProjection.startedAt}
-          status={statusProjection.status}
+          status={waitingForReportProjection ? "processing" : statusProjection.status}
         />
       </>
     );

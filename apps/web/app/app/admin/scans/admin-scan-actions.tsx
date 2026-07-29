@@ -5,11 +5,14 @@ import { usePathname } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { ShareReportActions } from "../../../../components/scans/share-report-actions";
 
 type AdminScanActionsProps = {
   compact?: boolean;
   scanId: string;
   scanViewHref: string;
+  domainLabel: string;
+  visualEvidenceHref?: string | null;
 };
 
 type AdminNavigationState = {
@@ -150,9 +153,17 @@ function ActionButton({
   );
 }
 
-export function AdminScanActions({ compact = false, scanId, scanViewHref }: AdminScanActionsProps) {
+export function AdminScanActions({ compact = false, domainLabel, scanId, scanViewHref, visualEvidenceHref }: AdminScanActionsProps) {
   return (
     <div className={`flex items-center ${compact ? "gap-1" : "gap-2"}`}>
+      {visualEvidenceHref ? (
+        <ShareReportActions
+          domainLabel={domainLabel}
+          scanId={scanId}
+          visualEvidenceHref={visualEvidenceHref}
+          visualEvidenceOnly
+        />
+      ) : null}
       <ActionButton compact={compact} href={scanViewHref} label="Open scan report">
         <SimpleScanIcon />
       </ActionButton>

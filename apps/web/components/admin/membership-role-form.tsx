@@ -20,7 +20,7 @@ function RoleSelect({ defaultRole }: { defaultRole: MembershipRole }) {
 
   return (
     <select
-      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-wait disabled:opacity-60"
+      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 disabled:cursor-wait disabled:opacity-60"
       defaultValue={defaultRole}
       disabled={pending}
       name="role"

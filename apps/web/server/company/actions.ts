@@ -6,22 +6,22 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getAuth } from "../better-auth/auth";
 import { sendPasswordSetupLink } from "../auth-flows/password-setup";
-import { upsertAppUserProfile, findAppUserByEmailRecord } from "../users/repository";
+import { findAppUserByEmailRecord, findOrganizationMembershipByUserId, upsertAppUserProfile } from "../users/repository";
 import { putStorageObject } from "../storage/s3";
 import { requireCompanyCapability } from "./authorization";
 import {
   addCompanyMembership,
   createCompany,
-  findCompanyBySlug,
+  findCompanyByName,
   removeCompanyMembership,
   updateCompanyLogo,
+  updateCompanyName,
   updateCompanyMembershipRole
 } from "./repository";
 import { requirePlatformAdminContext } from "../admin/platform-admin";
 
 const companySchema = z.object({
-  name: z.string().trim().min(2).max(120),
-  slug: z.string().trim().toLowerCase().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens.").max(80)
+  name: z.string().trim().min(2).max(120)
 });
 
 const userSchema = z.object({
@@ -40,6 +40,18 @@ function formValue(formData: FormData, key: string) {
   return typeof value === "string" ? value : "";
 }
 
+function slugifyWorkspaceName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 71) || "workspace";
+}
+
+function createWorkspaceSlug(name: string) {
+  return `${slugifyWorkspaceName(name)}-${randomUUID().slice(0, 8)}`;
+}
+
 function revalidateCompany(organizationId: string) {
   revalidatePath("/app/admin/companies");
   revalidatePath(`/app/admin/companies/${organizationId}`);
@@ -48,10 +60,33 @@ function revalidateCompany(organizationId: string) {
 
 export async function createCompanyFormAction(formData: FormData) {
   await requirePlatformAdminContext();
-  const parsed = companySchema.parse({ name: formValue(formData, "name"), slug: formValue(formData, "slug") });
-  if (await findCompanyBySlug(parsed.slug)) throw new Error("A company with this slug already exists.");
-  const companyId = await createCompany(parsed);
+  const parsed = companySchema.parse({ name: formValue(formData, "name") });
+  const slug = createWorkspaceSlug(parsed.name);
+  if (await findCompanyByName(parsed.name)) throw new Error("A company with this name already exists.");
+  const companyId = await createCompany({ ...parsed, slug });
   redirect(`/app/admin/companies/${companyId}`);
+}
+
+export async function updateCompanyNameFormAction(formData: FormData) {
+  const parsed = z.object({
+    companyId: z.string().uuid(),
+    name: z.string().trim().min(2).max(120)
+  }).parse({
+    companyId: formValue(formData, "companyId"),
+    name: formValue(formData, "name")
+  });
+  await requireCompanyCapability(parsed.companyId, "manage_settings");
+  if (await findCompanyByName(parsed.name, parsed.companyId)) throw new Error("A company with this name already exists.");
+
+  try {
+    await updateCompanyName(parsed.companyId, parsed.name);
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+      throw new Error("A company with this name already exists.");
+    }
+    throw error;
+  }
+  revalidateCompany(parsed.companyId);
 }
 
 export async function createCompanyUserFormAction(formData: FormData) {
@@ -62,7 +97,12 @@ export async function createCompanyUserFormAction(formData: FormData) {
     email: formValue(formData, "email")
   });
 
-  if (await findAppUserByEmailRecord(parsed.email)) throw new Error("A user with this email already exists.");
+  const existingUser = await findAppUserByEmailRecord(parsed.email);
+  if (existingUser) {
+    const existingMembership = await findOrganizationMembershipByUserId(existingUser.id);
+    if (existingMembership) throw new Error("This user already belongs to a workspace. Users can belong to only one workspace.");
+    throw new Error("A user with this email already exists.");
+  }
   const initialName = parsed.email.split("@", 1)[0] || parsed.email;
   const created = await getAuth().api.createUser({
     body: { email: parsed.email, name: initialName }

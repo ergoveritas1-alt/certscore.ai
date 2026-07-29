@@ -119,7 +119,7 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
   });
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const page = normalizePage(resolvedSearchParams.page);
-  const pageSize = normalizePageSize(resolvedSearchParams.perPage);
+  const pageSize = normalizePageSize(resolvedSearchParams.perPage, 20);
   const [result, organizationSettings] = await withServerTiming("app.scans.page_data", () =>
     Promise.all([
       getOrganizationScansPage(organization.id, {

@@ -9,6 +9,7 @@ type ShareReportActionsProps = {
   scanId: string;
   showMonitorSite?: boolean;
   visualEvidenceHref?: string | null;
+  visualEvidenceOnly?: boolean;
 };
 
 const initialSendReportEmailActionState: SendReportEmailActionState = {
@@ -192,7 +193,8 @@ export function ShareReportActions({
   domainLabel,
   scanId,
   showMonitorSite = false,
-  visualEvidenceHref = null
+  visualEvidenceHref = null,
+  visualEvidenceOnly = false
 }: ShareReportActionsProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [currentUrl, setCurrentUrl] = useState("");
@@ -291,48 +293,52 @@ export function ShareReportActions({
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          aria-label={copyState === "copied" ? "Report URL copied" : "Copy link to report"}
-          className={iconActionClassName("primary")}
-          data-analytics-cta-type="share"
-          data-analytics-event="report_cta_clicked"
-          onClick={copyReportUrl}
-          title="Copy link to report"
-        >
-          <ShareIcon />
-          <IconTooltip label={copyState === "copied" ? "Report URL copied" : "Copy link to report"} />
-        </button>
-        <button
-          type="button"
-          aria-label="Email report"
-          className={iconActionClassName()}
-          data-analytics-cta-type="email"
-          data-analytics-event="report_cta_clicked"
-          onClick={() => setIsEmailDialogOpen(true)}
-          title="Email report"
-        >
-          <EmailIcon />
-          <IconTooltip label={emailState.success ? "Sent" : "Email report"} />
-        </button>
-        {showMonitorSite ? (
-          <Link
-            aria-label="Monitor this site"
-            className={iconActionClassName()}
-            data-analytics-cta-type="monitor"
-            data-analytics-event="report_cta_clicked"
-            href={monitorHref}
-            title="Monitor this site"
-          >
-            <MonitorIcon />
-            <IconTooltip label="Monitor this site" />
-          </Link>
+        {!visualEvidenceOnly ? (
+          <>
+            <button
+              type="button"
+              aria-label={copyState === "copied" ? "Report URL copied" : "Copy link to report"}
+              className={iconActionClassName("primary")}
+              data-analytics-cta-type="share"
+              data-analytics-event="report_cta_clicked"
+              onClick={copyReportUrl}
+              title="Copy link to report"
+            >
+              <ShareIcon />
+              <IconTooltip label={copyState === "copied" ? "Report URL copied" : "Copy link to report"} />
+            </button>
+            <button
+              type="button"
+              aria-label="Email report"
+              className={iconActionClassName()}
+              data-analytics-cta-type="email"
+              data-analytics-event="report_cta_clicked"
+              onClick={() => setIsEmailDialogOpen(true)}
+              title="Email report"
+            >
+              <EmailIcon />
+              <IconTooltip label={emailState.success ? "Sent" : "Email report"} />
+            </button>
+            {showMonitorSite ? (
+              <Link
+                aria-label="Monitor this site"
+                className={iconActionClassName()}
+                data-analytics-cta-type="monitor"
+                data-analytics-event="report_cta_clicked"
+                href={monitorHref}
+                title="Monitor this site"
+              >
+                <MonitorIcon />
+                <IconTooltip label="Monitor this site" />
+              </Link>
+            ) : null}
+          </>
         ) : null}
         {visualEvidenceHref ? (
           <button
             type="button"
-            aria-label="View captured image"
-            className={iconActionClassName()}
+            aria-label="View screengrab"
+            className={visualEvidenceOnly ? "app-raised-button group relative inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-700 hover:text-slate-950" : iconActionClassName()}
             data-analytics-cta-type="visual-evidence"
             data-analytics-event="report_cta_clicked"
             onClick={() => {
@@ -341,7 +347,7 @@ export function ShareReportActions({
               setVisualEvidenceZoom(1);
               setIsVisualEvidenceDialogOpen(true);
             }}
-            title="View captured image"
+            title="View screengrab"
           >
             <VisualEvidenceIcon />
             <IconTooltip label="View captured image" />

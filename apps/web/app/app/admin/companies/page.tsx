@@ -17,19 +17,19 @@ export default async function AdminCompaniesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold text-slate-950">Companies</h2>
-          <p className="mt-1 text-sm text-slate-600">Manage company workspaces, membership, and branding.</p>
+          <h2 className="text-2xl font-semibold text-slate-950">Workspaces</h2>
+          <p className="mt-1 text-sm text-slate-600">Manage workspaces, membership, and branding.</p>
         </div>
-        <Link className="app-raised-button app-raised-button-dark rounded-lg px-4 py-2 text-sm font-semibold text-white" href="/app/admin/companies/new">New company</Link>
+        <Link className="app-raised-button app-raised-button-dark rounded-lg px-4 py-2 text-sm font-semibold text-white" href="/app/admin/companies/new">New workspace</Link>
       </div>
 
       <Card className="border-slate-200 bg-white">
-        <CardHeader><CardTitle>Company directory</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Workspace directory</CardTitle></CardHeader>
         <CardContent>
-          {companies.length === 0 ? <p className="text-sm text-slate-600">No companies have been created yet.</p> : (
+          {companies.length === 0 ? <p className="text-sm text-slate-600">No workspaces have been created yet.</p> : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500"><tr><th className="pb-3 pr-4">Company</th><th className="pb-3 pr-4">Users</th><th className="pb-3 pr-4">Domains</th><th className="pb-3 pr-4">Scans</th><th className="pb-3 pr-4">Created</th><th className="pb-3"> </th></tr></thead>
+                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500"><tr><th className="pb-3 pr-4">Workspace</th><th className="pb-3 pr-4">Users</th><th className="pb-3 pr-4">Domains</th><th className="pb-3 pr-4">Scans</th><th className="pb-3 pr-4">Created</th><th className="pb-3"> </th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {companies.map((company, index) => (
                     <tr key={company.id}>
