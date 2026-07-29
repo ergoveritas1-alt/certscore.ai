@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Input } from "@website-signal-risk-scanner/ui";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
 import { CERTSCORE_CHROME_EXTENSION_STORE_URL } from "../../lib/browser-extension";
@@ -368,7 +368,6 @@ export function DomainScanForm({
 }: DomainScanFormProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const canUseLocalExtensionScan = allowLocalExtensionScan && allowRestrictedScanOptions;
   const allowedDefaultScanFrom = restrictLocalExtensionScanFrom({
     allowLocalExtensionScan,
@@ -387,14 +386,18 @@ export function DomainScanForm({
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
   const [scanFrom, setScanFrom] = useState<ScanFrom>(allowedDefaultScanFrom);
   const [heroPlaceholder, setHeroPlaceholder] = useState(HERO_IDLE_PLACEHOLDER);
+  const [recentScanReusedFromUrl, setRecentScanReusedFromUrl] = useState(false);
   const staticPlaceholder = inputPlaceholder ?? HERO_IDLE_PLACEHOLDER;
   const isSubmittingRef = useRef(false);
   const scanProgress = useScanProgressClock(isSubmitting);
-  const recentScanReusedFromUrl = searchParams.get("recentScanReused") === "1";
   const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
   const scanButtonArmed = isValidScanTarget(effectiveSubmitDomain);
   const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
   const expectsRecentScanReuse = shouldExpectRecentScanReuse({ freshRescan, hasRecentReusableScan, mode });
+
+  useEffect(() => {
+    setRecentScanReusedFromUrl(new URLSearchParams(window.location.search).get("recentScanReused") === "1");
+  }, [pathname]);
 
   useEffect(() => {
     if (!recentScanReusedFromUrl) {
