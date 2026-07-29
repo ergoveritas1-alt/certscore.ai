@@ -126,7 +126,7 @@ if [[ ${#runtime_base_build_args[@]} -gt 0 ]]; then
     --build-arg "BUILD_IMAGE_TAG=${build_image_tag}" \
     --build-arg "SCANNER_RUNTIME_VERSION=${scanner_runtime_version}" \
     --cache-from "type=registry,ref=${build_cache_image_uri}" \
-    "${build_cache_push_args[@]}" \
+    ${build_cache_push_args[@]+"${build_cache_push_args[@]}"} \
     -f "${repo_root}/apps/v2-dag-lambda/Dockerfile" \
     -t "$image_uri" \
     --push \
@@ -140,7 +140,7 @@ else
     --build-arg "BUILD_IMAGE_TAG=${build_image_tag}" \
     --build-arg "SCANNER_RUNTIME_VERSION=${scanner_runtime_version}" \
     --cache-from "type=registry,ref=${build_cache_image_uri}" \
-    "${build_cache_push_args[@]}" \
+    ${build_cache_push_args[@]+"${build_cache_push_args[@]}"} \
     -f "${repo_root}/apps/v2-dag-lambda/Dockerfile" \
     -t "$image_uri" \
     --push \
