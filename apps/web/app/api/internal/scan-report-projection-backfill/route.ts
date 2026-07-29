@@ -46,7 +46,9 @@ export async function POST(request: Request) {
         and ($1::uuid is null or s.id = $1::uuid)
         and ($1::uuid is not null or
              ss.report_projection_version is distinct from $2 or
-             ss.report_projection_status is distinct from 'ready')
+             ss.report_projection_status is distinct from 'ready' or
+             (s.scan_config_json ->> 'processor' = 'local-v2-dag' and
+              (ss.scan_outcome is null or ss.access_posture_class is null)))
       order by s.completed_at desc nulls last, s.created_at desc
       limit $3`,
     [scanId, SCAN_REPORT_PROJECTION_VERSION, limit],

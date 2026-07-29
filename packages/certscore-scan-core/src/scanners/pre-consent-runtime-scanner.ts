@@ -4530,7 +4530,15 @@ async function readConsentUiObservation(
     allowFullDocumentCmpControls?: boolean;
   } = {},
 ): Promise<ConsentUiObservation> {
-  const text = await page.evaluate(() => (document.body?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 12_000)).catch(() => "");
+  // Surface detection is visibility-scoped. textContent includes script,
+  // style, template, and other non-rendered payloads; those strings can name
+  // cookies or consent APIs without any user-visible consent surface.
+  const text = await page.evaluate(() =>
+    (document.body?.innerText ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 12_000)
+  ).catch(() => "");
   const allowFullDocumentCmpControls = options.allowFullDocumentCmpControls === true;
   const inventoryProbeInstallSucceeded = await page.evaluate(CONSENT_INVENTORY_PROBE_SCRIPT)
     .then(() => true)
@@ -5132,7 +5140,7 @@ function boundedFrameInventoryRead(frame: Frame): Promise<{
         .slice(0, 8);
       return {
         controls,
-        textExcerpt: (document.body?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 2_000),
+        textExcerpt: (document.body?.innerText || "").replace(/\s+/g, " ").trim().slice(0, 2_000),
       };
     }),
     new Promise<null>((resolve) => {

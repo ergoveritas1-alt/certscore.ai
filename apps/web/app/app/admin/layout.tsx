@@ -9,6 +9,7 @@ type AdminLayoutProps = {
 const navItems = [
   { href: "/app/admin", label: "Overview" },
   { href: "/app/admin/users", label: "Users" },
+  { href: "/app/admin/companies", label: "Companies" },
   { href: "/app/admin/scans", label: "Scans" },
   { href: "/app/admin/pulse", label: "API activity" },
   { href: "/app/admin/monitor-requests", label: "Monitor Requests" }
@@ -29,7 +30,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
           <Link
             key={item.href}
             href={item.href}
-            prefetch={false}
+            prefetch
             className="app-raised-button rounded-full px-3.5 py-1.5 text-sm text-slate-700 hover:text-slate-950"
           >
             {item.label}

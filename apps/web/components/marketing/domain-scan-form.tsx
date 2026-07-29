@@ -839,7 +839,7 @@ export function DomainScanForm({
           />
           {mode === "full" ? (
             <div className={variant === "homepage-hero"
-              ? `absolute ${isSubmitting ? "right-[10rem] sm:right-[10.5rem]" : "right-[8.25rem] sm:right-[8.75rem]"} top-1/2 -translate-y-1/2 scale-150`
+              ? `absolute ${isSubmitting ? "right-[10rem] sm:right-[10.5rem]" : "right-[8.75rem] sm:right-[9.25rem]"} top-1/2 -translate-y-1/2 scale-150`
               : compact
               ? `absolute ${isSubmitting ? "right-[8.5rem]" : "right-[5.9rem]"} top-1/2 -translate-y-1/2`
               : `absolute ${isSubmitting ? "right-[10.25rem]" : "right-[8rem]"} top-1/2 -translate-y-1/2`}>

@@ -718,6 +718,133 @@ test("missing auxiliary geometry does not erase completed canonical consent evid
   assert.deepEqual(reconciled, retainedInspection);
 });
 
+test("CNN retained Accept All and Show Purposes survive an incomplete geometry artifact", async () => {
+  const {
+    reconcileConsentSurfaceInspectionWithGeometry,
+    summarizeFirstLayerConsentChoices,
+  } = await loadLocalV2DagReport();
+  const bundle = {
+    url: "https://cnn.com/",
+    normalizedUrl: "https://cnn.com/",
+    screenshots: [{
+      artifactId: "screenshot_pre_consent_settled",
+      capturedAtMs: 29_670,
+      captureMethod: "primary_viewport_fallback",
+      path: "/tmp/screenshot-pre-consent-settled.png",
+      url: "https://edition.cnn.com/",
+      pagePhase: "network_idle",
+      consentStateAtTime: "pre_consent",
+    }],
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 16_194,
+      captureStatus: "observed",
+      captureDiagnostics: {
+        completedChannels: [],
+        timedOutChannels: [],
+        failedChannels: [],
+      },
+      likelyPresent: true,
+      basis: [
+        "inventory:rapid_first_layer_controls",
+        "control:accept_all:Accept All",
+        "control:manage_preferences:Show Purposes, Opens the preference center dialog",
+        "settled_control_inventory_completed",
+      ],
+      textExcerpt: "Accept All Essential Cookies Only Show Purposes Show Purposes",
+      layerInspected: "first_layer",
+      visibleChoiceLabels: [
+        "Accept All",
+        "Show Purposes, Opens the preference center dialog",
+      ],
+      acceptControlObserved: true,
+      rejectControlObserved: false,
+      managePreferencesControlObserved: true,
+      controls: [
+        {
+          actionType: "accept_all",
+          label: "Accept All",
+          visible: true,
+          selectorHint: "#onetrust-accept-btn-handler",
+        },
+        {
+          actionType: "manage_preferences",
+          label: "Show Purposes, Opens the preference center dialog",
+          visible: true,
+          selectorHint: "#onetrust-pc-btn-handler",
+        },
+      ],
+      inventoryDiagnostics: {
+        candidateContainerCount: 1,
+        candidateControlCount: 2,
+        retainedControlCount: 2,
+        inventorySources: ["viewport"],
+        candidateLabels: [
+          "Accept All",
+          "Show Purposes, Opens the preference center dialog",
+        ],
+        rejectionReasons: [],
+        timingMarkers: [
+          "rapid_inventory_completed",
+          "rapid_first_layer_inventory",
+          "early_exit_controls_found",
+        ],
+      },
+      evidenceRefs: [],
+      confidence: 0.86,
+    }],
+  } as unknown as CanonicalEvidenceBundle;
+  const incompleteGeometry = {
+    artifactVersion: "consent_control_geometry.v1",
+    pageUrl: "https://cnn.com/",
+    viewport: { width: 0, height: 0 },
+    candidates: [],
+    summary: {
+      cmpDetected: false,
+      confidence: 0,
+      firstLayerAccept: false,
+      firstLayerOptions: false,
+      firstLayerReject: false,
+      limitations: [
+        "A/R/O not evaluated because page access did not reach a loaded pre-consent state.",
+      ],
+    },
+    access: { status: "unknown" },
+  };
+  const choices = summarizeFirstLayerConsentChoices(
+    bundle,
+    incompleteGeometry,
+  ) as Record<string, unknown>;
+  const inspection = reconcileConsentSurfaceInspectionWithGeometry(
+    bundle,
+    incompleteGeometry,
+    {
+      outcome: "actionable_surface_observed",
+      coverageStatus: "limited",
+      inspectionCompleted: false,
+      inspectedPreInteraction: true,
+      consentSurfaceObserved: true,
+      actionableControlObserved: true,
+      observedAtMs: 16_194,
+      evidenceSources: ["consent_ui_observation", "control_inventory"],
+      evidenceChannels: [],
+      limitationKeys: ["consent_surface_inspection_runtime_partial"],
+    } as never,
+  );
+
+  assert.equal(choices.geometryAssessment, "incomplete");
+  assert.equal(choices.acceptControlObserved, true);
+  assert.equal(choices.rejectControlObserved, false);
+  assert.equal(choices.managePreferencesControlObserved, true);
+  assert.deepEqual(choices.visibleChoiceLabels, [
+    "Accept All",
+    "Show Purposes, Opens the preference center dialog",
+  ]);
+  assert.equal(inspection.outcome, "actionable_surface_observed");
+  assert.equal(inspection.consentSurfaceObserved, true);
+  assert.equal(inspection.actionableControlObserved, true);
+});
+
 test("completed consent geometry from a different document fails closed", async () => {
   const { summarizeFirstLayerConsentChoices } = await loadLocalV2DagReport();
   const choices = summarizeFirstLayerConsentChoices({

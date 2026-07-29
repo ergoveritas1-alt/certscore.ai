@@ -166,6 +166,7 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   assert.match(pulseSource, /if \(item\.noGoFlag\)/);
   assert.match(repositorySource, /scan_no_go_assessment/);
   assert.match(repositorySource, /visual_access_review/);
+  assert.match(repositorySource, /from scans s\s+left join scan_snapshots ss on ss\.scan_id = s\.id\s+left join scan_runtime_artifacts sra on sra\.scan_id = s\.id/);
   assert.match(scansPage, /scan\.noGoFlag/);
   assert.match(scansPage, /label: "Tranco"/);
   assert.match(pulsePage, /label: "Tranco"/);
@@ -453,13 +454,17 @@ test("admin scan list logs its expensive production stages separately", async ()
   assert.match(listSource, /app\.admin\.scans\.score-attribution/);
 });
 
-test("admin navigation does not prefetch expensive dynamic routes", async () => {
+test("admin section navigation prefetches dynamic destinations and has a loading boundary", async () => {
   const layoutSource = await readFile("apps/web/app/app/admin/layout.tsx", "utf8");
+  const loadingSource = await readFile("apps/web/app/app/admin/loading.tsx", "utf8");
   const actionsSource = await readFile("apps/web/app/app/admin/scans/admin-scan-actions.tsx", "utf8");
   const overviewSource = await readFile("apps/web/app/app/admin/page.tsx", "utf8");
   const appShellSource = await readFile("apps/web/components/dashboard/app-shell.tsx", "utf8");
 
-  assert.match(layoutSource, /href=\{item\.href\}\s+prefetch=\{false\}/);
+  assert.match(layoutSource, /href=\{item\.href\}\s+prefetch\s/);
+  assert.doesNotMatch(layoutSource, /prefetch=\{false\}/);
+  assert.match(loadingSource, /aria-label="Loading admin page"/);
+  assert.match(loadingSource, /aria-busy="true"/);
   assert.equal((actionsSource.match(/prefetch=\{false\}/g) ?? []).length, 2);
   assert.equal((overviewSource.match(/prefetch=\{false\}/g) ?? []).length, 6);
   assert.equal((appShellSource.match(/prefetch=\{false\}/g) ?? []).length, 2);

@@ -996,13 +996,14 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
       : Promise.resolve({ rows: [] as AdminScanDiagnosticEventRow[] }),
     scanIds.length
       ? query<AdminRuntimeArtifactRow>(
-          `select sra.scan_id,
+          `select s.id as scan_id,
                   coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
                   coalesce(sra.visual_access_review, ss.visual_access_review) as visual_access_review,
                   coalesce(sra.visual_evidence_artifacts, ss.visual_evidence_artifacts) as visual_evidence_artifacts
-             from scan_snapshots ss
-             left join scan_runtime_artifacts sra on sra.scan_id = ss.scan_id
-            where ss.scan_id = any($1::uuid[])`,
+             from scans s
+             left join scan_snapshots ss on ss.scan_id = s.id
+             left join scan_runtime_artifacts sra on sra.scan_id = s.id
+            where s.id = any($1::uuid[])`,
           [scanIds],
           { readOnly: true }
         )

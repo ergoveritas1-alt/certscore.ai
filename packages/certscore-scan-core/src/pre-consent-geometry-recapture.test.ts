@@ -161,6 +161,53 @@ test("completed geometry cannot erase stronger structured A/R/O evidence", () =>
   assert.ok(reconciled.basis.includes("geometry:did_not_corroborate_structured_controls"));
 });
 
+test("non-rendered script consent words do not create a visible consent surface", async () => {
+  const server = await startServer(`
+    <!doctype html>
+    <html>
+      <head><meta charset="utf-8"></head>
+      <body>
+        <main>
+          <h1>News homepage</h1>
+          <p>Current reporting and analysis.</p>
+        </main>
+        <script type="application/json">
+          {
+            "cookie": "cookie consent",
+            "controls": ["accept all", "reject all", "manage preferences"]
+          }
+        </script>
+      </body>
+    </html>
+  `);
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-script-only-consent-"));
+  try {
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url: server.url,
+      normalizedUrl: server.url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 6_000,
+      artifactWriter,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "never",
+      waitMode: "fast",
+    });
+
+    const observation = result.consentUiObservations[0];
+    assert.ok(observation);
+    assert.equal(observation.likelyPresent, false);
+    assert.equal(observation.controls.length, 0);
+    assert.equal(observation.acceptControlObserved, false);
+    assert.equal(observation.rejectControlObserved, false);
+    assert.equal(observation.managePreferencesControlObserved, false);
+    assert.doesNotMatch(observation.textExcerpt, /accept all|reject all|manage preferences/i);
+  } finally {
+    await closeServer(server.server);
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("geometry from a different final document marks coverage incomplete without erasing structured evidence", () => {
   const reconciled = reconcileConsentUiObservationWithCompletedGeometry({
     current: rapidOxfamStyleObservation,

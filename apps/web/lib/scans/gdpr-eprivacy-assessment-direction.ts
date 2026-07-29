@@ -58,13 +58,16 @@ export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): Evide
     return "Not confirmed";
   }
   if (
+    (item.status === "Not confirmed" || item.status === "Not testable") &&
+    retainedPolicySurfaceExtractionLimited(item)
+  ) {
+    return "Not confirmed";
+  }
+  if (
     item.assessmentStatus === "coverage_limitation" ||
     item.status === "Not testable" ||
     item.evidenceState === "not_testable"
   ) {
-    return "Not testable";
-  }
-  if (item.status === "Not confirmed" && retainedPolicyExtractionLimited(item)) {
     return "Not testable";
   }
   if (item.status === "Not confirmed" && isRowSpecificExtractionNotConfirmed(item)) {
@@ -91,6 +94,33 @@ function retainedPolicyExtractionLimited(item: GdprEprivacyCoverageChecklistItem
     recordValueAsRecord(policySurfaceSummary, "policy_text_extraction_health");
   const status = health?.policyTextExtractionStatus ?? health?.policy_text_extraction_status;
   return typeof status === "string" && status !== "ok";
+}
+
+function retainedPolicySurfaceExtractionLimited(item: GdprEprivacyCoverageChecklistItem) {
+  if (!retainedPolicyExtractionLimited(item)) {
+    return false;
+  }
+
+  const policySurfaceSummary = retainedRecord(item, "policySurfaceSummary") ?? retainedRecord(item, "policy_surface_summary");
+  const retainedEvidence = item.criticalEvidence.retainedEvidence;
+  const extractionHealth = retainedRecord(item, "policyTextExtractionHealth") ??
+    retainedRecord(item, "policy_text_extraction_health") ??
+    (policySurfaceSummary?.policyTextExtractionHealth && typeof policySurfaceSummary.policyTextExtractionHealth === "object" ? policySurfaceSummary.policyTextExtractionHealth as Record<string, unknown> : null) ??
+    (policySurfaceSummary?.policy_text_extraction_health && typeof policySurfaceSummary.policy_text_extraction_health === "object" ? policySurfaceSummary.policy_text_extraction_health as Record<string, unknown> : null);
+  const policyUrlRetained = policySurfaceSummary?.policyUrlRetained ?? policySurfaceSummary?.policy_url_retained ?? extractionHealth?.policyUrlRetained ?? extractionHealth?.policy_url_retained ?? retainedEvidence.policyUrlRetained ?? retainedEvidence.policy_url_retained;
+  const policySurfaceObserved = policySurfaceSummary?.privacyPolicyPresent ??
+    policySurfaceSummary?.privacy_policy_present ??
+    policySurfaceSummary?.policySurfaceObserved ??
+    policySurfaceSummary?.policy_surface_observed ??
+    retainedEvidence.privacyPolicyPresent ??
+    retainedEvidence.privacy_policy_present ??
+    retainedEvidence.policySurfaceObserved ??
+    retainedEvidence.policy_surface_observed ??
+    extractionHealth?.policySurfaceObserved ??
+    extractionHealth?.policy_surface_observed;
+  const policyUrls = policySurfaceSummary?.privacyPolicyUrls ?? policySurfaceSummary?.privacy_policy_urls ?? retainedEvidence.privacyPolicyUrls ?? retainedEvidence.privacy_policy_urls;
+
+  return policyUrlRetained === true || policySurfaceObserved === true || (Array.isArray(policyUrls) && policyUrls.length > 0);
 }
 
 function isRowSpecificExtractionNotConfirmed(item: GdprEprivacyCoverageChecklistItem) {
@@ -377,6 +407,9 @@ function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem)
 export function getAssessmentDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection {
   const evidenceLabel = getEvidenceLabel(item);
   if (evidenceLabel === "Not testable") {
+    return "technical_limitation";
+  }
+  if (evidenceLabel === "Not confirmed" && retainedPolicySurfaceExtractionLimited(item)) {
     return "technical_limitation";
   }
   if (evidenceLabel === "Potential gap" || item.assessmentStatus === "gap_observed") {

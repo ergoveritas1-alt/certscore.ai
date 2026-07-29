@@ -351,8 +351,16 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     .filter((item, index, all) => all.findIndex((candidate) => candidate.evidenceId === item.evidenceId) === index)
     .slice(0, 96);
 
-  const surfaceObserved = input.surface?.status === "observed_actionable" || input.surface?.status === "observed_non_actionable" || observations.some((observation) => observation.likelyPresent);
   const actionable = evidence.length > 0;
+  const surfaceExplicitlyNotObserved = input.surface?.status === "not_observed";
+  const surfaceObserved =
+    input.surface?.status === "observed_actionable" ||
+    input.surface?.status === "observed_non_actionable" ||
+    actionable ||
+    (
+      !surfaceExplicitlyNotObserved &&
+      observations.some((observation) => observation.likelyPresent)
+    );
   const coverageStatus = input.coverage?.status ?? "limited";
   const requiredChannels = unique(input.coverage?.requiredChannels ?? DEFAULT_REQUIRED_CHANNELS);
   const completedChannels = unique(input.coverage?.completedChannels ?? observations.flatMap((observation) => observation.completedChannels ?? []));

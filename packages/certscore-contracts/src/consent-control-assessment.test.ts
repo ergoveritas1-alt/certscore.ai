@@ -129,6 +129,41 @@ test("complete no-surface inspection produces factual not-observed A/R/O", () =>
   assert.equal(assessment.controls.options.state, "not_observed");
 });
 
+test("complete no-surface inspection overrides a text-only likely-present observation", () => {
+  const input = baseInput();
+  input.surface = { status: "not_observed" };
+  input.observations = [{
+    observationId: "script-text-only",
+    observedAtMs: 24_199,
+    likelyPresent: true,
+    layerInspected: "unknown",
+    documentId: "https://oxfam.org/en",
+    captureStatus: "observed",
+    completedChannels: ["dom_inventory"],
+    incompleteChannels: [],
+    controls: [],
+    evidenceRefs: [],
+  }];
+  input.geometry = {
+    artifactVersion: "consent_control_geometry.v1",
+    assessmentStatus: "complete",
+    documentId: "https://oxfam.org/en",
+    observedAtMs: 24_199,
+    completedChannels: ["geometry"],
+    incompleteChannels: [],
+    evidenceRefs: [],
+    candidates: [],
+  };
+
+  const assessment = deriveConsentControlAssessment(input);
+
+  assert.equal(assessment.surface.status, "not_observed");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.equal(assessment.contradictions.length, 0);
+});
+
 test("missing visibility or actionability cannot create positive control evidence", () => {
   const input = baseInput();
   input.observations = [{

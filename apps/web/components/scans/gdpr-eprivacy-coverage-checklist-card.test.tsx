@@ -33,6 +33,30 @@ test("getEvidenceLabel keeps insufficient evidence distinct from missing test co
   assert.equal(getEvidenceLabel(missingCoverage), "Not testable");
 });
 
+test("retained but thin policy extraction is not confirmed without becoming not testable", () => {
+  const item = makeChecklistItem({
+    assessmentStatus: "coverage_limitation",
+    criticalEvidence: {
+      retainedEvidence: {
+        policySurfaceSummary: {
+          policyTextExtractionHealth: {
+            policyTextExtractionStatus: "thin"
+          },
+          privacyPolicyPresent: true
+        },
+        signalObserved: "not_confirmed_extraction_limited"
+      }
+    },
+    evidenceState: "observed",
+    id: "processing_purposes_disclosure",
+    label: "Processing purposes disclosure",
+    status: "Not testable"
+  });
+
+  assert.equal(getEvidenceLabel(item), "Not confirmed");
+  assert.equal(getAssessmentDirection(item), "technical_limitation");
+});
+
 function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
   return {
     assessmentStatus: "review_signal",

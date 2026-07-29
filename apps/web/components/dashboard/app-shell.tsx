@@ -75,6 +75,15 @@ function ShieldIcon(props: NavIconProps) {
   );
 }
 
+function CompanyIcon(props: NavIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
+      <path d="M4.5 20V6.5L12 4l7.5 2.5V20" />
+      <path d="M8 20v-4h8v4M8 9h1.5M14.5 9H16M8 12h1.5M14.5 12H16" />
+    </svg>
+  );
+}
+
 function PlanIcon(props: NavIconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
@@ -111,6 +120,7 @@ const navItems = [
 type AppShellProps = {
   children: ReactNode;
   isPlatformAdmin?: boolean;
+  canManageCompany?: boolean;
   organizationName: string;
   plan: string;
   userEmail: string;
@@ -145,7 +155,8 @@ export function AppShell({
   organizationName,
   plan,
   userEmail,
-  isPlatformAdmin = false
+  isPlatformAdmin = false,
+  canManageCompany = false
 }: AppShellProps) {
   const pathname = usePathname() ?? "";
   const scanReportPathActive = isScanReportPath(pathname);
@@ -168,6 +179,7 @@ export function AppShell({
         ? { ...item, href: scanViewHref }
         : item
     ),
+    ...(canManageCompany ? [{ href: "/app/settings/company", label: "Manage company", icon: CompanyIcon }] : []),
     ...(isPlatformAdmin ? [{ href: "/app/admin", label: "Admin", icon: ShieldIcon }] : [])
   ];
 

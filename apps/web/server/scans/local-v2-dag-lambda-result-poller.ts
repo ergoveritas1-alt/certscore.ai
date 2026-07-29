@@ -48,6 +48,8 @@ type RetainedScanCompletionDiagnostics = {
   noGo: boolean;
   pageState: string | null;
   reasonCode: string | null;
+  scanNoGoAssessment: Record<string, unknown> | null;
+  visualAccessReview: Record<string, unknown> | null;
 };
 
 export type LocalV2DagLambdaResultPollerEnv = {
@@ -122,6 +124,8 @@ async function readRetainedScanCompletionDiagnostics(
       (visualReview.goNoGo ?? visualReview.go_no_go) === "NO_GO",
     pageState: typeof pageState === "string" ? pageState : null,
     reasonCode: typeof reasonCode === "string" ? reasonCode : null,
+    scanNoGoAssessment: Object.keys(assessment).length > 0 ? assessment : null,
+    visualAccessReview: Object.keys(visualReview).length > 0 ? visualReview : null,
   };
 }
 
@@ -659,18 +663,34 @@ export async function recordLocalV2DagLambdaResultEvent(
         retainedDiagnostics.pageState,
       );
       await query(
-        `update scan_snapshots
-            set access_posture_class = 'early_loss',
-                blocked_flag = $5,
-                captcha_flag = $6,
-                coverage_level = 'limited_none',
-                homepage_fetch_status = 'failed',
-                pages_scanned = 0,
-                scan_outcome = $2,
-                stop_reason_code = $2,
-                stop_reason_detail = $3,
-                stop_reason_label = $4
-          where scan_id = $1`,
+        `insert into scan_snapshots (
+           scan_id, organization_id, domain_id, pages_requested, pages_scanned,
+           access_posture_class, blocked_flag, captcha_flag, coverage_level,
+           homepage_fetch_status, scan_outcome, stop_reason_code,
+           stop_reason_detail, stop_reason_label, scan_no_go_assessment,
+           visual_access_review
+         )
+         select s.id, s.organization_id, s.domain_id,
+                greatest(coalesce(s.pages_requested, s.pages_scanned, 1), 1),
+                0, 'early_loss', $5, $6, 'limited_none', 'failed', $2, $2,
+                $3, $4, $7::jsonb, $8::jsonb
+           from scans s
+          where s.id = $1
+            and s.organization_id is not null
+            and s.domain_id is not null
+         on conflict (scan_id) do update
+           set access_posture_class = 'early_loss',
+               blocked_flag = excluded.blocked_flag,
+               captcha_flag = excluded.captcha_flag,
+               coverage_level = 'limited_none',
+               homepage_fetch_status = 'failed',
+               pages_scanned = 0,
+               scan_outcome = excluded.scan_outcome,
+               stop_reason_code = excluded.stop_reason_code,
+               stop_reason_detail = excluded.stop_reason_detail,
+               stop_reason_label = excluded.stop_reason_label,
+               scan_no_go_assessment = coalesce(excluded.scan_no_go_assessment, scan_snapshots.scan_no_go_assessment),
+               visual_access_review = coalesce(excluded.visual_access_review, scan_snapshots.visual_access_review)`,
         [
           parsedMessage.scanId,
           retainedDiagnostics.reasonCode ?? "unknown_access_limitation",
@@ -678,6 +698,8 @@ export async function recordLocalV2DagLambdaResultEvent(
           presentation.snapshotStopReasonLabel,
           presentation.limitationKind === "scanner_access_limitation",
           presentation.code === "captcha_or_challenge",
+          retainedDiagnostics.scanNoGoAssessment ? JSON.stringify(retainedDiagnostics.scanNoGoAssessment) : null,
+          retainedDiagnostics.visualAccessReview ? JSON.stringify(retainedDiagnostics.visualAccessReview) : null,
         ]
       );
     }

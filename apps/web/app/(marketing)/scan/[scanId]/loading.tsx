@@ -6,13 +6,13 @@ export default function PublicScanLoading() {
     <main aria-busy="true" className="min-h-screen bg-white">
       <SiteHeader />
       <section className="mx-auto flex min-h-[calc(100vh-9rem)] max-w-6xl items-center justify-center px-6 py-16">
-        <div className="w-full max-w-xl rounded-3xl border border-slate-200 bg-slate-50 px-6 py-10 text-center shadow-sm sm:px-10">
-          <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-sky-100 text-4xl text-sky-700 motion-safe:animate-[spin_1.8s_ease-in-out_infinite] motion-reduce:animate-none" role="img" aria-label="Loading report">
+        <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-slate-50 px-6 py-6 text-center">
+          <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-sky-100 text-2xl text-sky-700" role="img" aria-label="Loading report">
             ⌛
           </div>
-          <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">CertScore.ai report</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Preparing your report</h1>
-          <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-600">
+          <p className="mt-4 text-[9px] font-semibold uppercase tracking-[0.2em] text-sky-700">CertScore.ai report</p>
+          <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Preparing your report</h1>
+          <p className="mx-auto mt-2 max-w-[18rem] text-[10px] leading-5 text-slate-600">
             We’re loading the scan evidence and report for you. This should only take a moment.
           </p>
         </div>

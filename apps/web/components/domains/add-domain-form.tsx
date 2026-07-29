@@ -165,7 +165,7 @@ export function AddDomainForm({
           </div>
           <Button
             aria-label="Scan now"
-            className="absolute right-1.5 top-1/2 h-12 w-[126px] -translate-y-1/2 rounded-[13px] border border-emerald-300/70 bg-[linear-gradient(135deg,#45c957_0%,#56bd58_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(34,197,94,0.22)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-emerald-300/40"
+            className="absolute right-1.5 top-1/2 h-12 w-[126px] -translate-y-1/2 rounded-[13px] border border-sky-300/70 bg-[linear-gradient(135deg,#38bdf8_0%,#0284c7_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(14,165,233,0.28)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-sky-300/40"
             disabled={isPending}
             type="submit"
           >

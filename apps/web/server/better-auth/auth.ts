@@ -1,7 +1,8 @@
 import "server-only";
 
-import { betterAuth } from "better-auth";
+import { betterAuth, type Auth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import { admin } from "better-auth/plugins";
 import { getWritePool } from "@website-signal-risk-scanner/db";
 import { createGmailTransport, getGmailConfig } from "../email/gmail";
 import {
@@ -27,7 +28,10 @@ function getGoogleProviderConfig(env: ReturnType<typeof getBetterAuthEnv>) {
 }
 
 async function canCreateAuthUser(email: string | null | undefined) {
-  return isPublicAccountCreationEnabled() && isAllowedAuthEmail(email);
+  // Public sign-up is enforced by emailAndPassword.disableSignUp. This hook
+  // must also allow passwordless users created by an authenticated company
+  // manager when public sign-up is paused.
+  return isAllowedAuthEmail(email);
 }
 
 async function canCreateAuthSession(userId: string | null | undefined) {
@@ -45,7 +49,13 @@ async function canCreateAuthSession(userId: string | null | undefined) {
   }
 }
 
-function createAuth() {
+type BetterAuthInstance = Auth<any> & {
+  api: Auth<any>["api"] & {
+    createUser: (...args: any[]) => Promise<any>;
+  };
+};
+
+function createAuth(): BetterAuthInstance {
   const env = getBetterAuthEnv();
 
   return betterAuth({
@@ -81,14 +91,14 @@ function createAuth() {
     databaseHooks: {
       session: {
         create: {
-          before: async (session) => {
+          before: async (session: { userId?: unknown }) => {
             return canCreateAuthSession(typeof session.userId === "string" ? session.userId : null);
           }
         }
       },
       user: {
         create: {
-          before: async (user) => {
+          before: async (user: { email?: unknown }) => {
             return canCreateAuthUser(typeof user.email === "string" ? user.email : null);
           }
         }
@@ -100,7 +110,7 @@ function createAuth() {
       requireEmailVerification: false,
       revokeSessionsOnPasswordReset: true,
       resetPasswordTokenExpiresIn: PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS,
-      sendResetPassword: async ({ user, url }) => {
+      sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
         const gmailConfig = getGmailConfig();
 
         if (!gmailConfig) {
@@ -126,7 +136,7 @@ function createAuth() {
     },
     emailVerification: {
       sendOnSignUp: true,
-      sendVerificationEmail: async ({ user, url }) => {
+      sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
         const gmailConfig = getGmailConfig();
 
         if (!gmailConfig) {
@@ -150,7 +160,7 @@ function createAuth() {
         });
       }
     },
-    plugins: [nextCookies()],
+    plugins: [nextCookies(), admin({ defaultRole: "user" })],
     secret: env.BETTER_AUTH_SECRET,
     session: {
       cookieCache: {
@@ -186,10 +196,8 @@ function createAuth() {
       },
       modelName: "better_auth_verifications"
     }
-  });
+  }) as BetterAuthInstance;
 }
-
-type BetterAuthInstance = ReturnType<typeof createAuth>;
 
 let authSingleton: BetterAuthInstance | null = null;
 

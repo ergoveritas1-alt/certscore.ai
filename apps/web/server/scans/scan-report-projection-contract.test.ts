@@ -14,7 +14,7 @@ const projectionPath = "apps/web/server/scans/scan-report-projection.ts";
 test("scan report projection requires the canonical v2 consent assessment", async () => {
   const source = await readFile(projectionPath, "utf8");
 
-  assert.match(source, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v5"/);
+  assert.match(source, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v6"/);
   assert.match(source, /Refusing to mark scan .* report projection ready before ConsentControlAssessment v2 is materialized/);
   assert.match(source, /assessment\.controls\.accept\.state === "observed"/);
   assert.match(source, /assessment\.controls\.reject\.state === "observed"/);

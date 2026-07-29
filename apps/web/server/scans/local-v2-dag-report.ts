@@ -3445,6 +3445,15 @@ export function summarizeFirstLayerConsentChoices(
     };
   }
   if (geometryStatus === "incomplete") {
+    // Geometry is an auxiliary corroboration channel. A late or budget-limited
+    // geometry capture must not erase an already completed canonical DOM
+    // inventory from the same pre-consent document.
+    if (hasCompletedCanonicalFirstLayerControlInventory(observation)) {
+      return {
+        ...canonicalChoices,
+        geometryAssessment: "incomplete" as const
+      };
+    }
     return {
       acceptControlObserved: false,
       acceptLabels: [],
@@ -3528,6 +3537,18 @@ export function reconcileConsentSurfaceInspectionWithGeometry(
   }
   const geometryStatus = consentGeometryAssessmentStatus(bundle, geometryEvidence);
   if (geometryStatus === "incomplete") {
+    const completedCanonicalFirstLayerInventory =
+      (bundle.consentUiObservations ?? []).some((observation) =>
+        hasCompletedCanonicalFirstLayerControlInventory(observation)
+      );
+    if (completedCanonicalFirstLayerInventory) {
+      return {
+        ...inspection,
+        outcome: "actionable_surface_observed" as const,
+        consentSurfaceObserved: true,
+        actionableControlObserved: true
+      };
+    }
     if (!inspection.consentSurfaceObserved && !inspection.actionableControlObserved) {
       return inspection;
     }

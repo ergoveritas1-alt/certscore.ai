@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { AdminSettingsCard } from "../../../components/settings/admin-settings-card";
 import { ApiKeysCard } from "../../../components/settings/api-keys-card";
@@ -103,6 +104,7 @@ export default async function SettingsPage() {
               <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">{formatPlanLabel(organization.plan)}</span>
             </div>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Manage scan defaults, account access, and your organization’s CertScore.ai capacity.</p>
+            <Link className="mt-4 inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-slate-400" href="/app/settings/company">Manage company</Link>
             <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500">
               <span><strong className="font-semibold text-slate-700">Workspace</strong> {organization.name}</span>
               <span><strong className="font-semibold text-slate-700">Member since</strong> {formatDate(profile.created_at)}</span>
