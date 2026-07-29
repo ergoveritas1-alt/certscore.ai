@@ -16,6 +16,18 @@ export type ScanStatusProjection = {
   status: string;
 };
 
+export const REPORT_PROJECTION_GRACE_MS = 60_000;
+
+/** Allow the async projection a short handoff window, then use retained-data fallback. */
+export function hasReportProjectionGraceElapsed(
+  projection: Pick<ScanStatusProjection, "completedAt" | "reportReady" | "status">,
+  nowMs = Date.now(),
+) {
+  if (projection.status !== "completed" || projection.reportReady || !projection.completedAt) return false;
+  const completedAtMs = Date.parse(projection.completedAt);
+  return Number.isFinite(completedAtMs) && nowMs - completedAtMs >= REPORT_PROJECTION_GRACE_MS;
+}
+
 type ScanStatusProjectionRow = {
   completed_at: string | Date | null;
   created_at: string | Date;

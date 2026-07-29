@@ -48,4 +48,5 @@ test("completed dashboard reports use an honest loading state and a short stable
   assert.doesNotMatch(loadingState, /Overall score|3rd-party requests|Non-essential storage/);
   assert.match(source, /COMPLETED_SCAN_DETAIL_CACHE_SECONDS = 15/);
   assert.match(source, /statusProjection\\.reportReady \\|\\| completedLongEnoughForShortCache/);
+  assert.match(source, /hasReportProjectionGraceElapsed\(statusProjection\)/);
 });

@@ -32,6 +32,7 @@ import {
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import {
   getPublicScanStatusProjection,
+  hasReportProjectionGraceElapsed,
   isPendingScanStatus
 } from "../../../../server/scans/scan-status-projection";
 
@@ -110,7 +111,10 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   if (!statusProjection) {
     notFound();
   }
-  const waitingForReportProjection = statusProjection.status === "completed" && !statusProjection.reportReady;
+  const waitingForReportProjection =
+    statusProjection.status === "completed" &&
+    !statusProjection.reportReady &&
+    !hasReportProjectionGraceElapsed(statusProjection);
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
       <main className="min-h-screen bg-white">
