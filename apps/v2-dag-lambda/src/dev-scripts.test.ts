@@ -12,6 +12,8 @@ async function readRepoFile(relativePath: string) {
 
 test("dev image scripts allow the approved Lambda scan regions", async () => {
   const buildScript = await readRepoFile("scripts/local-v2-dag-lambda/build-push-dev-image.sh");
+  const deployScript = await readRepoFile("scripts/deploy-fast.ts");
+  const replicateScript = await readRepoFile("scripts/local-v2-dag-lambda/replicate-dev-image.sh");
   const setupScript = await readRepoFile("scripts/local-v2-dag-lambda/setup-dev-aws-image.sh");
 
   assert.match(buildScript, /region="\$\{AWS_REGION:-eu-central-1\}"/);
@@ -44,6 +46,16 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_ACTION=\$\{runtime_base_action\}/);
   assert.match(buildScript, /--cache-from "type=registry,ref=\$\{build_cache_image_uri\}"/);
   assert.match(buildScript, /--cache-to "type=registry,ref=\$\{build_cache_image_uri\},mode=max"/);
+  assert.match(replicateScript, /docker pull --platform linux\/amd64/);
+  assert.match(replicateScript, /source_registry="\$\{source_image_uri%%\/\*\}"/);
+  assert.match(replicateScript, /aws ecr get-login-password --region "\$source_region"/);
+  assert.match(replicateScript, /docker tag "\$source_uri" "\$target_uri"/);
+  assert.match(replicateScript, /docker push "\$target_uri"/);
+  assert.match(replicateScript, /describe-images/);
+  assert.match(replicateScript, /Replicated scanner image to/);
+  assert.match(deployScript, /SCANNER_BUILD_REGION = "eu-central-1"/);
+  assert.match(deployScript, /scripts\/local-v2-dag-lambda\/replicate-dev-image\.sh/);
+  assert.match(deployScript, /const sourceImageUri =/);
   assert.match(setupScript, /region="\$\{AWS_REGION:-eu-central-1\}"/);
   assert.match(setupScript, /eu-central-1\) location_env_prefix="EU_DE"/);
   assert.match(setupScript, /eu-west-1\) location_env_prefix="EU_IE"/);
