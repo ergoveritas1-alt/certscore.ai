@@ -14,6 +14,7 @@ import {
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
+import { withCanonicalConsentSnapshotCompatibility } from "../../lib/scans/consent-assessment-compatibility";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { deriveDisplayCreatedAt } from "../scans/display-state";
 import { withServerTiming } from "../performance/log-server-timing";
@@ -257,6 +258,9 @@ export async function getAdminScanSummary(scanId: string): Promise<AdminScanSumm
     startedAt: null
   });
   const scanFromDisplay = getScanFromDisplay(scanRow.scan_config_json ?? null);
+  const canonicalSnapshot = snapshot
+    ? withCanonicalConsentSnapshotCompatibility(stripRecord(snapshot as Record<string, unknown>))
+    : null;
 
   return {
     accessPostureSummary: {
@@ -287,9 +291,9 @@ export async function getAdminScanSummary(scanId: string): Promise<AdminScanSumm
     },
     domainHostname: scan.domain_hostname,
     organizationName: scan.organization_name,
-    snapshot: snapshot ? nullifyEmptySnapshotHashes(stripRecord(snapshot as Record<string, unknown>)) : null,
-    agencyMappings: snapshot
-      ? buildAgencyMappings(buildAgencyMappingSource(stripRecord(snapshot as Record<string, unknown>)))
+    snapshot: canonicalSnapshot ? nullifyEmptySnapshotHashes(canonicalSnapshot) : null,
+    agencyMappings: canonicalSnapshot
+      ? buildAgencyMappings(buildAgencyMappingSource(canonicalSnapshot))
       : []
   };
 }

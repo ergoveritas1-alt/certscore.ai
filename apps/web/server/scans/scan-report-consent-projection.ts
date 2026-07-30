@@ -1,4 +1,5 @@
 import { consentControlAssessmentSchema, type ConsentControlAssessment } from "@certscore/contracts";
+import { assessmentSurfaceCompatibilityState } from "../../lib/scans/consent-assessment-compatibility";
 
 export type ScanReportConsentProjection = {
   accept: boolean | null;
@@ -185,18 +186,17 @@ export function withPersistedFirstLayerConsentEvidence(
     firstLayerConsentChoices: evidence,
     first_layer_consent_choices: evidence
   };
+  const canonicalSurfaceState = assessment
+    ? assessmentSurfaceCompatibilityState(assessment)
+    : null;
 
   return {
     ...(runtimeArtifacts ?? {}),
     ...(assessment ? {
       consentControlAssessment: assessment,
       consent_control_assessment: assessment,
-      consentSurfaceObserved:
-        assessment.surface.status === "observed_actionable" ||
-        assessment.surface.status === "observed_non_actionable",
-      consent_surface_observed:
-        assessment.surface.status === "observed_actionable" ||
-        assessment.surface.status === "observed_non_actionable",
+      consentSurfaceObserved: canonicalSurfaceState,
+      consent_surface_observed: canonicalSurfaceState,
     } : {}),
     firstLayerConsentChoices: evidence,
     first_layer_consent_choices: evidence,

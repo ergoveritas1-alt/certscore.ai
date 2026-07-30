@@ -1061,6 +1061,47 @@ export async function preConsentRuntimeScanner(
           retainedConsentUiObservation = preScreenshotConsentObservation;
         }
       }
+      if (shouldRunImmediateStructuredConsentRecovery(preScreenshotConsentObservation)) {
+        const evidenceFinalizationReserveMs = 1_500;
+        const requestedRecoveryBudgetMs = Math.min(
+          fastWait ? 3_000 : 4_000,
+          Math.max(0, remainingModuleBudgetMs() - evidenceFinalizationReserveMs),
+        );
+        if (requestedRecoveryBudgetMs >= 750) {
+          const recoveredConsentObservation = await recordBoundedTiming(
+            timingBreakdown,
+            "page evidence: immediate consent timeout recovery",
+            "Immediate read-only structured consent recovery after incomplete initial inventory; runs before consolidated page evidence can consume the remaining module budget.",
+            requestedRecoveryBudgetMs,
+            () => recoverIncompleteConsentUiObservation({
+              page,
+              scanStartedAtMs: input.scanStartedAtMs,
+              timeoutMs: requestedRecoveryBudgetMs,
+            }),
+            () => preScreenshotConsentObservation!,
+          );
+          const recoveryResolution = reconcileConsentUiRecapture({
+            current: preScreenshotConsentObservation,
+            candidate: recoveredConsentObservation,
+            strongerBasis: "recapture:immediate_timeout_structured_controls",
+            completedWithoutControlsBasis: "recapture:immediate_timeout_completed_without_first_layer_controls",
+          });
+          preScreenshotConsentObservation = recoveryResolution.strongerEvidenceRetained ||
+              recoveryResolution.completedNegativeRetained
+            ? recoveryResolution.observation
+            : annotateConsentUiObservation(
+              preScreenshotConsentObservation,
+              "recapture:immediate_timeout_structured_recovery_incomplete",
+            );
+          retainedConsentUiObservation = preScreenshotConsentObservation;
+        } else {
+          preScreenshotConsentObservation = annotateConsentUiObservation(
+            preScreenshotConsentObservation,
+            "recapture:immediate_timeout_recovery_budget_unavailable",
+          );
+          retainedConsentUiObservation = preScreenshotConsentObservation;
+        }
+      }
     }
     if ((input.screenshotMode ?? "always") !== "always") {
       await networkIdlePromise;
@@ -2618,6 +2659,62 @@ function emptyConsentUiObservation(scanStartedAtMs: number): ConsentUiObservatio
 function isIncompleteConsentUiCapture(observation: ConsentUiObservation): boolean {
   return observation.basis.includes("bounded_capture_timeout_or_failure") ||
     observation.basis.includes("inventory:probe_failed");
+}
+
+export function shouldRunImmediateStructuredConsentRecovery(
+  observation: ConsentUiObservation | undefined,
+): boolean {
+  return Boolean(
+    observation &&
+    isIncompleteConsentUiCapture(observation) &&
+    !hasSufficientFirstLayerConsentControls(observation),
+  );
+}
+
+async function recoverIncompleteConsentUiObservation(input: {
+  page: Page;
+  scanStartedAtMs: number;
+  timeoutMs: number;
+}): Promise<ConsentUiObservation> {
+  const startedAtMs = Date.now();
+  const rapidTimeoutMs = Math.min(1_250, Math.max(500, Math.floor(input.timeoutMs * 0.4)));
+  const rapidObservation = await readRapidFirstLayerConsentUiObservation(
+    input.page,
+    input.scanStartedAtMs,
+    rapidTimeoutMs,
+    "retry",
+  );
+  if (hasSufficientFirstLayerConsentControls(rapidObservation)) {
+    return annotateConsentUiObservation(
+      rapidObservation,
+      "inventory:immediate_timeout_recovery_dom",
+    );
+  }
+
+  const remainingMs = input.timeoutMs - (Date.now() - startedAtMs);
+  if (remainingMs < 500) {
+    return annotateConsentUiObservation(
+      rapidObservation,
+      "inventory:immediate_timeout_recovery_partial",
+    );
+  }
+  const accessibilityObservation = await detectConsentUi(
+    input.page,
+    input.scanStartedAtMs,
+    0,
+    {
+      accessibilityOnly: true,
+      accessibilityTimeoutMs: Math.min(1_500, remainingMs),
+    },
+  );
+  return annotateConsentUiObservation(
+    mergeConsentUiObservations(
+      rapidObservation,
+      accessibilityObservation,
+      "inventory:immediate_timeout_recovery_channels",
+    ),
+    "inventory:immediate_timeout_recovery_completed",
+  );
 }
 
 export function reconcileConsentUiRecapture(input: {
@@ -4438,12 +4535,17 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       const centerX = Math.max(0, Math.min(window.innerWidth - 1, rect.left + rect.width / 2));
       const centerY = Math.max(0, Math.min(window.innerHeight - 1, rect.top + rect.height / 2));
       const centerHit = document.elementFromPoint(centerX, centerY);
+      const opacity = Number.parseFloat(style.opacity || "1");
+      const hitTestableTransparentOverlay =
+        opacity <= 0.05 &&
+        style.pointerEvents !== "none" &&
+        Boolean(centerHit && (centerHit === element || element.contains(centerHit)));
       return rect.width > 0 && rect.height > 0 &&
         rect.top <= window.innerHeight + 200 && rect.bottom >= -200 &&
         style.visibility !== "hidden" && style.display !== "none" &&
         style.pointerEvents !== "none" &&
         element.getAttribute("aria-hidden") !== "true" &&
-        Number.parseFloat(style.opacity || "1") > 0.05 &&
+        (opacity > 0.05 || hitTestableTransparentOverlay) &&
         (!centerHit || centerHit === element || element.contains(centerHit));
     };
     const consentContextFor = (element) => {

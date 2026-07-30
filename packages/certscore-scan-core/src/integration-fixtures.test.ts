@@ -23,6 +23,7 @@ import {
   consentUiObservationFromConfirmedGeometryControls,
   consentControlsFromAccessibilityTree,
   preConsentRuntimeScanner,
+  shouldRunImmediateStructuredConsentRecovery,
 } from "./scanners/pre-consent-runtime-scanner.js";
 import type { ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 import { inspectBundle, type BundleInspectionReport } from "./inspector.js";
@@ -1513,6 +1514,120 @@ test("pre-consent runtime scanner recaptures late CMP choice controls when no in
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("pre-consent runtime scanner retains hit-testable transparent consent input overlays", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-transparent-input-overlays-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-transparent-input-overlays"),
+      path.join(tempRoot, "consent-transparent-input-overlays"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.inventoryDiagnostics?.timingMarkers.includes("rapid_first_layer_inventory"),
+      true,
+      "transparent actionable overlays should be retained by the canonical rapid DOM inventory",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner recovers structured controls before broad page evidence after renderer contention", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-renderer-contention-recovery-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-renderer-contention-delayed-controls"),
+      path.join(tempRoot, "consent-renderer-contention-delayed-controls"),
+      "fast",
+      "always",
+      "viewport_first",
+      20_000,
+    );
+    const observation = bundle.consentUiObservations[0];
+    const timingLabels = bundle.modulesRun[0]?.timingBreakdown?.map((entry) => entry.label) ?? [];
+    const recoveryIndex = timingLabels.indexOf("page evidence: immediate consent timeout recovery");
+    const broadEvidenceIndex = timingLabels.indexOf("page evidence capture");
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.basis.includes("recapture:immediate_timeout_structured_controls"),
+      true,
+    );
+    assert.ok(recoveryIndex >= 0, "an incomplete initial inventory should trigger immediate structured recovery");
+    assert.ok(
+      broadEvidenceIndex < 0 || recoveryIndex < broadEvidenceIndex,
+      "consent recovery must run before broad page-evidence capture",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("immediate structured consent recovery is reserved for incomplete observations", () => {
+  const incompleteObservation = {
+    observationId: "consent_ui_pre_consent",
+    observedAtMs: 7_000,
+    captureStatus: "incomplete",
+    captureDiagnostics: {
+      completedChannels: [],
+      timedOutChannels: ["accessibility_tree", "dom_inventory"],
+      failedChannels: [],
+    },
+    likelyPresent: false,
+    basis: ["bounded_capture_timeout_or_failure"],
+    textExcerpt: "",
+    layerInspected: "unknown",
+    visibleChoiceLabels: [],
+    defaultToggleStatesObserved: null,
+    nonEssentialDefaultsOff: null,
+    defaultTogglePurposeLabels: [],
+    precheckedOptionalPurposeCount: 0,
+    precheckedOptionalPurposeLabels: [],
+    acceptControlObserved: false,
+    rejectControlObserved: false,
+    managePreferencesControlObserved: false,
+    controls: [],
+    inventoryDiagnostics: {
+      candidateContainerCount: 0,
+      candidateControlCount: 0,
+      retainedControlCount: 0,
+      inventorySources: [],
+      candidateLabels: [],
+      rejectionReasons: ["timing_expired_before_controls_surfaced"],
+      timingMarkers: ["bounded_capture_timeout_or_failure"],
+    },
+    evidenceRefs: [],
+    confidence: 0.4,
+  } as const;
+
+  assert.equal(shouldRunImmediateStructuredConsentRecovery(incompleteObservation), true);
+  assert.equal(
+    shouldRunImmediateStructuredConsentRecovery({
+      ...incompleteObservation,
+      captureStatus: "no_evidence",
+      captureDiagnostics: {
+        completedChannels: ["dom_inventory"],
+        timedOutChannels: [],
+        failedChannels: [],
+      },
+      basis: ["settled_control_inventory_completed"],
+    }),
+    false,
+  );
 });
 
 test("pre-consent runtime scanner recaptures late settings controls from high-confidence CMP script evidence", async () => {

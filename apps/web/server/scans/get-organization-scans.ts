@@ -7,6 +7,7 @@ import { deriveScanQualitySummary, type ScanQualityLevel } from "../../lib/scans
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homepage-reason";
+import { canonicalConsentSurfaceCompatibilityFromSnapshot } from "../../lib/scans/consent-assessment-compatibility";
 import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveDisplayCreatedAt } from "./display-state";
@@ -551,7 +552,11 @@ async function loadOrganizationScans(
           ? null
           : overviewSnapshot?.top_finding_count ?? null,
         privacyPolicyPresent: noGo.isNoGo ? null : overviewSnapshot?.privacy_policy_present ?? null,
-        cookieBannerPresent: noGo.isNoGo ? null : overviewSnapshot?.cookie_banner_present ?? null,
+        cookieBannerPresent: noGo.isNoGo
+          ? null
+          : canonicalConsentSurfaceCompatibilityFromSnapshot(
+            overviewSnapshot as unknown as Record<string, unknown> | null
+          ),
         cmpVendorName: noGo.isNoGo ? null : overviewSnapshot?.cmp_vendor_name ?? null,
         consentAuditCompleted:
           runtimeArtifactMap.get(scan.id)?.consent_audit_completed ??

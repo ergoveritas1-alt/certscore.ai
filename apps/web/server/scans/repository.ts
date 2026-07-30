@@ -192,6 +192,7 @@ export type OrganizationScanSnapshotRow = {
   captcha_flag: boolean | null;
   certscore_overall: number | null;
   cmp_vendor_name: string | null;
+  consent_control_assessment?: Record<string, unknown> | null;
   consent_accept_observed?: boolean | null;
   consent_evidence_status?: string | null;
   consent_options_observed?: boolean | null;

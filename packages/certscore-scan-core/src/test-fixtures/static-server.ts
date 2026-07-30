@@ -46,6 +46,8 @@ export type StaticFixturePage =
   | "consent-late-first-layer-choice-controls"
   | "consent-late-without-cmp-runtime"
   | "consent-late-cmp-choice-controls"
+  | "consent-renderer-contention-delayed-controls"
+  | "consent-transparent-input-overlays"
   | "consent-privacy-choice-surface-reject-success"
   | "consent-privacy-choice-only"
   | "consent-privacy-opt-out-ad-comparison"
@@ -226,6 +228,8 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-late-first-layer-choice-controls": "consent-late-first-layer-choice-controls",
   "consent-late-without-cmp-runtime": "consent-late-without-cmp-runtime",
   "consent-late-cmp-choice-controls": "consent-late-cmp-choice-controls",
+  "consent-renderer-contention-delayed-controls": "consent-renderer-contention-delayed-controls",
+  "consent-transparent-input-overlays": "consent-transparent-input-overlays",
   "consent-privacy-choice-surface-reject-success": "consent-privacy-choice-surface-reject-success",
   "consent-privacy-choice-only": "consent-privacy-choice-only",
   "consent-privacy-opt-out-ad-comparison": "consent-privacy-opt-out-ad-comparison",
@@ -1304,6 +1308,8 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     lateFirstLayerChoiceControls: caseName === "consent-late-first-layer-choice-controls",
     lateWithoutCmpRuntime: caseName === "consent-late-without-cmp-runtime",
     lateCmpChoiceControls: caseName === "consent-late-cmp-choice-controls",
+    rendererContentionDelayedControls: caseName === "consent-renderer-contention-delayed-controls",
+    transparentInputOverlays: caseName === "consent-transparent-input-overlays",
     cmpScriptLateSettings: caseName === "consent-cmp-script-late-settings",
     cmpScriptOffscreenContextControls: caseName === "consent-cmp-script-offscreen-context-controls",
     cmpScriptOffscreenFooterSettings: caseName === "consent-cmp-script-offscreen-footer-settings",
@@ -1536,6 +1542,41 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
           if (!target) return;
           target.innerHTML = '<button id="settings" type="button">Cookie settings</button><button id="accept-all" type="button">Accept</button><button id="reject-all" type="button">Reject</button>';
         }, 3200);
+      </script>
+    `;
+  }
+  if (options.transparentInputOverlays) {
+    return `
+      <main><h1>Generic commerce fixture</h1></main>
+      <section role="dialog" aria-label="Cookie choices" style="position: fixed; inset: auto 0 0; padding: 24px; background: white;">
+        <h2>Cookies and privacy choices</h2>
+        <p>Choose whether optional analytics and advertising cookies may be used.</p>
+        <label style="display: inline-block; position: relative; padding: 10px 18px; background: #ffd814;">
+          <span>Accept</span>
+          <input aria-label="Accept" value="Accept" type="button" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.01;">
+        </label>
+        <label style="display: inline-block; position: relative; padding: 10px 18px; background: #eee;">
+          <span>Decline</span>
+          <input aria-label="Decline" value="Decline" type="button" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.01;">
+        </label>
+        <a href="/preferences">Customise</a>
+      </section>
+    `;
+  }
+  if (options.rendererContentionDelayedControls) {
+    return `
+      <main><h1>Delayed consent fixture</h1></main>
+      <div id="delayed-consent-root"></div>
+      <script>
+        setTimeout(() => {
+          const target = document.getElementById("delayed-consent-root");
+          if (!target) return;
+          target.innerHTML = '<section role="dialog" aria-label="Cookie choices"><p>Choose whether optional analytics cookies may be used.</p><button>Accept</button><button>Decline</button><a href="/preferences">Customise</a></section>';
+          const blockedUntil = performance.now() + 7600;
+          while (performance.now() < blockedUntil) {
+            Math.sqrt(144);
+          }
+        }, 250);
       </script>
     `;
   }

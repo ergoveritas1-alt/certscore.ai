@@ -491,13 +491,17 @@ test("all customer and administrative surfaces consume persisted canonical proje
     overviewProjection,
     pulseProjection,
     adminProjection,
-    apiActivityProjection
+    adminDetailProjection,
+    apiActivityProjection,
+    supplementalSignalsProjection
   ] = await Promise.all([
     readFile("apps/web/server/scans/scan-report-projection.ts", "utf8"),
     readFile("apps/web/server/scans/get-organization-scans.ts", "utf8"),
     readFile("apps/web/lib/pulse/projection.ts", "utf8"),
     readFile("apps/web/server/admin/admin-scan-summary.ts", "utf8"),
-    readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8")
+    readFile("apps/web/server/admin/get-admin-scan-detail.ts", "utf8"),
+    readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8"),
+    readFile("apps/web/lib/scans/scan-detail-supplemental-signals.ts", "utf8")
   ]);
 
   assert.match(reportProjection, /canonicalConsentAssessment/);
@@ -506,6 +510,7 @@ test("all customer and administrative surfaces consume persisted canonical proje
 
   assert.match(overviewProjection, /overviewSnapshot\?\.certscore_overall/);
   assert.match(overviewProjection, /legacyScoreAssessmentMap/);
+  assert.match(overviewProjection, /canonicalConsentSurfaceCompatibilityFromSnapshot/);
   assert.doesNotMatch(overviewProjection, /cookie consent tool|manage choices|accept all|decline/i);
 
   assert.match(pulseProjection, /buildScanReportUnifiedFindings/);
@@ -516,7 +521,19 @@ test("all customer and administrative surfaces consume persisted canonical proje
   assert.match(adminProjection, /reportSummary/);
   assert.doesNotMatch(adminProjection, /cookie consent tool|manage choices|accept all|decline/i);
 
+  assert.match(adminDetailProjection, /withCanonicalConsentSnapshotCompatibility/);
+  assert.doesNotMatch(adminDetailProjection, /cookie consent tool|manage choices|accept all|decline/i);
+
   assert.match(apiActivityProjection, /loadLatestVersionedScoreAssessments/);
   assert.match(apiActivityProjection, /scan_snapshots/);
+  assert.match(apiActivityProjection, /consent_accept_observed/);
+  assert.match(apiActivityProjection, /consent_reject_observed/);
+  assert.match(apiActivityProjection, /consent_options_observed/);
   assert.doesNotMatch(apiActivityProjection, /cookie consent tool|manage choices|accept all|decline/i);
+
+  assert.match(supplementalSignalsProjection, /canonicalConsentSurfaceCompatibilityFromSnapshot/);
+  assert.doesNotMatch(
+    supplementalSignalsProjection,
+    /snapshot\.cookie_banner_present\s*===\s*(?:true|false)/
+  );
 });
