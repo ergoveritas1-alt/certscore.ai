@@ -63,7 +63,6 @@ const GDPR_EPRIVACY_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   data_subject_rights_disclosure: { weight: 5 },
   device_identification_fingerprinting_signal_observed: { weight: 5 },
   dpo_contact_point_disclosure: { weight: 5 },
-  formal_dpo_designation_disclosure: { weight: 0 },
   embedded_content_pre_consent: { weight: 5 },
   international_transfers_disclosure: { weight: 5 },
   legal_basis_disclosure_observed: { weight: 5 },

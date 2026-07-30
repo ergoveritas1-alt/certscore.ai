@@ -1903,6 +1903,15 @@ function deriveConsentEvidenceChannels(input: {
   const hasObservationBasis = (pattern: RegExp) => observations.some((observation) =>
     observation.basis.some((basis) => pattern.test(basis))
   );
+  const channelCompleted = (channelName: "accessibility_tree" | "dom_inventory") =>
+    observations.some((observation) =>
+      observation.captureDiagnostics?.completedChannels.includes(channelName) === true
+    );
+  const channelIncomplete = (channelName: "accessibility_tree" | "dom_inventory") =>
+    observations.some((observation) =>
+      observation.captureDiagnostics?.timedOutChannels.includes(channelName) === true ||
+      observation.captureDiagnostics?.failedChannels.includes(channelName) === true
+    );
   const channel = (
     name: ConsentEvidenceChannel["channel"],
     status: ConsentEvidenceChannel["status"],
@@ -1918,11 +1927,20 @@ function deriveConsentEvidenceChannels(input: {
   const domObserved = input.domSnapshots.some((snapshot) =>
     snapshot.consentStateAtTime === "pre_consent" && (snapshot.textExcerpt?.trim().length ?? 0) > 0
   );
-  const accessibilityObserved = hasObservationBasis(/accessibility_tree/i);
-  const pageScriptObserved = hasObservationBasis(/(?:rapid|first_layer|generic_consent_surface|shadow_root|same_origin_frame|viewport|full_document)/i);
+  const accessibilityIncomplete = channelIncomplete("accessibility_tree");
+  const accessibilityObserved =
+    channelCompleted("accessibility_tree") ||
+    hasObservationBasis(/accessibility_tree/i) && !accessibilityIncomplete;
+  const pageScriptIncomplete = channelIncomplete("dom_inventory");
+  const pageScriptObserved =
+    channelCompleted("dom_inventory") ||
+    hasObservationBasis(/(?:rapid|first_layer|generic_consent_surface|shadow_root|same_origin_frame|viewport|full_document)/i) &&
+      !pageScriptIncomplete;
   const geometryObserved = hasObservationBasis(/geometry:(?:captured|confirmed)|geometry_proof/i);
   const geometryIncomplete = hasObservationBasis(/geometry_capture_unavailable|geometry.*(?:failed|unavailable)/i);
-  const consentObservationIncomplete = hasObservationBasis(/bounded_capture_timeout_or_failure|probe_failed|runtime_partial/i);
+  const consentObservationIncomplete =
+    observations.some((observation) => observation.captureStatus === "incomplete") ||
+    hasObservationBasis(/bounded_capture_timeout_or_failure|probe_failed|runtime_partial/i);
 
   return [
     channel(
@@ -1945,15 +1963,15 @@ function deriveConsentEvidenceChannels(input: {
     ),
     channel(
       "accessibility_tree",
-      accessibilityObserved ? "observed" : consentObservationIncomplete ? "inspection_incomplete" : "not_observed",
+      accessibilityObserved ? "observed" : accessibilityIncomplete || consentObservationIncomplete ? "inspection_incomplete" : "not_observed",
       accessibilityObserved ? observations.filter((observation) => observation.basis.some((basis) => /accessibility_tree/i.test(basis))).length : 0,
-      accessibilityObserved ? [] : consentObservationIncomplete ? ["accessibility_inventory_incomplete"] : ["no_accessibility_evidence"],
+      accessibilityObserved ? [] : accessibilityIncomplete || consentObservationIncomplete ? ["accessibility_inventory_incomplete"] : ["no_accessibility_evidence"],
     ),
     channel(
       "page_script_inventory",
-      pageScriptObserved ? "observed" : consentObservationIncomplete ? "inspection_incomplete" : "not_observed",
+      pageScriptObserved ? "observed" : pageScriptIncomplete || consentObservationIncomplete ? "inspection_incomplete" : "not_observed",
       pageScriptObserved ? observations.reduce((sum, observation) => sum + observation.controls.length, 0) : 0,
-      pageScriptObserved ? [] : consentObservationIncomplete ? ["page_script_inventory_incomplete"] : ["no_page_script_inventory"],
+      pageScriptObserved ? [] : pageScriptIncomplete || consentObservationIncomplete ? ["page_script_inventory_incomplete"] : ["no_page_script_inventory"],
     ),
     channel(
       "cmp_runtime",
@@ -2015,9 +2033,15 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
   const consentSurfaceObserved = Boolean(visibleObservation);
   const preConsentRun = (input.modulesRun ?? []).find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
   const observationFailed = observations.length === 0 || observations.some((observation) =>
-    observation.basis.includes("bounded_capture_timeout_or_failure") ||
-    observation.basis.includes("inventory:probe_failed") ||
-    observation.basis.includes("geometry_capture_unavailable")
+    observation.captureStatus === "incomplete" ||
+    (
+      observation.captureStatus === undefined &&
+      (
+        observation.basis.includes("bounded_capture_timeout_or_failure") ||
+        observation.basis.includes("inventory:probe_failed") ||
+        observation.basis.includes("geometry_capture_unavailable")
+      )
+    )
   );
   const settledInventoryCompleted = observations.some((observation) =>
     observation.basis.includes("settled_control_inventory_completed")

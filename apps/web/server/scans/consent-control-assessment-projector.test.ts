@@ -108,6 +108,57 @@ test("Oxfam A/R/O remains observed when a later same-document state is collapsed
   assert.equal(assessment.controls.options.state, "observed");
 });
 
+test("completed typed DOM controls survive an independent accessibility timeout", () => {
+  const url = "https://site-under-test.example/";
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+    { actionType: "reject_all", label: "Decline", visible: true, layer: "first_layer" },
+    { actionType: "manage_preferences", label: "Customise", visible: true, layer: "first_layer" },
+  ], { url });
+  source.domSnapshots = [];
+  source.screenshots = [{
+    artifactId: "screenshot-pre-consent",
+    capturedAtMs: 6_400,
+    consentStateAtTime: "pre_consent",
+    pagePhase: "dom_content_loaded",
+    path: "artifacts/screenshot-pre-consent.png",
+    url,
+  }];
+  source.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory"],
+    failedChannels: [],
+    timedOutChannels: ["accessibility_tree"],
+  };
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: {
+      actionableControlObserved: true,
+      consentSurfaceObserved: true,
+      coverageStatus: "limited",
+      evidenceChannels: [
+        { channel: "page_script_inventory", status: "observed" },
+        { channel: "accessibility_tree", status: "inspection_incomplete" },
+      ],
+      inspectionCompleted: false,
+      limitationKeys: ["accessibility_inventory_incomplete"],
+      observedAtMs: 6_500,
+      outcome: "actionable_surface_observed",
+    },
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.document.identityStatus, "matched");
+  assert.deepEqual(assessment.coverage.requiredChannels, ["dom_inventory"]);
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+});
+
 test("geometry projection retains inline and persistent options presentation", () => {
   const assessment = deriveMaterializedConsentControlAssessment({
     bundle: bundle([

@@ -265,7 +265,7 @@ function makeCoverageOutcome(
   };
 }
 
-test("checklist presents privacy contact and formal DPO designation as separate rows", () => {
+test("checklist presents the privacy contact row and ignores retired formal DPO outcomes", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     coverageOutcomes: {
@@ -295,11 +295,12 @@ test("checklist presents privacy contact and formal DPO designation as separate 
   });
 
   const privacyContact = byId(items, "dpo_contact_point_disclosure");
-  const formalDpo = byId(items, "formal_dpo_designation_disclosure");
   assert.equal(privacyContact.label, "Privacy contact point");
   assert.equal(privacyContact.status, "Observed");
-  assert.equal(formalDpo.label, "Formal DPO designation");
-  assert.equal(formalDpo.status, "Not confirmed");
+  assert.equal(
+    items.some((item) => item.id === "formal_dpo_designation_disclosure"),
+    false
+  );
 });
 
 test("visual no-go makes UI-dependent consent controls not testable without suppressing network rows", () => {
@@ -3388,5 +3389,5 @@ test("deriveGdprEprivacyReviewSummary excludes invalid 404 and footer excerpts f
   });
 
   const summary = deriveGdprEprivacyReviewSummary(items);
-  assert.match(summary.coverageText, /^36 of 38 in-scope rows had usable automated evidence\./);
+  assert.match(summary.coverageText, /^35 of 37 in-scope rows had usable automated evidence\./);
 });

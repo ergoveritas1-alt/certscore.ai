@@ -8297,53 +8297,11 @@ function calibratePolicyDisclosureOutcome(outcome: GdprEprivacyCoverageOutcome) 
   return outcome;
 }
 
-function deriveFormalDpoDesignationOutcome(
-  privacyContactOutcome: GdprEprivacyCoverageOutcome | undefined
-) {
-  if (!privacyContactOutcome) {
-    return null;
-  }
-  const formalDpoDesignationConfirmed =
-    privacyContactOutcome.criticalEvidence.retainedEvidence.formalDpoDesignationConfirmed === true;
-  if (formalDpoDesignationConfirmed) {
-    return makeOutcome(
-      "formal_dpo_designation_disclosure",
-      "Observed",
-      "The retained policy explicitly identifies a Data Protection Officer or DPO.",
-      privacyContactOutcome.evidenceRefs,
-      {
-        retainedEvidence: {
-          derivedFromRowId: privacyContactOutcome.rowId,
-          formalDpoDesignationConfirmed: true
-        }
-      }
-    );
-  }
-  return makeOutcome(
-    "formal_dpo_designation_disclosure",
-    privacyContactOutcome.status === "Not testable" ? "Not testable" : "Not confirmed",
-    "A formal GDPR Data Protection Officer designation was not confirmed. A Privacy Officer or general privacy contact is reported separately and does not by itself establish a DPO appointment.",
-    privacyContactOutcome.evidenceRefs,
-    {
-      retainedEvidence: {
-        derivedFromRowId: privacyContactOutcome.rowId,
-        formalDpoDesignationConfirmed: false,
-        privacyContactPointStatus: privacyContactOutcome.status
-      }
-    }
-  );
-}
-
 function derivePolicyDisclosureOutcomes(input: GdprEprivacyCoveragePolicyInput) {
-  const disclosureOutcomes = POLICY_DISCLOSURE_ROWS
-    .map((config) => derivePolicyDisclosureOutcome(input, config))
-    .map(calibratePolicyDisclosureOutcome);
-  const privacyContactOutcome = disclosureOutcomes.find(
-    (outcome) => outcome.rowId === "dpo_contact_point_disclosure"
-  );
   return [
-    ...disclosureOutcomes,
-    deriveFormalDpoDesignationOutcome(privacyContactOutcome),
+    ...POLICY_DISCLOSURE_ROWS
+      .map((config) => derivePolicyDisclosureOutcome(input, config))
+      .map(calibratePolicyDisclosureOutcome),
     derivePolicyTextExtractionOutcome(input),
   ].filter((outcome): outcome is GdprEprivacyCoverageOutcome => Boolean(outcome));
 }

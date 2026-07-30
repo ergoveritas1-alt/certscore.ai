@@ -222,6 +222,41 @@ test("canonical first-layer controls establish an actionable surface without CMP
   assert.equal(outcome.observedAtMs, 900);
 });
 
+test("completed DOM controls remain actionable when the independent accessibility channel times out", () => {
+  const input = baseInput();
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    captureStatus: "observed",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory"],
+      timedOutChannels: ["accessibility_tree"],
+      failedChannels: [],
+    },
+    basis: [
+      "inventory:rapid_first_layer_controls",
+      "inventory:accessibility_tree_timed_out",
+    ],
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    visibleChoiceLabels: ["Accept", "Decline", "Customise"],
+    acceptControlObserved: true,
+    rejectControlObserved: true,
+    managePreferencesControlObserved: true,
+    controls: [
+      { actionType: "accept_all", classifierReasonCodes: ["canonical_match"], label: "Accept", visible: true },
+      { actionType: "reject_all", classifierReasonCodes: ["canonical_match"], label: "Decline", visible: true },
+      { actionType: "manage_preferences", classifierReasonCodes: ["canonical_match"], label: "Customise", visible: true },
+    ],
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "actionable_surface_observed");
+  assert.equal(outcome.actionableControlObserved, true);
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "page_script_inventory")?.status, "observed");
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "accessibility_tree")?.status, "inspection_incomplete");
+});
+
 test("captured geometry remains an observed evidence channel when AX owns classification", () => {
   const input = baseInput();
   input.consentUiObservations![0] = {

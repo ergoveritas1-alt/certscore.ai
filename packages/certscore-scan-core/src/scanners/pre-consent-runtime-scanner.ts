@@ -3863,6 +3863,7 @@ export async function detectConsentUi(
     accessibilityTimeoutMs?: number;
     allowFullDocumentCmpControls?: boolean;
     deferBrowserProbeUntilCmpOrScreenshot?: boolean;
+    rapidInventoryTimeoutMs?: number;
     waitForActionableChoiceControls?: boolean;
     waitForCompleteChoiceControls?: boolean;
     waitForControlsOnTextOnlySurface?: boolean;
@@ -3887,63 +3888,120 @@ export async function detectConsentUi(
       },
     };
   }
-  // Prefer Chrome's native accessibility tree before asking the page's
-  // JavaScript thread to inventory the DOM. Commerce pages can keep that
-  // thread busy while Chrome is already painting a complete consent surface.
-  // The accessibility path is read-only and lets us retain the controls the
-  // browser exposed without interacting with the banner.
-  const earlyAccessibilityInventory = await readAccessibilityConsentInventory(
-    page,
-    options.accessibilityTimeoutMs,
-  );
-  const earlyAccessibilityObservation = consentUiObservationFromAccessibilityInventory(
-    earlyAccessibilityInventory,
-    scanStartedAtMs,
-  );
-  if (
-    hasSufficientFirstLayerConsentControls(earlyAccessibilityObservation) &&
-    !earlyAccessibilityInventory.hasPotentialToggle
-  ) {
-    return annotateConsentInventoryTimingMarkers(earlyAccessibilityObservation, [
-      "accessibility_tree_early_inventory",
-      "early_exit_controls_found",
-    ]);
-  }
   if (options.accessibilityOnly === true) {
-    return annotateConsentInventoryTimingMarkers(earlyAccessibilityObservation, [
-      "accessibility_tree_bounded_retry",
-    ]);
+    const accessibilityInventory = await readAccessibilityConsentInventory(
+      page,
+      options.accessibilityTimeoutMs,
+    );
+    return annotateConsentInventoryTimingMarkers(
+      consentUiObservationFromAccessibilityInventory(
+        accessibilityInventory,
+        scanStartedAtMs,
+      ),
+      ["accessibility_tree_bounded_retry"],
+    );
   }
-  const waitStartedAtMs = Date.now();
-  const rapidObservation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
-  const rapidInventoryHasPotentialToggle = rapidObservation.inventoryDiagnostics?.timingMarkers.includes(
+  const rapidInventoryTimeoutMs = Math.max(
+    100,
+    Math.min(options.rapidInventoryTimeoutMs ?? 750, 1_500),
+  );
+  // Run the bounded canonical DOM inventory before the full accessibility
+  // tree. Large native trees can consume almost the entire caller budget even
+  // when the already-rendered first-layer controls are cheap to read.
+  let rapidObservation = await readRapidFirstLayerConsentUiObservation(
+    page,
+    scanStartedAtMs,
+    rapidInventoryTimeoutMs,
+    "initial",
+  );
+  let rapidInventoryHasPotentialToggle = rapidObservation.inventoryDiagnostics?.timingMarkers.includes(
     "rapid_inventory_toggle_present",
   ) === true;
   if (
     hasSufficientFirstLayerConsentControls(rapidObservation) &&
-    !rapidInventoryHasPotentialToggle &&
-    options.waitForCompleteChoiceControls !== true
+    !rapidInventoryHasPotentialToggle
   ) {
     return annotateConsentInventoryTimingMarkers(rapidObservation, [
       "rapid_first_layer_inventory",
       "early_exit_controls_found",
     ]);
   }
-  const cheapTextObservation = rapidObservation.controls.length === 0
+
+  // Accessibility remains an independent fallback and augmentation channel.
+  // Its timeout is bounded so a post-accessibility rapid retry still has an
+  // opportunity to inspect the rendered document.
+  const earlyAccessibilityInventory = await readAccessibilityConsentInventory(
+    page,
+    options.accessibilityTimeoutMs ?? 4_500,
+  );
+  const earlyAccessibilityObservation = consentUiObservationFromAccessibilityInventory(
+    earlyAccessibilityInventory,
+    scanStartedAtMs,
+  );
+  let earlyChannelObservation = mergeConsentUiObservations(
+    earlyAccessibilityObservation,
+    rapidObservation,
+    "inventory:rapid_before_accessibility",
+  );
+  if (
+    hasSufficientFirstLayerConsentControls(earlyChannelObservation) &&
+    !earlyAccessibilityInventory.hasPotentialToggle &&
+    !rapidInventoryHasPotentialToggle
+  ) {
+    return annotateConsentInventoryTimingMarkers(earlyChannelObservation, [
+      "accessibility_tree_early_inventory",
+      "early_exit_controls_found",
+    ]);
+  }
+
+  if (!hasSufficientFirstLayerConsentControls(earlyChannelObservation)) {
+    const postAccessibilityRapidObservation = await readRapidFirstLayerConsentUiObservation(
+      page,
+      scanStartedAtMs,
+      rapidInventoryTimeoutMs,
+      "post_accessibility",
+    );
+    rapidObservation = mergeConsentUiObservations(
+      rapidObservation,
+      postAccessibilityRapidObservation,
+      "inventory:rapid_post_accessibility",
+    );
+    rapidInventoryHasPotentialToggle = rapidObservation.inventoryDiagnostics?.timingMarkers.includes(
+      "rapid_inventory_toggle_present",
+    ) === true;
+    earlyChannelObservation = mergeConsentUiObservations(
+      earlyAccessibilityObservation,
+      rapidObservation,
+      "inventory:rapid_after_accessibility",
+    );
+    if (
+      hasSufficientFirstLayerConsentControls(earlyChannelObservation) &&
+      !earlyAccessibilityInventory.hasPotentialToggle &&
+      !rapidInventoryHasPotentialToggle
+    ) {
+      return annotateConsentInventoryTimingMarkers(earlyChannelObservation, [
+        "post_accessibility_rapid_inventory",
+        "early_exit_controls_found",
+      ]);
+    }
+  }
+
+  const waitStartedAtMs = Date.now();
+  const cheapTextObservation = earlyChannelObservation.controls.length === 0
     ? await readCheapConsentTextObservation(page, scanStartedAtMs)
     : undefined;
   if (
     options.returnAfterRapidAndCheapSnapshot === true &&
     !rapidInventoryHasPotentialToggle &&
-    rapidObservation.controls.length > 0
+    earlyChannelObservation.controls.length > 0
   ) {
     const rapidAndCheapObservation = cheapTextObservation
       ? mergeConsentUiObservations(
           cheapTextObservation,
-          rapidObservation,
+          earlyChannelObservation,
           "inventory:rapid_first_layer_snapshot",
         )
-      : rapidObservation;
+      : earlyChannelObservation;
     return annotateConsentInventoryTimingMarkers(
       rapidAndCheapObservation,
       rapidAndCheapObservation.controls.length > 0
@@ -3951,25 +4009,16 @@ export async function detectConsentUi(
         : ["rapid_cheap_snapshot"],
     );
   }
-  const immediateDomObservation = rapidObservation.controls.length > 0 || cheapTextObservation?.likelyPresent
+  const immediateDomObservation = earlyChannelObservation.controls.length > 0 || cheapTextObservation?.likelyPresent
     ? await readConsentUiObservation(page, scanStartedAtMs, {
         allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
       })
-    : cheapTextObservation ?? rapidObservation;
-  const immediateObservation = earlyAccessibilityObservation.controls.length > 0
-    ? mergeConsentUiObservations(
-        immediateDomObservation,
-        earlyAccessibilityObservation,
-        "inventory:accessibility_tree_early",
-      )
-    : immediateDomObservation;
-  const mergedImmediateObservation = rapidObservation.controls.length > 0
-    ? mergeConsentUiObservations(
-        immediateObservation,
-        rapidObservation,
-        "inventory:rapid_first_layer_controls",
-      )
-    : immediateObservation;
+    : cheapTextObservation ?? earlyChannelObservation;
+  const mergedImmediateObservation = mergeConsentUiObservations(
+    immediateDomObservation,
+    earlyChannelObservation,
+    "inventory:prioritized_early_channels",
+  );
   const shouldWaitForRequestedRecapture =
     options.waitForActionableChoiceControls === true ||
     options.waitForCompleteChoiceControls === true ||
@@ -4287,6 +4336,67 @@ async function waitForSufficientDirectCmpSemanticControls(
 async function readRapidFirstLayerConsentUiObservation(
   page: Page,
   scanStartedAtMs: number,
+  timeoutMs = 750,
+  phase: "initial" | "post_accessibility" | "retry" = "retry",
+): Promise<ConsentUiObservation> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const boundedTimeoutMs = Math.max(100, Math.min(timeoutMs, 1_500));
+  try {
+    return await Promise.race([
+      readRapidFirstLayerConsentUiObservationUnbounded(page, scanStartedAtMs, phase),
+      new Promise<ConsentUiObservation>((resolve) => {
+        timer = setTimeout(() => {
+          resolve({
+            ...emptyConsentUiObservation(scanStartedAtMs),
+            captureDiagnostics: {
+              completedChannels: [],
+              timedOutChannels: ["dom_inventory"],
+              failedChannels: [],
+            },
+            basis: ["inventory:rapid_dom_timed_out"],
+            inventoryDiagnostics: {
+              candidateContainerCount: 0,
+              candidateControlCount: 0,
+              retainedControlCount: 0,
+              inventorySources: [],
+              candidateLabels: [],
+              rejectionReasons: ["timing_expired_before_controls_surfaced"],
+              timingMarkers: [`rapid_inventory_${phase}_timed_out`],
+            },
+          });
+        }, boundedTimeoutMs);
+      }),
+    ]);
+  } catch {
+    return {
+      ...emptyConsentUiObservation(scanStartedAtMs),
+      captureDiagnostics: {
+        completedChannels: [],
+        timedOutChannels: [],
+        failedChannels: ["dom_inventory"],
+      },
+      basis: ["inventory:rapid_dom_failed"],
+      inventoryDiagnostics: {
+        candidateContainerCount: 0,
+        candidateControlCount: 0,
+        retainedControlCount: 0,
+        inventorySources: [],
+        candidateLabels: [],
+        rejectionReasons: ["inventory_probe_failed"],
+        timingMarkers: [`rapid_inventory_${phase}_failed`],
+      },
+    };
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function readRapidFirstLayerConsentUiObservationUnbounded(
+  page: Page,
+  scanStartedAtMs: number,
+  phase: "initial" | "post_accessibility" | "retry",
 ): Promise<ConsentUiObservation> {
   type RapidConsentInventory = {
     controls: Array<{
@@ -4457,7 +4567,27 @@ async function readRapidFirstLayerConsentUiObservation(
     };
     };
   })()`).then(() => true).catch(() => false);
-  const snapshot = installed ? await page.evaluate<RapidConsentInventory, RapidConsentInventoryInput>((input) => {
+  if (!installed) {
+    return {
+      ...emptyConsentUiObservation(scanStartedAtMs),
+      captureDiagnostics: {
+        completedChannels: [],
+        timedOutChannels: [],
+        failedChannels: ["dom_inventory"],
+      },
+      basis: ["inventory:rapid_dom_failed"],
+      inventoryDiagnostics: {
+        candidateContainerCount: 0,
+        candidateControlCount: 0,
+        retainedControlCount: 0,
+        inventorySources: [],
+        candidateLabels: [],
+        rejectionReasons: ["inventory_probe_failed"],
+        timingMarkers: [`rapid_inventory_${phase}_failed`],
+      },
+    };
+  }
+  const snapshot = await page.evaluate<RapidConsentInventory, RapidConsentInventoryInput>((input) => {
     const scope = window as typeof window & {
       __certscoreRapidConsentInventory: (input: RapidConsentInventoryInput) => RapidConsentInventory;
     };
@@ -4466,8 +4596,7 @@ async function readRapidFirstLayerConsentUiObservation(
     canonicalCmpContainerSelectors: CANONICAL_CMP_CONTAINER_SELECTORS,
     canonicalConsentInventoryLabels: CANONICAL_CONSENT_INVENTORY_LABELS,
     canonicalConsentContextHints: CANONICAL_CONSENT_CONTEXT_HINTS,
-  }).catch((): RapidConsentInventory => ({ controls: [], contextText: "", hasPotentialToggle: false }))
-    : { controls: [], contextText: "", hasPotentialToggle: false };
+  });
 
   const classifiedControls = snapshot.controls.map((control) => ({
     control,
@@ -4503,7 +4632,7 @@ async function readRapidFirstLayerConsentUiObservation(
       classifierVariant: classification.variant,
     }];
   });
-  return buildConsentUiObservationFromEvidence({
+  const observation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
     text: snapshot.contextText,
     controls,
@@ -4516,12 +4645,20 @@ async function readRapidFirstLayerConsentUiObservation(
       candidateLabels: snapshot.controls.map((control) => control.label),
       rejectionReasons: [],
       timingMarkers: [
-        "rapid_inventory_completed",
+        `rapid_inventory_${phase}_completed`,
         ...(controls.length > 0 ? ["rapid_first_layer_inventory"] : []),
         ...(snapshot.hasPotentialToggle ? ["rapid_inventory_toggle_present"] : []),
       ],
     },
   });
+  return {
+    ...observation,
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+  };
 }
 
 async function readConsentUiObservation(
@@ -4746,7 +4883,7 @@ async function readConsentUiObservation(
     ]),
     timingMarkers: [],
   };
-  return buildConsentUiObservationFromEvidence({
+  const observation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
     text: combinedText,
     controls: enrichedControls,
@@ -4757,10 +4894,36 @@ async function readConsentUiObservation(
       ...(retainedInventorySources.has("same_origin_frame") ? ["inventory:same_origin_frame_controls"] : []),
       ...(retainedInventorySources.has("accessibility_tree") ? ["inventory:accessibility_tree_controls"] : []),
       ...(retainedRootSources.has("shadow_root") ? ["inventory:open_shadow_root_controls"] : []),
+      ...(accessibilityInventory.captureStatus === "timed_out" ? ["inventory:accessibility_tree_timed_out"] : []),
+      ...(accessibilityInventory.captureStatus === "failed" ? ["inventory:accessibility_tree_failed"] : []),
       ...(!inventoryProbeInstallSucceeded || !inventory.probeSucceeded ? ["inventory:probe_failed"] : []),
     ],
     inventoryDiagnostics: diagnostics,
   });
+  const domInventoryCompleted = inventoryProbeInstallSucceeded && inventory.probeSucceeded;
+  const completedChannels = [
+    ...(domInventoryCompleted ? ["dom_inventory" as const] : []),
+    ...(accessibilityInventory.captureStatus === "completed" ? ["accessibility_tree" as const] : []),
+  ];
+  return {
+    ...observation,
+    captureStatus:
+      enrichedControls.length > 0
+        ? "observed"
+        : domInventoryCompleted || accessibilityInventory.captureStatus === "completed"
+          ? observation.captureStatus
+          : "incomplete",
+    captureDiagnostics: {
+      completedChannels,
+      timedOutChannels: accessibilityInventory.captureStatus === "timed_out"
+        ? ["accessibility_tree"]
+        : [],
+      failedChannels: [
+        ...(!domInventoryCompleted ? ["dom_inventory" as const] : []),
+        ...(accessibilityInventory.captureStatus === "failed" ? ["accessibility_tree" as const] : []),
+      ],
+    },
+  };
 }
 
 type ConsentUiInventoryControl = ConsentUiObservation["controls"][number] & {
@@ -5173,43 +5336,62 @@ const AX_CONSENT_CONTEXT_PATTERN =
 const AX_CONSENT_CONTAINER_ROLE_PATTERN =
   /^(?:alertdialog|dialog|region|banner)$/i;
 
-async function readAccessibilityConsentInventory(page: Page, timeoutMs = 6_000): Promise<{
+type AccessibilityConsentInventory = {
   controls: ConsentUiInventoryControl[];
   hasPotentialToggle: boolean;
   textExcerpts: string[];
-}> {
+  captureStatus: "completed" | "timed_out" | "failed";
+};
+
+async function readAccessibilityConsentInventory(page: Page, timeoutMs = 6_000): Promise<AccessibilityConsentInventory> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
+  const clientRef: { current: CDPSession | null } = { current: null };
+  try {
+    return await Promise.race([
     (async () => {
       const client = await page.context().newCDPSession(page);
-      try {
-        const result = await client.send("Accessibility.getFullAXTree", {} as never) as {
-          nodes?: ConsentAccessibilityTreeNode[];
-        };
-        const firstLayerNodes = await filterAccessibilityTreeToFirstLayer(
-          client,
-          result.nodes ?? [],
-          page.viewportSize(),
-        );
-        return consentControlsFromAccessibilityTree(firstLayerNodes);
-      } finally {
-        await boundedCleanup(client.detach(), 250);
-      }
+      clientRef.current = client;
+      const result = await client.send("Accessibility.getFullAXTree", {} as never) as {
+        nodes?: ConsentAccessibilityTreeNode[];
+      };
+      const firstLayerNodes = await filterAccessibilityTreeToFirstLayer(
+        client,
+        result.nodes ?? [],
+        page.viewportSize(),
+      );
+      return {
+        ...consentControlsFromAccessibilityTree(firstLayerNodes),
+        captureStatus: "completed" as const,
+      };
     })(),
-    new Promise<{ controls: ConsentUiInventoryControl[]; hasPotentialToggle: boolean; textExcerpts: string[] }>((resolve) => {
+    new Promise<AccessibilityConsentInventory>((resolve) => {
       // Large commerce accessibility trees can take longer than a DOM probe
       // even though they remain the only responsive structured surface. Keep
       // this within the caller's bounded consent budget while allowing Chrome to
       // finish a bounded native-tree read.
-      timer = setTimeout(() => resolve({ controls: [], hasPotentialToggle: false, textExcerpts: [] }), timeoutMs);
+      timer = setTimeout(() => resolve({
+        controls: [],
+        hasPotentialToggle: false,
+        textExcerpts: [],
+        captureStatus: "timed_out",
+      }), timeoutMs);
     }),
-  ]).catch(() => {
-    return { controls: [], hasPotentialToggle: false, textExcerpts: [] };
-  }).finally(() => {
+    ]);
+  } catch {
+    return {
+      controls: [],
+      hasPotentialToggle: false,
+      textExcerpts: [],
+      captureStatus: "failed",
+    };
+  } finally {
     if (timer) {
       clearTimeout(timer);
     }
-  });
+    if (clientRef.current) {
+      await boundedCleanup(clientRef.current.detach(), 250);
+    }
+  }
 }
 
 async function filterAccessibilityTreeToFirstLayer(
@@ -5250,11 +5432,7 @@ async function filterAccessibilityTreeToFirstLayer(
 }
 
 function consentUiObservationFromAccessibilityInventory(
-  inventory: {
-    controls: ConsentUiInventoryControl[];
-    hasPotentialToggle: boolean;
-    textExcerpts: string[];
-  },
+  inventory: AccessibilityConsentInventory,
   scanStartedAtMs: number,
 ): ConsentUiObservation {
   const contextText = inventory.textExcerpts.join(" ").slice(0, 12_000);
@@ -5299,11 +5477,15 @@ function consentUiObservationFromAccessibilityInventory(
     const { _matchStrength: _discardedMatchStrength, ...retainedControl } = control;
     return [retainedControl];
   });
-  return buildConsentUiObservationFromEvidence({
+  const observation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
     text: contextText,
     controls,
-    fallbackBasis: controls.length > 0 ? ["inventory:accessibility_tree"] : [],
+    fallbackBasis: [
+      ...(controls.length > 0 ? ["inventory:accessibility_tree"] : []),
+      ...(inventory.captureStatus === "timed_out" ? ["inventory:accessibility_tree_timed_out"] : []),
+      ...(inventory.captureStatus === "failed" ? ["inventory:accessibility_tree_failed"] : []),
+    ],
     inventoryDiagnostics: {
       candidateContainerCount: new Set(
         inventory.controls.map((control) => control.inventoryContainerKey ?? "accessibility_tree"),
@@ -5315,9 +5497,29 @@ function consentUiObservationFromAccessibilityInventory(
       rejectionReasons: controls.length < classifiedControls.length
         ? ["generic_container_fewer_than_two_classified_controls"]
         : [],
-      timingMarkers: ["accessibility_tree_early_inventory_completed"],
+      timingMarkers: [
+        inventory.captureStatus === "completed"
+          ? "accessibility_tree_inventory_completed"
+          : inventory.captureStatus === "timed_out"
+            ? "accessibility_tree_inventory_timed_out"
+            : "accessibility_tree_inventory_failed",
+      ],
     },
   });
+  return {
+    ...observation,
+    captureStatus:
+      inventory.captureStatus === "completed"
+        ? observation.captureStatus
+        : controls.length > 0
+          ? "observed"
+          : "incomplete",
+    captureDiagnostics: {
+      completedChannels: inventory.captureStatus === "completed" ? ["accessibility_tree"] : [],
+      timedOutChannels: inventory.captureStatus === "timed_out" ? ["accessibility_tree"] : [],
+      failedChannels: inventory.captureStatus === "failed" ? ["accessibility_tree"] : [],
+    },
+  };
 }
 
 export function consentControlsFromAccessibilityTree(
@@ -6090,17 +6292,18 @@ function buildConsentUiObservationFromEvidence(input: {
   };
 }
 
-function shouldRecaptureConsentUiAfterTimeout(
+export function shouldRecaptureConsentUiAfterTimeout(
   observation: ConsentUiObservation,
   options: { evidenceHint?: boolean; fastWait: boolean },
 ): boolean {
-  if (options.fastWait && hasTextBackedConsentSurface(observation)) {
-    return false;
-  }
   if (options.fastWait && options.evidenceHint === false) {
     return false;
   }
-  return observation.basis.includes("bounded_capture_timeout_or_failure") &&
+  const timedOut =
+    observation.basis.includes("bounded_capture_timeout_or_failure") ||
+    observation.basis.includes("inventory:rapid_dom_timed_out") ||
+    (observation.captureDiagnostics?.timedOutChannels.length ?? 0) > 0;
+  return timedOut &&
     (
       !observation.likelyPresent ||
       observation.controls.length === 0 ||
@@ -6327,6 +6530,18 @@ function mergeConsentUiObservations(
     ...candidate.visibleChoiceLabels,
     ...controls.map((control) => control.label),
   ]).slice(0, 24);
+  const completedChannels = unique([
+    ...(current.captureDiagnostics?.completedChannels ?? []),
+    ...(candidate.captureDiagnostics?.completedChannels ?? []),
+  ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["completedChannels"];
+  const timedOutChannels = unique([
+    ...(current.captureDiagnostics?.timedOutChannels ?? []),
+    ...(candidate.captureDiagnostics?.timedOutChannels ?? []),
+  ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["timedOutChannels"];
+  const failedChannels = unique([
+    ...(current.captureDiagnostics?.failedChannels ?? []),
+    ...(candidate.captureDiagnostics?.failedChannels ?? []),
+  ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["failedChannels"];
   return {
     ...candidate,
     captureStatus: current.captureStatus === "observed" || candidate.captureStatus === "observed"
@@ -6335,18 +6550,9 @@ function mergeConsentUiObservations(
         ? "incomplete"
         : candidate.captureStatus ?? current.captureStatus,
     captureDiagnostics: {
-      completedChannels: unique([
-        ...(current.captureDiagnostics?.completedChannels ?? []),
-        ...(candidate.captureDiagnostics?.completedChannels ?? []),
-      ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["completedChannels"],
-      timedOutChannels: unique([
-        ...(current.captureDiagnostics?.timedOutChannels ?? []),
-        ...(candidate.captureDiagnostics?.timedOutChannels ?? []),
-      ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["timedOutChannels"],
-      failedChannels: unique([
-        ...(current.captureDiagnostics?.failedChannels ?? []),
-        ...(candidate.captureDiagnostics?.failedChannels ?? []),
-      ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["failedChannels"],
+      completedChannels,
+      timedOutChannels: timedOutChannels.filter((channel) => !completedChannels.includes(channel)),
+      failedChannels: failedChannels.filter((channel) => !completedChannels.includes(channel)),
     },
     acceptControlObserved: current.acceptControlObserved || candidate.acceptControlObserved ||
       controls.some((control) => control.actionType === "accept_all"),

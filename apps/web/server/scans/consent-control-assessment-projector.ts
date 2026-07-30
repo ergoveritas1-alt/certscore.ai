@@ -153,19 +153,34 @@ export function deriveMaterializedConsentControlAssessment(input: {
       snapshot.documentId !== null
     )
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs);
-  const hasTypedFirstLayerInventory = (input.bundle.consentUiObservations ?? []).some((observation) =>
-    observation.captureStatus === "observed" &&
-    observation.likelyPresent === true &&
-    observation.layerInspected === "first_layer" &&
-    (observation.captureDiagnostics?.timedOutChannels?.length ?? 0) === 0 &&
-    (observation.captureDiagnostics?.failedChannels?.length ?? 0) === 0 &&
-    observation.controls.length > 0 &&
-    observation.controls.every((control) =>
-      control.visible === true &&
-      control.actionType !== "other" &&
-      (control.layer ?? observation.layerInspected) === "first_layer"
-    )
-  );
+  const typedFirstLayerInventoryObservation = (input.bundle.consentUiObservations ?? []).find((observation) => {
+    const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
+    const timedOutChannels = observation.captureDiagnostics?.timedOutChannels ?? [];
+    const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
+    const completedTypedChannel = (["dom_inventory", "accessibility_tree"] as const).some((channel) =>
+      completedChannels.includes(channel) &&
+      !timedOutChannels.includes(channel) &&
+      !failedChannels.includes(channel)
+    );
+    const legacyTypedChannelComplete =
+      completedChannels.length === 0 &&
+      timedOutChannels.length === 0 &&
+      failedChannels.length === 0 &&
+      observation.basis.some((basis) =>
+        /(?:^|:)(?:rapid|first_layer|accessibility_tree|dom_inventory|viewport)/i.test(basis)
+      );
+    return observation.captureStatus === "observed" &&
+      observation.likelyPresent === true &&
+      observation.layerInspected === "first_layer" &&
+      (completedTypedChannel || legacyTypedChannelComplete) &&
+      observation.controls.length > 0 &&
+      observation.controls.every((control) =>
+        control.visible === true &&
+        control.actionType !== "other" &&
+        (control.layer ?? observation.layerInspected) === "first_layer"
+      );
+  });
+  const hasTypedFirstLayerInventory = Boolean(typedFirstLayerInventoryObservation);
   // A consent UI observation can be retained without a DOM snapshot. When
   // every retained pre-consent visual artifact points at the same document,
   // use that URL only to bind the already-typed control inventory to the
@@ -281,7 +296,19 @@ export function deriveMaterializedConsentControlAssessment(input: {
         ? "matched"
         : "unknown";
   const typedFirstLayerInventoryComplete = hasTypedFirstLayerInventory;
-  const requiredChannels = typedFirstLayerInventoryComplete ? ["dom_inventory" as const] : REQUIRED_CHANNELS;
+  const explicitlyCompletedTypedInventoryChannels = (typedFirstLayerInventoryObservation?.captureDiagnostics?.completedChannels ?? [])
+    .filter((channel): channel is "dom_inventory" | "accessibility_tree" =>
+      channel === "dom_inventory" || channel === "accessibility_tree"
+    );
+  const retainedTypedInventoryChannels =
+    explicitlyCompletedTypedInventoryChannels.length > 0
+      ? explicitlyCompletedTypedInventoryChannels
+      : typedFirstLayerInventoryObservation?.basis.some((basis) => /accessibility_tree/i.test(basis))
+        ? ["accessibility_tree" as const]
+        : ["dom_inventory" as const];
+  const requiredChannels = typedFirstLayerInventoryComplete
+    ? retainedTypedInventoryChannels
+    : REQUIRED_CHANNELS;
   const coverageComplete =
     !input.noGo &&
     documentIdentityStatus === "matched" &&

@@ -27,6 +27,7 @@ type FixtureControl = {
 type ConsentFlowFixture = {
   complete?: boolean;
   firstLayerControls: readonly FixtureControl[];
+  independentAccessibilityTimeout?: boolean;
   persistentOptions?: boolean;
 };
 
@@ -55,7 +56,9 @@ function retainedEvidencePacket(input: ConsentFlowFixture): CanonicalEvidenceBun
       captureDiagnostics: {
         completedChannels: ["dom_inventory"],
         failedChannels: [],
-        timedOutChannels: complete ? [] : ["geometry"]
+        timedOutChannels: input.independentAccessibilityTimeout
+          ? ["accessibility_tree"]
+          : complete ? [] : ["geometry"]
       },
       controls: input.firstLayerControls.map((control, index) => ({
         ...control,
@@ -238,6 +241,28 @@ test("canonical consent-control flow preserves site-agnostic prominence and abse
       expectedRowStatus: "Review signal",
       expectedScore: 100,
       expectedState: "inline_link"
+    },
+    {
+      name: "typed controls retained despite independent accessibility timeout",
+      fixture: {
+        independentAccessibilityTimeout: true,
+        firstLayerControls: [
+          { actionType: "accept_all", label: "Accept" },
+          { actionType: "reject_all", label: "Decline" },
+          {
+            actionType: "manage_preferences",
+            label: "Customise",
+            presentationType: "dedicated_button"
+          }
+        ]
+      },
+      expectedAssessmentOptions: "observed",
+      expectedAssessmentReject: "observed",
+      expectedChecklistEligibility: "observed",
+      expectedGapFinding: false,
+      expectedRowStatus: "Observed",
+      expectedScore: 100,
+      expectedState: "dedicated_button"
     },
     {
       name: "balanced accept and decline without first-layer settings",

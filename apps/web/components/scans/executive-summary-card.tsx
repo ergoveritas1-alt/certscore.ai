@@ -1999,13 +1999,6 @@ function BenchmarkMetricCard(input: {
       : input.note;
   const benchmarkTooltip = [benchmarkTooltipBase, metricNote].filter(Boolean).join(" ");
   const isStorageMetric = input.label === "Non-essential storage" || input.label === "Pre-consent storage";
-  const inlineMetricNote = actualValue === null
-    ? isStorageMetric
-      ? input.note ?? "Storage evidence was not sufficient for a conclusive count."
-      : input.note ?? "Not measured because the relevant evidence coverage was incomplete."
-    : actualValue === 0
-      ? "Scanned, none detected."
-      : null;
   const displayLabel =
     input.label === "Third-party requests"
       ? "3rd-party requests"
@@ -2029,7 +2022,6 @@ function BenchmarkMetricCard(input: {
             </span>
           ) : null}
         </div>
-        {inlineMetricNote ? <p className="mt-1.5 text-[10px] leading-4 text-slate-500">{inlineMetricNote}</p> : null}
       </div>
       <div className="mt-3 space-y-1">
         <div className={`relative h-2 rounded-full ${tone.rail}`}>

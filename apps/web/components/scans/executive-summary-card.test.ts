@@ -21,7 +21,16 @@ test("Executive storage metric uses the concise non-essential label", () => {
   assert.match(source, /Counts non-essential storage found before consent\. Essential storage is excluded/);
   assert.match(source, /beforeConsentStorageScope === "nonessential_only"/);
   assert.match(source, /const isStorageMetric = input\.label === "Non-essential storage"/);
-  assert.match(source, /isStorageMetric\n      \? input\.note \?\? "Storage evidence was not sufficient for a conclusive count\."/);
+});
+
+test("executive summary metrics do not render explanatory wording below their values", () => {
+  const source = readFileSync(new URL("./executive-summary-card.tsx", import.meta.url), "utf8");
+
+  assert.doesNotMatch(source, /const inlineMetricNote/);
+  assert.doesNotMatch(source, /\{inlineMetricNote \?/);
+  assert.doesNotMatch(source, /Scanned, none detected\./);
+  assert.doesNotMatch(source, /Storage evidence was not sufficient for a conclusive count\./);
+  assert.doesNotMatch(source, /Not measured because the relevant evidence coverage was incomplete\./);
 });
 
 test("the headline score is labeled Overall score and is not compared with an AI-estimated benchmark", () => {

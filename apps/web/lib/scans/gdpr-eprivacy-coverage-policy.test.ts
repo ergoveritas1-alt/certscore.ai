@@ -1455,7 +1455,7 @@ test("US privacy policy calibration separates contact, DPO, rights scope, transf
     outcomes.dpo_contact_point_disclosure?.criticalEvidence.retainedEvidence.formalDpoDesignationConfirmed,
     false
   );
-  assert.equal(outcomes.formal_dpo_designation_disclosure?.status, "Not confirmed");
+  assert.equal(outcomes.formal_dpo_designation_disclosure, undefined);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps financial-incentive text out of automated decision observed", () => {

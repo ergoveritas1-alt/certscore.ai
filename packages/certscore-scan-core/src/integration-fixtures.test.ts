@@ -692,6 +692,16 @@ test("pre-consent runtime scanner does not count subscription-only reject labels
 
     assert.equal(observation?.acceptControlObserved, true);
     assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.captureDiagnostics?.completedChannels.includes("dom_inventory"),
+      true,
+      "typed controls should retain a completed canonical DOM-inventory channel",
+    );
+    assert.equal(
+      observation?.captureDiagnostics?.timedOutChannels.includes("dom_inventory"),
+      false,
+      "a completed DOM retry should supersede an earlier timeout for the same channel",
+    );
     assert.equal(observation?.rejectControlObserved, false);
     assert.equal(
       observation?.controls.some((control) => control.actionType === "reject_all"),
@@ -1364,14 +1374,16 @@ test("pre-consent runtime scanner recaptures late first-layer controls without i
       "scanner should retain late first-layer settings label",
     );
     assert.equal(
-      observation?.basis.includes("recapture:post_settle_first_layer_controls"),
+      observation?.basis.includes("recapture:post_settle_first_layer_controls") ||
+        observation?.basis.includes("inventory:rapid_after_accessibility"),
       true,
-      "scanner should mark late controls as retained by the bounded post-settle recapture",
+      "scanner should mark late controls as retained by a bounded typed recapture",
     );
     assert.equal(
-      timingLabels.includes("page evidence: consent UI post-settle recapture"),
+      timingLabels.includes("page evidence: consent UI post-settle recapture") ||
+        observation?.inventoryDiagnostics?.timingMarkers.includes("rapid_inventory_post_accessibility_completed"),
       true,
-      "scanner should use the bounded post-settle recapture path",
+      "scanner should use a bounded typed recapture path",
     );
     assert.equal(
       bundle.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_cmp_controls"),

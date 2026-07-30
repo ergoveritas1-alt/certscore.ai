@@ -492,15 +492,6 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
-    id: "formal_dpo_designation_disclosure",
-    label: "Formal DPO designation",
-    explanation: "Whether retained privacy-policy evidence explicitly identified a GDPR Data Protection Officer or DPO.",
-    findingIds: [],
-    defaultFindingStatus: "Observed",
-    notObservedText: "No explicit Data Protection Officer or DPO designation was retained for this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
     id: "supervisory_authority_complaint_disclosure",
     label: "Supervisory authority complaint",
     explanation: "Whether retained privacy-policy evidence referenced a right to complain to a supervisory authority.",
