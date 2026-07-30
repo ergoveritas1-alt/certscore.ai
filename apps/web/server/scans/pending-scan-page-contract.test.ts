@@ -37,16 +37,20 @@ test("lightweight status API resolves public shared-link access before selecting
   assert.doesNotMatch(source, /bootstrapAppUserSession/);
 });
 
-test("completed dashboard reports use an honest loading state and a short stable-record cache", async () => {
+test("completed dashboard reports stream an honest report shell before detailed evidence", async () => {
   const source = await readFile("apps/web/app/app/scans/[scanId]/page.tsx", "utf8");
   const loadingStateStart = source.indexOf("function ScanDetailLoadingState");
   const loadingStateEnd = source.indexOf("function canViewCapturedImage", loadingStateStart);
   const loadingState = source.slice(loadingStateStart, loadingStateEnd);
 
   assert.match(loadingState, /Building the report view/);
-  assert.match(loadingState, /Loading the evidence summary, cookies and trackers, and privacy review/);
-  assert.doesNotMatch(loadingState, /Overall score|3rd-party requests|Non-essential storage/);
-  assert.match(source, /COMPLETED_SCAN_DETAIL_CACHE_SECONDS = 15/);
+  assert.match(loadingState, /Report generated/);
+  assert.match(loadingState, /Overall score/);
+  assert.match(loadingState, /Findings to review/);
+  assert.match(loadingState, /Loading detailed cookies, trackers, retained evidence, and privacy review/);
+  assert.doesNotMatch(loadingState, /summary\.overallScore|summary\.topFindingCount/);
+  assert.match(source, /COMPLETED_SCAN_DETAIL_CACHE_TTL_MS = 15_000/);
+  assert.doesNotMatch(source, /unstable_cache/);
   assert.match(source, /statusProjection\\.reportReady \\|\\| completedLongEnoughForShortCache/);
   assert.match(source, /hasReportProjectionGraceElapsed\(statusProjection\)/);
 });
@@ -64,4 +68,14 @@ test("completed v2 reports materialize full detail even when the summary project
       /localV2DagReportInput && scanRecord\.scan\.status === "completed" && !persistedReportProjectionReady/
     );
   }
+});
+
+test("completed report caches do not send full scan records through the Next data cache", async () => {
+  const dashboardPage = await readFile("apps/web/app/app/scans/[scanId]/page.tsx", "utf8");
+  const materializer = await readFile("apps/web/server/scans/local-v2-dag-report.ts", "utf8");
+
+  assert.doesNotMatch(dashboardPage, /unstable_cache/);
+  assert.doesNotMatch(materializer, /unstable_cache/);
+  assert.match(dashboardPage, /COMPLETED_SCAN_DETAIL_CACHE_MAX_ENTRIES = 8/);
+  assert.match(materializer, /LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6/);
 });

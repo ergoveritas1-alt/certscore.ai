@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { unstable_cache } from "next/cache";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
@@ -53,15 +52,38 @@ type ScanDetailPageProps = {
 const RECENT_SCAN_REUSED_MESSAGE =
   "Recently scanned. Select Fresh re-scan to run a new scan.";
 
-const COMPLETED_SCAN_DETAIL_CACHE_VERSION = "completed-scan-detail-v1";
-const COMPLETED_SCAN_DETAIL_CACHE_SECONDS = 15;
+const COMPLETED_SCAN_DETAIL_CACHE_TTL_MS = 15_000;
+const COMPLETED_SCAN_DETAIL_CACHE_MAX_ENTRIES = 8;
+const completedScanDetailCache = new Map<string, {
+  expiresAt: number;
+  value: ReturnType<typeof getPublicScanById>;
+}>();
 
 function getCachedCompletedScanById(scanId: string) {
-  return unstable_cache(
-    () => withServerTiming("app.scan_detail.record_cache_miss", () => getPublicScanById(scanId)),
-    [COMPLETED_SCAN_DETAIL_CACHE_VERSION, scanId],
-    { revalidate: COMPLETED_SCAN_DETAIL_CACHE_SECONDS }
-  )();
+  const now = Date.now();
+  const cached = completedScanDetailCache.get(scanId);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+
+  const value = withServerTiming("app.scan_detail.record_cache_miss", () => getPublicScanById(scanId));
+  completedScanDetailCache.set(scanId, {
+    expiresAt: now + COMPLETED_SCAN_DETAIL_CACHE_TTL_MS,
+    value
+  });
+  void value.catch(() => {
+    if (completedScanDetailCache.get(scanId)?.value === value) {
+      completedScanDetailCache.delete(scanId);
+    }
+  });
+
+  while (completedScanDetailCache.size > COMPLETED_SCAN_DETAIL_CACHE_MAX_ENTRIES) {
+    const oldestScanId = completedScanDetailCache.keys().next().value;
+    if (typeof oldestScanId !== "string") break;
+    completedScanDetailCache.delete(oldestScanId);
+  }
+
+  return value;
 }
 
 function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanStatusProjection }) {
@@ -74,12 +96,39 @@ function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanSt
         </h1>
         <p className="mt-2 text-sm text-slate-500">The scan is complete. Preparing its retained evidence and review.</p>
       </div>
-      <div className="flex min-h-[48vh] items-center justify-center rounded-2xl border border-sky-100 bg-sky-50/60 px-6 py-10">
-        <ScanReportLoadingCard
-          description="Loading the evidence summary, cookies and trackers, and privacy review."
-          title="Building the report view"
-        />
-      </div>
+      {statusProjection.reportReady ? (
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Exec Summary</p>
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
+              Report generated
+            </span>
+          </div>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Overall score</p>
+              <div className="mt-3 h-10 w-28 animate-pulse rounded-lg bg-slate-200" aria-hidden="true" />
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-4">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Findings to review</p>
+              <div className="mt-3 h-10 w-16 animate-pulse rounded-lg bg-slate-200" aria-hidden="true" />
+            </div>
+          </div>
+          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3">
+            <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-sky-500" aria-hidden="true" />
+            <p className="text-sm text-slate-600">
+              Loading detailed cookies, trackers, retained evidence, and privacy review.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex min-h-[48vh] items-center justify-center rounded-2xl border border-sky-100 bg-sky-50/60 px-6 py-10">
+          <ScanReportLoadingCard
+            description="Loading the evidence summary, cookies and trackers, and privacy review."
+            title="Building the report view"
+          />
+        </div>
+      )}
     </div>
   );
 }

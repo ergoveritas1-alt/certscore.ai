@@ -1,7 +1,6 @@
 import "server-only";
 
 import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
-import { unstable_cache } from "next/cache";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -4983,6 +4982,12 @@ function buildMaterializedLocalV2Detail(
 // projection repair to persist stale evidence even after the projector is
 // deployed.
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v6";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
+const localV2DagReportMaterializationCache = new Map<string, {
+  expiresAt: number;
+  value: Promise<ScanDetailResponse>;
+}>();
 
 async function materializeLocalV2DagScanDetailUncached(
   scanRecord: ScanDetailResponse,
@@ -5041,26 +5046,47 @@ export async function materializeLocalV2DagScanDetail(
   }
 
   // Production Lambda artifacts are immutable once their verified SHA is
-  // recorded. Cache the derived report by scan and artifact version so report
-  // navigation does not reread S3 and repeat the full projection on every hit.
-  // Local/test records without a verified artifact identity stay uncached so
-  // fixtures and local out-dir development remain fully deterministic.
+  // recorded. Deduplicate the derived report in-process by scan and artifact
+  // version so report navigation does not reread S3 and repeat the full
+  // projection. The record is intentionally not sent through Next's data cache:
+  // evidence-rich scans can exceed that cache's 2 MB item limit. Local/test
+  // records without a verified artifact identity stay uncached so fixtures and
+  // local out-dir development remain fully deterministic.
   const localOutDirActive = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
   if (localOutDirActive || !input.scanArtifactUri || !input.scanArtifactSha256) {
     return materializeLocalV2DagScanDetailUncached(scanRecord, options);
   }
 
-  const cachedMaterialization = unstable_cache(
-    () => materializeLocalV2DagScanDetailUncached(scanRecord, options),
-    [
-      LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION,
-      scanRecord.scan.id,
-      input.scanArtifactSha256,
-      input.manifestArtifactSha256 ?? "no-manifest",
-      getProductionPolicyModelReviewRevision(scanRecord.runtimeArtifacts),
-      options.requireBundle === true ? "required" : "optional"
-    ],
-    { revalidate: 3600 }
-  );
-  return cachedMaterialization();
+  const cacheKey = [
+    LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION,
+    scanRecord.scan.id,
+    input.scanArtifactSha256,
+    input.manifestArtifactSha256 ?? "no-manifest",
+    getProductionPolicyModelReviewRevision(scanRecord.runtimeArtifacts),
+    options.requireBundle === true ? "required" : "optional"
+  ].join(":");
+  const now = Date.now();
+  const cached = localV2DagReportMaterializationCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+
+  const value = materializeLocalV2DagScanDetailUncached(scanRecord, options);
+  localV2DagReportMaterializationCache.set(cacheKey, {
+    expiresAt: now + LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS,
+    value
+  });
+  void value.catch(() => {
+    if (localV2DagReportMaterializationCache.get(cacheKey)?.value === value) {
+      localV2DagReportMaterializationCache.delete(cacheKey);
+    }
+  });
+
+  while (localV2DagReportMaterializationCache.size > LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES) {
+    const oldestKey = localV2DagReportMaterializationCache.keys().next().value;
+    if (typeof oldestKey !== "string") break;
+    localV2DagReportMaterializationCache.delete(oldestKey);
+  }
+
+  return value;
 }

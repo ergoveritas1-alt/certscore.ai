@@ -517,7 +517,7 @@ When the user says **deploy all**, use the fast deploy-all gate before committin
 pnpm preflight:all
 ```
 
-In this repo, **deploy all** means the public web app, validation worker/DB-related code paths, production DB migration workflow when migrations changed, and the v2 DAG Lambda scanner images in all three approved scanner regions: `eu-central-1`, `eu-west-1`, and `us-west-2`. Treat those as the canonical Lambda scanner regions unless the user explicitly approves a region change.
+In this repo, **deploy all** means the public web app, validation worker, migrations applied from the target web image before ECS promotion, and the v2 DAG Lambda scanner images in all three approved scanner regions: `eu-central-1`, `eu-west-1`, and `us-west-2`. It does not run a separate production DB deployment lane. Treat those as the canonical Lambda scanner regions unless the user explicitly approves a region change.
 
 Use the full local gate when the change touches shared build infrastructure, broad dependency surfaces, release-critical scan behavior, or when you need maximum local confidence before pushing:
 
@@ -598,7 +598,30 @@ Do not use local production DB tunnels, ECS Exec, or copied secrets for routine 
 - Push the branch to GitHub instead of deploying an uncommitted working tree directly to any production host.
 - Prefer Git-based deploy promotion through the connected AWS ECS deployment workflows, but verify which runtime is actually serving `certscore.ai` before claiming production is updated.
 - Web deploys are forward-only: the target revision must contain the Git SHA currently reported by the production `/api/version` endpoint. Merge the live revision into the target branch before deploying; use the explicit non-descendant override only for an intentional emergency rollback.
-- For a user request phrased as "deploy all", run `pnpm preflight:all` first, then deploy through the canonical paths: GitHub/AWS ECS for web and validation worker, `.github/workflows/prod-db-migrate.yml` for production DB migrations when migration files changed, and the local v2 DAG Lambda image deploy helpers for each approved scanner region (`eu-central-1`, `eu-west-1`, `us-west-2`). Preview deploy orchestration first with `pnpm deploy:all -- --plan` or `pnpm deploy:all -- --dry-run` when checking scope. Scanner deploys reuse prebuilt Lambda runtime-base images by default; rebuild and push the scanner runtime base only when explicitly requested with `--push-runtime-base`.
+
+### Canonical deployment selection
+
+Before deploying, require a clean committed worktree, discover the revision currently served by the production `/api/version` endpoint, and use that live revision as the comparison base when previewing the canonical deployment plan.
+
+Use targeted deployment modes whenever scope is known:
+
+- `pnpm deploy:web -- --base <live-sha> --plan` for public web changes.
+- `pnpm deploy:validation -- --base <live-sha> --plan` for validation worker or scheduler changes.
+- `pnpm deploy:scanners -- --base <live-sha> --plan` for v2 DAG Lambda scanner changes.
+- `pnpm deploy:db -- --base <live-sha> --plan` only for an explicitly approved standalone migration.
+- `pnpm deploy:all -- --base <live-sha> --plan` only for intentionally coupled cross-system changes.
+
+Do not use deploy-all merely because deployment scope is uncertain. Run the change-aware readiness check and inspect runtime consumers first.
+
+Files under `apps/web/server/scans/` are conservatively classified as validation-related because some scan modules are shared with validation workflows. Do not deploy validation solely because of that classification; determine whether the validation worker actually consumes the changed behavior.
+
+A preflight result applies only to the exact source state that was tested. Rerun the relevant gate after any material change. The canonical deploy command may skip a duplicate local preflight only when the exact clean commit already passed it and the deployment workflow's required tests, typechecks, and guards remain enabled.
+
+Routine scanner deployments must reuse the existing runtime base, build the scanner image once in the canonical build region, skip registry cache export, replicate the image to all approved regions, and verify digest parity and Lambda health. Use `--push-runtime-base` only when Chromium, Playwright, OS packages, workspace dependencies, or the Lambda runtime-base Docker stage genuinely changed.
+
+Deploy-all applies database migrations through the target web image before ECS promotion. It does not run a separate production DB lane. Use the standalone DB deployment only when an independently approved migration must run outside a web release.
+
+After deployment, verify the workflow result, live revision, expected runtime target, and affected production behavior. Keep verification read-only by default. Do not create production scans, records, users, or other persistent state unless the user explicitly authorized that verification.
 
 ## Runtime and deployment topology
 
