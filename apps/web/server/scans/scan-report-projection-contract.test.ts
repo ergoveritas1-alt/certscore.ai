@@ -8,13 +8,24 @@ import {
   projectFirstLayerConsentChoices,
   withPersistedFirstLayerConsentEvidence
 } from "./scan-report-consent-projection";
+import {
+  buildPersistedScanReportProjection,
+  completionToReportProjectionMs,
+  isCurrentScanReportProjectionReady,
+  MAX_SCAN_REPORT_PROJECTION_BYTES,
+  readPersistedScanReportProjection,
+  REPORT_PROJECTION_READY_WARNING_MS,
+  SCAN_REPORT_PROJECTION_VERSION
+} from "./scan-report-projection-contract";
+import type { ScanDetailResponse } from "./get-scan-by-id";
 
 const projectionPath = "apps/web/server/scans/scan-report-projection.ts";
+const projectionContractPath = "apps/web/server/scans/scan-report-projection-contract.ts";
+const statusProjectionPath = "apps/web/server/scans/scan-status-projection.ts";
 
 test("scan report projection requires the canonical v2 consent assessment", async () => {
   const source = await readFile(projectionPath, "utf8");
 
-  assert.match(source, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v7"/);
   assert.match(source, /scoreVersion: canonicalScore === null \? null : "gdpr-eprivacy-canonical-shadow-v7"/);
   assert.match(source, /buildRuntimeCookieInventory/);
   assert.match(source, /runtimeCookieRows/);
@@ -29,6 +40,125 @@ test("scan report projection requires the canonical v2 consent assessment", asyn
     source,
     /runtimeArtifacts\?\.consentControlAssessment[\s\S]*record\(scanRecord\.snapshot\)\?\.consent_control_assessment/
   );
+});
+
+test("report projection writer and readiness query share one version contract", async () => {
+  const [contractSource, projectionSource, statusSource] = await Promise.all([
+    readFile(projectionContractPath, "utf8"),
+    readFile(projectionPath, "utf8"),
+    readFile(statusProjectionPath, "utf8")
+  ]);
+
+  assert.equal(SCAN_REPORT_PROJECTION_VERSION, "scan-report-projection-v8");
+  assert.match(contractSource, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v8"/);
+  assert.match(projectionSource, /from "\.\/scan-report-projection-contract"/);
+  assert.match(statusSource, /from "\.\/scan-report-projection-contract"/);
+  assert.match(
+    statusSource,
+    /projection\.report_projection_version = '\$\{SCAN_REPORT_PROJECTION_VERSION\}'/
+  );
+  assert.doesNotMatch(projectionSource, /scan-report-projection-v\d+/);
+  assert.doesNotMatch(statusSource, /scan-report-projection-v\d+/);
+});
+
+test("persisted display projection is bounded, checksum-verified, and scan-bound", () => {
+  const scanRecord = {
+    events: [],
+    scan: {
+      completedAt: "2026-07-30T19:22:39.000Z",
+      id: "5eb8e37d-7eac-4c45-bb4b-3c31c239a2df",
+      status: "completed"
+    },
+    snapshot: {
+      report_projection_payload: { stale: true },
+      report_projection_payload_sha256: "stale"
+    }
+  } as unknown as ScanDetailResponse;
+  const persisted = buildPersistedScanReportProjection(scanRecord);
+  assert.ok(persisted.sizeBytes < MAX_SCAN_REPORT_PROJECTION_BYTES);
+  assert.equal(
+    (persisted.payload.snapshot as Record<string, unknown>).report_projection_payload,
+    undefined
+  );
+
+  const hydrated = readPersistedScanReportProjection({
+    scan: scanRecord.scan,
+    snapshot: {
+      report_projection_computed_at: "2026-07-30T19:22:47.000Z",
+      report_projection_payload: persisted.payload,
+      report_projection_payload_sha256: persisted.sha256,
+      report_projection_payload_size_bytes: persisted.sizeBytes,
+      report_projection_status: "ready",
+      report_projection_version: SCAN_REPORT_PROJECTION_VERSION
+    }
+  });
+  assert.equal(hydrated?.scan.id, scanRecord.scan.id);
+
+  assert.equal(readPersistedScanReportProjection({
+    scan: scanRecord.scan,
+    snapshot: {
+      report_projection_computed_at: "2026-07-30T19:22:47.000Z",
+      report_projection_payload: persisted.payload,
+      report_projection_payload_sha256: "0".repeat(64),
+      report_projection_payload_size_bytes: persisted.sizeBytes,
+      report_projection_status: "ready",
+      report_projection_version: SCAN_REPORT_PROJECTION_VERSION
+    }
+  }), null);
+});
+
+test("oversized display projections fail closed instead of truncating evidence", () => {
+  const scanRecord = {
+    events: [],
+    runtimeArtifacts: {
+      boundedFixture: "x".repeat(MAX_SCAN_REPORT_PROJECTION_BYTES)
+    },
+    scan: {
+      id: "5eb8e37d-7eac-4c45-bb4b-3c31c239a2df",
+      status: "completed"
+    },
+    snapshot: null
+  } as unknown as ScanDetailResponse;
+  assert.throws(
+    () => buildPersistedScanReportProjection(scanRecord),
+    /maximum is/
+  );
+});
+
+test("only a ready current-version projection satisfies readiness", () => {
+  const current = {
+    report_projection_computed_at: "2026-07-30T19:22:47.000Z",
+    report_projection_status: "ready",
+    report_projection_version: SCAN_REPORT_PROJECTION_VERSION
+  };
+  assert.equal(isCurrentScanReportProjectionReady(current), true);
+  assert.equal(isCurrentScanReportProjectionReady({
+    ...current,
+    report_projection_version: "scan-report-projection-v6"
+  }), false);
+  assert.equal(isCurrentScanReportProjectionReady({
+    ...current,
+    report_projection_status: "pending"
+  }), false);
+  assert.equal(isCurrentScanReportProjectionReady({
+    ...current,
+    report_projection_computed_at: null
+  }), false);
+  assert.equal(isCurrentScanReportProjectionReady({
+    ...current,
+    report_projection_computed_at: ""
+  }), false);
+});
+
+test("report projection readiness latency is bounded and warning-calibrated", () => {
+  const completedAt = "2026-07-30T19:22:39.000Z";
+  assert.equal(
+    completionToReportProjectionMs(completedAt, Date.parse("2026-07-30T19:22:47.000Z")),
+    8_000
+  );
+  assert.equal(REPORT_PROJECTION_READY_WARNING_MS, 15_000);
+  assert.equal(completionToReportProjectionMs(null), null);
+  assert.equal(completionToReportProjectionMs("invalid"), null);
 });
 
 test("Oxfam retained controls survive the persisted report boundary", () => {

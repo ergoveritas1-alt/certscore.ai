@@ -26,7 +26,8 @@ import {
   materializeLocalV2DagScanDetail
 } from "../../../../server/scans/local-v2-dag-report";
 import {
-  hasReadyScanReportProjection,
+  getPersistedScanReportProjection,
+  loadPersistedScanReportProjection,
   persistScanReportProjection
 } from "../../../../server/scans/scan-report-projection";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
@@ -134,17 +135,22 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
       </main>
     );
   }
-  const scanRecord = await getPublicScanById(scanId);
+  const localPersistedReportProjection = statusProjection.reportReady
+    ? await loadPersistedScanReportProjection({ scanId })
+    : null;
+  const scanRecord = localPersistedReportProjection ?? await getPublicScanById(scanId);
 
   if (!scanRecord) {
     notFound();
   }
 
   const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
-  const persistedReportProjectionReady = hasReadyScanReportProjection(scanRecord);
+  const persistedReportProjection =
+    localPersistedReportProjection ?? getPersistedScanReportProjection(scanRecord);
+  const persistedReportProjectionReady = Boolean(persistedReportProjection);
   const displayScanRecord =
     localV2DagReportInput && scanRecord.scan.status === "completed"
-      ? await materializeLocalV2DagScanDetail(scanRecord)
+      ? persistedReportProjection ?? await materializeLocalV2DagScanDetail(scanRecord)
       : scanRecord;
   if (!persistedReportProjectionReady && displayScanRecord.scan.status === "completed") {
     after(async () => {

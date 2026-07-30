@@ -1,6 +1,7 @@
 import "server-only";
 
 import { queryOne } from "@website-signal-risk-scanner/db";
+import { SCAN_REPORT_PROJECTION_VERSION } from "./scan-report-projection-contract";
 
 export type ScanStatusProjection = {
   completedAt: string | null;
@@ -86,7 +87,7 @@ const PROJECTION_SQL = `select s.id,
              select 1 from scan_snapshots projection
               where projection.scan_id = s.id
                 and projection.report_projection_status = 'ready'
-                and projection.report_projection_version = 'scan-report-projection-v6'
+                and projection.report_projection_version = '${SCAN_REPORT_PROJECTION_VERSION}'
                 and projection.report_projection_computed_at is not null
            )
            else exists (

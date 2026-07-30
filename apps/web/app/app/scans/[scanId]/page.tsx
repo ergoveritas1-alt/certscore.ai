@@ -27,7 +27,8 @@ import {
   materializeLocalV2DagScanDetail
 } from "../../../../server/scans/local-v2-dag-report";
 import {
-  hasReadyScanReportProjection,
+  getPersistedScanReportProjection,
+  loadPersistedScanReportProjection,
   persistScanReportProjection
 } from "../../../../server/scans/scan-report-projection";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
@@ -195,8 +196,19 @@ async function ScanDetailReportContent({
   const canUseShortCompletedRecordCache =
     statusProjection.status === "completed" &&
     (statusProjection.reportReady || completedLongEnoughForShortCache);
-  let [scanRecord, organizationSettings] = await Promise.all([
-    withServerTiming("app.scan_detail.record", () =>
+  const [localPersistedReportProjection, organizationSettings] = await Promise.all([
+    statusProjection.reportReady
+      ? withServerTiming("app.scan_detail.persisted_projection", () =>
+          loadPersistedScanReportProjection({
+            organizationId: isPlatformAdmin ? null : organization.id,
+            scanId
+          })
+        )
+      : Promise.resolve(null),
+    getOrganizationSettings(organization.id)
+  ]);
+  const scanRecord = localPersistedReportProjection ??
+    await withServerTiming("app.scan_detail.record", () =>
       // The lightweight status lookup above has already established viewer
       // access; only stable completed records use this shared short cache.
       canUseShortCompletedRecordCache
@@ -204,24 +216,24 @@ async function ScanDetailReportContent({
         : isPlatformAdmin
           ? getPublicScanById(scanId)
           : getScanById({ organizationId: organization.id, scanId, viewerEmail: user.email })
-    ),
-    getOrganizationSettings(organization.id)
-  ]);
+    );
 
   if (!scanRecord) {
     notFound();
   }
 
   const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
-  const persistedReportProjectionReady = hasReadyScanReportProjection(scanRecord);
+  const persistedReportProjection =
+    localPersistedReportProjection ?? getPersistedScanReportProjection(scanRecord);
+  const persistedReportProjectionReady = Boolean(persistedReportProjection);
   const displayScanRecord =
     localV2DagReportInput && scanRecord.scan.status === "completed"
-      ? await withServerTiming("app.scan_detail.local_v2_report", () => materializeLocalV2DagScanDetail(scanRecord))
+      ? persistedReportProjection ??
+        await withServerTiming("app.scan_detail.local_v2_report", () => materializeLocalV2DagScanDetail(scanRecord))
       : scanRecord;
 
-  // The persisted projection is a readiness and summary read model. The full
-  // report still needs the cached materialized v2 evidence for its detailed
-  // findings, inventory, policy, and timeline surfaces.
+  // Invalid, stale, oversized, or missing projections fail closed to canonical
+  // retained-evidence materialization and are repaired after this response.
   if (!persistedReportProjectionReady && displayScanRecord.scan.status === "completed") {
     after(async () => {
       await persistScanReportProjection(displayScanRecord, {

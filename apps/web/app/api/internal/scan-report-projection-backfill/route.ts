@@ -2,10 +2,8 @@ import { NextResponse } from "next/server";
 import { query } from "@website-signal-risk-scanner/db";
 import { getAnonymousScanById, getScanById } from "../../../../server/scans/get-scan-by-id";
 import { materializeLocalV2DagScanDetail } from "../../../../server/scans/local-v2-dag-report";
-import {
-  persistScanReportProjection,
-  SCAN_REPORT_PROJECTION_VERSION
-} from "../../../../server/scans/scan-report-projection";
+import { persistScanReportProjection } from "../../../../server/scans/scan-report-projection";
+import { SCAN_REPORT_PROJECTION_VERSION } from "../../../../server/scans/scan-report-projection-contract";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

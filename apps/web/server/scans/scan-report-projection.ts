@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import { consentControlAssessmentSchema, type ConsentControlAssessment } from "@certscore/contracts";
-import { query } from "@website-signal-risk-scanner/db";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import {
   LOCAL_V2_DAG_SCAN_PROCESSOR,
@@ -17,8 +17,14 @@ import {
   buildPersistedFirstLayerConsentEvidence,
   projectFirstLayerConsentChoices
 } from "./scan-report-consent-projection";
-
-export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v7";
+import {
+  buildPersistedScanReportProjection,
+  completionToReportProjectionMs,
+  isCurrentScanReportProjectionReady,
+  readPersistedScanReportProjection,
+  REPORT_PROJECTION_READY_WARNING_MS,
+  SCAN_REPORT_PROJECTION_VERSION
+} from "./scan-report-projection-contract";
 
 /**
  * The scan detail record already includes the scan_snapshots row. Once that
@@ -27,15 +33,65 @@ export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v7";
  * to rediscover values that are already persisted there.
  */
 export function hasReadyScanReportProjection(scanRecord: Pick<ScanDetailResponse, "scan" | "snapshot">) {
-  const snapshot = scanRecord.snapshot;
   return Boolean(
     scanRecord.scan.status === "completed" &&
-    snapshot &&
-    snapshot.report_projection_status === "ready" &&
-    snapshot.report_projection_version === SCAN_REPORT_PROJECTION_VERSION &&
-    typeof snapshot.report_projection_computed_at === "string" &&
-    snapshot.report_projection_computed_at.length > 0
+    isCurrentScanReportProjectionReady(scanRecord.snapshot)
   );
+}
+
+export function getPersistedScanReportProjection(
+  scanRecord: Pick<ScanDetailResponse, "scan" | "snapshot">
+) {
+  return readPersistedScanReportProjection(scanRecord);
+}
+
+type PersistedScanReportProjectionRow = {
+  report_projection_computed_at: string | null;
+  report_projection_payload: Record<string, unknown> | null;
+  report_projection_payload_sha256: string | null;
+  report_projection_payload_size_bytes: number | null;
+  report_projection_status: string | null;
+  report_projection_version: string | null;
+  scan_id: string;
+  scan_status: string;
+};
+
+/**
+ * Reads the local display projection without first loading and normalizing all
+ * scan evidence tables. Callers must establish viewer access before using the
+ * unrestricted platform-admin/public scope.
+ */
+export async function loadPersistedScanReportProjection(input: {
+  organizationId?: string | null;
+  scanId: string;
+}) {
+  const row = await queryOne<PersistedScanReportProjectionRow>(
+    `select s.id as scan_id,
+            s.status as scan_status,
+            projection.report_projection_computed_at,
+            projection.report_projection_payload,
+            projection.report_projection_payload_sha256,
+            projection.report_projection_payload_size_bytes,
+            projection.report_projection_status,
+            projection.report_projection_version
+       from public.scans s
+       join public.scan_snapshots projection on projection.scan_id = s.id
+      where s.id = $1::uuid
+        and ($2::uuid is null or s.organization_id = $2::uuid)
+      limit 1`,
+    [input.scanId, input.organizationId ?? null],
+    { readOnly: true }
+  );
+  if (!row) {
+    return null;
+  }
+  return readPersistedScanReportProjection({
+    scan: {
+      id: row.scan_id,
+      status: row.scan_status
+    } as ScanDetailResponse["scan"],
+    snapshot: row
+  });
 }
 
 export type ScanReportProjectionRow = {
@@ -195,10 +251,18 @@ type ScanReportProjectionSource = {
 };
 
 function sourceHash(scanRecord: ScanDetailResponse, value: ProjectionValue, source: ScanReportProjectionSource = {}) {
+  const snapshot = record(scanRecord.snapshot);
+  const hashableSnapshot = snapshot
+    ? Object.fromEntries(
+        Object.entries(snapshot).filter(([key]) =>
+          !key.startsWith("report_projection_payload")
+        )
+      )
+    : null;
   return createHash("sha256")
     .update(JSON.stringify({
       scan: scanRecord.scan,
-      snapshot: scanRecord.snapshot,
+      snapshot: hashableSnapshot,
       runtimeArtifacts: scanRecord.runtimeArtifacts,
       sourceSnapshot: source.snapshot ?? null,
       sourceRuntimeArtifacts: source.runtimeArtifacts ?? null,
@@ -364,9 +428,11 @@ export async function persistScanReportProjection(
   const consentControlEvidence = buildPersistedFirstLayerConsentEvidence(
     rawFirstLayerConsentChoices(scanRecord) ?? null
   );
+  const projectionWasAlreadyReady = isCurrentScanReportProjectionReady(snapshot);
   const scanNoGoAssessment = record(sourceRuntimeArtifacts?.scan_no_go_assessment) ?? record(sourceRuntimeArtifacts?.scanNoGoAssessment) ?? record(sourceSnapshot?.scan_no_go_assessment);
   const visualAccessReview = record(sourceRuntimeArtifacts?.visual_access_review) ?? record(sourceRuntimeArtifacts?.visualAccessReview) ?? record(sourceSnapshot?.visual_access_review);
   const hash = sourceHash(scanRecord, value, source);
+  const persistedProjection = buildPersistedScanReportProjection(scanRecord);
 
   await query(
     `insert into public.scan_snapshots (
@@ -386,7 +452,8 @@ export async function persistScanReportProjection(
        scan_no_go_assessment, visual_access_review,
        report_projection_version, report_projection_status,
        report_projection_computed_at, report_projection_source_hash,
-       report_projection_error
+       report_projection_error, report_projection_payload,
+       report_projection_payload_sha256, report_projection_payload_size_bytes
      )
      select s.id, s.organization_id, s.domain_id,
             greatest(coalesce(s.pages_requested, s.pages_scanned, 1), 1),
@@ -396,7 +463,8 @@ export async function persistScanReportProjection(
             $22, $23, $24, $25, $26::jsonb,
             $31::jsonb, $32, $33, $34::timestamptz, $35, $36, $37,
             $27::jsonb, $28::jsonb,
-            $29, 'ready', timezone('utc', now()), $30, null
+            $29, 'ready', timezone('utc', now()), $30, null,
+            $38::jsonb, $39, $40
        from public.scans s
       where s.id = $1::uuid
         and s.domain_id is not null
@@ -439,7 +507,10 @@ export async function persistScanReportProjection(
            report_projection_status = excluded.report_projection_status,
            report_projection_computed_at = excluded.report_projection_computed_at,
            report_projection_source_hash = excluded.report_projection_source_hash,
-           report_projection_error = excluded.report_projection_error`,
+           report_projection_error = excluded.report_projection_error,
+           report_projection_payload = excluded.report_projection_payload,
+           report_projection_payload_sha256 = excluded.report_projection_payload_sha256,
+           report_projection_payload_size_bytes = excluded.report_projection_payload_size_bytes`,
     [
       scanRecord.scan.id,
       value.score,
@@ -477,9 +548,31 @@ export async function persistScanReportProjection(
       assessment?.provenance.computedAt ?? null,
       assessment?.provenance.sourceHash ?? null,
       assessment?.coverage.status ?? null,
-      assessment?.surface.status ?? null
+      assessment?.surface.status ?? null,
+      JSON.stringify(persistedProjection.payload),
+      persistedProjection.sha256,
+      persistedProjection.sizeBytes
     ]
   );
+
+  if (!projectionWasAlreadyReady) {
+    const completionToProjectionMs = completionToReportProjectionMs(scanRecord.scan.completedAt);
+    const event = {
+      completionToProjectionMs,
+      event: "scan.report_projection.ready",
+      payloadSizeBytes: persistedProjection.sizeBytes,
+      projectionVersion: SCAN_REPORT_PROJECTION_VERSION,
+      scanId: scanRecord.scan.id
+    };
+    if (
+      completionToProjectionMs !== null &&
+      completionToProjectionMs > REPORT_PROJECTION_READY_WARNING_MS
+    ) {
+      console.warn(JSON.stringify(event));
+    } else {
+      console.info(JSON.stringify(event));
+    }
+  }
 
   return value;
 }

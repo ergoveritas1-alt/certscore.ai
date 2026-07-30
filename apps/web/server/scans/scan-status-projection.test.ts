@@ -62,6 +62,18 @@ test("lightweight status keeps recent completed scans finalizing", async () => {
   assert.equal(response.reportReadiness.status, "finalizing");
 });
 
+test("lightweight status exposes a recent completed scan as soon as its current projection is ready", async () => {
+  const build = await getBuildLightweightScanStatusResponse();
+  const response = build(
+    projection({
+      completedAt: new Date().toISOString(),
+      reportReady: true
+    })
+  );
+  assert.equal(response.reportReadiness.status, "ready");
+  assert.equal(response.scan.status, "completed");
+});
+
 test("lightweight status does not apply the fallback to non-completed scans", async () => {
   const build = await getBuildLightweightScanStatusResponse();
   const response = build(projection({ status: "running" }));
