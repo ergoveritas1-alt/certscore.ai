@@ -1,9 +1,6 @@
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
-import { DEFAULT_NEW_MEMBERSHIP_ROLE } from "../lib/auth/membership-role-policy";
 import type { AuthenticatedAppUser } from "./auth-flows/types";
 import {
-  createOrganization,
-  createOrganizationMembership,
   findAppUserByEmailRecord,
   findAppUserProfileById,
   findOrganizationById,
@@ -46,23 +43,6 @@ export type BootstrapResult = {
 };
 
 export type BootstrapSessionUser = AuthenticatedAppUser;
-
-function slugify(input: string) {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-}
-
-function getWorkspaceName(user: BootstrapSessionUser) {
-  return `SignalNest-${user.id.slice(0, 8)}`;
-}
-
-function getWorkspaceSlug(user: BootstrapSessionUser) {
-  const emailPart = user.email?.split("@")[0] ?? "workspace";
-  return `${slugify(emailPart)}-${user.id.slice(0, 8)}`;
-}
 
 function mergeAuthProviders(existingProvider: string | null | undefined, nextProvider: string) {
   const providers = new Set(
@@ -134,17 +114,8 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
   let membership = (await findOrganizationMembershipByUserId(canonicalUserId)) as OrganizationMemberRecord | null;
   let organization: OrganizationRecord | null = null;
 
-  if (!membership) {
-    organization = mapOrganizationRow(await createOrganization({
-      name: getWorkspaceName(user),
-      slug: getWorkspaceSlug(user)
-    }));
-
-    membership = (await createOrganizationMembership({
-      organizationId: organization.id,
-      role: DEFAULT_NEW_MEMBERSHIP_ROLE,
-      userId: canonicalUserId
-    })) as OrganizationMemberRecord;
+  if (membership) {
+    organization = mapOrganizationRow(await findOrganizationById(membership.organization_id));
   }
 
   return {
@@ -154,10 +125,8 @@ export async function bootstrapAppUserSession(user: BootstrapSessionUser): Promi
       id: canonicalUserId
     },
     profile,
-    organization:
-      organization ??
-      mapOrganizationRow(await findOrganizationById(membership.organization_id)),
-    membership
+    organization: organization as OrganizationRecord,
+    membership: membership as OrganizationMemberRecord
   };
 }
 

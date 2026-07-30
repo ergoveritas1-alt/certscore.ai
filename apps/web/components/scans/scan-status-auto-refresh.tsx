@@ -5,6 +5,7 @@ import React, { useEffect } from "react";
 type ScanStatusAutoRefreshProps = {
   pendingBrowserExtensionNormalization?: boolean;
   pendingPostCompletionWork?: boolean;
+  reloadOnTerminal?: boolean;
   scanId?: string;
   silent?: boolean;
   status: string;
@@ -229,6 +230,7 @@ function recordTerminalDetection(scanId: string, state: ReturnType<ReturnType<ty
 export function ScanStatusAutoRefresh({
   pendingBrowserExtensionNormalization = false,
   pendingPostCompletionWork = false,
+  reloadOnTerminal = true,
   scanId,
   silent = false,
   status,
@@ -272,6 +274,7 @@ export function ScanStatusAutoRefresh({
       isOnline: () => navigator.onLine,
       isVisible: () => document.visibilityState === "visible",
       onTerminal: () => {
+        if (!reloadOnTerminal) return;
         if (terminalNavigations.has(scanId)) return;
         terminalNavigations.add(scanId);
         recordTerminalDetection(scanId, poller.getState());
@@ -289,7 +292,7 @@ export function ScanStatusAutoRefresh({
         poller.stop();
       }
     };
-  }, [pendingBrowserExtensionNormalization, pendingPostCompletionWork, scanId, shouldRefresh, status]);
+  }, [pendingBrowserExtensionNormalization, pendingPostCompletionWork, reloadOnTerminal, scanId, shouldRefresh, status]);
 
   if (!shouldRefresh || silent) return null;
   const statusLabel = pendingBrowserExtensionNormalization

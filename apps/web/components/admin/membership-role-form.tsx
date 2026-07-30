@@ -36,10 +36,16 @@ export function MembershipRoleForm({ action, defaultRole, organizationId, userId
   const formKey = `${organizationId}:${userId}:${defaultRole}`;
 
   return (
-    <form action={action} className="mt-0 self-start" key={formKey}>
+    <form action={action} className="mt-0 flex items-center gap-2 self-start" key={formKey}>
       <input name="organizationId" type="hidden" value={organizationId} />
       <input name="userId" type="hidden" value={userId} />
       <RoleSelect defaultRole={defaultRole} />
+      <RoleSaveStatus />
     </form>
   );
+}
+
+function RoleSaveStatus() {
+  const { pending } = useFormStatus();
+  return pending ? <span aria-live="polite" className="text-xs text-slate-500">Saving…</span> : null;
 }

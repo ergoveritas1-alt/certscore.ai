@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { PendingButtonLink, PendingLink } from "../../../../components/ui/pending-link";
 import { requirePlatformAdminContext } from "../../../../server/admin/platform-admin";
 import { listCompanies } from "../../../../server/company/repository";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
@@ -20,7 +20,7 @@ export default async function AdminCompaniesPage() {
           <h2 className="text-2xl font-semibold text-slate-950">Workspaces</h2>
           <p className="mt-1 text-sm text-slate-600">Manage workspaces, membership, and branding.</p>
         </div>
-        <Link className="app-raised-button app-raised-button-dark rounded-lg px-4 py-2 text-sm font-semibold text-white" href="/app/admin/companies/new">New workspace</Link>
+        <PendingButtonLink className="app-raised-button app-raised-button-dark rounded-lg px-4 py-2 text-sm font-semibold text-white" href="/app/admin/companies/new" idleContent="New workspace" pendingContent="Opening…" prefetch={false} />
       </div>
 
       <Card className="border-slate-200 bg-white">
@@ -38,7 +38,7 @@ export default async function AdminCompaniesPage() {
                       <td className="py-4 pr-4 text-slate-600">{company.domainCount}</td>
                       <td className="py-4 pr-4 text-slate-600">{company.scanCount}</td>
                       <td className="whitespace-nowrap py-4 pr-4 text-slate-600">{formatAdminDateTime(company.createdAt)}</td>
-                      <td className="py-4 text-right"><Link className="font-semibold text-sky-700 hover:text-sky-900" href={`/app/admin/companies/${company.id}`}>Manage</Link></td>
+                      <td className="py-4 text-right"><PendingLink className="font-semibold text-sky-700 hover:text-sky-900" href={`/app/admin/companies/${company.id}`} idleContent="Manage" pendingContent="Opening…" prefetch={false} /></td>
                     </tr>
                   ))}
                 </tbody>

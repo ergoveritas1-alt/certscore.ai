@@ -4,9 +4,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { getAuth } from "../better-auth/auth";
-import { sendPasswordSetupLink } from "../auth-flows/password-setup";
-import { findAppUserByEmailRecord, findOrganizationMembershipByUserId, upsertAppUserProfile } from "../users/repository";
+import { findAppUserByEmailRecord, findOrganizationMembershipByUserId } from "../users/repository";
 import { putStorageObject } from "../storage/s3";
 import { requireCompanyCapability } from "./authorization";
 import {
@@ -90,33 +88,21 @@ export async function updateCompanyNameFormAction(formData: FormData) {
 }
 
 export async function createCompanyUserFormAction(formData: FormData) {
+  return addExistingCompanyUserFormAction(formData);
+}
+
+export async function addExistingCompanyUserFormAction(formData: FormData) {
   const companyId = formValue(formData, "companyId");
   await requireCompanyCapability(companyId, "manage_users");
-  const parsed = userSchema.parse({
-    companyId,
-    email: formValue(formData, "email")
-  });
-
+  const parsed = userSchema.parse({ companyId, email: formValue(formData, "email") });
   const existingUser = await findAppUserByEmailRecord(parsed.email);
-  if (existingUser) {
-    const existingMembership = await findOrganizationMembershipByUserId(existingUser.id);
-    if (existingMembership) throw new Error("This user already belongs to a workspace. Users can belong to only one workspace.");
-    throw new Error("A user with this email already exists.");
+  if (!existingUser) {
+    throw new Error("Create the user from Admin → Users first, then assign them to a workspace.");
   }
-  const initialName = parsed.email.split("@", 1)[0] || parsed.email;
-  const created = await getAuth().api.createUser({
-    body: { email: parsed.email, name: initialName }
-  });
-  if (!created?.user) throw new Error("The authentication account could not be created.");
-
-  await upsertAppUserProfile({
-    authProvider: "password",
-    email: created.user.email,
-    fullName: created.user.name ?? initialName,
-    userId: created.user.id
-  });
-  await addCompanyMembership({ organizationId: parsed.companyId, userId: created.user.id });
-  await sendPasswordSetupLink(created.user.email);
+  if (await findOrganizationMembershipByUserId(existingUser.id)) {
+    throw new Error("This user already belongs to a workspace. Users can belong to only one workspace.");
+  }
+  await addCompanyMembership({ organizationId: parsed.companyId, userId: existingUser.id });
   revalidateCompany(parsed.companyId);
 }
 

@@ -38,22 +38,15 @@ test("company mutations enforce server-side capability checks and bounded logo t
   assert.match(migration, /logo_storage_key/);
 });
 
-test("company invitations create passwordless accounts and send a password setup link", async () => {
+test("workspace user assignment requires a user to already exist", async () => {
   const actions = await readFile("apps/web/server/company/actions.ts", "utf8");
-  const setup = await readFile("apps/web/server/auth-flows/password-setup.ts", "utf8");
   const adminCompanyPage = await readFile("apps/web/app/app/admin/companies/[companyId]/page.tsx", "utf8");
   const settingsCompanyPage = await readFile("apps/web/app/app/settings/company/page.tsx", "utf8");
 
-  assert.match(actions, /body: \{ email: parsed\.email, name: initialName \}/);
-  assert.match(actions, /const initialName = parsed\.email\.split/);
-  assert.match(actions, /sendPasswordSetupLink\(created\.user\.email\)/);
-  assert.doesNotMatch(actions, /password: z\.string/);
-  assert.match(setup, /requestPasswordReset/);
-  assert.match(setup, /reset-password\/update/);
-  assert.doesNotMatch(adminCompanyPage, /Temporary password|name="password"/);
-  assert.doesNotMatch(settingsCompanyPage, /Temporary password|name="password"/);
-  assert.doesNotMatch(adminCompanyPage, /name="fullName"/);
-  assert.doesNotMatch(settingsCompanyPage, /name="fullName"/);
+  assert.match(actions, /addExistingCompanyUserFormAction/);
+  assert.match(actions, /Create the user from Admin → Users first/);
+  assert.match(adminCompanyPage, /Add existing user/);
+  assert.match(settingsCompanyPage, /createCompanyUserFormAction/);
 });
 
 test("workspace management navigation is limited to platform admins", async () => {
@@ -90,6 +83,19 @@ test("platform admins can assign unassigned users to a workspace", async () => {
   assert.match(action, /revalidatePath\("\/app\/admin\/users"\)/);
   assert.match(page, /Assign workspace/);
   assert.match(page, /assignUserWorkspaceFormAction/);
+});
+
+test("new accounts and admin-created users stay unassigned until explicit assignment", async () => {
+  const bootstrap = await readFile("apps/web/server/bootstrap-user.ts", "utf8");
+  const adminUsersPage = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
+  const adminCreateAction = await readFile("apps/web/server/admin/create-user.ts", "utf8");
+
+  assert.doesNotMatch(bootstrap, /createOrganizationMembership|createOrganization\(/);
+  assert.match(adminUsersPage, /createAdminUserFormAction/);
+  assert.doesNotMatch(adminUsersPage, /name="companyId"/);
+  assert.match(adminCreateAction, /requirePlatformAdminContext/);
+  assert.match(adminCreateAction, /sendPasswordSetupLink/);
+  assert.doesNotMatch(adminCreateAction, /addCompanyMembership/);
 });
 
 test("platform admins can send an existing user a password reset email", async () => {

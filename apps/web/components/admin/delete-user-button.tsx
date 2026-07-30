@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFormStatus } from "react-dom";
 
 type DeleteUserButtonProps = {
   action: (formData: FormData) => Promise<void>;
@@ -29,9 +30,7 @@ export function DeleteUserButton({ action, email, userId }: DeleteUserButtonProp
       <div className="flex items-center gap-2">
         <form action={action}>
           <input name="userId" type="hidden" value={userId} />
-          <button className="rounded-md bg-red-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-800" type="submit">
-            Confirm delete
-          </button>
+          <ConfirmDeleteButton />
         </form>
         <button className="text-xs font-medium text-slate-600 underline underline-offset-2" onClick={() => setConfirming(false)} type="button">
           Cancel
@@ -39,4 +38,10 @@ export function DeleteUserButton({ action, email, userId }: DeleteUserButtonProp
       </div>
     </div>
   );
+}
+
+function ConfirmDeleteButton() {
+  const { pending } = useFormStatus();
+
+  return <button aria-busy={pending} className="rounded-md bg-red-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:cursor-wait disabled:opacity-60" disabled={pending} type="submit">{pending ? "Deleting…" : "Confirm delete"}</button>;
 }

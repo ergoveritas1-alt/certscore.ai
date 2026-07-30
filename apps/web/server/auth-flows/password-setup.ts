@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { getAuth } from "../better-auth/auth";
+import { createGmailTransport, getGmailConfig } from "../email/gmail";
 
 function getRequestOrigin(headerStore: Headers) {
   const forwardedHost = headerStore.get("x-forwarded-host")?.trim();
@@ -14,6 +15,12 @@ function getRequestOrigin(headerStore: Headers) {
 }
 
 export async function sendPasswordSetupLink(email: string) {
+  const gmailConfig = getGmailConfig();
+  if (!gmailConfig) {
+    throw new Error("Email delivery is not configured. Set GMAIL_SMTP_USER and GMAIL_SMTP_APP_PASSWORD.");
+  }
+  await createGmailTransport(gmailConfig).verify();
+
   const headerStore = await headers();
   const requestOrigin = getRequestOrigin(headerStore);
 

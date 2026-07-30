@@ -10,9 +10,10 @@ import { updateOrganizationPlanFormAction } from "../../../../server/admin/updat
 import { deleteAdminUserFormAction } from "../../../../server/admin/delete-user";
 import { assignUserWorkspaceFormAction } from "../../../../server/admin/assign-user-workspace";
 import { sendUserPasswordResetFormAction } from "../../../../server/admin/send-user-password-reset";
-import { createCompanyUserFormAction } from "../../../../server/company/actions";
+import { createAdminUserFormAction } from "../../../../server/admin/create-user";
 import { listCompanies } from "../../../../server/company/repository";
 import { DeleteUserButton } from "../../../../components/admin/delete-user-button";
+import { AdminSubmitButton } from "../../../../components/admin/admin-submit-button";
 
 type AdminUsersPageProps = {
   searchParams?: Promise<{
@@ -41,14 +42,18 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
   const users = userPage.items;
   const workspaces = await listCompanies();
   const passwordResetSent = resolved.message === "password_reset_sent";
+  const inviteSent = resolved.message === "invite_sent";
+  const userAlreadyExists = resolved.message === "user_exists";
 
   return (
     <div className="space-y-4">
       {passwordResetSent ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">Password reset email sent. The user can use the secure link to choose a new password.</div> : null}
+      {inviteSent ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">That user already exists and is unassigned. A fresh password setup link was sent.</div> : null}
+      {userAlreadyExists ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status">That user already exists and is assigned to a workspace. Use the existing user row to manage their workspace.</div> : null}
       <Card className="border-slate-200 bg-white">
-        <CardHeader><CardTitle>Invite user</CardTitle><p className="text-sm text-slate-600">Create a user and send a secure link to set their password.</p></CardHeader>
+        <CardHeader><CardTitle>Create user</CardTitle><p className="text-sm text-slate-600">Create an unassigned user and send a secure link to set their password. Assign the user to a workspace separately below.</p></CardHeader>
         <CardContent>
-          {workspaces.length > 0 ? <form action={createCompanyUserFormAction} className="flex flex-col gap-3 lg:flex-row lg:items-end"><label className="min-w-0 flex-1 text-sm font-medium text-slate-700">Email<input aria-label="Email address" className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3" name="email" required type="email" /></label><label className="min-w-0 flex-1 text-sm font-medium text-slate-700">Workspace<select className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3" name="companyId" required defaultValue=""><option disabled value="">Select a workspace</option>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label><button className="app-raised-button app-raised-button-dark h-10 shrink-0 rounded-lg px-4 text-sm font-semibold text-white" type="submit">Create user and send invite</button></form> : <p className="text-sm text-slate-600">Create a workspace before inviting users.</p>}
+          <form action={createAdminUserFormAction} className="flex flex-col gap-3 lg:flex-row lg:items-end"><label className="min-w-0 flex-1 text-sm font-medium text-slate-700">Email<input aria-label="Email address" className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3" name="email" required type="email" /></label><AdminSubmitButton className="app-raised-button app-raised-button-dark h-10 shrink-0 rounded-lg px-4 text-sm font-semibold text-white" idleContent="Create user and send invite" pendingContent="Creating…" /></form>
         </CardContent>
       </Card>
 
@@ -73,7 +78,8 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                 <th className="whitespace-nowrap pb-2 pr-4">User</th>
                 <th className="whitespace-nowrap pb-2 pr-4">Activity</th>
                 <th className="whitespace-nowrap pb-2 pr-4">Last active</th>
-                <th className="whitespace-nowrap pb-2 pr-4">Access</th>
+                <th className="whitespace-nowrap pb-2 pr-4">Access level</th>
+                <th className="whitespace-nowrap pb-2 pr-4">Assign</th>
                 <th className="whitespace-nowrap pb-2 pr-4">Plan</th>
                 <th className="whitespace-nowrap pb-2 pl-2">Actions</th>
               </tr>
@@ -104,6 +110,11 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                         organizationId={user.organizationId}
                         userId={user.id}
                       />
+                    ) : <span className="text-slate-400">Not assigned</span>}
+                  </td>
+                  <td className="whitespace-nowrap py-2.5 pr-4 align-top text-slate-600">
+                    {user.organizationId ? (
+                      <span className="text-slate-700">{user.organizationName}</span>
                     ) : workspaces.length > 0 ? (
                       <form action={assignUserWorkspaceFormAction} className="flex min-w-56 items-center gap-2">
                         <input name="userId" type="hidden" value={user.id} />
@@ -118,7 +129,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                           <option disabled value="">Assign workspace</option>
                           {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
                         </select>
-                        <button className="app-raised-button app-raised-button-dark rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white" type="submit">Assign</button>
+                        <AdminSubmitButton className="app-raised-button app-raised-button-dark rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white" idleContent="Assign" pendingContent="Assigning…" />
                       </form>
                     ) : <span className="text-slate-500">No workspaces</span>}
                   </td>
@@ -138,7 +149,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                     <div className="flex flex-col items-start gap-3">
                       <form action={sendUserPasswordResetFormAction}>
                         <input name="userId" type="hidden" value={user.id} />
-                        <button className="text-sm font-medium text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-900" type="submit">Send reset link</button>
+                        <AdminSubmitButton className="text-sm font-medium text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-900" idleContent="Send reset link" pendingContent="Sending…" />
                       </form>
                       <DeleteUserButton action={deleteAdminUserFormAction} email={user.email} userId={user.id} />
                     </div>

@@ -44,6 +44,19 @@ function isCompletedWithin24Hours(completedAt: string | null) {
 
 export default async function DashboardPage() {
   const { membership, organization, profile, user } = await withServerTiming("app.dashboard.context", () => getDashboardContext());
+  if (!organization || !membership) {
+    return (
+      <div className="mx-auto max-w-2xl py-12">
+        <Card className="border-sky-100 bg-white shadow-sm">
+          <CardHeader><CardTitle>Your account is ready</CardTitle></CardHeader>
+          <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
+            <p>You do not have a workspace assigned yet. A CertScore administrator will create or assign one before you can scan sites.</p>
+            <p>Once you are assigned, sign in again to open your workspace.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   const allowRestrictedScanOptions = canUseRestrictedScanOptions({
     membershipRole: membership.role,
     userEmail: user.email

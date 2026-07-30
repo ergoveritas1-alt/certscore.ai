@@ -114,12 +114,12 @@ function createAuth(): BetterAuthInstance {
         const gmailConfig = getGmailConfig();
 
         if (!gmailConfig) {
-          return;
+          throw new Error("Email delivery is not configured. Set GMAIL_SMTP_USER and GMAIL_SMTP_APP_PASSWORD.");
         }
 
         const transporter = createGmailTransport(gmailConfig);
 
-        await transporter.sendMail({
+        const delivery = await transporter.sendMail({
           from: `"CertScore.ai" <${gmailConfig.fromEmail}>`,
           subject: "Reset your CertScore.ai password",
           text: [
@@ -131,6 +131,12 @@ function createAuth(): BetterAuthInstance {
             `If you did not request a reset for ${user.email}, you can ignore this email.`
           ].join("\n"),
           to: user.email
+        });
+        console.info("Password setup email sent", {
+          accepted: delivery.accepted,
+          email: user.email,
+          messageId: delivery.messageId,
+          rejected: delivery.rejected
         });
       }
     },

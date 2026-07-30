@@ -300,6 +300,7 @@ async function ScanDetailReportContent({
           <ScanStatusAutoRefresh
             pendingBrowserExtensionNormalization={pendingBrowserExtensionNormalization}
             pendingPostCompletionWork={pendingPostCompletionWork}
+            reloadOnTerminal={false}
             scanId={displayScanRecord.scan.id}
             silent={Boolean(localV2DagReportInput)}
             status={displayScanRecord.scan.status}

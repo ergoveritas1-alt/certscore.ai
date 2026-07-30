@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { requirePlatformAdminContext } from "../../../../../server/admin/platform-admin";
 import { createCompanyFormAction } from "../../../../../server/company/actions";
+import { AdminSubmitButton } from "../../../../../components/admin/admin-submit-button";
 
 export default async function NewCompanyPage() {
   await requirePlatformAdminContext();
@@ -14,7 +15,7 @@ export default async function NewCompanyPage() {
           <form action={createCompanyFormAction} className="space-y-4">
             <label className="block text-sm font-medium text-slate-700">Workspace name<input className="mt-1 block h-10 w-full rounded-lg border border-slate-300 px-3" name="name" required /></label>
             <p className="text-xs text-slate-500">A stable workspace slug will be generated automatically.</p>
-            <button className="app-raised-button app-raised-button-dark rounded-lg px-4 py-2 text-sm font-semibold text-white" type="submit">Create workspace</button>
+            <AdminSubmitButton className="app-raised-button app-raised-button-dark rounded-lg px-4 py-2 text-sm font-semibold text-white" idleContent="Create workspace" pendingContent="Creating…" />
           </form>
         </CardContent>
       </Card>

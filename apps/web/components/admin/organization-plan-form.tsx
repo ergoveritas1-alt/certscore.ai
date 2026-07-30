@@ -60,6 +60,12 @@ export function OrganizationPlanForm({ action, defaultPlan, defaultPlanStatus, o
     <form action={action} className="grid items-start gap-1.5 md:grid-cols-[96px_110px]" key={formKey}>
       <input name="organizationId" type="hidden" value={organizationId} />
       <PlanControls defaultPlan={defaultPlan} defaultPlanStatus={defaultPlanStatus} />
+      <PlanSaveStatus />
     </form>
   );
+}
+
+function PlanSaveStatus() {
+  const { pending } = useFormStatus();
+  return pending ? <span aria-live="polite" className="text-xs text-slate-500">Saving…</span> : null;
 }
