@@ -1241,8 +1241,35 @@ function synthesizePreconsentThirdPartyCookieOutcome(rows: RuntimeCookieEvidence
 function synthesizePreconsentThirdPartyTrackingOutcome(
   rows: GdprEprivacyCoverageChecklistInput["runtimeTrackerPriorityRows"] | undefined
 ) {
+  const trackingRelevanceTokens = new Set([
+    "a_b_testing",
+    "ad_measurement",
+    "advertising",
+    "advertising_measurement",
+    "analytics",
+    "audience_measurement",
+    "behavioral_tracking",
+    "conversion_tracking",
+    "cross_site_tracking",
+    "event_tracking",
+    "experimentation",
+    "fingerprinting",
+    "identifier_sync",
+    "marketing_attribution",
+    "retargeting",
+    "session_replay",
+    "tracking",
+  ]);
+  const normalizeToken = (value: string) =>
+    value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const isTrackingRelevant = (row: NonNullable<typeof rows>[number]) =>
+    [row.purpose, ...(row.regulatoryRelevance ?? [])]
+      .flatMap((value) => [value, ...value.split(/[,;|/]+/)])
+      .map(normalizeToken)
+      .some((token) => trackingRelevanceTokens.has(token));
   const thirdPartyRows = (rows ?? [])
     .filter((row) => row.party === "3rd" || row.party === "mixed" || row.party === "third_party")
+    .filter(isTrackingRelevant)
     .sort(compareRuntimePriorityEvidenceRows);
   if (thirdPartyRows.length === 0) {
     return undefined;

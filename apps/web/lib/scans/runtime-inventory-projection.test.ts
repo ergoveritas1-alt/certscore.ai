@@ -100,7 +100,81 @@ test("derives Fable macro categories without replacing detailed purposes", () =>
   assert.equal(deriveInventoryMacroCategory({ purpose: "Tag management", priority: "medium", vendor: "Google Tag Manager" }), "Functional");
   assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "jQuery CDN" }), "Essential");
   assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "Instagram CDN" }), "Functional");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "Embedded media", priority: "medium", vendor: "Example Player" }), "Functional");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "Unknown", priority: "medium", vendor: "unresolved.example" }), "Review");
   assert.equal(deriveInventoryMacroCategory({ purpose: "Unknown", priority: "review_needed", vendor: "unresolved.example" }), "Review");
+});
+
+test("projects canonical embedded players without reclassifying them as analytics", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: ["player.vimeo.com"],
+    firstPartyDomain: "example.com",
+    preConsentVendors: ["Vimeo"],
+    resolvedVendors: ["Vimeo"],
+    sessionReplayVendors: [],
+    trackerVendors: [],
+    topObservedEntities: [{
+      category: "unknown",
+      label: "player.vimeo.com",
+      requestCount: 2,
+    }],
+    unresolvedHosts: [],
+  });
+  const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
+  const player = groupedRows.find((row) => row.rawProducts.includes("Vimeo Embedded Player"));
+
+  assert.equal(player?.purpose, "Embedded media");
+  assert.equal(player?.macroCategory, "Functional");
+  assert.equal(player?.priority, "medium");
+  assert.deepEqual(player?.regulatoryRelevance, [
+    "embedded_content",
+    "media_delivery",
+    "third_party_runtime",
+  ]);
+});
+
+test("keeps incompatible products from one legal entity in distinct inventory rows", () => {
+  const groupedRows = buildRuntimeInventoryGroupRows({
+    cookieRows: [],
+    trackerRows: [
+      {
+        category: "analytics",
+        confidence: 0.99,
+        domains: ["www.google-analytics.com"],
+        firstSeenMs: 100,
+        label: "Google Analytics",
+        observedVia: ["request"],
+        party: "third_party",
+        preConsent: true,
+        regulatoryRelevance: ["analytics", "audience_measurement"],
+        requestCount: 1,
+        source: "fixture",
+      },
+      {
+        category: "authentication",
+        confidence: 0.99,
+        domains: ["accounts.google.com"],
+        firstSeenMs: 150,
+        label: "Google Sign-in",
+        observedVia: ["request"],
+        party: "third_party",
+        preConsent: true,
+        regulatoryRelevance: ["authentication"],
+        requestCount: 1,
+        source: "fixture",
+      },
+    ],
+  });
+  const googleRows = groupedRows.filter((row) => row.canonicalEntity === "Google LLC");
+
+  assert.equal(googleRows.length, 2);
+  assert.deepEqual(
+    googleRows.map((row) => [row.rawProducts[0], row.purpose]).sort(),
+    [
+      ["Google Analytics", "Audience measurement"],
+      ["Google Sign-in", "Authentication"],
+    ],
+  );
 });
 
 test("keeps context-dependent runtime activity out of Essential evidence without a necessity basis", () => {

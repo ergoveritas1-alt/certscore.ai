@@ -840,7 +840,7 @@ export function deriveInventoryMacroCategory(input: {
   if (/^(security|necessary|payment|payment_processors|authentication|cookie_compliance|consent|consent_management)$/.test(purpose)) {
     return "Essential";
   }
-  if (/^(tag_management|tag_manager|functional|customer_support|personalization|personalisation|embedded_content)$/.test(purpose)) {
+  if (/^(tag_management|tag_manager|functional|customer_support|personalization|personalisation|embedded_content|embedded_media)$/.test(purpose)) {
     return "Functional";
   }
   if (/^(cdn|cdn_static)$/.test(purpose)) {
@@ -850,9 +850,6 @@ export function deriveInventoryMacroCategory(input: {
   }
   if (input.priority === "high") {
     return "Advertising";
-  }
-  if (input.priority === "medium") {
-    return "Analytics";
   }
   return "Review";
 }
@@ -1162,7 +1159,7 @@ export function buildRuntimeInventoryGroupRows(input: {
         ),
         preConsent: row.cookieDetails.some((detail) => detail.observedBeforeConsent === true),
         purposes: [row.purpose],
-        rawProducts: [row.vendor],
+        rawProducts: [owner?.product ?? row.vendor],
         regulatoryRelevance: owner?.regulatoryRelevance ?? [],
         requestCount: null,
         type: "cookie",
@@ -1181,27 +1178,36 @@ export function buildRuntimeInventoryGroupRows(input: {
           row.domains.includes(flow.endpoint)
         ),
         purposes: [row.purpose],
+        rawProducts: [owner?.product ?? row.rawProducts[0] ?? row.vendor],
         setByThirdPartyScript: false,
         type: "tracker",
         vendor: owner?.vendor ?? row.vendor,
       };
     }),
   ];
-  const byEntity = new Map<string, InventoryGroupRow>();
+  const compatibleRows = new Map<string, InventoryGroupRow>();
   for (const candidate of candidates) {
-    const key = candidate.canonicalEntity
-      ? `entity:${candidate.canonicalEntity.toLowerCase()}`
-      : `unresolved:${candidate.vendor.toLowerCase()}`;
-    const existing = byEntity.get(key);
+    const productIdentity = candidate.rawProducts
+      .map((product) => product.trim().toLowerCase())
+      .filter(Boolean)
+      .sort()
+      .join("|") || candidate.vendor.toLowerCase();
+    const key = JSON.stringify([
+      candidate.canonicalEntity?.toLowerCase() ?? null,
+      productIdentity,
+      candidate.macroCategory,
+      normalizeInventoryPurpose(candidate.purpose),
+    ]);
+    const existing = compatibleRows.get(key);
     if (!existing) {
-      byEntity.set(key, candidate);
+      compatibleRows.set(key, candidate);
       continue;
     }
     const priority = priorityWeight(candidate.priority) > priorityWeight(existing.priority)
       ? candidate.priority
       : existing.priority;
     const purposes = uniqueStrings([...existing.purposes, ...candidate.purposes]);
-    byEntity.set(key, {
+    compatibleRows.set(key, {
       ...existing,
       attributionSignatures: uniqueStrings([...existing.attributionSignatures, ...candidate.attributionSignatures]),
       confidence: confidenceWeight(candidate.confidence) > confidenceWeight(existing.confidence)
@@ -1237,7 +1243,7 @@ export function buildRuntimeInventoryGroupRows(input: {
       type: existing.type === "tracker" || candidate.type === "tracker" ? "tracker" : "cookie",
     });
   }
-  return [...byEntity.values()].sort(compareInventoryPriorityRows);
+  return [...compatibleRows.values()].sort(compareInventoryPriorityRows);
 }
 
 export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailResponse) {

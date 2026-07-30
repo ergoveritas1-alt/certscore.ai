@@ -888,7 +888,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps medium pre-consent tracking as p
   assert.match(row.criticalEvidence.statusBasis, /Medium priority.*A\/B Testing/);
 });
 
-test("deriveGdprEprivacyCoverageChecklist labels a standalone GTM bootstrap as a review signal", () => {
+test("deriveGdprEprivacyCoverageChecklist does not relabel a standalone GTM bootstrap as tracking", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     runtimeTrackerPriorityRows: [{
@@ -905,13 +905,12 @@ test("deriveGdprEprivacyCoverageChecklist labels a standalone GTM bootstrap as a
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.equal(row.label, "Pre-consent tag-manager load");
-  assert.equal(row.status, "Review signal");
-  assert.match(row.explanation, /without a concrete downstream analytics\/advertising request, cookie, or storage write/i);
-  assert.match(row.evidenceRefs.join(" "), /www\.googletagmanager\.com.*3\.35s.*1 request/i);
+  assert.equal(row.label, "Pre-consent 3rd party tracking");
+  assert.equal(row.status, "Not observed");
+  assert.equal(row.evidenceRefs.length, 0);
 });
 
-test("deriveGdprEprivacyCoverageChecklist labels Medal library and config traffic as service connections", () => {
+test("deriveGdprEprivacyCoverageChecklist does not relabel library and config traffic as tracking", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     runtimeTrackerPriorityRows: [
@@ -939,9 +938,53 @@ test("deriveGdprEprivacyCoverageChecklist labels Medal library and config traffi
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.equal(row.label, "Pre-consent advertising/analytics service connections");
+  assert.equal(row.label, "Pre-consent 3rd party tracking");
+  assert.equal(row.status, "Not observed");
+  assert.equal(row.evidenceRefs.length, 0);
+});
+
+test("deriveGdprEprivacyCoverageChecklist keeps embedded media out of the tracking fallback", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    runtimeTrackerPriorityRows: [{
+      domains: ["player.video.example"],
+      firstSeenMs: 420,
+      party: "3rd",
+      priority: "medium",
+      purpose: "Embedded media",
+      regulatoryRelevance: ["embedded_content", "media_delivery", "third_party_runtime"],
+      requestCount: 2,
+      vendor: "Example Embedded Player",
+    }],
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+
+  const row = byId(items, "pre_consent_third_party_tracking");
+  assert.equal(row.status, "Not observed");
+  assert.equal(row.evidenceRefs.length, 0);
+});
+
+test("deriveGdprEprivacyCoverageChecklist retains canonical analytics in the tracking fallback", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    runtimeTrackerPriorityRows: [{
+      domains: ["analytics.example.net"],
+      firstSeenMs: 510,
+      party: "3rd",
+      priority: "medium",
+      purpose: "Analytics",
+      regulatoryRelevance: ["analytics", "audience_measurement"],
+      requestCount: 1,
+      vendor: "Example Analytics",
+    }],
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+
+  const row = byId(items, "pre_consent_third_party_tracking");
   assert.equal(row.status, "Review signal");
-  assert.match(row.explanation, /without a concrete ad, analytics-event, identifier, or storage-write event/i);
+  assert.match(row.explanation, /Example Analytics - Analytics/);
 });
 
 test("deriveGdprEprivacyCoverageChecklist maps Article 13 disclosure findings into transparency rows", () => {

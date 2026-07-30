@@ -15,3 +15,13 @@ test("network destination keeps CDP remote IP and CDN-edge label when local GeoL
     source: "cdp_remote_ip"
   });
 });
+
+test("network destination omits non-public CDP remote IP evidence", async () => {
+  const destination = await enrichNetworkDestination({
+    ip: "192.168.10.4",
+    locationLabel: "server location (may be CDN edge)",
+    source: "cdp_remote_ip"
+  });
+
+  assert.equal(destination, undefined);
+});

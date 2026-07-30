@@ -335,6 +335,26 @@ function certificateValidityEvidence(summary: Record<string, unknown> | null | u
     .filter((value): value is string => Boolean(value));
 }
 
+function retainedCertificateValidationState(
+  summary: Record<string, unknown> | null | undefined
+): boolean | null {
+  const observations = getObjectArray(summary, [
+    "tlsCertificateObservations",
+    "tls_certificate_observations"
+  ]);
+  if (observations.some((observation) =>
+    getBoolean(observation, ["validCertificate", "valid_certificate"]) === true
+  )) {
+    return true;
+  }
+  if (observations.some((observation) =>
+    getBoolean(observation, ["validCertificate", "valid_certificate"]) === false
+  )) {
+    return false;
+  }
+  return null;
+}
+
 function transportOutcomeFromBoolean(input: {
   falseStatus: GdprEprivacyCoverageOutcomeStatus;
   falseText: string;
@@ -1672,11 +1692,35 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
       value: getBoolean(summary, ["pageHttpsObserved", "page_https_observed"]),
     }),
     (() => {
-      const validTlsCertificate = getBoolean(summary, ["validTlsCertificate", "valid_tls_certificate"]);
+      const strictProbeValidCertificate = getBoolean(summary, ["validTlsCertificate", "valid_tls_certificate"]);
+      const retainedValidationState = retainedCertificateValidationState(summary);
+      const validTlsCertificate = retainedValidationState === true
+        ? true
+        : strictProbeValidCertificate ?? retainedValidationState;
       const tlsProbeErrorCategory = getString(summary, ["tlsProbeErrorCategory", "tls_probe_error_category"]);
       const tlsProbeErrorMessage = getString(summary, ["tlsProbeErrorMessage", "tls_probe_error_message"]);
       const certificateValidityDetails = certificateValidityEvidence(summary);
-      if (validTlsCertificate === false && tlsProbeErrorCategory && tlsProbeErrorCategory !== "tls_or_certificate_failure") {
+      const certificateDetails = certificateValidityDetails.length > 0
+        ? ` Retained certificate evidence: ${certificateValidityDetails.join("; ")}.`
+        : "";
+      if (retainedValidationState === true) {
+        const secondaryProbeNote =
+          strictProbeValidCertificate !== true && tlsProbeErrorCategory
+            ? ` A secondary strict TLS probe encountered an operational limitation (${tlsProbeErrorCategory}${tlsProbeErrorMessage ? `: ${tlsProbeErrorMessage}` : ""}), but it does not override the successful retained certificate validation.`
+            : "";
+        return makeOutcome(
+          "transport_security_tls_certificate",
+          "Observed",
+          `Retained certificate validation verified the HTTPS origin certificate.${certificateDetails}${secondaryProbeNote}`,
+          transportEvidenceRef(summary),
+          { retainedEvidence }
+        );
+      }
+      if (
+        tlsProbeErrorCategory &&
+        tlsProbeErrorCategory !== "tls_or_certificate_failure" &&
+        retainedValidationState !== false
+      ) {
         return makeOutcome(
           "transport_security_tls_certificate",
           "Not testable",
@@ -1696,9 +1740,6 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
         : "";
       const tlsChainReviewNote = isCertificateChainFailure
         ? " This is a strict probe certificate-chain verification result; it may reflect an incomplete issuer chain or a scanner trust-store difference and does not by itself confirm that the site certificate is invalid. Compare the served certificate and chain with a standard client before treating this as a site defect."
-        : "";
-      const certificateDetails = certificateValidityDetails.length > 0
-        ? ` Retained certificate evidence: ${certificateValidityDetails.join("; ")}.`
         : "";
       return transportOutcomeFromBoolean({
         falseStatus: "Gap observed",

@@ -669,6 +669,15 @@ test("keeps Cloudflare Web Analytics in analytics display category rather than a
   }), "Analytics");
 });
 
+test("projects canonical embedded-player relevance as embedded media", () => {
+  assert.equal(resolveVendorDisplayCategory({
+    vendor: "Example Video",
+    product: "Example Embedded Player",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["embedded_content", "media_delivery", "third_party_runtime"]
+  }), "Embedded media");
+});
+
 test("keeps Umami Cloud matching bounded to its analytics runtime", () => {
   const observations = resolveVendorObservations([
     { type: "request", url: "https://cloud.umami.is/script.js", hostname: "cloud.umami.is" },

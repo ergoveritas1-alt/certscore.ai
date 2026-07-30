@@ -55,6 +55,7 @@ import {
 } from "../domain-utils.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
 import { enrichNetworkDestination } from "../network-destination.js";
+import { normalizePublicIpAddress } from "../public-ip-address.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
 import {
@@ -7470,7 +7471,7 @@ async function installCdpNetworkMetadataCapture(
     const params = raw as {
       response?: { remoteIPAddress?: string; url?: string };
     };
-    const ip = params.response?.remoteIPAddress?.trim();
+    const ip = normalizePublicIpAddress(params.response?.remoteIPAddress);
     const url = params.response?.url;
     if (!ip || !url) return;
     pushQueuedValue(stores.destinationsByUrl, url, {

@@ -108,6 +108,7 @@ export type VendorDisplayCategory =
   | "CDN"
   | "Cookie compliance"
   | "Customer support"
+  | "Embedded media"
   | "Marketing automation"
   | "Payment processors"
   | "Performance monitoring"
@@ -4162,6 +4163,15 @@ export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput):
   }
   if (/piano|tinypass|cxense|personalization|personalisation|paywall|subscription|audience_management/.test(haystack)) {
     return "Personalisation";
+  }
+  if (
+    (
+      /\bembedded_content\b|\bsocial_embed\b|\bvideo_player\b/.test(relevance) &&
+      /\bembed(?:ded)?\b|\bplayer\b|\bwidget\b/.test(label)
+    ) ||
+    /\bvideo_player\b|\bsocial_embed\b/.test(purpose)
+  ) {
+    return "Embedded media";
   }
   if (/jsdelivr|cdn\b|font_delivery|content delivery/.test(haystack)) {
     return "CDN";

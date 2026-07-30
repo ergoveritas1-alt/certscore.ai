@@ -1,5 +1,6 @@
 import type { NetworkDestination } from "@certscore/contracts";
 import maxmind, { type AsnResponse, type CityResponse, type Reader } from "maxmind";
+import { normalizePublicIpAddress } from "./public-ip-address.js";
 
 let cityReaderPromise: Promise<Reader<CityResponse> | null> | null = null;
 let asnReaderPromise: Promise<Reader<AsnResponse> | null> | null = null;
@@ -24,17 +25,22 @@ export async function enrichNetworkDestination(
   destination: NetworkDestination | undefined,
 ): Promise<NetworkDestination | undefined> {
   if (!destination) return undefined;
+  const publicIp = normalizePublicIpAddress(destination.ip);
+  if (!publicIp) return undefined;
+  const normalizedDestination = publicIp === destination.ip
+    ? destination
+    : { ...destination, ip: publicIp };
   const [city, asn] = await Promise.all([
-    cityReader().then((reader) => reader?.get(destination.ip) ?? null),
-    asnReader().then((reader) => reader?.get(destination.ip) ?? null),
+    cityReader().then((reader) => reader?.get(publicIp) ?? null),
+    asnReader().then((reader) => reader?.get(publicIp) ?? null),
   ]);
   const countryCode = city?.country?.iso_code ?? city?.registered_country?.iso_code;
   const cityName = city?.city?.names?.en;
   const asnNumber = asn?.autonomous_system_number;
   const provider = asn?.autonomous_system_organization;
-  if (!countryCode && !cityName && !asnNumber && !provider) return destination;
+  if (!countryCode && !cityName && !asnNumber && !provider) return normalizedDestination;
   return {
-    ...destination,
+    ...normalizedDestination,
     asn: asnNumber,
     city: cityName,
     country: countryCode,

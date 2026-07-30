@@ -7056,6 +7056,40 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not turn TLS probe operation
   assert.match(outcomes.transport_security_tls_certificate?.criticalEvidence.statusBasis ?? "", /strict TLS probe timed out/i);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes prefers successful retained certificate validation over a secondary probe timeout", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      transportSecuritySummary: {
+        evidenceRetained: true,
+        evidenceRefs: ["ref_transport_security"],
+        pageHttpsObserved: true,
+        validTlsCertificate: false,
+        tlsProbeErrorCategory: "timeout",
+        tlsProbeErrorMessage: "strict TLS probe timed out",
+        tlsCertificateObservations: [{
+          inputUrl: "https://www.example.com/",
+          validCertificate: true,
+          subject: "CN=shared-certificate.example",
+          issuer: "CN=Example Trust",
+          validFrom: "Jun 22 01:12:16 2026 GMT",
+          validTo: "Sep 20 01:12:15 2026 GMT",
+          chainCertificateCount: 3,
+        }],
+        httpRedirectsToHttps: true,
+        mixedContentObserved: false,
+        insecureFormTransportObserved: false,
+      },
+    },
+  });
+
+  const outcome = outcomes.transport_security_tls_certificate;
+  assert.equal(outcome?.status, "Observed");
+  assert.match(outcome?.limitation ?? "", /successful retained certificate validation/i);
+  assert.match(outcome?.limitation ?? "", /secondary strict TLS probe.*timeout/i);
+  assert.doesNotMatch(outcome?.limitation ?? "", /hostname defect/i);
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes retains certificate probe failure detail", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
