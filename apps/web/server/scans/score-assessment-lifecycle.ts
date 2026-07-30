@@ -2,6 +2,7 @@
 
 import { buildCanonicalGdprEprivacyShadowProjection } from "../../lib/pulse/projection";
 import { getAnonymousScanById, getScanById } from "./get-scan-by-id";
+import type { PublicScanRecord } from "./get-public-scan-record";
 import { materializeLocalV2DagScanDetail } from "./local-v2-dag-report";
 import {
   buildLegacyGdprEprivacyVersionedAssessmentInput,
@@ -36,6 +37,7 @@ function runSynchronousScoreLifecyclePhase<T>(phase: string, operation: () => T)
 
 export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
   organizationId: string | null;
+  scanRecord?: PublicScanRecord;
   scanId: string;
   scoredAt?: string | null;
 }) {
@@ -55,7 +57,7 @@ export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
       scoreVersion: LEGACY_GDPR_EPRIVACY_SCORE_VERSION
     })
   );
-  const rawRecord = await runScoreLifecyclePhase("scan-load", () => input.organizationId
+  const rawRecord = input.scanRecord ?? await runScoreLifecyclePhase("scan-load", () => input.organizationId
     ? getScanById({ organizationId: input.organizationId, scanId: input.scanId })
     : getAnonymousScanById(input.scanId));
   if (!rawRecord || rawRecord.scan.status !== "completed") {
@@ -74,7 +76,7 @@ export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
     return { inserted: false, reason: "score_time_missing_or_invalid" as const };
   }
 
-  const scanRecord = await runScoreLifecyclePhase("scan-materialization", () =>
+  const scanRecord = input.scanRecord ?? await runScoreLifecyclePhase("scan-materialization", () =>
     materializeLocalV2DagScanDetail(rawRecord)
   );
   const projection = runSynchronousScoreLifecyclePhase("canonical-projection", () =>

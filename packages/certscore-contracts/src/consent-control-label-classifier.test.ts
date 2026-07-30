@@ -59,6 +59,18 @@ test("classifies direct consent controls across English, German, and French", ()
   assert.equal(classifyConsentControlLabel({ label: "Paramètres des cookies" }).intent, "options");
 });
 
+test("classifies explicit inline consent preference labels without broadening generic manage", () => {
+  const consentTool = classifyConsentControlLabel({ label: "Cookie Consent Tool" });
+  assert.equal(consentTool.intent, "options");
+  assert.equal(consentTool.matchStrength, "direct");
+  assert.equal(classifyConsentControlLabel({ label: "Consent Choices" }).intent, "options");
+  assert.equal(classifyConsentControlLabel({ label: "Manage" }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({
+    label: "Manage",
+    contextText: "We use cookies and ask for your consent.",
+  }).intent, "options");
+});
+
 test("Italian discovery registry and classifier retain Personalizza as a contextual first-layer options control", () => {
   const italian = PRIVACY_EVIDENCE_LOCALE_REGISTRY.find((entry) => entry.locale === "it");
   assert.equal(italian?.consentControls.options.includes("personalizza"), true);

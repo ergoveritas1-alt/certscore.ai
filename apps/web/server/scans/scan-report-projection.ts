@@ -12,12 +12,13 @@ import { lookupTrancoRankMetadata, trancoRankFromScanConfig } from "./tranco-ran
 import { debugBuildScanReportUnifiedFindingStateForScan } from "../../lib/scans/scan-report-unified-findings";
 import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
 import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "./scan-detail-checklist";
+import { buildRuntimeCookieInventory } from "../../lib/scans/runtime-cookie-evidence";
 import {
   buildPersistedFirstLayerConsentEvidence,
   projectFirstLayerConsentChoices
 } from "./scan-report-consent-projection";
 
-export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v6";
+export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v7";
 
 /**
  * The scan detail record already includes the scan_snapshots row. Once that
@@ -277,12 +278,16 @@ export async function deriveScanReportProjectionValue(
   const sourceSnapshot = record(source.snapshot) ?? snapshot;
   const runtimeArtifacts = record(scanRecord.runtimeArtifacts);
   const reportState = debugBuildScanReportUnifiedFindingStateForScan(scanRecord as unknown as Record<string, unknown>);
+  const runtimeCookieRows = buildRuntimeCookieInventory({
+    runtimeArtifacts: scanRecord.runtimeArtifacts
+  }).rows;
   const checklist = deriveSharedScanDetailGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     events: scanRecord.events,
     normalizedConcerns: reportState.normalizedConcerns,
     policyEnrichmentCount: scanRecord.policyEnrichment.length,
     runtimeArtifacts: scanRecord.runtimeArtifacts,
+    runtimeCookieRows,
     scanCompleted: scanRecord.scan.status === "completed",
     snapshot: scanRecord.snapshot,
     unifiedFindings: reportState.globalUnifiedFindings
@@ -341,7 +346,7 @@ export async function deriveScanReportProjectionValue(
     egressProvider,
     durationMs: numberValue(scanRecord.scan.durationMs),
     scoreSource: canonicalScore === null ? (score === null ? null : "legacy.scan_snapshot") : "canonical.gdpr_eprivacy",
-    scoreVersion: canonicalScore === null ? null : "gdpr-eprivacy-canonical-shadow-v6",
+    scoreVersion: canonicalScore === null ? null : "gdpr-eprivacy-canonical-shadow-v7",
     scoreScoredAt: scanRecord.scan.completedAt
   };
 }

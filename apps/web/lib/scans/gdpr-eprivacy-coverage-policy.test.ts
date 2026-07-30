@@ -28,6 +28,7 @@ function makeCanonicalConsentAssessment(input: {
     actionType: "accept_all" | "reject_all" | "manage_preferences";
     intent: "accept" | "reject" | "options";
     label: string;
+    presentationType?: "dedicated_button" | "inline_link" | "persistent_link" | "unknown";
   }>;
   coverage?: "complete" | "limited";
   noGo?: boolean;
@@ -102,6 +103,24 @@ function makeCanonicalConsentAssessment(input: {
       computedAt: "2026-07-27T00:00:00.000Z",
     },
   });
+}
+
+function makeCanonicalConsentPolicyInput(
+  assessment: ReturnType<typeof makeCanonicalConsentAssessment>,
+  runtimeArtifactOverrides: Record<string, unknown> = {}
+) {
+  const runtimeArtifacts = {
+    ...runtimeArtifactOverrides,
+    consentControlAssessment: assessment
+  };
+  return {
+    normalizedConcerns: buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts,
+      validationFindings: []
+    }),
+    runtimeArtifacts
+  };
 }
 
 function retainedArticle13Signal(outcome: NonNullable<ReturnType<typeof deriveGdprEprivacyCoveragePolicyOutcomes>[string]>) {
@@ -1378,6 +1397,65 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats DPO contact as review when
     "not_confirmed_row_specific_extraction"
   );
   assert.match(outcomes.dpo_contact_point_disclosure?.limitation ?? "", /controller\/contact surface was retained/i);
+});
+
+test("US privacy policy calibration separates contact, DPO, rights scope, transfers, recipients, and complaint rights", () => {
+  const controller = "Example Studios Inc. operates these services. Questions about this Privacy Policy may be submitted through our privacy request form or mailed to 100 Example Avenue, Culver City, California, Attention: Privacy Officer.";
+  const recipients = "We share Personal Information with service providers, affiliates, analytics providers, advertising networks, social networks, platforms, and governmental authorities.";
+  const retention = "We retain Personal Information as long as necessary or permitted for the purposes for which it was obtained, considering legal obligations and the sensitivity of the information.";
+  const rights = "California and other U.S. state residents may request access, correction, deletion, portability, opt out, appeal, and nondiscrimination.";
+  const transfers = "Personal Information may be transferred to and processed in the United States or other jurisdictions, where courts, law enforcement, and national security authorities may access it.";
+  const legal = "We may process information with your consent or as required by law.";
+  const regulator = "We may disclose information to regulatory authorities when required by law.";
+  const text = [controller, recipients, retention, rights, transfers, legal, regulator].join(" ");
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4200,
+        privacyPolicyUrls: ["https://studio.example/privacy"],
+        retainedPrivacyPolicyTextExcerpt: text,
+        policyTextExtractionHealth: {
+          policyTextExtractionStatus: "ok",
+          extractedTextLength: 4200
+        },
+        article13DisclosureSignals: [
+          { disclosureType: "controller_contact", evidenceText: controller, source: "deterministic", status: "observed" },
+          { disclosureType: "recipients_or_vendor_categories", evidenceText: recipients, source: "deterministic", status: "observed" },
+          { disclosureType: "data_retention", evidenceText: retention, source: "deterministic", status: "observed" },
+          { disclosureType: "data_subject_rights", evidenceText: rights, source: "deterministic", status: "observed" },
+          { disclosureType: "international_transfers", evidenceText: transfers, source: "deterministic", status: "observed" },
+          { disclosureType: "legal_basis", evidenceText: legal, source: "deterministic", status: "observed" },
+          { disclosureType: "supervisory_authority", evidenceText: regulator, source: "deterministic", status: "observed" },
+          { disclosureType: "dpo_contact", evidenceText: controller, source: "deterministic", status: "partial" }
+        ]
+      }
+    },
+    snapshot: { privacy_policy_present: true }
+  });
+
+  assert.equal(outcomes.controller_contact_disclosure?.status, "Observed");
+  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Observed");
+  assert.match(
+    retainedArticle13Signal(outcomes.recipients_vendor_categories_disclosure!)?.evidenceText ?? "",
+    /analytics providers|advertising networks/i
+  );
+  assert.equal(outcomes.retention_disclosure_observed?.status, "Observed");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Observed");
+  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Review signal");
+  assert.equal(
+    outcomes.data_subject_rights_disclosure?.criticalEvidence.retainedEvidence.rightsJurisdictionScope,
+    "us_state_only"
+  );
+  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
+  assert.equal(outcomes.supervisory_authority_complaint_disclosure?.status, "Not confirmed");
+  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Observed");
+  assert.equal(
+    outcomes.dpo_contact_point_disclosure?.criticalEvidence.retainedEvidence.formalDpoDesignationConfirmed,
+    false
+  );
+  assert.equal(outcomes.formal_dpo_designation_disclosure?.status, "Not confirmed");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps financial-incentive text out of automated decision observed", () => {
@@ -2693,7 +2771,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained consent and runti
   });
 
   assert.equal(outcomes.pre_consent_cookies_storage?.status, "Review signal");
-  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /aggregate count alone/i);
+  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /reconciled to the aggregate count/i);
   assert.equal(outcomes.reject_all_path_availability?.status, "Insufficient evidence");
   assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /complete reject-all control/i);
   assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
@@ -3809,7 +3887,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps aggregate-only before-conse
   const outcome = outcomes.pre_consent_cookies_storage;
   assert.equal(outcome?.status, "Review signal");
   assert.deepEqual(outcome?.evidenceRefs, [
-    "Aggregate before-consent cookie/storage count: 3"
+    "Aggregate pre-consent storage count: 3",
+    "Assessment reconciliation: aggregate_exceeds_attributed_rows"
   ]);
   assert.deepEqual(outcome?.criticalEvidence.missingOrIncompleteSourceSignals, []);
   assert.equal(outcome?.criticalEvidence.pipeline.projectionStage, "coverage_policy");
@@ -3818,7 +3897,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps aggregate-only before-conse
     false
   );
   assert.equal(outcome?.criticalEvidence.retainedEvidence.rowLevelEssentialityEvidenceRetained, false);
-  assert.match(outcome?.criticalEvidence.statusBasis ?? "", /aggregate count alone/i);
+  assert.match(outcome?.criticalEvidence.statusBasis ?? "", /reconciled to the aggregate count/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes excludes essential first-party consent cookies from the pre-consent storage row", () => {
@@ -3840,7 +3919,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes excludes essential first-party co
   });
 
   assert.equal(outcomes.pre_consent_cookies_storage?.status, "Not observed");
-  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /essential or excluded first-party consent\/functional cookies/i);
+  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /did not contain eligible non-essential storage/i);
   assert.equal(outcomes.pre_consent_cookies_storage?.criticalEvidence.retainedEvidence.eligibleNonEssentialCookieStorageFindingProjected, false);
 });
 
@@ -3889,10 +3968,9 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats Medal Amplitude snapshots 
   const outcome = outcomes.pre_consent_cookies_storage;
 
   assert.equal(outcome?.status, "Review signal");
-  assert.deepEqual(outcome?.evidenceRefs, [
-    "AMP_abc: present before recorded consent — write timing unconfirmed",
-    "AMP_MKTG_abc: present before recorded consent — write timing unconfirmed"
-  ]);
+  assert.match(outcome?.evidenceRefs.join(" ") ?? "", /AMP_abc.*initial pre-consent snapshot/i);
+  assert.match(outcome?.evidenceRefs.join(" ") ?? "", /AMP_MKTG_abc.*initial pre-consent snapshot/i);
+  assert.doesNotMatch(outcome?.limitation ?? "", /writes? (?:were|was) observed/i);
   assert.equal(outcome?.criticalEvidence.retainedEvidence.eligibleNonEssentialCookieStorageFindingProjected, false);
   assert.equal(outcome?.criticalEvidence.retainedEvidence.cookiesBeforeConsentCount, 0);
 });
@@ -3915,8 +3993,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes retains non-essential analytics c
     }
   });
 
-  assert.equal(outcomes.pre_consent_cookies_storage?.status, "Observed");
-  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /non-essential or 3rd party/i);
+  assert.equal(outcomes.pre_consent_cookies_storage?.status, "Gap observed");
+  assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /classified non-essential storage/i);
   assert.equal(outcomes.pre_consent_cookies_storage?.criticalEvidence.retainedEvidence.eligibleNonEssentialCookieStorageFindingProjected, true);
 });
 
@@ -7130,8 +7208,7 @@ test("canonical consent assessment exclusively supplies current-scan A/R/O polic
   });
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
-    runtimeArtifacts: {
-      consentControlAssessment: assessment,
+    ...makeCanonicalConsentPolicyInput(assessment, {
       // Conflicting compatibility fields must not manufacture a reject result.
       rejectPathDepthAndAvailability: {
         completeRejectPathAvailable: true,
@@ -7140,7 +7217,7 @@ test("canonical consent assessment exclusively supplies current-scan A/R/O polic
           visibleChoiceLabels: ["Reject all"],
         },
       },
-    },
+    }),
     snapshot: {
       cookie_banner_present: true,
     },
@@ -7155,6 +7232,167 @@ test("canonical consent assessment exclusively supplies current-scan A/R/O polic
   );
 });
 
+test("balanced first-layer Accept and Decline controls do not make missing settings a potential gap", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [
+      { actionType: "accept_all", intent: "accept", label: "Accept all" },
+      { actionType: "reject_all", intent: "reject", label: "Decline" },
+    ],
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    ...makeCanonicalConsentPolicyInput(assessment),
+    snapshot: { cookie_banner_present: true },
+  });
+
+  const outcome = outcomes.options_settings_preferences_control;
+  assert.equal(outcome?.status, "Review signal");
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.balancedAcceptDeclineWithoutFirstLayerSettings, true);
+  assert.match(outcome?.limitation ?? "", /Accept and Decline controls were observed on the first-layer consent surface/i);
+  assert.match(outcome?.limitation ?? "", /not necessarily a compliance gap where refusal is as easy as acceptance/i);
+  assert.match(outcome?.limitation ?? "", /review, vary, or withdraw consent by purpose/i);
+});
+
+test("Accept-only first-layer consent still evaluates an available settings path", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [
+      { actionType: "accept_all", intent: "accept", label: "Accept all" },
+      {
+        actionType: "manage_preferences",
+        intent: "options",
+        label: "Cookie settings",
+        presentationType: "dedicated_button",
+      },
+    ],
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    ...makeCanonicalConsentPolicyInput(assessment),
+    snapshot: { cookie_banner_present: true },
+  });
+
+  const outcome = outcomes.options_settings_preferences_control;
+  assert.equal(outcome?.status, "Observed");
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.optionsControlObserved, true);
+});
+
+test("first-layer inline preference link is contextual with reduced prominence", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [
+      { actionType: "accept_all", intent: "accept", label: "Accept all" },
+      { actionType: "reject_all", intent: "reject", label: "Decline" },
+      {
+        actionType: "manage_preferences",
+        intent: "options",
+        label: "Cookie Consent Tool",
+        presentationType: "inline_link",
+      },
+    ],
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    ...makeCanonicalConsentPolicyInput(assessment),
+    snapshot: { cookie_banner_present: true },
+  });
+
+  const outcome = outcomes.options_settings_preferences_control;
+  assert.equal(outcome?.status, "Review signal");
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.optionsControlObserved, true);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.optionsControlProminence, "inline_link");
+  assert.match(outcome?.limitation ?? "", /inline text link, not a button/i);
+  assert.match(outcome?.limitation ?? "", /reduced prominence/i);
+  assert.doesNotMatch(outcome?.limitation ?? "", /did not show an options control/i);
+});
+
+test("persistent footer preference link is contextual without becoming first-layer evidence", () => {
+  const finalUrl = "https://persistent-preferences.example/";
+  const assessment = deriveConsentControlAssessment({
+    scan: {
+      scanId: "scan-persistent-preferences",
+      requestedUrl: finalUrl,
+      finalUrl,
+      scanStatus: "completed",
+      noGo: false,
+    },
+    document: {
+      canonicalDocumentId: finalUrl,
+      observedDocumentIds: [finalUrl],
+      identityStatus: "matched",
+    },
+    observations: [{
+      observationId: "first-layer",
+      observedAtMs: 100,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      documentId: finalUrl,
+      captureStatus: "observed",
+      completedChannels: ["dom_inventory"],
+      controls: [
+        {
+          actionType: "accept_all",
+          evidenceId: "accept",
+          intent: "accept",
+          label: "Accept all",
+          layer: "first_layer",
+          visible: true,
+          actionable: true,
+        },
+      ],
+    }],
+    geometry: {
+      artifactVersion: "consent_control_geometry.v1",
+      assessmentStatus: "complete",
+      documentId: finalUrl,
+      completedChannels: ["geometry"],
+      candidates: [{
+        actionType: "manage_preferences",
+        evidenceId: "footer-settings",
+        intent: "options",
+        label: "Cookie Settings",
+        layer: "deeper_layer",
+        presentationType: "persistent_link",
+        visible: true,
+        actionable: true,
+        documentId: finalUrl,
+      }],
+    },
+    surface: { status: "observed_actionable" },
+    coverage: {
+      status: "complete",
+      requiredChannels: ["dom_inventory", "geometry"],
+      completedChannels: ["dom_inventory", "geometry"],
+      incompleteChannels: [],
+    },
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    ...makeCanonicalConsentPolicyInput(assessment),
+    snapshot: { cookie_banner_present: true },
+  });
+
+  const outcome = outcomes.options_settings_preferences_control;
+  assert.equal(outcome?.status, "Review signal");
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.optionsControlProminence, "persistent_link");
+  assert.match(outcome?.limitation ?? "", /persistent preferences or cookie-settings link/i);
+});
+
+test("no granular controls anywhere remains a potential gap", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [
+      { actionType: "accept_all", intent: "accept", label: "Accept all" },
+    ],
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    ...makeCanonicalConsentPolicyInput(assessment),
+    snapshot: { cookie_banner_present: true },
+  });
+
+  const outcome = outcomes.options_settings_preferences_control;
+  assert.equal(outcome?.status, "Gap observed");
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.balancedAcceptDeclineWithoutFirstLayerSettings, undefined);
+});
+
 test("limited canonical consent assessment cannot create missing-control findings", () => {
   const assessment = makeCanonicalConsentAssessment({
     coverage: "limited",
@@ -7164,10 +7402,9 @@ test("limited canonical consent assessment cannot create missing-control finding
   });
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
-    runtimeArtifacts: {
-      consentControlAssessment: assessment,
+    ...makeCanonicalConsentPolicyInput(assessment, {
       consentSurfaceObserved: true,
-    },
+    }),
     snapshot: {
       cookie_banner_present: true,
     },
@@ -7187,10 +7424,9 @@ test("complete no-surface assessment reports factual not-observed controls witho
   });
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
-    runtimeArtifacts: {
-      consentControlAssessment: assessment,
+    ...makeCanonicalConsentPolicyInput(assessment, {
       consentSurfaceObserved: false,
-    },
+    }),
     snapshot: {
       cookie_banner_present: false,
     },
@@ -7213,8 +7449,7 @@ test("no-go canonical consent assessment stays unknown despite conflicting compa
   });
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
-    runtimeArtifacts: {
-      consentControlAssessment: assessment,
+    ...makeCanonicalConsentPolicyInput(assessment, {
       consentSurfaceObserved: true,
       rejectPathDepthAndAvailability: {
         firstLayerConsentChoices: {
@@ -7223,7 +7458,7 @@ test("no-go canonical consent assessment stays unknown despite conflicting compa
           visibleChoiceLabels: ["Accept all"],
         },
       },
-    },
+    }),
     snapshot: {
       cookie_banner_present: true,
     },

@@ -224,6 +224,8 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     weak("reject", "skip", { requiresConsentContext: true }),
 
     contextual("options", "manage", { requiresConsentContext: true }),
+    ...direct("options", "cookie consent tool"),
+    ...direct("options", "consent choices"),
     ...direct("options", "manage preferences"),
     ...direct("options", "manage cookies"),
     ...direct("options", "manage options"),

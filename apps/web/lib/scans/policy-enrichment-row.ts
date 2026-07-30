@@ -112,7 +112,7 @@ export function prioritizePublicPolicySurfaces<T extends PublicPolicySurfaceProj
     .map((surface, index) => ({ index, score: publicPolicySurfaceScore(surface, siteDomain), surface }))
     .sort((left, right) => right.score - left.score || left.index - right.index);
   const selected = ranked.slice(0, limit);
-  for (const pattern of [/privacy/i, /cookie/i, /terms/i]) {
+  for (const pattern of [/privacy/i, /cookie/i, /terms/i, /accessibility/i]) {
     const candidate = ranked.find((entry) => pattern.test(entry.surface.type));
     if (!candidate || selected.includes(candidate) || selected.length === 0) continue;
     const replaceIndex = [...selected].reverse().findIndex((entry) =>

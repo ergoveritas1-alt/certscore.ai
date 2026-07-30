@@ -108,6 +108,53 @@ test("Oxfam A/R/O remains observed when a later same-document state is collapsed
   assert.equal(assessment.controls.options.state, "observed");
 });
 
+test("geometry projection retains inline and persistent options presentation", () => {
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([
+      { actionType: "accept_all", label: "Accept all cookies", visible: true, layer: "first_layer" },
+      { actionType: "reject_all", label: "Reject all cookies", visible: true, layer: "first_layer" },
+    ]),
+    consentControlGeometryEvidence: geometry([
+      {
+        candidateId: "inline-options",
+        actionType: "manage_preferences",
+        label: "Cookie Consent Tool",
+        layer: "first_layer",
+        presentationType: "inline_link",
+        enabled: true,
+        decisionStatus: "confirmed_visible",
+      },
+      {
+        candidateId: "footer-options",
+        actionType: "manage_preferences",
+        label: "Cookie Settings",
+        layer: "footer",
+        presentationType: "persistent_link",
+        enabled: true,
+        decisionStatus: "footer_or_policy_link",
+      },
+    ]),
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: "https://oxfam.org/en",
+    noGo: false,
+    requestedUrl: "https://oxfam.org/en",
+  });
+
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.equal(
+    assessment.evidence.find((row) => row.evidenceId === "inline-options")?.presentationType,
+    "inline_link",
+  );
+  assert.equal(
+    assessment.evidence.find((row) => row.evidenceId === "footer-options")?.presentationType,
+    "persistent_link",
+  );
+  assert.equal(
+    assessment.evidence.find((row) => row.evidenceId === "footer-options")?.layer,
+    "deeper_layer",
+  );
+});
+
 test("CNN retained geometry keeps an explicitly inventoried missing reject as not_observed", () => {
   const assessment = deriveMaterializedConsentControlAssessment({
     bundle: bundle([

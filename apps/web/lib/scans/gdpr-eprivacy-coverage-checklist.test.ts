@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { deriveConsentControlAssessment } from "@certscore/contracts";
 import {
   deriveGdprEprivacyCoverageChecklist,
   type GdprEprivacyCoverageChecklistItem
@@ -77,6 +78,116 @@ function makeChecklistGdprTransparencyConcerns(disclosureType: string) {
   });
 }
 
+test("inline consent preference links remain contextual through concern policy and checklist projection", () => {
+  const finalUrl = "https://inline-consent.example/";
+  const assessment = deriveConsentControlAssessment({
+    scan: {
+      scanId: "scan-inline-consent",
+      requestedUrl: finalUrl,
+      finalUrl,
+      scanStatus: "completed",
+      noGo: false
+    },
+    document: {
+      canonicalDocumentId: finalUrl,
+      observedDocumentIds: [finalUrl],
+      identityStatus: "matched"
+    },
+    observations: [{
+      observationId: "first-layer",
+      observedAtMs: 100,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      documentId: finalUrl,
+      captureStatus: "observed",
+      completedChannels: ["dom_inventory"],
+      controls: [
+        {
+          actionType: "accept_all",
+          evidenceId: "accept",
+          intent: "accept",
+          label: "Accept all",
+          layer: "first_layer",
+          visible: true,
+          actionable: true
+        },
+        {
+          actionType: "reject_all",
+          evidenceId: "decline",
+          intent: "reject",
+          label: "Decline",
+          layer: "first_layer",
+          visible: true,
+          actionable: true
+        },
+        {
+          actionType: "manage_preferences",
+          evidenceId: "inline-preferences",
+          intent: "options",
+          label: "Cookie Consent Tool",
+          layer: "first_layer",
+          presentationType: "inline_link",
+          visible: true,
+          actionable: true,
+          artifactRefs: ["CanonicalEvidenceBundle.json"]
+        }
+      ]
+    }],
+    geometry: {
+      assessmentStatus: "complete",
+      documentId: finalUrl,
+      completedChannels: ["geometry"],
+      incompleteChannels: [],
+      candidates: []
+    },
+    surface: { status: "observed_actionable" },
+    coverage: {
+      status: "complete",
+      requiredChannels: ["dom_inventory", "geometry"],
+      completedChannels: ["dom_inventory", "geometry"],
+      incompleteChannels: []
+    }
+  });
+  const runtimeArtifacts = { consentControlAssessment: assessment };
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    normalizedConcerns,
+    runtimeArtifacts,
+    scanCompleted: true,
+    snapshot: { cookie_banner_present: true }
+  });
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    projectedFindings: [],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+  const options = byId(items, "options_settings_preferences_control");
+  const gapFindings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      rows: items.filter((item) => item.assessmentStatus === "gap_observed"),
+      title: "GDPR / ePrivacy"
+    }
+  });
+
+  assert.equal(options.status, "Review signal");
+  assert.equal(options.assessmentStatus, "review_signal");
+  assert.match(options.criticalEvidence.statusBasis, /inline text link, not a button/i);
+  assert.equal(
+    gapFindings.some((finding) =>
+      finding.id === "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control"
+    ),
+    false
+  );
+});
+
 test("checklist consumes approved multilingual GDPR Transparency Article 13 coverage without unified findings", () => {
   const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     coverageLimited: false,
@@ -153,6 +264,43 @@ function makeCoverageOutcome(
     }
   };
 }
+
+test("checklist presents privacy contact and formal DPO designation as separate rows", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      dpo_contact_point_disclosure: makeCoverageOutcome({
+        evidenceRefs: ["Excerpt: Contact our Privacy Officer."],
+        limitation: "A privacy contact point was retained.",
+        retainedEvidence: {
+          formalDpoDesignationConfirmed: false,
+          privacyContactPointConfirmed: true
+        },
+        rowId: "dpo_contact_point_disclosure",
+        status: "Observed"
+      }),
+      formal_dpo_designation_disclosure: makeCoverageOutcome({
+        evidenceRefs: ["Excerpt: Contact our Privacy Officer."],
+        limitation: "A formal GDPR Data Protection Officer designation was not confirmed.",
+        retainedEvidence: {
+          formalDpoDesignationConfirmed: false
+        },
+        rowId: "formal_dpo_designation_disclosure",
+        status: "Not confirmed"
+      })
+    },
+    projectedFindings: [],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const privacyContact = byId(items, "dpo_contact_point_disclosure");
+  const formalDpo = byId(items, "formal_dpo_designation_disclosure");
+  assert.equal(privacyContact.label, "Privacy contact point");
+  assert.equal(privacyContact.status, "Observed");
+  assert.equal(formalDpo.label, "Formal DPO designation");
+  assert.equal(formalDpo.status, "Not confirmed");
+});
 
 test("visual no-go makes UI-dependent consent controls not testable without suppressing network rows", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
@@ -3197,5 +3345,5 @@ test("deriveGdprEprivacyReviewSummary excludes invalid 404 and footer excerpts f
   });
 
   const summary = deriveGdprEprivacyReviewSummary(items);
-  assert.match(summary.coverageText, /^35 of 37 in-scope rows had usable automated evidence\./);
+  assert.match(summary.coverageText, /^36 of 38 in-scope rows had usable automated evidence\./);
 });

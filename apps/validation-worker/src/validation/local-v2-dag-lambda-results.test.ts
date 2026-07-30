@@ -222,6 +222,8 @@ test("validation worker persists completion scores before acknowledging a Lambda
   assert.match(source, /scan_score_materialization_requests/);
   assert.match(source, /result\.complete !== true/);
   assert.match(source, /completedScanScoresExist/);
+  assert.match(source, /response\.status === 422 && failure\?\.retryable === false/);
+  assert.match(source, /terminal score materialization failure acknowledged/);
 });
 
 test("validation worker synchronizes linked API activity before acknowledging a Lambda result", async () => {

@@ -6,7 +6,8 @@ import {
   buildPolicyReviewPacketFromCanonicalBundle,
   deriveDeterministicLegalFrameworkSignals,
   deriveDeterministicPolicyReviewSignals,
-  reviewPolicyPacketWithMini
+  reviewPolicyPacketWithMini,
+  selectBoundedPolicyReviewText
 } from "./model-policy-review";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 
@@ -99,6 +100,28 @@ test("policy packet retains named Oxfam cookies and compact runtime contradictio
     (packet.runtimeContext.sessionReplay as { vendor?: string }).vendor,
     "Microsoft Clarity"
   );
+});
+
+test("bounded policy review text retains late transfer, rights, recipient, and privacy-contact sections", () => {
+  const filler = "General policy introduction and service description. ".repeat(520);
+  const text = [
+    "US PRIVACY POLICY. This policy explains our information practices.",
+    filler,
+    "SHARING PERSONAL INFORMATION. We share Personal Information with service providers, corporate affiliates, analytics providers, advertising networks, social networks, platforms, and governmental authorities.",
+    "RETENTION. We retain Personal Information as long as necessary or permitted for the purposes for which it was obtained, considering legal obligations and the sensitivity of the information.",
+    "US STATE PRIVACY RIGHTS. California and other state residents may request access, correction, deletion, portability, opt out, appeal, and nondiscrimination.",
+    "INTERNATIONAL TRANSFER. Personal Information may be transferred to and processed in the United States or other jurisdictions, where courts, law enforcement, and national security authorities may access it.",
+    "CONTACT US. Example Media Group Inc. operates the services. Contact us through our privacy request form or write to 100 Example Avenue, Example City, California, Attention: Privacy Officer."
+  ].join("\n\n");
+
+  const retained = selectBoundedPolicyReviewText(text);
+
+  assert.equal(retained.length <= 18_000, true);
+  assert.match(retained, /service providers.*advertising networks/i);
+  assert.match(retained, /US STATE PRIVACY RIGHTS/i);
+  assert.match(retained, /transferred to and processed in the United States or other jurisdictions/i);
+  assert.match(retained, /Example Media Group Inc/i);
+  assert.match(retained, /Attention: Privacy Officer/i);
 });
 
 test("canonical v2 policy surfaces become bounded review documents without raw runtime values", () => {

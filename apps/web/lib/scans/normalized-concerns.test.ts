@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { deriveConsentControlAssessment } from "@certscore/contracts";
 
 import {
   buildNormalizedConcerns,
@@ -83,6 +84,158 @@ function makeMissingBridgePolicyRuntimeEvidence(runtimeOverride: Record<string, 
     policyRuntimeBridgeCandidates: []
   };
 }
+
+function makeConsentOptionsAssessment(input: {
+  firstLayer?: Array<{
+    actionType: "accept_all" | "reject_all" | "manage_preferences";
+    intent: "accept" | "reject" | "options";
+    label: string;
+    presentationType?: "dedicated_button" | "inline_link" | "unknown";
+  }>;
+  persistentOptions?: boolean;
+}) {
+  const finalUrl = "https://consent-options.example/";
+  return deriveConsentControlAssessment({
+    scan: {
+      scanId: "scan-consent-options",
+      requestedUrl: finalUrl,
+      finalUrl,
+      scanStatus: "completed",
+      noGo: false
+    },
+    document: {
+      canonicalDocumentId: finalUrl,
+      observedDocumentIds: [finalUrl],
+      identityStatus: "matched"
+    },
+    observations: [{
+      observationId: "first-layer",
+      observedAtMs: 100,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      documentId: finalUrl,
+      captureStatus: "observed",
+      completedChannels: ["dom_inventory"],
+      controls: (input.firstLayer ?? []).map((control, index) => ({
+        ...control,
+        evidenceId: `first-layer-${index}`,
+        layer: "first_layer" as const,
+        visible: true,
+        actionable: true,
+        artifactRefs: ["CanonicalEvidenceBundle.json"]
+      }))
+    }],
+    geometry: {
+      assessmentStatus: "complete",
+      documentId: finalUrl,
+      completedChannels: ["geometry"],
+      incompleteChannels: [],
+      candidates: input.persistentOptions ? [{
+        actionType: "manage_preferences",
+        evidenceId: "footer-cookie-settings",
+        intent: "options",
+        label: "Cookie Settings",
+        layer: "deeper_layer",
+        presentationType: "persistent_link",
+        visible: true,
+        actionable: true,
+        artifactRefs: ["ConsentControlGeometry.json"]
+      }] : []
+    },
+    surface: {
+      status: "observed_actionable",
+      evidenceRefs: ["CanonicalEvidenceBundle.json"]
+    },
+    coverage: {
+      status: "complete",
+      requiredChannels: ["dom_inventory", "geometry"],
+      completedChannels: ["dom_inventory", "geometry"],
+      incompleteChannels: []
+    }
+  });
+}
+
+test("normalizes consent options prominence before concern policy assigns checklist eligibility", () => {
+  const cases = [
+    {
+      expectedEligibility: "observed",
+      expectedState: "dedicated_button",
+      assessment: makeConsentOptionsAssessment({
+        firstLayer: [{
+          actionType: "manage_preferences",
+          intent: "options",
+          label: "Cookie settings",
+          presentationType: "dedicated_button"
+        }]
+      })
+    },
+    {
+      expectedEligibility: "review_signal",
+      expectedState: "inline_link",
+      assessment: makeConsentOptionsAssessment({
+        firstLayer: [{
+          actionType: "manage_preferences",
+          intent: "options",
+          label: "Cookie Consent Tool",
+          presentationType: "inline_link"
+        }]
+      })
+    },
+    {
+      expectedEligibility: "review_signal",
+      expectedState: "persistent_link",
+      assessment: makeConsentOptionsAssessment({
+        firstLayer: [{
+          actionType: "accept_all",
+          intent: "accept",
+          label: "Accept all"
+        }],
+        persistentOptions: true
+      })
+    },
+    {
+      expectedEligibility: "review_signal",
+      expectedState: "balanced_accept_decline_no_first_layer_settings",
+      assessment: makeConsentOptionsAssessment({
+        firstLayer: [
+          { actionType: "accept_all", intent: "accept", label: "Accept all" },
+          { actionType: "reject_all", intent: "reject", label: "Decline" }
+        ]
+      })
+    },
+    {
+      expectedEligibility: "gap_observed",
+      expectedState: "no_granular_controls_retained",
+      assessment: makeConsentOptionsAssessment({
+        firstLayer: [
+          { actionType: "accept_all", intent: "accept", label: "Accept all" }
+        ]
+      })
+    }
+  ] as const;
+
+  for (const testCase of cases) {
+    const concerns = buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts: {
+        consentControlAssessment: testCase.assessment
+      },
+      validationFindings: []
+    });
+    const concern = concerns.find((candidate) =>
+      candidate.originKey.startsWith("consent.options_control_prominence.")
+    );
+    assert.ok(concern, testCase.expectedState);
+    assert.equal(concern.observedValue, testCase.expectedState);
+    assert.equal(
+      concern.evidenceBundle.rawEvidence?.consentOptionsControlProminenceState,
+      testCase.expectedState
+    );
+    assert.equal(concern.regulatoryChecklistEligibility, testCase.expectedEligibility);
+    assert.equal(concern.promotionEligibility, "internal_only");
+    assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  }
+});
 
 test("normalizes snapshot signal candidates into eligible concerns", () => {
   const concerns = buildNormalizedConcerns({

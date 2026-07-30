@@ -3244,6 +3244,7 @@ function summarizeGeometryFirstLayerConsentChoices(
             matchedLocale: classification.matchedLocale,
             matchedTerm: classification.matchedTerm,
             matchStrength: classification.matchStrength,
+            presentationType: getString(candidate.presentationType) ?? "unknown",
             role: getString(candidate.role) ?? undefined,
             selectorHint: getString(candidate.selectorHint) ?? undefined,
             tagName: getString(candidate.tagName) ?? undefined,

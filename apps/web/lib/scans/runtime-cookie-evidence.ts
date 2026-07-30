@@ -25,6 +25,11 @@ export type RuntimeCookieEvidenceRow = {
   observedBeforeConsent?: boolean;
   explicitPreconsentEvidence?: boolean;
   essentiality?: "essential" | "non_essential" | "unknown";
+  essentialitySource?:
+    | "canonical_registry"
+    | "deterministic_classifier"
+    | "retained_explicit_classification"
+    | "unknown";
   party: "first_party" | "third_party" | "unknown";
   responseUrl: string | null;
   sourceRequestUrl: string | null;
@@ -35,6 +40,66 @@ export type RuntimeCookieEvidenceRow = {
   timingBasis: string | null;
   evidenceGrade: string | null;
   timingEvidence: "before_consent_cookie_write" | "initial_cookie_snapshot" | "periodic_cookie_snapshot" | "unknown";
+};
+
+export type PreConsentStorageAssessmentStatus =
+  | "classified_nonessential_observed"
+  | "classified_zero"
+  | "partially_classified"
+  | "snapshot_presence_only"
+  | "insufficient_evidence";
+
+export type PreConsentStorageReconciliationStatus =
+  | "reconciled"
+  | "aggregate_exceeds_attributed_rows"
+  | "row_count_exceeds_aggregate"
+  | "aggregate_unavailable";
+
+export type PreConsentStorageAssessmentEvidenceRow = {
+  category: string;
+  domain: string | null;
+  essentiality: "essential" | "non_essential" | "unknown";
+  essentialitySource:
+    | "canonical_registry"
+    | "deterministic_classifier"
+    | "retained_explicit_classification"
+    | "unknown";
+  exclusionReason: string | null;
+  firstObservedMs: number | null;
+  initiatorDomain: string | null;
+  initiatorVendor: string | null;
+  name: string;
+  party: "first_party" | "third_party" | "unknown";
+  storageType: "cookie";
+  timingEvidence:
+    | "before_consent_write"
+    | "periodic_preconsent_snapshot"
+    | "initial_snapshot"
+    | "unknown";
+};
+
+export type PreConsentStorageAssessment = {
+  aggregateObservedCount: number | null;
+  assessmentVersion: "pre-consent-storage-assessment-v1";
+  attributedPreConsentRecordCount: number;
+  classifiedEssentialCount: number;
+  classifiedNonEssentialCount: number;
+  excludedFunctionalOrConsentCount: number;
+  evidenceRows: PreConsentStorageAssessmentEvidenceRow[];
+  provenWriteCount: number;
+  reconciliationStatus: PreConsentStorageReconciliationStatus;
+  snapshotPresenceCount: number;
+  status: PreConsentStorageAssessmentStatus;
+  unclassifiedCount: number;
+};
+
+export type PreConsentStorageMetricProjection = {
+  available: boolean;
+  explanation: string;
+  label: "Non-essential storage";
+  scope: "nonessential_only";
+  status: "measured_positive" | "measured_zero" | "partially_classified" | "unavailable";
+  value: number | null;
 };
 
 export type PolicyCookieDisclosureRow = {
@@ -85,6 +150,16 @@ function getObjectArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
     : [];
+}
+
+function getRecordNumber(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      return value;
+    }
+  }
+  return null;
 }
 
 function uniqueStrings(values: Array<string | null | undefined>) {
@@ -605,6 +680,13 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     : nonEssential
       ? "non_essential" as const
       : "unknown" as const;
+  const essentialitySource = knowledge.essentiality !== "unknown"
+    ? "canonical_registry" as const
+    : inferredSecurityOrNecessary || canonicalNonEssentialIdentifier || isNonEssentialCookieCategory(category)
+      ? "deterministic_classifier" as const
+      : retainedNonEssential !== null
+        ? "retained_explicit_classification" as const
+        : "unknown" as const;
   const rawInitiatorVendor = getString(row.initiatorVendor ?? row.initiator_vendor ?? row.cookieInitiatorVendor ?? row.cookie_initiator_vendor);
   const sourceHost =
     hostnameFromUrl(getString(row.sourceRequestUrl ?? row.source_request_url ?? row.responseUrl ?? row.response_url ?? row.initiatorUrl ?? row.initiator_url)) ??
@@ -662,6 +744,7 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
       row.before_consent === true ||
       getString(row.consentStateAtTime ?? row.consent_state_at_time) === "pre_consent",
     essentiality,
+    essentialitySource,
     explicitPreconsentEvidence: false,
     party: getCookiePartyType(row, domain, hybrid),
     responseUrl: getString(row.responseUrl ?? row.response_url),
@@ -708,6 +791,11 @@ function normalizeInitialCookieRow(cookieName: string, domain: string | null): R
     essentiality: isNonEssentialCookieCategory(category)
       ? "non_essential"
       : category === "necessary" ? "essential" : "unknown",
+    essentialitySource: knowledge.essentiality !== "unknown"
+      ? "canonical_registry"
+      : category === "necessary" || isNonEssentialCookieCategory(category)
+        ? "deterministic_classifier"
+        : "unknown",
     party: "unknown",
     responseUrl: null,
     sourceRequestUrl: null,
@@ -802,6 +890,223 @@ export function buildRuntimeCookieInventory(input: {
     rows,
     unmatchedCookieNames,
     unmatchedRows
+  };
+}
+
+function isPreConsentAssessmentRow(row: RuntimeCookieEvidenceRow) {
+  return row.timingEvidence === "before_consent_cookie_write" ||
+    row.timingEvidence === "initial_cookie_snapshot" ||
+    (row.timingEvidence === "periodic_cookie_snapshot" && row.observedBeforeConsent === true) ||
+    row.explicitPreconsentEvidence === true;
+}
+
+function mapPreConsentStorageTimingEvidence(
+  row: RuntimeCookieEvidenceRow
+): PreConsentStorageAssessmentEvidenceRow["timingEvidence"] {
+  if (row.timingEvidence === "before_consent_cookie_write") {
+    return "before_consent_write";
+  }
+  if (row.timingEvidence === "periodic_cookie_snapshot" && row.observedBeforeConsent === true) {
+    return "periodic_preconsent_snapshot";
+  }
+  if (row.timingEvidence === "initial_cookie_snapshot") {
+    return "initial_snapshot";
+  }
+  return "unknown";
+}
+
+function normalizePreConsentStorageObservedMs(
+  value: number | null,
+  navigationStartMs: number | null
+) {
+  if (value === null || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  if (value <= 10 * 60 * 1000) {
+    return value;
+  }
+  if (navigationStartMs !== null && value >= navigationStartMs) {
+    const elapsed = value - navigationStartMs;
+    return elapsed <= 10 * 60 * 1000 ? elapsed : null;
+  }
+  return null;
+}
+
+export function buildPreConsentStorageAssessment(input: {
+  hybridRuntimeEvidence?: Record<string, unknown> | null;
+  runtimeArtifacts?: Record<string, unknown> | null;
+  runtimeCookieRows?: RuntimeCookieEvidenceRow[];
+}): PreConsentStorageAssessment {
+  const runtimeArtifacts = getRecord(input.runtimeArtifacts);
+  const hybrid =
+    getRecord(input.hybridRuntimeEvidence) ??
+    getRecord(runtimeArtifacts?.hybrid_runtime_evidence ?? runtimeArtifacts?.hybridRuntimeEvidence);
+  const storageSummary = getRecord(hybrid?.storageSummary ?? hybrid?.storage_summary);
+  const timelineMarkers = getRecord(hybrid?.timelineMarkers ?? hybrid?.timeline_markers);
+  const navigationStartMs = getRecordNumber(timelineMarkers, [
+    "navigationStartMs",
+    "navigation_start_ms"
+  ]);
+  const rows = input.runtimeCookieRows ?? buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: hybrid,
+    runtimeArtifacts
+  }).rows;
+  const preConsentRows = rows.filter(isPreConsentAssessmentRow);
+  const aggregateCandidates = [
+    getRecordNumber(storageSummary, [
+      "distinctPreConsentCookieCount",
+      "distinct_pre_consent_cookie_count",
+      "cookiesBeforeConsentCount",
+      "cookies_before_consent_count"
+    ]),
+    getRecordNumber(runtimeArtifacts, [
+      "initialCookieCount",
+      "initial_cookie_count"
+    ])
+  ].filter((value): value is number => value !== null);
+  const aggregateObservedCount = aggregateCandidates.length > 0
+    ? Math.max(...aggregateCandidates)
+    : null;
+  const classifiedNonEssentialRows = preConsentRows.filter((row) =>
+    isEligibleNonEssentialPreconsentStorageMetricRow(row)
+  );
+  const classifiedEssentialRows = preConsentRows.filter((row) => row.essentiality === "essential");
+  const unclassifiedRows = preConsentRows.filter((row) => row.essentiality === "unknown");
+  const excludedRows = preConsentRows.filter((row) =>
+    isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+  );
+  const snapshotRows = preConsentRows.filter((row) =>
+    row.timingEvidence === "initial_cookie_snapshot" ||
+    row.timingEvidence === "periodic_cookie_snapshot"
+  );
+  const snapshotNonEssentialCandidates = snapshotRows.filter((row) =>
+    row.nonEssential === true &&
+    !isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+  );
+  const reconciliationStatus: PreConsentStorageReconciliationStatus =
+    aggregateObservedCount === null
+      ? "aggregate_unavailable"
+      : aggregateObservedCount > preConsentRows.length
+        ? "aggregate_exceeds_attributed_rows"
+        : aggregateObservedCount < preConsentRows.length
+          ? "row_count_exceeds_aggregate"
+          : "reconciled";
+  const captureRetained =
+    preConsentRows.length > 0 ||
+    aggregateObservedCount !== null ||
+    storageSummary !== null;
+  const status: PreConsentStorageAssessmentStatus =
+    !captureRetained
+      ? "insufficient_evidence"
+      : unclassifiedRows.length > 0 ||
+          reconciliationStatus === "aggregate_exceeds_attributed_rows" ||
+          reconciliationStatus === "row_count_exceeds_aggregate"
+        ? "partially_classified"
+        : classifiedNonEssentialRows.length > 0
+          ? "classified_nonessential_observed"
+          : snapshotNonEssentialCandidates.length > 0
+            ? "snapshot_presence_only"
+            : "classified_zero";
+  const evidenceRows = preConsentRows.slice(0, 24).map((row) => ({
+    category: row.category,
+    domain: row.domain,
+    essentiality: row.essentiality ?? "unknown",
+    essentialitySource: row.essentialitySource ?? "unknown",
+    exclusionReason: isFunctionalCookieExcludedFromTrackingEvidence(row.cookieName, row.domain)
+      ? "functional_or_consent_storage"
+      : null,
+    firstObservedMs: normalizePreConsentStorageObservedMs(
+      row.setAtMs ?? row.firstObservedAtMs,
+      navigationStartMs
+    ),
+    initiatorDomain: row.initiatorDomain,
+    initiatorVendor: row.initiatorVendor,
+    name: row.cookieName,
+    party: row.party,
+    storageType: "cookie" as const,
+    timingEvidence: mapPreConsentStorageTimingEvidence(row)
+  }));
+
+  return {
+    aggregateObservedCount,
+    assessmentVersion: "pre-consent-storage-assessment-v1",
+    attributedPreConsentRecordCount: preConsentRows.length,
+    classifiedEssentialCount: classifiedEssentialRows.length,
+    classifiedNonEssentialCount: classifiedNonEssentialRows.length,
+    excludedFunctionalOrConsentCount: excludedRows.length,
+    evidenceRows,
+    provenWriteCount: preConsentRows.filter((row) =>
+      row.timingEvidence === "before_consent_cookie_write"
+    ).length,
+    reconciliationStatus,
+    snapshotPresenceCount: snapshotRows.length,
+    status,
+    unclassifiedCount: unclassifiedRows.length
+  };
+}
+
+export function isPreConsentStorageAssessment(value: unknown): value is PreConsentStorageAssessment {
+  const record = getRecord(value);
+  return record?.assessmentVersion === "pre-consent-storage-assessment-v1" &&
+    typeof record.status === "string" &&
+    typeof record.classifiedNonEssentialCount === "number" &&
+    typeof record.classifiedEssentialCount === "number" &&
+    typeof record.unclassifiedCount === "number" &&
+    Array.isArray(record.evidenceRows);
+}
+
+export function projectPreConsentStorageMetric(
+  assessment: PreConsentStorageAssessment
+): PreConsentStorageMetricProjection {
+  if (assessment.status === "classified_nonessential_observed") {
+    return {
+      available: true,
+      explanation: "Classified non-essential storage was observed before a recorded consent action.",
+      label: "Non-essential storage",
+      scope: "nonessential_only",
+      status: "measured_positive",
+      value: assessment.classifiedNonEssentialCount
+    };
+  }
+  if (assessment.status === "classified_zero") {
+    return {
+      available: true,
+      explanation: "Storage was scanned and no non-essential storage was detected in the reported scope.",
+      label: "Non-essential storage",
+      scope: "nonessential_only",
+      status: "measured_zero",
+      value: 0
+    };
+  }
+  if (assessment.status === "partially_classified") {
+    return {
+      available: false,
+      explanation: assessment.unclassifiedCount > 0
+        ? `Pre-consent storage was retained, but ${assessment.unclassifiedCount} record${assessment.unclassifiedCount === 1 ? " remains" : "s remain"} unclassified.`
+        : "Pre-consent storage was retained, but the aggregate count could not be reconciled to attributed storage rows.",
+      label: "Non-essential storage",
+      scope: "nonessential_only",
+      status: "partially_classified",
+      value: null
+    };
+  }
+  if (assessment.status === "snapshot_presence_only") {
+    return {
+      available: false,
+      explanation: "Non-essential storage candidates were present in a pre-consent snapshot, but write timing was not confirmed.",
+      label: "Non-essential storage",
+      scope: "nonessential_only",
+      status: "partially_classified",
+      value: null
+    };
+  }
+  return {
+    available: false,
+    explanation: "Pre-consent storage capture or attribution was insufficient for a non-essential storage count.",
+    label: "Non-essential storage",
+    scope: "nonessential_only",
+    status: "unavailable",
+    value: null
   };
 }
 

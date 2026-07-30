@@ -44,6 +44,58 @@ test("captures IKEA-style OneTrust first-layer accept, reject, and options contr
     artifact.candidates.find((candidate) => candidate.ariaLabel?.startsWith("Cookie settings"))?.decisionStatus,
     "confirmed_visible",
   );
+  assert.equal(
+    artifact.candidates.find((candidate) => candidate.ariaLabel?.startsWith("Cookie settings"))?.presentationType,
+    "dedicated_button",
+  );
+});
+
+test("captures inline Cookie Consent Tool anchors with reduced prominence", async () => {
+  const artifact = await captureFixture(`
+    <section id="cookie-banner" role="dialog" aria-label="Cookie consent" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: black; color: white;">
+      <p>
+        We use cookies and other technologies. To make choices regarding specific cookies,
+        access our <a href="#cookie-consent-tool" style="color: #20bff3;">Cookie Consent Tool</a>.
+      </p>
+      <button type="button">Reject all non-essential cookies</button>
+      <button type="button">Accept all cookies</button>
+    </section>
+  `);
+
+  const options = findCandidate(artifact, "Cookie Consent Tool");
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.decisionStatus, "confirmed_visible");
+  assert.equal(options?.presentationType, "inline_link");
+  assert.equal(options?.layer, "first_layer");
+  assert.equal(artifact.summary.firstLayerOptions, true);
+});
+
+test("does not promote non-actionable inline preference text into control evidence", async () => {
+  const artifact = await captureFixture(`
+    <section id="cookie-banner" role="dialog" aria-label="Cookie consent" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: white;">
+      <p>Cookie Consent Tool</p>
+      <button type="button">Reject all cookies</button>
+      <button type="button">Accept all cookies</button>
+    </section>
+  `);
+
+  assert.equal(findCandidate(artifact, "Cookie Consent Tool"), undefined);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+});
+
+test("retains footer cookie settings anchors as persistent links, not first-layer controls", async () => {
+  const artifact = await captureFixture(`
+    <main style="height: 900px;"><h1>Example</h1></main>
+    <footer style="padding: 24px;">
+      <a href="#cookie-settings">Cookie Settings</a>
+    </footer>
+  `);
+
+  const options = findCandidate(artifact, "Cookie Settings");
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.presentationType, "persistent_link");
+  assert.equal(options?.layer, "footer");
+  assert.equal(artifact.summary.firstLayerOptions, false);
 });
 
 test("uses the rendered label when aria-label is a localization token", async () => {

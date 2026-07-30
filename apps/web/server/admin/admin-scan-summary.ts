@@ -23,6 +23,31 @@ export type AdminScanSummary = {
 
 const summaryPromises = new Map<string, Promise<AdminScanSummary | null>>();
 
+async function timedAdminPersistencePhase<T>(
+  scanId: string,
+  phase: "report_projection" | "admin_summary",
+  operation: () => Promise<T>,
+) {
+  const startedAt = Date.now();
+  try {
+    const result = await operation();
+    console.info("[scan-materialization] phase completed", {
+      durationMs: Date.now() - startedAt,
+      phase,
+      scanId,
+    });
+    return result;
+  } catch (error) {
+    console.error("[scan-materialization] phase failed", {
+      durationMs: Date.now() - startedAt,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      phase,
+      scanId,
+    });
+    throw error;
+  }
+}
+
 function recordString(record: Record<string, unknown> | null, key: string) {
   const value = record?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -109,17 +134,21 @@ export async function persistAdminScanSummaryForRecord(
     topFindingCount: noGo.isNoGo ? 0 : topFindingIds.length
   };
 
-  const persistedProjection = await persistScanReportProjection(scanRecord, source);
+  const persistedProjection = await timedAdminPersistencePhase(scanId, "report_projection", () =>
+    persistScanReportProjection(scanRecord, source)
+  );
 
-  await persistAdminScanSummary({
-    scanId,
-    ...summary,
-    topFindingCount: persistedProjection.topFindingCount ?? summary.topFindingCount,
-    trancoRank: trancoRankFromScanConfig(scanRecord.scan.scanConfigJson),
-    scanNoGoAssessment,
-    visualAccessReview,
-    visualEvidenceArtifacts
-  });
+  await timedAdminPersistencePhase(scanId, "admin_summary", () =>
+    persistAdminScanSummary({
+      scanId,
+      ...summary,
+      topFindingCount: persistedProjection.topFindingCount ?? summary.topFindingCount,
+      trancoRank: trancoRankFromScanConfig(scanRecord.scan.scanConfigJson),
+      scanNoGoAssessment,
+      visualAccessReview,
+      visualEvidenceArtifacts
+    })
+  );
   return {
     ...summary,
     score: persistedProjection.score ?? summary.score,

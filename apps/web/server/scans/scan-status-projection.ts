@@ -23,7 +23,11 @@ export function hasReportProjectionGraceElapsed(
   projection: Pick<ScanStatusProjection, "completedAt" | "reportReady" | "status">,
   nowMs = Date.now(),
 ) {
-  if (projection.status !== "completed" || projection.reportReady || !projection.completedAt) return false;
+  if (
+    (projection.status !== "completed" && projection.status !== "completed_limited") ||
+    projection.reportReady ||
+    !projection.completedAt
+  ) return false;
   const completedAtMs = Date.parse(projection.completedAt);
   return Number.isFinite(completedAtMs) && nowMs - completedAtMs >= REPORT_PROJECTION_GRACE_MS;
 }

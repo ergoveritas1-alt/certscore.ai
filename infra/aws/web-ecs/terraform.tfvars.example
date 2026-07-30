@@ -13,7 +13,7 @@ existing_ecs_cluster_name = ""
 public_subnet_ids         = ["subnet-053d0eaa45152d300", "subnet-000adac289b27c3ac"]
 private_subnet_ids        = ["subnet-053d0eaa45152d300", "subnet-000adac289b27c3ac"]
 assign_public_ip          = true
-web_autoscaling_min_capacity = 1
+web_autoscaling_min_capacity = 2
 web_autoscaling_max_capacity = 3
 web_autoscaling_target_cpu   = 60
 database_security_group_id = "sg-0f2219d488cc6c482"
@@ -58,7 +58,7 @@ stripe_billing_portal_return_path    = "/app/modify-plan"
 
 web_cpu           = 512
 web_memory        = 1024
-web_desired_count = 1
+web_desired_count = 2
 
 tags = {
   Environment = "production"

@@ -441,13 +441,13 @@ test("Pulse descriptive storage totals include explicit pre-consent observations
   assert.match(source, /nonEssentialPreConsentStorageCount =/);
   assert.match(source, /nonEssentialPreConsentStorage: nonEssentialPreConsentStorageCount/);
   assert.match(source, /unclassifiedPreConsentStorageCount/);
-  assert.match(source, /const cookiesBeforeConsentCount = hasClassifiedRuntimeStorageRows/);
-  assert.doesNotMatch(source, /const cookiesBeforeConsentCount = nonEssentialPreConsentStorageCount \?\?/);
-  assert.match(source, /hasClassifiedRuntimeStorageRows \? "Non-essential storage" : "Pre-consent storage"/);
-  assert.match(source, /hasClassifiedRuntimeStorageRows \? "nonessential_only" : "all_observed"/);
-  assert.match(source, /storageMetricStatus/);
-  assert.match(source, /Storage was scanned and none was detected/);
-  assert.match(source, /Storage was not measured or retained/);
+  assert.match(source, /buildPreConsentStorageAssessment/);
+  assert.match(source, /projectPreConsentStorageMetric/);
+  assert.match(source, /const cookiesBeforeConsentCount = nonEssentialPreConsentStorageCount/);
+  assert.match(source, /storageMetricLabel: storageMetric\.label/);
+  assert.match(source, /storageMetricScope: storageMetric\.scope/);
+  assert.match(source, /storageMetricStatus: storageMetric\.status/);
+  assert.match(source, /storageMetricExplanation: storageMetric\.explanation/);
 });
 
 test("Pulse evidence inventory filters display hostnames and deduplicates vendor rows", () => {

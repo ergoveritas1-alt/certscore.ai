@@ -245,6 +245,60 @@ test("privacy opt-out and options do not satisfy reject", () => {
   assert.equal(assessment.controls.reject.state, "not_observed");
 });
 
+test("retains first-layer options presentation without changing control intent", () => {
+  const input = baseInput();
+  input.observations = [{
+    observationId: "inline-options",
+    observedAtMs: 200,
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    captureStatus: "observed",
+    documentId: "https://oxfam.org/en",
+    controls: [
+      candidate({
+        actionType: "manage_preferences",
+        evidenceId: "inline-cookie-tool",
+        intent: "options",
+        label: "Cookie Consent Tool",
+        presentationType: "inline_link",
+      }),
+    ],
+  }];
+
+  const assessment = deriveConsentControlAssessment(input);
+
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.equal(assessment.evidence[0]?.presentationType, "inline_link");
+});
+
+test("retains persistent options links without promoting them to first-layer controls", () => {
+  const input = baseInput();
+  input.surface = { status: "not_observed" };
+  input.geometry = {
+    artifactVersion: "consent_control_geometry.v1",
+    assessmentStatus: "complete",
+    documentId: "https://oxfam.org/en",
+    observedAtMs: 300,
+    candidates: [
+      candidate({
+        actionType: "manage_preferences",
+        evidenceId: "footer-cookie-settings",
+        intent: "options",
+        label: "Cookie Settings",
+        layer: "deeper_layer",
+        presentationType: "persistent_link",
+      }),
+    ],
+  };
+
+  const assessment = deriveConsentControlAssessment(input);
+
+  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.equal(assessment.surface.status, "not_observed");
+  assert.equal(assessment.evidence[0]?.layer, "deeper_layer");
+  assert.equal(assessment.evidence[0]?.presentationType, "persistent_link");
+});
+
 test("deeper-layer controls do not become first-layer A/R/O", () => {
   const input = baseInput();
   input.observations = [{
@@ -340,4 +394,44 @@ test("projection is deterministic for the same source input", () => {
 
   assert.deepEqual(first, second);
   assert.match(first.provenance.sourceHash, /^fnv1a-[0-9a-f]{8}$/);
+});
+
+test("overlong redirect URLs and document identities are safely bounded with stable hashes", () => {
+  const input = baseInput();
+  const longUrl = `https://example.test/redirect?next=${"x".repeat(700)}`;
+  const longDocumentId = `document:${"y".repeat(400)}`;
+  input.scan.requestedUrl = longUrl;
+  input.scan.finalUrl = longUrl;
+  input.document = {
+    canonicalDocumentId: longDocumentId,
+    observedDocumentIds: [longDocumentId],
+  };
+  input.observations = [{
+    observationId: "long-identity",
+    observedAtMs: 100,
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    documentId: longDocumentId,
+    captureStatus: "observed",
+    controls: [candidate({
+      documentId: longDocumentId,
+      evidenceId: `control:${"z".repeat(400)}`,
+      intent: "accept",
+      label: "Accept all",
+    })],
+  }];
+
+  const first = deriveConsentControlAssessment(input);
+  const second = deriveConsentControlAssessment(input);
+
+  assert.equal(first.scan.requestedUrl?.length, 500);
+  assert.equal(first.scan.finalUrl?.length, 500);
+  assert.equal(first.document.canonicalDocumentId?.length, 240);
+  assert.equal(first.document.observedDocumentIds[0]?.length, 240);
+  assert.equal(first.evidence[0]?.documentId?.length, 240);
+  assert.equal(first.evidence[0]?.evidenceId.length, 240);
+  assert.equal(first.document.identityStatus, "matched");
+  assert.equal(first.controls.accept.state, "observed");
+  assert.ok(first.limitations.some((limitation) => limitation.code === "document_identity_bounded"));
+  assert.deepEqual(first, second);
 });

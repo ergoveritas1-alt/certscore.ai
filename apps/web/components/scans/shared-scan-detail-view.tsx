@@ -131,10 +131,10 @@ import {
 import { isGenericBrowserCookieHelpUrl } from "../../lib/scans/policy-surface-url-hygiene";
 import { deriveHighRiskTrackingContext } from "../../lib/scans/high-risk-tracking-context";
 import {
+  buildPreConsentStorageAssessment,
   buildRuntimeCookieInventory,
-  countEligibleNonEssentialPreconsentStorageMetricRows,
-  countUnclassifiedNonEssentialPreconsentStorageRows,
   isEligibleNonEssentialPreconsentStorageRow,
+  projectPreConsentStorageMetric,
   type RuntimeCookieEvidenceRow
 } from "../../lib/scans/runtime-cookie-evidence";
 import { buildScanProof } from "../../lib/scans/scan-proof";
@@ -7285,12 +7285,10 @@ export async function SharedScanDetailView({
   const hybridRuntimeSummaryRows = getHybridRuntimeSummaryRows(runtimeArtifacts);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
   const hybridVendorSummary = getRecord(hybridRuntimeEvidence?.vendorSummary);
-  const hybridStorageSummary = getRecord(hybridRuntimeEvidence?.storageSummary);
   const hybridFingerprintSummary = getRecord(hybridRuntimeEvidence?.fingerprintSummary);
   const hybridNavigationSummary = getRecord(hybridRuntimeEvidence?.navigationSummary);
   const hybridUiSummary = getRecord(hybridRuntimeEvidence?.uiSummary);
   const hybridMediaSummary = getRecord(hybridRuntimeEvidence?.mediaSummary);
-  const runtimeInitialCookieCount = getRecordNumber(runtimeArtifacts, "initial_cookie_count") ?? getRecordNumber(runtimeArtifacts, "initialCookieCount") ?? 0;
   const certScoreSummary = deriveCertScoreFindings(scanRecord);
   const fallbackEvidence = previewPayload?.supplementalEvidence ?? previewPayload?.fallbackEvidence ?? null;
   const fallbackEvidenceRelation =
@@ -7339,19 +7337,23 @@ export async function SharedScanDetailView({
   });
   const cookieInventoryRows = runtimeCookieInventory.rows;
   const preConsentDataFlows = buildPreConsentDataFlows(hybridRuntimeEvidence);
-  const observedNonEssentialPreConsentStorageCount = countEligibleNonEssentialPreconsentStorageMetricRows(cookieInventoryRows);
-  const unclassifiedPreConsentStorageCount = countUnclassifiedNonEssentialPreconsentStorageRows(cookieInventoryRows);
+  const preConsentStorageAssessment = buildPreConsentStorageAssessment({
+    hybridRuntimeEvidence,
+    runtimeArtifacts,
+    runtimeCookieRows: cookieInventoryRows
+  });
+  const preConsentStorageMetric = projectPreConsentStorageMetric(preConsentStorageAssessment);
+  const observedNonEssentialPreConsentStorageCount =
+    preConsentStorageAssessment.classifiedNonEssentialCount;
+  const unclassifiedPreConsentStorageCount =
+    preConsentStorageAssessment.unclassifiedCount;
   const promotionGradePreConsentStorageCount = cookieInventoryRows.filter(isEligibleNonEssentialPreconsentStorageRow).length;
-  const cookiesBeforeConsentCount = cookieInventoryRows.length > 0
-    ? observedNonEssentialPreConsentStorageCount
-    : Math.max(
-        getRecordNumber(hybridStorageSummary, "cookiesBeforeConsentCount") ?? 0,
-        certScoreSummary.cookieNamesBeforeConsent.length,
-        runtimeInitialCookieCount
-      );
-  const beforeConsentStorageScope = cookieInventoryRows.length > 0
-    ? "nonessential_only" as const
-    : "all_observed" as const;
+  const cookiesBeforeConsentCount = preConsentStorageMetric.value ?? 0;
+  const beforeConsentStorageMetricAvailable = preConsentStorageMetric.available;
+  const beforeConsentStorageLimitation = preConsentStorageMetric.available
+    ? null
+    : preConsentStorageMetric.explanation;
+  const beforeConsentStorageScope = preConsentStorageMetric.scope;
   const trackerInventoryRows = buildTrackerInventoryRows({
     domains: inventoryThirdPartyDomains,
     firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
@@ -7783,9 +7785,8 @@ export async function SharedScanDetailView({
                 accessibilitySignals={executiveAccessibilitySignals}
             agencyMappings={scanRecord.agencyMappings}
             beforeConsentCookieCount={cookiesBeforeConsentCount}
-            beforeConsentStorageMetricAvailable={
-              cookiesBeforeConsentCount > 0 || unclassifiedPreConsentStorageCount === 0
-            }
+            beforeConsentStorageLimitation={beforeConsentStorageLimitation}
+            beforeConsentStorageMetricAvailable={beforeConsentStorageMetricAvailable}
             unclassifiedPreConsentStorageCount={unclassifiedPreConsentStorageCount}
             beforeConsentStorageScope={beforeConsentStorageScope}
             coverageDiagnosticIndicators={scanCalibrationSummary.coverage.diagnosticIndicators}

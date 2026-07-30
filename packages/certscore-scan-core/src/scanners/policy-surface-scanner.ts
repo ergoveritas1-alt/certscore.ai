@@ -4286,7 +4286,7 @@ const ARTICLE13_SECTION_PROFILES: Array<{
     disclosureType: "international_transfers",
     headingPatterns: [/data transfers?/i, /international transfers?/i],
     textPatterns: [/servers around the world/i, /processed? outside (?:your )?country/i, /outside (?:of )?the country where you live/i, /outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /data transfers? to third countr(?:y|ies)/i, /third countr(?:y|ies)/i, /legal frameworks? relating to the transfer of data/i, /data protection laws vary/i, /agreements?.{0,180}(?:protect|safeguard)/i, /adequacy/i, /Article 45|Art\.\s*45/i, /Article 46|Art\.\s*46/i, /safeguards/i, /EU-U\.S\. Data Privacy Framework/i, /UK Extension/i, /Swiss-U\.S\./i],
-    observedPattern: /servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|data transfers? to third countr(?:y|ies)|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|legal frameworks? relating to the transfer of data|data protection laws vary|adequacy decision|(?:Article|Art\.)\s*45|(?:Article|Art\.)\s*46|appropriate safeguards|EU-U\.S\. Data Privacy Framework|UK Extension|Swiss-U\.S\.|standard contractual clauses/i,
+    observedPattern: /servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|data transfers? to third countr(?:y|ies)|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|other jurisdictions|other countries|outside)|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|legal frameworks? relating to the transfer of data|data protection laws vary|adequacy decision|(?:Article|Art\.)\s*45|(?:Article|Art\.)\s*46|appropriate safeguards|EU-U\.S\. Data Privacy Framework|UK Extension|Swiss-U\.S\.|standard contractual clauses/i,
   },
   {
     disclosureType: "supervisory_authority",
@@ -4307,9 +4307,9 @@ const ARTICLE13_SECTION_PROFILES: Array<{
     disclosureType: "controller_contact",
     subjectScope: "controller",
     headingPatterns: [/contact/i, /European requirements/i, /information on (?:the )?controller/i, /controller/i],
-    textPatterns: [/\bcontroller\b/i, /Art\.?\s*4.{0,24}(?:No\.?\s*)?7\s+GDPR/i, /\bE-?Mail\s*:/i, /contact Google/i, /contact us/i, /questions about this policy/i, /privacy office/i, /data protection office/i, /data protection officer/i, /Google LLC/i, /Google Ireland Limited/i],
-    observedPattern: /information on (?:the )?controller|data controller|\bcontroller\b|Art\.?\s*4.{0,24}(?:No\.?\s*)?7\s+GDPR|privacy@|contact (?:us|our privacy team).{0,120}(?:privacy|data protection)/i,
-    partialPattern: /Google LLC|Google Ireland Limited|contact Google|questions about this policy|privacy office|data protection office/i,
+    textPatterns: [/\bcontroller\b/i, /Art\.?\s*4.{0,24}(?:No\.?\s*)?7\s+GDPR/i, /\bE-?Mail\s*:/i, /contact Google/i, /contact us/i, /questions about this (?:privacy )?policy/i, /privacy officer/i, /privacy office/i, /data protection office/i, /data protection officer/i, /Google LLC/i, /Google Ireland Limited/i],
+    observedPattern: /information on (?:the )?controller|data controller|\bcontroller\b|Art\.?\s*4.{0,24}(?:No\.?\s*)?7\s+GDPR|privacy@|contact (?:us|our privacy team).{0,120}(?:privacy|data protection)|(?:questions about this (?:privacy )?policy|contact us).{0,260}(?:privacy officer|privacy office|privacy contact|postal address|mailing address|attention:?\s*privacy officer)|(?:postal address|mailing address|attention:?\s*privacy officer).{0,260}(?:privacy officer|privacy office|privacy contact|questions about this (?:privacy )?policy)/i,
+    partialPattern: /Google LLC|Google Ireland Limited|contact Google|questions about this (?:privacy )?policy|privacy officer|privacy office|data protection office/i,
   },
   {
     disclosureType: "processing_purposes",
@@ -4340,7 +4340,7 @@ const ARTICLE13_SECTION_PROFILES: Array<{
     disclosureType: "recipients_or_vendor_categories",
     headingPatterns: [/recipients?/i, /service providers?/i, /processors?/i, /sharing/i],
     textPatterns: [/recipients?/i, /service providers?/i, /processors?/i, /affiliates?/i, /third parties/i],
-    observedPattern: /recipients? of (?:personal )?(?:data|information)|categories of recipients?|service providers?.{0,160}(?:process|receive|access)|processors?.{0,160}(?:personal )?(?:data|information)|share.{0,160}(?:affiliates?|third parties|service providers?)/i,
+    observedPattern: /recipients? of (?:personal )?(?:data|information)|categories of recipients?|service providers?.{0,160}(?:process|receive|access)|processors?.{0,160}(?:personal )?(?:data|information)|share.{0,180}(?:personal data|personal information|information|data)?.{0,180}(?:affiliates?|third parties|service providers?|analytics providers?|advertising networks?|social networks?|platforms?|governmental authorities)|(?:personal data|personal information|information|data).{0,140}(?:shared|disclosed|provided).{0,180}(?:affiliates?|third parties|service providers?|analytics providers?|advertising networks?|social networks?|platforms?|governmental authorities)/i,
   },
   {
     disclosureType: "automated_decision_making_or_profiling",
@@ -6305,6 +6305,7 @@ function bestSectionExcerptForProfile(
     controller_contact: [
       /information on (?:the )?controller.{0,360}(?:e-?mail|email|tel(?:ephone)?|address|@[a-z0-9.-]+\.[a-z]{2,})/i,
       /(?:we|our organization|[A-Z][A-Za-z ]{2,80}) (?:is|are) the (?:data )?controller.{0,220}(?:contact|privacy@|data protection)/i,
+      /(?:questions about this (?:privacy )?policy|contact us).{0,420}(?:privacy officer|privacy office|privacy contact|postal address|mailing address|attention:?\s*privacy officer)/i,
     ],
     processing_purposes: [
       /what do we use (?:your )?(?:personal )?(?:data|information) for.{0,360}/i,
@@ -6313,7 +6314,8 @@ function bestSectionExcerptForProfile(
     ],
     legal_basis: [/(?:our )?(?:legal|lawful) bases? (?:are|include).{0,260}(?:contract|legitimate interests?|legal obligations?|consent|public task|vital interests?)/i],
     data_retention: [/we retain.{0,260}(?:as long as|period|criteria|delete|anonymi[sz]e)/i],
-    international_transfers: [/(?:we|our service providers?|our processors?) (?:transfer|store|process).{0,300}(?:outside|other countries|third countr(?:y|ies)|international).{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i, /(?:international|cross-border|third-country) transfers?.{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i],
+    international_transfers: [/(?:personal data|personal information|information|data).{0,180}(?:transferred|processed|stored|accessed).{0,220}(?:united states|other jurisdictions|other countries|outside)/i, /(?:we|our service providers?|our processors?) (?:transfer|store|process).{0,300}(?:outside|other countries|third countr(?:y|ies)|international).{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i, /(?:international|cross-border|third-country) transfers?.{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i],
+    recipients_or_vendor_categories: [/(?:we|the company) (?:share|disclose|provide).{0,180}(?:personal data|personal information|information|data).{0,260}(?:service providers?|affiliates?|analytics providers?|advertising networks?|social networks?|platforms?|governmental authorities|third parties)/i],
     dpo_contact: [/(?:privacy office|data protection office|data protection officer|\bdpo\b).{0,180}(?:@|contact|email|write|telephone|phone)/i],
   };
   const directPatterns = preferredPatterns[profile.disclosureType] ?? [];

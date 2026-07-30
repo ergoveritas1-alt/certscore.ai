@@ -5,7 +5,7 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 
 type RequestRow = {
   organization_id: string | null;
-  status: "pending" | "completed";
+  status: "pending" | "completed" | "terminal_failure";
   token_sha256: string;
 };
 
@@ -58,3 +58,14 @@ export async function recordScoreMaterializationRequestError(scanId: string, err
   );
 }
 
+export async function failScoreMaterializationRequest(scanId: string, diagnostic: string) {
+  await query(
+    `update public.scan_score_materialization_requests
+        set status = 'terminal_failure',
+            completed_at = coalesce(completed_at, now()),
+            last_error = $2
+      where scan_id = $1::uuid
+        and status = 'pending'`,
+    [scanId, diagnostic.slice(0, 500)]
+  );
+}

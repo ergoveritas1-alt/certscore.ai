@@ -65,7 +65,15 @@ function geometryInput(
         const supportedActionType = ["accept_all", "reject_all", "manage_preferences", "save_preferences", "do_not_sell_share", "other"].includes(actionType)
           ? actionType as ConsentControlAssessmentCandidate["actionType"]
           : "other";
-        const visible = row.decisionStatus === "confirmed_visible";
+        const presentationType =
+          row.presentationType === "dedicated_button" ||
+          row.presentationType === "inline_link" ||
+          row.presentationType === "persistent_link"
+            ? row.presentationType
+            : "unknown";
+        const visible =
+          row.decisionStatus === "confirmed_visible" ||
+          (presentationType === "persistent_link" && row.decisionStatus === "footer_or_policy_link");
         return [{
           evidenceId: typeof row.candidateId === "string" ? row.candidateId : undefined,
           actionType: supportedActionType,
@@ -76,7 +84,12 @@ function geometryInput(
           classifierReasonCodes: Array.isArray(row.classifierReasonCodes)
             ? row.classifierReasonCodes.filter((value): value is string => typeof value === "string")
             : [],
-          layer: row.layer === "deeper_layer" ? "deeper_layer" : row.layer === "first_layer" ? "first_layer" : "unknown",
+          layer: row.layer === "first_layer"
+            ? "first_layer"
+            : row.layer === "footer" || row.layer === "preference_center" || row.layer === "page_body" || row.layer === "deeper_layer"
+              ? "deeper_layer"
+              : "unknown",
+          presentationType,
           visible,
           actionable: visible && row.enabled !== false,
           observedAtMs: typeof raw.observedAtMs === "number" ? raw.observedAtMs : 0,
@@ -197,6 +210,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           matchedTerm: control.matchedTerm,
           matchStrength: control.matchStrength,
           classifierReasonCodes: control.classifierReasonCodes,
+          presentationType: control.presentationType,
           layer,
           visible: control.visible,
           actionable: control.visible === true && control.actionType !== "other",

@@ -149,13 +149,24 @@ export async function ensureCompletedScanScoresPersisted(input: {
     }
   );
   if (!response.ok) {
+    const failure = await response.json().catch(() => null) as {
+      code?: unknown;
+      retryable?: unknown;
+    } | null;
+    if (response.status === 422 && failure?.retryable === false) {
+      console.error("[validation-worker] terminal score materialization failure acknowledged", {
+        code: typeof failure.code === "string" ? failure.code.slice(0, 120) : "contract_validation_failed",
+        scanId: input.scanId,
+      });
+      return { alreadyPersisted: false, terminalFailure: true as const };
+    }
     throw new Error(`Score materialization endpoint returned HTTP ${response.status}.`);
   }
   const result = await response.json() as { complete?: unknown };
   if (result.complete !== true || !(await completedScanScoresExist(input.scanId))) {
     throw new Error("Score materialization endpoint did not confirm persisted legacy assessment.");
   }
-  return { alreadyPersisted: false };
+  return { alreadyPersisted: false, terminalFailure: false as const };
 }
 
 type LambdaResultConsumerMetadata = {

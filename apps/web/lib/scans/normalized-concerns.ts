@@ -1,5 +1,6 @@
 import {
   classifyGdprTransparencyTopics,
+  consentControlAssessmentSchema,
   evaluateLegalFrameworkValidity,
   hasStaleLegalFrameworkReference,
   hasSubstantiveProcessingPurposesEvidence,
@@ -52,6 +53,7 @@ import {
   CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID,
   getConsentGovernanceDisclosureEvidence
 } from "./consent-governance-disclosure";
+import { buildPreConsentStorageAssessment } from "./runtime-cookie-evidence";
 import {
   isRuntimeRequestEvidenceUrl,
   stripReportUrlAnnotation
@@ -143,7 +145,20 @@ export type NormalizedConcernExternalSurfacingEligibility = "eligible" | "audit_
 
 export type NormalizedConcernAssertionLevel = "weak" | "moderate" | "strong";
 
-export type NormalizedConcernRegulatoryChecklistEligibility = "observed" | "review_signal" | "none";
+export type NormalizedConcernRegulatoryChecklistEligibility =
+  | "gap_observed"
+  | "observed"
+  | "review_signal"
+  | "none";
+
+export type ConsentOptionsControlProminenceState =
+  | "dedicated_button"
+  | "first_layer_control"
+  | "inline_link"
+  | "persistent_link"
+  | "balanced_accept_decline_no_first_layer_settings"
+  | "no_granular_controls_retained"
+  | "insufficient_retained_evidence";
 
 export type NormalizedConcernNegativeEvidenceFlag =
   | "no_consent_surface_observed"
@@ -2978,6 +2993,162 @@ function buildRuntimeCoverageLimitationConcerns(
   ];
 }
 
+function getConsentControlAssessmentForConcern(
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+) {
+  const hybridRuntimeEvidence = getRuntimeRecord(runtimeArtifacts, [
+    "hybridRuntimeEvidence",
+    "hybrid_runtime_evidence"
+  ]);
+  for (const candidate of [
+    getRuntimeRecord(runtimeArtifacts, [
+      "consentControlAssessment",
+      "consent_control_assessment"
+    ]),
+    getRuntimeRecord(hybridRuntimeEvidence, [
+      "consentControlAssessment",
+      "consent_control_assessment"
+    ])
+  ]) {
+    const parsed = consentControlAssessmentSchema.safeParse(candidate);
+    if (parsed.success) {
+      return parsed.data;
+    }
+  }
+  return null;
+}
+
+function buildConsentOptionsControlProminenceConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  if (!assessment) {
+    return [];
+  }
+
+  const firstLayerOptions = assessment.evidence.filter(
+    (evidence) => evidence.intent === "options" && evidence.layer === "first_layer"
+  );
+  const persistentOptions = assessment.evidence.filter(
+    (evidence) =>
+      evidence.intent === "options" &&
+      evidence.layer === "deeper_layer" &&
+      evidence.presentationType === "persistent_link"
+  );
+  const state: ConsentOptionsControlProminenceState =
+    firstLayerOptions.some((evidence) => evidence.presentationType === "dedicated_button")
+      ? "dedicated_button"
+      : firstLayerOptions.some((evidence) => evidence.presentationType === "inline_link")
+        ? "inline_link"
+        : firstLayerOptions.length > 0
+          ? "first_layer_control"
+          : persistentOptions.length > 0
+            ? "persistent_link"
+            : assessment.assessmentStatus !== "complete" ||
+                assessment.coverage.status !== "complete" ||
+                assessment.surface.status !== "observed_actionable"
+              ? "insufficient_retained_evidence"
+              : assessment.controls.accept.state === "observed" &&
+                  assessment.controls.reject.state === "observed"
+                ? "balanced_accept_decline_no_first_layer_settings"
+                : "no_granular_controls_retained";
+  const retainedControls = [...firstLayerOptions, ...persistentOptions]
+    .slice(0, 8)
+    .map((evidence) => ({
+      artifactRefs: evidence.artifactRefs.slice(0, 8),
+      evidenceId: evidence.evidenceId,
+      label: evidence.label,
+      layer: evidence.layer,
+      presentationType: evidence.presentationType
+    }));
+  const runtimeEvidenceArtifacts = uniqueStrings([
+    ...retainedControls.flatMap((control) => control.artifactRefs),
+    "scan_runtime_artifacts.consent_control_assessment"
+  ]);
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "Typed consent-control observations were assessed for first-layer settings availability and control prominence before GDPR/ePrivacy checklist projection.",
+      domainContext,
+      evidence: retainedControls
+        .map((control) => control.label)
+        .filter((label): label is string => Boolean(label)),
+      observedValue: state,
+      originKey: `consent.options_control_prominence.${state}`,
+      originType: "runtime_artifact",
+      rawEvidence: {
+        consentControlAssessmentStatus: assessment.assessmentStatus,
+        consentControlCoverageStatus: assessment.coverage.status,
+        consentOptionsControlProminenceEvidence: true,
+        consentOptionsControlProminenceState: state,
+        consentSurfaceStatus: assessment.surface.status,
+        firstLayerAcceptState: assessment.controls.accept.state,
+        firstLayerOptionsState: assessment.controls.options.state,
+        firstLayerRejectState: assessment.controls.reject.state,
+        retainedConsentOptionsControls: retainedControls,
+        runtimeEvidenceArtifacts
+      },
+      severity: state === "no_granular_controls_retained" ? "medium" : "low",
+      signalKey: "privacy.consent_options_control_prominence",
+      signalLabel: "Consent options control prominence",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Consent options control prominence"
+    })
+  ];
+}
+
+function buildPreConsentStorageAssessmentConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = buildPreConsentStorageAssessment({ runtimeArtifacts });
+  const evidence = assessment.evidenceRows
+    .slice(0, 12)
+    .map((row) => `storage:${row.name}${row.domain ? `@${row.domain}` : ""}`);
+  const runtimeEvidenceArtifacts = evidence.length > 0
+    ? evidence
+    : assessment.aggregateObservedCount !== null
+      ? ["scan_runtime_artifacts.hybrid_runtime_evidence.storage_summary"]
+      : [];
+
+  if (
+    assessment.status === "insufficient_evidence" &&
+    runtimeEvidenceArtifacts.length === 0
+  ) {
+    return [];
+  }
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "Verified retained storage evidence was reconciled into one typed pre-consent storage assessment before concern policy and checklist projection.",
+      domainContext,
+      evidence,
+      observedValue: assessment.status,
+      originKey: `storage.preconsent_assessment.${assessment.status}`,
+      originType: "runtime_artifact",
+      rawEvidence: {
+        preConsentStorageAssessment: assessment,
+        preConsentStorageAssessmentEvidence: true,
+        runtimeEvidenceArtifacts
+      },
+      severity: assessment.status === "classified_nonessential_observed"
+        ? "medium"
+        : "low",
+      signalKey: "privacy.preconsent_storage_assessment",
+      signalLabel: "Pre-consent storage assessment",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Pre-consent storage assessment"
+    })
+  ];
+}
+
 
 export function buildNormalizedConcerns(input: {
   domainContext?: ScanDomainContext;
@@ -2995,6 +3166,8 @@ export function buildNormalizedConcerns(input: {
     }),
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildPreConsentStorageAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCmpLoadOrderConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRtbCookieSyncConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildGdprTransparencyArticle13Concerns(input.runtimeArtifacts, input.domainContext),

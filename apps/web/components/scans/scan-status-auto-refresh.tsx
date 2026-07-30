@@ -63,6 +63,35 @@ export function getPolledReadiness(payload: unknown) {
   };
 }
 
+export function getNavigablePolledScanStatus(
+  payload: unknown,
+  input: { pendingBrowserExtensionNormalization?: boolean } = {},
+) {
+  const status = getPolledScanStatus(payload);
+  if (!status) return null;
+
+  const readiness = getPolledReadiness(payload);
+  if (
+    input.pendingBrowserExtensionNormalization === true &&
+    !readiness.browserReady &&
+    (status === "completed" || status === "completed_limited")
+  ) {
+    return "processing";
+  }
+
+  // A completed scanner run is not yet a viewable report. The lightweight
+  // status endpoint applies the bounded projection grace period and reports
+  // `ready` after either projection completion or that fallback has elapsed.
+  if (
+    (status === "completed" || status === "completed_limited") &&
+    !readiness.reportReady
+  ) {
+    return "processing";
+  }
+
+  return status;
+}
+
 export function scanStatusPollDelayMs(failureCount: number, randomValue = Math.random()) {
   const backoff = Math.min(
     SCAN_STATUS_POLL_MAX_MS,
@@ -211,7 +240,10 @@ export function ScanStatusAutoRefresh({
   });
 
   useEffect(() => {
-    if (!shouldRefresh || !scanId || isTerminalScanStatus(status)) return;
+    const completedButFinalizing =
+      (status === "completed" || status === "completed_limited") &&
+      (pendingPostCompletionWork || pendingBrowserExtensionNormalization);
+    if (!shouldRefresh || !scanId || (isTerminalScanStatus(status) && !completedButFinalizing)) return;
 
     const existing = activeScanPollers.get(scanId);
     if (existing) {
@@ -233,11 +265,9 @@ export function ScanStatusAutoRefresh({
         });
         if (!response.ok) return null;
         const payload = await response.json() as unknown;
-        const nextStatus = getPolledScanStatus(payload);
-        const readiness = getPolledReadiness(payload);
-        if (pendingBrowserExtensionNormalization && !readiness.browserReady) return "processing";
-        if (pendingPostCompletionWork && !readiness.reportReady) return "processing";
-        return nextStatus;
+        return getNavigablePolledScanStatus(payload, {
+          pendingBrowserExtensionNormalization,
+        });
       },
       isOnline: () => navigator.onLine,
       isVisible: () => document.visibilityState === "visible",

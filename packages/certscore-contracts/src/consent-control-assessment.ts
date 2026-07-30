@@ -46,6 +46,7 @@ export const consentControlAssessmentEvidenceSchema = z.object({
   actionable: z.boolean().nullable(),
   observedAtMs: z.number().int().nonnegative(),
   documentId: z.string().max(240).nullable(),
+  presentationType: z.enum(["dedicated_button", "inline_link", "persistent_link", "unknown"]).default("unknown"),
   channels: z.array(assessmentChannelSchema).max(8),
   artifactRefs: z.array(z.string().max(240)).max(24),
   classifier: z.object({
@@ -149,6 +150,7 @@ export type ConsentControlAssessmentCandidate = {
   actionable?: boolean | null;
   observedAtMs?: number;
   documentId?: string | null;
+  presentationType?: "dedicated_button" | "inline_link" | "persistent_link" | "unknown";
   channels?: ConsentControlAssessmentChannel[];
   artifactRefs?: string[];
 };
@@ -220,6 +222,14 @@ function boundedText(value: string | null | undefined, limit: number) {
   return normalized.length > limit ? normalized.slice(0, limit) : normalized;
 }
 
+function boundedIdentityText(value: string | null | undefined, limit: number) {
+  if (!value) return null;
+  const normalized = value.trim();
+  if (normalized.length <= limit) return normalized;
+  const suffix = `~${fnv1a(normalized)}`;
+  return `${normalized.slice(0, Math.max(0, limit - suffix.length))}${suffix}`;
+}
+
 function stableValue(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableValue).join(",")}]`;
@@ -245,7 +255,10 @@ function candidateIntent(candidate: ConsentControlAssessmentCandidate): Exclude<
 }
 
 function canonicalDocumentId(input: ConsentControlAssessmentInput) {
-  return input.document?.canonicalDocumentId ?? input.scan.finalUrl ?? input.scan.requestedUrl ?? null;
+  return boundedIdentityText(
+    input.document?.canonicalDocumentId ?? input.scan.finalUrl ?? input.scan.requestedUrl ?? null,
+    240,
+  );
 }
 
 function eligibleCandidate(candidate: ConsentControlAssessmentCandidate, fallbackObservedAtMs: number, fallbackDocumentId: string | null, source: "bundle" | "geometry"): ConsentControlAssessmentEvidence | null {
@@ -256,9 +269,22 @@ function eligibleCandidate(candidate: ConsentControlAssessmentCandidate, fallbac
   // Positive control evidence must be explicit. Missing visibility or
   // actionability metadata is an evidence limitation, not permission to
   // promote a candidate into an observed first-layer control.
-  if (!intent || layer !== "first_layer" || visible !== true || actionable !== true) return null;
+  const presentationType = candidate.presentationType ?? "unknown";
+  const retainedPersistentOptionsLink =
+    intent === "options" &&
+    layer === "deeper_layer" &&
+    presentationType === "persistent_link";
+  if (
+    !intent ||
+    (layer !== "first_layer" && !retainedPersistentOptionsLink) ||
+    visible !== true ||
+    actionable !== true
+  ) return null;
   const observedAtMs = candidate.observedAtMs ?? fallbackObservedAtMs;
-  const evidenceId = candidate.evidenceId ?? `${source}:${observedAtMs}:${candidate.label ?? intent}`;
+  const evidenceId = boundedIdentityText(
+    candidate.evidenceId ?? `${source}:${observedAtMs}:${candidate.label ?? intent}`,
+    240,
+  ) ?? `${source}:${observedAtMs}:${intent}`;
   return {
     evidenceId,
     intent,
@@ -268,7 +294,8 @@ function eligibleCandidate(candidate: ConsentControlAssessmentCandidate, fallbac
     visible,
     actionable,
     observedAtMs,
-    documentId: candidate.documentId ?? fallbackDocumentId,
+    documentId: boundedIdentityText(candidate.documentId ?? fallbackDocumentId, 240),
+    presentationType,
     channels: unique(candidate.channels ?? (source === "geometry" ? ["geometry"] : ["dom_inventory"])),
     artifactRefs: bounded(candidate.artifactRefs ?? []),
     classifier: {
@@ -281,7 +308,7 @@ function eligibleCandidate(candidate: ConsentControlAssessmentCandidate, fallbac
 }
 
 function resultFor(intent: ConsentControlIntent, evidence: ConsentControlAssessmentEvidence[], completeInventory: boolean, reasons: string[]): ConsentControlAssessmentControlResult {
-  const matching = evidence.filter((item) => item.intent === intent);
+  const matching = evidence.filter((item) => item.intent === intent && item.layer === "first_layer");
   const first = matching[0]?.observedAtMs ?? null;
   const last = matching.at(-1)?.observedAtMs ?? null;
   if (matching.length > 0) {
@@ -310,12 +337,12 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   const bundleObservedIds = bounded([
     ...(input.document?.observedDocumentIds ?? []),
     ...observations.map((observation) => observation.documentId ?? ""),
-  ]);
+  ].flatMap((value) => boundedIdentityText(value, 240) ?? []));
   const observedIds = bounded([
     ...bundleObservedIds,
     ...(input.geometry &&
     (input.geometry.assessmentStatus === "complete" || (input.geometry.candidates?.length ?? 0) > 0)
-      ? [input.geometry.documentId ?? ""]
+      ? [boundedIdentityText(input.geometry.documentId, 240) ?? ""]
       : []),
   ]);
   const documentStatus = input.document?.identityStatus ??
@@ -327,6 +354,15 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   const noGo = input.scan.noGo === true;
   const geometryMismatch = input.geometry?.assessmentStatus === "document_mismatch";
   const limitations: ConsentControlAssessment["limitations"] = [];
+  const identityWasBounded =
+    [input.scan.requestedUrl, input.scan.finalUrl]
+      .some((value) => typeof value === "string" && value.trim().length > 500) ||
+    [
+      input.document?.canonicalDocumentId,
+      ...(input.document?.observedDocumentIds ?? []),
+      ...observations.map((observation) => observation.documentId),
+      input.geometry?.documentId,
+    ].some((value) => typeof value === "string" && value.trim().length > 240);
   const reasons = bounded([
     ...(input.scan.noGoReasonCodes ?? []),
     ...(input.coverage?.reasonCodes ?? []),
@@ -338,6 +374,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   if (documentStatus === "mismatched") limitations.push({ code: "document_identity_mismatch", detail: "Observed consent evidence was not attributable to the canonical scanned document.", affectedFields: ["surface", "accept", "reject", "options", "privacy_opt_out"] });
   if (documentStatus === "unknown") limitations.push({ code: "document_identity_unverified", detail: "The retained consent evidence was not explicitly bound to the canonical scanned document.", affectedFields: ["surface", "accept", "reject", "options", "privacy_opt_out"] });
   if (geometryMismatch) limitations.push({ code: "geometry_document_mismatch", detail: "Geometry was retained for a different document identity and cannot erase bundle evidence.", affectedFields: ["surface", "accept", "reject", "options", "privacy_opt_out"] });
+  if (identityWasBounded) limitations.push({ code: "document_identity_bounded", detail: "An overlong retained URL or document identity was projected with a stable hash suffix.", affectedFields: ["surface", "accept", "reject", "options", "privacy_opt_out"] });
 
   const bundleEvidence = observations.flatMap((observation) => observation.controls
     .map((candidate) => eligibleCandidate(candidate, observation.observedAtMs, observation.documentId ?? canonicalId, "bundle"))
@@ -351,7 +388,8 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     .filter((item, index, all) => all.findIndex((candidate) => candidate.evidenceId === item.evidenceId) === index)
     .slice(0, 96);
 
-  const actionable = evidence.length > 0;
+  const firstLayerEvidence = evidence.filter((item) => item.layer === "first_layer");
+  const actionable = firstLayerEvidence.length > 0;
   const surfaceExplicitlyNotObserved = input.surface?.status === "not_observed";
   const surfaceObserved =
     input.surface?.status === "observed_actionable" ||
@@ -443,7 +481,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   if (actionable && input.surface?.status === "not_observed") {
     contradictionRows.push({
       reasonCode: "retained_actionable_control_overrides_later_surface_absence",
-      earlierEvidenceId: evidence[0]?.evidenceId ?? null,
+      earlierEvidenceId: firstLayerEvidence[0]?.evidenceId ?? null,
       laterEvidenceId: null,
       affectedFields: ["surface"],
     });
@@ -481,8 +519,8 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     assessmentStatus: assessmentBlocked || effectiveCoverageStatus !== "complete" ? "limited" : "complete",
     scan: {
       scanId: input.scan.scanId,
-      requestedUrl: input.scan.requestedUrl ?? null,
-      finalUrl: input.scan.finalUrl ?? null,
+      requestedUrl: boundedIdentityText(input.scan.requestedUrl, 500),
+      finalUrl: boundedIdentityText(input.scan.finalUrl, 500),
       scanStatus: input.scan.scanStatus ?? "unknown",
       noGo,
     },

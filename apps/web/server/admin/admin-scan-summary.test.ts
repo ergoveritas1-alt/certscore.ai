@@ -84,13 +84,16 @@ test("API activity derives terminal state and score from canonical scan records"
 test("completion materialization persists the admin summary before acknowledging success", async () => {
   const source = await readFile("apps/web/app/api/internal/scan-score-materialization/route.ts", "utf8");
   const scoreIndex = source.indexOf("persistCompletedLegacyGdprEprivacyAssessment");
-  const summaryIndex = source.indexOf("materializeAdminScanSummary", scoreIndex);
+  const summaryIndex = source.indexOf("persistAdminScanSummaryForRecord", scoreIndex);
   const completeIndex = source.indexOf("completeScoreMaterializationRequest", summaryIndex);
 
   assert.ok(scoreIndex >= 0);
   assert.ok(summaryIndex > scoreIndex);
   assert.ok(completeIndex > summaryIndex);
   assert.match(source, /Admin scan summary persistence was incomplete/);
+  assert.match(source, /scanRecord/);
+  assert.match(source, /classifyScoreMaterializationFailure/);
+  assert.match(source, /status: disposition\.retryable \? 503 : 422/);
 });
 
 test("Admin Scans navigation is read-only and Score Shadow has no admin surface", async () => {
@@ -158,7 +161,7 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   assert.match(scansSource, /projectAdminNoGo/);
   assert.match(scansSource, /runtimeAssessment: runtimeArtifact\?\.scan_no_go_assessment \?\? overviewSnapshot\?\.scan_no_go_assessment/);
   assert.match(scansSource, /visualAccessReview: runtimeArtifact\?\.visual_access_review \?\? overviewSnapshot\?\.visual_access_review/);
-  assert.match(scansSource, /const scoreAssessment = noGo\.isNoGo \? null : scoreSelection\.assessment/);
+  assert.match(scansSource, /const scoreAssessment = noGo\.isNoGo \? null : legacyScoreAssessmentMap\.get\(scan\.id\) \?\? null/);
   assert.match(pulseSource, /SCAN_NO_GO_SNAPSHOT_OUTCOMES/);
   assert.match(pulseSource, /PULSE_NO_GO_SQL/);
   assert.match(pulseSource, /const score = noGo\.isNoGo \? null : retainedScore/);
@@ -167,7 +170,8 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   assert.match(repositorySource, /visual_access_review/);
   assert.match(repositorySource, /scanner_evidence_missing/);
   assert.match(repositorySource, /completed_scan_backfill/);
-  assert.match(repositorySource, /from scans s\s+left join scan_snapshots ss on ss\.scan_id = s\.id\s+left join scan_runtime_artifacts sra on sra\.scan_id = s\.id/);
+  assert.match(repositorySource, /from scan_snapshots\s+where scan_id = any\(\$1::uuid\[\]\)/);
+  assert.match(repositorySource, /from scan_runtime_artifacts\s+where scan_id = any\(\$1::uuid\[\]\)/);
   assert.match(scansPage, /scan\.noGoFlag/);
   assert.match(scansPage, /label: "Tranco"/);
   assert.match(pulsePage, /label: "Tranco"/);
@@ -346,7 +350,7 @@ test("admin summary persistence accepts completed scans without a canonical scor
 test("admin overview links cross-workspace scans through the admin detail route", async () => {
   const source = await readFile("apps/web/app/app/admin/page.tsx", "utf8");
 
-  assert.match(source, /href=\{`\/app\/admin\/scans\/\$\{scan\.linkedScanId\}`\}/);
+  assert.match(source, /href=\{`\/app\/admin\/scans\/\$\{scan\.scanId\}`\}/);
   assert.doesNotMatch(source, /href=\{scan\.scanViewHref\} idleContent="Inspect snapshot"/);
 });
 
@@ -404,7 +408,7 @@ test("admin users paginate in SQL instead of loading the complete account histor
   assert.doesNotMatch(pageSource, /listAdminUsers\(\)/);
   assert.match(repositorySource, /selected_users as/);
   assert.match(repositorySource, /limit \$1 offset \$2/);
-  assert.match(repositorySource, /where scans\.organization_id in \(select organization_id from selected_organizations\)/);
+  assert.match(repositorySource, /where scans\.submitted_by_user_id = selected_users\.id/);
 });
 
 test("admin scans poll lightweight status data and refresh only after a status change", async () => {

@@ -47,6 +47,13 @@ test("lightweight status exposes completed fallback reports after the grace wind
   assert.equal(response.scan.status, "completed");
 });
 
+test("lightweight status exposes completed-limited fallback reports after the grace window", async () => {
+  const build = await getBuildLightweightScanStatusResponse();
+  const response = build(projection({ status: "completed_limited" }));
+  assert.equal(response.reportReadiness.status, "ready");
+  assert.equal(response.scan.status, "completed_limited");
+});
+
 test("lightweight status keeps recent completed scans finalizing", async () => {
   const build = await getBuildLightweightScanStatusResponse();
   const response = build(

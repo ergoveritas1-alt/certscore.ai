@@ -2283,6 +2283,61 @@ function getGdprTransparencyArticle13ChecklistEligibility(
     : "review_signal";
 }
 
+function getConsentOptionsControlChecklistEligibility(input: {
+  originKey: string;
+  rawEvidence: Record<string, unknown> | null | undefined;
+}): NormalizedConcernRegulatoryChecklistEligibility | null {
+  if (
+    !input.originKey.startsWith("consent.options_control_prominence.") ||
+    input.rawEvidence?.consentOptionsControlProminenceEvidence !== true
+  ) {
+    return null;
+  }
+
+  const state = getFirstString(input.rawEvidence, [
+    "consentOptionsControlProminenceState",
+    "consent_options_control_prominence_state"
+  ]);
+  if (state === "dedicated_button" || state === "first_layer_control") {
+    return "observed";
+  }
+  if (
+    state === "inline_link" ||
+    state === "persistent_link" ||
+    state === "balanced_accept_decline_no_first_layer_settings"
+  ) {
+    return "review_signal";
+  }
+  if (state === "no_granular_controls_retained") {
+    return "gap_observed";
+  }
+  return "none";
+}
+
+function getPreConsentStorageAssessmentChecklistEligibility(input: {
+  originKey: string;
+  rawEvidence: Record<string, unknown> | null | undefined;
+}): NormalizedConcernRegulatoryChecklistEligibility | null {
+  if (
+    !input.originKey.startsWith("storage.preconsent_assessment.") ||
+    input.rawEvidence?.preConsentStorageAssessmentEvidence !== true
+  ) {
+    return null;
+  }
+
+  const assessment = input.rawEvidence.preConsentStorageAssessment;
+  const status = assessment && typeof assessment === "object" && !Array.isArray(assessment)
+    ? getFirstString(assessment as Record<string, unknown>, ["status"])
+    : null;
+  if (status === "classified_nonessential_observed") {
+    return "gap_observed";
+  }
+  if (status === "partially_classified" || status === "snapshot_presence_only") {
+    return "review_signal";
+  }
+  return "none";
+}
+
 function isGuessedOnlyDiscovery(rawEvidence: Record<string, unknown> | null | undefined) {
   return rawEvidence?.keyPageGuessedOnly === true || rawEvidence?.key_page_guessed_only === true;
 }
@@ -2383,6 +2438,35 @@ export function deriveConcernPolicy(input: {
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
 
   const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  const consentOptionsChecklistEligibility = getConsentOptionsControlChecklistEligibility({
+    originKey: input.concern.originKey,
+    rawEvidence: input.rawEvidence
+  });
+  if (consentOptionsChecklistEligibility !== null) {
+    return {
+      allowedNarrativeTier:
+        consentOptionsChecklistEligibility === "observed" ? "moderate" : "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility: consentOptionsChecklistEligibility
+    };
+  }
+  const preConsentStorageChecklistEligibility = getPreConsentStorageAssessmentChecklistEligibility({
+    originKey: input.concern.originKey,
+    rawEvidence: input.rawEvidence
+  });
+  if (preConsentStorageChecklistEligibility !== null) {
+    return {
+      allowedNarrativeTier:
+        preConsentStorageChecklistEligibility === "observed" ? "moderate" : "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility: preConsentStorageChecklistEligibility
+    };
+  }
+
   if (suggestedUnifiedFindingId === "cookie_retention_lifetime_review_signal") {
     const review = evaluateCookieRetentionReview(input.rawEvidence);
     return {

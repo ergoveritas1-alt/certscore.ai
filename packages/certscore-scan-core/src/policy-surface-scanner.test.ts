@@ -2940,6 +2940,45 @@ test("retained policy sections prefer the governing controller and retain passiv
   assert.doesNotMatch(transfers?.selectedPolicySectionExcerpt ?? "", /vendor\.example/i);
 });
 
+test("retained US-policy sections confirm direct recipients, transfers, controller contact, and privacy contact without inventing a DPO", () => {
+  const sourceUrl = "https://studio.example/privacy";
+  const evidence = retainedArticle13SectionEvidenceFromSections([
+    {
+      sourceUrl,
+      heading: "How we disclose Personal Information",
+      textExcerpt: "We share Personal Information with service providers, affiliates, analytics providers, advertising networks, social networks, platforms, and governmental authorities.",
+      charStart: 0,
+      charEnd: 170,
+      quality: "strong",
+    },
+    {
+      sourceUrl,
+      heading: "International Transfer",
+      textExcerpt: "Personal Information may be transferred to and processed in the United States or other jurisdictions. Courts, law enforcement, and national security authorities in those jurisdictions may access it.",
+      charStart: 171,
+      charEnd: 370,
+      quality: "strong",
+    },
+    {
+      sourceUrl,
+      heading: "Contact Us",
+      textExcerpt: "Example Studios Inc. operates these services. Questions about this Privacy Policy may be submitted through our privacy request form or mailed to 100 Example Avenue, Culver City, California, Attention: Privacy Officer.",
+      charStart: 371,
+      charEnd: 590,
+      quality: "strong",
+    },
+  ], sourceUrl);
+  const row = (coverageArea: string) => evidence.find((candidate) => candidate.coverageArea === coverageArea);
+
+  assert.equal(row("recipients_or_vendor_categories")?.signalObserved, "observed");
+  assert.match(row("recipients_or_vendor_categories")?.selectedPolicySectionExcerpt ?? "", /analytics providers|advertising networks/i);
+  assert.equal(row("international_transfers")?.signalObserved, "observed");
+  assert.match(row("international_transfers")?.selectedPolicySectionExcerpt ?? "", /United States or other jurisdictions/i);
+  assert.equal(row("controller_contact")?.signalObserved, "observed");
+  assert.match(row("controller_contact")?.selectedPolicySectionExcerpt ?? "", /Example Studios Inc|Privacy Officer/i);
+  assert.notEqual(row("dpo_contact")?.signalObserved, "observed");
+});
+
 test("retained policy excerpts directly support controller, purposes, legal basis, retention, and privacy contact rows", () => {
   const sourceUrl = "https://foundation.example/privacy";
   const textExcerpt = [

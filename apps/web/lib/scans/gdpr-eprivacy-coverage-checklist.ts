@@ -484,11 +484,20 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "dpo_contact_point_disclosure",
-    label: "DPO / privacy contact point",
-    explanation: "Whether retained privacy-policy evidence identified a DPO, privacy office, privacy contact, or data-protection contact point.",
+    label: "Privacy contact point",
+    explanation: "Whether retained privacy-policy evidence identified a privacy officer, privacy office, privacy contact, DPO, or data-protection contact point.",
     findingIds: ["privacy_contact_path_present"],
     defaultFindingStatus: "Observed",
-    notObservedText: "No canonical DPO or data-protection contact point evidence was retained for this scan context.",
+    notObservedText: "No canonical privacy or data-protection contact point evidence was retained for this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "formal_dpo_designation_disclosure",
+    label: "Formal DPO designation",
+    explanation: "Whether retained privacy-policy evidence explicitly identified a GDPR Data Protection Officer or DPO.",
+    findingIds: [],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No explicit Data Protection Officer or DPO designation was retained for this scan context.",
     requiresPublicWebCoverage: true
   },
   {
@@ -3326,6 +3335,11 @@ export function deriveGdprEprivacyCoverageChecklist(
     .filter((definition) => shouldIncludeChecklistRowDefinition(definition, input.coverageOutcomes?.[definition.id]))
     .map((definition) => {
     const directCoverageOutcome = input.coverageOutcomes?.[definition.id];
+    const canonicalPreconsentStorageOutcome =
+      definition.id === "pre_consent_cookies_storage" &&
+      typeof directCoverageOutcome?.criticalEvidence.retainedEvidence.preConsentStorageAssessmentStatus === "string"
+        ? directCoverageOutcome
+        : undefined;
     const synthesizedPreconsentCookieOutcome =
       definition.id === "pre_consent_cookies_storage"
         ? synthesizePreconsentThirdPartyCookieOutcome(input.runtimeCookieRows)
@@ -3343,7 +3357,10 @@ export function deriveGdprEprivacyCoverageChecklist(
         combinedReplayFingerprintingOutcome?.criticalEvidence.retainedEvidence.fingerprintingObserved === true
       )
         ? combinedReplayFingerprintingOutcome
-        : synthesizedPreconsentCookieOutcome ?? synthesizedPreconsentTrackingOutcome ?? directCoverageOutcome;
+        : canonicalPreconsentStorageOutcome ??
+          synthesizedPreconsentCookieOutcome ??
+          synthesizedPreconsentTrackingOutcome ??
+          directCoverageOutcome;
     const matchingFindings = definition.findingIds.flatMap((id) => {
       const finding = findingsById.get(id);
       return finding && isFindingEligibleForCoverageRow(definition.id, finding) ? [finding] : [];

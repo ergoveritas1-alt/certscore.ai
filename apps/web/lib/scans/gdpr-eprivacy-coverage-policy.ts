@@ -8,8 +8,18 @@ import {
   hasSubstantiveLegalBasisEvidence,
   hasSubstantiveProcessingPurposesEvidence,
 } from "@certscore/contracts";
-import type { NormalizedConcern } from "./normalized-concerns";
-import { classifyRuntimeCookieCategory, isFunctionalCookieExcludedFromTrackingEvidence, isNonEssentialCookieCategory } from "./runtime-cookie-evidence";
+import type {
+  ConsentOptionsControlProminenceState,
+  NormalizedConcern
+} from "./normalized-concerns";
+import { buildNormalizedConcerns } from "./normalized-concerns";
+import {
+  classifyRuntimeCookieCategory,
+  isFunctionalCookieExcludedFromTrackingEvidence,
+  isNonEssentialCookieCategory,
+  isPreConsentStorageAssessment,
+  type PreConsentStorageAssessment
+} from "./runtime-cookie-evidence";
 
 export type GdprEprivacyCoverageOutcomeStatus =
   | "Gap observed"
@@ -1185,6 +1195,7 @@ function serializeConsentControlEvidence(control: Record<string, unknown>) {
     matchedTerm: getString(control, ["matchedTerm", "matched_term"]),
     matchStrength: getString(control, ["matchStrength", "match_strength"]),
     nearbyConsentText: getString(control, ["nearbyConsentText", "nearby_consent_text"]),
+    presentationType: getString(control, ["presentationType", "presentation_type"]),
     semanticRole: getConsentControlSemanticRole(control),
     variant: getString(control, ["classifierVariant", "classifier_variant", "variant"])
   };
@@ -1245,6 +1256,12 @@ function getFirstLayerOptionsControlEvidence(input: GdprEprivacyCoveragePolicyIn
     const optionsEvidence = assessment.evidence.filter(
       (row) => row.intent === "options" && row.layer === "first_layer",
     );
+    const persistentOptionsEvidence = assessment.evidence.filter(
+      (row) =>
+        row.intent === "options" &&
+        row.layer === "deeper_layer" &&
+        row.presentationType === "persistent_link",
+    );
     const labels = uniqueStrings(
       optionsEvidence.map((row) => row.label).filter((label): label is string => Boolean(label)),
     );
@@ -1254,6 +1271,7 @@ function getFirstLayerOptionsControlEvidence(input: GdprEprivacyCoveragePolicyIn
       layerInspected: "first_layer",
       optionsControlObserved: assessment.controls.options.state === "observed",
       optionsControls: optionsEvidence.slice(0, 6),
+      persistentOptionsControls: persistentOptionsEvidence.slice(0, 6),
       structuredControlInventoryRetained:
         assessment.assessmentStatus === "complete" && assessment.coverage.status === "complete",
       visibleChoiceLabels: uniqueStrings(
@@ -1282,10 +1300,24 @@ function getFirstLayerOptionsControlEvidence(input: GdprEprivacyCoveragePolicyIn
     layerInspected,
     optionsControlObserved: optionsControls.length > 0,
     optionsControls: optionsControls.slice(0, 6).map(serializeConsentControlEvidence),
+    persistentOptionsControls: [],
     structuredControlInventoryRetained: controls.length > 0,
     visibleChoiceLabels: getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"]),
     visibleOptionsLabels: labels
   };
+}
+
+function getConsentOptionsControlProminenceConcern(
+  input: GdprEprivacyCoveragePolicyInput
+) {
+  return (input.normalizedConcerns ?? []).find((concern) => {
+    const rawEvidence = concern.evidenceBundle.rawEvidence;
+    return concern.originKey.startsWith("consent.options_control_prominence.") &&
+      concern.originType === "runtime_artifact" &&
+      concern.promotionEligibility === "internal_only" &&
+      concern.externalSurfacingEligibility === "audit_only" &&
+      rawEvidence?.consentOptionsControlProminenceEvidence === true;
+  }) ?? null;
 }
 
 function getFirstLayerNoticeGateEvidence(input: GdprEprivacyCoveragePolicyInput) {
@@ -2067,168 +2099,176 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
   return null;
 }
 
+function getPreConsentStorageAssessmentConcern(input: GdprEprivacyCoveragePolicyInput) {
+  const concerns = input.normalizedConcerns ?? buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: input.runtimeArtifacts,
+    validationFindings: []
+  });
+  return concerns.find((concern) =>
+    concern.originKey.startsWith("storage.preconsent_assessment.") &&
+    concern.originType === "runtime_artifact" &&
+    concern.promotionEligibility === "internal_only" &&
+    concern.externalSurfacingEligibility === "audit_only" &&
+    concern.evidenceBundle.rawEvidence?.preConsentStorageAssessmentEvidence === true
+  ) ?? null;
+}
+
+function getCanonicalPreConsentStorageAssessment(
+  input: GdprEprivacyCoveragePolicyInput
+): {
+  assessment: PreConsentStorageAssessment;
+  regulatoryChecklistEligibility: NormalizedConcern["regulatoryChecklistEligibility"];
+} | null {
+  const concern = getPreConsentStorageAssessmentConcern(input);
+  const assessment = concern?.evidenceBundle.rawEvidence?.preConsentStorageAssessment;
+  return concern && isPreConsentStorageAssessment(assessment)
+    ? {
+        assessment,
+        regulatoryChecklistEligibility: concern.regulatoryChecklistEligibility
+      }
+    : null;
+}
+
+function getPreConsentStorageEvidenceRefs(assessment: PreConsentStorageAssessment) {
+  const rowRefs = assessment.evidenceRows.slice(0, 6).map((row) => {
+    const owner = row.initiatorVendor ?? row.domain;
+    const timing = row.timingEvidence === "before_consent_write"
+      ? row.firstObservedMs === null
+        ? "before recorded consent"
+        : `first observed ${(row.firstObservedMs / 1000).toFixed(3)}s after scan start`
+      : row.timingEvidence === "initial_snapshot"
+        ? "present in initial pre-consent snapshot"
+        : row.timingEvidence === "periodic_preconsent_snapshot"
+          ? "present in periodic pre-consent snapshot"
+          : "timing unresolved";
+    return `${row.name}${owner ? ` (${owner})` : ""}: ${row.essentiality}, ${timing}`;
+  });
+  return [
+    ...rowRefs,
+    assessment.aggregateObservedCount === null
+      ? null
+      : `Aggregate pre-consent storage count: ${assessment.aggregateObservedCount}`,
+    `Assessment reconciliation: ${assessment.reconciliationStatus}`
+  ].filter((value): value is string => Boolean(value));
+}
+
 function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyInput) {
-  const storageSummary = getHybridStorageSummary(input.runtimeArtifacts);
-  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
-  const rawPreconsentRows = [
-    ...getObjectArray(hybridRuntimeEvidence, ["cookieWriteObservations", "cookie_write_observations"]),
-    ...getObjectArray(hybridRuntimeEvidence, ["preconsentCookieEvidence", "preconsent_cookie_evidence"])
-  ].filter(rowHasPreconsentTimingEvidence).filter((row) => !rowIsCookieSnapshotPresence(row));
-  const snapshotReviewRows = [
-    ...getObjectArray(hybridRuntimeEvidence, ["cookieWriteObservations", "cookie_write_observations"]),
-    ...getObjectArray(hybridRuntimeEvidence, ["preconsentCookieEvidence", "preconsent_cookie_evidence"])
-  ].filter((row) => {
-    if (!rowIsCookieSnapshotPresence(row)) {
-      return false;
-    }
-    const cookieName = getString(row, ["cookieName", "cookie_name", "name"]);
-    const domain = getString(row, ["domain", "cookieDomain", "cookie_domain"]);
-    if (!cookieName || isFunctionalCookieExcludedFromTrackingEvidence(cookieName, domain)) {
-      return false;
-    }
-    return isNonEssentialCookieCategory(classifyRuntimeCookieCategory(cookieName, domain));
-  });
-  const eligiblePreconsentRows = rawPreconsentRows.filter((row) => {
-    const cookieName = getString(row, ["cookieName", "cookie_name", "name"]);
-    const domain = getString(row, ["domain", "cookieDomain", "cookie_domain"]);
-    if (isFunctionalCookieExcludedFromTrackingEvidence(cookieName, domain)) {
-      return false;
-    }
-    const party = getString(row, ["party", "partyContext", "party_context"]);
-    const category = getString(row, ["category", "cookieCategory", "cookie_category", "purpose"]) ??
-      (cookieName ? classifyRuntimeCookieCategory(cookieName, domain) : null);
-    const explicitNonEssential = getBoolean(row, ["nonEssential", "non_essential"]);
-    if (explicitNonEssential === false) {
-      return false;
-    }
-    return explicitNonEssential === true ||
-      isNonEssentialCookieCategory(category) ||
-      ((party === "third_party" || party === "3rd") && category !== "necessary" && category !== "essential");
-  });
-  const preconsentTimingEvidence = getPreconsentTimingRetainedEvidence(input.runtimeArtifacts);
-  const firstObservedMsRef = formatPreconsentObservedMsRef(
-    "First pre-consent cookie/storage observation",
-    preconsentTimingEvidence.firstPreconsentCookieOrStorageObservedMs,
-    preconsentTimingEvidence.firstPreconsentCookieOrStorageObservationBasis
+  const canonicalAssessment = getCanonicalPreConsentStorageAssessment(input);
+  if (!canonicalAssessment) {
+    return null;
+  }
+  const { assessment, regulatoryChecklistEligibility } = canonicalAssessment;
+
+  const nonEssentialEvidenceRows = assessment.evidenceRows.filter(
+    (row) => row.essentiality === "non_essential" && row.exclusionReason === null
   );
-  const cookiesBeforeConsentCount =
-    getNumber(storageSummary, ["cookiesBeforeConsentCount", "cookies_before_consent_count"]) ??
-    (getBoolean(input.snapshot, ["first_party_cookie_set_before_consent", "third_party_cookie_set_before_consent"]) === true
-      ? 1
-      : null);
-  const cookiesSeenCount =
-    getNumber(storageSummary, ["cookiesSeenCount", "cookies_seen_count"]) ??
-    getNumber(input.snapshot, ["cookie_count_total"]);
+  const firstObservedMs = (
+    nonEssentialEvidenceRows.length > 0
+      ? nonEssentialEvidenceRows
+      : assessment.evidenceRows
+  )
+    .map((row) => row.firstObservedMs)
+    .filter((value): value is number => value !== null)
+    .sort((left, right) => left - right)[0] ?? null;
+  const retainedEvidence = {
+    cookiesBeforeConsentCount: assessment.classifiedNonEssentialCount,
+    cookiesSeenCount: assessment.aggregateObservedCount,
+    eligibleNonEssentialCookieStorageFindingProjected:
+      assessment.status === "classified_nonessential_observed",
+    eligiblePreconsentCookieStorageRows: nonEssentialEvidenceRows,
+    excludedEssentialOrFunctionalRows: assessment.evidenceRows.filter(
+      (row) => row.essentiality === "essential" || row.exclusionReason !== null
+    ),
+    firstPreconsentCookieOrStorageObservedMs: firstObservedMs,
+    preConsentStorageAssessment: assessment,
+    preConsentStorageAssessmentStatus: assessment.status,
+    preConsentStorageClassificationLimitation:
+      assessment.status === "partially_classified" ||
+      assessment.status === "snapshot_presence_only",
+    preconsentCookieOrStorageExactTimingRetained: assessment.provenWriteCount > 0,
+    rowLevelEssentialityEvidenceRetained: assessment.attributedPreConsentRecordCount > 0,
+    snapshotOnlyNonEssentialCookieNames:
+      assessment.status === "snapshot_presence_only"
+        ? nonEssentialEvidenceRows.map((row) => row.name)
+        : []
+  };
+  const evidenceRefs = getPreConsentStorageEvidenceRefs(assessment);
 
-  if (eligiblePreconsentRows.length > 0) {
+  if (assessment.status === "classified_nonessential_observed") {
+    if (regulatoryChecklistEligibility !== "gap_observed") {
+      return makeOutcome(
+        "pre_consent_cookies_storage",
+        "Insufficient evidence",
+        "Classified non-essential pre-consent storage evidence was retained, but concern policy did not authorize a gap-level checklist result.",
+        evidenceRefs,
+        { retainedEvidence }
+      );
+    }
     return makeOutcome(
       "pre_consent_cookies_storage",
-      "Observed",
-      "Non-essential or 3rd party cookie/storage evidence was retained before a recorded consent action. Essential first-party consent-state cookies are excluded from this row.",
-      [
-        firstObservedMsRef,
-        `Eligible before-consent cookie/storage count: ${eligiblePreconsentRows.length}`,
-        "Evidence: hybrid runtime storage summary"
-      ].filter((value): value is string => Boolean(value)),
-      {
-        retainedEvidence: {
-          cookiesBeforeConsentCount: eligiblePreconsentRows.length,
-          cookiesSeenCount,
-          eligibleNonEssentialCookieStorageFindingProjected: true,
-          eligiblePreconsentCookieStorageRows: compactArray(eligiblePreconsentRows, 8),
-          observedRuntimeSignalOnly: true,
-          ...preconsentTimingEvidence,
-          storageSummaryRetained: Boolean(storageSummary)
-        }
-      }
+      "Gap observed",
+      `${assessment.classifiedNonEssentialCount} classified non-essential storage record${assessment.classifiedNonEssentialCount === 1 ? " was" : "s were"} retained before a recorded consent action.`,
+      evidenceRefs,
+      { retainedEvidence }
     );
   }
 
-  if (snapshotReviewRows.length > 0) {
-    const cookieNames = uniqueStrings(snapshotReviewRows
-      .map((row) => getString(row, ["cookieName", "cookie_name", "name"]))
-      .filter((value): value is string => Boolean(value)));
-    return makeOutcome(
-      "pre_consent_cookies_storage",
-      "Review signal",
-      "Non-essential cookie candidates were present before recorded consent, but snapshot-only evidence does not prove they were written during the scan.",
-      cookieNames.slice(0, 6).map((cookieName) => `${cookieName}: present before recorded consent — write timing unconfirmed`),
-      {
-        retainedEvidence: {
-          cookiesBeforeConsentCount: 0,
-          cookiesSeenCount,
-          eligibleNonEssentialCookieStorageFindingProjected: false,
-          snapshotOnlyNonEssentialCookieCandidates: compactArray(snapshotReviewRows, 8),
-          snapshotOnlyNonEssentialCookieNames: cookieNames,
-          snapshotPresenceDoesNotProveWrite: true,
-          storageSummaryRetained: Boolean(storageSummary)
-        }
-      }
-    );
-  }
-
-  if (rawPreconsentRows.length > 0 && cookiesBeforeConsentCount !== null && cookiesBeforeConsentCount > 0) {
-    return makeOutcome(
-      "pre_consent_cookies_storage",
-      "Not observed",
-      "Before-consent storage was retained, but the observed rows were limited to essential or excluded first-party consent/functional cookies. No eligible non-essential or 3rd party cookie/storage row was retained.",
-      [
-        `Excluded essential/functional before-consent rows: ${rawPreconsentRows.length}`,
-        "Evidence: hybrid runtime cookie observations"
-      ],
-      {
-        retainedEvidence: {
-          cookiesBeforeConsentCount,
-          cookiesSeenCount,
-          eligibleNonEssentialCookieStorageFindingProjected: false,
-          excludedEssentialOrFunctionalRows: compactArray(rawPreconsentRows, 8),
-          runtimeCaptureCompleted: hasRuntimeCapture(input),
-          storageSummaryRetained: Boolean(storageSummary)
-        }
-      }
-    );
-  }
-
-  if (cookiesBeforeConsentCount !== null && cookiesBeforeConsentCount > 0) {
+  if (assessment.status === "partially_classified") {
+    if (regulatoryChecklistEligibility !== "review_signal") {
+      return makeOutcome(
+        "pre_consent_cookies_storage",
+        "Insufficient evidence",
+        "Partially classified pre-consent storage evidence was retained, but concern policy did not authorize a review-level checklist result.",
+        evidenceRefs,
+        { retainedEvidence }
+      );
+    }
     return makeOutcome(
       "pre_consent_cookies_storage",
       "Review signal",
-      "A before-consent storage count was retained without row-level party and essentiality evidence. The aggregate count alone does not establish non-essential or 3rd party storage.",
-      [`Aggregate before-consent cookie/storage count: ${cookiesBeforeConsentCount}`],
-      {
-        retainedEvidence: {
-          cookiesBeforeConsentCount,
-          cookiesSeenCount,
-          eligibleNonEssentialCookieStorageFindingProjected: false,
-          rowLevelEssentialityEvidenceRetained: false,
-          storageSummaryRetained: Boolean(storageSummary)
-        }
-      }
+      "Pre-consent storage was observed, but one or more records could not be classified as essential or non-essential or could not be reconciled to the aggregate count. Review the retained storage inventory before drawing a conclusion.",
+      evidenceRefs,
+      { retainedEvidence }
     );
   }
 
-  if (cookiesSeenCount !== null || hasRuntimeCapture(input)) {
+  if (assessment.status === "snapshot_presence_only") {
+    if (regulatoryChecklistEligibility !== "review_signal") {
+      return makeOutcome(
+        "pre_consent_cookies_storage",
+        "Insufficient evidence",
+        "Snapshot-only pre-consent storage evidence was retained, but concern policy did not authorize a review-level checklist result.",
+        evidenceRefs,
+        { retainedEvidence }
+      );
+    }
+    return makeOutcome(
+      "pre_consent_cookies_storage",
+      "Review signal",
+      "Non-essential storage candidates were present in a pre-consent snapshot, but retained evidence did not confirm that they were written during the scan.",
+      evidenceRefs,
+      { retainedEvidence }
+    );
+  }
+
+  if (assessment.status === "classified_zero") {
     return makeOutcome(
       "pre_consent_cookies_storage",
       "Not observed",
-      "Cookie/storage inventory was retained for the tested context, and no eligible pre-consent cookie/storage finding was projected.",
-      [
-        firstObservedMsRef,
-        "Evidence: hybrid runtime storage summary"
-      ].filter((value): value is string => Boolean(value)),
-      {
-        retainedEvidence: {
-          cookiesBeforeConsentCount: cookiesBeforeConsentCount ?? 0,
-          cookiesSeenCount,
-          ...preconsentTimingEvidence,
-          runtimeCaptureCompleted: hasRuntimeCapture(input),
-          storageSummaryRetained: Boolean(storageSummary)
-        }
-      }
+      "The retained pre-consent storage inventory was classified and did not contain eligible non-essential storage. Essential, consent-management, security, and functional storage remains contextual evidence only.",
+      evidenceRefs,
+      { retainedEvidence }
     );
   }
 
-  return null;
+  return makeOutcome(
+    "pre_consent_cookies_storage",
+    "Insufficient evidence",
+    "Pre-consent storage capture or attribution was not sufficient to determine whether non-essential storage was present.",
+    evidenceRefs,
+    { retainedEvidence }
+  );
 }
 
 function deriveCmpFrameworkSignalOutcome(input: GdprEprivacyCoveragePolicyInput) {
@@ -4123,6 +4163,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
 
 function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  const prominenceConcern = getConsentOptionsControlProminenceConcern(input);
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
   const cmpEvidence = getCmpFrameworkSignalEvidence(input);
   const evidence = getFirstLayerOptionsControlEvidence(input);
@@ -4133,6 +4174,153 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
     ...evidence.visibleOptionsLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
     evidence.layerInspected ? `Layer inspected: ${evidence.layerInspected}` : null
   ].filter((value): value is string => Boolean(value));
+
+  if (consentControlAssessment) {
+    if (!prominenceConcern) {
+      return makeOutcome(
+        "options_settings_preferences_control",
+        "Not confirmed",
+        "A typed consent-control assessment was retained, but its normalized consent-options concern was not available to concern policy. The checklist did not infer a result directly from assessment metadata.",
+        [
+          "Evidence: ConsentControlAssessment retained",
+          "Limitation: normalized consent-options concern missing"
+        ],
+        {
+          missingOrIncompleteSourceSignals: [
+            sourceGap(
+              "CertScore.ai.normalizedConcerns.consentOptionsControlProminence",
+              "policy-gated normalized consent-options concern",
+              "missing",
+              "Required to preserve the canonical assessment → normalized concern → concern policy → checklist flow."
+            )
+          ],
+          retainedEvidence: {
+            consentControlAssessmentStatus: consentControlAssessment.assessmentStatus,
+            consentControlCoverageStatus: consentControlAssessment.coverage.status,
+            optionsControlObserved: consentControlAssessment.controls.options.state === "observed"
+          }
+        }
+      );
+    }
+
+    const rawEvidence = prominenceConcern.evidenceBundle.rawEvidence ?? {};
+    const state = getString(rawEvidence, [
+      "consentOptionsControlProminenceState",
+      "consent_options_control_prominence_state"
+    ]) as ConsentOptionsControlProminenceState | null;
+    const retainedControls = getObjectArray(rawEvidence, [
+      "retainedConsentOptionsControls",
+      "retained_consent_options_controls"
+    ]);
+    const retainedLabels = retainedControls
+      .map((control) => getString(control, ["label"]))
+      .filter((label): label is string => Boolean(label));
+    const concernEvidenceRefs = uniqueStrings([
+      ...prominenceConcern.evidenceBundle.runtimeArtifacts,
+      ...retainedLabels.map((label) => `Observed control: ${label}`)
+    ]).slice(0, 12);
+    const retainedEvidence = {
+      ...(state === "balanced_accept_decline_no_first_layer_settings"
+        ? { balancedAcceptDeclineWithoutFirstLayerSettings: true }
+        : {}),
+      consentOptionsControlProminenceConcern: {
+        canonicalConcernKey: prominenceConcern.canonicalConcernKey,
+        originKey: prominenceConcern.originKey,
+        regulatoryChecklistEligibility: prominenceConcern.regulatoryChecklistEligibility,
+        state
+      },
+      optionsControlObserved:
+        state === "dedicated_button" ||
+        state === "first_layer_control" ||
+        state === "inline_link",
+      optionsControlProminence: state,
+      retainedConsentOptionsControls: retainedControls
+    };
+
+    if (
+      prominenceConcern.regulatoryChecklistEligibility === "observed" &&
+      (state === "dedicated_button" || state === "first_layer_control")
+    ) {
+      return makeOutcome(
+        "options_settings_preferences_control",
+        "Observed",
+        state === "dedicated_button"
+          ? "A dedicated options, settings, or preferences control was observed on the retained first-layer consent surface."
+          : "A structured options, settings, or preferences control was observed on the retained first-layer consent surface.",
+        concernEvidenceRefs,
+        { retainedEvidence }
+      );
+    }
+
+    if (
+      prominenceConcern.regulatoryChecklistEligibility === "review_signal" &&
+      state === "inline_link"
+    ) {
+      return makeOutcome(
+        "options_settings_preferences_control",
+        "Review signal",
+        "Preferences control present as an inline text link, not a button — reduced prominence. Granular choices appear available; verify that the link is keyboard accessible, clearly labelled, and opens purpose-level choices.",
+        concernEvidenceRefs,
+        { retainedEvidence }
+      );
+    }
+
+    if (
+      prominenceConcern.regulatoryChecklistEligibility === "review_signal" &&
+      state === "persistent_link"
+    ) {
+      return makeOutcome(
+        "options_settings_preferences_control",
+        "Review signal",
+        "A persistent preferences or cookie-settings link was observed outside the first-layer consent surface. A first-layer granular-settings control was not retained. Verify that the persistent control remains easy to find and allows users to review, vary, or withdraw consent by purpose.",
+        concernEvidenceRefs,
+        { retainedEvidence }
+      );
+    }
+
+    if (
+      prominenceConcern.regulatoryChecklistEligibility === "review_signal" &&
+      state === "balanced_accept_decline_no_first_layer_settings"
+    ) {
+      return makeOutcome(
+        "options_settings_preferences_control",
+        "Review signal",
+        "Accept and Decline controls were observed on the first-layer consent surface. A separate preferences or granular-settings control was not retained on that layer. This is not necessarily a compliance gap where refusal is as easy as acceptance. Verify whether users can later review, vary, or withdraw consent by purpose.",
+        concernEvidenceRefs,
+        { retainedEvidence }
+      );
+    }
+
+    if (
+      prominenceConcern.regulatoryChecklistEligibility === "gap_observed" &&
+      state === "no_granular_controls_retained"
+    ) {
+      return makeOutcome(
+        "options_settings_preferences_control",
+        "Gap observed",
+        "A first-layer GDPR/ePrivacy cookie consent surface was confirmed, but no granular options, settings, preferences, or persistent revisit control was retained.",
+        concernEvidenceRefs,
+        { retainedEvidence }
+      );
+    }
+
+    const incompleteAssessmentOutcome = makeIncompleteConsentSurfaceInspectionOutcome(
+      input,
+      "options_settings_preferences_control",
+      "options, settings, or preferences control"
+    );
+    if (incompleteAssessmentOutcome) {
+      return incompleteAssessmentOutcome;
+    }
+
+    return makeOutcome(
+      "options_settings_preferences_control",
+      "Not confirmed",
+      "The policy-gated consent-options concern did not establish a checklist-eligible prominence result.",
+      concernEvidenceRefs,
+      { retainedEvidence }
+    );
+  }
 
   if (evidence.optionsControlObserved) {
     return makeOutcome(
@@ -4272,13 +4460,7 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
     );
   }
 
-  if (
-    evidence.structuredControlInventoryRetained &&
-    (
-      !consentControlAssessment ||
-      consentControlAssessment.surface.status === "observed_actionable"
-    )
-  ) {
+  if (evidence.structuredControlInventoryRetained) {
     return makeOutcome(
       "options_settings_preferences_control",
       "Gap observed",
@@ -5743,7 +5925,7 @@ type PolicySectionChunk = {
 };
 
 const LEGAL_BASIS_DISCLOSURE_PATTERN =
-  /(?:legal|lawful)\s+basis|article\s*6|legitimate interests?|legal obligation|when required by law|vital interests?|public task|performance of (?:a )?contract|contractual necessity|(?:basis for processing|we rely on|based on).{0,160}\b(?:consent|contract|legal obligation|legitimate interest)\b|\bwith your consent\b|\bconsent\b.{0,140}\b(?:personal data|personal information|processing|lawful|legal basis)\b/i;
+  /(?:legal|lawful)\s+basis|article\s*6|legitimate interests?|legal obligation|vital interests?|public task|performance of (?:a )?contract|contractual necessity|(?:basis for processing|we rely on|based on).{0,160}\b(?:consent|contract|legal obligation|legitimate interest)\b|\b(?:process|processing|collect|use)\b.{0,140}\b(?:personal data|personal information|information|data)\b.{0,140}\b(?:under|on the basis of|because of)\b.{0,100}\b(?:consent|contract|legal obligation|legitimate interest)\b/i;
 
 const RECIPIENTS_VENDOR_CATEGORIES_DISCLOSURE_PATTERN =
   /recipient|third[- ]part(?:y|ies)|service providers?|vendors?|processors?|subprocessors?|business partners?|advertising partners?|analytics providers?|payment processors?|hosting providers?|cloud providers?|affiliates?|empfänger|dienstleister|auftragsverarbeiter|destinataires?|prestataires?|sous-traitants?|destinatarios?|proveedores?|encargados?|destinatari|fornitori|responsabili|ontvangers|dienstverleners|verwerkers|odbiorcy|dostawcy|podmioty przetwarzające/i;
@@ -5755,7 +5937,7 @@ const RECIPIENT_DISCLOSURE_VERBS =
   /share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|provide|provided|providing|receive|receives|received|access|accessed|handle|handled|process|processed|processing|teilen|weitergeben|übermitteln|erhalten|verarbeiten|communiqu|partage|transmis|transfér|trait|compart|comunic|transmit|tratar|condivid|comunicat|trasferit|tratt|delen|verstrekken|ontvangen|verwerken|udostęp|przekaz|przetwarz/i;
 
 const CONTROLLER_CONTACT_DISCLOSURE_PATTERN =
-  /data controller|\bcontroller\b|privacy (?:contact|office|team|questions|rights)|data protection(?: office| officer)?|contact (?:our )?(?:privacy|data protection)|contact (?:google|us).{0,80}(?:privacy|data protection)|privacy@/i;
+  /data controller|\bcontroller\b|privacy (?:contact|officer|office|team|questions|rights)|data protection(?: office| officer)?|contact (?:our )?(?:privacy|data protection)|contact (?:google|us).{0,120}(?:privacy|data protection|privacy officer)|questions about this (?:privacy )?policy|attention:?\s*privacy officer|privacy@|postal address|mailing address/i;
 
 const PROCESSING_PURPOSES_DISCLOSURE_PATTERN =
   /purposes? of (?:the )?(?:processing|collection|use)|why we (?:use|process|collect)|\b(?:we|[a-z][a-z0-9&.'’-]*(?:\s+[a-z][a-z0-9&.'’-]*){0,5})\s+(?:(?:use|uses|process|processes|collect|collects)\s+(?:and\s+use\s+)?|describes?\s+processing\s+)(?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|personalize (?:content|ads|advertising|services|experience)|tailored search results|measure (?:performance|advertising)|perform analytics/i;
@@ -5781,11 +5963,8 @@ const DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN =
 const INTERNATIONAL_TRANSFERS_DISCLOSURE_PATTERN =
   /data transfers?|international transfer|cross-border transfer|transfer.{0,120}(?:personal data|personal information|information|data).{0,160}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies))|(?:personal data|personal information|information|data).{0,120}(?:transfer|transferred|stored|processed|accessed|shared|protected).{0,180}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|usa|eea|european economic area|uk|united kingdom)|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,240}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries)|agreements?.{0,240}(?:personal data|personal information|information|data).{0,240}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|(?:stored|processed|accessed|shared).{0,120}(?:in|from).{0,80}(?:united states|usa|other countries|countries outside|third countries|foreign countries)|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|standard contractual|contractual clauses|sccs?|adequacy|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|transfer mechanisms?|data transfer framework|data privacy framework|dpf|privacy shield/i;
 
-const SUPERVISORY_AUTHORITY_DISCLOSURE_PATTERN =
-  /supervisory authority|data protection authority|local data protection authorit(?:y|ies)|lodge a complaint|formal written complaints?|resolve any complaints?|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority|regulatory authorities|regulators?|ico|cnil|dpc/i;
-
 const SUPERVISORY_AUTHORITY_COMPLAINT_RIGHT_PATTERN =
-  /right to (?:contact|lodge|make|file|submit|complain to) (?:your )?(?:local )?(?:supervisory|data protection) authority|lodge a complaint|present(?:ing)? a complaint|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority/i;
+  /right to (?:contact|lodge|make|file|submit|complain to) (?:your )?(?:local )?(?:supervisory|data protection) authority|lodge a complaint|present(?:ing)? a complaint|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority|(?:if you believe|complaints?).{0,220}(?:may|can) contact (?:the )?(?:relevant |competent |local )*(?:supervisory|data protection) authority/i;
 
 const AUTOMATED_DECISION_PROFILING_DISCLOSURE_PATTERN =
   /automated decision(?:-making| making)?|solely automated (?:processing|decision)|automated systems?|meaningful information about the logic involved|legal or similarly significant effects|similarly significant effects|\bprofiling\b|personalized ads|personalized advertising|customized search results|tailored search results|tailored|algorithms?|recognize patterns/i;
@@ -5854,7 +6033,7 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
   },
   {
     rowId: "dpo_contact_point_disclosure",
-    label: "Privacy contact point / DPO designation disclosure",
+    label: "Privacy contact point",
     disclosureType: "dpo_contact",
     signalKeys: ["dpoContactPointDisclosureObserved", "dpo_contact_point_disclosure_observed"],
     textPattern: /data protection officer|dpo|chief privacy officer|privacy officer|privacy office|privacy contact|privacy team|data protection contact/i
@@ -5864,7 +6043,7 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
     label: "Supervisory authority complaint disclosure",
     disclosureType: "supervisory_authority",
     signalKeys: ["supervisoryAuthorityComplaintDisclosureObserved", "supervisory_authority_complaint_disclosure_observed"],
-    textPattern: SUPERVISORY_AUTHORITY_DISCLOSURE_PATTERN
+    textPattern: SUPERVISORY_AUTHORITY_COMPLAINT_RIGHT_PATTERN
   },
   {
     rowId: "automated_decision_making_profiling_disclosure",
@@ -6924,7 +7103,13 @@ function hasSubstantiveControllerContactDisclosure(value: string) {
   const body = disclosureEvidenceBodyAfterHeading(value, [
     /^(?:contact us|data controller|controller|privacy contact|privacy office|data protection officer)[.:;\-–—]?\s*/i
   ]);
-  return /\b(?:information on (?:the )?controller|data controller|controller.{0,180}(?:contact|privacy|data protection|e-?mail|email|postal address|registered address|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b)|google llc|contact google about privacy questions|contact (?:us|google).{0,120}(?:privacy|data protection)|contact form|privacy office|data protection office|data protection officer|privacy@|postal address|registered address)\b/i.test(body);
+  const explicitControllerOrContact =
+    /\b(?:information on (?:the )?controller|data controller|controller.{0,180}(?:contact|privacy|data protection|e-?mail|email|postal address|registered address|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b)|google llc|contact google about privacy questions|contact (?:us|google).{0,160}(?:privacy|data protection|privacy officer)|contact form|privacy officer|privacy office|data protection office|data protection officer|privacy@|postal address|registered address)\b/i.test(body);
+  const namedPolicyOperator =
+    /\b[A-Z][A-Za-z0-9&.'’ -]{2,100}\s(?:Inc\.?|LLC|Ltd\.?|Limited|Corporation|Company|GmbH|AG|S\.A\.|S\.p\.A\.)\b.{0,220}\b(?:operates?|provides?|offers?|is responsible for)\b.{0,160}\b(?:services?|sites?|apps?|privacy policy|policy|personal information|personal data)\b/i.test(body);
+  const privacyContactRoute =
+    /\b(?:privacy officer|privacy office|privacy contact|privacy request form|contact us|contact form|attention:?\s*privacy officer|postal address|mailing address|registered address|https?:\/\/\S*(?:privacy|contact)|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})\b/i.test(body);
+  return explicitControllerOrContact || (namedPolicyOperator && privacyContactRoute);
 }
 
 function hasSubstantiveDataSubjectRightsDisclosure(value: string) {
@@ -6949,6 +7134,12 @@ function hasSubstantiveRecipientsVendorCategoriesDisclosure(value: string) {
     /\b(?:record users?'? interactions|recording users?'? interactions|mouse clicks|mouse movements|page scrolling|keystrokes?|key touches|session replay|interaction recording|usage data|information about your use|collecting information about your use|cookies?|pixels?|sdks?)\b/i.test(body);
   const broadRecipientDisclosure =
     /\b(?:share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|categories of (?:third parties|recipients)|third parties with whom we share|recipients of (?:personal )?(?:data|information))\b/i.test(body);
+  const rightsRequestAboutRecipients =
+    /\b(?:right to|may|can)\s+(?:request|ask).{0,180}\b(?:categories of (?:third parties|recipients)|third parties to whom|recipient information)\b/i.test(body) &&
+    !/\b(?:we|our service providers?|our affiliates?)\s+(?:share|disclose|provide|transfer|process|receive|access)\b/i.test(body);
+  if (rightsRequestAboutRecipients) {
+    return false;
+  }
   if (sessionReplayOrCollectedDataContext && !broadRecipientDisclosure) {
     return false;
   }
@@ -7135,6 +7326,19 @@ function scorePolicyDisclosureEvidenceText(value: string, disclosureType: string
   }
   if (disclosureType === "recipients_or_vendor_categories" && hasSubstantiveRecipientsVendorCategoriesDisclosure(text)) {
     score += 4;
+  }
+  if (
+    disclosureType === "recipients_or_vendor_categories" &&
+    /\b(?:we|our service providers?|our affiliates?)\s+(?:share|disclose|provide|transfer|process|receive|access)\b/i.test(text) &&
+    RECIPIENT_VENDOR_CATEGORY_TERMS.test(text)
+  ) {
+    score += 6;
+  }
+  if (
+    disclosureType === "recipients_or_vendor_categories" &&
+    /\b(?:right to|may|can)\s+(?:request|ask).{0,180}\b(?:categories of (?:third parties|recipients)|third parties to whom|recipient information)\b/i.test(text)
+  ) {
+    score -= 8;
   }
   if (disclosureType === "controller_contact" && CONTROLLER_CONTACT_DISCLOSURE_PATTERN.test(lower)) {
     score += 4;
@@ -7912,11 +8116,195 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   );
 }
 
+const US_STATE_PRIVACY_RIGHTS_SCOPE_PATTERN =
+  /\b(?:california|ccpa|cpra|colorado|connecticut|delaware|florida|indiana|iowa|kentucky|maryland|minnesota|montana|nebraska|new hampshire|new jersey|oregon|rhode island|tennessee|texas|utah|virginia|state privacy laws?|u\.?s\.? state privacy rights?|state residents?)\b/i;
+
+const GDPR_PRIVACY_RIGHTS_SCOPE_PATTERN =
+  /\b(?:gdpr|general data protection regulation|european union|european economic area|\beea\b|eu\/eea|united kingdom data protection|data subject rights?|right to restriction|right to object|withdraw(?:al)? of consent|supervisory authority)\b/i;
+
+function policyOutcomeEvidenceText(outcome: GdprEprivacyCoverageOutcome) {
+  const retainedEvidence = outcome.criticalEvidence.retainedEvidence;
+  const article13Signal = getObject(retainedEvidence, ["article13Signal", "article13_signal"]);
+  const rowSpecificSectionEvidence = getObject(retainedEvidence, [
+    "rowSpecificSectionEvidence",
+    "row_specific_section_evidence"
+  ]);
+  return uniqueStrings([
+    getString(article13Signal, ["evidenceText", "evidence_text"]),
+    getString(article13Signal, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]),
+    getString(rowSpecificSectionEvidence, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]),
+    ...outcome.evidenceRefs
+      .filter((value) => value.startsWith("Excerpt:"))
+      .map((value) => value.slice("Excerpt:".length).trim())
+  ].filter((value): value is string => Boolean(value))).join(" ");
+}
+
+function calibratePolicyDisclosureOutcome(outcome: GdprEprivacyCoverageOutcome) {
+  const evidenceText = policyOutcomeEvidenceText(outcome);
+  if (!evidenceText) {
+    return outcome;
+  }
+
+  if (
+    outcome.rowId === "legal_basis_disclosure_observed" &&
+    outcome.status === "Observed" &&
+    /\b(?:with your consent|as required by law|when required by law)\b/i.test(evidenceText) &&
+    !/\b(?:legal|lawful)\s+basis|article\s*6|legitimate interests?|legal obligation|vital interests?|public task|performance of (?:a )?contract|contractual necessity|basis for processing|we rely on\b/i.test(evidenceText)
+  ) {
+    return makeOutcome(
+      outcome.rowId,
+      "Not confirmed",
+      "Consent or legally required processing language was retained, but no Article 6-style legal-basis disclosure or purpose-to-basis mapping was confirmed.",
+      outcome.evidenceRefs,
+      {
+        retainedEvidence: {
+          ...outcome.criticalEvidence.retainedEvidence,
+          signalObserved: "incidental_legal_language_without_basis_mapping"
+        }
+      }
+    );
+  }
+
+  if (
+    outcome.rowId === "supervisory_authority_complaint_disclosure" &&
+    outcome.status === "Observed" &&
+    outcome.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern === undefined &&
+    !SUPERVISORY_AUTHORITY_COMPLAINT_RIGHT_PATTERN.test(evidenceText)
+  ) {
+    return makeOutcome(
+      outcome.rowId,
+      "Not confirmed",
+      "Regulator or authority language was retained, but a right to lodge a complaint with a supervisory or data-protection authority was not confirmed.",
+      outcome.evidenceRefs,
+      {
+        retainedEvidence: {
+          ...outcome.criticalEvidence.retainedEvidence,
+          signalObserved: "authority_reference_without_complaint_right"
+        }
+      }
+    );
+  }
+
+  if (
+    outcome.rowId === "data_subject_rights_disclosure" &&
+    outcome.status === "Observed" &&
+    US_STATE_PRIVACY_RIGHTS_SCOPE_PATTERN.test(evidenceText) &&
+    !GDPR_PRIVACY_RIGHTS_SCOPE_PATTERN.test(evidenceText)
+  ) {
+    return makeOutcome(
+      outcome.rowId,
+      "Review signal",
+      "US-state privacy rights were retained, including request or opt-out rights. GDPR-specific rights coverage was not confirmed, so this row receives partial contextual credit rather than full GDPR transparency credit.",
+      outcome.evidenceRefs,
+      {
+        retainedEvidence: {
+          ...outcome.criticalEvidence.retainedEvidence,
+          rightsJurisdictionScope: "us_state_only",
+          signalObserved: "partial_us_state_rights"
+        }
+      }
+    );
+  }
+
+  if (
+    outcome.rowId === "controller_contact_disclosure" &&
+    outcome.status === "Review signal" &&
+    hasSubstantiveControllerContactDisclosure(evidenceText)
+  ) {
+    return makeOutcome(
+      outcome.rowId,
+      "Observed",
+      "The retained policy identifies the organization responsible for the services and provides a privacy-specific contact route.",
+      outcome.evidenceRefs,
+      {
+        retainedEvidence: {
+          ...outcome.criticalEvidence.retainedEvidence,
+          signalObserved: true
+        }
+      }
+    );
+  }
+
+  if (outcome.rowId === "dpo_contact_point_disclosure") {
+    const formalDpoDesignationConfirmed = /\b(?:data protection officer|dpo)\b/i.test(evidenceText);
+    const privacyContactPointConfirmed =
+      formalDpoDesignationConfirmed ||
+      /\b(?:privacy officer|chief privacy officer|privacy office|privacy contact|privacy team|data protection contact)\b/i.test(evidenceText);
+    if (
+      privacyContactPointConfirmed &&
+      (outcome.status === "Observed" || outcome.status === "Review signal")
+    ) {
+      return makeOutcome(
+        outcome.rowId,
+        "Observed",
+        formalDpoDesignationConfirmed
+          ? "A privacy contact point and an explicit Data Protection Officer or DPO designation were retained."
+          : "A privacy contact point was retained. The wording does not establish a formal GDPR Data Protection Officer designation.",
+        outcome.evidenceRefs,
+        {
+          retainedEvidence: {
+            ...outcome.criticalEvidence.retainedEvidence,
+            formalDpoDesignationConfirmed,
+            privacyContactPointConfirmed: true,
+            signalObserved: true
+          }
+        }
+      );
+    }
+  }
+
+  return outcome;
+}
+
+function deriveFormalDpoDesignationOutcome(
+  privacyContactOutcome: GdprEprivacyCoverageOutcome | undefined
+) {
+  if (!privacyContactOutcome) {
+    return null;
+  }
+  const formalDpoDesignationConfirmed =
+    privacyContactOutcome.criticalEvidence.retainedEvidence.formalDpoDesignationConfirmed === true;
+  if (formalDpoDesignationConfirmed) {
+    return makeOutcome(
+      "formal_dpo_designation_disclosure",
+      "Observed",
+      "The retained policy explicitly identifies a Data Protection Officer or DPO.",
+      privacyContactOutcome.evidenceRefs,
+      {
+        retainedEvidence: {
+          derivedFromRowId: privacyContactOutcome.rowId,
+          formalDpoDesignationConfirmed: true
+        }
+      }
+    );
+  }
+  return makeOutcome(
+    "formal_dpo_designation_disclosure",
+    privacyContactOutcome.status === "Not testable" ? "Not testable" : "Not confirmed",
+    "A formal GDPR Data Protection Officer designation was not confirmed. A Privacy Officer or general privacy contact is reported separately and does not by itself establish a DPO appointment.",
+    privacyContactOutcome.evidenceRefs,
+    {
+      retainedEvidence: {
+        derivedFromRowId: privacyContactOutcome.rowId,
+        formalDpoDesignationConfirmed: false,
+        privacyContactPointStatus: privacyContactOutcome.status
+      }
+    }
+  );
+}
+
 function derivePolicyDisclosureOutcomes(input: GdprEprivacyCoveragePolicyInput) {
+  const disclosureOutcomes = POLICY_DISCLOSURE_ROWS
+    .map((config) => derivePolicyDisclosureOutcome(input, config))
+    .map(calibratePolicyDisclosureOutcome);
+  const privacyContactOutcome = disclosureOutcomes.find(
+    (outcome) => outcome.rowId === "dpo_contact_point_disclosure"
+  );
   return [
-    ...POLICY_DISCLOSURE_ROWS.map((config) => derivePolicyDisclosureOutcome(input, config)),
+    ...disclosureOutcomes,
+    deriveFormalDpoDesignationOutcome(privacyContactOutcome),
     derivePolicyTextExtractionOutcome(input),
-  ];
+  ].filter((outcome): outcome is GdprEprivacyCoverageOutcome => Boolean(outcome));
 }
 
 function derivePolicyTextExtractionOutcome(input: GdprEprivacyCoveragePolicyInput) {

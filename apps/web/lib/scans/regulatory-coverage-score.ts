@@ -63,6 +63,7 @@ const GDPR_EPRIVACY_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   data_subject_rights_disclosure: { weight: 5 },
   device_identification_fingerprinting_signal_observed: { weight: 5 },
   dpo_contact_point_disclosure: { weight: 5 },
+  formal_dpo_designation_disclosure: { weight: 0 },
   embedded_content_pre_consent: { weight: 5 },
   international_transfers_disclosure: { weight: 5 },
   legal_basis_disclosure_observed: { weight: 5 },
@@ -219,6 +220,43 @@ function getCheckedFactor(row: RegulatoryCoverageRow) {
 function getRowFactor(row: RegulatoryCoverageRow) {
   if (isExcludedFromDenominator(row)) {
     return null;
+  }
+  if (
+    row.id === "options_settings_preferences_control" &&
+    (
+      (row.criticalEvidence?.retainedEvidence as Record<string, unknown> | undefined)?.balancedAcceptDeclineWithoutFirstLayerSettings === true ||
+      [
+        "balanced_accept_decline_no_first_layer_settings",
+        "inline_link",
+        "persistent_link"
+      ].includes(
+        String(
+          (row.criticalEvidence?.retainedEvidence as Record<string, unknown> | undefined)
+            ?.optionsControlProminence ?? ""
+        )
+      )
+    )
+  ) {
+    return 1;
+  }
+  if (
+    row.id === "pre_consent_cookies_storage" &&
+    (row.criticalEvidence?.retainedEvidence as Record<string, unknown> | undefined)
+      ?.preConsentStorageAssessmentStatus === "classified_zero"
+  ) {
+    return 1;
+  }
+  if (
+    row.id === "pre_consent_cookies_storage" &&
+    row.assessmentStatus === "review_signal" &&
+    ["partially_classified", "snapshot_presence_only"].includes(
+      String(
+        (row.criticalEvidence?.retainedEvidence as Record<string, unknown> | undefined)
+          ?.preConsentStorageAssessmentStatus ?? ""
+      )
+    )
+  ) {
+    return 1;
   }
   if (row.assessmentStatus === "gap_observed") {
     return 0;

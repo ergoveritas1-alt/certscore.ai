@@ -2001,7 +2001,7 @@ function BenchmarkMetricCard(input: {
   const isStorageMetric = input.label === "Non-essential storage" || input.label === "Pre-consent storage";
   const inlineMetricNote = actualValue === null
     ? isStorageMetric
-      ? null
+      ? input.note ?? "Storage evidence was not sufficient for a conclusive count."
       : input.note ?? "Not measured because the relevant evidence coverage was incomplete."
     : actualValue === 0
       ? "Scanned, none detected."
@@ -4232,6 +4232,7 @@ export function ExecutiveSummaryCard(input: {
   } | null;
   agencyMappings?: AgencyMapping[];
   beforeConsentCookieCount: number;
+  beforeConsentStorageLimitation?: string | null;
   beforeConsentStorageMetricAvailable?: boolean;
   beforeConsentStorageScope?: "all_observed" | "nonessential_only";
   unclassifiedPreConsentStorageCount?: number;
@@ -4319,7 +4320,11 @@ export function ExecutiveSummaryCard(input: {
   const unclassifiedStorageInfoNote = (input.unclassifiedPreConsentStorageCount ?? 0) > 0
     ? `${input.unclassifiedPreConsentStorageCount} unclassified record${input.unclassifiedPreConsentStorageCount === 1 ? " was" : "s were"} found but not counted; ${input.unclassifiedPreConsentStorageCount === 1 ? "it appears" : "they appear"} as "Unknown" in the Pre-consent Cookies & Trackers table.`
     : null;
-  const storageMetricInfoNote = [cookieCountMismatchNote, unclassifiedStorageInfoNote]
+  const storageMetricInfoNote = [
+    input.beforeConsentStorageLimitation,
+    cookieCountMismatchNote,
+    unclassifiedStorageInfoNote
+  ]
     .filter((note): note is string => Boolean(note))
     .join(" ") || null;
   const executiveHeadlineFindings = displayedTopFindings.slice(0, 3).map((finding) => {

@@ -485,6 +485,7 @@ export const consentUiObservationSchema = z.object({
     actionType: z.enum(["accept_all", "reject_all", "manage_preferences", "save_preferences", "do_not_sell_share", "other"]),
     tagName: z.string().max(32).optional(),
     role: z.string().max(64).optional(),
+    presentationType: z.enum(["dedicated_button", "inline_link", "persistent_link", "unknown"]).optional(),
     selectorHint: z.string().max(160).optional(),
     visible: z.boolean().default(true),
     layer: z.enum(["first_layer", "unknown"]).optional(),

@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   createScanStatusPoller,
+  getNavigablePolledScanStatus,
   getPolledScanStatus,
   getPolledReadiness,
   isTerminalScanStatus,
@@ -75,6 +76,33 @@ test("getPolledReadiness keeps post-completion polling lightweight until report 
     browserReady: false,
     reportReady: false
   });
+});
+
+test("completed scans remain non-terminal while report projection is finalizing", () => {
+  assert.equal(getNavigablePolledScanStatus({
+    scan: { status: "completed" },
+    reportReadiness: { status: "finalizing" },
+  }), "processing");
+  assert.equal(getNavigablePolledScanStatus({
+    scan: { status: "completed_limited" },
+    reportReadiness: { status: "finalizing" },
+  }), "processing");
+});
+
+test("completed scans become navigable when report projection or its grace fallback is ready", () => {
+  assert.equal(getNavigablePolledScanStatus({
+    scan: { status: "completed" },
+    reportReadiness: { status: "ready" },
+  }), "completed");
+});
+
+test("failed and canceled scans bypass report readiness", () => {
+  for (const status of ["failed", "canceled", "cancelled", "expired", "rate_limited"]) {
+    assert.equal(getNavigablePolledScanStatus({
+      scan: { status },
+      reportReadiness: { status: "finalizing" },
+    }), status);
+  }
 });
 
 test("ScanStatusAutoRefresh uses lightweight recursive polling without router refresh or intervals", () => {

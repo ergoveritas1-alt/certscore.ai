@@ -31,6 +31,12 @@ export type ConsentControlGeometryLayer =
   | "page_body"
   | "unknown";
 
+export type ConsentControlPresentationType =
+  | "dedicated_button"
+  | "inline_link"
+  | "persistent_link"
+  | "unknown";
+
 export type ConsentControlDecisionStatus =
   | "confirmed_visible"
   | "dom_present_not_visible"
@@ -91,6 +97,7 @@ export interface ConsentControlCandidateEvidence {
   label: string;
   normalizedLabel: string;
   actionType: ConsentControlGeometryActionType;
+  presentationType: ConsentControlPresentationType;
   tagName: string;
   role?: string;
   ariaLabel?: string;
@@ -600,6 +607,7 @@ function buildCandidateEvidence(
     label: candidate.label,
     normalizedLabel: normalizeLabel(candidate.label),
     actionType,
+    presentationType: presentationTypeForCandidate(candidate),
     tagName: candidate.tagName,
     role: candidate.role,
     ariaLabel: candidate.ariaLabel,
@@ -631,6 +639,23 @@ function buildCandidateEvidence(
     decisionStatus,
     reasons,
   };
+}
+
+function presentationTypeForCandidate(
+  candidate: Pick<RawGeometryCandidate, "layer" | "role" | "tagName">,
+): ConsentControlPresentationType {
+  const role = candidate.role?.toLowerCase();
+  if (
+    candidate.tagName === "button" ||
+    candidate.tagName === "input" ||
+    role === "button"
+  ) {
+    return "dedicated_button";
+  }
+  if (candidate.tagName === "a" || role === "link") {
+    return candidate.layer === "first_layer" ? "inline_link" : "persistent_link";
+  }
+  return "unknown";
 }
 
 function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabelClassification {
@@ -716,6 +741,15 @@ function actionTypeForClassification(
   classification: ConsentControlLabelClassification,
   candidate: RawGeometryCandidate,
 ): ConsentControlGeometryActionType {
+  if (
+    classification.intent === "options" &&
+    classification.matchStrength === "direct" &&
+    ["cookie consent tool", "consent choices"].includes(
+      classification.matchedTerm?.trim().toLocaleLowerCase() ?? ""
+    )
+  ) {
+    return classification.variant === "save_preferences" ? "save_preferences" : "manage_preferences";
+  }
   if (candidate.tagName === "a" && POLICY_LINK_PATTERN.test(candidate.label)) {
     return "policy_link";
   }

@@ -65,6 +65,29 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
   }
 
   if (item.id === "pre_consent_cookies_storage") {
+    const assessmentStatus = typeof evidence.preConsentStorageAssessmentStatus === "string"
+      ? evidence.preConsentStorageAssessmentStatus
+      : null;
+    const assessment = getRecord(evidence.preConsentStorageAssessment);
+    if (assessmentStatus === "partially_classified") {
+      return "Pre-consent storage was observed, but one or more records could not be classified as essential or non-essential or reconciled to the aggregate count.";
+    }
+    if (assessmentStatus === "snapshot_presence_only") {
+      return "Non-essential storage candidates were present in a pre-consent snapshot, but retained evidence did not confirm that they were written during the scan.";
+    }
+    if (assessmentStatus === "insufficient_evidence") {
+      return "Pre-consent storage capture or attribution was insufficient to determine whether non-essential storage was present.";
+    }
+    if (assessmentStatus === "classified_nonessential_observed") {
+      const count = getFirstNumberFromRecord(assessment, ["classifiedNonEssentialCount"]);
+      const provenWriteCount = getFirstNumberFromRecord(assessment, ["provenWriteCount"]) ?? 0;
+      const countPhrase = count === null
+        ? "Classified non-essential storage"
+        : `${count} classified non-essential storage record${count === 1 ? "" : "s"}`;
+      return provenWriteCount > 0
+        ? `${countPhrase} ${count === 1 ? "was" : "were"} retained before a recorded consent action; ${provenWriteCount} had write-level timing evidence.`
+        : `${countPhrase} ${count === 1 ? "was" : "were"} retained in pre-consent snapshot evidence; write-level timing was not retained.`;
+    }
     const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
       fallbackFirstSeenMs: firstSeenMs,
       item,
@@ -347,6 +370,9 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     }
     if (evidenceLabel === "Potential gap") {
       return "The sufficiently retained first-layer consent surface did not show an options, settings, preferences, or manage-choices control.";
+    }
+    if (item.status === "Review signal" && evidence.balancedAcceptDeclineWithoutFirstLayerSettings === true) {
+      return "Accept and Decline controls were observed on the first-layer consent surface. A separate preferences or granular-settings control was not retained on that layer. This is not necessarily a compliance gap where refusal is as easy as acceptance. Verify whether users can later review, vary, or withdraw consent by purpose.";
     }
   }
 

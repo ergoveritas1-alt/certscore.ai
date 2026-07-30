@@ -19,6 +19,18 @@ const POLICY_REVIEW_INVARIANT_VERSION = "policy_review_invariants.v5";
 const MAX_DOCUMENTS = 6;
 const MAX_DOCUMENT_TEXT_CHARS = 18_000;
 const MAX_PACKET_TEXT_CHARS = 54_000;
+const POLICY_REVIEW_TEXT_ANCHORS = [
+  /\b(?:international transfers?|cross-border transfers?|data transfers?)\b/i,
+  /\b(?:personal data|personal information|information|data)\b.{0,100}\b(?:transferred|processed|stored|accessed)\b.{0,140}\b(?:united states|other jurisdictions|other countries|outside)\b/i,
+  /\b(?:sharing personal information|how we share|categories of third parties|service providers|advertising networks|analytics providers)\b/i,
+  /\b(?:retention|how long we retain|as long as necessary|retention criteria)\b/i,
+  /\b(?:your privacy rights|your rights|california privacy rights|other state privacy rights)\b/i,
+  /\b(?:legal basis|lawful basis|article 6|legitimate interests?)\b/i,
+  /\b(?:how we use|purposes? for which|processing purposes?)\b/i,
+  /\b(?:contact us|privacy officer|privacy office|data protection officer|controller)\b/i,
+  /\b(?:supervisory authority|data protection authority|lodge a complaint)\b/i,
+  /\b(?:cookie inventory|cookies? and other technologies|cookie names?)\b/i
+] as const;
 const POLICY_REVIEW_TOPICS = [
   "processing_purposes",
   "legal_basis",
@@ -282,6 +294,49 @@ function compactPolicyCandidate(row: Record<string, unknown>) {
   );
 }
 
+export function selectBoundedPolicyReviewText(rawText: string, limit = MAX_DOCUMENT_TEXT_CHARS) {
+  if (rawText.length <= limit) {
+    return rawText;
+  }
+
+  const excerpts: string[] = [];
+  let retainedChars = 0;
+  const addExcerpt = (start: number, end: number) => {
+    if (retainedChars >= limit) {
+      return;
+    }
+    const excerpt = rawText
+      .slice(Math.max(0, start), Math.min(rawText.length, end))
+      .trim();
+    if (!excerpt || excerpts.some((retained) => retained.includes(excerpt))) {
+      return;
+    }
+    const separator = excerpts.length > 0 ? "\n\n[…]\n\n" : "";
+    const remaining = limit - retainedChars - separator.length;
+    if (remaining <= 0) {
+      return;
+    }
+    const boundedExcerpt = excerpt.slice(0, remaining);
+    excerpts.push(`${separator}${boundedExcerpt}`);
+    retainedChars += separator.length + boundedExcerpt.length;
+  };
+
+  // Preserve document identity and scope, then retain topic-balanced passages
+  // from the complete source before reserving space for late contact sections.
+  addExcerpt(0, 2_400);
+  for (const anchor of POLICY_REVIEW_TEXT_ANCHORS) {
+    const match = anchor.exec(rawText);
+    anchor.lastIndex = 0;
+    if (!match || match.index === undefined) {
+      continue;
+    }
+    addExcerpt(match.index - 320, match.index + match[0].length + 1_180);
+  }
+  addExcerpt(rawText.length - 3_200, rawText.length);
+
+  return excerpts.join("").slice(0, limit);
+}
+
 export function buildPolicyReviewPacket(input: {
   documentSources: Array<Record<string, unknown>>;
   evidenceCoverage?: {
@@ -314,7 +369,7 @@ export function buildPolicyReviewPacket(input: {
       }
       const extractedFields = getRecord(row.extracted_fields_json);
       const textLimit = Math.min(MAX_DOCUMENT_TEXT_CHARS, remainingChars);
-      const text = rawText.slice(0, textLimit);
+      const text = selectBoundedPolicyReviewText(rawText, textLimit);
       remainingChars -= text.length;
       const rawCoverage = getRecord(
         row.content_coverage ?? extractedFields.content_coverage,

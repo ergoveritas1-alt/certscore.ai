@@ -18,12 +18,13 @@ import {
 } from "../scans/preconsent-public-evidence";
 import { CANONICAL_VENDOR_RESOLVER_VERSION } from "@certscore/vendor-resolver";
 import {
+  buildPreConsentStorageAssessment,
   buildRuntimeCookieInventory,
   countEligibleNonEssentialPreconsentStorageMetricRows,
-  countUnclassifiedNonEssentialPreconsentStorageRows,
   hasUnresolvedNonEssentialPreconsentStorageEvidence,
   getRuntimeCookiePrimaryProvider,
-  isEligibleNonEssentialPreconsentStorageRow
+  isEligibleNonEssentialPreconsentStorageRow,
+  projectPreConsentStorageMetric
 } from "../scans/runtime-cookie-evidence";
 import {
   buildTrackerInventoryGroupRows,
@@ -35,6 +36,7 @@ import {
 import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
 import { meaningfulPolicySurfaceTitle, prioritizePublicPolicySurfaces } from "../scans/policy-enrichment-row";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
 import { withPersistedFirstLayerConsentEvidence } from "../../server/scans/scan-report-consent-projection";
 import {
   getKnownCmpVendorForHost,
@@ -262,7 +264,7 @@ export function projectedPolicySurfaceRows(scanRecord: ScanDetailResponse) {
   return prioritizePublicPolicySurfaces([...retained.values()].map((surface) => ({
     ...surface,
     url: surface.url
-  })), { siteDomain: scanRecord.scan.domainHostname });
+  })), { limit: 5, siteDomain: scanRecord.scan.domainHostname });
 }
 
 function safeRecordSubset(record: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -411,7 +413,10 @@ function buildPulseReportSurface(input: {
     rows: reportableGdprRows
   });
   const gdprEprivacyScore = gdprEprivacyScoreAssessment.score;
-  const canonicalScore = gdprEprivacyScoreAssessment.score;
+  const canonicalScore = deriveCanonicalOverallScoreForReport({
+    checklistRows: gdprEprivacyChecklist,
+    unifiedFindings: unifiedFindingPackets
+  });
   const persistedReportScore =
     scanRecord.snapshot?.report_projection_status === "ready"
       ? finiteNumber(scanRecord.snapshot.certscore_overall)
@@ -2028,34 +2033,16 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     topFindings
   });
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(hydratedScanRecord.runtimeArtifacts);
-  const storageSummary = asRecord(recordValue(hybridRuntimeEvidence, "storageSummary"));
   const networkSummary = asRecord(recordValue(hybridRuntimeEvidence, "networkSummary"));
-  const hasClassifiedRuntimeStorageRows = reportSurface.runtimeCookieRows.length > 0;
-  const observedNonEssentialPreConsentStorageCount = hasClassifiedRuntimeStorageRows
-    ? countEligibleNonEssentialPreconsentStorageMetricRows(reportSurface.runtimeCookieRows)
-    : null;
-  const nonEssentialPreConsentStorageCount = observedNonEssentialPreConsentStorageCount;
-  const unclassifiedPreConsentStorageCount = hasClassifiedRuntimeStorageRows
-    ? countUnclassifiedNonEssentialPreconsentStorageRows(reportSurface.runtimeCookieRows)
-    : 0;
-  const storedPreConsentCookieCount = finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
-    finiteNumber(recordValue(hydratedScanRecord.snapshot, "initial_cookie_count")) ??
-    finiteNumber(recordValue(hydratedScanRecord.snapshot, "initialCookieCount"));
-  const storageMetricStatus = hasClassifiedRuntimeStorageRows
-    ? unclassifiedPreConsentStorageCount > 0
-      ? "partially_classified"
-      : (nonEssentialPreConsentStorageCount ?? 0) > 0
-        ? "measured_positive"
-        : "measured_zero"
-    : storedPreConsentCookieCount === null
-      ? "unavailable"
-      : storedPreConsentCookieCount > 0
-        ? "measured_positive"
-        : "measured_zero";
-  const cookiesBeforeConsentCount = hasClassifiedRuntimeStorageRows
-    ? nonEssentialPreConsentStorageCount
-    : storedPreConsentCookieCount ??
-      0;
+  const preConsentStorageAssessment = buildPreConsentStorageAssessment({
+    hybridRuntimeEvidence,
+    runtimeArtifacts: hydratedScanRecord.runtimeArtifacts,
+    runtimeCookieRows: reportSurface.runtimeCookieRows
+  });
+  const storageMetric = projectPreConsentStorageMetric(preConsentStorageAssessment);
+  const nonEssentialPreConsentStorageCount = storageMetric.value;
+  const unclassifiedPreConsentStorageCount = preConsentStorageAssessment.unclassifiedCount;
+  const cookiesBeforeConsentCount = nonEssentialPreConsentStorageCount;
   const policySurfaces = projectedPolicySurfaceRows(hydratedScanRecord).map(({ type, url }) => ({
     type,
     title: meaningfulPolicySurfaceTitle(type, url),
@@ -2090,17 +2077,13 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     cookiesPreConsent: cookiesBeforeConsentCount,
     nonEssentialPreConsentStorage: nonEssentialPreConsentStorageCount,
     unclassifiedPreConsentStorageCount,
-    storageMetricLabel: hasClassifiedRuntimeStorageRows ? "Non-essential storage" : "Pre-consent storage",
-    storageMetricScope: hasClassifiedRuntimeStorageRows ? "nonessential_only" : "all_observed",
-    storageMetricStatus,
-    storageMetricExplanation: storageMetricStatus === "unavailable"
-      ? "Storage was not measured or retained for this scan."
-      : storageMetricStatus === "partially_classified"
-        ? "Storage was observed, but some retained rows could not be classified as essential or non-essential."
-        : storageMetricStatus === "measured_zero"
-          ? "Storage was scanned and none was detected in the reported scope."
-          : "Storage was observed in the reported scope.",
-    totalStorageRecordsPresentBeforeRecordedConsent: reportSurface.runtimeCookieRows.length,
+    preConsentStorageAssessment,
+    storageMetricLabel: storageMetric.label,
+    storageMetricScope: storageMetric.scope,
+    storageMetricStatus: storageMetric.status,
+    storageMetricExplanation: storageMetric.explanation,
+    totalStorageRecordsPresentBeforeRecordedConsent:
+      preConsentStorageAssessment.attributedPreConsentRecordCount,
     consentPlatform: deriveConsentPlatform(hydratedScanRecord, reportSurface.presentationSummary),
     trackerFootprint: {
       vendors: trackerFootprintBreakdown.providerFamilies,

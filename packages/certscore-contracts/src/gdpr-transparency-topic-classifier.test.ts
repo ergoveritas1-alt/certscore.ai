@@ -147,6 +147,31 @@ test("classifies retained recipients headings with concrete affiliate and provid
   assert.match(match.evidenceExcerpt, /affiliates, service providers, and third parties/i);
 });
 
+test("classifies direct US-policy transfer, recipient, and privacy-contact wording", () => {
+  const classification = classifyGdprTransparencyTopics({
+    text: [
+      "We share personal information with service providers, analytics providers, advertising networks, social networks, and governmental authorities.",
+      "Personal Information may be transferred to and processed in the United States or other jurisdictions.",
+      "Questions about this Privacy Policy may be submitted to the address below, Attention Privacy Officer."
+    ].join(" ")
+  });
+  const byTopic = new Map(classification.matches.map((match) => [match.topic, match]));
+
+  assert.match(
+    byTopic.get("recipients_or_vendor_categories")?.evidenceExcerpt ?? "",
+    /share personal information with service providers/i
+  );
+  assert.match(
+    byTopic.get("international_transfers")?.evidenceExcerpt ?? "",
+    /transferred to and processed in the United States or other jurisdictions/i
+  );
+  assert.match(
+    byTopic.get("controller_contact")?.evidenceExcerpt ?? "",
+    /Privacy Policy|Privacy Officer/i
+  );
+  assert.equal(byTopic.has("dpo_contact"), false);
+});
+
 test("classifies representative GDPR Transparency snippets across supported locales", () => {
   const examples = [
     {

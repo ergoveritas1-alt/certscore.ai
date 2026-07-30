@@ -39,6 +39,39 @@ Executive-summary and top-finding selection may rank, allowlist, suppress, or gr
 
 If a valid signal is missing, add or fix the upstream WS01 observed evidence and the WC01 concern/policy mapping. Do not patch around missing evidence in display code. If a deviation from this flow seems necessary, stop and call it out before implementing.
 
+### Canonical consent-control flow
+
+Consent-control logic is a production specialization of the canonical scan-to-report flow:
+
+```text
+WS01 typed observations
+→ verified retained evidence packet
+→ WC01 ConsentControlAssessment v2
+→ persisted typed assessment/evidence projection
+→ normalized consent concerns
+→ concern policy
+→ unified findings/checklist
+→ score, report, Overview, Admin Scans, and API Activity
+```
+
+WS01 owns pre-consent observation and retained evidence capture. WC01 owns typed assessment, persistence, normalized concerns, policy, findings, scoring, and presentation.
+
+Persistence must preserve the assessment's contract version, provenance, retained-evidence references, and source hash. Persistence must not synthesize observations, upgrade confidence, or create findings.
+
+Every downstream surface must consume the canonical persisted projection or its normalized concern, concern-policy, and unified finding/checklist outputs. Do not infer consent findings, status, severity, prominence, or score effects directly from raw labels, screenshots, DOM signals, or display-layer context.
+
+Missing, malformed, stale, or unverifiable evidence must fail closed to an unknown, insufficient-evidence, or review state. It must not become an observed gap solely because evidence is absent.
+
+If a downstream result is incorrect, trace the first broken stage in this sequence and fix it there. Do not add surface-specific fallbacks.
+
+Changes to this flow require focused regression coverage at the affected boundaries:
+
+- WS01 observation -> retained evidence contract
+- retained evidence -> `ConsentControlAssessment v2`
+- assessment -> persisted projection
+- persisted projection -> normalized concern and concern policy
+- unified projection -> score and every downstream surface
+
 ### CertScore v2 internal diagnostic architecture
 
 CertScore v2 exists in this repo as a clean scanner/review architecture and internal diagnostic pipeline. Its current operating principle is:
