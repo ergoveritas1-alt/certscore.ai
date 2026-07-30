@@ -5000,6 +5000,14 @@ const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({
   maxEntries: LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES,
+  onEvent: ({ key, outcome, size }) => {
+    console.warn(JSON.stringify({
+      cacheKeyHash: createHash("sha256").update(key).digest("hex").slice(0, 12),
+      cacheSize: size,
+      event: "app.scan_detail.local_v2_cache",
+      outcome
+    }));
+  },
   ttlMs: LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS
 });
 

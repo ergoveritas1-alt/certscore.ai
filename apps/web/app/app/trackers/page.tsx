@@ -163,7 +163,7 @@ export default async function TrackersPage() {
                       {domain.preconsentViolationCount} pre-consent violation{domain.preconsentViolationCount === 1 ? "" : "s"}
                     </span>
                   ) : null}
-                  <Link className="text-sm font-medium text-slate-900 underline underline-offset-4" href={`/app/scans/${domain.scanId}`}>
+                  <Link className="text-sm font-medium text-slate-900 underline underline-offset-4" href={`/app/scans/${domain.scanId}`} prefetch={false}>
                     Open scan
                   </Link>
                 </div>

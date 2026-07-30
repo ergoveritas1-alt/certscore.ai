@@ -61,3 +61,23 @@ test("bounded promise cache evicts the oldest key at capacity", async () => {
 
   assert.equal(firstCalls, 2);
 });
+
+test("bounded promise cache reports hits, misses, and capacity evictions", async () => {
+  const events: Array<{ key: string; outcome: string; size: number }> = [];
+  const cache = new BoundedPromiseCache<string, string>({
+    maxEntries: 1,
+    onEvent: (event) => events.push(event),
+    ttlMs: 60_000
+  });
+
+  await cache.getOrCreate("scan-1", async () => "first");
+  await cache.getOrCreate("scan-1", async () => "unused");
+  await cache.getOrCreate("scan-2", async () => "second");
+
+  assert.deepEqual(events, [
+    { key: "scan-1", outcome: "miss", size: 1 },
+    { key: "scan-1", outcome: "hit", size: 1 },
+    { key: "scan-2", outcome: "miss", size: 2 },
+    { key: "scan-1", outcome: "evicted", size: 1 }
+  ]);
+});

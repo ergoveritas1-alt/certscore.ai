@@ -51,7 +51,7 @@ export default async function ChangesPage() {
                     size="sm"
                     variant="secondary"
                   >
-                    <Link aria-label={`View scan for ${change.domainHostname ?? "domain"} change`} href={`/app/scans/${change.scanId}`}>
+                    <Link aria-label={`View scan for ${change.domainHostname ?? "domain"} change`} href={`/app/scans/${change.scanId}`} prefetch={false}>
                       <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 19V5" />
                         <path d="m5 12 7-7 7 7" />

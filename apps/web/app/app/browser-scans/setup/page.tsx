@@ -82,7 +82,7 @@ export default async function BrowserScanSetupPage({ searchParams }: SetupPagePr
         {scan ? <p className="mt-4 text-sm text-slate-300">Preparing to rescan <strong className="text-white">{scan.scan.domainHostname ?? "this site"}</strong>.</p> : null}
         <div className="mt-7 flex flex-wrap gap-3">
           <a className="inline-flex min-h-12 items-center rounded-xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" href={storeUrl} rel="noreferrer" target="_blank">Add the CertScore.ai extension to Chrome</a>
-          {scan ? <Link className="inline-flex min-h-12 items-center rounded-xl border border-slate-600 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800" href={`/app/scans/${encodeURIComponent(scan.scan.id)}`}>Back to scan report</Link> : null}
+          {scan ? <Link className="inline-flex min-h-12 items-center rounded-xl border border-slate-600 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800" href={`/app/scans/${encodeURIComponent(scan.scan.id)}`} prefetch={false}>Back to scan report</Link> : null}
         </div>
       </header>
 

@@ -273,6 +273,7 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                             ariaLabel="View scan details"
                             className="h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
                             href={`/app/scans/${scan.id}`}
+                            prefetch={false}
                             idleContent={
                               <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M12 19V5" />
@@ -347,6 +348,7 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                         ariaLabel="View scan details"
                         className="h-11 w-11 rounded-full border-0 bg-[linear-gradient(180deg,#62cf63_0%,#4fbe51_100%)] p-0 text-white shadow-[0_10px_24px_rgba(79,190,81,0.24)] hover:brightness-[1.03]"
                         href={`/app/scans/${scan.id}`}
+                        prefetch={false}
                         idleContent={
                           <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M12 19V5" />
