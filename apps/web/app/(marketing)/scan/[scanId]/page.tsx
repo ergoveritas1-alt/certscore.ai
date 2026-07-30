@@ -143,7 +143,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
   const persistedReportProjectionReady = hasReadyScanReportProjection(scanRecord);
   const displayScanRecord =
-    localV2DagReportInput && scanRecord.scan.status === "completed" && !persistedReportProjectionReady
+    localV2DagReportInput && scanRecord.scan.status === "completed"
       ? await materializeLocalV2DagScanDetail(scanRecord)
       : scanRecord;
   if (!persistedReportProjectionReady && displayScanRecord.scan.status === "completed") {

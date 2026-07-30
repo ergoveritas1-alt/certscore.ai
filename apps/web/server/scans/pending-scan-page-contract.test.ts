@@ -50,3 +50,18 @@ test("completed dashboard reports use an honest loading state and a short stable
   assert.match(source, /statusProjection\\.reportReady \\|\\| completedLongEnoughForShortCache/);
   assert.match(source, /hasReportProjectionGraceElapsed\(statusProjection\)/);
 });
+
+test("completed v2 reports materialize full detail even when the summary projection is ready", async () => {
+  for (const page of pages) {
+    const source = await readFile(page, "utf8");
+
+    assert.match(
+      source,
+      /localV2DagReportInput && scanRecord\.scan\.status === "completed"\s*\n?\s*\? await[\s\S]{0,160}materializeLocalV2DagScanDetail\(scanRecord\)/
+    );
+    assert.doesNotMatch(
+      source,
+      /localV2DagReportInput && scanRecord\.scan\.status === "completed" && !persistedReportProjectionReady/
+    );
+  }
+});

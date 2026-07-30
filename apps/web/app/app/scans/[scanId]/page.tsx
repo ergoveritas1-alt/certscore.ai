@@ -183,12 +183,13 @@ async function ScanDetailReportContent({
   const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
   const persistedReportProjectionReady = hasReadyScanReportProjection(scanRecord);
   const displayScanRecord =
-    localV2DagReportInput && scanRecord.scan.status === "completed" && !persistedReportProjectionReady
-      ? await withServerTiming("app.scan_detail.local_v2_report_fallback", () => materializeLocalV2DagScanDetail(scanRecord))
+    localV2DagReportInput && scanRecord.scan.status === "completed"
+      ? await withServerTiming("app.scan_detail.local_v2_report", () => materializeLocalV2DagScanDetail(scanRecord))
       : scanRecord;
 
-  // Older scans may not have the shared projection yet. Serve the reliable
-  // materialized fallback, but never make the next page refresh pay that cost.
+  // The persisted projection is a readiness and summary read model. The full
+  // report still needs the cached materialized v2 evidence for its detailed
+  // findings, inventory, policy, and timeline surfaces.
   if (!persistedReportProjectionReady && displayScanRecord.scan.status === "completed") {
     after(async () => {
       await persistScanReportProjection(displayScanRecord, {

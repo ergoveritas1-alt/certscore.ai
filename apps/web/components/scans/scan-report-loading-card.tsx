@@ -1,3 +1,5 @@
+import React from "react";
+
 export function ScanReportLoadingCard({
   description = "We’re organizing the evidence into your report now. It will open automatically when it’s ready.",
   title = "Finishing your report"
