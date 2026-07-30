@@ -19,6 +19,7 @@ import {
 import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
+import { BoundedPromiseCache } from "../../../../server/performance/bounded-promise-cache";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { getPublicScanById, getScanById } from "../../../../server/scans/get-scan-by-id";
 import {
@@ -54,36 +55,18 @@ const RECENT_SCAN_REUSED_MESSAGE =
 
 const COMPLETED_SCAN_DETAIL_CACHE_TTL_MS = 15_000;
 const COMPLETED_SCAN_DETAIL_CACHE_MAX_ENTRIES = 8;
-const completedScanDetailCache = new Map<string, {
-  expiresAt: number;
-  value: ReturnType<typeof getPublicScanById>;
-}>();
+const completedScanDetailCache = new BoundedPromiseCache<
+  string,
+  Awaited<ReturnType<typeof getPublicScanById>>
+>({
+  maxEntries: COMPLETED_SCAN_DETAIL_CACHE_MAX_ENTRIES,
+  ttlMs: COMPLETED_SCAN_DETAIL_CACHE_TTL_MS
+});
 
 function getCachedCompletedScanById(scanId: string) {
-  const now = Date.now();
-  const cached = completedScanDetailCache.get(scanId);
-  if (cached && cached.expiresAt > now) {
-    return cached.value;
-  }
-
-  const value = withServerTiming("app.scan_detail.record_cache_miss", () => getPublicScanById(scanId));
-  completedScanDetailCache.set(scanId, {
-    expiresAt: now + COMPLETED_SCAN_DETAIL_CACHE_TTL_MS,
-    value
-  });
-  void value.catch(() => {
-    if (completedScanDetailCache.get(scanId)?.value === value) {
-      completedScanDetailCache.delete(scanId);
-    }
-  });
-
-  while (completedScanDetailCache.size > COMPLETED_SCAN_DETAIL_CACHE_MAX_ENTRIES) {
-    const oldestScanId = completedScanDetailCache.keys().next().value;
-    if (typeof oldestScanId !== "string") break;
-    completedScanDetailCache.delete(oldestScanId);
-  }
-
-  return value;
+  return completedScanDetailCache.getOrCreate(scanId, () =>
+    withServerTiming("app.scan_detail.record_cache_miss", () => getPublicScanById(scanId))
+  );
 }
 
 function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanStatusProjection }) {

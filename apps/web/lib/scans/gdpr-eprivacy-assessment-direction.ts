@@ -9,6 +9,8 @@ export type AssessmentDirection =
   | "review_signal"
   | "potential_concern"
   | "technical_limitation";
+export type GdprEprivacyAssessmentSummaryCounts =
+  Record<AssessmentDirection | "gap_observed", number>;
 
 const RISK_SIGNAL_ROW_IDS = new Set([
   "pre_consent_cookies_storage",
@@ -52,6 +54,35 @@ const POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS = new Set([
   "social_media_embed_pre_consent",
   "embedded_content_pre_consent"
 ]);
+
+export function summarizeGdprEprivacyAssessmentDirections(
+  items: GdprEprivacyCoverageChecklistItem[]
+): GdprEprivacyAssessmentSummaryCounts {
+  return items.reduce<GdprEprivacyAssessmentSummaryCounts>((counts, item) => {
+    const direction = getAssessmentDirection(item);
+    if (direction === "technical_limitation") {
+      counts.technical_limitation += 1;
+    } else if (direction === "positive_signal") {
+      counts.positive_signal += 1;
+    } else if (direction === "neutral_signal") {
+      counts.neutral_signal += 1;
+    } else if (item.assessmentStatus === "gap_observed" || item.status === "Gap observed") {
+      counts.gap_observed += 1;
+    } else if (direction === "potential_concern") {
+      counts.potential_concern += 1;
+    } else {
+      counts.review_signal += 1;
+    }
+    return counts;
+  }, {
+    gap_observed: 0,
+    neutral_signal: 0,
+    positive_signal: 0,
+    potential_concern: 0,
+    review_signal: 0,
+    technical_limitation: 0
+  });
+}
 
 export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): EvidenceLabel {
   if (item.status === "Insufficient evidence") {

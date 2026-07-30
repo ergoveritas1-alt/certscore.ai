@@ -17,7 +17,8 @@ import {
   getAssessmentDirection,
   getEvidenceLabel,
   type AssessmentDirection,
-  type EvidenceLabel
+  type EvidenceLabel,
+  type GdprEprivacyAssessmentSummaryCounts
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
@@ -1064,39 +1065,11 @@ function getDisplayEvidenceRefs(item: GdprEprivacyCoverageChecklistItem) {
   return item.evidenceRefs.map(humanizeEvidenceToken).slice(0, 6);
 }
 
-export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivacyCoverageChecklistItem[] }) {
-  const summaryCounts = items.reduce<Record<AssessmentDirection | "gap_observed", number>>((counts, item) => {
-    const direction = getAssessmentDirection(item);
-    if (direction === "technical_limitation") {
-      counts.technical_limitation += 1;
-      return counts;
-    }
-    if (direction === "positive_signal") {
-      counts.positive_signal += 1;
-      return counts;
-    }
-    if (direction === "neutral_signal") {
-      counts.neutral_signal += 1;
-      return counts;
-    }
-    if (item.assessmentStatus === "gap_observed" || item.status === "Gap observed") {
-      counts.gap_observed += 1;
-      return counts;
-    }
-    if (direction === "potential_concern") {
-      counts.potential_concern += 1;
-      return counts;
-    }
-    counts.review_signal += 1;
-    return counts;
-  }, {
-    gap_observed: 0,
-    neutral_signal: 0,
-    positive_signal: 0,
-    potential_concern: 0,
-    review_signal: 0,
-    technical_limitation: 0
-  });
+export function GdprEprivacyCoverageSummaryPills({
+  summaryCounts
+}: {
+  summaryCounts: GdprEprivacyAssessmentSummaryCounts;
+}) {
   type DecisionMixSegment = {
     color: string;
     count: number;

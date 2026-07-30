@@ -29,6 +29,50 @@ async function loadLocalV2DagReport() {
   return import("./local-v2-dag-report");
 }
 
+test("remote report artifacts start geometry as soon as the manifest resolves", async () => {
+  const { localV2DagReportPerformanceTestHelpers } = await loadLocalV2DagReport();
+  const events: string[] = [];
+  let resolveBundle: ((value: CanonicalEvidenceBundle) => void) | undefined;
+  let resolveGeometry: ((value: Record<string, unknown>) => void) | undefined;
+
+  const resultPromise = localV2DagReportPerformanceTestHelpers.loadLocalV2DagRemoteArtifacts({
+    readBundle: () => {
+      events.push("bundle:start");
+      return new Promise<CanonicalEvidenceBundle>((resolve) => {
+        resolveBundle = resolve;
+      });
+    },
+    readGeometry: async () => {
+      events.push("geometry:start");
+      return new Promise<Record<string, unknown>>((resolve) => {
+        resolveGeometry = resolve;
+      });
+    },
+    readManifest: async () => {
+      events.push("manifest:start");
+      return { auxiliaryArtifacts: [] };
+    }
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events, ["bundle:start", "manifest:start", "geometry:start"]);
+
+  resolveGeometry?.({ retainedControlCount: 1 });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(events.includes("geometry:start"), true);
+
+  const bundle = {
+    schemaVersion: "certscore.v2.canonical-evidence-bundle.v1"
+  } as CanonicalEvidenceBundle;
+  resolveBundle?.(bundle);
+
+  assert.deepEqual(await resultPromise, {
+    bundle,
+    consentControlGeometryEvidence: { retainedControlCount: 1 },
+    manifest: { auxiliaryArtifacts: [] }
+  });
+});
+
 test("getLocalV2PrimaryLanguage ranks declared, retained text, and URL evidence", async () => {
   const { getLocalV2PrimaryLanguage } = await loadLocalV2DagReport();
   assert.equal(getLocalV2PrimaryLanguage({

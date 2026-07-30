@@ -43,6 +43,8 @@ import {
   isPromotionGradePreconsentRequestRow
 } from "../../lib/scans/preconsent-public-evidence";
 import { guessPrimaryLanguage } from "../../lib/scans/primary-language";
+import { BoundedPromiseCache } from "../performance/bounded-promise-cache";
+import { withServerTiming } from "../performance/log-server-timing";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import { deriveMaterializedConsentControlAssessment } from "./consent-control-assessment-projector";
 import {
@@ -1415,7 +1417,7 @@ async function readLocalV2DagJsonArtifactFromS3(input: {
   uri: string;
 }) {
   const { bucket, key } = parseS3Uri(input.uri);
-  const response = await new S3Client({ region: inferS3ArtifactRegion(bucket) }).send(
+  const response = await getLocalV2DagS3Client(inferS3ArtifactRegion(bucket)).send(
     new GetObjectCommand({ Bucket: bucket, Key: key })
   );
   const body = verifyLocalV2DagLambdaArtifactBody({
@@ -1424,6 +1426,18 @@ async function readLocalV2DagJsonArtifactFromS3(input: {
     expectedSizeBytes: input.expectedSizeBytes
   });
   return JSON.parse(body.toString("utf8")) as unknown;
+}
+
+const localV2DagS3Clients = new Map<string, S3Client>();
+
+function getLocalV2DagS3Client(region: string) {
+  const cached = localV2DagS3Clients.get(region);
+  if (cached) {
+    return cached;
+  }
+  const client = new S3Client({ region });
+  localV2DagS3Clients.set(region, client);
+  return client;
 }
 
 async function readLocalV2DagBundleFromS3(input: {
@@ -4984,10 +4998,33 @@ function buildMaterializedLocalV2Detail(
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v6";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
-const localV2DagReportMaterializationCache = new Map<string, {
-  expiresAt: number;
-  value: Promise<ScanDetailResponse>;
-}>();
+const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({
+  maxEntries: LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES,
+  ttlMs: LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS
+});
+
+async function loadLocalV2DagRemoteArtifacts(input: {
+  readBundle: () => Promise<CanonicalEvidenceBundle | null>;
+  readGeometry: (manifest: Record<string, unknown> | null) => Promise<Record<string, unknown> | null>;
+  readManifest: () => Promise<Record<string, unknown> | null>;
+}) {
+  // Start the largest object immediately. The geometry pointer depends on the
+  // small manifest, but geometry itself does not depend on the bundle. Starting
+  // it as soon as the manifest resolves removes a full S3 request from the
+  // critical path.
+  const bundlePromise = input.readBundle();
+  const manifest = await input.readManifest();
+  const geometryPromise = input.readGeometry(manifest);
+  const [bundle, consentControlGeometryEvidence] = await Promise.all([
+    bundlePromise,
+    geometryPromise
+  ]);
+  return {
+    bundle,
+    consentControlGeometryEvidence,
+    manifest
+  };
+}
 
 async function materializeLocalV2DagScanDetailUncached(
   scanRecord: ScanDetailResponse,
@@ -4998,42 +5035,76 @@ async function materializeLocalV2DagScanDetailUncached(
     return scanRecord;
   }
   const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
-  const [localBundle, localGeometryEvidence, localManifest] = await Promise.all([
-    shouldReadLocalOutDir && input.outDir ? readLocalV2DagBundle(input.outDir) : Promise.resolve(null),
-    shouldReadLocalOutDir && input.outDir ? readLocalV2ConsentControlGeometry(input.outDir) : Promise.resolve(null),
-    shouldReadLocalOutDir && input.outDir ? readLocalV2DagManifest(input.outDir) : Promise.resolve(null)
-  ]);
-  const [bundle, manifest] = await Promise.all([
-    localBundle ?? (input.scanArtifactUri
-      ? readLocalV2DagBundleFromS3({
-          expectedSha256: input.scanArtifactSha256,
-          expectedSizeBytes: input.scanArtifactSizeBytes,
-          uri: input.scanArtifactUri
-        })
-      : Promise.resolve(null)),
-    localManifest ?? (localGeometryEvidence || !input.manifestArtifactUri
-      ? Promise.resolve(null)
-      : readLocalV2DagManifestFromS3({
-          expectedSha256: input.manifestArtifactSha256,
-          expectedSizeBytes: input.manifestArtifactSizeBytes,
-          uri: input.manifestArtifactUri
-        }))
-  ]);
-  const geometryArtifact = localGeometryEvidence
-    ? null
-    : getLocalV2DagAuxiliaryArtifact(manifest, "ConsentControlGeometryEvidence.json");
-  const consentControlGeometryEvidence = localGeometryEvidence ?? (geometryArtifact
-    ? await readLocalV2ConsentControlGeometryFromS3(geometryArtifact)
-    : null);
-  if (!bundle && options.requireBundle) {
+  let bundle: CanonicalEvidenceBundle | null;
+  let consentControlGeometryEvidence: Record<string, unknown> | null;
+  if (shouldReadLocalOutDir && input.outDir) {
+    [bundle, consentControlGeometryEvidence] = await withServerTiming(
+      "app.scan_detail.local_v2_artifacts.local",
+      async () => {
+        const [localBundle, localGeometryEvidence] = await Promise.all([
+          readLocalV2DagBundle(input.outDir!),
+          readLocalV2ConsentControlGeometry(input.outDir!)
+        ]);
+        return [localBundle, localGeometryEvidence] as const;
+      }
+    );
+  } else {
+    const remoteArtifacts = await withServerTiming(
+      "app.scan_detail.local_v2_artifacts.remote",
+      () => loadLocalV2DagRemoteArtifacts({
+        readBundle: () => input.scanArtifactUri
+          ? withServerTiming("app.scan_detail.local_v2_artifact.bundle", () =>
+              readLocalV2DagBundleFromS3({
+                expectedSha256: input.scanArtifactSha256,
+                expectedSizeBytes: input.scanArtifactSizeBytes,
+                uri: input.scanArtifactUri!
+              })
+            )
+          : Promise.resolve(null),
+        readGeometry: (manifest) => {
+          const geometryArtifact = getLocalV2DagAuxiliaryArtifact(
+            manifest,
+            "ConsentControlGeometryEvidence.json"
+          );
+          return geometryArtifact
+            ? withServerTiming("app.scan_detail.local_v2_artifact.geometry", () =>
+                readLocalV2ConsentControlGeometryFromS3(geometryArtifact)
+              )
+            : Promise.resolve(null);
+        },
+        readManifest: () => input.manifestArtifactUri
+          ? withServerTiming("app.scan_detail.local_v2_artifact.manifest", () =>
+              readLocalV2DagManifestFromS3({
+                expectedSha256: input.manifestArtifactSha256,
+                expectedSizeBytes: input.manifestArtifactSizeBytes,
+                uri: input.manifestArtifactUri!
+              })
+            )
+          : Promise.resolve(null)
+      })
+    );
+    bundle = remoteArtifacts.bundle;
+    consentControlGeometryEvidence = remoteArtifacts.consentControlGeometryEvidence;
+  }
+  if (
+    !bundle &&
+    (
+      options.requireBundle ||
+      (!shouldReadLocalOutDir && Boolean(input.scanArtifactUri && input.scanArtifactSha256))
+    )
+  ) {
     throw new Error(`Required local v2 DAG evidence bundle was unavailable for scan ${scanRecord.scan.id}.`);
   }
-  return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle, {
-    consentControlGeometryEvidence,
-    gdprTransparencyEvidenceProfile: input.gdprTransparencyEvidenceProfile,
-    localOutDir: shouldReadLocalOutDir ? input.outDir : null,
-    scanArtifactUri: input.scanArtifactUri
-  }) : scanRecord;
+  return bundle
+    ? withServerTiming("app.scan_detail.local_v2_projection", async () =>
+        buildMaterializedLocalV2Detail(scanRecord, bundle, {
+          consentControlGeometryEvidence,
+          gdprTransparencyEvidenceProfile: input.gdprTransparencyEvidenceProfile,
+          localOutDir: shouldReadLocalOutDir ? input.outDir : null,
+          scanArtifactUri: input.scanArtifactUri
+        })
+      )
+    : scanRecord;
 }
 
 export async function materializeLocalV2DagScanDetail(
@@ -5065,28 +5136,12 @@ export async function materializeLocalV2DagScanDetail(
     getProductionPolicyModelReviewRevision(scanRecord.runtimeArtifacts),
     options.requireBundle === true ? "required" : "optional"
   ].join(":");
-  const now = Date.now();
-  const cached = localV2DagReportMaterializationCache.get(cacheKey);
-  if (cached && cached.expiresAt > now) {
-    return cached.value;
-  }
-
-  const value = materializeLocalV2DagScanDetailUncached(scanRecord, options);
-  localV2DagReportMaterializationCache.set(cacheKey, {
-    expiresAt: now + LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS,
-    value
-  });
-  void value.catch(() => {
-    if (localV2DagReportMaterializationCache.get(cacheKey)?.value === value) {
-      localV2DagReportMaterializationCache.delete(cacheKey);
-    }
-  });
-
-  while (localV2DagReportMaterializationCache.size > LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES) {
-    const oldestKey = localV2DagReportMaterializationCache.keys().next().value;
-    if (typeof oldestKey !== "string") break;
-    localV2DagReportMaterializationCache.delete(oldestKey);
-  }
-
-  return value;
+  return localV2DagReportMaterializationCache.getOrCreate(
+    cacheKey,
+    () => materializeLocalV2DagScanDetailUncached(scanRecord, options)
+  );
 }
+
+export const localV2DagReportPerformanceTestHelpers = {
+  loadLocalV2DagRemoteArtifacts
+};

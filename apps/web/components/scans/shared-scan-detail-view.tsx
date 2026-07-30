@@ -42,7 +42,8 @@ import {
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
 import {
   getAssessmentDirection,
-  getEvidenceLabel
+  getEvidenceLabel,
+  summarizeGdprEprivacyAssessmentDirections
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
@@ -7543,6 +7544,9 @@ export async function SharedScanDetailView({
     unifiedFindings: findingEvidenceDiagnostics
   });
   const reportableGdprEprivacyCoverageChecklist = getReportableGdprEprivacyCoverageItems(gdprEprivacyCoverageChecklist);
+  const gdprEprivacyAssessmentSummaryCounts = summarizeGdprEprivacyAssessmentDirections(
+    reportableGdprEprivacyCoverageChecklist
+  );
   const executivePolicySurfaces = deriveExecutivePolicySurfaces(
     scanRecord.policyEnrichment,
     scanRecord.snapshot,
@@ -7848,7 +7852,11 @@ export async function SharedScanDetailView({
           {showRegulatoryChecklistSection ? (
             <RegulatoryChecklistSection
               headingLabel="GDPR / ePrivacy Evidence Checklist"
-              headingTrailing={<GdprEprivacyCoverageSummaryPills items={reportableGdprEprivacyCoverageChecklist} />}
+              headingTrailing={
+                <GdprEprivacyCoverageSummaryPills
+                  summaryCounts={gdprEprivacyAssessmentSummaryCounts}
+                />
+              }
               showAdvancedEvidenceToggle
               tabs={[
                 {

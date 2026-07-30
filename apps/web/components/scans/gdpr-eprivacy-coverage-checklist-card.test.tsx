@@ -9,7 +9,11 @@ import {
   getGdprEprivacyCoverageChecklistRowRationaleForAudit,
   gdprPolicyExcerptPageTestHelpers
 } from "./gdpr-eprivacy-coverage-checklist-card";
-import { getAssessmentDirection, getEvidenceLabel } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
+import {
+  getAssessmentDirection,
+  getEvidenceLabel,
+  summarizeGdprEprivacyAssessmentDirections
+} from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 
 test("GDPR Transparency grouping includes every emitted Article 13 checklist row", () => {
@@ -1607,7 +1611,9 @@ test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead 
     })
   ];
   const html = renderToStaticMarkup(
-    createElement(GdprEprivacyCoverageSummaryPills, { items })
+    createElement(GdprEprivacyCoverageSummaryPills, {
+      summaryCounts: summarizeGdprEprivacyAssessmentDirections(items)
+    })
   );
 
   assert.match(html, /GDPR\/ePrivacy checklist rating mix/);
