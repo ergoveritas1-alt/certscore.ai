@@ -235,6 +235,7 @@ async function runSite(input: {
     productionFindingIntegration: false,
     profile: input.args.profile,
     resultHandoff: "sqs",
+    resultPurpose: "synthetic_verification",
     resultQueueUrl: input.queueUrl,
     scanId,
     scannerRuntime: "certscore-v2-dag-parallel-path",

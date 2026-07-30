@@ -32,6 +32,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   productionFindingIntegration: false;
   profile: LocalV2DagScanProfile;
   resultHandoff: "sqs";
+  resultPurpose: "persisted_scan";
   resultQueueUrl: string;
   scanId: string;
   scannerRuntime: "certscore-v2-dag-parallel-path";
@@ -167,6 +168,7 @@ export type LocalV2DagLambdaResultMessage = {
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
+  resultPurpose: "persisted_scan";
   scanId: string;
   scannerGitSha?: string;
   scannerImageTag?: string;
@@ -368,6 +370,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     productionFindingIntegration: false,
     profile: getProfile(config),
     resultHandoff: "sqs",
+    resultPurpose: "persisted_scan",
     resultQueueUrl: requireString(intent.resultQueueUrl, "resultQueueUrl"),
     scanId: requireString(input.scanId, "scanId"),
     scannerRuntime: "certscore-v2-dag-parallel-path",
@@ -662,6 +665,7 @@ export function parseLocalV2DagLambdaResultMessage(
     contractVersion: LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
+    resultPurpose: "persisted_scan",
     scanId: requireString(record.scanId, "scanId"),
     status,
     targetEnvironment

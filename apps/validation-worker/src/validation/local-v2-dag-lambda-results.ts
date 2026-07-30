@@ -11,6 +11,7 @@ import {
   type MessageSystemAttributeName,
   type Message
 } from "@aws-sdk/client-sqs";
+import { classifyV2DagLambdaResultDisposition } from "@certscore/contracts";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -377,17 +378,8 @@ function messageBody(message: Message) {
 }
 
 export function getManualSmokeResultScanId(rawMessage: unknown) {
-  try {
-    const record = asRecord(typeof rawMessage === "string" ? JSON.parse(rawMessage) : rawMessage);
-    const scanId = typeof record.scanId === "string" ? record.scanId : "";
-    return (
-      scanId.startsWith("manual-") ||
-      scanId.startsWith("postdeploy-") ||
-      scanId.startsWith("aro-gate-")
-    ) ? scanId : null;
-  } catch {
-    return null;
-  }
+  const disposition = classifyV2DagLambdaResultDisposition(rawMessage);
+  return disposition.kind === "synthetic_verification" ? disposition.scanId : null;
 }
 
 export function getLambdaResultTargetEnvironment(rawMessage: unknown): LambdaTargetEnvironment | null {
@@ -992,18 +984,29 @@ async function pollOnce(input: {
   const messages = response.Messages ?? [];
   const outcomes = await mapWithConcurrency(messages, RESULT_BATCH_CONCURRENCY, async (message) => {
     const rawMessage = messageBody(message);
-    const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
-    if (manualSmokeScanId) {
+    const disposition = classifyV2DagLambdaResultDisposition(rawMessage);
+    if (disposition.kind === "synthetic_verification") {
       await input.client.send(new DeleteMessageCommand({
         QueueUrl: input.queueUrl,
         ReceiptHandle: receiptHandle(message)
       }));
-      console.warn("[validation-worker] ignored manual v2 DAG Lambda smoke result", {
+      console.warn("[validation-worker] acknowledged non-persistable v2 DAG Lambda result", {
+        disposition: disposition.kind,
         messageId: message.MessageId ?? null,
         queueRegion: input.queueRegion,
-        scanId: manualSmokeScanId
+        reason: disposition.reason,
+        scanId: disposition.scanId
       });
       return { deleted: 1, failed: 0, handled: 0 };
+    }
+    if (disposition.kind === "invalid") {
+      console.error("[validation-worker] rejected invalid v2 DAG Lambda result identity", {
+        messageId: message.MessageId ?? null,
+        queueRegion: input.queueRegion,
+        reason: disposition.reason,
+        scanId: disposition.scanId
+      });
+      return { deleted: 0, failed: 1, handled: 0 };
     }
     try {
       const parsed = parseLambdaResultMessage(rawMessage, input.targetEnvironment);

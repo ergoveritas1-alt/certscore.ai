@@ -104,6 +104,19 @@ test("validation worker identifies manual Lambda smoke results for queue cleanup
     getManualSmokeResultScanId(JSON.stringify({ scanId: "aro-gate-adversarial-zeit-de-1782705130742" })),
     "aro-gate-adversarial-zeit-de-1782705130742"
   );
+  assert.equal(
+    getManualSmokeResultScanId(JSON.stringify({
+      scanId: "regional-vpc-parity-us-west-2-example-com-123"
+    })),
+    "regional-vpc-parity-us-west-2-example-com-123"
+  );
+  assert.equal(
+    getManualSmokeResultScanId(JSON.stringify({
+      resultPurpose: "synthetic_verification",
+      scanId: "bounded-verification-id"
+    })),
+    "bounded-verification-id"
+  );
   assert.equal(getManualSmokeResultScanId(JSON.stringify({ scanId: "49037835-190b-4e67-9fe2-426d51d55069" })), null);
 });
 
@@ -205,6 +218,9 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /RESULT_BATCH_CONCURRENCY\s*=\s*3/);
   assert.match(source, /MaxNumberOfMessages:\s*RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /mapWithConcurrency\(messages, RESULT_BATCH_CONCURRENCY/);
+  assert.match(source, /classifyV2DagLambdaResultDisposition\(rawMessage\)/);
+  assert.match(source, /acknowledged non-persistable v2 DAG Lambda result/);
+  assert.match(source, /rejected invalid v2 DAG Lambda result identity/);
   assert.match(source, /async function loopQueue\(queueUrl: string\)/);
   assert.match(source, /for \(const queueUrl of queueUrls\)/);
   assert.doesNotMatch(source, /Promise\.all\(queueUrls\.map/);

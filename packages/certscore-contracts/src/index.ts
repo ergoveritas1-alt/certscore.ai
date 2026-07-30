@@ -14,6 +14,7 @@ export * from "./supported-languages";
 export * from "./model-assistance";
 export * from "./consent-control-assessment";
 export * from "./consent-control-calibration";
+export * from "./lambda-result-disposition";
 
 export const directVsInferredSchema = z.enum([
   "direct",

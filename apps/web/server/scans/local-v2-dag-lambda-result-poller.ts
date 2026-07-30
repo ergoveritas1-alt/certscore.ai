@@ -8,6 +8,7 @@ import {
   type Message,
   type ReceiveMessageCommandOutput
 } from "@aws-sdk/client-sqs";
+import { classifyV2DagLambdaResultDisposition } from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -135,20 +136,6 @@ function messageBody(message: Message) {
   }
 
   return message.Body;
-}
-
-function getManualSmokeResultScanId(rawMessage: unknown) {
-  try {
-    const record = asRecord(typeof rawMessage === "string" ? JSON.parse(rawMessage) : rawMessage);
-    const scanId = typeof record.scanId === "string" ? record.scanId : "";
-    return (
-      scanId.startsWith("manual-") ||
-      scanId.startsWith("postdeploy-") ||
-      scanId.startsWith("aro-gate-")
-    ) ? scanId : null;
-  } catch {
-    return null;
-  }
 }
 
 function getReceiptHandle(message: Message) {
@@ -906,18 +893,29 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
 
     const messageResults = await mapWithConcurrency(messages, RESULT_BATCH_CONCURRENCY, async (message) => {
       const rawMessage = messageBody(message);
-      const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
-      if (manualSmokeScanId) {
+      const disposition = classifyV2DagLambdaResultDisposition(rawMessage);
+      if (disposition.kind === "synthetic_verification") {
         await sqsClient.send(new DeleteMessageCommand({
           QueueUrl: queueUrl,
           ReceiptHandle: getReceiptHandle(message)
         }));
-        console.warn("[web] ignored manual local v2 DAG Lambda smoke result", {
+        console.warn("[web] acknowledged non-persistable local v2 DAG Lambda result", {
+          disposition: disposition.kind,
           messageId: message.MessageId ?? null,
           queueRegion: getSqsQueueRegion(queueUrl),
-          scanId: manualSmokeScanId
+          reason: disposition.reason,
+          scanId: disposition.scanId
         });
         return { deleted: 1, failed: 0, handled: 0 };
+      }
+      if (disposition.kind === "invalid") {
+        console.error("[web] rejected invalid local v2 DAG Lambda result identity", {
+          messageId: message.MessageId ?? null,
+          queueRegion: getSqsQueueRegion(queueUrl),
+          reason: disposition.reason,
+          scanId: disposition.scanId
+        });
+        return { deleted: 0, failed: 1, handled: 0 };
       }
       try {
         await handleMessage(rawMessage, {

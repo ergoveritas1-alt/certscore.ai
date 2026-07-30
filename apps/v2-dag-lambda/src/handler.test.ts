@@ -41,6 +41,7 @@ function validPayload(overrides: Record<string, unknown> = {}) {
     productionFindingIntegration: false,
     profile: "tiny",
     resultHandoff: "sqs",
+    resultPurpose: "synthetic_verification",
     resultQueueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results",
     scanId: "scan-local-1",
     scannerRuntime: "certscore-v2-dag-parallel-path",
@@ -59,6 +60,18 @@ test("handler validates local v2 DAG Lambda dispatch contract", () => {
   assert.equal(parsed.artifactOnly, true);
   assert.equal(parsed.productionFindingIntegration, false);
   assert.equal(parsed.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
+  assert.equal(parsed.resultPurpose, "synthetic_verification");
+});
+
+test("handler preserves the typed persisted-scan result purpose for UUID-backed product scans", () => {
+  const parsed = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    callbackCorrelationId: "49037835-190b-4e67-9fe2-426d51d55069",
+    resultPurpose: "persisted_scan",
+    scanId: "49037835-190b-4e67-9fe2-426d51d55069",
+  }));
+
+  assert.equal(parsed.resultPurpose, "persisted_scan");
+  assert.equal(parsed.scanId, "49037835-190b-4e67-9fe2-426d51d55069");
 });
 
 test("handler bounds and validates policy surface seeds", () => {
@@ -604,6 +617,7 @@ test("terminal SQS publication is bounded and aborts the SDK call", async () => 
         contractVersion: "certscore.v2.lambda-dag-result.v1",
         processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
         productionFindingIntegration: false,
+        resultPurpose: "synthetic_verification",
         scanId: "scan-local-1",
         status: "failed",
         targetEnvironment: "local"
@@ -635,6 +649,7 @@ test("terminal SQS publication retries a stalled send within its total deadline"
       contractVersion: "certscore.v2.lambda-dag-result.v1",
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
       productionFindingIntegration: false,
+      resultPurpose: "synthetic_verification",
       scanId: "scan-local-retry",
       status: "completed",
       targetEnvironment: "local"

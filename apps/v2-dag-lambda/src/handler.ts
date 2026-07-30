@@ -8,7 +8,14 @@ import path from "node:path";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { connect as tlsConnect } from "node:tls";
 import { chromium } from "playwright";
-import { canonicalEvidenceBundleSchema, type CanonicalEvidenceBundle, type ConsentFlowScenario, type ScreenshotArtifact } from "@certscore/contracts";
+import {
+  canonicalEvidenceBundleSchema,
+  classifyV2DagLambdaResultDisposition,
+  type CanonicalEvidenceBundle,
+  type ConsentFlowScenario,
+  type ScreenshotArtifact,
+  type V2DagLambdaResultPurpose,
+} from "@certscore/contracts";
 import {
   chromiumContextOptions,
   chromiumLaunchArgs,
@@ -59,6 +66,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
   debugOverrides?: LocalV2DagLambdaDebugOverrides;
   resultHandoff: "sqs";
+  resultPurpose: V2DagLambdaResultPurpose;
   resultQueueUrl: string;
   scanId: string;
   scannerRuntime: typeof LOCAL_V2_DAG_SCANNER_RUNTIME;
@@ -110,6 +118,7 @@ export type LocalV2DagLambdaResultMessage = {
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
+  resultPurpose: V2DagLambdaResultPurpose;
   scanId: string;
   scannerGitSha?: string;
   scannerImageTag?: string;
@@ -456,6 +465,14 @@ function parseQueueRegion(queueUrl: string): LocalV2DagLambdaAwsRegion {
 
 export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2DagLambdaDispatchPayload {
   const record = asRecord(typeof event === "string" ? JSON.parse(event) : event);
+  const scanId = requireString(record, "scanId");
+  const resultDisposition = classifyV2DagLambdaResultDisposition({
+    resultPurpose: record.resultPurpose,
+    scanId,
+  });
+  if (resultDisposition.kind === "invalid") {
+    throw new Error(`Local v2 DAG Lambda dispatch has an invalid result identity: ${resultDisposition.reason}.`);
+  }
   const coordinatorPlanSummary = parseCoordinatorPlanSummary(record.coordinatorPlanSummary);
   const debugOverrides = parseDebugOverrides(record.debugOverrides);
   const policySurfaceSeeds = parsePolicySurfaceSeeds(record.policySurfaceSeeds);
@@ -477,8 +494,9 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     ...(coordinatorPlanSummary ? { coordinatorPlanSummary } : {}),
     ...(debugOverrides ? { debugOverrides } : {}),
     resultHandoff: "sqs",
+    resultPurpose: resultDisposition.kind,
     resultQueueUrl: requireString(record, "resultQueueUrl"),
-    scanId: requireString(record, "scanId"),
+    scanId,
     scannerRuntime: LOCAL_V2_DAG_SCANNER_RUNTIME,
     ...(record.strongEvidenceMode === "webmd" || asRecord(record.debugOverrides).strongEvidenceMode === "webmd" ? { strongEvidenceMode: "webmd" as const } : {}),
     targetEnvironment: record.targetEnvironment === "production" ? "production" : "local",
@@ -2358,6 +2376,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
     ...(input.phaseTimings ? { phaseTimings: input.phaseTimings } : {}),
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
+    resultPurpose: input.payload.resultPurpose,
     scanId: input.payload.scanId,
     ...scannerBuildProvenance,
     scannerRuntimeProvenance,
