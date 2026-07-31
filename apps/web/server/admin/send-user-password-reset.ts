@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { sendPasswordSetupLink } from "../auth-flows/password-setup";
+import { sendPasswordResetLink } from "../auth-flows/password-setup";
 import { findBetterAuthUserByEmail, findAppUserProfileById } from "../users/repository";
 import { requirePlatformAdminContext } from "./platform-admin";
 
@@ -25,7 +25,7 @@ export async function sendUserPasswordResetFormAction(formData: FormData): Promi
     throw new Error("This user does not have an active login account.");
   }
 
-  await sendPasswordSetupLink(user.email);
+  await sendPasswordResetLink(user.email);
 
   revalidatePath("/app/admin/users");
   redirect("/app/admin/users?message=password_reset_sent");

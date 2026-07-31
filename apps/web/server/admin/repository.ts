@@ -787,6 +787,7 @@ export type AdminValidationVerdictRow = {
 };
 
 export type AdminUserRow = {
+  account_role: string;
   auth_provider: string;
   created_at: string;
   email: string;
@@ -1525,12 +1526,14 @@ export async function loadAdminUsersData(): Promise<{
               users.auth_provider,
               users.created_at,
               users.updated_at,
+              coalesce(login_activity.account_role, 'user') as account_role,
               login_activity.last_login_at
          from users
          left join lateral (
-           select max(better_auth_sessions.created_at) as last_login_at
+           select max(better_auth_users.role) as account_role,
+                  max(better_auth_sessions.created_at) as last_login_at
              from better_auth_users
-             join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
+             left join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
             where better_auth_users.email = users.email
          ) login_activity on true
         order by users.created_at desc`,
@@ -1589,9 +1592,10 @@ export async function loadAdminUsersPageData(limit: number, offset = 0): Promise
        ),
        login_activity as (
          select better_auth_users.email,
+                max(better_auth_users.role) as account_role,
                 max(better_auth_sessions.created_at) as last_login_at
            from better_auth_users
-           join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
+           left join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
            join selected_users on selected_users.email = better_auth_users.email
           group by better_auth_users.email
        )
@@ -1601,6 +1605,7 @@ export async function loadAdminUsersPageData(limit: number, offset = 0): Promise
               selected_users.auth_provider,
               selected_users.created_at,
               selected_users.updated_at,
+              coalesce(login_activity.account_role, 'user') as account_role,
               login_activity.last_login_at,
               selected_memberships.organization_id,
               selected_memberships.role as membership_role,
@@ -1670,6 +1675,7 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
               users.auth_provider,
               users.created_at,
               users.updated_at,
+              coalesce(login_activity.account_role, 'user') as account_role,
               login_activity.last_login_at,
               membership.organization_id,
               membership.role as membership_role,
@@ -1684,9 +1690,10 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
               user_activity.last_completed_scan_at
          from users
          left join lateral (
-           select max(better_auth_sessions.created_at) as last_login_at
+           select max(better_auth_users.role) as account_role,
+                  max(better_auth_sessions.created_at) as last_login_at
              from better_auth_users
-             join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
+             left join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
             where better_auth_users.email = users.email
          ) login_activity on true
          left join lateral (

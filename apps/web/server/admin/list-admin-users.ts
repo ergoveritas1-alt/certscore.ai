@@ -16,6 +16,7 @@ import {
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminUserListItem = {
+  accountRole: string;
   authProvider: string;
   completedScans: number;
   createdAt: string;
@@ -100,6 +101,7 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
     const organization = membership ? organizationMap.get(membership.organization_id) ?? null : null;
 
     return {
+      accountRole: user.account_role,
       id: user.id,
       email: user.email,
       fullName: user.full_name,
@@ -136,6 +138,7 @@ export async function listAdminUsersPage(limit = 25, offset = 0): Promise<{
 
 function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
   return {
+    accountRole: row.account_role,
     id: row.id,
     email: row.email,
     fullName: row.full_name,

@@ -79,23 +79,51 @@ test("platform admins can assign unassigned users to a workspace", async () => {
 
   assert.match(action, /requirePlatformAdminContext/);
   assert.match(action, /addCompanyMembership/);
+  assert.match(action, /role: parsed\.role/);
+  assert.match(action, /updateAdminOrganizationPlan/);
+  assert.match(action, /if \(parsed\.plan\)/);
   assert.match(action, /organizationId/);
   assert.match(action, /revalidatePath\("\/app\/admin\/users"\)/);
   assert.match(page, /Assign workspace/);
   assert.match(page, /assignUserWorkspaceFormAction/);
+  assert.match(page, /form=\{assignmentFormId\}/);
+  assert.match(page, /name="role"/);
+  assert.match(page, /Keep workspace plan/);
+  assert.match(page, /name="planStatus"/);
 });
 
-test("new accounts and admin-created users stay unassigned until explicit assignment", async () => {
+test("new admin-created accounts receive a workspace and default user access", async () => {
   const bootstrap = await readFile("apps/web/server/bootstrap-user.ts", "utf8");
   const adminUsersPage = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
   const adminCreateAction = await readFile("apps/web/server/admin/create-user.ts", "utf8");
+  const userRepository = await readFile("apps/web/server/users/repository.ts", "utf8");
 
   assert.doesNotMatch(bootstrap, /createOrganizationMembership|createOrganization\(/);
   assert.match(adminUsersPage, /createAdminUserFormAction/);
   assert.doesNotMatch(adminUsersPage, /name="companyId"/);
   assert.match(adminCreateAction, /requirePlatformAdminContext/);
+  assert.match(adminCreateAction, /role: DEFAULT_NEW_MEMBERSHIP_ROLE/);
+  assert.match(adminCreateAction, /createOrganizationForUser/);
+  assert.match(adminCreateAction, /createUserWorkspaceIdentity/);
   assert.match(adminCreateAction, /sendPasswordSetupLink/);
-  assert.doesNotMatch(adminCreateAction, /addCompanyMembership/);
+  assert.match(adminCreateAction, /message=user_created/);
+  assert.match(adminCreateAction, /existing_user_workspace_created/);
+  assert.match(adminUsersPage, /User and workspace created successfully/);
+  assert.match(userRepository, /with created_organization as/);
+  assert.match(userRepository, /created_membership as/);
+});
+
+test("unassigned admin-created users retain and display their default user access level", async () => {
+  const adminUsersPage = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
+  const adminRepository = await readFile("apps/web/server/admin/repository.ts", "utf8");
+  const adminUserList = await readFile("apps/web/server/admin/list-admin-users.ts", "utf8");
+
+  assert.match(adminRepository, /coalesce\(login_activity\.account_role, 'user'\) as account_role/);
+  assert.match(adminRepository, /left join better_auth_sessions/);
+  assert.match(adminUserList, /accountRole: row\.account_role/);
+  assert.match(adminUsersPage, /aria-label=\{`Access level for \$\{user\.email\}`\}/);
+  assert.match(adminUsersPage, /defaultValue="user"/);
+  assert.doesNotMatch(adminUsersPage, />Not assigned</);
 });
 
 test("platform admins can send an existing user a password reset email", async () => {
@@ -105,11 +133,25 @@ test("platform admins can send an existing user a password reset email", async (
 
   assert.match(action, /requirePlatformAdminContext/);
   assert.match(action, /findBetterAuthUserByEmail/);
-  assert.match(action, /sendPasswordSetupLink/);
+  assert.match(action, /sendPasswordResetLink/);
   assert.match(action, /password_reset_sent/);
   assert.match(page, /Send reset link/);
   assert.match(page, /Password reset email sent/);
-  assert.match(auth, /Reset your CertScore\.ai password/);
+  assert.match(auth, /buildPasswordEmailContent/);
+});
+
+test("admin-created accounts receive welcome copy while reset actions retain reset copy", async () => {
+  const createAction = await readFile("apps/web/server/admin/create-user.ts", "utf8");
+  const resetAction = await readFile("apps/web/server/admin/send-user-password-reset.ts", "utf8");
+  const setup = await readFile("apps/web/server/auth-flows/password-setup.ts", "utf8");
+  const content = await readFile("apps/web/server/auth-flows/password-email-content.ts", "utf8");
+
+  assert.match(createAction, /sendPasswordSetupLink/);
+  assert.match(resetAction, /sendPasswordResetLink/);
+  assert.match(setup, /"account_setup"/);
+  assert.match(setup, /"password_reset"/);
+  assert.match(content, /Welcome to CertScore\.ai — set your password/);
+  assert.match(content, /Reset your CertScore\.ai password/);
 });
 
 test("admin user activity counts are scoped to the user who submitted the scan", async () => {

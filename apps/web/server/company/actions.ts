@@ -17,6 +17,7 @@ import {
   updateCompanyMembershipRole
 } from "./repository";
 import { requirePlatformAdminContext } from "../admin/platform-admin";
+import { createWorkspaceSlug } from "./workspace-identity";
 
 const companySchema = z.object({
   name: z.string().trim().min(2).max(120)
@@ -36,18 +37,6 @@ const membershipSchema = z.object({
 function formValue(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value : "";
-}
-
-function slugifyWorkspaceName(name: string) {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 71) || "workspace";
-}
-
-function createWorkspaceSlug(name: string) {
-  return `${slugifyWorkspaceName(name)}-${randomUUID().slice(0, 8)}`;
 }
 
 function revalidateCompany(organizationId: string) {

@@ -10,6 +10,8 @@ import {
   isPublicAccountCreationEnabled
 } from "../access-control";
 import { findBetterAuthUserById } from "../users/repository";
+import { buildPasswordEmailContent } from "../auth-flows/password-email-content";
+import { getPasswordEmailPurpose } from "../auth-flows/password-email-purpose";
 import { BETTER_AUTH_COOKIE_PREFIX, BETTER_AUTH_SESSION_COOKIE_NAME } from "./constants";
 import { getBetterAuthBaseURLConfig, getBetterAuthEnv } from "./env";
 
@@ -118,24 +120,24 @@ function createAuth(): BetterAuthInstance {
         }
 
         const transporter = createGmailTransport(gmailConfig);
+        const purpose = getPasswordEmailPurpose();
+        const content = buildPasswordEmailContent({
+          email: user.email,
+          purpose,
+          url
+        });
 
         const delivery = await transporter.sendMail({
           from: `"CertScore.ai" <${gmailConfig.fromEmail}>`,
-          subject: "Reset your CertScore.ai password",
-          text: [
-            "We received a request to reset your CertScore.ai password.",
-            "",
-            "Use this secure link to choose a new password:",
-            url,
-            "",
-            `If you did not request a reset for ${user.email}, you can ignore this email.`
-          ].join("\n"),
+          subject: content.subject,
+          text: content.text,
           to: user.email
         });
-        console.info("Password setup email sent", {
+        console.info("Password email sent", {
           accepted: delivery.accepted,
           email: user.email,
           messageId: delivery.messageId,
+          purpose,
           rejected: delivery.rejected
         });
       }

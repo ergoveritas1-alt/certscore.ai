@@ -5,11 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode, type SVGProps } from "react";
 import { FOOTER_COPYRIGHT_COPY, FOOTER_DISCLAIMER_COPY } from "../layout/footer-copy";
-import {
-  isScanReportPath,
-  LAST_SCAN_REPORT_PATH_STORAGE_KEY,
-  resolveScanViewHref
-} from "./scan-view-navigation";
+import { isScanReportPath, resolveScanViewHref } from "./scan-view-navigation";
 
 type NavIconProps = SVGProps<SVGSVGElement>;
 
@@ -164,12 +160,7 @@ export function AppShell({
 }: AppShellProps) {
   const pathname = usePathname() ?? "";
   const scanReportPathActive = isScanReportPath(pathname);
-  const [lastScanReportPath, setLastScanReportPath] = useState<string | null>(
-    scanReportPathActive ? pathname : null
-  );
-  const scanViewHref = resolveScanViewHref(
-    scanReportPathActive ? pathname : lastScanReportPath
-  );
+  const scanViewHref = resolveScanViewHref(scanReportPathActive ? pathname : null);
   const userInitial = userEmail.slice(0, 1).toUpperCase();
   const displayOrganizationName = isPlatformAdmin ? organizationName.replace(/\s+workspace$/i, "") : "Your account";
   const displayPlan =
@@ -186,23 +177,6 @@ export function AppShell({
     ...(canManageCompany ? [{ href: "/app/settings/company", label: "Manage workspace", icon: CompanyIcon }] : []),
     ...(isPlatformAdmin ? [{ href: "/app/admin", label: "Admin", icon: ShieldIcon }] : [])
   ];
-
-  useEffect(() => {
-    if (scanReportPathActive) {
-      setLastScanReportPath(pathname);
-      window.localStorage.setItem(LAST_SCAN_REPORT_PATH_STORAGE_KEY, pathname);
-      return;
-    }
-
-    if (lastScanReportPath) {
-      return;
-    }
-
-    const storedScanReportPath = window.localStorage.getItem(LAST_SCAN_REPORT_PATH_STORAGE_KEY);
-    if (isScanReportPath(storedScanReportPath ?? "")) {
-      setLastScanReportPath(storedScanReportPath);
-    }
-  }, [lastScanReportPath, pathname, scanReportPathActive]);
 
   useEffect(() => {
     setAccountMenuOpen(false);

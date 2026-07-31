@@ -1,5 +1,3 @@
-export const LAST_SCAN_REPORT_PATH_STORAGE_KEY = "certscore:last-scan-report-path";
-
 const SCAN_REPORT_PATH_PATTERN = /^\/app\/scans\/[^/]+\/?$/;
 
 export function isScanReportPath(pathname: string) {

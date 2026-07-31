@@ -1,21 +1,17 @@
 "use client";
 
-import { PLAN_CODES } from "@website-signal-risk-scanner/shared/constants/plans";
 import { useFormStatus } from "react-dom";
+import {
+  ADMIN_PLAN_LABELS,
+  ADMIN_PLAN_STATUSES,
+  PLAN_CODES
+} from "../../lib/admin/plan-options";
 
 type OrganizationPlanFormProps = {
   action: (formData: FormData) => Promise<void>;
   defaultPlan: "free" | "individual" | "pro" | "team";
   defaultPlanStatus: "active" | "trialing" | "past_due" | "paused";
   organizationId: string;
-};
-
-const PLAN_STATUSES = ["active", "trialing", "past_due", "paused"] as const;
-const PLAN_LABELS: Record<(typeof PLAN_CODES)[number], string> = {
-  free: "Trial",
-  individual: "Starter",
-  pro: "Pro",
-  team: "Custom",
 };
 
 function PlanControls(props: Pick<OrganizationPlanFormProps, "defaultPlan" | "defaultPlanStatus">) {
@@ -32,7 +28,7 @@ function PlanControls(props: Pick<OrganizationPlanFormProps, "defaultPlan" | "de
       >
         {PLAN_CODES.map((plan) => (
           <option key={plan} value={plan}>
-            {PLAN_LABELS[plan]}
+            {ADMIN_PLAN_LABELS[plan]}
           </option>
         ))}
       </select>
@@ -43,7 +39,7 @@ function PlanControls(props: Pick<OrganizationPlanFormProps, "defaultPlan" | "de
         name="planStatus"
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
       >
-        {PLAN_STATUSES.map((status) => (
+        {ADMIN_PLAN_STATUSES.map((status) => (
           <option key={status} value={status}>
             {status}
           </option>

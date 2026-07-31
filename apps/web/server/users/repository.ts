@@ -182,6 +182,43 @@ export async function createOrganizationMembership(input: {
   }
 }
 
+export async function createOrganizationForUser(input: {
+  name: string;
+  role: AssignableMembershipRole;
+  slug: string;
+  userId: string;
+}): Promise<{ membershipId: string; organizationId: string }> {
+  try {
+    const row = await queryOne<{ membership_id: string; organization_id: string }>(
+      `with created_organization as (
+         insert into organizations (name, slug)
+         values ($1, $2)
+         returning id
+       ),
+       created_membership as (
+         insert into organization_members (organization_id, user_id, role)
+         select id, $3, $4 from created_organization
+         returning id, organization_id
+       )
+       select id as membership_id, organization_id
+         from created_membership`,
+      [input.name, input.slug, input.userId, input.role]
+    );
+
+    if (!row) {
+      throw new Error("Unknown error");
+    }
+
+    return {
+      membershipId: row.membership_id,
+      organizationId: row.organization_id
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown database error.";
+    throw new Error(`Failed to create the user's workspace: ${message}`);
+  }
+}
+
 export async function findOrganizationById(organizationId: string): Promise<AppOrganizationRow> {
   try {
     const row = await queryOne<AppOrganizationRow>(

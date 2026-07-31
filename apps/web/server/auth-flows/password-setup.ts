@@ -1,6 +1,10 @@
 import { headers } from "next/headers";
 import { getAuth } from "../better-auth/auth";
 import { createGmailTransport, getGmailConfig } from "../email/gmail";
+import {
+  type PasswordEmailPurpose,
+  withPasswordEmailPurpose
+} from "./password-email-purpose";
 
 function getRequestOrigin(headerStore: Headers) {
   const forwardedHost = headerStore.get("x-forwarded-host")?.trim();
@@ -14,7 +18,7 @@ function getRequestOrigin(headerStore: Headers) {
   return `${protocol}://${host}`;
 }
 
-export async function sendPasswordSetupLink(email: string) {
+async function sendPasswordLink(email: string, purpose: PasswordEmailPurpose) {
   const gmailConfig = getGmailConfig();
   if (!gmailConfig) {
     throw new Error("Email delivery is not configured. Set GMAIL_SMTP_USER and GMAIL_SMTP_APP_PASSWORD.");
@@ -24,11 +28,21 @@ export async function sendPasswordSetupLink(email: string) {
   const headerStore = await headers();
   const requestOrigin = getRequestOrigin(headerStore);
 
-  await getAuth().api.requestPasswordReset({
-    body: {
-      email,
-      redirectTo: `${requestOrigin}/reset-password/update`
-    },
-    headers: headerStore
-  });
+  await withPasswordEmailPurpose(purpose, () =>
+    getAuth().api.requestPasswordReset({
+      body: {
+        email,
+        redirectTo: `${requestOrigin}/reset-password/update`
+      },
+      headers: headerStore
+    })
+  );
+}
+
+export function sendPasswordSetupLink(email: string) {
+  return sendPasswordLink(email, "account_setup");
+}
+
+export function sendPasswordResetLink(email: string) {
+  return sendPasswordLink(email, "password_reset");
 }

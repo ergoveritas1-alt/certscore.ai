@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   isScanReportPath,
@@ -23,4 +24,12 @@ test("links directly to the last valid report and otherwise uses the resolver ro
   );
   assert.equal(resolveScanViewHref("/app/settings"), "/app/signals");
   assert.equal(resolveScanViewHref(null), "/app/signals");
+});
+
+test("scan navigation does not retain a report path across accounts", async () => {
+  const appShell = await readFile("apps/web/components/dashboard/app-shell.tsx", "utf8");
+
+  assert.doesNotMatch(appShell, /localStorage/);
+  assert.doesNotMatch(appShell, /LAST_SCAN_REPORT_PATH_STORAGE_KEY/);
+  assert.match(appShell, /resolveScanViewHref\(scanReportPathActive \? pathname : null\)/);
 });
