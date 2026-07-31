@@ -117,15 +117,7 @@ async function readLogsWithRetry(input: { logGroup: string; marker: string; regi
   let lastError: unknown;
   for (let attempt = 0; attempt < 30; attempt += 1) {
     try {
-      const payload = parseJson<{ events?: Array<{ message?: string }> }>(await aws([
-        "logs", "get-log-events",
-        "--region", input.region,
-        "--log-group-name", input.logGroup,
-        "--log-stream-name", input.streamName,
-        "--start-from-head",
-        "--output", "json",
-      ]));
-      const logs = payload.events?.map((event) => event.message).filter((message): message is string => Boolean(message)).join("\n") ?? "";
+      const logs = await readAllLogEvents(input);
       if (hasCompleteMarkedOutput(logs, input.marker)) return logs;
     } catch (error) {
       lastError = error;
@@ -137,8 +129,36 @@ async function readLogsWithRetry(input: { logGroup: string; marker: string; regi
     : new Error(`Production DB one-off logs did not contain the complete ${input.marker} output`);
 }
 
+async function readAllLogEvents(input: { logGroup: string; region: string; streamName: string }) {
+  const messages: string[] = [];
+  let nextToken: string | undefined;
+  let previousToken: string | undefined;
+  for (let page = 0; page < 100; page += 1) {
+    const payload = parseJson<{
+      events?: Array<{ message?: string }>;
+      nextForwardToken?: string;
+    }>(await aws([
+      "logs", "get-log-events",
+      "--region", input.region,
+      "--log-group-name", input.logGroup,
+      "--log-stream-name", input.streamName,
+      "--start-from-head",
+      ...(nextToken ? ["--next-token", nextToken] : []),
+      "--output", "json",
+    ]));
+    messages.push(...(payload.events ?? [])
+      .map((event) => event.message)
+      .filter((message): message is string => Boolean(message)));
+    const forwardToken = payload.nextForwardToken;
+    if (!forwardToken || forwardToken === previousToken || forwardToken === nextToken) break;
+    previousToken = nextToken;
+    nextToken = forwardToken;
+  }
+  return messages.join("\n");
+}
+
 async function aws(args: string[]) {
-  const { stdout } = await execFileAsync("aws", args, { maxBuffer: 30 * 1024 * 1024 });
+  const { stdout } = await execFileAsync("aws", args, { maxBuffer: 64 * 1024 * 1024 });
   return stdout;
 }
 

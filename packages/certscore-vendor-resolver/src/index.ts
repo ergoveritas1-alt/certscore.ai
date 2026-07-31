@@ -6,7 +6,17 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-20-wave19-ifit-attribution";
+export {
+  isCanonicalIdSyncEndpoint,
+  resolveCanonicalCookieKnowledge,
+  resolveCanonicalVendorLegalContext,
+  type CanonicalCookieCategory,
+  type CanonicalCookieKnowledge,
+  type CanonicalVendorLegalContext,
+  type TransferMechanism,
+} from "./cookie-knowledge-base";
+
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-30-wave20-amazon-ownership";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -98,6 +108,7 @@ export type VendorDisplayCategory =
   | "CDN"
   | "Cookie compliance"
   | "Customer support"
+  | "Embedded media"
   | "Marketing automation"
   | "Payment processors"
   | "Performance monitoring"
@@ -125,6 +136,8 @@ export type CanonicalVendorLabelResolution = {
   vendor: string;
 };
 
+export type CanonicalEntityOwnerResolution = CanonicalVendorLabelResolution;
+
 interface VendorRule {
   entity: string;
   vendor: string;
@@ -148,6 +161,28 @@ interface VendorRule {
 }
 
 const rules: VendorRule[] = [
+  {
+    entity: "Drupal",
+    vendor: "Drupal",
+    product: "Drupal EU Cookie Compliance module, non-TCF",
+    purpose: "consent_management",
+    regulatoryRelevance: ["consent_management", "preference_tooling"],
+    confidence: 0.96,
+    urlPatterns: [
+      /(?:^|\/)modules\/contrib\/eu_cookie_compliance(?:\/|[?#]|$)/i,
+      /(?:^|\/)libraries\/eu_cookie_compliance(?:\/|[?#]|$)/i,
+      /eu_cookie_compliance(?:\.min)?\.js(?:[?#]|$)/i,
+    ],
+    cookiePatterns: [/^cookie-agreed(?:-.+)?$/i],
+    globalPatterns: [/^drupalSettings\.eu_cookie_compliance$/i],
+    domSelectorPatterns: [
+      /^#sliding-popup$/i,
+      /^\.eu-cookie-compliance-banner$/i,
+      /^\[id\*=['"]?eu-cookie-compliance/i,
+      /^\[class\*=['"]?eu-cookie-compliance/i,
+    ],
+    basisLabel: "drupal_eu_cookie_compliance_module",
+  },
   {
     entity: "Borlabs GmbH",
     vendor: "Borlabs",
@@ -367,6 +402,19 @@ const rules: VendorRule[] = [
     urlPatterns: [/\/b\/ss\//i, /[?&]AQB=1\b/i],
     cookiePatterns: [/^s_ecid$/i, /^AMCV_/i, /^s_vi$/i],
     basisLabel: "adobe_analytics_or_experience_cloud_endpoint",
+  },
+  {
+    entity: "Amazon.com, Inc.",
+    vendor: "Amazon",
+    product: "Amazon Retail",
+    aliases: ["Amazon.de"],
+    purpose: "infrastructure",
+    regulatoryRelevance: ["service_delivery", "first_party_runtime", "retail_platform"],
+    confidence: 0.99,
+    hostPatterns: [/^(?:www\.)?amazon\.de$/i],
+    cookiePatterns: [/^ubid(?:-[a-z0-9]+)?$/i],
+    requireHostPatternForCookieMatch: true,
+    basisLabel: "amazon_de_retail_site_or_ubid_cookie",
   },
   {
     entity: "Amazon.com, Inc.",
@@ -4131,6 +4179,15 @@ export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput):
   if (/piano|tinypass|cxense|personalization|personalisation|paywall|subscription|audience_management/.test(haystack)) {
     return "Personalisation";
   }
+  if (
+    (
+      /\bembedded_content\b|\bsocial_embed\b|\bvideo_player\b/.test(relevance) &&
+      /\bembed(?:ded)?\b|\bplayer\b|\bwidget\b/.test(label)
+    ) ||
+    /\bvideo_player\b|\bsocial_embed\b/.test(purpose)
+  ) {
+    return "Embedded media";
+  }
   if (/jsdelivr|cdn\b|font_delivery|content delivery/.test(haystack)) {
     return "CDN";
   }
@@ -4329,6 +4386,38 @@ export function resolveEndpointGeography(
   return {
     basis: ["host_only_endpoint_geography", "no_explicit_region_in_hostname"],
     status: "unknown",
+  };
+}
+
+/**
+ * Resolves legal-entity ownership from a canonical registry hostname match.
+ * Product attribution remains path-bounded in resolveVendorObservations; this
+ * owner-only projection is used for party and entity consolidation.
+ */
+export function resolveCanonicalEntityOwner(
+  value: string | null | undefined
+): CanonicalEntityOwnerResolution | null {
+  const hostname = normalizeHostname(value?.trim().replace(/^\.+/, ""));
+  if (!hostname) {
+    return null;
+  }
+  const candidates = rules.filter((rule) => (
+    matchesAny(hostname, rule.hostPatterns) &&
+    !matchesAny(hostname, rule.excludeHostPatterns)
+  ));
+  if (candidates.length === 0 || new Set(candidates.map((rule) => rule.entity)).size !== 1) {
+    return null;
+  }
+  const primaryRule = candidates.reduce((best, rule) => rule.confidence > best.confidence ? rule : best);
+  return {
+    basis: `${primaryRule.basisLabel}:canonical_entity_owner`,
+    confidence: primaryRule.confidence,
+    displayCategory: resolveVendorDisplayCategory(primaryRule),
+    entity: primaryRule.entity,
+    product: primaryRule.product,
+    purpose: primaryRule.purpose,
+    regulatoryRelevance: unique(candidates.flatMap((rule) => rule.regulatoryRelevance)),
+    vendor: primaryRule.vendor
   };
 }
 

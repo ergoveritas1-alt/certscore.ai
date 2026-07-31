@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { deriveConsentControlAssessment } from "@certscore/contracts";
 
 import {
   buildNormalizedConcerns,
@@ -83,6 +84,227 @@ function makeMissingBridgePolicyRuntimeEvidence(runtimeOverride: Record<string, 
     policyRuntimeBridgeCandidates: []
   };
 }
+
+function makeConsentOptionsAssessment(input: {
+  firstLayer?: Array<{
+    actionType: "accept_all" | "reject_all" | "manage_preferences";
+    intent: "accept" | "reject" | "options";
+    label: string;
+    presentationType?: "dedicated_button" | "inline_link" | "unknown";
+  }>;
+  persistentOptions?: boolean;
+}) {
+  const finalUrl = "https://consent-options.example/";
+  return deriveConsentControlAssessment({
+    scan: {
+      scanId: "scan-consent-options",
+      requestedUrl: finalUrl,
+      finalUrl,
+      scanStatus: "completed",
+      noGo: false
+    },
+    document: {
+      canonicalDocumentId: finalUrl,
+      observedDocumentIds: [finalUrl],
+      identityStatus: "matched"
+    },
+    observations: [{
+      observationId: "first-layer",
+      observedAtMs: 100,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      documentId: finalUrl,
+      captureStatus: "observed",
+      completedChannels: ["dom_inventory"],
+      controls: (input.firstLayer ?? []).map((control, index) => ({
+        ...control,
+        evidenceId: `first-layer-${index}`,
+        layer: "first_layer" as const,
+        visible: true,
+        actionable: true,
+        artifactRefs: ["CanonicalEvidenceBundle.json"]
+      }))
+    }],
+    geometry: {
+      assessmentStatus: "complete",
+      documentId: finalUrl,
+      completedChannels: ["geometry"],
+      incompleteChannels: [],
+      candidates: input.persistentOptions ? [{
+        actionType: "manage_preferences",
+        evidenceId: "footer-cookie-settings",
+        intent: "options",
+        label: "Cookie Settings",
+        layer: "deeper_layer",
+        presentationType: "persistent_link",
+        visible: true,
+        actionable: true,
+        artifactRefs: ["ConsentControlGeometry.json"]
+      }] : []
+    },
+    surface: {
+      status: "observed_actionable",
+      evidenceRefs: ["CanonicalEvidenceBundle.json"]
+    },
+    coverage: {
+      status: "complete",
+      requiredChannels: ["dom_inventory", "geometry"],
+      completedChannels: ["dom_inventory", "geometry"],
+      incompleteChannels: []
+    }
+  });
+}
+
+test("normalizes consent options prominence before concern policy assigns checklist eligibility", () => {
+  const cases = [
+    {
+      expectedEligibility: "observed",
+      expectedState: "dedicated_button",
+      assessment: makeConsentOptionsAssessment({
+        firstLayer: [{
+          actionType: "manage_preferences",
+          intent: "options",
+          label: "Cookie settings",
+          presentationType: "dedicated_button"
+        }]
+      })
+    },
+    {
+      expectedEligibility: "review_signal",
+      expectedState: "inline_link",
+      assessment: makeConsentOptionsAssessment({
+        firstLayer: [{
+          actionType: "manage_preferences",
+          intent: "options",
+          label: "Cookie Consent Tool",
+          presentationType: "inline_link"
+        }]
+      })
+    },
+    {
+      expectedEligibility: "review_signal",
+      expectedState: "persistent_link",
+      assessment: makeConsentOptionsAssessment({
+        firstLayer: [{
+          actionType: "accept_all",
+          intent: "accept",
+          label: "Accept all"
+        }],
+        persistentOptions: true
+      })
+    },
+    {
+      expectedEligibility: "review_signal",
+      expectedState: "balanced_accept_decline_no_first_layer_settings",
+      assessment: makeConsentOptionsAssessment({
+        firstLayer: [
+          { actionType: "accept_all", intent: "accept", label: "Accept all" },
+          { actionType: "reject_all", intent: "reject", label: "Decline" }
+        ]
+      })
+    },
+    {
+      expectedEligibility: "gap_observed",
+      expectedState: "no_granular_controls_retained",
+      assessment: makeConsentOptionsAssessment({
+        firstLayer: [
+          { actionType: "accept_all", intent: "accept", label: "Accept all" }
+        ]
+      })
+    }
+  ] as const;
+
+  for (const testCase of cases) {
+    const concerns = buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts: {
+        consentControlAssessment: testCase.assessment
+      },
+      validationFindings: []
+    });
+    const concern = concerns.find((candidate) =>
+      candidate.originKey.startsWith("consent.options_control_prominence.")
+    );
+    assert.ok(concern, testCase.expectedState);
+    assert.equal(concern.observedValue, testCase.expectedState);
+    assert.equal(
+      concern.evidenceBundle.rawEvidence?.consentOptionsControlProminenceState,
+      testCase.expectedState
+    );
+    assert.equal(concern.regulatoryChecklistEligibility, testCase.expectedEligibility);
+    assert.equal(concern.promotionEligibility, "internal_only");
+    assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  }
+});
+
+test("normalizes a retained paid decline variant as a checklist-only review signal", () => {
+  const assessment = deriveConsentControlAssessment({
+    scan: {
+      scanId: "scan-paid-decline",
+      requestedUrl: "https://example.com/",
+      finalUrl: "https://example.com/",
+      scanStatus: "completed",
+      noGo: false
+    },
+    document: {
+      canonicalDocumentId: "https://example.com/",
+      observedDocumentIds: ["https://example.com/"],
+      identityStatus: "matched"
+    },
+    observations: [{
+      observationId: "first-layer",
+      observedAtMs: 100,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      documentId: "https://example.com/",
+      captureStatus: "observed",
+      completedChannels: ["dom_inventory"],
+      controls: [{
+        actionType: "other",
+        controlVariant: "reject_with_subscription",
+        evidenceId: "paid-decline",
+        label: "Reject and subscribe",
+        layer: "first_layer",
+        visible: true,
+        actionable: true,
+        artifactRefs: ["CanonicalEvidenceBundle.json"]
+      }]
+    }],
+    geometry: {
+      assessmentStatus: "complete",
+      documentId: "https://example.com/",
+      completedChannels: ["geometry"],
+      incompleteChannels: [],
+      candidates: []
+    },
+    surface: {
+      status: "observed_actionable",
+      evidenceRefs: ["CanonicalEvidenceBundle.json"]
+    },
+    coverage: {
+      status: "complete",
+      requiredChannels: ["dom_inventory", "geometry"],
+      completedChannels: ["dom_inventory", "geometry"],
+      incompleteChannels: []
+    }
+  });
+
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: { consentControlAssessment: assessment },
+    validationFindings: []
+  });
+  const concern = concerns.find((candidate) =>
+    candidate.originKey === "consent.paid_decline_path.reject_with_subscription"
+  );
+
+  assert.ok(concern);
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(concern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  assert.equal(concern.evidenceBundle.rawEvidence?.consentPaidDeclinePathEvidence, true);
+});
 
 test("normalizes snapshot signal candidates into eligible concerns", () => {
   const concerns = buildNormalizedConcerns({
@@ -1556,7 +1778,12 @@ function makeApprovedGdprTransparencyArticle13Signal(
   } = {}
 ) {
   const disclosureType = input.disclosureType ?? "legal_basis";
-  const evidenceText = input.evidenceText ?? "La base juridica del tratamiento de datos personales incluye el consentimiento y el contrato.";
+  const isProcessingPurposes = disclosureType === "processing_purposes";
+  const evidenceText = input.evidenceText ?? (
+    isProcessingPurposes
+      ? "Utilizamos sus datos personales para prestar los servicios solicitados y responder a sus solicitudes."
+      : "La base juridica del tratamiento de datos personales incluye el consentimiento y el contrato."
+  );
   return {
     classifierProvenance: "gdpr_transparency_topic_classifier.v1",
     classifierReasonCodes: [`matched_${disclosureType}`],
@@ -1566,7 +1793,7 @@ function makeApprovedGdprTransparencyArticle13Signal(
     evidenceText,
     matchStrength: "direct",
     matchedLocale: input.matchedLocale ?? "es",
-    matchedTerm: "base juridica",
+    matchedTerm: isProcessingPurposes ? "utilizamos sus datos personales para" : "base juridica",
     productionCredit: input.productionCredit ?? true,
     productionCreditProfile: input.productionCreditProfile ?? "gdpr_transparency_multilingual_article13_v1",
     selectedEvidenceStrength: "strong",
@@ -1760,6 +1987,108 @@ test("ambiguous GDPR Transparency Article 13 evidence receives no checklist cred
   assert.equal(concern.regulatoryChecklistEligibility, "none");
 });
 
+test("GDPR Transparency concerns keep stale transfer frameworks as review-only evidence", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      scanStartedAt: "2026-07-25T12:00:00.000Z",
+      policyDisclosureSummary: makeGdprTransparencyPolicyDisclosureSummary({
+        signals: [
+          makeApprovedGdprTransparencyArticle13Signal({
+            disclosureType: "international_transfers",
+            evidenceText: "Our payment provider is certified under the EU-US Privacy Shield.",
+          }),
+        ],
+      }),
+    },
+    validationFindings: [],
+  });
+  const concern = concerns.find((item) =>
+    item.originKey === "gdpr_transparency.article13.international_transfers"
+  );
+
+  assert.ok(concern);
+  assert.equal(concern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(
+    concern.evidenceBundle.rawEvidence?.staleLegalFrameworkReferenceObserved,
+    true,
+  );
+  assert.deepEqual(
+    concern.negativeEvidenceFlags,
+    ["stale_legal_framework_reference_observed"],
+  );
+});
+
+test("retained discarded policy evidence creates a stale legal-framework review concern", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        legalFrameworkValidityMatches: [
+          {
+            canonicalId: "eu_us_privacy_shield",
+            canonicalName: "EU-US Privacy Shield",
+            canonicalStatus: "invalidated",
+            effectiveFrom: "2016-07-12",
+            evidenceText:
+              "Our payment provider is certified under the EU-US Privacy Shield.",
+            invalidatedFrom: "2020-07-16",
+            matchedAlias: "EU-US Privacy Shield",
+            reviewMessage:
+              "An obsolete EU-US Privacy Shield reference was observed.",
+            sourceUrl: "https://example.test/privacy",
+            statusAtScan: "invalidated",
+            subjectArea: "international_data_transfers"
+          }
+        ],
+        staleLegalFrameworkReferenceObserved: true
+      }
+    },
+    validationFindings: []
+  });
+  const concern = concerns.find((item) =>
+    item.originKey ===
+    "gdpr_transparency.legal_framework_validity.eu_us_privacy_shield"
+  );
+
+  assert.ok(concern);
+  assert.equal(concern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  assert.deepEqual(concern.negativeEvidenceFlags, [
+    "stale_legal_framework_reference_observed"
+  ]);
+  assert.match(concern.evidenceBundle.policySnippets[0] ?? "", /Privacy Shield/i);
+});
+
+test("off-topic Privacy Shield wording receives no processing-purposes checklist credit", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      scanStartedAt: "2026-07-25T12:00:00.000Z",
+      policyDisclosureSummary: makeGdprTransparencyPolicyDisclosureSummary({
+        signals: [
+          makeApprovedGdprTransparencyArticle13Signal({
+            disclosureType: "processing_purposes",
+            evidenceText: "Our payment provider is certified under the EU-US Privacy Shield.",
+          }),
+        ],
+      }),
+    },
+    validationFindings: [],
+  });
+  const concern = concerns.find((item) =>
+    item.originKey === "gdpr_transparency.article13.processing_purposes"
+  );
+
+  assert.ok(concern);
+  assert.equal(concern.regulatoryChecklistEligibility, "none");
+  assert.equal(
+    concern.evidenceBundle.rawEvidence?.processingPurposesEvidenceSubstantive,
+    false,
+  );
+});
+
 test("missing GDPR Transparency classifier evidence alone does not create Article 13 gaps", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],
@@ -1839,6 +2168,102 @@ test("English legacy normalized concern behavior is preserved with legacy Articl
   );
   assert.equal(
     withLegacyArticle13Summary.some((concern) => concern.originKey.startsWith("gdpr_transparency.article13.")),
+    false
+  );
+});
+
+function makeProductionPolicyModelReviewArtifact(
+  overrides: Record<string, unknown> = {}
+) {
+  return {
+    contractVersion: "policy_model_review.v2",
+    mode: "enforced",
+    status: "completed",
+    scanId: "scan-model-review-1",
+    cacheKey: "a".repeat(64),
+    rows: [
+      {
+        topic: "legal_basis",
+        status: "observed",
+        confidence: 0.96,
+        sourceDocumentIds: ["policy-1"],
+        sourceUrls: ["https://example.com/privacy"],
+        evidenceExcerpts: [
+          "We process personal data based on consent, contract, and legal obligations."
+        ],
+        conflictingExcerpts: [],
+        reasonCodes: ["policy_review_invariants_applied_v1"],
+        rationale:
+          "A directly relevant legal-basis passage passed the production invariants."
+      }
+    ],
+    deterministicLegalFrameworkSignals: [],
+    deterministicPolicyReviewSignals: [],
+    failureReason: null,
+    provenance: {
+      role: "review",
+      provider: "openai",
+      requestedModel: "gpt-5.4-mini",
+      resolvedModel: "gpt-5.4-mini",
+      taskType: "policy_semantic_review",
+      promptVersion: "policy_semantic_review.v2",
+      schemaVersion: "policy_semantic_review_output.v2",
+      inputRefs: ["policy-1"],
+      outputRefs: ["policy-1"],
+      contentHash: "b".repeat(64),
+      confidence: 0.96,
+      reasonCodes: ["approved_precision_first_production_projection_v1"],
+      uncertaintyNotes: [],
+      latencyMs: 10,
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+      usedForProductionProjection: true
+    },
+    productionEligible: true,
+    ...overrides
+  };
+}
+
+test("enforced invariant-verified Mini policy review creates checklist-only normalized evidence", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyModelReviewArtifact: makeProductionPolicyModelReviewArtifact()
+    },
+    validationFindings: []
+  });
+  const concern = concerns.find(
+    (candidate) =>
+      candidate.originKey === "gdpr_transparency.article13.legal_basis"
+  );
+
+  assert.ok(concern);
+  assert.equal(concern.regulatoryChecklistEligibility, "observed");
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  assert.equal(
+    concern.evidenceBundle.rawEvidence?.classifierProvenance,
+    "mini_policy_semantic_review.v2"
+  );
+});
+
+test("shadow or non-production Mini policy review cannot create normalized evidence", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyModelReviewArtifact: makeProductionPolicyModelReviewArtifact({
+        mode: "shadow",
+        productionEligible: false
+      })
+    },
+    validationFindings: []
+  });
+
+  assert.equal(
+    concerns.some((concern) =>
+      concern.originKey === "gdpr_transparency.article13.legal_basis"
+    ),
     false
   );
 });

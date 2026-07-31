@@ -41,7 +41,7 @@ export default async function AdminV2ShadowPreviewPage({ searchParams }: V2Shado
               defaultValue={artifactPath ?? ""}
             />
             <button
-              className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white"
+              className="app-raised-button app-raised-button-dark rounded-lg px-4 py-2 text-sm font-medium text-white"
               type="submit"
             >
               Load artifact

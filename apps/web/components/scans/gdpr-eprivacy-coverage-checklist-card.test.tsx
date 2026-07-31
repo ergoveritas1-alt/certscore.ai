@@ -9,12 +9,56 @@ import {
   getGdprEprivacyCoverageChecklistRowRationaleForAudit,
   gdprPolicyExcerptPageTestHelpers
 } from "./gdpr-eprivacy-coverage-checklist-card";
-import { getAssessmentDirection, getEvidenceLabel } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
+import {
+  getAssessmentDirection,
+  getEvidenceLabel,
+  summarizeGdprEprivacyAssessmentDirections
+} from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 
 test("GDPR Transparency grouping includes every emitted Article 13 checklist row", () => {
   const source = readFileSync(new URL("./gdpr-eprivacy-coverage-checklist-card.tsx", import.meta.url), "utf8");
   assert.match(source, /title: "GDPR Transparency"[\s\S]*automated_decision_making_profiling_disclosure/);
+});
+
+test("getEvidenceLabel keeps insufficient evidence distinct from missing test coverage", () => {
+  const partialEvidence = makeChecklistItem({
+    assessmentStatus: "coverage_limitation",
+    evidenceState: "observed",
+    status: "Insufficient evidence"
+  });
+  const missingCoverage = makeChecklistItem({
+    assessmentStatus: "coverage_limitation",
+    evidenceState: "not_testable",
+    status: "Not testable"
+  });
+
+  assert.equal(getEvidenceLabel(partialEvidence), "Not confirmed");
+  assert.equal(getEvidenceLabel(missingCoverage), "Not testable");
+});
+
+test("retained but thin policy extraction is not confirmed without becoming not testable", () => {
+  const item = makeChecklistItem({
+    assessmentStatus: "coverage_limitation",
+    criticalEvidence: {
+      retainedEvidence: {
+        policySurfaceSummary: {
+          policyTextExtractionHealth: {
+            policyTextExtractionStatus: "thin"
+          },
+          privacyPolicyPresent: true
+        },
+        signalObserved: "not_confirmed_extraction_limited"
+      }
+    },
+    evidenceState: "observed",
+    id: "processing_purposes_disclosure",
+    label: "Processing purposes disclosure",
+    status: "Not testable"
+  });
+
+  assert.equal(getEvidenceLabel(item), "Not confirmed");
+  assert.equal(getAssessmentDirection(item), "technical_limitation");
 });
 
 function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
@@ -37,6 +81,7 @@ function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
       ],
       retainedEvidence: {
         sessionReplayEvidence: {
+          firstSeenMs: 2410,
           preConsentObserved: false,
           vendors: ["Microsoft Clarity", "Hotjar", "Contentsquare"]
         },
@@ -129,7 +174,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       assessmentStatus: "checked",
       evidenceState: "observed",
       id: "cmp_framework_signal_observed",
-      label: "Consent framework / CMP signal",
+      label: "CMP framework",
       status: "Observed"
     })),
     "neutral_signal"
@@ -505,7 +550,7 @@ test("GdprEprivacyCoverageChecklistCard renders concise session replay evidence 
 
   assert.match(
     html,
-    /Session replay or behavioral analytics signals were observed: Microsoft Clarity, Hotjar, and Contentsquare\./
+    /Session replay or behavioral analytics signals were observed: Microsoft Clarity, Hotjar, and Contentsquare; first seen 2\.41s after scan start\./
   );
   assert.match(html, /Review summary/);
   assert.match(html, /GDPR\/ePrivacy score is weighted from evidence-gated checklist rows/);
@@ -978,6 +1023,38 @@ test("GdprEprivacyCoverageChecklistCard shows captured policy review button for 
   assert.match(html, /aria-label="Open captured privacy policy for Retention disclosure"/);
   assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Supervisory authority complaint"/);
   assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Pre-consent 3rd party tracking"/);
+});
+
+test("observed transparency witnesses remain reviewable without a duplicated policy summary", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "checked",
+          criticalEvidence: {
+            retainedEvidence: {
+              article13Signal: {
+                disclosureType: "legal_basis",
+                evidenceText:
+                  "We process personal data based on consent, contractual necessity, legal obligations, and legitimate interests.",
+                sourceUrl: "https://example.test/privacy",
+                status: "observed"
+              },
+              signalObserved: true
+            }
+          },
+          evidenceState: "observed",
+          id: "legal_basis_disclosure_observed",
+          label: "Legal basis disclosure",
+          status: "Observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /aria-label="Open captured privacy policy for Legal basis disclosure"/);
 });
 
 test("GdprEprivacyCoverageChecklistCard shows policy review for every not-confirmed transparency row with retained summary snippets", () => {
@@ -1475,22 +1552,6 @@ test("GdprEprivacyCoverageChecklistCard renders 3rd party service rows under a t
             }
           },
           evidenceState: "observed",
-          id: "third_party_service_connection_pre_consent",
-          label: "3rd party service connections before consent",
-          status: "Gap observed"
-        }),
-        makeChecklistItem({
-          assessmentStatus: "gap_observed",
-          criticalEvidence: {
-            retainedEvidence: {
-              embeddedContentHosts: ["youtube.com"],
-              embeddedContentPurposeBuckets: {
-                mediaEmbed: ["youtube.com"]
-              },
-              firstEmbeddedContentObservedMs: 928
-            }
-          },
-          evidenceState: "observed",
           id: "third_party_iframe_pre_consent",
           label: "3rd party iframes before consent",
           status: "Gap observed"
@@ -1502,7 +1563,6 @@ test("GdprEprivacyCoverageChecklistCard renders 3rd party service rows under a t
 
   assert.match(html, /3rd Party Services/);
   assert.match(html, /Scan-context note/);
-  assert.match(html, /3rd party service connections before consent/);
   assert.match(html, /3rd party iframes before consent/);
 });
 
@@ -1519,7 +1579,7 @@ test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead 
       assessmentStatus: "checked",
       evidenceState: "observed",
       id: "cmp_framework_signal_observed",
-      label: "Consent framework / CMP signal",
+      label: "CMP framework",
       status: "Observed"
     }),
     makeChecklistItem({
@@ -1551,14 +1611,16 @@ test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead 
     })
   ];
   const html = renderToStaticMarkup(
-    createElement(GdprEprivacyCoverageSummaryPills, { items })
+    createElement(GdprEprivacyCoverageSummaryPills, {
+      summaryCounts: summarizeGdprEprivacyAssessmentDirections(items)
+    })
   );
 
   assert.match(html, /GDPR\/ePrivacy checklist rating mix/);
   assert.match(html, /Rating mix/);
   assert.match(html, /5 rows/);
   assert.match(html, /concern/);
-  assert.match(html, /partial concern/);
+  assert.match(html, />partial</);
   assert.match(html, /review/);
   assert.match(html, /positive/);
   assert.match(html, /contextual/);
@@ -1571,7 +1633,6 @@ test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead 
   assert.doesNotMatch(html, />neutral</);
   assert.doesNotMatch(html, /potential concerns/);
   assert.doesNotMatch(html, /potential gaps/);
-  assert.doesNotMatch(html, />partial</);
   assert.doesNotMatch(html, />observed</);
 });
 

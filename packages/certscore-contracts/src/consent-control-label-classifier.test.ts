@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  classifyConsentLanguage,
   classifyConsentControlLabel,
   consentActionCandidateSchema,
   consentUiObservationSchema,
@@ -8,6 +9,41 @@ import {
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
+
+test("separates explicit consent controls from acknowledgments and refusal equivalents", () => {
+  assert.equal(
+    classifyConsentControlLabel({
+      label: "OK",
+      contextText: "By using this site you agree to analytics cookies."
+    }).semanticRole,
+    "ambiguous_acknowledgment"
+  );
+  assert.equal(classifyConsentControlLabel({ label: "Accept all" }).semanticRole, "explicit_accept");
+  assert.equal(
+    classifyConsentControlLabel({
+      label: "Only required",
+      contextText: "Choose which cookies this site may use."
+    }).semanticRole,
+    "necessary_only"
+  );
+  assert.equal(
+    classifyConsentControlLabel({
+      label: "Close",
+      contextText: "This site uses cookies."
+    }).semanticRole,
+    "dismiss"
+  );
+});
+
+test("classifies bounded implied-consent language canonically", () => {
+  const classification = classifyConsentLanguage({
+    text: "We use analytics. By using this site you agree to our use of cookies."
+  });
+  assert.equal(classification.impliedConsentLanguageObserved, true);
+  assert.equal(classification.matches[0]?.classifierId, "implied_consent.by_using_agree");
+  assert.match(classification.matches[0]?.excerpt ?? "", /By using this site/i);
+  assert.ok((classification.matches[0]?.excerpt.length ?? 0) <= 240);
+});
 
 test("classifies direct consent controls across English, German, and French", () => {
   assert.equal(classifyConsentControlLabel({ label: "Accept all" }).intent, "accept");
@@ -21,6 +57,18 @@ test("classifies direct consent controls across English, German, and French", ()
   assert.equal(classifyConsentControlLabel({ label: "Cookie settings" }).intent, "options");
   assert.equal(classifyConsentControlLabel({ label: "Cookie-Einstellungen" }).intent, "options");
   assert.equal(classifyConsentControlLabel({ label: "Paramètres des cookies" }).intent, "options");
+});
+
+test("classifies explicit inline consent preference labels without broadening generic manage", () => {
+  const consentTool = classifyConsentControlLabel({ label: "Cookie Consent Tool" });
+  assert.equal(consentTool.intent, "options");
+  assert.equal(consentTool.matchStrength, "direct");
+  assert.equal(classifyConsentControlLabel({ label: "Consent Choices" }).intent, "options");
+  assert.equal(classifyConsentControlLabel({ label: "Manage" }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({
+    label: "Manage",
+    contextText: "We use cookies and ask for your consent.",
+  }).intent, "options");
 });
 
 test("Italian discovery registry and classifier retain Personalizza as a contextual first-layer options control", () => {
@@ -131,6 +179,25 @@ test("classifies observed English options labels", () => {
     label: "Personalise",
     contextText: "Data privacy at Dailymotion. We use cookies and partners for advertising measurement.",
   }).intent, "options");
+});
+
+test("classifies consent-contextual approval wording without broadening generic language", () => {
+  const classification = classifyConsentControlLabel({
+    label: "I'm happy with that",
+    contextText: "This website uses cookies to improve your experience and show relevant ads.",
+  });
+  assert.equal(classification.intent, "accept");
+  assert.equal(classification.semanticRole, "explicit_accept");
+  assert.equal(classification.matchStrength, "contextual");
+  assert.equal(classification.variant, "approval_acknowledgment");
+  assert.equal(classifyConsentControlLabel({ label: "I'm happy with that" }).intent, "unknown");
+  assert.equal(
+    classifyConsentControlLabel({
+      label: "I’m happy with that",
+      contextText: "We use cookies and analytics on this site.",
+    }).intent,
+    "accept",
+  );
 });
 
 test("classifies observed Spanish and Italian consent labels", () => {
@@ -495,6 +562,78 @@ test("classifies decline non-essential cookies as reject", () => {
   assert.equal(classification.intent, "reject");
   assert.equal(classification.matchedTerm, "decline non-essential cookies");
   assert.equal(classification.matchStrength, "direct");
+});
+
+test("classifies optional-cookie refusal variants as reject", () => {
+  for (const [label, matchedTerm] of [
+    ["Decline optional cookies", "decline optional cookies"],
+    ["Refuse optional cookies", "refuse optional cookies"],
+    ["Deny optional cookies", "deny optional cookies"],
+  ] as const) {
+    const classification = classifyConsentControlLabel({ label });
+    assert.equal(classification.intent, "reject", label);
+    assert.equal(classification.semanticRole, "reject", label);
+    assert.equal(classification.matchedTerm, matchedTerm, label);
+    assert.equal(classification.matchStrength, "direct", label);
+  }
+});
+
+test("covers the audited reject, accept, and optional-choice vocabulary", () => {
+  const rejectLabels = [
+    "Reject Additional Cookies",
+    "Decline Cookies",
+    "Proceed with Required Cookies only",
+    "Refuse Functional Cookies",
+    "Refuse Advertising Cookies",
+    "Reject the use of cookies and other data for the purposes described",
+    "Deny Cookies",
+    "I decline optional cookies",
+  ];
+  for (const label of rejectLabels) {
+    const result = classifyConsentControlLabel({ label, contextText: "Choose which cookies this site may use." });
+    assert.equal(result.intent, "reject", label);
+  }
+
+  const acceptLabels = [
+    "Accept Selections",
+    "Consent to all",
+    "Accept and close",
+    "Accept use of cookies",
+    "Allow Selected",
+    "Accept the use of cookies and other data for the purposes described",
+    "Agree & Continue",
+  ];
+  for (const label of acceptLabels) {
+    assert.equal(classifyConsentControlLabel({ label }).intent, "accept", label);
+  }
+
+  const optionLabels = [
+    "Manage my choices",
+    "Set Cookie Options",
+    "More choices",
+    "Functional Cookies choice",
+    "Advertising Cookies choice",
+    "Consent Preference",
+    "View options",
+  ];
+  for (const label of optionLabels) {
+    assert.equal(
+      classifyConsentControlLabel({ label, contextText: "Cookie consent preferences" }).intent,
+      "options",
+      label,
+    );
+  }
+});
+
+test("keeps the audited vocabulary represented across every supported locale", () => {
+  for (const locale of SUPPORTED_PRIVACY_EVIDENCE_LOCALES) {
+    const entry = PRIVACY_EVIDENCE_LOCALE_REGISTRY.find((candidate) => candidate.locale === locale);
+    assert.ok(entry, locale);
+    assert.ok(entry?.consentControls.accept.length, `${locale}: accept coverage`);
+    assert.ok(entry?.consentControls.reject.length, `${locale}: reject coverage`);
+    assert.ok(entry?.consentControls.options.length, `${locale}: options coverage`);
+    assert.ok(entry?.consentControls.necessaryOnly.length, `${locale}: necessary-only coverage`);
+  }
 });
 
 test("classifies short non-essential reject labels in concatenated banner text", () => {

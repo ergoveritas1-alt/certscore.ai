@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ConsentUiObservation } from "@certscore/contracts";
+import type { Page } from "playwright";
 import {
+  detectConsentUi,
   reconcileConsentUiRecapture,
   shouldCaptureSettledPreConsentScreenshot,
+  shouldRecaptureConsentUiAfterTimeout,
 } from "./scanners/pre-consent-runtime-scanner.js";
 
 function observation(overrides: Partial<ConsentUiObservation> = {}): ConsentUiObservation {
@@ -118,6 +121,116 @@ test("a newly retained options control strengthens an existing accept and reject
     result.observation.controls.map((control) => control.actionType).sort(),
     ["accept_all", "manage_preferences", "reject_all"],
   );
+});
+
+function rapidInventorySnapshot(withControls: boolean) {
+  return {
+    controls: withControls
+      ? [
+          { cmpScoped: true, label: "Accept", role: "button", selectorHint: "#accept", tagName: "button", visible: true },
+          { cmpScoped: true, label: "Decline", role: "button", selectorHint: "#decline", tagName: "button", visible: true },
+          { cmpScoped: true, label: "Customise", role: "link", selectorHint: "#customise", tagName: "a", visible: true },
+        ]
+      : [],
+    contextText: withControls
+      ? "We use cookies and advertising technologies. Accept, Decline, or Customise your preferences."
+      : "",
+    hasPotentialToggle: false,
+  };
+}
+
+test("rapid DOM inventory retains complete first-layer controls before accessibility is attempted", async () => {
+  let evaluateCallCount = 0;
+  let accessibilityAttempted = false;
+  const page = {
+    evaluate: async (_pageFunction: unknown, argument?: unknown) => {
+      evaluateCallCount += 1;
+      return argument === undefined ? true : rapidInventorySnapshot(true);
+    },
+    context: () => {
+      accessibilityAttempted = true;
+      throw new Error("accessibility should not be attempted after complete rapid evidence");
+    },
+  } as unknown as Page;
+
+  const result = await detectConsentUi(page, Date.now(), 0, {
+    rapidInventoryTimeoutMs: 100,
+    waitForCompleteChoiceControls: true,
+  });
+
+  assert.equal(accessibilityAttempted, false);
+  assert.equal(evaluateCallCount, 2);
+  assert.equal(result.acceptControlObserved, true);
+  assert.equal(result.rejectControlObserved, true);
+  assert.equal(result.managePreferencesControlObserved, true);
+  assert.deepEqual(result.captureDiagnostics?.completedChannels, ["dom_inventory"]);
+  assert.deepEqual(result.captureDiagnostics?.timedOutChannels, []);
+  assert.equal(
+    result.inventoryDiagnostics?.timingMarkers.includes("rapid_inventory_initial_completed"),
+    true,
+  );
+});
+
+test("post-accessibility rapid retry preserves typed controls and records the independent accessibility timeout", async () => {
+  let evaluateCallCount = 0;
+  let rapidSnapshotCount = 0;
+  let accessibilityAttemptCount = 0;
+  const page = {
+    evaluate: async (_pageFunction: unknown, argument?: unknown) => {
+      evaluateCallCount += 1;
+      if (argument === undefined) return true;
+      rapidSnapshotCount += 1;
+      return rapidInventorySnapshot(rapidSnapshotCount >= 2);
+    },
+    context: () => ({
+      newCDPSession: async () => {
+        accessibilityAttemptCount += 1;
+        return {
+          send: async () => await new Promise<never>(() => undefined),
+          detach: async () => undefined,
+        };
+      },
+    }),
+  } as unknown as Page;
+
+  const result = await detectConsentUi(page, Date.now(), 0, {
+    accessibilityTimeoutMs: 5,
+    rapidInventoryTimeoutMs: 100,
+    waitForCompleteChoiceControls: true,
+  });
+
+  assert.equal(accessibilityAttemptCount, 1);
+  assert.equal(evaluateCallCount, 4);
+  assert.equal(result.acceptControlObserved, true);
+  assert.equal(result.rejectControlObserved, true);
+  assert.equal(result.managePreferencesControlObserved, true);
+  assert.deepEqual(result.captureDiagnostics?.completedChannels, ["dom_inventory"]);
+  assert.deepEqual(result.captureDiagnostics?.timedOutChannels, ["accessibility_tree"]);
+  assert.equal(
+    result.inventoryDiagnostics?.timingMarkers.includes("accessibility_tree_inventory_timed_out"),
+    true,
+  );
+  assert.equal(
+    result.inventoryDiagnostics?.timingMarkers.includes("rapid_inventory_post_accessibility_completed"),
+    true,
+  );
+});
+
+test("fast mode retries a timed-out text-backed surface without inferring controls from text", () => {
+  assert.equal(shouldRecaptureConsentUiAfterTimeout(observation({
+    captureStatus: "incomplete",
+    captureDiagnostics: {
+      completedChannels: [],
+      timedOutChannels: ["dom_inventory"],
+      failedChannels: [],
+    },
+    likelyPresent: true,
+    basis: ["inventory:rapid_dom_timed_out", "keyword:cookie", "keyword:preferences"],
+    textExcerpt: "We use cookies. Select Accept, Decline, or Customise to manage your preferences.".repeat(2),
+  }), {
+    evidenceHint: true,
+    fastWait: true,
+  }), true);
 });
 
 test("settled screenshot replaces an early loading frame once substantive content appears", () => {

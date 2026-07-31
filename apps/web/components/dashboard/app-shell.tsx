@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode, type SVGProps } from "react";
 import { FOOTER_COPYRIGHT_COPY, FOOTER_DISCLAIMER_COPY } from "../layout/footer-copy";
+import { isScanReportPath, resolveScanViewHref } from "./scan-view-navigation";
 
 type NavIconProps = SVGProps<SVGSVGElement>;
 
@@ -70,6 +71,15 @@ function ShieldIcon(props: NavIconProps) {
   );
 }
 
+function CompanyIcon(props: NavIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
+      <path d="M4.5 20V6.5L12 4l7.5 2.5V20" />
+      <path d="M8 20v-4h8v4M8 9h1.5M14.5 9H16M8 12h1.5M14.5 12H16" />
+    </svg>
+  );
+}
+
 function PlanIcon(props: NavIconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
@@ -106,6 +116,7 @@ const navItems = [
 type AppShellProps = {
   children: ReactNode;
   isPlatformAdmin?: boolean;
+  canManageCompany?: boolean;
   organizationName: string;
   plan: string;
   userEmail: string;
@@ -124,6 +135,10 @@ function isItemActive(pathname: string, href: string) {
     return pathname === "/app";
   }
 
+  if (href === "/app/settings") {
+    return pathname === href;
+  }
+
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -140,19 +155,26 @@ export function AppShell({
   organizationName,
   plan,
   userEmail,
-  isPlatformAdmin = false
+  isPlatformAdmin = false,
+  canManageCompany = false
 }: AppShellProps) {
   const pathname = usePathname() ?? "";
-  const isScanReportPath = /^\/app\/scans\/[^/]+\/?$/.test(pathname);
+  const scanReportPathActive = isScanReportPath(pathname);
+  const scanViewHref = resolveScanViewHref(scanReportPathActive ? pathname : null);
   const userInitial = userEmail.slice(0, 1).toUpperCase();
-  const displayOrganizationName = organizationName.replace(/\s+workspace$/i, "");
+  const displayOrganizationName = isPlatformAdmin ? organizationName.replace(/\s+workspace$/i, "") : "Your account";
   const displayPlan =
     plan === "free" ? "TRIAL" : plan === "individual" ? "STARTER" : plan === "pro" ? "PRO" : "CUSTOM";
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const scopedNavItems = [
-    ...navItems,
+    ...navItems.map((item) =>
+      item.href === "/app/signals"
+        ? { ...item, href: scanViewHref }
+        : item
+    ),
+    ...(canManageCompany ? [{ href: "/app/settings/company", label: "Manage workspace", icon: CompanyIcon }] : []),
     ...(isPlatformAdmin ? [{ href: "/app/admin", label: "Admin", icon: ShieldIcon }] : [])
   ];
 
@@ -305,6 +327,7 @@ export function AppShell({
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileNavOpen(false)}
+                      prefetch={false}
                       className={[
                         "flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition",
                         active
@@ -348,6 +371,7 @@ export function AppShell({
                             key={item.href}
                             href={item.href}
                             onClick={closeNav}
+                            prefetch={false}
                             aria-label={item.label}
                             title={item.label}
                             className={[
@@ -383,8 +407,8 @@ export function AppShell({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-slate-50">
             <main
               className={[
-                "min-w-0 flex-1 overflow-x-hidden px-4 pb-6 text-ink sm:px-6 sm:pb-8",
-                isScanReportPath ? "pt-0 sm:pt-0.5" : "pt-6 sm:pt-8"
+                "certscore-app-content min-w-0 flex-1 overflow-x-hidden px-4 pb-6 text-ink sm:px-6 sm:pb-8",
+                scanReportPathActive ? "pt-0 sm:pt-0.5" : "pt-6 sm:pt-8"
               ].join(" ")}
             >
               {children}

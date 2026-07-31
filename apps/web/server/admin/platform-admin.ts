@@ -20,7 +20,7 @@ export const getPlatformAdminFlag = cache(async () => {
   return isPlatformAdminEmail(user.email);
 });
 
-export async function requirePlatformAdminContext() {
+export const requirePlatformAdminContext = cache(async () => {
   const context = await getDashboardContext();
 
   if (!isPlatformAdminEmail(context.user.email)) {
@@ -28,4 +28,4 @@ export async function requirePlatformAdminContext() {
   }
 
   return context;
-}
+});

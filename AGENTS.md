@@ -39,6 +39,39 @@ Executive-summary and top-finding selection may rank, allowlist, suppress, or gr
 
 If a valid signal is missing, add or fix the upstream WS01 observed evidence and the WC01 concern/policy mapping. Do not patch around missing evidence in display code. If a deviation from this flow seems necessary, stop and call it out before implementing.
 
+### Canonical consent-control flow
+
+Consent-control logic is a production specialization of the canonical scan-to-report flow:
+
+```text
+WS01 typed observations
+→ verified retained evidence packet
+→ WC01 ConsentControlAssessment v2
+→ persisted typed assessment/evidence projection
+→ normalized consent concerns
+→ concern policy
+→ unified findings/checklist
+→ score, report, Overview, Admin Scans, and API Activity
+```
+
+WS01 owns pre-consent observation and retained evidence capture. WC01 owns typed assessment, persistence, normalized concerns, policy, findings, scoring, and presentation.
+
+Persistence must preserve the assessment's contract version, provenance, retained-evidence references, and source hash. Persistence must not synthesize observations, upgrade confidence, or create findings.
+
+Every downstream surface must consume the canonical persisted projection or its normalized concern, concern-policy, and unified finding/checklist outputs. Do not infer consent findings, status, severity, prominence, or score effects directly from raw labels, screenshots, DOM signals, or display-layer context.
+
+Missing, malformed, stale, or unverifiable evidence must fail closed to an unknown, insufficient-evidence, or review state. It must not become an observed gap solely because evidence is absent.
+
+If a downstream result is incorrect, trace the first broken stage in this sequence and fix it there. Do not add surface-specific fallbacks.
+
+Changes to this flow require focused regression coverage at the affected boundaries:
+
+- WS01 observation -> retained evidence contract
+- retained evidence -> `ConsentControlAssessment v2`
+- assessment -> persisted projection
+- persisted projection -> normalized concern and concern policy
+- unified projection -> score and every downstream surface
+
 ### CertScore v2 internal diagnostic architecture
 
 CertScore v2 exists in this repo as a clean scanner/review architecture and internal diagnostic pipeline. Its current operating principle is:
@@ -51,9 +84,54 @@ report-adapter projects internal artifacts
 web app presents only after separate approval
 ```
 
+### Model-assisted review roles
+
+Use explicit model roles rather than treating every task as generic Nano enrichment:
+
+```text
+deterministic evidence and registries
+→ Nano extraction / routine triage
+→ Mini interpretation when semantics or conflicts require it
+→ optional bounded escalation
+→ internal shadow artifact
+```
+
+- `CERTSCORE_EXTRACTION_MODEL` defaults to `gpt-5.4-nano`.
+- `CERTSCORE_REVIEW_MODEL` defaults to `gpt-5.4-mini`.
+- `CERTSCORE_ESCALATION_MODEL` is optional and has no default.
+- Mini review and escalation are disabled by default.
+- `CERTSCORE_MODEL_REVIEW_MODE` defaults to `shadow`.
+
+Keep passage location, candidate-topic extraction, normalization, evidence compression, and routine taxonomy triage on the extraction role. Use the review role for substantive policy interpretation, contradictory evidence, legal-basis wording, retention, transfers, rights, vendor disclosure, and policy/runtime consistency. Use escalation only for bounded high-impact or conflicting cases that remain inconclusive or low-confidence after review.
+
+Model outputs must use strict structured schemas, application-side validation, explicit provenance, bounded inputs/outputs, and safe failed/inconclusive states. Batch policy and finding review where possible and cache policy review by canonical content hash, contract version, prompt version, schema version, and model.
+
+Deterministic code remains authoritative for observed runtime facts, timestamps, canonical registries, legal-framework dates/validity, thresholds, severity, finding eligibility, scoring, and display projection. Model-review artifacts must remain internal and non-production until a separate production integration is explicitly approved.
+
+Model-review rollout evaluation must fail closed and must record review provenance honestly. `independently_reviewed` is reserved for evidence-only human review. `human_adjudicated` may be used when a named product owner reviews the retained evidence and a multi-model comparison, then personally decides every label. Human-adjudicated labels count for the approved precision-first observed-only production scope, but they must not be relabeled as independent review. The stricter full-status rollout gate still requires its canonical balance, coverage, precision, recall, and exact-agreement thresholds.
+
+Independent policy-review labels must be created from evidence-only reviewer packets that omit Mini/Nano outputs, provisional labels, model-derived candidate classifications, and other reviewers' decisions. Bind every response to the packet's retained-evidence hash, require a named human reviewer plus explicit no-model/no-provisional-label attestations, require topic-level rationale and valid evidence references, and fail closed on evidence drift or malformed responses. Ingestion must write a review candidate rather than silently overwriting the canonical corpus.
+
 The v2 packages and artifacts are not production report integration by default. V2 shadow, allowlist dry-run, concern-input dry-run, policy simulation, normalized-concern candidate, comparison, reviewer-packet, and evidence-preview outputs must remain artifact-only, internal-only, and non-persistent unless the user explicitly approves a separate production integration proposal.
 
 Do not wire v2 outputs into production report cards, checklist builders, executive summaries, top findings, scoring, regulatory lenses, persisted normalized concerns, unified findings, or customer-facing copy without explicit approval. Do not map v2 dry-run rows directly to `gap_observed`.
+
+The product owner approved one narrow production integration on July 25, 2026:
+completed `gpt-5.4-mini` policy-semantic review may supplement GDPR
+Transparency checklist coverage only when the artifact is in `enforced` mode,
+is explicitly production-projectable, and every projected `observed` row has
+passed the versioned deterministic topic-relevance, target-ownership,
+coverage, retained-evidence, and confidence invariants. This approval does not
+allow model output to create absence findings, scoring changes, executive/top
+findings, legal conclusions, or direct display-layer findings. The approved
+path remains persisted typed artifact -> normalized concern -> concern policy
+-> checklist projection. Shadow, failed, incomplete, low-confidence,
+ambiguous, conflicting, and insufficient-evidence rows remain non-production.
+The owner also confirmed that their July 25 review covered all 200 topic rows
+in the 25-case corpus. Those rows are canonical `human_adjudicated` calibration
+labels. The approved observed-only scope is production-eligible when its
+precision-first gate passes even if the separate full-status rollout gate
+remains blocked by recall or exact agreement.
 
 Sensitive-context labels in v2 are review routing metadata only. They must not create stronger findings, customer-facing language, legal conclusions, or production eligibility.
 
@@ -80,6 +158,8 @@ WC01 should not consume loose, ad hoc, or display-only scanner fields. New scann
 If WC01 starts consuming a new WS01 field, add or update a runtime contract fixture and the relevant normalized concern/policy test in the same change.
 
 For CertScore v2, artifact contracts must stay typed, bounded, display-safe where projected, and covered by focused fixtures/tests. Do not carry raw cookies, raw request/response bodies, sensitive query values, unbounded DOM/policy text, or raw Nano reasoning into reviewer, report-adapter, or web-facing artifacts.
+
+Production v2 Lambda policy-semantic review must consume retained policy evidence from the checksum- and size-verified `CanonicalEvidenceBundle.json` S3 pointer recorded on `v2_lambda_result.received`. `scan_document_sources` is a legacy/fallback input and must not be assumed to contain v2 Lambda policy surfaces. Keep this handoff typed, bounded, restricted to approved scanner regions, and fail closed when retained artifact metadata does not verify.
 
 ### Scan reliability and evidence quality
 
@@ -114,6 +194,8 @@ If a module needs different thresholds, severity, or status treatment, express t
 
 For CertScore v2 endpoint/vendor attribution, use `packages/certscore-vendor-resolver` as the canonical resolver home. Do not add local endpoint or vendor lists inside scan modules, report adapters, dry-run bridges, or docs when the classification belongs in the resolver.
 
+`packages/certscore-contracts/src/legal-framework-validity.ts` `LEGAL_FRAMEWORK_VALIDITY_REGISTRY` is the canonical registry for named, time-sensitive legal or regulatory frameworks recognized in retained policy text. Use it for framework identity, aliases, subject area, effective dates, invalidation or supersession dates, successor relationships, authoritative source metadata, and safe review wording. Do not add checklist-specific or display-specific stale-framework lists. Framework status must be evaluated relative to the scan date and carried through typed evidence, normalized concern, concern policy, and checklist/finding projection.
+
 Multilingual privacy-surface and consent-control coverage supports the 40 typed locales enumerated by `SUPPORTED_PRIVACY_EVIDENCE_LOCALES`. These surfaces and controls must use `PRIVACY_EVIDENCE_LOCALE_REGISTRY` plus their canonical classifiers. GDPR Transparency topic extraction has its separately calibrated locale set in `SUPPORTED_GDPR_TRANSPARENCY_LOCALES` and must use its canonical topic classifier. Localized text should normalize to typed evidence before findings. Do not add display-layer phrase lists, raw text shortcuts, or consent-clicking runtime behavior for multilingual coverage.
 
 Consent UI control discovery must use the canonical consent-control label classifier/registry for label-based classification of accept, reject, options/manage, and privacy opt-out controls. Do not add feature-specific or display-specific accept/reject/options regexes when the same rule belongs in the canonical classifier. New language terms, CMP label variants, or consent-control synonyms should be added to the canonical registry with typed intent, locale, match strength, optional variant, and focused tests.
@@ -131,6 +213,28 @@ Display copy may explain retained evidence and the already-determined policy/che
 Executive summaries and top findings may rank, allowlist, suppress, or group already-projected findings only. Top findings should be traceable to unified finding IDs or checklist/regulatory projection rows. Do not create executive-only findings from raw signals or display context.
 
 DB repair and backfill scripts may repair records, but must not create findings that bypass normalized concern construction, concern policy, and unified finding/checklist projection.
+
+When retained evidence includes a resolved vendor and reliable first-seen timing, finding and checklist descriptors should identify the vendor and first-seen time. Keep this descriptive only: missing display detail must not change finding eligibility or cause display code to infer a vendor or timestamp.
+
+Evidence Mix uses `Essential` only for genuinely necessary functional, security, authentication, transaction, or service-delivery runtime activity. Use `Contextual` for consent-management, disclosure, governance, policy-surface, or page-context evidence that explains the scan but is not itself essential runtime activity. CMP identity or banner context is `Contextual`; a genuinely necessary functional runtime request remains `Essential`.
+
+### Policy semantic validity
+
+Policy review must keep four questions separate: whether disclosure text exists, whether the evidence is relevant to the checklist topic, whether a named time-sensitive mechanism was current on the scan date, and whether legal compliance has been established. Evidence for one topic must not satisfy another topic merely because it appears nearby in the same excerpt.
+
+Policy-review absence labels are coverage-gated. `not_observed_with_sufficient_coverage` is permitted only when the governing target source was retained, the document is usable and attributable to the target or a confirmed first-party brand, the relevant section is complete and untruncated, material linked supplements were retained or shown irrelevant, and any required runtime lane is usable. Otherwise use `insufficient_retained_evidence`. Caveats in rationale text must not rescue an absence label whose deterministic coverage preconditions failed.
+
+Keep evidence-presence topics distinct from completeness or adequacy. One retained named vendor, recipient category, substantive right, or cookie/storage identifier may establish the corresponding presence signal; it does not establish that the disclosure or inventory is complete. Name findings for the evidence they prove. Canonical policy-review display labels are `Processing-purpose disclosure`, `Processing legal-basis language`, `Retention period or substantive criteria`, `International-transfer disclosure`, `Named vendors or recipient categories`, `Substantive privacy-rights signals`, `Observed cookie/storage names`, and `Policy/runtime comparison`.
+
+`Policy/runtime comparison` is a comparison result, not a generic disclosure-presence row. Compare a specific retained policy promise only with a directly comparable runtime fact in the same jurisdiction and consent state. Use typed outcomes equivalent to no material mismatch retained, material contradiction retained, insufficient comparison evidence, or ambiguous comparison. Mutual silence is not alignment.
+
+Policy-document ownership is part of evidence quality. Retain typed owner entity, target relationship, confidence, and reason codes. A service-provider or unrelated policy may be retained as vendor evidence but must not establish the scanned target's policy coverage or support a target-policy absence conclusion.
+
+Invalidated, superseded, or not-yet-effective framework references are retained evidence and should produce an evidence-scoped review signal. They must not receive unqualified `Observed` credit, positive scoring that hides the stale reference, or customer-facing language implying that the named mechanism establishes compliance. Current framework or safeguard language may support disclosure presence, but does not by itself prove that the site qualifies for or correctly implements that mechanism.
+
+International-transfer disclosure presence and transfer-framework validity are separate checks. An obsolete framework reference must produce the deterministic `Outdated transfer framework referenced` review signal and must not, by itself, turn an otherwise supported international-transfer disclosure row into `conflicting`.
+
+Implement policy-validity rules in the shared evidence and policy pipeline, with deterministic fixtures covering topic separation and scan-date transitions. Do not implement validity checks as display-only keyword matching, Nano-only judgment, or executive-summary-only findings.
 
 ### Legal conclusion language
 
@@ -204,7 +308,7 @@ WC01/
 - **Database:** PostgreSQL (raw SQL via `pg` package; no ORM)
 - **Storage:** AWS S3-compatible (AWS SDK v3 + presigned URLs)
 - **Browser automation:** Playwright (Chromium) — used by validation worker
-- **LLM integration:** OpenAI API (configurable models; default `gpt-5.4-nano` / `gpt-5.4-nano`)
+- **LLM integration:** OpenAI API with role-based routing (`gpt-5.4-nano` extraction, `gpt-5.4-mini` review, optional escalation)
 - **Validation / Schema:** Zod
 - **Testing:** Node.js built-in test runner (`node --test`) executed through `tsx`
 - **CI/CD:** GitHub Actions
@@ -446,7 +550,7 @@ When the user says **deploy all**, use the fast deploy-all gate before committin
 pnpm preflight:all
 ```
 
-In this repo, **deploy all** means the public web app, validation worker/DB-related code paths, production DB migration workflow when migrations changed, and the v2 DAG Lambda scanner images in all three approved scanner regions: `eu-central-1`, `eu-west-1`, and `us-west-2`. Treat those as the canonical Lambda scanner regions unless the user explicitly approves a region change.
+In this repo, **deploy all** means the public web app, validation worker, migrations applied from the target web image before ECS promotion, and the v2 DAG Lambda scanner images in all three approved scanner regions: `eu-central-1`, `eu-west-1`, and `us-west-2`. It does not run a separate production DB deployment lane. Treat those as the canonical Lambda scanner regions unless the user explicitly approves a region change.
 
 Use the full local gate when the change touches shared build infrastructure, broad dependency surfaces, release-critical scan behavior, or when you need maximum local confidence before pushing:
 
@@ -527,7 +631,30 @@ Do not use local production DB tunnels, ECS Exec, or copied secrets for routine 
 - Push the branch to GitHub instead of deploying an uncommitted working tree directly to any production host.
 - Prefer Git-based deploy promotion through the connected AWS ECS deployment workflows, but verify which runtime is actually serving `certscore.ai` before claiming production is updated.
 - Web deploys are forward-only: the target revision must contain the Git SHA currently reported by the production `/api/version` endpoint. Merge the live revision into the target branch before deploying; use the explicit non-descendant override only for an intentional emergency rollback.
-- For a user request phrased as "deploy all", run `pnpm preflight:all` first, then deploy through the canonical paths: GitHub/AWS ECS for web and validation worker, `.github/workflows/prod-db-migrate.yml` for production DB migrations when migration files changed, and the local v2 DAG Lambda image deploy helpers for each approved scanner region (`eu-central-1`, `eu-west-1`, `us-west-2`). Preview deploy orchestration first with `pnpm deploy:all -- --plan` or `pnpm deploy:all -- --dry-run` when checking scope. Scanner deploys reuse prebuilt Lambda runtime-base images by default; rebuild and push the scanner runtime base only when explicitly requested with `--push-runtime-base`.
+
+### Canonical deployment selection
+
+Before deploying, require a clean committed worktree, discover the revision currently served by the production `/api/version` endpoint, and use that live revision as the comparison base when previewing the canonical deployment plan.
+
+Use targeted deployment modes whenever scope is known:
+
+- `pnpm deploy:web -- --base <live-sha> --plan` for public web changes.
+- `pnpm deploy:validation -- --base <live-sha> --plan` for validation worker or scheduler changes.
+- `pnpm deploy:scanners -- --base <live-sha> --plan` for v2 DAG Lambda scanner changes.
+- `pnpm deploy:db -- --base <live-sha> --plan` only for an explicitly approved standalone migration.
+- `pnpm deploy:all -- --base <live-sha> --plan` only for intentionally coupled cross-system changes.
+
+Do not use deploy-all merely because deployment scope is uncertain. Run the change-aware readiness check and inspect runtime consumers first.
+
+Files under `apps/web/server/scans/` are conservatively classified as validation-related because some scan modules are shared with validation workflows. Do not deploy validation solely because of that classification; determine whether the validation worker actually consumes the changed behavior.
+
+A preflight result applies only to the exact source state that was tested. Rerun the relevant gate after any material change. The canonical deploy command may skip a duplicate local preflight only when the exact clean commit already passed it and the deployment workflow's required tests, typechecks, and guards remain enabled.
+
+Routine scanner deployments must reuse the existing runtime base, build the scanner image once in the canonical build region, skip registry cache export, replicate the image to all approved regions, and verify digest parity and Lambda health. Use `--push-runtime-base` only when Chromium, Playwright, OS packages, workspace dependencies, or the Lambda runtime-base Docker stage genuinely changed.
+
+Deploy-all applies database migrations through the target web image before ECS promotion. It does not run a separate production DB lane. Use the standalone DB deployment only when an independently approved migration must run outside a web release.
+
+After deployment, verify the workflow result, live revision, expected runtime target, and affected production behavior. Keep verification read-only by default. Do not create production scans, records, users, or other persistent state unless the user explicitly authorized that verification.
 
 ## Runtime and deployment topology
 

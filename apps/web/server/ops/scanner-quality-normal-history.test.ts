@@ -89,6 +89,30 @@ test("normal scan windows retain per-finding metrics when provided", () => {
   assert.deepEqual(window?.findingScanCounts, { pre_consent_tracking_detected: 3 });
 });
 
+test("normal scan windows retain separate canonical no-go limitation counts", () => {
+  const kinds = [
+    "scanner_access_limitation",
+    "scanner_capture_limitation",
+    "target_site_state",
+    null,
+    "scanner_access_limitation"
+  ] as const;
+  const window = buildNormalScannerQualityWindow({
+    egressId: "aws-default",
+    rows: kinds.map((scanNoGoLimitationKind, index) =>
+      row({
+        completedAt: `2026-05-22T20:${String(index).padStart(2, "0")}:00.000Z`,
+        scanId: `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`,
+        scanNoGoLimitationKind
+      })
+    )
+  });
+
+  assert.equal(window?.labelCounts["no_go:scanner_access_limitation"], 2);
+  assert.equal(window?.labelCounts["no_go:scanner_capture_limitation"], 1);
+  assert.equal(window?.labelCounts["no_go:target_site_state"], 1);
+});
+
 test("accumulates 5-scan graph windows into conservative warning windows", () => {
   const windows = Array.from({ length: 5 }, (_, windowIndex) =>
     buildNormalScannerQualityWindow({

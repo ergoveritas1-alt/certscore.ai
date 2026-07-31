@@ -19,6 +19,15 @@ export type ConsentControlMatchStrength =
   | "contextual"
   | "weak";
 
+export type ConsentControlSemanticRole =
+  | "explicit_accept"
+  | "ambiguous_acknowledgment"
+  | "reject"
+  | "necessary_only"
+  | "preferences"
+  | "dismiss"
+  | "unknown";
+
 export type ConsentControlClassifierProfile =
   | "production_default"
   | "multilingual_v1";
@@ -48,6 +57,7 @@ export type ConsentControlLabelClassifierInput = {
 
 export type ConsentControlLabelClassification = {
   intent: ConsentControlIntent;
+  semanticRole: ConsentControlSemanticRole;
   confidence: number;
   matchedTerm?: string;
   matchedLocale?: ConsentControlLocale;
@@ -111,9 +121,22 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "agree and close"),
     ...direct("accept", "agree and continue"),
     ...direct("accept", "accept and continue"),
+    ...direct("accept", "accept and close"),
+    ...direct("accept", "accept selections"),
+    ...direct("accept", "consent to all"),
+    ...direct("accept", "accept use of cookies"),
+    ...direct("accept", "allow selected"),
+    ...direct("accept", "accept the use of cookies and other data for the purposes described"),
+    ...direct("accept", "agree & continue"),
+    equivalent("accept", "accept functional cookies", "category_functional"),
+    equivalent("accept", "accept advertising cookies", "category_advertising"),
     equivalent("accept", "allow analytics", "category_analytics"),
     equivalent("accept", "accept analytics", "category_analytics"),
     equivalent("accept", "enable analytics", "category_analytics"),
+    contextual("accept", "i'm happy with that", {
+      requiresConsentContext: true,
+      variant: "approval_acknowledgment",
+    }),
     contextual("accept", "continue", { requiresContinueConsentContext: true, variant: "continue_as_accept" }),
     weak("accept", "ok", { requiresConsentContext: true }),
     weak("accept", "got it", { requiresConsentContext: true }),
@@ -150,6 +173,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "essential cookies only", "necessary_only"),
     equivalent("reject", "essential only", "necessary_only"),
     contextual("reject", "required only", { requiresConsentContext: true, variant: "necessary_only" }),
+    contextual("reject", "only required", { requiresConsentContext: true, variant: "necessary_only" }),
     equivalent("reject", "only necessary", "necessary_only"),
     equivalent("reject", "only essential", "necessary_only"),
     equivalent("reject", "only technically required", "necessary_only"),
@@ -171,6 +195,20 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("reject", "decline non essential"),
     ...direct("reject", "decline non-essential cookies"),
     ...direct("reject", "decline non essential cookies"),
+    ...direct("reject", "decline optional"),
+    ...direct("reject", "decline optional cookies"),
+    ...direct("reject", "i decline optional cookies"),
+    ...direct("reject", "refuse optional"),
+    ...direct("reject", "refuse optional cookies"),
+    ...direct("reject", "deny optional"),
+    ...direct("reject", "deny optional cookies"),
+    ...direct("reject", "reject additional cookies"),
+    ...direct("reject", "decline cookies"),
+    equivalent("reject", "proceed with required cookies only", "necessary_only"),
+    equivalent("reject", "refuse functional cookies", "category_functional"),
+    equivalent("reject", "refuse advertising cookies", "category_advertising"),
+    ...direct("reject", "reject the use of cookies and other data for the purposes described"),
+    ...direct("reject", "deny cookies"),
     equivalent("reject", "reject analytics", "category_analytics"),
     equivalent("reject", "deny analytics", "category_analytics"),
     equivalent("reject", "disable analytics", "category_analytics"),
@@ -186,10 +224,14 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     weak("reject", "skip", { requiresConsentContext: true }),
 
     contextual("options", "manage", { requiresConsentContext: true }),
+    ...direct("options", "cookie consent tool"),
+    ...direct("options", "consent choices"),
     ...direct("options", "manage preferences"),
     ...direct("options", "manage cookies"),
     ...direct("options", "manage options"),
     ...direct("options", "manage choices"),
+    ...direct("options", "manage my choices"),
+    ...direct("options", "set cookie options"),
     ...direct("options", "allow selection"),
     ...direct("options", "set preferences"),
     contextual("options", "set up the collection", { requiresConsentContext: true }),
@@ -204,12 +246,18 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "customise choices"),
     ...direct("options", "customise my choices"),
     ...direct("options", "more options"),
+    contextual("options", "more choices", { requiresConsentContext: true }),
+    contextual("options", "functional cookies choice", { requiresConsentContext: true }),
+    contextual("options", "advertising cookies choice", { requiresConsentContext: true }),
+    contextual("options", "consent preference", { requiresConsentContext: true }),
+    contextual("options", "view options", { requiresConsentContext: true }),
     contextual("options", "show purposes", { requiresConsentContext: true }),
     contextual("options", "options", { requiresConsentContext: true }),
     contextual("options", "settings", { requiresConsentContext: true }),
     contextual("options", "configure", { requiresConsentContext: true }),
     contextual("options", "choose", { requiresConsentContext: true }),
     ...direct("options", "preference center"),
+    contextual("options", "preference cookies", { requiresConsentContext: true }),
     ...direct("options", "privacy center"),
     ...direct("options", "privacy preference center"),
     contextual("options", "save choices", { requiresPreferenceContext: true, variant: "save_preferences" }),
@@ -258,6 +306,14 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "cookies akzeptieren"),
     ...direct("accept", "alle cookies akzeptieren"),
     ...direct("accept", "akzeptieren und fortfahren"),
+    ...direct("accept", "auswahl übernehmen"),
+    ...direct("accept", "alle zustimmen"),
+    ...direct("accept", "alle cookies erlauben"),
+    ...direct("accept", "akzeptieren und schließen"),
+    ...direct("accept", "cookies verwenden"),
+    ...direct("accept", "ausgewählte erlauben"),
+    equivalent("accept", "funktionale cookies akzeptieren", "category_functional"),
+    equivalent("accept", "werbe-cookies akzeptieren", "category_advertising"),
     weak("accept", "ok", { requiresConsentContext: true }),
     weak("accept", "ja", { requiresConsentContext: true }),
 
@@ -294,6 +350,12 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("reject", "alle deaktivieren"),
     ...direct("reject", "optionale deaktivieren"),
     ...direct("reject", "deaktivieren"),
+    ...direct("reject", "zusätzliche cookies ablehnen"),
+    ...direct("reject", "cookies ablehnen"),
+    equivalent("reject", "nur erforderliche cookies verwenden", "necessary_only"),
+    equivalent("reject", "funktionale cookies ablehnen", "category_functional"),
+    equivalent("reject", "werbe-cookies ablehnen", "category_advertising"),
+    ...direct("reject", "cookies verweigern"),
 
     contextual("options", "einstellungen", { requiresConsentContext: true }),
     ...direct("options", "cookie-einstellungen"),
@@ -306,6 +368,11 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "cookies verwalten"),
     contextual("options", "verwalten", { requiresConsentContext: true }),
     ...direct("options", "auswahl verwalten"),
+    ...direct("options", "meine auswahl"),
+    ...direct("options", "cookie-optionen festlegen"),
+    contextual("options", "weitere auswahl", { requiresConsentContext: true }),
+    contextual("options", "einwilligungspräferenz", { requiresConsentContext: true }),
+    contextual("options", "optionen anzeigen", { requiresConsentContext: true }),
     contextual("options", "optionen", { requiresConsentContext: true }),
     ...direct("options", "weitere optionen"),
     contextual("options", "anpassen", { requiresConsentContext: true }),
@@ -353,6 +420,13 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "accepter les recommandations"),
     ...direct("accept", "accepter et continuer"),
     ...direct("accept", "enregistrer et accepter"),
+    ...direct("accept", "accepter la sélection"),
+    ...direct("accept", "consentir à tout"),
+    ...direct("accept", "accepter et fermer"),
+    ...direct("accept", "accepter l'utilisation des cookies"),
+    ...direct("accept", "autoriser la sélection"),
+    equivalent("accept", "accepter les cookies fonctionnels", "category_functional"),
+    equivalent("accept", "accepter les cookies publicitaires", "category_advertising"),
     weak("accept", "ok", { requiresConsentContext: true }),
     weak("accept", "oui", { requiresConsentContext: true }),
     weak("accept", "continuer", { requiresConsentContext: true }),
@@ -393,11 +467,23 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("reject", "tout rejeter"),
     ...direct("reject", "rejeter tout"),
     ...direct("reject", "tout refuser et continuer"),
+    ...direct("reject", "refuser les cookies supplémentaires"),
+    ...direct("reject", "refuser les cookies"),
+    equivalent("reject", "continuer avec les cookies nécessaires uniquement", "necessary_only"),
+    equivalent("reject", "refuser les cookies fonctionnels", "category_functional"),
+    equivalent("reject", "refuser les cookies publicitaires", "category_advertising"),
+    ...direct("reject", "refuser l'utilisation des cookies et des données décrites"),
+    ...direct("reject", "refuser les cookies"),
 
     contextual("options", "paramètres", { requiresConsentContext: true }),
     contextual("options", "préférences", { requiresConsentContext: true }),
     ...direct("options", "gestion des préférences"),
     ...direct("options", "gérer mes choix"),
+    ...direct("options", "définir les options des cookies"),
+    contextual("options", "plus de choix", { requiresConsentContext: true }),
+    contextual("options", "choix des cookies fonctionnels", { requiresConsentContext: true }),
+    contextual("options", "préférence de consentement", { requiresConsentContext: true }),
+    contextual("options", "voir les options", { requiresConsentContext: true }),
     ...direct("options", "gérer les choix"),
     ...direct("options", "gérer le consentement"),
     ...direct("options", "gérer mes consentements"),
@@ -456,6 +542,13 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "aceptar y continuar"),
     ...direct("accept", "aceptar cookies"),
     ...direct("accept", "aceptar todas las cookies"),
+    ...direct("accept", "aceptar selección"),
+    ...direct("accept", "consentir todo"),
+    ...direct("accept", "aceptar y cerrar"),
+    ...direct("accept", "aceptar el uso de cookies"),
+    ...direct("accept", "permitir seleccionadas"),
+    equivalent("accept", "aceptar cookies funcionales", "category_functional"),
+    equivalent("accept", "aceptar cookies publicitarias", "category_advertising"),
 
     ...direct("reject", "rechazar"),
     ...direct("reject", "rechazar todo"),
@@ -466,6 +559,12 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "continuar sin cookies"),
     equivalent("reject", "solo cookies necesarias", "necessary_only"),
     equivalent("reject", "solo las cookies necesarias", "necessary_only"),
+    ...direct("reject", "rechazar cookies adicionales"),
+    ...direct("reject", "rechazar cookies"),
+    equivalent("reject", "continuar solo con las cookies necesarias", "necessary_only"),
+    equivalent("reject", "rechazar cookies funcionales", "category_functional"),
+    equivalent("reject", "rechazar cookies publicitarias", "category_advertising"),
+    ...direct("reject", "denegar cookies"),
 
     contextual("options", "configurar", { requiresConsentContext: true }),
     contextual("options", "preferencias", { requiresConsentContext: true }),
@@ -475,6 +574,11 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "gestionar opciones"),
     ...direct("options", "gestionar preferencias"),
     ...direct("options", "panel de preferencias"),
+    ...direct("options", "gestionar mis opciones"),
+    ...direct("options", "establecer opciones de cookies"),
+    contextual("options", "más opciones", { requiresConsentContext: true }),
+    contextual("options", "preferencia de consentimiento", { requiresConsentContext: true }),
+    contextual("options", "ver opciones", { requiresConsentContext: true }),
   ]),
   ...it([
     ...direct("accept", "accetta"),
@@ -485,6 +589,13 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "accetta e continua"),
     ...direct("accept", "accetta i cookie"),
     ...direct("accept", "accetta tutti i cookie"),
+    ...direct("accept", "accetta selezione"),
+    ...direct("accept", "consenti tutto"),
+    ...direct("accept", "accetta e chiudi"),
+    ...direct("accept", "accetta l'uso dei cookie"),
+    ...direct("accept", "consenti selezionati"),
+    equivalent("accept", "accetta i cookie funzionali", "category_functional"),
+    equivalent("accept", "accetta i cookie pubblicitari", "category_advertising"),
 
     ...direct("reject", "rifiuta"),
     ...direct("reject", "rifiuta tutto"),
@@ -502,6 +613,12 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "consenti solo i cookie tecnici", "necessary_only"),
     equivalent("reject", "solo cookie tecnici", "necessary_only"),
     equivalent("reject", "solo i cookie tecnici", "necessary_only"),
+    ...direct("reject", "rifiuta i cookie aggiuntivi"),
+    ...direct("reject", "rifiuta i cookie"),
+    equivalent("reject", "continua solo con i cookie necessari", "necessary_only"),
+    equivalent("reject", "rifiuta i cookie funzionali", "category_functional"),
+    equivalent("reject", "rifiuta i cookie pubblicitari", "category_advertising"),
+    ...direct("reject", "nega i cookie"),
 
     contextual("options", "preferenze", { requiresConsentContext: true }),
     contextual("options", "impostazioni", { requiresConsentContext: true }),
@@ -511,6 +628,11 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "impostazioni cookie"),
     ...direct("options", "gestisci preferenze"),
     ...direct("options", "personalizza le mie scelte"),
+    ...direct("options", "gestisci le mie scelte"),
+    ...direct("options", "imposta le opzioni dei cookie"),
+    contextual("options", "altre scelte", { requiresConsentContext: true }),
+    contextual("options", "preferenza di consenso", { requiresConsentContext: true }),
+    contextual("options", "visualizza opzioni", { requiresConsentContext: true }),
   ]),
   ...nl([
     ...direct("accept", "accepteren"),
@@ -521,6 +643,13 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "toestaan"),
     ...direct("accept", "alles toestaan"),
     ...direct("accept", "accepteren en doorgaan"),
+    ...direct("accept", "selectie accepteren"),
+    ...direct("accept", "alles toestaan"),
+    ...direct("accept", "accepteren en sluiten"),
+    ...direct("accept", "gebruik van cookies accepteren"),
+    ...direct("accept", "geselecteerde toestaan"),
+    equivalent("accept", "functionele cookies accepteren", "category_functional"),
+    equivalent("accept", "advertentiecookies accepteren", "category_advertising"),
     weak("accept", "ok", { requiresConsentContext: true }),
 
     ...direct("reject", "weigeren"),
@@ -538,6 +667,12 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "noodzakelijke cookies gebruiken", "necessary_only"),
     ...direct("reject", "optionele cookies weigeren"),
     ...direct("reject", "alles uitschakelen"),
+    ...direct("reject", "extra cookies weigeren"),
+    ...direct("reject", "cookies weigeren"),
+    equivalent("reject", "doorgaan met alleen noodzakelijke cookies", "necessary_only"),
+    equivalent("reject", "functionele cookies weigeren", "category_functional"),
+    equivalent("reject", "advertentiecookies weigeren", "category_advertising"),
+    ...direct("reject", "cookies ontzeggen"),
 
     contextual("options", "instellingen", { requiresConsentContext: true }),
     contextual("options", "voorkeuren", { requiresConsentContext: true }),
@@ -548,6 +683,11 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "voorkeuren beheren"),
     ...direct("options", "privacy-instellingen"),
     contextual("options", "zelf instellen", { requiresConsentContext: true }),
+    ...direct("options", "mijn keuzes beheren"),
+    ...direct("options", "cookie-opties instellen"),
+    contextual("options", "meer keuzes", { requiresConsentContext: true }),
+    contextual("options", "toestemmingsvoorkeur", { requiresConsentContext: true }),
+    contextual("options", "opties bekijken", { requiresConsentContext: true }),
     contextual("options", "mijn keuzes opslaan", { requiresPreferenceContext: true, variant: "save_preferences" }),
 
     ...direct("privacy_opt_out", "bezwaar maken"),
@@ -569,6 +709,13 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "zezwól na wszystkie"),
     ...direct("accept", "zezwalam"),
     ...direct("accept", "zezwalam na wszystkie"),
+    ...direct("accept", "zaakceptuj wybór"),
+    ...direct("accept", "wyraź zgodę na wszystko"),
+    ...direct("accept", "zaakceptuj i zamknij"),
+    ...direct("accept", "zaakceptuj użycie plików cookie"),
+    ...direct("accept", "zezwól na wybrane"),
+    equivalent("accept", "zaakceptuj funkcjonalne pliki cookie", "category_functional"),
+    equivalent("accept", "zaakceptuj reklamowe pliki cookie", "category_advertising"),
     contextual("accept", "przejdź do serwisu", { requiresConsentContext: true }),
     weak("accept", "ok", { requiresConsentContext: true }),
 
@@ -588,6 +735,12 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "używaj tylko niezbędnych plików cookie", "necessary_only"),
     ...direct("reject", "odrzuć opcjonalne pliki cookie"),
     ...direct("reject", "wyłącz wszystkie"),
+    ...direct("reject", "odrzuć dodatkowe pliki cookie"),
+    ...direct("reject", "odrzuć pliki cookie"),
+    equivalent("reject", "kontynuuj tylko z wymaganymi plikami cookie", "necessary_only"),
+    equivalent("reject", "odrzuć funkcjonalne pliki cookie", "category_functional"),
+    equivalent("reject", "odrzuć reklamowe pliki cookie", "category_advertising"),
+    ...direct("reject", "odrzuć pliki cookie"),
 
     contextual("options", "ustawienia", { requiresConsentContext: true }),
     contextual("options", "ustawienia zaawansowane", { requiresConsentContext: true }),
@@ -603,6 +756,11 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "zarządzaj preferencjami"),
     ...direct("options", "centrum preferencji"),
     contextual("options", "zapisz moje wybory", { requiresPreferenceContext: true, variant: "save_preferences" }),
+    ...direct("options", "zarządzaj moimi wyborami"),
+    ...direct("options", "ustaw opcje plików cookie"),
+    contextual("options", "więcej wyborów", { requiresConsentContext: true }),
+    contextual("options", "preferencja zgody", { requiresConsentContext: true }),
+    contextual("options", "pokaż opcje", { requiresConsentContext: true }),
 
     ...direct("privacy_opt_out", "sprzeciw"),
     ...direct("privacy_opt_out", "wnieś sprzeciw"),
@@ -688,9 +846,21 @@ export function classifyConsentControlLabel(
   if (NON_ACTIONABLE_REFERENCE_PATTERN.test(normalizedLabel)) {
     return unknown(["non_actionable_reference_label"]);
   }
+  if (/^(?:close|dismiss|×|x)$/i.test(normalizedLabel)) {
+    return {
+      intent: "unknown",
+      semanticRole: "dismiss",
+      confidence: 0.84,
+      matchedTerm: normalizedLabel,
+      matchStrength: "direct",
+      reasonCodes: ["matched_dismiss", "match_strength_direct"],
+      contextSatisfied: hasConsentContext,
+    };
+  }
   if (isUtiqScopedRejectLabel(normalizedLabel)) {
     return {
       intent: "privacy_opt_out",
+      semanticRole: "unknown",
       confidence: 0.86,
       matchedTerm: "utiq reject",
       matchedLocale: "de",
@@ -731,6 +901,7 @@ export function classifyConsentControlLabel(
   const confidence = confidenceFor(match.term, contextSatisfied);
   return {
     intent: match.term.intent,
+    semanticRole: semanticRoleForTerm(match.term),
     confidence,
     matchedTerm: match.term.phrase,
     matchedLocale: match.term.locale,
@@ -748,6 +919,21 @@ export function classifyConsentControlLabel(
     ]),
     contextSatisfied,
   };
+}
+
+function semanticRoleForTerm(term: ConsentControlTerm): ConsentControlSemanticRole {
+  if (term.intent === "reject") {
+    return term.variant === "necessary_only" ? "necessary_only" : "reject";
+  }
+  if (term.intent === "options") {
+    return "preferences";
+  }
+  if (term.intent === "accept") {
+    return term.strength === "weak" || term.variant === "continue_as_accept"
+      ? "ambiguous_acknowledgment"
+      : "explicit_accept";
+  }
+  return "unknown";
 }
 
 export function normalizeConsentControlText(value: string | null | undefined): string {
@@ -934,6 +1120,7 @@ function hasCanonicalLocaleContext(
 function unknown(reasonCodes: string[]): ConsentControlLabelClassification {
   return {
     intent: "unknown",
+    semanticRole: "unknown",
     confidence: 0.2,
     reasonCodes: uniqueStrings(reasonCodes),
     contextSatisfied: false,

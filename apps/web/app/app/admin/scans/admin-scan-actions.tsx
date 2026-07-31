@@ -5,11 +5,14 @@ import { usePathname } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { ShareReportActions } from "../../../../components/scans/share-report-actions";
 
 type AdminScanActionsProps = {
   compact?: boolean;
   scanId: string;
   scanViewHref: string;
+  domainLabel: string;
+  visualEvidenceHref?: string | null;
 };
 
 type AdminNavigationState = {
@@ -33,6 +36,14 @@ function useAdminNavigation() {
 export function AdminNavigationProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [navigation, setNavigation] = useState<AdminNavigationState>(null);
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
+
+  // Keep the first client render identical to the server render. Reading
+  // document during render makes the portal branch environment-dependent and
+  // can trigger React hydration recovery before a navigation click occurs.
+  useEffect(() => {
+    setPortalHost(document.body);
+  }, []);
 
   useEffect(() => {
     setNavigation(null);
@@ -50,7 +61,7 @@ export function AdminNavigationProvider({ children }: { children: ReactNode }) {
     return true;
   }
 
-  const overlay = navigation && typeof document !== "undefined"
+  const overlay = navigation && portalHost
     ? createPortal(
       <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/45 backdrop-blur-sm" role="status" aria-live="polite">
         <div className="rounded-2xl border border-white/20 bg-white px-6 py-5 text-center shadow-2xl">
@@ -59,7 +70,7 @@ export function AdminNavigationProvider({ children }: { children: ReactNode }) {
           <p className="mt-1 text-xs text-slate-500">This will clear automatically if navigation cannot complete.</p>
         </div>
       </div>,
-      document.body
+      portalHost
     )
     : null;
 
@@ -127,9 +138,10 @@ function ActionButton({
       <Link
         aria-label={label}
         aria-disabled={navigationPending}
-        className={`inline-flex items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-slate-400 hover:text-slate-950 ${navigationPending ? "cursor-wait opacity-60" : ""} ${compact ? "h-8 w-8 [&_svg]:h-4 [&_svg]:w-4" : "h-10 w-10"}`}
+        className={`app-raised-button inline-flex items-center justify-center rounded-full text-slate-700 hover:text-slate-950 ${navigationPending ? "cursor-wait opacity-60" : ""} ${compact ? "h-8 w-8 [&_svg]:h-4 [&_svg]:w-4" : "h-10 w-10"}`}
         href={href}
         onClick={handleClick}
+        prefetch={false}
         title={label}
       >
         {children}
@@ -141,9 +153,17 @@ function ActionButton({
   );
 }
 
-export function AdminScanActions({ compact = false, scanId, scanViewHref }: AdminScanActionsProps) {
+export function AdminScanActions({ compact = false, domainLabel, scanId, scanViewHref, visualEvidenceHref }: AdminScanActionsProps) {
   return (
     <div className={`flex items-center ${compact ? "gap-1" : "gap-2"}`}>
+      {visualEvidenceHref ? (
+        <ShareReportActions
+          domainLabel={domainLabel}
+          scanId={scanId}
+          visualEvidenceHref={visualEvidenceHref}
+          visualEvidenceOnly
+        />
+      ) : null}
       <ActionButton compact={compact} href={scanViewHref} label="Open scan report">
         <SimpleScanIcon />
       </ActionButton>
@@ -172,7 +192,7 @@ export function AdminReportLink({
     <Link
       aria-disabled={navigationPending}
       aria-label={ariaLabel}
-      className={`${className} ${navigationPending ? "cursor-wait opacity-60" : ""}`}
+      className={`app-raised-button ${className} ${navigationPending ? "cursor-wait opacity-60" : ""}`}
       href={href}
       onClick={(event) => {
         if (
@@ -189,6 +209,7 @@ export function AdminReportLink({
           event.preventDefault();
         }
       }}
+      prefetch={false}
     >
       {children}
     </Link>

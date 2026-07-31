@@ -116,6 +116,7 @@ test("final document party classification rebases redirected site traffic withou
     "browser_snapshot",
     "first_party",
     "final_document_party",
+    "canonical_cookie_kb:unknown",
   ]);
 });
 

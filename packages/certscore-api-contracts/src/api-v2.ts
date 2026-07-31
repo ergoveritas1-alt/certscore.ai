@@ -281,6 +281,48 @@ export const apiV2PreConsentCookiesTrackersRowSchema = z
     priority: apiV2PreConsentInventoryPrioritySchema.optional(),
     confidence: apiV2PreConsentInventoryConfidenceSchema.optional(),
     party: z.enum(["first_party", "third_party", "mixed", "unknown"]).optional(),
+    setByThirdPartyScript: z.boolean().optional(),
+    set_by_third_party_script: z.boolean().optional(),
+    cookieDetails: z.array(z.object({
+      name: z.string(),
+      domain: z.string().nullable(),
+      category: z.string(),
+      description: z.string(),
+      dataTypes: z.array(z.string()),
+      expiresAt: z.string().nullable(),
+      lifespanSeconds: z.number().int().min(0).nullable(),
+      lifespanSource: z.string().nullable(),
+      longLived: z.boolean(),
+      setByThirdPartyScript: z.boolean(),
+      set_by_third_party_script: z.boolean(),
+      setterScriptUrl: z.string().nullable(),
+      initiatorChain: z.array(z.string()),
+    }).strict()).optional(),
+    canonicalEntity: z.string().nullable().optional(),
+    purposes: z.array(z.string()).optional(),
+    domains: z.array(z.string()).optional(),
+    products: z.array(z.string()).optional(),
+    dataFlows: z.array(z.object({
+      endpoint: z.string(),
+      idSync: z.boolean(),
+      networkDestination: z.object({
+        ip: z.string().nullable(),
+        country: z.string().nullable(),
+        countryCode: z.string().nullable(),
+        asn: z.number().int().positive().nullable(),
+        provider: z.string().nullable(),
+        label: z.literal("server location (may be CDN edge)")
+      }).strict(),
+      controllingEntity: z.object({
+        legalEntity: z.string().nullable(),
+        headquartersCountry: z.string().nullable()
+      }).strict(),
+      transferMechanism: z.object({
+        mechanism: z.enum(["adequacy_decision", "dpf_certified", "sccs_assumed_unverified", "unknown"]),
+        basis: z.string(),
+        verifiedAsOf: z.string()
+      }).strict()
+    }).strict()).optional(),
     requestCount: z.number().int().min(0).nullable().optional(),
     phase: apiV2PreConsentInventoryPhaseSchema,
     observedBeforeConsent: z.boolean(),
@@ -295,7 +337,9 @@ export const apiV2PreConsentCookiesTrackersSummarySchema = z
     rowCount: z.number().int().min(0),
     trackerCount: z.number().int().min(0),
     cookieCount: z.number().int().min(0),
-    requestCount: z.number().int().min(0)
+    requestCount: z.number().int().min(0),
+    vendorCount: z.number().int().min(0).default(0),
+    domainCount: z.number().int().min(0).default(0)
   })
   .strict();
 

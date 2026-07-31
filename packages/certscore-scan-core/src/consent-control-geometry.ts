@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import {
   classifyConsentControlLabel,
+  consentControlTerms,
   isSupportedPrivacyEvidenceLocale,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   type ConsentControlClassifierProfile,
@@ -28,6 +29,12 @@ export type ConsentControlGeometryLayer =
   | "preference_center"
   | "footer"
   | "page_body"
+  | "unknown";
+
+export type ConsentControlPresentationType =
+  | "dedicated_button"
+  | "inline_link"
+  | "persistent_link"
   | "unknown";
 
 export type ConsentControlDecisionStatus =
@@ -90,6 +97,7 @@ export interface ConsentControlCandidateEvidence {
   label: string;
   normalizedLabel: string;
   actionType: ConsentControlGeometryActionType;
+  presentationType: ConsentControlPresentationType;
   tagName: string;
   role?: string;
   ariaLabel?: string;
@@ -246,11 +254,16 @@ const DEFAULT_CONTAINER_LIMIT = 12;
 const CONSENT_CONTEXT_PATTERN = canonicalPhrasePattern([
   "cookie", "cookies", "consent", "privacy", "tracking", "advertising", "marketing",
   "optanon", "onetrust", "cmp", "trustarc", "didomi", "usercentrics", "cookiebot", "consentmanager",
+  "drupal", "eu cookie compliance", "sliding popup",
   ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => entry.contextHints),
 ]);
 const MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN = CONSENT_CONTEXT_PATTERN;
-const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN =
-  /preference|preferences|settings|choices|options|purpose|purposes|präferenzen|einstellungen|auswahl|optionen|choix|paramètres|préférences|finalités|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|voorkeuren|instellingen|keuzes|doeleinden|ustawieni[ae]|preferencj[ae]|wybor(?:y|ów)|cel(?:e|ów)/i;
+const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN = canonicalPhrasePattern([
+  ...consentControlTerms
+    .filter((term) => term.intent === "options")
+    .map((term) => term.phrase),
+  ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => entry.contextHints),
+]);
 const POLICY_LINK_PATTERN = canonicalPhrasePattern(
   PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => [
     ...entry.privacyPolicyLabels,
@@ -287,6 +300,8 @@ export async function captureConsentControlGeometry(
   const frameInput = {
     candidateLimit: options.candidateLimit ?? DEFAULT_CANDIDATE_LIMIT,
     containerLimit: options.containerLimit ?? DEFAULT_CONTAINER_LIMIT,
+    consentPatternSource: CONSENT_CONTEXT_PATTERN.source,
+    controlLabelPatternSource: CANDIDATE_ACTION_PRIORITY_PATTERN.source,
     registrySelectors,
   };
   const mainFrame = page.mainFrame();
@@ -530,7 +545,7 @@ function buildCmpEvidence(input: RawGeometryCapture): ConsentControlCmpEvidence 
     domSelectors: input.domSelectors,
     jsGlobals: input.globals,
     textSnippets: input.textSnippets,
-    urls: input.scripts,
+    urls: unique([...input.scripts, input.pageUrl]),
   });
   const detections = rawDetections.map((detection) => ({
     ...detection,
@@ -592,6 +607,7 @@ function buildCandidateEvidence(
     label: candidate.label,
     normalizedLabel: normalizeLabel(candidate.label),
     actionType,
+    presentationType: presentationTypeForCandidate(candidate),
     tagName: candidate.tagName,
     role: candidate.role,
     ariaLabel: candidate.ariaLabel,
@@ -625,6 +641,23 @@ function buildCandidateEvidence(
   };
 }
 
+function presentationTypeForCandidate(
+  candidate: Pick<RawGeometryCandidate, "layer" | "role" | "tagName">,
+): ConsentControlPresentationType {
+  const role = candidate.role?.toLowerCase();
+  if (
+    candidate.tagName === "button" ||
+    candidate.tagName === "input" ||
+    role === "button"
+  ) {
+    return "dedicated_button";
+  }
+  if (candidate.tagName === "a" || role === "link") {
+    return candidate.layer === "first_layer" ? "inline_link" : "persistent_link";
+  }
+  return "unknown";
+}
+
 function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabelClassification {
   return classifyConsentControlLabel({
     label: candidate.label,
@@ -633,7 +666,9 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
     value: candidate.value,
     contextText: candidate.contextText,
     hasConsentContext: CONSENT_CONTEXT_PATTERN.test(candidate.contextText),
-    hasPreferenceContext: candidate.layer === "preference_center" || /preference|settings|privacy choices/i.test(candidate.contextText),
+    hasPreferenceContext:
+      candidate.layer === "preference_center" ||
+      MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN.test(candidate.contextText),
     localeHints: localeHintsForCandidate(candidate),
   });
 }
@@ -706,6 +741,15 @@ function actionTypeForClassification(
   classification: ConsentControlLabelClassification,
   candidate: RawGeometryCandidate,
 ): ConsentControlGeometryActionType {
+  if (
+    classification.intent === "options" &&
+    classification.matchStrength === "direct" &&
+    ["cookie consent tool", "consent choices"].includes(
+      classification.matchedTerm?.trim().toLocaleLowerCase() ?? ""
+    )
+  ) {
+    return classification.variant === "save_preferences" ? "save_preferences" : "manage_preferences";
+  }
   if (candidate.tagName === "a" && POLICY_LINK_PATTERN.test(candidate.label)) {
     return "policy_link";
   }
@@ -829,6 +873,8 @@ function normalizeLabel(label: string): string {
 function collectConsentGeometryInPage(input: {
   candidateLimit: number;
   containerLimit: number;
+  consentPatternSource: string;
+  controlLabelPatternSource: string;
   registrySelectors: string[];
 }): RawGeometryCapture {
   const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
@@ -842,9 +888,8 @@ function collectConsentGeometryInPage(input: {
     width: window.innerWidth,
     height: window.innerHeight,
   };
-  const consentPattern = /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|toestemming|voorkeuren|instellingen|keuzes|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|preferencj[ae]|ustawieni[ae]|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie/i;
-  const controlLabelPattern =
-    /accept|agree|allow|continue|ok|got it|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|save|cookie|cookies|analytics|necessary|essential|required|technical|akzeptieren|annehmen|ablehnen|einstellungen|verwalten|accepter|refuser|continuer|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|keuzes|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
+  const consentPattern = new RegExp(input.consentPatternSource, "iu");
+  const controlLabelPattern = new RegExp(input.controlLabelPatternSource, "iu");
   const containerSelector = [
     "[role='dialog']",
     "[aria-modal='true']",
@@ -990,7 +1035,16 @@ function collectConsentGeometryInPage(input: {
       "Didomi",
       "UC_UI",
       "TrustArc",
-    ].filter((name) => name in window),
+    ].filter((name) => name in window).concat(
+      (() => {
+        const settings = (window as typeof window & {
+          drupalSettings?: Record<string, unknown>;
+        }).drupalSettings;
+        return settings && typeof settings.eu_cookie_compliance === "object"
+          ? ["drupalSettings.eu_cookie_compliance"]
+          : [];
+      })(),
+    ),
     domSelectors,
     textSnippets: [
       compactText(document.body?.innerText || "").slice(0, 2_000),
@@ -1007,6 +1061,14 @@ function collectConsentGeometryInPage(input: {
     contextPattern: RegExp,
   ): RawGeometryCandidate | null {
     if (isStaticTextOnlyControlCandidate(element)) {
+      return null;
+    }
+    // Some CMPs add a class such as `button-row` to a wrapper that contains
+    // the real actionable controls. Retaining that wrapper creates a composite
+    // label (for example, "Manage settingsReject Accept") and can consume the
+    // candidate budget before its child buttons are considered. Keep the
+    // actual interactive descendants and omit only non-interactive wrappers.
+    if (!isSemanticallyInteractive(element) && hasInteractiveDescendant(element)) {
       return null;
     }
     const label = labelFor(element);
@@ -1088,6 +1150,29 @@ function collectConsentGeometryInPage(input: {
       /\b(?:btn|button|choice|option|preference|purpose)\b/i.test(className) ||
       /(?:btn|button|choice|option|preference|purpose)/i.test(id)
     );
+  }
+
+  function isSemanticallyInteractive(element: Element): boolean {
+    const tagName = element.tagName.toLowerCase();
+    if (/^(?:a|button|input|select|textarea|summary)$/.test(tagName)) {
+      return true;
+    }
+    const role = (element.getAttribute("role") || "").toLowerCase();
+    if (/^(?:button|link|checkbox|radio|switch|tab|menuitem|option)$/i.test(role)) {
+      return true;
+    }
+    if (element.hasAttribute("onclick")) {
+      return true;
+    }
+    const tabindex = element.getAttribute("tabindex");
+    return tabindex !== null && Number.isFinite(Number(tabindex)) && Number(tabindex) >= 0;
+  }
+
+  function hasInteractiveDescendant(element: Element): boolean {
+    return deepQuerySelectorAll(
+      "button,a,input,select,textarea,summary,[role='button'],[role='link'],[role='checkbox'],[role='radio'],[role='switch'],[role='tab'],[role='menuitem'],[role='option'],[onclick],[tabindex]",
+      element,
+    ).some((descendant) => descendant !== element && isSemanticallyInteractive(descendant));
   }
 
   function nearestContextRoot(element: Element, pattern: RegExp): Element | undefined {
@@ -1211,10 +1296,41 @@ function collectConsentGeometryInPage(input: {
 
   function labelFor(element: Element): string {
     const aria = element.getAttribute("aria-label");
+    const labelRoot = element.getRootNode();
+    const labelledBy = (element.getAttribute("aria-labelledby") || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((id) => {
+        if (labelRoot instanceof Document) {
+          return labelRoot.getElementById(id);
+        }
+        if (labelRoot instanceof ShadowRoot) {
+          return labelRoot.querySelector(`#${cssEscape(id)}`);
+        }
+        return document.getElementById(id);
+      })
+      .filter((labelElement): labelElement is HTMLElement => Boolean(labelElement))
+      .map((labelElement) => compactText(labelElement.innerText || labelElement.textContent || ""))
+      .filter(Boolean)
+      .join(" ");
     const title = element.getAttribute("title");
     const value = element instanceof HTMLInputElement ? element.value : "";
-    const text = deepText(element);
-    return compactText(aria || title || value || text);
+    const visibleText = element instanceof HTMLElement ? compactText(element.innerText || "") : "";
+    const text = visibleText || deepText(element);
+    // Tokenized aria labels are implementation keys, not user-facing control
+    // names (for example `BUTTONS.REJECT`). Prefer the rendered label while
+    // retaining the token separately in ariaLabel for diagnostics.
+    for (const candidate of [aria, labelledBy, title, value, text]) {
+      const normalized = compactText(candidate || "");
+      if (normalized && !isLocalizationToken(normalized)) {
+        return normalized;
+      }
+    }
+    return compactText(aria || labelledBy || title || value || text);
+  }
+
+  function isLocalizationToken(value: string): boolean {
+    return /^[A-Za-z][A-Za-z0-9]*(?:[._:-][A-Za-z0-9_-]+)+$/.test(value) && !/\s/.test(value);
   }
 
   function selectorHintFor(element: Element): string {

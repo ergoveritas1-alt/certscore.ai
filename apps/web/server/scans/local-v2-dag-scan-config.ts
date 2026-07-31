@@ -11,6 +11,7 @@ export const LOCAL_V2_DAG_WC01_PROJECTION_VERSION = "wc01.normalized-concern-pol
 export type LocalV2DagScanProfile = (typeof LOCAL_V2_DAG_SCAN_PROFILES)[number];
 export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)[number];
 export type LocalV2DagLambdaTargetEnvironment = "local" | "production";
+export type LocalV2DagLambdaVpcMode = "none" | "vpc";
 export type LocalV2DagLambdaDebugOverrides = {
   actionFinalSettleMs?: number;
   actionSearchDeadlineMs?: number;
@@ -40,6 +41,7 @@ export type LocalV2DagScanEnv = {
   CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL?: string;
   CERTSCORE_V2_DAG_LAMBDA_SIMULATED?: string;
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV?: string;
+  CERTSCORE_V2_DAG_LAMBDA_VPC_MODE?: string;
   CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED?: string;
   CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME?: string;
   CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL?: string;
@@ -111,6 +113,9 @@ export function getLocalV2DagLambdaAwsRegionForScanFrom(value: unknown): LocalV2
   if (scanFrom === "eu_ie") {
     return "eu-west-1";
   }
+  if (scanFrom === "california") {
+    return "us-west-2";
+  }
   return "eu-central-1";
 }
 
@@ -121,6 +126,13 @@ function lambdaRegionEnv(input: { env: LocalV2DagScanEnv; scanFrom?: ScanFrom })
       enabled: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED ?? input.env.CERTSCORE_V2_DAG_LAMBDA_ENABLED,
       functionName: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_FUNCTION_NAME ?? input.env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME,
       resultQueueUrl: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL ?? input.env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL
+    };
+  }
+  if (scanFrom === "california") {
+    return {
+      enabled: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED ?? input.env.CERTSCORE_V2_DAG_LAMBDA_ENABLED,
+      functionName: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME ?? input.env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME,
+      resultQueueUrl: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL ?? input.env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL
     };
   }
   return {
@@ -167,6 +179,14 @@ export function getLocalV2DagLambdaConfiguration(
     ? compactEnvValue(regionEnv.functionName) ?? "local-v2-dag-lambda-simulator"
     : compactEnvValue(regionEnv.functionName);
   const resultQueueUrl = simulatedLocalLambda ? null : compactEnvValue(regionEnv.resultQueueUrl);
+  const targetEnvironment = getLocalV2DagLambdaTargetEnvironment(env);
+  const vpcMode: LocalV2DagLambdaVpcMode = simulatedLocalLambda
+    ? "none"
+    : env.CERTSCORE_V2_DAG_LAMBDA_VPC_MODE === "none"
+      ? "none"
+      : env.CERTSCORE_V2_DAG_LAMBDA_VPC_MODE === "vpc" || targetEnvironment === "production"
+        ? "vpc"
+        : "none";
 
   if (!enabled) {
     missing.push("CERTSCORE_V2_DAG_LAMBDA_ENABLED=true");
@@ -189,8 +209,8 @@ export function getLocalV2DagLambdaConfiguration(
     orchestrationMode: env.CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE === "sharded" ? "sharded" as const : "single" as const,
     resultQueueUrl: resultQueueUrl ?? (simulatedLocalLambda ? "local://certscore-v2-dag-lambda-simulated-results" : null),
     simulatedLocalLambda,
-    targetEnvironment: getLocalV2DagLambdaTargetEnvironment(env),
-    vpcMode: "none" as const
+    targetEnvironment,
+    vpcMode
   };
 }
 

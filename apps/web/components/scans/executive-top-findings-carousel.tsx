@@ -44,7 +44,7 @@ export function ExecutiveTopFindingsCarousel({
             <button
               type="button"
               aria-label="Previous top finding"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-lg font-semibold text-slate-600 shadow-sm transition hover:border-sky-200 hover:text-sky-700"
+              className="scan-report-button inline-flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold text-slate-600 hover:text-sky-700"
               onClick={goPrevious}
             >
               ‹
@@ -55,7 +55,7 @@ export function ExecutiveTopFindingsCarousel({
             <button
               type="button"
               aria-label="Next top finding"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-lg font-semibold text-slate-600 shadow-sm transition hover:border-sky-200 hover:text-sky-700"
+              className="scan-report-button inline-flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold text-slate-600 hover:text-sky-700"
               onClick={goNext}
             >
               ›

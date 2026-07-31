@@ -2,23 +2,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-s
 import { MembershipRoleForm, type MembershipRole } from "../../../../components/admin/membership-role-form";
 import { OrganizationPlanForm } from "../../../../components/admin/organization-plan-form";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
-import { formatAdminDateTime } from "../../../../lib/admin/date-time";
-import { listAdminUsers } from "../../../../server/admin/list-admin-users";
+import { formatAdminCompactDateTime } from "../../../../lib/admin/date-time";
+import { listAdminUsersPage } from "../../../../server/admin/list-admin-users";
+import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { updateMembershipRoleFormAction } from "../../../../server/admin/update-membership-role";
 import { updateOrganizationPlanFormAction } from "../../../../server/admin/update-organization-plan";
-
-function InfoIcon() {
-  return (
-    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 10.5v5" />
-      <circle cx="12" cy="7.5" r="0.8" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
+import { deleteAdminUserFormAction } from "../../../../server/admin/delete-user";
+import { assignUserWorkspaceFormAction } from "../../../../server/admin/assign-user-workspace";
+import { sendUserPasswordResetFormAction } from "../../../../server/admin/send-user-password-reset";
+import { createAdminUserFormAction } from "../../../../server/admin/create-user";
+import { listCompanies } from "../../../../server/company/repository";
+import { DeleteUserButton } from "../../../../components/admin/delete-user-button";
+import { AdminSubmitButton } from "../../../../components/admin/admin-submit-button";
+import {
+  ADMIN_PLAN_LABELS,
+  ADMIN_PLAN_STATUSES,
+  PLAN_CODES
+} from "../../../../lib/admin/plan-options";
+import { ASSIGNABLE_MEMBERSHIP_ROLES } from "../../../../lib/auth/membership-role-policy";
 
 type AdminUsersPageProps = {
   searchParams?: Promise<{
+    message?: string;
     page?: string;
     perPage?: string;
   }>;
@@ -28,13 +33,39 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
   const resolved = searchParams ? await searchParams : {};
   const pageSize = normalizePageSize(resolved.perPage);
   const requestedPage = normalizePage(resolved.page);
-  const allUsers = await listAdminUsers();
-  const pageCount = Math.max(1, Math.ceil(allUsers.length / pageSize));
+  const requestedUserPage = await withServerTiming(
+    "app.admin.users.list",
+    () => listAdminUsersPage(pageSize, (requestedPage - 1) * pageSize)
+  );
+  const pageCount = Math.max(1, Math.ceil(requestedUserPage.totalCount / pageSize));
   const page = Math.min(requestedPage, pageCount);
-  const users = allUsers.slice((page - 1) * pageSize, page * pageSize);
+  const userPage = page === requestedPage
+    ? requestedUserPage
+    : await withServerTiming(
+        "app.admin.users.list.normalized",
+        () => listAdminUsersPage(pageSize, (page - 1) * pageSize)
+      );
+  const users = userPage.items;
+  const workspaces = await listCompanies();
+  const passwordResetSent = resolved.message === "password_reset_sent";
+  const existingUserWorkspaceCreated = resolved.message === "existing_user_workspace_created";
+  const userCreated = resolved.message === "user_created";
+  const userAlreadyExists = resolved.message === "user_exists";
 
   return (
-    <Card className="border-slate-200 bg-white">
+    <div className="space-y-4">
+      {passwordResetSent ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">Password reset email sent. The user can use the secure link to choose a new password.</div> : null}
+      {userCreated ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">User and workspace created successfully. A welcome email with a secure password setup link was sent.</div> : null}
+      {existingUserWorkspaceCreated ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">That account already existed without a workspace. A new workspace was created and a fresh password setup link was sent.</div> : null}
+      {userAlreadyExists ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status">That user already exists and is assigned to a workspace. Use the existing user row to manage their workspace.</div> : null}
+      <Card className="border-slate-200 bg-white">
+        <CardHeader><CardTitle>Create user</CardTitle><p className="text-sm text-slate-600">Create a user, automatically assign them a new workspace, and send a secure link to set their password.</p></CardHeader>
+        <CardContent>
+          <form action={createAdminUserFormAction} className="flex flex-col gap-3 lg:flex-row lg:items-end"><label className="min-w-0 flex-1 text-sm font-medium text-slate-700">Email<input aria-label="Email address" className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3" name="email" required type="email" /></label><AdminSubmitButton className="app-raised-button app-raised-button-dark h-10 shrink-0 rounded-lg px-4 text-sm font-semibold text-white" idleContent="Create user and send invite" pendingContent="Creating…" /></form>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 bg-white">
       <CardHeader>
         <CardTitle>User And Workspace Admin</CardTitle>
       </CardHeader>
@@ -45,50 +76,43 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
           page={page}
           pageCount={pageCount}
           pageSize={pageSize}
-          totalCount={allUsers.length}
+          totalCount={userPage.totalCount}
           visibleCount={users.length}
         />
         <div className="overflow-x-auto overflow-y-visible">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead>
-              <tr className="text-left text-slate-500">
-                <th className="pb-3 pr-4 font-medium">User</th>
-                <th className="pb-3 pr-4 font-medium">Domains</th>
-                <th className="pb-3 pr-4 font-medium">Scans</th>
-                <th className="pb-3 pr-4 font-medium">Last login/scan</th>
-                <th className="pb-3 pr-4 font-medium">Access</th>
-                <th className="pb-3 font-medium">Plan Controls</th>
+              <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <th className="whitespace-nowrap pb-2 pr-4">User</th>
+                <th className="whitespace-nowrap pb-2 pr-4">Activity</th>
+                <th className="whitespace-nowrap pb-2 pr-4">Last active</th>
+                <th className="whitespace-nowrap pb-2 pr-4">Access level</th>
+                <th className="whitespace-nowrap pb-2 pr-4">Assign</th>
+                <th className="whitespace-nowrap pb-2 pr-4">Plan</th>
+                <th className="whitespace-nowrap pb-2 pl-2">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 [&_td]:align-top">
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td className="py-4 pr-4 align-top">
+              {users.map((user) => {
+                const assignmentFormId = `assign-user-${user.id}`;
+                return (
+                  <tr key={user.id}>
+                  <td className="py-2.5 pr-4 align-top">
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-slate-900">{user.email}</p>
-                      <div className="group relative">
-                        <button
-                          type="button"
-                          aria-label="User details"
-                          className="text-slate-400 transition hover:text-slate-700"
-                        >
-                          <InfoIcon />
-                        </button>
-                        <div className="pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-64 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-lg group-hover:block">
-                          <p>Name: {user.fullName ?? "No full name"}</p>
-                          <p>Provider: {user.authProvider}</p>
-                          <p>Created: {formatAdminDateTime(user.createdAt)}</p>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="max-w-[260px] truncate font-medium text-slate-900" title={user.email}>{user.email}</p>
+                        <p className="truncate text-xs text-slate-500">{user.organizationName ?? "Unassigned"}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="py-4 pr-4 align-top text-slate-600">{user.domainCount}</td>
-                  <td className="py-4 pr-4 align-top text-slate-600">{user.totalScans}</td>
-                  <td className="whitespace-nowrap py-4 pr-4 align-top text-slate-600">
-                    <div>Login: {formatAdminDateTime(user.lastLoginAt, { fallback: "Never" })}</div>
-                    <div>Scan: {formatAdminDateTime(user.lastScanAt, { fallback: "Never" })}</div>
+                  <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
+                    {user.domainCount} domains <span className="text-slate-300">·</span> {user.totalScans} scans
                   </td>
-                  <td className="py-4 pr-4 align-top text-slate-600">
+                  <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
+                    <div>Login {formatAdminCompactDateTime(user.lastLoginAt)}</div>
+                    <div>Scan {formatAdminCompactDateTime(user.lastScanAt)}</div>
+                  </td>
+                  <td className="whitespace-nowrap py-2.5 pr-4 align-top text-slate-600">
                     {user.organizationId ? (
                       <MembershipRoleForm
                         action={updateMembershipRoleFormAction}
@@ -96,9 +120,40 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                         organizationId={user.organizationId}
                         userId={user.id}
                       />
-                    ) : null}
+                    ) : (
+                      <select
+                        aria-label={`Access level for ${user.email}`}
+                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900"
+                        defaultValue="user"
+                        form={assignmentFormId}
+                        name="role"
+                      >
+                        {ASSIGNABLE_MEMBERSHIP_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+                      </select>
+                    )}
                   </td>
-                  <td className="py-4 align-top">
+                  <td className="whitespace-nowrap py-2.5 pr-4 align-top text-slate-600">
+                    {user.organizationId ? (
+                      <span className="text-slate-700">{user.organizationName}</span>
+                    ) : workspaces.length > 0 ? (
+                      <form action={assignUserWorkspaceFormAction} className="flex min-w-56 items-center gap-2" id={assignmentFormId}>
+                        <input name="userId" type="hidden" value={user.id} />
+                        <label className="sr-only" htmlFor={`workspace-${user.id}`}>Assign workspace for {user.email}</label>
+                        <select
+                          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900"
+                          defaultValue=""
+                          id={`workspace-${user.id}`}
+                          name="organizationId"
+                          required
+                        >
+                          <option disabled value="">Assign workspace</option>
+                          {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
+                        </select>
+                        <AdminSubmitButton className="app-raised-button app-raised-button-dark rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white" idleContent="Assign" pendingContent="Assigning…" />
+                      </form>
+                    ) : <span className="text-slate-500">No workspaces</span>}
+                  </td>
+                  <td className="whitespace-nowrap py-2.5 pr-4 align-top">
                     {user.organizationId ? (
                       <OrganizationPlanForm
                         action={updateOrganizationPlanFormAction}
@@ -107,15 +162,48 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                         organizationId={user.organizationId}
                       />
                     ) : (
-                      <p className="text-slate-500">No organization to administer.</p>
+                      <div className="grid items-start gap-1.5 md:grid-cols-[126px_110px]">
+                        <label className="sr-only" htmlFor={`plan-${user.id}`}>Plan for the assigned workspace</label>
+                        <select
+                          className="w-[126px] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900"
+                          defaultValue=""
+                          form={assignmentFormId}
+                          id={`plan-${user.id}`}
+                          name="plan"
+                        >
+                          <option value="">Keep workspace plan</option>
+                          {PLAN_CODES.map((plan) => <option key={plan} value={plan}>{ADMIN_PLAN_LABELS[plan]}</option>)}
+                        </select>
+                        <label className="sr-only" htmlFor={`plan-status-${user.id}`}>Plan status for the assigned workspace</label>
+                        <select
+                          className="w-[110px] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900"
+                          defaultValue="active"
+                          form={assignmentFormId}
+                          id={`plan-status-${user.id}`}
+                          name="planStatus"
+                        >
+                          {ADMIN_PLAN_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+                        </select>
+                      </div>
                     )}
                   </td>
-                </tr>
-              ))}
+                  <td className="whitespace-nowrap py-2.5 pl-2 align-top">
+                    <div className="flex flex-col items-start gap-3">
+                      <form action={sendUserPasswordResetFormAction}>
+                        <input name="userId" type="hidden" value={user.id} />
+                        <AdminSubmitButton className="text-sm font-medium text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-900" idleContent="Send reset link" pendingContent="Sending…" />
+                      </form>
+                      <DeleteUserButton action={deleteAdminUserFormAction} email={user.email} userId={user.id} />
+                    </div>
+                  </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }

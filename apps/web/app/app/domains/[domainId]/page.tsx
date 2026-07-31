@@ -178,7 +178,7 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
                 <p>Added: {latestScan.addedCount}</p>
                 <p>Removed: {latestScan.removedCount}</p>
                 <p>Changed: {latestScan.changedCount}</p>
-                <PendingButtonLink href={`/app/scans/${latestScan.id}`} idleContent="Open latest scan" pendingContent="Opening..." size="sm" variant="secondary" />
+                <PendingButtonLink href={`/app/scans/${latestScan.id}`} idleContent="Open latest scan" pendingContent="Opening..." prefetch={false} size="sm" variant="secondary" />
               </>
             ) : (
               <>
@@ -402,7 +402,7 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
                           size="sm"
                           variant="secondary"
                         >
-                          <Link aria-label={`View scan for ${scan.scanType}`} href={`/app/scans/${scan.id}`}>
+                          <Link aria-label={`View scan for ${scan.scanType}`} href={`/app/scans/${scan.id}`} prefetch={false}>
                             <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M12 19V5" />
                               <path d="m5 12 7-7 7 7" />

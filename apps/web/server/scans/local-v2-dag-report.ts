@@ -11,14 +11,22 @@ import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   classifyGdprTransparencyTopics,
   classifyConsentControlLabel,
+  type ConsentControlAssessment,
   deriveConsentSurfaceInspectionOutcome,
   derivePolicySurfaceInspectionOutcome,
+  evaluateLegalFrameworkValidity,
+  hasStaleLegalFrameworkReference,
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type CanonicalEvidenceBundle,
   type NormalizedVendorObservation,
   type PolicySurfaceInspectionOutcome
 } from "@certscore/contracts";
-import { resolveVendorDisplayCategory, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
+import {
+  isCanonicalIdSyncEndpoint,
+  resolveVendorDisplayCategory,
+  resolveVendorObservations,
+  type VendorResolverInput
+} from "@certscore/vendor-resolver";
 import { isScanNoGoSnapshotOutcome, resolveScanNoGoPresentation } from "@website-signal-risk-scanner/shared";
 import {
   adaptGdprTransparencyTopicCandidatesForProduction,
@@ -29,12 +37,16 @@ import {
   normalizeGdprTransparencyProductionEvidenceProfile,
   type GdprTransparencyProductionEvidenceProfile
 } from "../../lib/scans/gdpr-transparency-production-profile";
+import { getProductionPolicyModelReviewRevision } from "../../lib/scans/policy-model-review-revision";
 import {
   inferDirectEndpointVendorFromUrl,
   isPromotionGradePreconsentRequestRow
 } from "../../lib/scans/preconsent-public-evidence";
 import { guessPrimaryLanguage } from "../../lib/scans/primary-language";
+import { BoundedPromiseCache } from "../performance/bounded-promise-cache";
+import { withServerTiming } from "../performance/log-server-timing";
 import type { ScanDetailResponse } from "./get-scan-by-id";
+import { deriveMaterializedConsentControlAssessment } from "./consent-control-assessment-projector";
 import {
   LOCAL_V2_DAG_LAMBDA_AWS_REGION,
   isLocalV2DagLambdaAwsRegion,
@@ -618,6 +630,10 @@ function normalizePolicyPageType(surfaceType: string) {
 type LocalV2PolicySurface = NonNullable<CanonicalEvidenceBundle["policySurfaceObservations"]>[number];
 const MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13 = 2_500;
 
+function isCookiePreferenceSurfaceUrl(value: string | null | undefined) {
+  return Boolean(value && /\/(?:privacy|cookie)[-_]?(?:prefs?|preferences?|settings?)(?:\/|$)/i.test(value));
+}
+
 function canonicalPolicySurfaceUrl(surface: LocalV2PolicySurface, fallbackBaseUrl: string | null) {
   const rawUrl = firstString(surface.normalizedUrl, surface.url);
   if (!rawUrl) {
@@ -632,6 +648,7 @@ function canonicalPolicySurfaceUrl(surface: LocalV2PolicySurface, fallbackBaseUr
     parsed.hash = semanticFragment;
     parsed.hostname = parsed.hostname.replace(/^www\./i, "").toLowerCase();
     parsed.pathname = parsed.pathname.replace(/\/+$/g, "") || "/";
+    parsed.pathname = parsed.pathname.replace(/^\/-\/[a-z]{2}(?:-[a-z]{2})?\//i, "/");
     if (semanticFragment && /^\/[a-z]{2}(?:-[a-z]{2})?\/policy$/i.test(parsed.pathname)) {
       parsed.pathname = "/policy";
     }
@@ -720,7 +737,7 @@ function policySurfaceEvidenceWeight(surface: LocalV2PolicySurface, pageUrl: str
 }
 
 export function dedupePolicySurfaces(surfaces: readonly LocalV2PolicySurface[], fallbackBaseUrl: string | null) {
-  const retained = new Map<string, { pageUrl: string | null; surface: LocalV2PolicySurface }>();
+  const retained = new Map<string, { pageUrl: string | null; surface: LocalV2PolicySurface; aliasUrls?: string[] }>();
 
   for (const surface of surfaces) {
     if (!isReportablePolicySurface(surface)) {
@@ -728,10 +745,28 @@ export function dedupePolicySurfaces(surfaces: readonly LocalV2PolicySurface[], 
     }
 
     const pageUrl = canonicalPolicySurfaceUrl(surface, fallbackBaseUrl);
-    const key = policySurfaceDeduplicationKey(surface, fallbackBaseUrl);
+    const rawPageUrl = firstString(surface.normalizedUrl, surface.url);
+    let sourcePageUrl = pageUrl;
+    if (rawPageUrl) {
+      try {
+        sourcePageUrl = (fallbackBaseUrl ? new URL(rawPageUrl, fallbackBaseUrl) : new URL(rawPageUrl)).toString();
+      } catch {
+        sourcePageUrl = rawPageUrl;
+      }
+    }
+    const projectedSurface = isCookiePreferenceSurfaceUrl(pageUrl) && surface.surfaceType === "cookie_policy"
+      ? { ...surface, surfaceType: "cookie_settings" as const }
+      : surface;
+    const key = policySurfaceDeduplicationKey(projectedSurface, fallbackBaseUrl);
     const existing = retained.get(key);
-    if (!existing || policySurfaceEvidenceWeight(surface, pageUrl) > policySurfaceEvidenceWeight(existing.surface, existing.pageUrl)) {
-      retained.set(key, { pageUrl, surface });
+    const aliasUrls = uniqueStrings([
+      ...(existing?.aliasUrls ?? []),
+      sourcePageUrl,
+    ]);
+    if (!existing || policySurfaceEvidenceWeight(projectedSurface, pageUrl) > policySurfaceEvidenceWeight(existing.surface, existing.pageUrl)) {
+      retained.set(key, { pageUrl, surface: projectedSurface, aliasUrls });
+    } else {
+      retained.set(key, { ...existing, aliasUrls });
     }
   }
 
@@ -932,12 +967,12 @@ export function deriveCriticalCoverageLimitationKeys(input: {
 export function deriveApplicablePolicyCoverageComplete(input: {
   policySurfaceInspection: PolicySurfaceInspectionOutcome;
   privacyPolicyPresent: boolean;
-  rawPrivacyPolicyCandidateCount: number;
+  unresolvedObservedPrivacyPolicyCandidateCount: number;
 }) {
   if (input.privacyPolicyPresent) {
     return true;
   }
-  if (input.rawPrivacyPolicyCandidateCount > 0) {
+  if (input.unresolvedObservedPrivacyPolicyCandidateCount > 0) {
     return false;
   }
   return input.policySurfaceInspection.outcome === "no_privacy_policy_observed_complete_coverage";
@@ -989,6 +1024,7 @@ function resolvePolicyTextArtifactPath(rawPath: string) {
 
 function readPolicySurfaceTextArtifact(surface: LocalV2PolicySurface) {
   const artifactRefs = Array.isArray(surface.artifactRefs) ? surface.artifactRefs : [];
+  let hasPolicyTextArtifactReference = false;
   for (const ref of artifactRefs) {
     if (!isRecord(ref)) {
       continue;
@@ -1000,6 +1036,7 @@ function readPolicySurfaceTextArtifact(surface: LocalV2PolicySurface) {
     if (!artifactPath || !/policy_surface_text/i.test(`${artifactId ?? ""} ${label ?? ""} ${path.basename(artifactPath)}`)) {
       continue;
     }
+    hasPolicyTextArtifactReference = true;
     const resolved = resolvePolicyTextArtifactPath(artifactPath);
     if (!resolved) {
       continue;
@@ -1010,7 +1047,21 @@ function readPolicySurfaceTextArtifact(surface: LocalV2PolicySurface) {
       return null;
     }
   }
-  return null;
+  // Lambda bundles retain bounded policy excerpts inline while their local
+  // artifact paths point at the scanner filesystem. On production web,
+  // prefer that retained typed evidence when the local path is unavailable.
+  if (!hasPolicyTextArtifactReference) {
+    return null;
+  }
+  const inlineCandidates = [
+    ...(Array.isArray(surface.evidenceRefs) ? surface.evidenceRefs : [])
+      .map((reference) => firstString(reference.excerpt)),
+    ...(Array.isArray(surface.retainedPolicySections) ? surface.retainedPolicySections : [])
+      .map((section) => firstString(section.textExcerpt)),
+    ...(Array.isArray(surface.article13DisclosureSignals) ? surface.article13DisclosureSignals : [])
+      .map((signal) => firstString(signal.evidenceText)),
+  ].filter((value): value is string => Boolean(value));
+  return inlineCandidates.sort((left, right) => right.length - left.length)[0]?.slice(0, MAX_RETAINED_POLICY_DISCLOSURE_TEXT_CHARS) ?? null;
 }
 
 function findCaseInsensitiveTextIndex(source: string, needle: string) {
@@ -1366,7 +1417,7 @@ async function readLocalV2DagJsonArtifactFromS3(input: {
   uri: string;
 }) {
   const { bucket, key } = parseS3Uri(input.uri);
-  const response = await new S3Client({ region: inferS3ArtifactRegion(bucket) }).send(
+  const response = await getLocalV2DagS3Client(inferS3ArtifactRegion(bucket)).send(
     new GetObjectCommand({ Bucket: bucket, Key: key })
   );
   const body = verifyLocalV2DagLambdaArtifactBody({
@@ -1375,6 +1426,18 @@ async function readLocalV2DagJsonArtifactFromS3(input: {
     expectedSizeBytes: input.expectedSizeBytes
   });
   return JSON.parse(body.toString("utf8")) as unknown;
+}
+
+const localV2DagS3Clients = new Map<string, S3Client>();
+
+function getLocalV2DagS3Client(region: string) {
+  const cached = localV2DagS3Clients.get(region);
+  if (cached) {
+    return cached;
+  }
+  const client = new S3Client({ region });
+  localV2DagS3Clients.set(region, client);
+  return client;
 }
 
 async function readLocalV2DagBundleFromS3(input: {
@@ -1442,15 +1505,35 @@ function getLocalV2DagAuxiliaryArtifact(
 const LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES = {
   "local_v2:screenshot_pre_consent": "screenshot-pre-consent.png",
   "local_v2:screenshot_pre_consent_settled": "screenshot-pre-consent-settled.png",
-  "local_v2:screenshot_pre_consent_full_page": "screenshot-pre-consent-full-page.png",
+  "local_v2:screenshot_pre_consent_full_page": "screenshot-pre-consent-full-page.jpg",
   "local_v2:screenshot_pre_consent_geometry_proof": "screenshot-pre-consent-geometry-proof.png"
 } as const;
+
+const LOCAL_V2_VISUAL_EVIDENCE_ALTERNATE_FILE_NAMES: Partial<Record<
+  keyof typeof LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES,
+  readonly string[]
+>> = {
+  "local_v2:screenshot_pre_consent_full_page": [
+    "screenshot-pre-consent-full-page.jpg",
+    "screenshot-pre-consent-full-page.png",
+  ],
+};
+
+function localV2VisualEvidenceFileNames(id: keyof typeof LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES) {
+  return LOCAL_V2_VISUAL_EVIDENCE_ALTERNATE_FILE_NAMES[id] ?? [LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES[id]];
+}
+
+function localV2VisualEvidenceMimeType(fileName: string): "image/png" | "image/jpeg" {
+  return fileName.toLowerCase().endsWith(".jpg") || fileName.toLowerCase().endsWith(".jpeg")
+    ? "image/jpeg"
+    : "image/png";
+}
 
 export type LocalV2DagVisualEvidencePointer = {
   bucket: string | null;
   id: keyof typeof LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES;
   key: string;
-  mimeType: "image/png";
+  mimeType: "image/png" | "image/jpeg";
   status: "available";
 };
 
@@ -1468,22 +1551,24 @@ export async function resolveLocalV2DagVisualEvidencePointer(
   }
 
   const id = artifactId as keyof typeof LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES;
-  const fileName = LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES[id];
+  const fileNames = localV2VisualEvidenceFileNames(id);
   const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
   if (shouldReadLocalOutDir && input.outDir) {
-    try {
-      const localPath = path.join(resolveLocalV2OutDir(input.outDir), fileName);
-      if (statSync(localPath).isFile()) {
-        return {
-          bucket: null,
-          id,
-          key: `local-v2-dag-scans/${scanRecord.scan.id}/${fileName}`,
-          mimeType: "image/png",
-          status: "available"
-        };
+    for (const fileName of fileNames) {
+      try {
+        const localPath = path.join(resolveLocalV2OutDir(input.outDir), fileName);
+        if (statSync(localPath).isFile()) {
+          return {
+            bucket: null,
+            id,
+            key: `local-v2-dag-scans/${scanRecord.scan.id}/${fileName}`,
+            mimeType: localV2VisualEvidenceMimeType(fileName),
+            status: "available"
+          };
+        }
+      } catch {
+        // Fall through to the verified manifest pointer when the local mirror is unavailable.
       }
-    } catch {
-      // Fall through to the verified manifest pointer when the local mirror is unavailable.
     }
   }
 
@@ -1497,7 +1582,9 @@ export async function resolveLocalV2DagVisualEvidencePointer(
         uri: input.manifestArtifactUri
       })
     : null);
-  const screenshotArtifact = getLocalV2DagAuxiliaryArtifact(manifest, fileName);
+  const screenshotArtifact = fileNames
+    .map((fileName) => getLocalV2DagAuxiliaryArtifact(manifest, fileName))
+    .find((artifact): artifact is LocalV2DagLambdaArtifactPointer => Boolean(artifact));
   if (!screenshotArtifact) {
     return null;
   }
@@ -1508,7 +1595,7 @@ export async function resolveLocalV2DagVisualEvidencePointer(
       bucket,
       id,
       key,
-      mimeType: "image/png",
+      mimeType: localV2VisualEvidenceMimeType(screenshotArtifact.uri),
       status: "available"
     };
   } catch {
@@ -2047,6 +2134,7 @@ export function summarizePolicySurfaces(
     gdprTransparencyEvidenceProfile?: GdprTransparencyProductionEvidenceProfile | string | null;
     homepageNoGo?: boolean;
     primaryLanguage?: string | null;
+    scanStartedAt?: string | null;
   } = {}
 ) {
   const gdprTransparencyEvidenceProfile = normalizeGdprTransparencyProductionEvidenceProfile(
@@ -2062,6 +2150,27 @@ export function summarizePolicySurfaces(
     .map((row) => firstString(row.surface.textExcerpt))
     .filter(Boolean)
     .join("\n");
+  const policyCookieDisclosures = [
+    ...new Map(
+      cookieSurfaces
+        .flatMap((row) =>
+          (row.surface.policyCookieDisclosures ?? []).map((disclosure) => ({
+            ...disclosure,
+            sourceUrl:
+              firstString(
+                disclosure.sourceUrl,
+                row.pageUrl,
+                row.surface.normalizedUrl,
+                row.surface.url,
+              ) ?? disclosure.sourceUrl,
+          }))
+        )
+        .map((disclosure) => [
+          `${disclosure.sourceUrl.toLowerCase()}|${disclosure.cookieName.toLowerCase()}`,
+          disclosure,
+        ])
+    ).values(),
+  ].slice(0, 250);
   const discoveredPrivacySurfaces = (options.discoveredPolicySurfaces ?? [])
     .filter((surface) => surface.surfaceType === "privacy_policy")
     .filter((surface) => {
@@ -2089,7 +2198,10 @@ export function summarizePolicySurfaces(
       !isSpecializedPrivacySurfaceForDifferentAudience(row, rootDomain)
     )
   );
-  const text = article13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
+  const text = article13Surfaces
+    .map((row) => readPolicySurfaceTextArtifact(row.surface) ?? firstString(row.surface.textExcerpt))
+    .filter(Boolean)
+    .join("\n");
   const policyPrimaryLanguage = guessPrimaryLanguage({
     matchedLocales: article13Surfaces.flatMap((row) => [
       ...(row.surface.gdprTransparencyTopicCandidates ?? []).map((candidate) => candidate.matchedLocale),
@@ -2260,6 +2372,39 @@ export function summarizePolicySurfaces(
       textExcerpt: section.textExcerpt,
     }))
   ).slice(0, 80);
+  const legalFrameworkValidityMatches = [
+    ...new Map(
+      article13Surfaces.flatMap((row) => {
+        const sourceUrl =
+          row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url;
+        const policyTexts = uniqueStrings([
+          readPolicySurfaceTextArtifact(row.surface),
+          firstString(row.surface.textExcerpt),
+          ...(row.surface.retainedPolicySections ?? []).map((section) =>
+            firstString(section.textExcerpt)
+          ),
+          ...(row.surface.article13DisclosureSignals ?? []).map((signal) =>
+            firstString(signal.evidenceText)
+          ),
+          ...(row.surface.discardedArticle13DisclosureSignals ?? []).map((signal) =>
+            firstString(signal.evidenceText)
+          ),
+        ]);
+        return policyTexts.flatMap((policyText) =>
+          evaluateLegalFrameworkValidity(policyText, options.scanStartedAt).map((match) => ({
+            ...match,
+            evidenceText:
+              buildPolicyEvidenceContextExcerpt(policyText, match.matchedAlias) ??
+              match.matchedAlias,
+            sourceUrl,
+          }))
+        );
+      }).map((match) => [
+        `${match.canonicalId}\u0000${match.statusAtScan}\u0000${match.sourceUrl}`,
+        match,
+      ])
+    ).values(),
+  ].slice(0, 20);
   const retainedArticle13SectionEvidence = dedupePolicyDisclosureRows(article13Surfaces.flatMap((row) =>
     (row.surface.retainedArticle13SectionEvidence ?? []).map((evidence) => ({
       coverageArea: evidence.coverageArea,
@@ -2280,6 +2425,24 @@ export function summarizePolicySurfaces(
   const policyLastUpdatedTexts = uniqueStrings(policySurfaces
     .map((row) => firstString(row.surface.lastUpdatedText))
     .filter(Boolean));
+  const selectedPrivacyPolicyDocument = article13Surfaces
+    .filter((row) =>
+      row.surface.traversalDepth === 1 &&
+      row.surface.documentEvaluationState === "usable"
+    )
+    .sort((left, right) => right.surface.confidence - left.surface.confidence)[0] ?? null;
+  const privacyPolicyEvidencePaths = article13Surfaces
+    .filter((row) => row.surface.traversalDepth === 1)
+    .map((row) => ({
+      childObservationId: row.surface.observationId,
+      documentEvaluationState: row.surface.documentEvaluationState ?? "not_attempted",
+      documentFetchState: row.surface.documentFetchState ?? "not_attempted",
+      documentUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
+      parentObservationId: row.surface.parentObservationId ?? null,
+      parentSurfaceUrl: row.surface.parentSurfaceUrl ?? null,
+      selectionReasonCodes: row.surface.selectionReasonCodes ?? [],
+      traversalDepth: row.surface.traversalDepth,
+    }));
   const expectedPolicySectionHeadings = [
     "Your privacy controls",
     "Exporting and deleting your information",
@@ -2300,6 +2463,9 @@ export function summarizePolicySurfaces(
       .filter((signal) => signal.status === "partial")
       .map((signal) => signal.disclosureType)),
     discardedArticle13DisclosureSignals,
+    legalFrameworkValidityMatches,
+    staleLegalFrameworkReferenceObserved:
+      hasStaleLegalFrameworkReference(legalFrameworkValidityMatches),
     gdprTransparencyEvidenceProfile,
     gdprTransparencyProductionEvidenceDiagnostics,
     gdprTransparencyProductionEvidenceEnabled,
@@ -2316,18 +2482,35 @@ export function summarizePolicySurfaces(
     policyLastUpdatedTexts,
     cookiePolicyPresent: cookieSurfaces.length > 0,
     cookiePolicyUrls: uniqueStrings(cookieSurfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
+    cookieDisclosures: policyCookieDisclosures,
+    cookie_disclosures: policyCookieDisclosures,
+    policyCookieDisclosures,
+    policy_cookie_disclosures: policyCookieDisclosures,
     evaluatedPrivacyPolicySurfaceCount: evaluatedPrivacySurfaces.length,
     policyTextExtractionHealth,
     policy_text_extraction_health: policyTextExtractionHealth,
     privacyPolicyPresent: article13Surfaces.length > 0,
     privacyPolicyDiscovered: targetRelevantDiscoveredPrivacySurfaces.length > 0 || article13Surfaces.length > 0,
     privacyPolicyEvaluationState,
+    privacyPolicyEvidencePaths,
+    selectedPrivacyPolicyDocument: selectedPrivacyPolicyDocument ? {
+      documentUrl:
+        selectedPrivacyPolicyDocument.pageUrl ??
+        selectedPrivacyPolicyDocument.surface.normalizedUrl ??
+        selectedPrivacyPolicyDocument.surface.url,
+      observationId: selectedPrivacyPolicyDocument.surface.observationId,
+      parentObservationId: selectedPrivacyPolicyDocument.surface.parentObservationId ?? null,
+      parentSurfaceUrl: selectedPrivacyPolicyDocument.surface.parentSurfaceUrl ?? null,
+      selectionReasonCodes: selectedPrivacyPolicyDocument.surface.selectionReasonCodes ?? [],
+      traversalDepth: selectedPrivacyPolicyDocument.surface.traversalDepth,
+    } : null,
     discoveredPrivacyPolicyStatuses,
     discoveredPrivacyPolicyDetails,
     discoveredPrivacyPolicyUrls,
     privacyPolicyTextCharacterCount: text.length,
     privacyPolicyUrls: uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
     processingErrorObserved,
+    scanStartedAt: options.scanStartedAt ?? null,
     retainedCookiePolicyTextExcerpt: buildRetainedPolicyDisclosureText(cookiePolicyText),
     retainedPrivacyPolicyTextExcerpt: buildRetainedPolicyDisclosureText(text),
     validatedDisclosureTypesObserved: uniqueStrings(dedupedArticle13DisclosureSignals
@@ -2576,7 +2759,10 @@ function selectArticle13PrivacySurfaces(
     )
     .map(({ row }) => row);
   if (canonicalPrivacyNotices.length > 0) {
-    return prioritizeGeneralScope(generalPrivacySurfaces.filter((row) => !isPrivacyServiceMarketingSurface(row)));
+    return prioritizeGeneralScope(generalPrivacySurfaces.filter((row) =>
+      !isPrivacyServiceMarketingSurface(row) &&
+      !isNonPolicyEditorialSurface(row)
+    ));
   }
   return prioritizeGeneralScope(generalPrivacySurfaces.length > 0 ? generalPrivacySurfaces : privacySurfaces);
 }
@@ -2597,6 +2783,21 @@ function isPrivacyServiceMarketingSurface(row: ReturnType<typeof dedupePolicySur
   return /(?:DPO|data protection officer)[-\s]*(?:as a service|service)|(?:data privacy|data protection)\s+(?:services?|solutions?|consulting)|(?:our|managed)\s+(?:DPO|data protection)\s+services?/i.test(evidence);
 }
 
+function isNonPolicyEditorialSurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
+  const url = [
+    row.pageUrl,
+    row.surface.normalizedUrl,
+    row.surface.url,
+  ].filter(Boolean).join(" ");
+  const label = [
+    row.surface.title,
+    row.surface.linkText,
+    row.surface.surroundingTextExcerpt,
+  ].filter(Boolean).join(" ");
+  return /\/(?:customer-stories|customer-story|case-studies|case-study|success-stories|blog|news|insights)(?:\/|$)/i.test(url) ||
+    /\b(?:customer story|case study|success story)\b/i.test(label);
+}
+
 function isCanonicalPrivacyNoticeSurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
   const evidence = [
     row.pageUrl,
@@ -2615,7 +2816,6 @@ function isSpecializedPrivacySurfaceForDifferentAudience(
   const evidence = [
     row.surface.title,
     row.surface.linkText,
-    row.surface.textExcerpt,
     row.pageUrl,
     row.surface.normalizedUrl,
     row.surface.url,
@@ -2731,6 +2931,7 @@ function summarizeTransportSecurity(bundle: CanonicalEvidenceBundle) {
       observedCount: 0,
       pageHttpsObserved: null,
       sampledPageUrls: [],
+      tlsCertificateObservations: [],
       validTlsCertificate: null,
       httpRedirectsToHttps: null,
     };
@@ -2791,12 +2992,63 @@ function summarizeTransportSecurity(bundle: CanonicalEvidenceBundle) {
     sampledPageUrls: observation.sampledPageUrls ?? [],
     tlsProbeAttempted: observation.tlsProbe?.attempted === true,
     tlsProbeErrorCategory: observation.tlsProbe?.errorCategory,
+    tlsProbeErrorMessage: observation.tlsProbe?.errorMessage,
+    tlsCertificateObservations: (observation.tlsCertificateObservations ?? []).slice(0, 4),
     validTlsCertificate: observation.summary?.validTlsCertificate ?? null,
   };
 }
 
 function consentGeometrySummary(geometryEvidence: Record<string, unknown> | null | undefined) {
   return isRecord(geometryEvidence?.summary) ? geometryEvidence.summary : null;
+}
+
+type ConsentGeometryAssessmentStatus =
+  | "complete"
+  | "document_mismatch"
+  | "incomplete";
+
+function canonicalConsentDocumentIdentity(value: unknown) {
+  const raw = getString(value);
+  if (!raw) {
+    return null;
+  }
+  try {
+    const url = new URL(raw);
+    if (!/^https?:$/.test(url.protocol)) {
+      return null;
+    }
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return `${url.protocol}//${url.host.toLowerCase()}${pathname}`;
+  } catch {
+    return null;
+  }
+}
+
+function consentGeometryAssessmentStatus(
+  bundle: CanonicalEvidenceBundle,
+  geometryEvidence: Record<string, unknown> | null | undefined
+): ConsentGeometryAssessmentStatus {
+  const summary = consentGeometrySummary(geometryEvidence);
+  const access = getRecord(geometryEvidence, "access");
+  const geometryDocument = canonicalConsentDocumentIdentity(geometryEvidence?.pageUrl);
+  const finalDocument = canonicalConsentDocumentIdentity(getLocalV2FinalDocumentUrl(bundle));
+  const complete =
+    typeof summary?.firstLayerAccept === "boolean" &&
+    typeof summary.firstLayerReject === "boolean" &&
+    typeof summary.firstLayerOptions === "boolean" &&
+    typeof summary.confidence === "number" &&
+    summary.confidence > 0 &&
+    Array.isArray(geometryEvidence?.candidates) &&
+    (access === null || getString(access.status) === "loaded") &&
+    geometryDocument !== null &&
+    finalDocument !== null;
+  if (!complete) {
+    return "incomplete";
+  }
+
+  return geometryDocument !== finalDocument
+    ? "document_mismatch"
+    : "complete";
 }
 
 function consentGeometryCmpName(geometryEvidence: Record<string, unknown> | null | undefined) {
@@ -2843,23 +3095,166 @@ function actionTypeFromRetainedGeometryCandidate(candidate: Record<string, unkno
   };
 }
 
-function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<string, unknown> | null | undefined) {
+function geometryCandidateMatchesDocument(
+  candidate: Record<string, unknown>,
+  geometryEvidence: Record<string, unknown>
+) {
+  const frameContext = getRecord(candidate, "frameContext");
+  const frameDocument = canonicalConsentDocumentIdentity(frameContext?.frameUrl);
+  const geometryDocument = canonicalConsentDocumentIdentity(geometryEvidence.pageUrl);
+  return !frameDocument || !geometryDocument || frameDocument === geometryDocument;
+}
+
+function geometryCandidateIsConfirmedVisible(
+  candidate: Record<string, unknown>,
+  geometryEvidence: Record<string, unknown>
+) {
+  const computedStyle = getRecord(candidate, "computedStyle");
+  return (
+    getString(candidate.decisionStatus) === "confirmed_visible" &&
+    candidate.enabled !== false &&
+    candidate.intersectsViewport === true &&
+    positiveGeometryBox(candidate) &&
+    computedStyle?.display !== "none" &&
+    computedStyle?.visibility !== "hidden" &&
+    computedStyle?.pointerEvents !== "none" &&
+    !(typeof computedStyle?.opacity === "string" && Number.parseFloat(computedStyle.opacity) <= 0.05) &&
+    candidate.clippedByScrollableAncestor !== true &&
+    geometryCandidateMatchesDocument(candidate, geometryEvidence)
+  );
+}
+
+function hasStrongConsentModalContainerEvidence(container: Record<string, unknown>) {
+  const context = [
+    getString(container.selectorHint),
+    getString(container.id),
+    getString(container.classes),
+    getString(container.role),
+    getString(container.ariaLabel),
+    getString(container.textExcerpt),
+    getString(container.htmlExcerpt)
+  ].filter(Boolean).join(" ");
+  const hasConsentContext =
+    /cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|personal data/i.test(context);
+  const hasModalSemantics =
+    /\b(?:alert)?dialog\b|aria-modal\s*=\s*["']?true|data-borlabs-cookie-consent-required/i.test(context);
+  const hasOverlayStyling =
+    /(?:position\s*:\s*fixed|\bfixed\b|w-screen|h-screen|inset-0|z-max|dialog-backdrop|cookiebox)/i.test(context);
+  return hasConsentContext && (hasModalSemantics || hasOverlayStyling);
+}
+
+function reconciledConsentModalContainerIds(
+  geometryEvidence: Record<string, unknown> | null | undefined
+) {
+  const reconciled = new Set<string>();
+  if (!geometryEvidence) {
+    return reconciled;
+  }
   const summary = consentGeometrySummary(geometryEvidence);
+  const hasConsentContext = summary?.cmpDetected === true ||
+    getObjectArray(geometryEvidence.containers).some((container) =>
+      /cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|personal data/i.test(
+        getString(container.textExcerpt) ?? ""
+      )
+    );
+  const containersById = new Map(
+    getObjectArray(geometryEvidence.containers).flatMap((container) => {
+      const containerId = getString(container.containerId);
+      return containerId ? [[containerId, container] as const] : [];
+    })
+  );
+  const actionsByContainer = new Map<string, Set<string>>();
+  for (const candidate of getObjectArray(geometryEvidence.candidates)) {
+    const containerId = getString(candidate.containerId);
+    if (
+      !containerId ||
+      candidate.layer !== "page_body" ||
+      !geometryCandidateIsConfirmedVisible(candidate, geometryEvidence)
+    ) {
+      continue;
+    }
+    const { actionType } = actionTypeFromRetainedGeometryCandidate(candidate, hasConsentContext);
+    if (
+      actionType !== "accept_all" &&
+      actionType !== "reject_all" &&
+      actionType !== "manage_preferences"
+    ) {
+      continue;
+    }
+    const actions = actionsByContainer.get(containerId) ?? new Set<string>();
+    actions.add(actionType);
+    actionsByContainer.set(containerId, actions);
+  }
+  for (const [containerId, actions] of actionsByContainer) {
+    const container = containersById.get(containerId);
+    if (
+      container &&
+      hasStrongConsentModalContainerEvidence(container) &&
+      actions.has("accept_all") &&
+      (actions.has("reject_all") || actions.has("manage_preferences"))
+    ) {
+      reconciled.add(containerId);
+    }
+  }
+  return reconciled;
+}
+
+function hasAmbiguousVisibleConsentControlCandidate(
+  geometryEvidence: Record<string, unknown> | null | undefined
+) {
+  if (!geometryEvidence) {
+    return false;
+  }
+  const summary = consentGeometrySummary(geometryEvidence);
+  const hasConsentContext = summary?.cmpDetected === true ||
+    getObjectArray(geometryEvidence.containers).some((container) =>
+      /cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|personal data/i.test(
+        getString(container.textExcerpt) ?? ""
+      )
+    );
+  const reconciledContainerIds = reconciledConsentModalContainerIds(geometryEvidence);
+  return getObjectArray(geometryEvidence.candidates).some((candidate) => {
+    const { actionType } = actionTypeFromRetainedGeometryCandidate(candidate, hasConsentContext);
+    const containerId = getString(candidate.containerId);
+    const canonicalAction =
+      actionType === "accept_all" ||
+      actionType === "reject_all" ||
+      actionType === "manage_preferences" ||
+      actionType === "save_preferences";
+    return (
+      canonicalAction &&
+      candidate.layer !== "first_layer" &&
+      (!containerId || !reconciledContainerIds.has(containerId)) &&
+      geometryCandidateIsConfirmedVisible(candidate, geometryEvidence)
+    );
+  });
+}
+
+function summarizeGeometryFirstLayerConsentChoices(
+  geometryEvidence: Record<string, unknown> | null | undefined
+) {
+  const summary = consentGeometrySummary(geometryEvidence);
+  if (!geometryEvidence) {
+    return null;
+  }
   const hasConsentContext = summary?.cmpDetected === true ||
     getObjectArray(geometryEvidence?.containers).some((container) =>
       /cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|personal data/i.test(
         getString(container.textExcerpt) ?? ""
       )
     );
+  const reconciledContainerIds = reconciledConsentModalContainerIds(geometryEvidence);
   const controls = getObjectArray(geometryEvidence?.candidates)
     .map((candidate) => {
       const label = getString(candidate.label);
       const { actionType, classification } = actionTypeFromRetainedGeometryCandidate(candidate, hasConsentContext);
+      const containerId = getString(candidate.containerId);
       const geometryVisible =
-        candidate.layer === "first_layer" &&
-        candidate.enabled !== false &&
-        candidate.intersectsViewport !== false &&
-        positiveGeometryBox(candidate);
+        (
+          candidate.layer === "first_layer" ||
+          Boolean(containerId && reconciledContainerIds.has(containerId))
+        ) &&
+        geometryCandidateIsConfirmedVisible(candidate, geometryEvidence);
       const retainedDecision = getString(candidate.decisionStatus);
       const canonicalAction =
         actionType === "accept_all" ||
@@ -2870,10 +3265,7 @@ function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<stri
           : null;
       const visible =
         geometryVisible &&
-        (
-          retainedDecision === "confirmed_visible" ||
-          (retainedDecision === "ambiguous" && canonicalAction !== null)
-        );
+        retainedDecision === "confirmed_visible";
       return label && visible && canonicalAction
         ? {
             actionType: canonicalAction,
@@ -2882,6 +3274,7 @@ function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<stri
             matchedLocale: classification.matchedLocale,
             matchedTerm: classification.matchedTerm,
             matchStrength: classification.matchStrength,
+            presentationType: getString(candidate.presentationType) ?? "unknown",
             role: getString(candidate.role) ?? undefined,
             selectorHint: getString(candidate.selectorHint) ?? undefined,
             tagName: getString(candidate.tagName) ?? undefined,
@@ -2890,10 +3283,6 @@ function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<stri
         : null;
     })
     .filter((control): control is NonNullable<typeof control> => control !== null);
-  if (controls.length === 0 && summary?.cmpDetected !== true) {
-    return null;
-  }
-
   const acceptLabels = uniqueStrings(controls
     .filter((control) => control.actionType === "accept_all")
     .map((control) => control.label));
@@ -2920,7 +3309,8 @@ function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<stri
     precheckedOptionalPurposeLabels: [],
     rejectControlObserved: rejectLabels.length > 0,
     rejectLabels,
-    visibleChoiceLabels
+    visibleChoiceLabels,
+    geometryAssessment: "complete" as const
   };
 }
 
@@ -2942,6 +3332,79 @@ function summarizeConsentDefaultToggleEvidence(observation: CanonicalEvidenceBun
   };
 }
 
+function hasCompletedCanonicalFirstLayerControlInventory(
+  observation: CanonicalEvidenceBundle["consentUiObservations"][number] | null | undefined
+) {
+  if (
+    !observation ||
+    observation.likelyPresent !== true ||
+    observation.layerInspected !== "first_layer"
+  ) {
+    return false;
+  }
+
+  const diagnostics = isRecord(observation.inventoryDiagnostics)
+    ? observation.inventoryDiagnostics
+    : null;
+  const controls = (observation.controls ?? []).filter((control) =>
+    control.visible !== false &&
+    (
+      control.actionType === "accept_all" ||
+      control.actionType === "reject_all" ||
+      control.actionType === "manage_preferences" ||
+      control.actionType === "save_preferences"
+    )
+  );
+  const retainedControlCount = diagnostics?.retainedControlCount;
+  const rejectionReasons = Array.isArray(diagnostics?.rejectionReasons)
+    ? diagnostics.rejectionReasons
+    : null;
+
+  return (
+    controls.length > 0 &&
+    typeof retainedControlCount === "number" &&
+    retainedControlCount >= controls.length &&
+    rejectionReasons !== null &&
+    rejectionReasons.length === 0
+  );
+}
+
+function mergeCompletedFirstLayerConsentChoices(
+  canonicalChoices: Record<string, unknown>,
+  geometryChoices: Record<string, unknown>
+) {
+  const controls = [
+    ...getObjectArray(geometryChoices.controls),
+    ...getObjectArray(canonicalChoices.controls)
+  ].filter((control, index, all) => {
+    const key = `${getString(control.actionType) ?? "other"}:${getString(control.label)?.toLowerCase() ?? ""}`;
+    return all.findIndex((candidate) =>
+      `${getString(candidate.actionType) ?? "other"}:${getString(candidate.label)?.toLowerCase() ?? ""}` === key
+    ) === index;
+  }).slice(0, 12);
+  const labelsFor = (...actionTypes: string[]) => uniqueStrings(controls
+    .filter((control) => actionTypes.includes(getString(control.actionType) ?? ""))
+    .map((control) => getString(control.label)));
+  const acceptLabels = labelsFor("accept_all");
+  const rejectLabels = labelsFor("reject_all");
+  const preferenceLabels = labelsFor("manage_preferences", "save_preferences");
+
+  return {
+    ...canonicalChoices,
+    ...geometryChoices,
+    acceptControlObserved: acceptLabels.length > 0,
+    acceptLabels,
+    actionableControlInventoryRetained: controls.length > 0,
+    controls,
+    layerInspected: "first_layer" as const,
+    managePreferencesControlObserved: preferenceLabels.length > 0,
+    preferenceLabels,
+    rejectControlObserved: rejectLabels.length > 0,
+    rejectLabels,
+    visibleChoiceLabels: uniqueStrings(controls.map((control) => getString(control.label))).slice(0, 12)
+  };
+}
+
 export function summarizeFirstLayerConsentChoices(
   bundle: CanonicalEvidenceBundle,
   geometryEvidence?: Record<string, unknown> | null
@@ -2951,6 +3414,7 @@ export function summarizeFirstLayerConsentChoices(
     null;
   const defaultToggleEvidence = summarizeConsentDefaultToggleEvidence(observation);
   const geometryChoices = summarizeGeometryFirstLayerConsentChoices(geometryEvidence);
+  const geometryStatus = consentGeometryAssessmentStatus(bundle, geometryEvidence);
   const controls = (observation?.controls ?? []).flatMap((control) => {
     const label = getString(control?.label);
     return label && control?.visible !== false ? [{ ...control, label }] : [];
@@ -2990,7 +3454,8 @@ export function summarizeFirstLayerConsentChoices(
       role: control.role,
       selectorHint: control.selectorHint,
       tagName: control.tagName,
-      variant: control.classifierVariant
+      variant: control.classifierVariant,
+      visible: control.visible === true
     })),
     ...defaultToggleEvidence,
     layerInspected: observation.layerInspected ?? (visibleChoiceLabels.length > 0 ? "first_layer" : "unknown"),
@@ -3006,37 +3471,218 @@ export function summarizeFirstLayerConsentChoices(
     textSnippet: boundedTextExcerpt(observation.textExcerpt),
     visibleChoiceLabels
   };
-  if (geometryChoices?.actionableControlInventoryRetained !== true) {
-    return canonicalChoices;
+  if (geometryStatus === "document_mismatch") {
+    return {
+      acceptControlObserved: false,
+      acceptLabels: [],
+      actionableControlInventoryRetained: false,
+      capturedBeforeInteraction: true,
+      controls: [],
+      ...defaultToggleEvidence,
+      geometryAssessment: "document_mismatch" as const,
+      layerInspected: "unknown" as const,
+      managePreferencesControlObserved: false,
+      preferenceLabels: [],
+      rejectControlObserved: false,
+      rejectLabels: [],
+      visibleChoiceLabels: []
+    };
+  }
+  if (geometryStatus === "incomplete") {
+    // Geometry is an auxiliary corroboration channel. A late or budget-limited
+    // geometry capture must not erase an already completed canonical DOM
+    // inventory from the same pre-consent document.
+    if (hasCompletedCanonicalFirstLayerControlInventory(observation)) {
+      return {
+        ...canonicalChoices,
+        geometryAssessment: "incomplete" as const
+      };
+    }
+    return {
+      acceptControlObserved: false,
+      acceptLabels: [],
+      actionableControlInventoryRetained: false,
+      capturedBeforeInteraction: true,
+      controls: [],
+      defaultTogglePurposeLabels: [],
+      defaultToggleStatesObserved: null,
+      geometryAssessment: "incomplete" as const,
+      layerInspected: "unknown" as const,
+      managePreferencesControlObserved: false,
+      nonEssentialDefaultsOff: null,
+      preferenceLabels: [],
+      precheckedOptionalPurposeCount: 0,
+      precheckedOptionalPurposeLabels: [],
+      rejectControlObserved: false,
+      rejectLabels: [],
+      visibleChoiceLabels: []
+    };
+  }
+  if (geometryStatus === "complete" && geometryChoices) {
+    if (hasCompletedCanonicalFirstLayerControlInventory(observation)) {
+      return mergeCompletedFirstLayerConsentChoices(
+        canonicalChoices,
+        geometryChoices as Record<string, unknown>
+      );
+    }
+    return {
+      ...geometryChoices,
+      ...defaultToggleEvidence
+    };
+  }
+  return canonicalChoices;
+}
+
+export function reconcileConsentSurfaceInspectionWithGeometry(
+  bundle: CanonicalEvidenceBundle,
+  geometryEvidence: Record<string, unknown> | null | undefined,
+  inspection: ReturnType<typeof deriveConsentSurfaceInspectionOutcome>
+) {
+  // The canonical bundle may already contain a completed, geometry-backed
+  // consent observation. A missing optional auxiliary mirror must not erase
+  // that retained structured evidence.
+  if (!geometryEvidence) {
+    const completedCanonicalFirstLayerInventory =
+      inspection.inspectionCompleted === true &&
+      inspection.coverageStatus === "complete" &&
+      inspection.consentSurfaceObserved === true &&
+      inspection.actionableControlObserved === true &&
+      (bundle.consentUiObservations ?? []).some((observation) =>
+        observation.likelyPresent === true &&
+        observation.layerInspected === "first_layer" &&
+        (observation.controls ?? []).some((control) =>
+          control.visible !== false &&
+          (
+            control.actionType === "accept_all" ||
+            control.actionType === "reject_all" ||
+            control.actionType === "manage_preferences" ||
+            control.actionType === "save_preferences"
+          )
+        )
+      );
+    if (
+      completedCanonicalFirstLayerInventory ||
+      (!inspection.consentSurfaceObserved && !inspection.actionableControlObserved)
+    ) {
+      return inspection;
+    }
+    return {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage" as const,
+      coverageStatus: "limited" as const,
+      inspectionCompleted: false,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      limitationKeys: uniqueStrings([
+        ...inspection.limitationKeys,
+        "consent_control_geometry_incomplete"
+      ])
+    };
+  }
+  const geometryStatus = consentGeometryAssessmentStatus(bundle, geometryEvidence);
+  if (geometryStatus === "incomplete") {
+    const completedCanonicalFirstLayerInventory =
+      (bundle.consentUiObservations ?? []).some((observation) =>
+        hasCompletedCanonicalFirstLayerControlInventory(observation)
+      );
+    if (completedCanonicalFirstLayerInventory) {
+      return {
+        ...inspection,
+        outcome: "actionable_surface_observed" as const,
+        consentSurfaceObserved: true,
+        actionableControlObserved: true
+      };
+    }
+    if (!inspection.consentSurfaceObserved && !inspection.actionableControlObserved) {
+      return inspection;
+    }
+    return {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage" as const,
+      coverageStatus: "limited" as const,
+      inspectionCompleted: false,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      limitationKeys: uniqueStrings([
+        ...inspection.limitationKeys,
+        "consent_control_geometry_incomplete"
+      ])
+    };
+  }
+  if (geometryStatus === "document_mismatch") {
+    return {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage" as const,
+      coverageStatus: "limited" as const,
+      inspectionCompleted: false,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      limitationKeys: uniqueStrings([
+        ...inspection.limitationKeys,
+        "consent_control_geometry_document_mismatch"
+      ])
+    };
   }
 
-  const mergedControls = [...canonicalChoices.controls, ...geometryChoices.controls]
-    .filter((control, index, rows) => rows.findIndex((candidate) =>
-      candidate.actionType === control.actionType &&
-      candidate.label.trim().toLowerCase() === control.label.trim().toLowerCase()
-    ) === index)
-    .slice(0, 12);
+  const choices = summarizeGeometryFirstLayerConsentChoices(geometryEvidence);
+  const actionableControlObserved = choices?.actionableControlInventoryRetained === true;
+  if (actionableControlObserved) {
+    return {
+      ...inspection,
+      outcome: "actionable_surface_observed" as const,
+      consentSurfaceObserved: true,
+      actionableControlObserved: true
+    };
+  }
+
+  const ambiguousVisibleConsentControlCandidate =
+    hasAmbiguousVisibleConsentControlCandidate(geometryEvidence);
+  if (ambiguousVisibleConsentControlCandidate) {
+    return {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage" as const,
+      coverageStatus: "limited" as const,
+      inspectionCompleted: false,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      limitationKeys: uniqueStrings([
+        ...inspection.limitationKeys,
+        "consent_control_geometry_visible_candidate_layer_ambiguous"
+      ])
+    };
+  }
+
+  const geometryResolvedLimitationKeys = new Set([
+    "consent_ui_capture_timed_out",
+    "cmp_runtime_without_actionable_surface",
+    "consent_surface_inspection_observation_incomplete",
+    "consent_surface_inspection_settled_inventory_missing"
+  ]);
+  const inspectionAlreadyComplete =
+    inspection.inspectionCompleted &&
+    inspection.coverageStatus === "complete";
+  const geometryResolvesEveryLimitation =
+    inspection.limitationKeys.length > 0 &&
+    inspection.limitationKeys.every((key) => geometryResolvedLimitationKeys.has(key));
+  if (!inspectionAlreadyComplete && !geometryResolvesEveryLimitation) {
+    return {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage" as const,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false
+    };
+  }
+
   return {
-    ...geometryChoices,
-    ...canonicalChoices,
-    acceptControlObserved: canonicalChoices.acceptControlObserved || geometryChoices.acceptControlObserved,
-    acceptLabels: uniqueStrings([...canonicalChoices.acceptLabels, ...geometryChoices.acceptLabels]),
-    actionableControlInventoryRetained:
-      canonicalChoices.actionableControlInventoryRetained || geometryChoices.actionableControlInventoryRetained,
-    controls: mergedControls,
-    layerInspected:
-      canonicalChoices.layerInspected === "first_layer" || geometryChoices.layerInspected === "first_layer"
-        ? "first_layer"
-        : canonicalChoices.layerInspected,
-    managePreferencesControlObserved:
-      canonicalChoices.managePreferencesControlObserved || geometryChoices.managePreferencesControlObserved,
-    preferenceLabels: uniqueStrings([...canonicalChoices.preferenceLabels, ...geometryChoices.preferenceLabels]),
-    rejectControlObserved: canonicalChoices.rejectControlObserved || geometryChoices.rejectControlObserved,
-    rejectLabels: uniqueStrings([...canonicalChoices.rejectLabels, ...geometryChoices.rejectLabels]),
-    visibleChoiceLabels: uniqueStrings([
-      ...canonicalChoices.visibleChoiceLabels,
-      ...geometryChoices.visibleChoiceLabels
-    ]).slice(0, 12)
+    ...inspection,
+    outcome: "no_surface_observed_complete_coverage" as const,
+    coverageStatus: "complete" as const,
+    inspectionCompleted: true,
+    inspectedPreInteraction: true,
+    consentSurfaceObserved: false,
+    actionableControlObserved: false,
+    evidenceSources: uniqueStrings([...inspection.evidenceSources, "geometry"]),
+    limitationKeys: inspection.limitationKeys.filter((key) => !geometryResolvedLimitationKeys.has(key))
   };
 }
 
@@ -3093,12 +3739,17 @@ export function classifyRetainedRequestActivity(input: {
 }) {
   const relevance = (input.regulatoryRelevance ?? []).join(" ").toLowerCase();
   const url = input.url ?? "";
+  const hostname = hostnameFromUrl(url);
   const canonicalVendorEndpointObserved = Boolean(
     inferDirectEndpointVendorFromUrl(url) &&
     /^(?:beacon|fetch|xhr)$/i.test(input.resourceType ?? "")
   );
   const collectionEndpointObserved = input.collectionEndpointObserved || canonicalVendorEndpointObserved;
-  if (/identifier_sync|identity_resolution|cookie_sync/.test(relevance) || /(?:user|id|cookie)[_-]?sync|sync(?:\.gif|\/)|setuid|getuid/i.test(url)) {
+  if (
+    isCanonicalIdSyncEndpoint(hostname) ||
+    /identifier_sync|identity_resolution|cookie_sync/.test(relevance) ||
+    /(?:user|id|cookie)[_-]?sync|sync(?:\.gif|\/)|setuid|getuid/i.test(url)
+  ) {
     return "identifier_synchronization";
   }
   if (collectionEndpointObserved && /advertising|adtech|retargeting|marketing/i.test(input.category)) {
@@ -3108,6 +3759,29 @@ export function classifyRetainedRequestActivity(input: {
     return "tracker_beacon";
   }
   return "library";
+}
+
+function retainedRequestPathSample(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    return new URL(value).pathname.slice(0, 240);
+  } catch {
+    return null;
+  }
+}
+
+function retainedRequestUrlSample(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    const redactedQuery = [...parsed.searchParams.keys()]
+      .slice(0, 16)
+      .map((key) => `${encodeURIComponent(key)}=[redacted]`)
+      .join("&");
+    return `${parsed.origin}${parsed.pathname}${redactedQuery ? `?${redactedQuery}` : ""}`.slice(0, 640);
+  } catch {
+    return null;
+  }
 }
 
 const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
@@ -3492,21 +4166,25 @@ function buildMaterializedLocalV2Detail(
       : runtimeLimitationKeys;
   const consentRuntimeEvidenceReportable = !localV2NoGo && preConsentRuntimeReliable;
   const runtimeEvidenceReportable = !localV2NoGo && effectiveRuntimeCountsRetained;
-  const consentSurfaceInspection = deriveConsentSurfaceInspectionOutcome({
-    cmpRuntimeObservations: bundle.cmpRuntimeObservations,
-    consentUiObservations: bundle.consentUiObservations,
-    domSnapshots: bundle.domSnapshots,
-    modulesRun: bundle.modulesRun,
-    runtimeCoverage: bundle.runtimeCoverage
-      ? {
-          ...bundle.runtimeCoverage,
-          coverageStatus: effectiveRuntimeCoverageStatus ?? bundle.runtimeCoverage.coverageStatus,
-          limitationKeys: effectiveRuntimeLimitationKeys,
-        }
-      : undefined,
-    screenshots: bundle.screenshots,
-    visualCapture: bundle.visualCapture,
-  });
+  const consentSurfaceInspection = reconcileConsentSurfaceInspectionWithGeometry(
+    bundle,
+    options.consentControlGeometryEvidence,
+    deriveConsentSurfaceInspectionOutcome({
+      cmpRuntimeObservations: bundle.cmpRuntimeObservations,
+      consentUiObservations: bundle.consentUiObservations,
+      domSnapshots: bundle.domSnapshots,
+      modulesRun: bundle.modulesRun,
+      runtimeCoverage: bundle.runtimeCoverage
+        ? {
+            ...bundle.runtimeCoverage,
+            coverageStatus: effectiveRuntimeCoverageStatus ?? bundle.runtimeCoverage.coverageStatus,
+            limitationKeys: effectiveRuntimeLimitationKeys,
+          }
+        : undefined,
+      screenshots: bundle.screenshots,
+      visualCapture: bundle.visualCapture,
+    })
+  );
   const primaryAssessmentEventIds = new Set([
     ...networkEvents.map((event) => event.eventId),
     ...cookieEvents.map((event) => event.eventId),
@@ -3568,6 +4246,21 @@ function buildMaterializedLocalV2Detail(
         url: safeLocalV2DocumentUrl(screenshot.url, canonicalDocumentUrl)
       }))
   };
+  const consentControlAssessment: ConsentControlAssessment = deriveMaterializedConsentControlAssessment({
+    bundle,
+    consentControlGeometryEvidence: options.consentControlGeometryEvidence,
+    consentSurfaceInspection,
+    finalUrl: canonicalDocumentUrl,
+    noGo: Boolean(localV2NoGo) ||
+      providedScanNoGoAssessment?.decision === "no_go" ||
+      providedVisualAccessReview?.go_no_go === "NO_GO",
+    noGoReasonCodes: uniqueStrings([
+      ...(localV2NoGo?.scanNoGoAssessment.reasonCodes ?? []),
+      ...(providedScanNoGoAssessment?.reasonCodes ?? []),
+    ]),
+    requestedUrl: requestedDocumentUrl,
+    scanId: scanRecord.scan.id,
+  });
   const policySurfaces = dedupePolicySurfaces(
     bundle.policySurfaceObservations ?? [],
     canonicalDocumentUrl
@@ -3580,6 +4273,7 @@ function buildMaterializedLocalV2Detail(
     gdprTransparencyEvidenceProfile,
     homepageNoGo: Boolean(localV2NoGo),
     primaryLanguage: getLocalV2PrimaryLanguage(bundle),
+    scanStartedAt: bundle.startedAt,
   });
   const verifiedPolicySurfaces = policySurfaces.filter((row) =>
     row.surface.surfaceType !== "privacy_policy" || isEvaluatedPrivacyPolicySurface(row.surface)
@@ -3663,6 +4357,33 @@ function buildMaterializedLocalV2Detail(
     }))
   );
   const boundedRequestPurposeRows = selectBoundedPreconsentRequestPurposeRows(requestPurposeRows, 50);
+  const rtbCookieSyncObservations = boundedRequestPurposeRows
+    .filter((row) => row.classification === "identifier_synchronization")
+    .map((row) => {
+      const hostname = firstString(row.hostname);
+      const knownEndpoint = isCanonicalIdSyncEndpoint(hostname);
+      return {
+        category: "identity_sync",
+        consentStateAtTime: "pre_consent",
+        hostname,
+        pathSample: retainedRequestPathSample(firstString(row.requestUrl)),
+        queryKeysSample: (() => {
+        const value = firstString(row.requestUrl);
+        if (!value) return [];
+        try {
+          return [...new URL(value).searchParams.keys()].slice(0, 16);
+        } catch {
+          return [];
+        }
+        })(),
+        reason: knownEndpoint ? "known_sync_endpoint" : "sync_path",
+        registrableDomain: registrableDomain(hostname),
+        requestUrl: retainedRequestUrlSample(firstString(row.requestUrl)),
+        timestampMs: row.tsMs,
+        vendorName: row.vendorName ?? null,
+        evidenceBasis: knownEndpoint ? "canonical_id_sync_endpoint" : "retained_sync_request_shape",
+      };
+    });
   const promotionGradeRequestPurposeRows = boundedRequestPurposeRows.filter(isPromotionGradePreconsentRequestRow);
   const sensitiveThirdPartyTrackingCorrelation = deriveSensitiveThirdPartyTrackingCorrelation({
     collectionSurfaceObservations: Array.isArray(bundle.collectionSurfaceObservations)
@@ -3682,8 +4403,13 @@ function buildMaterializedLocalV2Detail(
     .filter((event) => event.cookiePurpose === "analytics" || event.cookiePurpose === "advertising")
     .map((event) => cookieName(event)));
   const hasPromotionGradePreconsentCookies = promotionGradePreconsentCookieNames.length > 0;
-  const rawPrivacyPolicyCandidates = (bundle.policySurfaceObservations ?? [])
-    .filter((surface) => surface.surfaceType === "privacy_policy");
+  const unresolvedObservedPrivacyPolicyCandidates = (bundle.policySurfaceObservations ?? [])
+    .filter((surface) =>
+      surface.surfaceType === "privacy_policy" &&
+      surface.linkObservationState === "observed" &&
+      surface.status !== "fetched" &&
+      surface.status !== "observed"
+    );
   const policySurfaceInspection = bundle.policySurfaceInspection ?? derivePolicySurfaceInspectionOutcome({
     modulesRun: bundle.modulesRun,
     policySurfaceObservations: bundle.policySurfaceObservations,
@@ -3707,7 +4433,7 @@ function buildMaterializedLocalV2Detail(
   const applicablePolicyCoverageComplete = deriveApplicablePolicyCoverageComplete({
     policySurfaceInspection,
     privacyPolicyPresent: policySurfaceSummary.privacyPolicyPresent === true,
-    rawPrivacyPolicyCandidateCount: rawPrivacyPolicyCandidates.length,
+    unresolvedObservedPrivacyPolicyCandidateCount: unresolvedObservedPrivacyPolicyCandidates.length,
   });
   const criticalCoverageLimitationKeys = deriveCriticalCoverageLimitationKeys({
     applicablePolicyCoverageComplete,
@@ -3742,17 +4468,28 @@ function buildMaterializedLocalV2Detail(
     const category = event.cookiePurpose && event.cookiePurpose !== "unknown"
       ? event.cookiePurpose
       : matchedVendor?.vendorCategory ?? "unknown";
+    const initiatorUrl = event.setterScriptUrl ?? event.initiatorChain?.[0] ?? event.initiatorUrl ?? null;
+    const initiatorDomain = hostnameFromUrl(initiatorUrl) ?? null;
     return {
       beforeConsent: event.consentStateAtTime === "pre_consent",
       category,
       cookieName: event.cookieName,
       domain: (event.cookieDomain ?? event.hostname)?.replace(/^\.+/, ""),
+      expiresAt: event.expires ?? null,
       firstObservedAtMs: event.timestampMs,
-      initiatorDomain: event.hostname,
-      initiatorUrl: event.url,
+      initiatorChain: event.initiatorChain ?? [],
+      initiatorDomain,
+      initiatorUrl,
       initiatorVendor: snapshot || !matchedVendorHostAligned ? null : matchedVendor?.vendorName ?? null,
+      lifespanSeconds: event.lifespanSeconds ?? null,
+      lifespanSource: event.lifespanSource ?? null,
+      description: event.description ?? null,
+      dataTypes: event.dataTypes ?? [],
       nonEssential: /^(?:advertising|analytics|fingerprinting|marketing|measurement|personalization|session_replay)$/i.test(category),
       party: event.cookieParty ?? (event.thirdParty ? "third_party" : "first_party"),
+      setByThirdPartyScript: event.setByThirdPartyScript === true,
+      set_by_third_party_script: event.setByThirdPartyScript === true,
+      setterScriptUrl: event.setterScriptUrl ?? null,
       setAtMs: snapshot ? null : event.timestampMs,
       setMethod: event.operation ?? "cookie_event",
       thirdParty: event.thirdParty === true || event.cookieParty === "third_party",
@@ -3763,6 +4500,8 @@ function buildMaterializedLocalV2Detail(
     };
   });
   const hybridRuntimeEvidence = {
+    consentControlAssessment,
+    consent_control_assessment: consentControlAssessment,
     consentSummary: {
       bannerPresent: assessedConsentSurfaceObserved,
       consentSurfaceObserved: assessedConsentSurfaceObserved,
@@ -3785,6 +4524,10 @@ function buildMaterializedLocalV2Detail(
       first_layer_consent_choices: completeFirstLayerConsentChoices
     } : {}),
     cookieWriteObservations,
+    rtbCookieSyncObserved: rtbCookieSyncObservations.length > 0,
+    rtb_cookie_sync_observed: rtbCookieSyncObservations.length > 0,
+    rtbCookieSyncObservations,
+    rtb_cookie_sync_observations: rtbCookieSyncObservations,
     networkSummary: {
       metricBasis: "retained_unique_request_events",
       observedRawRequestEventCount: runtimeObservationCounts?.networkEvents ?? null,
@@ -3797,6 +4540,8 @@ function buildMaterializedLocalV2Detail(
     },
     requestObservations: networkEvents.slice(0, 200).map((event) => ({
       collectionEndpointObserved: event.collectionEndpointObserved === true,
+      idSyncEndpoint: event.idSyncEndpoint === true,
+      networkDestination: event.networkDestination ?? null,
       domain: event.hostname ?? hostnameFromUrl(event.url),
       initiatorType: event.initiatorType ?? event.resourceType,
       documentUrl: safeLocalV2DocumentUrl(event.documentUrl, event.topLevelUrl, canonicalDocumentUrl),
@@ -3913,6 +4658,8 @@ function buildMaterializedLocalV2Detail(
       visual_access_review: localV2NoGo.visualAccessReview
     } : {}),
     consent_audit_completed: true,
+    consentControlAssessment,
+    consent_control_assessment: consentControlAssessment,
     consent_baseline_tracker_evidence_urls: runtimeEvidenceReportable ? promotionGradePreconsentRequestUrls : [],
     consent_baseline_tracker_vendor_names: runtimeEvidenceReportable ? promotionGradeVendorNames : [],
     consent_preconsent_violation_count: runtimeEvidenceReportable ? promotionGradeRequestPurposeRows.length : 0,
@@ -4016,10 +4763,11 @@ function buildMaterializedLocalV2Detail(
     key_page_discovery_summary: {
       pageSummaries: [privacySurface, termsSurface, cookieSurface]
         .filter((row): row is NonNullable<typeof row> => Boolean(row))
-        .map(({ pageUrl, surface }) => ({
+        .map(({ pageUrl, surface, aliasUrls }) => ({
           bestCandidateUrl: pageUrl ?? surface.normalizedUrl ?? surface.url,
           pageType: surface.surfaceType,
           successfulUrl: pageUrl ?? surface.normalizedUrl ?? surface.url,
+          aliasUrls,
           surfaceDetected: true,
           surfaceState: "linked_and_verified"
         }))
@@ -4154,12 +4902,22 @@ function buildMaterializedLocalV2Detail(
     ...(cookieSurface ? { cookie_policy_present: true } : {}),
     ...(termsSurface ? { terms_of_service_present: true } : {})
   };
-  const policyEnrichmentRows = verifiedPolicySurfaces.map(({ pageUrl, surface }) => ({
+  const policyEnrichmentRows = verifiedPolicySurfaces.map(({ pageUrl, surface, aliasUrls }) => ({
     id: `local-v2-${surface.observationId}`,
     pageType: normalizePolicyPageType(surface.surfaceType),
     pageUrl: pageUrl ?? surface.normalizedUrl ?? surface.url,
     page_type: normalizePolicyPageType(surface.surfaceType),
     page_url: pageUrl ?? surface.normalizedUrl ?? surface.url,
+    policyAliasUrls: aliasUrls,
+    policy_alias_urls: aliasUrls,
+    parentObservationId: surface.parentObservationId ?? null,
+    parent_observation_id: surface.parentObservationId ?? null,
+    parentSurfaceUrl: surface.parentSurfaceUrl ?? null,
+    parent_surface_url: surface.parentSurfaceUrl ?? null,
+    traversalDepth: surface.traversalDepth,
+    traversal_depth: surface.traversalDepth,
+    selectionReasonCodes: surface.selectionReasonCodes ?? [],
+    selection_reason_codes: surface.selectionReasonCodes ?? [],
     lastUpdatedText: surface.lastUpdatedText ?? null,
     policy_last_updated_text: surface.lastUpdatedText ?? null,
     policyActionableFlags: surface.mentionedControls ?? [],
@@ -4272,7 +5030,50 @@ function buildMaterializedLocalV2Detail(
   };
 }
 
-export async function materializeLocalV2DagScanDetail(
+// Bump whenever materialization semantics change. This cache contains the
+// fully derived report detail, so retaining an older entry can cause a
+// projection repair to persist stale evidence even after the projector is
+// deployed.
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v6";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
+const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({
+  maxEntries: LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES,
+  onEvent: ({ key, outcome, size }) => {
+    console.warn(JSON.stringify({
+      cacheKeyHash: createHash("sha256").update(key).digest("hex").slice(0, 12),
+      cacheSize: size,
+      event: "app.scan_detail.local_v2_cache",
+      outcome
+    }));
+  },
+  ttlMs: LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS
+});
+
+async function loadLocalV2DagRemoteArtifacts(input: {
+  readBundle: () => Promise<CanonicalEvidenceBundle | null>;
+  readGeometry: (manifest: Record<string, unknown> | null) => Promise<Record<string, unknown> | null>;
+  readManifest: () => Promise<Record<string, unknown> | null>;
+}) {
+  // Start the largest object immediately. The geometry pointer depends on the
+  // small manifest, but geometry itself does not depend on the bundle. Starting
+  // it as soon as the manifest resolves removes a full S3 request from the
+  // critical path.
+  const bundlePromise = input.readBundle();
+  const manifest = await input.readManifest();
+  const geometryPromise = input.readGeometry(manifest);
+  const [bundle, consentControlGeometryEvidence] = await Promise.all([
+    bundlePromise,
+    geometryPromise
+  ]);
+  return {
+    bundle,
+    consentControlGeometryEvidence,
+    manifest
+  };
+}
+
+async function materializeLocalV2DagScanDetailUncached(
   scanRecord: ScanDetailResponse,
   options: { requireBundle?: boolean } = {}
 ): Promise<ScanDetailResponse> {
@@ -4281,40 +5082,113 @@ export async function materializeLocalV2DagScanDetail(
     return scanRecord;
   }
   const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
-  const [localBundle, localGeometryEvidence, localManifest] = await Promise.all([
-    shouldReadLocalOutDir && input.outDir ? readLocalV2DagBundle(input.outDir) : Promise.resolve(null),
-    shouldReadLocalOutDir && input.outDir ? readLocalV2ConsentControlGeometry(input.outDir) : Promise.resolve(null),
-    shouldReadLocalOutDir && input.outDir ? readLocalV2DagManifest(input.outDir) : Promise.resolve(null)
-  ]);
-  const [bundle, manifest] = await Promise.all([
-    localBundle ?? (input.scanArtifactUri
-      ? readLocalV2DagBundleFromS3({
-          expectedSha256: input.scanArtifactSha256,
-          expectedSizeBytes: input.scanArtifactSizeBytes,
-          uri: input.scanArtifactUri
-        })
-      : Promise.resolve(null)),
-    localManifest ?? (localGeometryEvidence || !input.manifestArtifactUri
-      ? Promise.resolve(null)
-      : readLocalV2DagManifestFromS3({
-          expectedSha256: input.manifestArtifactSha256,
-          expectedSizeBytes: input.manifestArtifactSizeBytes,
-          uri: input.manifestArtifactUri
-        }))
-  ]);
-  const geometryArtifact = localGeometryEvidence
-    ? null
-    : getLocalV2DagAuxiliaryArtifact(manifest, "ConsentControlGeometryEvidence.json");
-  const consentControlGeometryEvidence = localGeometryEvidence ?? (geometryArtifact
-    ? await readLocalV2ConsentControlGeometryFromS3(geometryArtifact)
-    : null);
-  if (!bundle && options.requireBundle) {
+  let bundle: CanonicalEvidenceBundle | null;
+  let consentControlGeometryEvidence: Record<string, unknown> | null;
+  if (shouldReadLocalOutDir && input.outDir) {
+    [bundle, consentControlGeometryEvidence] = await withServerTiming(
+      "app.scan_detail.local_v2_artifacts.local",
+      async () => {
+        const [localBundle, localGeometryEvidence] = await Promise.all([
+          readLocalV2DagBundle(input.outDir!),
+          readLocalV2ConsentControlGeometry(input.outDir!)
+        ]);
+        return [localBundle, localGeometryEvidence] as const;
+      }
+    );
+  } else {
+    const remoteArtifacts = await withServerTiming(
+      "app.scan_detail.local_v2_artifacts.remote",
+      () => loadLocalV2DagRemoteArtifacts({
+        readBundle: () => input.scanArtifactUri
+          ? withServerTiming("app.scan_detail.local_v2_artifact.bundle", () =>
+              readLocalV2DagBundleFromS3({
+                expectedSha256: input.scanArtifactSha256,
+                expectedSizeBytes: input.scanArtifactSizeBytes,
+                uri: input.scanArtifactUri!
+              })
+            )
+          : Promise.resolve(null),
+        readGeometry: (manifest) => {
+          const geometryArtifact = getLocalV2DagAuxiliaryArtifact(
+            manifest,
+            "ConsentControlGeometryEvidence.json"
+          );
+          return geometryArtifact
+            ? withServerTiming("app.scan_detail.local_v2_artifact.geometry", () =>
+                readLocalV2ConsentControlGeometryFromS3(geometryArtifact)
+              )
+            : Promise.resolve(null);
+        },
+        readManifest: () => input.manifestArtifactUri
+          ? withServerTiming("app.scan_detail.local_v2_artifact.manifest", () =>
+              readLocalV2DagManifestFromS3({
+                expectedSha256: input.manifestArtifactSha256,
+                expectedSizeBytes: input.manifestArtifactSizeBytes,
+                uri: input.manifestArtifactUri!
+              })
+            )
+          : Promise.resolve(null)
+      })
+    );
+    bundle = remoteArtifacts.bundle;
+    consentControlGeometryEvidence = remoteArtifacts.consentControlGeometryEvidence;
+  }
+  if (
+    !bundle &&
+    (
+      options.requireBundle ||
+      (!shouldReadLocalOutDir && Boolean(input.scanArtifactUri && input.scanArtifactSha256))
+    )
+  ) {
     throw new Error(`Required local v2 DAG evidence bundle was unavailable for scan ${scanRecord.scan.id}.`);
   }
-  return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle, {
-    consentControlGeometryEvidence,
-    gdprTransparencyEvidenceProfile: input.gdprTransparencyEvidenceProfile,
-    localOutDir: shouldReadLocalOutDir ? input.outDir : null,
-    scanArtifactUri: input.scanArtifactUri
-  }) : scanRecord;
+  return bundle
+    ? withServerTiming("app.scan_detail.local_v2_projection", async () =>
+        buildMaterializedLocalV2Detail(scanRecord, bundle, {
+          consentControlGeometryEvidence,
+          gdprTransparencyEvidenceProfile: input.gdprTransparencyEvidenceProfile,
+          localOutDir: shouldReadLocalOutDir ? input.outDir : null,
+          scanArtifactUri: input.scanArtifactUri
+        })
+      )
+    : scanRecord;
 }
+
+export async function materializeLocalV2DagScanDetail(
+  scanRecord: ScanDetailResponse,
+  options: { requireBundle?: boolean } = {}
+): Promise<ScanDetailResponse> {
+  const input = getLocalV2DagReportInput(scanRecord);
+  if (!input || scanRecord.scan.status !== "completed") {
+    return scanRecord;
+  }
+
+  // Production Lambda artifacts are immutable once their verified SHA is
+  // recorded. Deduplicate the derived report in-process by scan and artifact
+  // version so report navigation does not reread S3 and repeat the full
+  // projection. The record is intentionally not sent through Next's data cache:
+  // evidence-rich scans can exceed that cache's 2 MB item limit. Local/test
+  // records without a verified artifact identity stay uncached so fixtures and
+  // local out-dir development remain fully deterministic.
+  const localOutDirActive = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
+  if (localOutDirActive || !input.scanArtifactUri || !input.scanArtifactSha256) {
+    return materializeLocalV2DagScanDetailUncached(scanRecord, options);
+  }
+
+  const cacheKey = [
+    LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION,
+    scanRecord.scan.id,
+    input.scanArtifactSha256,
+    input.manifestArtifactSha256 ?? "no-manifest",
+    getProductionPolicyModelReviewRevision(scanRecord.runtimeArtifacts),
+    options.requireBundle === true ? "required" : "optional"
+  ].join(":");
+  return localV2DagReportMaterializationCache.getOrCreate(
+    cacheKey,
+    () => materializeLocalV2DagScanDetailUncached(scanRecord, options)
+  );
+}
+
+export const localV2DagReportPerformanceTestHelpers = {
+  loadLocalV2DagRemoteArtifacts
+};

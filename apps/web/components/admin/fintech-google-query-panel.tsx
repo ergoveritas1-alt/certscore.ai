@@ -164,7 +164,7 @@ export function FintechGoogleQueryPanel({ initialSearchTerms }: { initialSearchT
                           {generatingTerm === term ? "Generating..." : "Generate"}
                         </Button>
                         <button
-                          className="text-xs font-medium text-slate-500 transition hover:text-slate-900"
+                          className="app-raised-button rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900"
                           onClick={() => handleRemoveTerm(term)}
                           type="button"
                         >

@@ -56,3 +56,13 @@ test("workspace scan quota uses one unit per normal scan entry point", () => {
   assert.doesNotMatch(createDomainSource, /website limit/i);
   assert.doesNotMatch(`${createDomainSource}\n${rescanSource}\n${scheduledSource}`, /enforceMonthlyUsageLimit: false/);
 });
+
+test("full scan responses keep post-queue failures attached to the created scan", () => {
+  const routeSource = readFileSync("apps/web/app/api/full-scan/route.ts", "utf8");
+  const queueSource = readFileSync("apps/web/server/scans/create-full-scan.ts", "utf8");
+
+  assert.match(routeSource, /scans\.filter\(\(scan\) => Boolean\(scan\.scanId\)\)/);
+  assert.doesNotMatch(routeSource, /!scan\.error && scan\.scanId/);
+  assert.match(queueSource, /Scan created but event logging failed\.",\s+scanId: scan\.id/);
+  assert.match(queueSource, /Scan created but latest scan update failed\.",\s+scanId: scan\.id/);
+});

@@ -7,7 +7,7 @@ import { SiteHeader } from "../../../components/layout/site-header";
 import { PULSE_STANDARD_DISCLAIMER } from "../../../lib/pulse/constants";
 import { buildPulseProjection } from "../../../lib/pulse/projection";
 import { normalizePulseUrl } from "../../../lib/pulse/request";
-import { getAnonymousScanById } from "../../../server/scans/get-scan-by-id";
+import { getPublicScanRecord } from "../../../server/scans/get-public-scan-record";
 import { createPulseRequest, findLatestCompletedAnonymousScanForDomain } from "../../../server/pulse/repository";
 import { PulseFeedbackForm } from "../feedback/pulse-feedback-form";
 
@@ -42,7 +42,7 @@ export default async function PulseDomainPage({ params }: PulsePageProps) {
   if (!latest) {
     notFound();
   }
-  const scanRecord = await getAnonymousScanById(latest.id);
+  const scanRecord = await getPublicScanRecord(latest.id, { logPrefix: "[pulse-page]" });
   if (!scanRecord || scanRecord.scan.status !== "completed") {
     notFound();
   }

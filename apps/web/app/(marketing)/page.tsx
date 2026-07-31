@@ -167,6 +167,7 @@ export default async function MarketingHomePage() {
         <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(1,10,27,0.06)_0%,rgba(1,10,27,0.02)_48%,rgba(1,10,27,0.12)_100%)]" aria-hidden="true" />
         <div className="relative -top-5 mx-auto grid min-h-[595px] max-w-6xl gap-12 px-6 py-14 sm:py-20 lg:grid-cols-[minmax(0,650px)_minmax(0,1fr)] lg:items-center lg:gap-8 lg:py-16">
           <div className="relative z-20 max-w-[680px] space-y-8 lg:-translate-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300">Evidence-led website review</p>
             <h1 className="text-[2rem] font-bold leading-[1.08] tracking-[-0.035em] text-white sm:text-5xl lg:text-[3.5rem]">
               <span className="block whitespace-nowrap">See what websites <span className="text-[#178cff]">reveal</span></span>
               <span className="block whitespace-nowrap">about privacy risk.</span>
@@ -180,9 +181,12 @@ export default async function MarketingHomePage() {
               </p>
             </div>
             <div id="homepage-scan" className="max-w-[650px] scroll-mt-24 pt-2">
-              <DomainScanForm buttonLabel="Scan a website" inputLabel="Website URL to scan" inputPlaceholder="Enter website here:" mode="full" requestSource="homepage" scanSource="homepage" variant="homepage-hero" />
+              <div className="rounded-[1.4rem] border border-sky-300/30 bg-slate-950/35 p-2 shadow-[0_20px_45px_rgba(2,132,199,0.16)] backdrop-blur-sm sm:p-2.5">
+                <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-200">Start with a website URL</p>
+                <DomainScanForm buttonLabel="Scan a website" inputLabel="Website URL to scan" inputPlaceholder="Enter website here:" mode="full" requestSource="homepage" scanSource="homepage" variant="homepage-hero" />
+              </div>
             </div>
-            <div className="flex flex-nowrap gap-x-6 overflow-x-auto pb-1 text-sm font-medium text-slate-100">
+            <div className="flex flex-nowrap gap-x-6 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-medium text-slate-100 shadow-[0_12px_28px_rgba(2,6,23,0.12)] backdrop-blur-sm">
               <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">
                 <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="9.25" /><path d="m8 12.2 2.5 2.5 5.5-6" />
@@ -214,7 +218,7 @@ export default async function MarketingHomePage() {
                 data-analytics-cta-type="sample_report"
                 data-analytics-event="hero_sample_report_clicked"
                 href={SAMPLE_REPORT_URL}
-                idleContent="See sample report"
+                idleContent="View sample report"
                 pendingContent="Opening..."
               />
               <PendingButtonLink
@@ -315,7 +319,7 @@ export default async function MarketingHomePage() {
           <div className="overflow-hidden rounded-[2.25rem] bg-[linear-gradient(135deg,#081127_0%,#0b1a3f_45%,#132b63_100%)] px-6 py-10 shadow-[0_24px_60px_rgba(8,17,39,0.24)] sm:px-10 sm:py-12">
             <div className="max-w-4xl space-y-6">
               <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Get a clearer read on public-facing website signals.
+                Get a clearer read on website privacy diagnostics.
               </h2>
               <p className="max-w-3xl text-lg leading-8 text-slate-300">
                 Use CertScore.ai to observe pre-consent website behavior, detect tracking activity, review public policy surfaces, and monitor changes over time.

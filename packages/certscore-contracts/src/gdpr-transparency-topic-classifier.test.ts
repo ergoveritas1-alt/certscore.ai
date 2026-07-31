@@ -48,6 +48,36 @@ test("classifies canonical GDPR Transparency topics with bounded provenance", ()
   }
 });
 
+test("classifies common practical English policy headings and clauses", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "We use the information for the purposes for which it was collected.",
+      "The legal basis on which we hold and use your data varies by activity.",
+      "Our lawful bases include consent, contract, and compliance with our legal obligations.",
+      "International transfers of data may occur outside your jurisdiction.",
+    ].join(" "),
+  });
+  const topics = new Set(classification.matches.map((match) => match.topic));
+
+  assert.equal(topics.has("processing_purposes"), true);
+  assert.equal(topics.has("legal_basis"), true);
+  assert.equal(topics.has("international_transfers"), true);
+});
+
+test("retention criteria do not become processing-purpose evidence", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text:
+      "We retain personal data only as long as necessary for the purpose for which it was collected."
+  });
+
+  assert.equal(
+    classification.matches.some((match) => match.topic === "processing_purposes"),
+    false
+  );
+});
+
 test("classifies a large retained policy once while preserving bounded topic excerpts", () => {
   const text = [
     "navigation and service copy ".repeat(12_000),
@@ -117,6 +147,31 @@ test("classifies retained recipients headings with concrete affiliate and provid
   assert.match(match.evidenceExcerpt, /affiliates, service providers, and third parties/i);
 });
 
+test("classifies direct US-policy transfer, recipient, and privacy-contact wording", () => {
+  const classification = classifyGdprTransparencyTopics({
+    text: [
+      "We share personal information with service providers, analytics providers, advertising networks, social networks, and governmental authorities.",
+      "Personal Information may be transferred to and processed in the United States or other jurisdictions.",
+      "Questions about this Privacy Policy may be submitted to the address below, Attention Privacy Officer."
+    ].join(" ")
+  });
+  const byTopic = new Map(classification.matches.map((match) => [match.topic, match]));
+
+  assert.match(
+    byTopic.get("recipients_or_vendor_categories")?.evidenceExcerpt ?? "",
+    /share personal information with service providers/i
+  );
+  assert.match(
+    byTopic.get("international_transfers")?.evidenceExcerpt ?? "",
+    /transferred to and processed in the United States or other jurisdictions/i
+  );
+  assert.match(
+    byTopic.get("controller_contact")?.evidenceExcerpt ?? "",
+    /Privacy Policy|Privacy Officer/i
+  );
+  assert.equal(byTopic.has("dpo_contact"), false);
+});
+
 test("classifies representative GDPR Transparency snippets across supported locales", () => {
   const examples = [
     {
@@ -136,7 +191,7 @@ test("classifies representative GDPR Transparency snippets across supported loca
     },
     {
       locale: "es",
-      text: "El responsable del tratamiento describe las finalidades del tratamiento de datos personales, la base jurídica del tratamiento de datos personales y los destinatarios de datos personales.",
+      text: "El responsable del tratamiento describe la base jurídica del tratamiento de datos personales y los destinatarios de datos personales. Utilizamos sus datos personales para procesar sus donaciones y emitir recibos.",
       topics: ["controller_contact", "processing_purposes", "legal_basis", "recipients_or_vendor_categories"],
     },
     {

@@ -39,7 +39,7 @@ function TabLabel({ tab, useShortLabel = false }: { tab: RegulatoryChecklistTab;
 
 export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnostics", headingTrailing, showAdvancedEvidenceToggle = false, tabs }: RegulatoryChecklistSectionProps) {
   const [activeTabId, setActiveTabId] = useState(tabs[0]?.id ?? "");
-  const [expandAllAdvancedEvidence, setExpandAllAdvancedEvidence] = useState(false);
+  const [isSectionExpanded, setIsSectionExpanded] = useState(true);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null;
   const visibleTabs = tabs.filter((tab) => !tab.group || tab.group === "visible");
   const menuGroups = [
@@ -75,30 +75,13 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
               {showAdvancedEvidenceToggle ? (
                 <button
                   type="button"
-                  aria-label={expandAllAdvancedEvidence
-                    ? "Collapse all evidence packets and correction steps"
-                    : "Expand all evidence packets and correction steps"}
-                  aria-pressed={expandAllAdvancedEvidence}
-                  className={cn(
-                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition",
-                    expandAllAdvancedEvidence
-                      ? "border-sky-300 bg-sky-50 text-sky-700 shadow-sm"
-                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800"
-                  )}
-                  title={expandAllAdvancedEvidence
-                    ? "Collapse all evidence packets and correction steps"
-                    : "Expand all evidence packets and correction steps"}
-                  onClick={() => setExpandAllAdvancedEvidence((value) => !value)}
+                  aria-label={isSectionExpanded ? `Collapse ${headingLabel}` : `Expand ${headingLabel}`}
+                  aria-pressed={isSectionExpanded}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2"
+                  title={isSectionExpanded ? `Collapse ${headingLabel}` : `Expand ${headingLabel}`}
+                  onClick={() => setIsSectionExpanded((value) => !value)}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "transition-transform",
-                      expandAllAdvancedEvidence ? "rotate-90" : "rotate-0"
-                    )}
-                  >
-                    <ScanReportDisclosureIcon className="h-4 w-4 rounded-[0.375rem] [&_svg]:h-2.5 [&_svg]:w-2.5" />
-                  </span>
+                  <ScanReportDisclosureIcon open={isSectionExpanded} className="h-8 w-8 rounded-lg [&_svg]:h-3.5 [&_svg]:w-3.5" />
                 </button>
               ) : null}
               <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">{headingLabel}</p>
@@ -121,9 +104,9 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
                     type="button"
                     aria-pressed={selected}
                     className={cn(
-                      "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                      "scan-report-button rounded-full px-3 py-1.5 text-xs font-semibold",
                       selected
-                        ? "border-slate-950 bg-slate-950 text-white shadow-[0_12px_24px_-14px_rgba(15,23,42,0.9)] ring-1 ring-slate-950"
+                        ? "scan-report-button-dark border-slate-950 bg-slate-950 text-white shadow-[0_12px_24px_-14px_rgba(15,23,42,0.9)] ring-1 ring-slate-950"
                         : "border-transparent text-slate-500 hover:bg-white hover:text-slate-900"
                     )}
                     onClick={() => setActiveTabId(tab.id)}
@@ -163,8 +146,8 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
                                 key={tab.id}
                                 type="button"
                                 className={cn(
-                                  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold transition",
-                                  selected ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+                                  "scan-report-button flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-semibold",
+                                  selected ? "scan-report-button-dark bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
                                 )}
                                 onClick={(event) => {
                                   setActiveTabId(tab.id);
@@ -188,9 +171,11 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
         </div>
       </div>
       <div className="[&>*]:border-t-0 [&>*]:rounded-t-none">
-        <RegulatoryChecklistAdvancedEvidenceProvider value={{ expandAllAdvancedEvidence }}>
-          {activeTab.content}
-        </RegulatoryChecklistAdvancedEvidenceProvider>
+        {isSectionExpanded ? (
+          <RegulatoryChecklistAdvancedEvidenceProvider value={{ expandAllAdvancedEvidence: false }}>
+            {activeTab.content}
+          </RegulatoryChecklistAdvancedEvidenceProvider>
+        ) : null}
       </div>
     </section>
   );

@@ -28,3 +28,23 @@ export function formatAdminDateTime(value: string | Date | null | undefined, opt
     timeZoneName: "short"
   }).format(date);
 }
+
+export function formatAdminCompactDateTime(value: string | Date | null | undefined, options: Pick<AdminDateTimeOptions, "fallback"> = {}) {
+  if (!value) {
+    return options.fallback ?? "Never";
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return options.fallback ?? "Never";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: ADMIN_LOCAL_TIME_ZONE
+  }).format(date);
+}

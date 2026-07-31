@@ -44,6 +44,19 @@ function isCompletedWithin24Hours(completedAt: string | null) {
 
 export default async function DashboardPage() {
   const { membership, organization, profile, user } = await withServerTiming("app.dashboard.context", () => getDashboardContext());
+  if (!organization || !membership) {
+    return (
+      <div className="mx-auto max-w-2xl py-12">
+        <Card className="border-sky-100 bg-white shadow-sm">
+          <CardHeader><CardTitle>Your account is ready</CardTitle></CardHeader>
+          <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
+            <p>You do not have a workspace assigned yet. A CertScore administrator will create or assign one before you can scan sites.</p>
+            <p>Once you are assigned, sign in again to open your workspace.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   const allowRestrictedScanOptions = canUseRestrictedScanOptions({
     membershipRole: membership.role,
     userEmail: user.email
@@ -84,7 +97,7 @@ export default async function DashboardPage() {
   const websitesNeedingReview = latestByWebsite.filter(
     (scan) =>
       (scan.topFindingCount ?? 0) > 0 ||
-      ((scan.scoreLabel === "GDPR/ePrivacy evidence" || scan.scoreLabel === "GDPR/ePrivacy posture") && scan.certscoreOverall !== null && scan.certscoreOverall < 75) ||
+      (scan.scoreLabel === "GDPR/ePrivacy posture" && scan.certscoreOverall !== null && scan.certscoreOverall < 75) ||
       Boolean(scan.interruptionLabel)
   ).length;
   const websitesWithPrivacyPolicy = latestByWebsite.filter((scan) => scan.privacyPolicyPresent === true).length;
@@ -136,7 +149,7 @@ export default async function DashboardPage() {
               </div>
               <p className="mt-1.5 text-xs text-slate-500">{scanUsagePercent === null ? "No monthly limit" : `${scanUsagePercent}% used`} · resets {formatDate(scanUsage.monthlyPeriodEnd)}</p>
             </div>
-            <div className="bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{latestCompletedScan?.scoreLabel ?? "GDPR/ePrivacy evidence"}</p><p className="mt-1 text-2xl font-semibold text-slate-950">{latestCompletedScan?.certscoreOverall ?? "—"}{latestCompletedScan?.certscoreOverall !== null && latestCompletedScan ? <span className="text-sm text-slate-400">/100</span> : null}</p><p className="truncate text-xs text-slate-500">{latestCompletedScan?.domainHostname ?? "No completed scan"}</p></div>
+            <div className="bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{latestCompletedScan?.scoreLabel ?? "GDPR/ePrivacy posture"}</p><p className="mt-1 text-2xl font-semibold text-slate-950">{latestCompletedScan?.certscoreOverall ?? "—"}{latestCompletedScan?.certscoreOverall !== null && latestCompletedScan ? <span className="text-sm text-slate-400">/100</span> : null}</p><p className="truncate text-xs text-slate-500">{latestCompletedScan?.domainHostname ?? "No completed scan"}</p></div>
             <div className="bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Needs review</p><p className="mt-1 text-2xl font-semibold text-slate-950">{websitesNeedingReview}</p><p className="text-xs text-slate-500">of {latestByWebsite.length} websites</p></div>
             <div className="bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Privacy coverage</p><p className="mt-1 text-2xl font-semibold text-slate-950">{websitesWithPrivacyPolicy}<span className="text-sm text-slate-400">/{latestByWebsite.length}</span></p><p className="text-xs text-slate-500">latest scans found a privacy policy</p></div>
           </CardContent>

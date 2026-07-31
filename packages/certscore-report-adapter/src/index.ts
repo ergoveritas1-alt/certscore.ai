@@ -849,7 +849,7 @@ function determineProjectionStatus(
   if (candidate.eligibility.status !== "eligible") {
     return "not_testable";
   }
-  if (isNanoAssistedUnverified(candidate)) {
+  if (isModelAssistedUnverified(candidate)) {
     return mapping.notEligibleStatus === "not_observed"
       ? "not_observed"
       : "assisted_candidate";
@@ -866,15 +866,18 @@ function determineProjectionStatus(
   return "review_signal";
 }
 
-function isNanoAssistedUnverified(candidate: FindingCandidate) {
-  const hasNanoSignal = [
+function isModelAssistedUnverified(candidate: FindingCandidate) {
+  const hasModelAssistSignal = [
     ...candidate.matchedCriteria,
     ...candidate.demotionReasons,
     ...candidate.missingCorroborators,
-  ].some((value) => value.toLowerCase().includes("nano"));
+  ].some((value) => {
+    const normalized = value.toLowerCase();
+    return normalized.includes("nano") || normalized.includes("model_assist");
+  });
 
   return (
-    hasNanoSignal &&
+    hasModelAssistSignal &&
     candidate.sourceEvidenceRefs.length === 0 &&
     candidate.evidenceExcerptIds.length === 0
   );

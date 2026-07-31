@@ -12,6 +12,7 @@ export const SCAN_NO_GO_REASON_CODES = [
   "maintenance_or_unavailable",
   "tls_or_certificate_error",
   "unsupported_region",
+  "target_unreachable_or_unsuitable",
   "navigation_transport_failure",
   "visual_capture_failed_or_placeholder",
   "retained_visual_error_shell",
@@ -260,6 +261,22 @@ export const SCAN_NO_GO_REASON_PRESENTATIONS: Record<ScanNoGoReasonCode, ScanNoG
     snapshotHomepageFetchStatus: "blocked",
     snapshotScanOutcome: "homepage_unsupported_region",
   },
+  target_unreachable_or_unsuitable: {
+    code: "target_unreachable_or_unsuitable",
+    customerTitle: "The submitted target could not be used as a public homepage",
+    explanation: "The submitted host was unreachable, required non-public access, or appeared to be an infrastructure endpoint rather than a usable public homepage.",
+    reportSummary: "The target did not provide a reachable, representative public homepage for scanning.",
+    recommendedNextAction: "Confirm the public website URL and use its visitor-facing HTTPS homepage instead of a CDN, API, DNS, advertising, authenticated, or inactive endpoint.",
+    pageState: "capture_failed",
+    retryLikelyToHelp: false,
+    limitationKind: "target_site_state",
+    snapshotStopReasonCode: "homepage_target_unreachable_or_unsuitable",
+    snapshotStopReasonLabel: "Target unreachable or unsuitable",
+    snapshotStopReasonDetail: "The submitted target was unreachable or did not appear to provide a usable public homepage.",
+    snapshotBlockPageClassification: "target_unreachable_or_unsuitable",
+    snapshotHomepageFetchStatus: "unreachable",
+    snapshotScanOutcome: "homepage_target_unreachable_or_unsuitable",
+  },
   navigation_transport_failure: {
     code: "navigation_transport_failure",
     customerTitle: "The scanner could not open the site",
@@ -313,18 +330,71 @@ export const SCAN_NO_GO_REASON_PRESENTATIONS: Record<ScanNoGoReasonCode, ScanNoG
 /** Canonical persisted scan outcomes that represent a terminal no-go result. */
 export const SCAN_NO_GO_SNAPSHOT_OUTCOMES = Array.from(new Set([
   "no_go",
+  // Legacy snapshot values written before the canonical reason registry was
+  // introduced. Keep these readable so historical rows cannot regress to Go.
+  "reachability_blocked",
+  "robots_restricted",
+  "homepage_blocked_403",
+  "homepage_blocked_429",
+  "homepage_blocked",
+  "captcha",
+  "auth_wall",
+  "homepage_not_found",
+  "homepage_timeout",
+  "homepage_unreachable",
+  "no_pages_scanned",
+  "reachability_blocked_homepage_403",
+  "reachability_blocked_homepage_401",
+  "reachability_blocked_challenge_suspected",
+  "reachability_blocked_captcha",
+  "reachability_blocked_auth_wall",
+  "reachability_blocked_geo_or_reputation",
+  "transport_failure",
+  "timeout_navigation",
+  "unknown_access_limitation",
+  "domain_inactive_or_unstable",
+  "verification_incomplete",
   ...Object.values(SCAN_NO_GO_REASON_PRESENTATIONS).map((presentation) => presentation.snapshotScanOutcome),
 ]));
+
+const SCAN_NO_GO_REASON_BY_SNAPSHOT_OUTCOME = Object.fromEntries(
+  Object.values(SCAN_NO_GO_REASON_PRESENTATIONS).map((presentation) => [
+    presentation.snapshotScanOutcome,
+    presentation.code,
+  ]),
+) as Record<string, ScanNoGoReasonCode>;
 
 export function isScanNoGoSnapshotOutcome(value: string | null | undefined) {
   return Boolean(value && SCAN_NO_GO_SNAPSHOT_OUTCOMES.includes(value));
 }
 
 const LEGACY_SCAN_NO_GO_REASON_ALIASES: Record<string, ScanNoGoReasonCode> = {
+  reachability_blocked: "access_denied_or_forbidden_page",
+  robots_restricted: "access_denied_or_forbidden_page",
+  homepage_blocked_403: "access_denied_or_forbidden_page",
+  homepage_blocked_429: "rate_limited_429",
+  homepage_blocked: "access_denied_or_forbidden_page",
+  captcha: "captcha_or_challenge",
+  auth_wall: "access_denied_or_forbidden_page",
+  homepage_not_found: "not_found_404",
+  homepage_timeout: "loading_or_stalled",
+  homepage_unreachable: "navigation_transport_failure",
+  no_pages_scanned: "target_unreachable_or_unsuitable",
   access_blocked: "access_denied_or_forbidden_page",
   blank_page_no_visible_content: "blank_or_unusable_page",
   bot_challenge_visible: "captcha_or_challenge",
   challenge_or_robot_page: "captcha_or_challenge",
+  reachability_blocked_homepage_403: "access_denied_or_forbidden_page",
+  reachability_blocked_homepage_401: "access_denied_or_forbidden_page",
+  reachability_blocked_challenge_suspected: "captcha_or_challenge",
+  reachability_blocked_captcha: "captcha_or_challenge",
+  reachability_blocked_auth_wall: "access_denied_or_forbidden_page",
+  reachability_blocked_geo_or_reputation: "unsupported_region",
+  transport_failure: "navigation_transport_failure",
+  timeout_navigation: "loading_or_stalled",
+  unknown_access_limitation: "target_unreachable_or_unsuitable",
+  domain_inactive_or_unstable: "target_unreachable_or_unsuitable",
+  verification_incomplete: "navigation_transport_failure",
   maintenance_recharging_page: "maintenance_or_unavailable",
   visual_error_shell: "retained_visual_error_shell",
 };
@@ -377,7 +447,9 @@ export function resolveScanNoGoPresentation(
   const canonicalReason = normalizedReason && isScanNoGoReasonCode(normalizedReason)
     ? normalizedReason
     : normalizedReason
-      ? LEGACY_SCAN_NO_GO_REASON_ALIASES[normalizedReason] ?? PAGE_STATE_REASON_FALLBACKS[pageState ?? ""]
+      ? SCAN_NO_GO_REASON_BY_SNAPSHOT_OUTCOME[normalizedReason] ??
+        LEGACY_SCAN_NO_GO_REASON_ALIASES[normalizedReason] ??
+        PAGE_STATE_REASON_FALLBACKS[pageState ?? ""]
       : PAGE_STATE_REASON_FALLBACKS[pageState ?? ""];
   if (canonicalReason) {
     return {

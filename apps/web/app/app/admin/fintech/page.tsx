@@ -31,13 +31,13 @@ export default async function AdminFintechPage() {
           <Link
             href="/app/admin/fintech"
             aria-current="page"
-            className="rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+            className="app-raised-button app-raised-button-dark rounded-full px-4 py-2 text-sm font-medium text-white"
           >
             Overview
           </Link>
           <Link
             href="/app/admin/fintech/sourcing"
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+            className="app-raised-button rounded-full px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-950"
           >
             Sourcing
           </Link>

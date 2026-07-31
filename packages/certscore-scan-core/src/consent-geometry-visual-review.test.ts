@@ -119,7 +119,7 @@ test("normalizeNanoVisualReview does not promote generic settings titles to opti
   });
 });
 
-test("normalizeNanoVisualReview keeps reject-with-subscription labels as visible reject", () => {
+test("normalizeNanoVisualReview does not treat reject-with-subscription labels as free reject", () => {
   const review = normalizeNanoVisualReview("ilsole24ore.com", fixtureGeometry(), {
     visualFirstLayerAccept: true,
     visualFirstLayerReject: false,
@@ -130,9 +130,9 @@ test("normalizeNanoVisualReview keeps reject-with-subscription labels as visible
   }, "test-nano");
 
   assert.equal(review.visualFirstLayerAccept, true);
-  assert.equal(review.visualFirstLayerReject, true);
+  assert.equal(review.visualFirstLayerReject, false);
   assert.equal(review.visualFirstLayerOptions, true);
-  assert.equal(review.scannerAgreement.reject, "agree");
+  assert.equal(review.scannerAgreement.reject, "disagree");
 });
 
 function fixtureGeometry(): ConsentControlGeometryArtifact {

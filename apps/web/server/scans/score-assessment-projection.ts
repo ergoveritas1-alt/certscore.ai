@@ -1,14 +1,7 @@
 import { createHash } from "node:crypto";
 import type { VersionedScoreAssessmentInput } from "./score-assessment-repository";
-import type { CanonicalShadowScoreComparisonArtifact } from "../../lib/scans/canonical-shadow-score-artifact";
-import {
-  GDPR_EPRIVACY_SHADOW_LUNA_DECISION,
-  isLunaScoreDecisionApprovedForModel,
-  type CanonicalShadowScoreLunaDecision
-} from "../../lib/scans/canonical-shadow-score-luna-decision";
 
 export const LEGACY_GDPR_EPRIVACY_SCORE_VERSION = "gdpr-eprivacy-evidence.legacy-v1";
-export const CANONICAL_GDPR_EPRIVACY_POSTURE_SCORE_SOURCE = "wc01.canonical-gdpr-eprivacy-posture";
 
 type LegacyGdprEprivacyScoreAssessment = {
   coverageConfidence: VersionedScoreAssessmentInput["coverageConfidence"];
@@ -78,80 +71,6 @@ export function buildLegacyGdprEprivacyVersionedAssessmentInput(input: {
     scoredAt: input.scoredAt,
     ...(input.assessment.score === null
       ? { withholdingReason: `legacy_evidence_score_withheld:${input.assessment.coverageConfidence}` }
-      : {})
-  };
-}
-
-export function buildShadowGdprEprivacyVersionedAssessmentInput(input: {
-  artifact: CanonicalShadowScoreComparisonArtifact;
-  scoredAt: string;
-}): VersionedScoreAssessmentInput {
-  const candidate = input.artifact.candidate;
-  return {
-    coverageConfidence: candidate.coverageConfidence,
-    coverageRatio: candidate.coverageRatio,
-    inputFindingIds: candidate.inputFindingIds,
-    inputProjectionFingerprint: input.artifact.inputProjectionFingerprint,
-    scanId: input.artifact.scanId,
-    scoreKind: "gdpr_eprivacy_risk_shadow",
-    scoreSource: candidate.scoreSource,
-    scoreValue: candidate.postureScore,
-    scoreVersion: candidate.modelVersion,
-    scoredAt: input.scoredAt,
-    ...(candidate.postureScore === null
-      ? {
-          withholdingReason: candidate.withheldReasons.length > 0
-            ? candidate.withheldReasons.join(",").slice(0, 500)
-            : "candidate_posture_withheld"
-        }
-      : {})
-  };
-}
-
-function customerCoverageConfidence(coverageRatio: number, inScopeRowCount: number) {
-  if (inScopeRowCount === 0) return "insufficient" as const;
-  if (coverageRatio >= 0.9) return "high" as const;
-  if (coverageRatio >= 0.7) return "medium" as const;
-  return "low" as const;
-}
-
-export function buildApprovedGdprEprivacyPostureVersionedAssessmentInput(input: {
-  artifact: CanonicalShadowScoreComparisonArtifact;
-  decision?: CanonicalShadowScoreLunaDecision;
-  scoredAt: string;
-}): VersionedScoreAssessmentInput {
-  const decision = input.decision ?? GDPR_EPRIVACY_SHADOW_LUNA_DECISION;
-  const candidate = input.artifact.candidate;
-  if (!isLunaScoreDecisionApprovedForModel(decision, candidate.modelVersion)) {
-    throw new Error("The exact candidate model is not fully approved by Luna.");
-  }
-  if (candidate.modelApprovalStatus !== "approved_by_luna" || !input.artifact.cutoverEligible) {
-    throw new Error("The candidate artifact is not eligible for customer cutover.");
-  }
-  if (decision.coverageSemantics.selectedCustomerFacingMetric !== "report_usable_evidence") {
-    throw new Error("The approved customer coverage metric is not report usable evidence.");
-  }
-  const coverage = input.artifact.comparison.coverage;
-  return {
-    coverageConfidence: customerCoverageConfidence(
-      coverage.reportUsableEvidenceRatio,
-      coverage.reportInScopeRowCount
-    ),
-    coverageRatio: coverage.reportUsableEvidenceRatio,
-    inputFindingIds: candidate.inputFindingIds,
-    inputProjectionFingerprint: input.artifact.inputProjectionFingerprint,
-    scanId: input.artifact.scanId,
-    scoreKind: "gdpr_eprivacy_posture",
-    scoreSource: CANONICAL_GDPR_EPRIVACY_POSTURE_SCORE_SOURCE,
-    scoreValue: candidate.postureScore,
-    scoreVersion: candidate.modelVersion,
-    scoredAt: input.scoredAt,
-    ...(candidate.postureScore === null
-      ? {
-          withholdingReason: candidate.withheldReasons.length > 0
-            ? candidate.withheldReasons.join(",").slice(0, 500)
-            : "candidate_posture_withheld"
-        }
       : {})
   };
 }

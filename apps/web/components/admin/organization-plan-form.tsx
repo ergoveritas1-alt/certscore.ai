@@ -1,7 +1,11 @@
 "use client";
 
-import { PLAN_CODES } from "@website-signal-risk-scanner/shared/constants/plans";
 import { useFormStatus } from "react-dom";
+import {
+  ADMIN_PLAN_LABELS,
+  ADMIN_PLAN_STATUSES,
+  PLAN_CODES
+} from "../../lib/admin/plan-options";
 
 type OrganizationPlanFormProps = {
   action: (formData: FormData) => Promise<void>;
@@ -10,21 +14,13 @@ type OrganizationPlanFormProps = {
   organizationId: string;
 };
 
-const PLAN_STATUSES = ["active", "trialing", "past_due", "paused"] as const;
-const PLAN_LABELS: Record<(typeof PLAN_CODES)[number], string> = {
-  free: "Trial",
-  individual: "Starter",
-  pro: "Pro",
-  team: "Custom",
-};
-
 function PlanControls(props: Pick<OrganizationPlanFormProps, "defaultPlan" | "defaultPlanStatus">) {
   const { pending } = useFormStatus();
 
   return (
     <>
       <select
-        className="w-[108px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-wait disabled:opacity-60"
+        className="w-[96px] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 disabled:cursor-wait disabled:opacity-60"
         defaultValue={props.defaultPlan}
         disabled={pending}
         name="plan"
@@ -32,18 +28,18 @@ function PlanControls(props: Pick<OrganizationPlanFormProps, "defaultPlan" | "de
       >
         {PLAN_CODES.map((plan) => (
           <option key={plan} value={plan}>
-            {PLAN_LABELS[plan]}
+            {ADMIN_PLAN_LABELS[plan]}
           </option>
         ))}
       </select>
       <select
-        className="w-[128px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-wait disabled:opacity-60"
+        className="w-[110px] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 disabled:cursor-wait disabled:opacity-60"
         defaultValue={props.defaultPlanStatus}
         disabled={pending}
         name="planStatus"
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
       >
-        {PLAN_STATUSES.map((status) => (
+        {ADMIN_PLAN_STATUSES.map((status) => (
           <option key={status} value={status}>
             {status}
           </option>
@@ -57,9 +53,15 @@ export function OrganizationPlanForm({ action, defaultPlan, defaultPlanStatus, o
   const formKey = `${organizationId}:${defaultPlan}:${defaultPlanStatus}`;
 
   return (
-    <form action={action} className="grid items-start gap-2 md:grid-cols-[108px_128px]" key={formKey}>
+    <form action={action} className="grid items-start gap-1.5 md:grid-cols-[96px_110px]" key={formKey}>
       <input name="organizationId" type="hidden" value={organizationId} />
       <PlanControls defaultPlan={defaultPlan} defaultPlanStatus={defaultPlanStatus} />
+      <PlanSaveStatus />
     </form>
   );
+}
+
+function PlanSaveStatus() {
+  const { pending } = useFormStatus();
+  return pending ? <span aria-live="polite" className="text-xs text-slate-500">Saving…</span> : null;
 }

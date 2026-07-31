@@ -7,10 +7,10 @@ import { deriveScanQualitySummary, type ScanQualityLevel } from "../../lib/scans
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homepage-reason";
+import { canonicalConsentSurfaceCompatibilityFromSnapshot } from "../../lib/scans/consent-assessment-compatibility";
 import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveDisplayCreatedAt } from "./display-state";
-import { selectConfiguredCustomerGdprEprivacyScore } from "./customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
 import { projectAdminNoGo } from "../admin/admin-no-go";
 import {
@@ -37,7 +37,7 @@ export type OrganizationScanListItem = {
   certscoreOverall: number | null;
   scoreCoverageConfidence: "high" | "medium" | "low" | "insufficient" | null;
   scoreCoverageRatio: number | null;
-  scoreLabel: "GDPR/ePrivacy evidence" | "GDPR/ePrivacy posture" | "Legacy scan score" | null;
+  scoreLabel: "GDPR/ePrivacy evidence" | "GDPR/ePrivacy posture" | null;
   scoreScoredAt: string | null;
   scoreSource: string | null;
   scoreVersion: string | null;
@@ -379,16 +379,10 @@ async function loadOrganizationScans(
     signalCountMap,
     summaryScanIds
   } = await loadOrganizationScanPageData(organizationId, input);
-  const [legacyScoreAssessmentMap, candidateScoreAssessmentMap] = await Promise.all([
-    loadLatestVersionedScoreAssessments({
-      scanIds: scanRows.map((scan) => scan.id),
-      scoreKind: "gdpr_eprivacy_evidence"
-    }),
-    loadLatestVersionedScoreAssessments({
-      scanIds: scanRows.map((scan) => scan.id),
-      scoreKind: "gdpr_eprivacy_posture"
-    })
-  ]);
+  const legacyScoreAssessmentMap = await loadLatestVersionedScoreAssessments({
+    scanIds: scanRows.map((scan) => scan.id),
+    scoreKind: "gdpr_eprivacy_evidence"
+  });
 
   const domainMap = new Map(domains.map((domain) => [domain.id, domain]));
   const domainLastCompletedAtMap = new Map<string, string>();
@@ -415,6 +409,7 @@ async function loadOrganizationScans(
     existing.push(diagnosticEvent);
     diagnosticEventMap.set(diagnosticEvent.scan_id, existing);
   }
+
   const changeMap = new Map<
     string,
     {
@@ -463,9 +458,10 @@ async function loadOrganizationScans(
     const snapshot =
       snapshotMap.get(scan.id) ??
       (resolvedSnapshots.find((snapshotRow) => snapshotRow.scan_id === scan.id) ?? null);
+    const overviewSnapshot = snapshot;
     const derivedState = deriveScanStateExplanation(
       scan,
-      snapshot,
+      overviewSnapshot,
       diagnosticEventMap.get(scan.id) ?? []
     );
     const totalSignals =
@@ -473,13 +469,13 @@ async function loadOrganizationScans(
       signalCountMap.get(scan.id) ??
       null;
     const normalizedAccessPosture = normalizeAccessPostureSummary({
-      accessPostureClass: snapshot?.access_posture_class ?? null,
-      highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
-      homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
-      homepageFetchStatus: snapshot?.homepage_fetch_status ?? null,
+      accessPostureClass: overviewSnapshot?.access_posture_class ?? null,
+      highestSuccessfulTier: overviewSnapshot?.highest_successful_tier ?? null,
+      homepageFetchHttpStatus: overviewSnapshot?.homepage_fetch_http_status ?? null,
+      homepageFetchStatus: overviewSnapshot?.homepage_fetch_status ?? null,
       pagesScanned: scan.pages_scanned,
-      recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? [],
-      stopTier: snapshot?.stop_tier ?? null,
+      recoverableFindingClasses: overviewSnapshot?.recoverable_finding_classes ?? [],
+      stopTier: overviewSnapshot?.stop_tier ?? null,
       totalSignals
     });
     const accessPosture = deriveAccessPosturePresentation({
@@ -510,27 +506,25 @@ async function loadOrganizationScans(
       startedAt: scan.started_at
     });
     const scanFromDisplay = getScanFromDisplay(scan.scan_config_json);
-    const scoreSelection = selectConfiguredCustomerGdprEprivacyScore({
-      candidateAssessment: candidateScoreAssessmentMap.get(scan.id) ?? null,
-      legacyAssessment: legacyScoreAssessmentMap.get(scan.id) ?? null
-    });
+    const scoreAssessment = legacyScoreAssessmentMap.get(scan.id) ?? null;
     const runtimeArtifact = runtimeArtifactMap.get(scan.id) ?? null;
     const noGo = projectAdminNoGo({
       accessPostureClass: normalizedAccessPosture.accessPostureClass,
-      blockedFlag: snapshot?.blocked_flag ?? null,
-      captchaFlag: snapshot?.captcha_flag ?? null,
+      blockedFlag: overviewSnapshot?.blocked_flag ?? null,
+      captchaFlag: overviewSnapshot?.captcha_flag ?? null,
       runtimeAssessment: runtimeArtifact?.scan_no_go_assessment ?? null,
-      snapshotRuntimeAssessment: snapshot?.scan_no_go_assessment ?? null,
-      snapshotOutcome: snapshot?.scan_outcome ?? null,
+      snapshotRuntimeAssessment: overviewSnapshot?.scan_no_go_assessment ?? null,
+      snapshotOutcome: overviewSnapshot?.scan_outcome ?? null,
       visualAccessReview: runtimeArtifact?.visual_access_review ?? null,
-      snapshotVisualAccessReview: snapshot?.visual_access_review ?? null
+      snapshotVisualAccessReview: overviewSnapshot?.visual_access_review ?? null
     });
-    const scoreAssessment = noGo.isNoGo ? null : scoreSelection.assessment;
+    const effectiveScoreAssessment = noGo.isNoGo ? null : scoreAssessment;
+    const materializedScore = typeof overviewSnapshot?.certscore_overall === "number"
+      ? overviewSnapshot.certscore_overall
+      : null;
     const displayedScore = noGo.isNoGo
       ? null
-      : scoreAssessment
-      ? scoreAssessment.scoreValue
-      : snapshot?.certscore_overall ?? null;
+      : materializedScore ?? effectiveScoreAssessment?.scoreValue ?? null;
     return {
         id: scan.id,
         domainActiveScanExists: latestDomainScan?.status === "queued" || latestDomainScan?.status === "running",
@@ -540,26 +534,30 @@ async function loadOrganizationScans(
           (domain?.last_scanned_at ?? scan.display_last_scanned_at ?? (displayDomainId ? domainLastCompletedAtMap.get(displayDomainId) : null)) ??
           null,
         certscoreOverall: displayedScore,
-        scoreCoverageConfidence: scoreAssessment?.coverageConfidence ?? null,
-        scoreCoverageRatio: scoreAssessment?.coverageRatio ?? null,
-        scoreLabel: scoreAssessment
-          ? scoreSelection.label
-          : displayedScore !== null
-            ? "Legacy scan score"
-            : null,
-        scoreScoredAt: scoreAssessment?.scoredAt ?? null,
-        scoreSource: scoreAssessment?.scoreSource ?? (displayedScore !== null ? "legacy.scan-snapshot" : null),
-        scoreVersion: scoreAssessment?.scoreVersion ?? null,
+        scoreCoverageConfidence: overviewSnapshot?.score_coverage_confidence as OrganizationScanListItem["scoreCoverageConfidence"] ?? effectiveScoreAssessment?.coverageConfidence ?? null,
+        scoreCoverageRatio: overviewSnapshot?.score_coverage_ratio ?? effectiveScoreAssessment?.coverageRatio ?? null,
+        scoreLabel: overviewSnapshot?.score_source === "canonical.gdpr_eprivacy"
+          ? "GDPR/ePrivacy posture"
+          : effectiveScoreAssessment ? "GDPR/ePrivacy evidence" : null,
+        scoreScoredAt: overviewSnapshot?.score_scored_at ?? effectiveScoreAssessment?.scoredAt ?? null,
+        scoreSource: overviewSnapshot?.score_source ?? effectiveScoreAssessment?.scoreSource ?? null,
+        scoreVersion: overviewSnapshot?.score_version ?? effectiveScoreAssessment?.scoreVersion ?? null,
         regulatoryScore: noGo.isNoGo ? null : snapshot?.regulatory_exposure_score ?? null,
         privacyScore: noGo.isNoGo ? null : snapshot?.privacy_score ?? null,
         consentScore: noGo.isNoGo ? null : snapshot?.consent_score ?? null,
         accessibilityScore: noGo.isNoGo ? null : snapshot?.accessibility_score ?? null,
         totalSignals: noGo.isNoGo ? null : totalSignals,
         findingCount: noGo.isNoGo ? 0 : snapshot?.report_finding_count ?? 0,
-        topFindingCount: noGo.isNoGo ? null : snapshot?.top_finding_count ?? null,
-        privacyPolicyPresent: noGo.isNoGo ? null : snapshot?.privacy_policy_present ?? null,
-        cookieBannerPresent: noGo.isNoGo ? null : snapshot?.cookie_banner_present ?? null,
-        cmpVendorName: noGo.isNoGo ? null : snapshot?.cmp_vendor_name ?? null,
+        topFindingCount: noGo.isNoGo
+          ? null
+          : overviewSnapshot?.top_finding_count ?? null,
+        privacyPolicyPresent: noGo.isNoGo ? null : overviewSnapshot?.privacy_policy_present ?? null,
+        cookieBannerPresent: noGo.isNoGo
+          ? null
+          : canonicalConsentSurfaceCompatibilityFromSnapshot(
+            overviewSnapshot as unknown as Record<string, unknown> | null
+          ),
+        cmpVendorName: noGo.isNoGo ? null : overviewSnapshot?.cmp_vendor_name ?? null,
         consentAuditCompleted:
           runtimeArtifactMap.get(scan.id)?.consent_audit_completed ??
           getHybridConsentAuditCompleted(runtimeArtifactMap.get(scan.id) as Record<string, unknown> | null),

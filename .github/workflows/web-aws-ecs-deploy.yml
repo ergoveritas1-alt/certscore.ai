@@ -184,7 +184,6 @@ jobs:
             --provenance=false \
             --sbom=false \
             --cache-from "type=registry,ref=${WEB_CACHE}" \
-            --cache-to "type=registry,ref=${WEB_CACHE},mode=max" \
             -f apps/web/Dockerfile \
             --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
             --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \

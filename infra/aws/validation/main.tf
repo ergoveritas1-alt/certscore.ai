@@ -67,6 +67,11 @@ locals {
       { name = "VALIDATION_DEFAULT_RUN_MODE", value = var.validation_default_run_mode },
       { name = "VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES", value = var.validation_default_sample_interval_minutes },
       { name = "VALIDATION_OPENAI_MODEL", value = var.validation_openai_model },
+      { name = "CERTSCORE_EXTRACTION_MODEL", value = var.certscore_extraction_model },
+      { name = "CERTSCORE_REVIEW_MODEL", value = var.certscore_review_model },
+      { name = "CERTSCORE_MINI_REVIEW_ENABLED", value = var.certscore_mini_review_enabled },
+      { name = "CERTSCORE_ESCALATION_ENABLED", value = var.certscore_escalation_enabled },
+      { name = "CERTSCORE_MODEL_REVIEW_MODE", value = var.certscore_model_review_mode },
       { name = "VALIDATION_TRANCO_MIN_RANK", value = tostring(var.validation_tranco_min_rank) },
       { name = "VALIDATION_TRANCO_MAX_RANK", value = tostring(var.validation_tranco_max_rank) },
       { name = "WORKER_CONCURRENCY", value = var.worker_concurrency },
@@ -80,6 +85,7 @@ locals {
       { name = "CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_ie },
       { name = "CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.california }
     ],
+    var.certscore_escalation_model != "" ? [{ name = "CERTSCORE_ESCALATION_MODEL", value = var.certscore_escalation_model }] : [],
     var.s3_endpoint != "" ? [{ name = "S3_ENDPOINT", value = var.s3_endpoint }] : [],
     var.s3_force_path_style != "" ? [{ name = "S3_FORCE_PATH_STYLE", value = var.s3_force_path_style }] : [],
     var.validation_tranco_source_url != "" ? [{ name = "VALIDATION_TRANCO_SOURCE_URL", value = var.validation_tranco_source_url }] : []

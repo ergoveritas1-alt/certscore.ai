@@ -10,7 +10,7 @@ type CopyJsonButtonProps = {
 
 export function CopyJsonButton({
   payload,
-  className = "absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 shadow-sm transition-colors hover:border-slate-400 hover:text-slate-950",
+  className = "absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 hover:text-slate-950",
   label = "Copy JSON"
 }: CopyJsonButtonProps) {
   const [copied, setCopied] = useState(false);
@@ -27,14 +27,14 @@ export function CopyJsonButton({
   }
 
   if (!mounted) {
-    return <span aria-hidden="true" className={className} />;
+    return <span aria-hidden="true" className={`scan-report-button ${className}`} />;
   }
 
   return (
     <button
       type="button"
       onClick={handleCopy}
-      className={className}
+      className={`scan-report-button ${className}`}
       aria-label={label}
       title={copied ? "Copied" : label}
     >

@@ -44,6 +44,102 @@ test("captures IKEA-style OneTrust first-layer accept, reject, and options contr
     artifact.candidates.find((candidate) => candidate.ariaLabel?.startsWith("Cookie settings"))?.decisionStatus,
     "confirmed_visible",
   );
+  assert.equal(
+    artifact.candidates.find((candidate) => candidate.ariaLabel?.startsWith("Cookie settings"))?.presentationType,
+    "dedicated_button",
+  );
+});
+
+test("captures inline Cookie Consent Tool anchors with reduced prominence", async () => {
+  const artifact = await captureFixture(`
+    <section id="cookie-banner" role="dialog" aria-label="Cookie consent" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: black; color: white;">
+      <p>
+        We use cookies and other technologies. To make choices regarding specific cookies,
+        access our <a href="#cookie-consent-tool" style="color: #20bff3;">Cookie Consent Tool</a>.
+      </p>
+      <button type="button">Reject all non-essential cookies</button>
+      <button type="button">Accept all cookies</button>
+    </section>
+  `);
+
+  const options = findCandidate(artifact, "Cookie Consent Tool");
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.decisionStatus, "confirmed_visible");
+  assert.equal(options?.presentationType, "inline_link");
+  assert.equal(options?.layer, "first_layer");
+  assert.equal(artifact.summary.firstLayerOptions, true);
+});
+
+test("does not promote non-actionable inline preference text into control evidence", async () => {
+  const artifact = await captureFixture(`
+    <section id="cookie-banner" role="dialog" aria-label="Cookie consent" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: white;">
+      <p>Cookie Consent Tool</p>
+      <button type="button">Reject all cookies</button>
+      <button type="button">Accept all cookies</button>
+    </section>
+  `);
+
+  assert.equal(findCandidate(artifact, "Cookie Consent Tool"), undefined);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+});
+
+test("retains footer cookie settings anchors as persistent links, not first-layer controls", async () => {
+  const artifact = await captureFixture(`
+    <main style="height: 900px;"><h1>Example</h1></main>
+    <footer style="padding: 24px;">
+      <a href="#cookie-settings">Cookie Settings</a>
+    </footer>
+  `);
+
+  const options = findCandidate(artifact, "Cookie Settings");
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.presentationType, "persistent_link");
+  assert.equal(options?.layer, "footer");
+  assert.equal(artifact.summary.firstLayerOptions, false);
+});
+
+test("uses the rendered label when aria-label is a localization token", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-modal="true" aria-label="Cookie settings" style="position: fixed; left: 80px; top: 80px; width: 560px; padding: 24px; background: white;">
+      <p>We use cookies and similar technologies.</p>
+      <button id="reject" aria-label="BUTTONS.REJECT">Decline optional cookies</button>
+    </section>
+  `);
+
+  const reject = findCandidate(artifact, "Decline optional cookies");
+  assert.equal(reject?.ariaLabel, "BUTTONS.REJECT");
+  assert.equal(reject?.actionType, "reject_all");
+  assert.equal(reject?.decisionStatus, "confirmed_visible");
+});
+
+test("resolves aria-labelledby names when a control has no rendered text", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-modal="true" aria-label="Cookie settings" style="position: fixed; left: 80px; top: 80px; width: 560px; padding: 24px; background: white;">
+      <p>We use cookies and similar technologies.</p>
+      <span id="reject-label">Reject optional cookies</span>
+      <button id="reject" aria-labelledby="reject-label"></button>
+    </section>
+  `);
+
+  const reject = findCandidate(artifact, "Reject optional cookies");
+  assert.equal(reject?.actionType, "reject_all");
+  assert.equal(reject?.decisionStatus, "confirmed_visible");
+});
+
+test("omits composite consent wrappers while retaining their actionable descendants", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-modal="true" aria-label="Cookie settings" style="position: fixed; left: 80px; top: 80px; width: 560px; padding: 24px; background: white;">
+      <p>We use cookies and similar technologies.</p>
+      <div class="button-row">
+        <button type="button">Accept all cookies</button>
+        <button type="button">Decline optional cookies</button>
+      </div>
+    </section>
+  `);
+
+  assert.equal(artifact.candidates.some((candidate) => candidate.label === "Accept all cookies Decline optional cookies"), false);
+  assert.equal(findCandidate(artifact, "Accept all cookies")?.actionType, "accept_all");
+  assert.equal(findCandidate(artifact, "Decline optional cookies")?.actionType, "reject_all");
 });
 
 test("captures Air France-style DOM-present options as clipped rather than first-layer visible", async () => {
@@ -106,7 +202,7 @@ test("captures OneTrust optional-cookie noun-phrase controls as first-layer acce
         <p>We use cookies to provide necessary site functions and optional cookies for analytics and personalization.</p>
         <div id="onetrust-button-group">
           <button id="onetrust-pc-btn-handler">Manage Cookies</button>
-          <button id="onetrust-reject-all-handler">Reject Optional Cookies</button>
+          <button id="onetrust-reject-all-handler">Decline optional cookies</button>
           <button id="onetrust-accept-btn-handler">Accept Optional Cookies</button>
         </div>
       </section>
@@ -123,6 +219,11 @@ test("captures OneTrust optional-cookie noun-phrase controls as first-layer acce
   assert.equal(accept?.actionType, "accept_all");
   assert.equal(accept?.matchedTerm, "accept optional cookies");
   assert.equal(accept?.decisionStatus, "confirmed_visible");
+
+  const reject = findCandidate(artifact, "Decline optional cookies");
+  assert.equal(reject?.actionType, "reject_all");
+  assert.equal(reject?.matchedTerm, "decline optional cookies");
+  assert.equal(reject?.decisionStatus, "confirmed_visible");
 });
 
 test("retains Polish consent controls as production geometry evidence", async () => {
@@ -386,6 +487,22 @@ test("captures Italian first-layer accept, reject, and options controls", async 
   assert.equal(findCandidate(artifact, "Accetta")?.actionType, "accept_all");
   assert.equal(findCandidate(artifact, "Rifiuta")?.actionType, "reject_all");
   assert.equal(findCandidate(artifact, "Gestisci preferenze")?.actionType, "manage_preferences");
+});
+
+test("does not treat an Italian paid reject-and-subscribe alternative as free reject", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-modal="true" aria-label="Scelte cookie" style="position: fixed; inset: 60px; padding: 24px; background: white;">
+      <p>Puoi acconsentire, gestire le preferenze oppure rifiutare sottoscrivendo un abbonamento.</p>
+      <button>Accetta e continua</button>
+      <button>Preferenze</button>
+      <a href="/abbonati">Rifiuta e abbonati</a>
+    </section>
+  `);
+
+  assert.equal(findCandidate(artifact, "Accetta e continua")?.actionType, "accept_all");
+  assert.equal(findCandidate(artifact, "Preferenze")?.actionType, "manage_preferences");
+  assert.equal(findCandidate(artifact, "Rifiuta e abbonati")?.actionType, "other");
+  assert.equal(artifact.summary.firstLayerReject, false);
 });
 
 test("captures Spanish Didomi pay-or-consent controls rendered as styled elements", async () => {
@@ -778,6 +895,66 @@ test("prioritizes visible consent buttons over hidden navigation controls before
   assert.equal(artifact.summary.firstLayerReject, true);
   assert.equal(artifact.summary.firstLayerOptions, true);
   assert.equal(findCandidate(artifact, "Accept")?.decisionStatus, "confirmed_visible");
+});
+
+test("retains consent controls when an unrelated modal is visible at the same time", async () => {
+  const artifact = await captureFixture(`
+    <style>
+      .account-modal {
+        position: fixed;
+        left: 420px;
+        top: 80px;
+        width: 520px;
+        padding: 24px;
+        background: white;
+        z-index: 20;
+      }
+      .cookie-banner {
+        position: fixed;
+        left: 24px;
+        right: 24px;
+        bottom: 24px;
+        padding: 20px;
+        background: #f8f8f8;
+        z-index: 30;
+      }
+      .cookie-banner button { margin-right: 12px; }
+    </style>
+    <section class="account-modal" role="dialog" aria-label="Sign in">
+      <h2>Member sign in</h2>
+      <button>Continue with email</button>
+    </section>
+    <section class="cookie-banner" role="dialog" aria-label="Cookie consent">
+      <p>We use cookies for analytics and advertising. Choose your cookie preferences.</p>
+      <button>Manage preferences</button>
+      <button>Reject all non-required</button>
+      <button>Accept all</button>
+    </section>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Continue with email")?.actionType, "other");
+});
+
+test("captures Show Purposes as contextual first-layer options", async () => {
+  const artifact = await captureFixture(`
+    <section
+      role="dialog"
+      aria-label="Cookie consent"
+      style="position: fixed; left: 180px; top: 120px; width: 720px; padding: 24px; background: white;"
+    >
+      <p>We and our partners use cookies and personal data for advertising purposes.</p>
+      <button>Agree</button>
+      <button>Show Purposes</button>
+    </section>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Show Purposes")?.actionType, "manage_preferences");
 });
 
 async function captureFixture(html: string) {

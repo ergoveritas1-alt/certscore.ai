@@ -68,6 +68,7 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
     direct("privacy_policy", "privacy notice"),
     direct("privacy_policy", "gdpr notice"),
     direct("privacy_policy", "privacy statement"),
+    policyContextualEquivalent("privacy_policy", "data protection"),
     equivalent("privacy_policy", "privacy"),
     direct("cookie_policy", "cookie policy"),
     direct("cookie_policy", "cookie notice"),
@@ -142,6 +143,7 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
   ...es([
     direct("privacy_policy", "política de privacidad"),
     direct("privacy_policy", "aviso de privacidad"),
+    direct("privacy_policy", "protección de datos"),
     equivalent("privacy_policy", "privacidad"),
     direct("cookie_policy", "política de cookies"),
     direct("cookie_policy", "aviso de cookies"),
@@ -159,6 +161,7 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
     direct("privacy_policy", "informativa privacy generale", "general_scope"),
     direct("privacy_policy", "informativa sulla privacy"),
     direct("privacy_policy", "politica sulla privacy"),
+    direct("privacy_policy", "protezione dei dati"),
     equivalent("privacy_policy", "privacy"),
     direct("cookie_policy", "informativa sui cookie"),
     direct("cookie_policy", "cookie policy"),
@@ -172,6 +175,7 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
   ...nl([
     direct("privacy_policy", "privacybeleid"),
     direct("privacy_policy", "privacyverklaring"),
+    direct("privacy_policy", "gegevensbescherming"),
     direct("privacy_policy", "privacy reglement"),
     equivalent("privacy_policy", "privacy"),
     direct("cookie_policy", "cookiebeleid"),
@@ -189,6 +193,7 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
   ...pl([
     direct("privacy_policy", "polityka prywatności"),
     direct("privacy_policy", "informacja o prywatności"),
+    direct("privacy_policy", "ochrona danych"),
     equivalent("privacy_policy", "prywatność"),
     direct("cookie_policy", "polityka plików cookie"),
     direct("cookie_policy", "polityka cookies"),
@@ -220,6 +225,7 @@ const URL_SURFACE_PATTERNS: Array<{
   { surfaceType: "cookie_policy", pattern: /privacy[-_/]cookie[-_/]statement|privacy[-_/]and[-_/]cookies?|privacy[-_/]cookies?/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_-])privacy(?:[-_/]policy|[-_/]notice|[-_/]statement)?(?:$|[/?#._-])/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_-])privacy[-_/]statement(?:$|[/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_-])data[-_/]protection(?:$|[/?#._-])/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])datenschutz(?:erkl[aä]rung|information)?(?:$|[\s/?#._-])/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:politique[-_\s/](?:de[-_\s/])?confidentialit[eé]|protection[-_\s/](?:des[-_\s/])?donn[eé]es(?:[-_\s/]personnelles)?)(?:$|[\s/?#._-])/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:pol[ií]tica[-_\s/](?:de[-_\s/])?privacidad|protecci[oó]n[-_\s/](?:de[-_\s/])?datos|privacidad)(?:$|[\s/?#._-])/i },
@@ -242,6 +248,8 @@ const PRIVACY_CONTEXT_PATTERN =
   /\b(privacy|cookie|cookies|consent|preferences?|settings|choices?|datenschutz|cookie|cookies|einwilligung|confidentialit[eé]|cookies?|consentement|privacidad|cookies?|consenso|privacy|cookie|cookies|toestemming|privacybeleid|cookiebeleid|prywatno[śs][ćc]|zgod[ay]|plik[oó]w cookie)\b/i;
 const POLICY_CONTEXT_PATTERN =
   /\b(policy|notice|statement|legal|privacy|cookies?|data protection|personal data|datenschutz|datenschutzerkl[aä]rung|politique|mentions l[eé]gales|donn[eé]es personnelles|protection des donn[eé]es|vie priv[eé]e|pol[ií]tica|aviso legal|protecci[oó]n de datos|informativa|termini|privacybeleid|privacyverklaring|avg|polityka|regulamin|dane osobowe)\b/i;
+const POLICY_DOCUMENT_CONTEXT_PATTERN =
+  /\b(policy|notice|statement|legal|privacy|personal data|data controller|gdpr|article 13|datenschutzerkl[aä]rung)\b/i;
 
 export function classifyPrivacySurface(
   input: PrivacySurfaceClassifierInput,
@@ -253,7 +261,9 @@ export function classifyPrivacySurface(
   const labelText = uniqueStrings([normalizedLinkText, normalizedTitle].filter(Boolean)).join(" ");
   const haystack = uniqueStrings([labelText, normalizedSurrounding, normalizedUrl].filter(Boolean)).join(" ");
   const contextSatisfied = PRIVACY_CONTEXT_PATTERN.test(haystack);
-  const policyContextSatisfied = POLICY_CONTEXT_PATTERN.test(uniqueStrings([normalizedSurrounding, normalizedUrl]).join(" "));
+  const policyContext = uniqueStrings([normalizedSurrounding, normalizedUrl]).join(" ");
+  const policyContextSatisfied = POLICY_CONTEXT_PATTERN.test(policyContext);
+  const policyDocumentContextSatisfied = POLICY_DOCUMENT_CONTEXT_PATTERN.test(policyContext);
 
   if (!haystack) {
     return unknown(["empty_surface_evidence"]);
@@ -266,7 +276,13 @@ export function classifyPrivacySurface(
   const phraseMatch = phrases
     .map((term) => ({
       term,
-      score: phraseScore(term, labelText, contextSatisfied, policyContextSatisfied),
+      score: phraseScore(
+        term,
+        labelText,
+        contextSatisfied,
+        policyContextSatisfied,
+        policyDocumentContextSatisfied,
+      ),
     }))
     .filter((entry) => entry.score > 0)
     .sort((left, right) =>
@@ -406,6 +422,7 @@ function phraseScore(
   normalizedLabel: string,
   contextSatisfied: boolean,
   policyContextSatisfied: boolean,
+  policyDocumentContextSatisfied: boolean,
 ) {
   const phrase = normalizePrivacySurfaceText(term.phrase);
   if (!phrase) {
@@ -420,6 +437,14 @@ function phraseScore(
     return 0;
   }
   if (term.requiresPolicyContext && !policyContextSatisfied) {
+    return 0;
+  }
+  if (
+    term.requiresPolicyContext &&
+    term.locale === "en" &&
+    normalizePrivacySurfaceText(term.phrase) === "data protection" &&
+    !policyDocumentContextSatisfied
+  ) {
     return 0;
   }
   return (exact ? 1000 : 650) +

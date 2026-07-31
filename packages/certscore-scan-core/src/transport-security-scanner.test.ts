@@ -62,6 +62,9 @@ test("pre-consent scanner uses strict TLS probe and records transport-security e
     assert.equal(observation.tlsProbe.attempted, true);
     assert.equal(observation.tlsProbe.validCertificate, false);
     assert.equal(observation.tlsProbe.errorCategory, "tls_or_certificate_failure");
+    assert.equal(typeof observation.tlsProbe.certificateValidTo, "string");
+    assert.equal(observation.tlsCertificateObservations.length, 1);
+    assert.equal(observation.tlsCertificateObservations[0]?.validTo, observation.tlsProbe.certificateValidTo);
     assert.equal(observation.summary.validTlsCertificate, false);
     assert.equal(observation.summary.mixedContentObserved, true);
     assert.ok(observation.mixedContent.observedCount > 0);

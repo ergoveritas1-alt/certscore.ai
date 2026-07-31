@@ -424,13 +424,13 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
 
   assert.deepEqual(fallback?.preconsent_cookie_names, ["_fbp", "demdex", "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L"]);
   assert.deepEqual(fallback?.preconsent_nonessential_cookie_names, ["_fbp", "demdex", "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L"]);
-  assert.deepEqual(fallback?.preconsent_cookie_categories, ["advertising", "dmp", "session_replay"]);
+  assert.deepEqual(fallback?.preconsent_cookie_categories, ["advertising", "session_replay"]);
   assert.deepEqual(fallback?.preconsent_cookie_excluded_functional_names, ["__cf_bm"]);
   assert.deepEqual(fallback?.preconsent_cookie_evidence, [
     {
       category: "advertising",
       cookieName: "_fbp",
-      domain: ".facebook.com",
+      domain: "facebook.com",
       firstObservedAtMs: 120,
       initiatorDomain: null,
       initiatorUrl: null,
@@ -444,9 +444,9 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
       timingEvidence: "before_consent_cookie_write"
     },
     {
-      category: "dmp",
+      category: "advertising",
       cookieName: "demdex",
-      domain: ".demdex.net",
+      domain: "demdex.net",
       firstObservedAtMs: 80,
       initiatorDomain: null,
       initiatorUrl: null,
@@ -462,7 +462,7 @@ test("builds calibrated pre-consent cookie evidence from hybrid cookie writes", 
     {
       category: "session_replay",
       cookieName: "QSI_ReplaySession_Info_ZN_8DiCwx5sYuF137L",
-      domain: ".example.com",
+      domain: "example.com",
       firstObservedAtMs: 90,
       initiatorDomain: null,
       initiatorUrl: null,
@@ -520,7 +520,7 @@ test("retains third-party pre-consent cookie writes when category is unknown", (
     {
       category: "unknown",
       cookieName: "visitor_id",
-      domain: ".vendor.example",
+      domain: "vendor.example",
       firstObservedAtMs: 75,
       initiatorDomain: null,
       initiatorUrl: null,
@@ -879,13 +879,7 @@ test("builds promotion evidence from legacy baseline tracker arrays when quality
     "https://tags-eu.tiqcdn.com/utag/example/prod/utag.js"
   ]);
   assert.deepEqual(fallback?.preconsent_tracker_vendors, ["Tealium"]);
-  assert.deepEqual(fallback?.consentTimeline, {
-    firstCmpVisibleMs: 0,
-    firstConsentActionMs: null,
-    firstNonEssentialRequestMs: null,
-    navigationStartMs: 0,
-    timelineConfidence: "derived_from_hybrid_runtime"
-  });
+  assert.equal(fallback?.consentTimeline, null);
   assert.equal(fallback?.consentActionableChoiceObserved, true);
   assert.equal(fallback?.consentSurfaceObserved, true);
   assert.deepEqual(fallback?.requestPurposeClassificationConfidence, [
@@ -901,7 +895,7 @@ test("builds promotion evidence from legacy baseline tracker arrays when quality
   ]);
 
   const merged = withHybridRuntimeArtifactFallbacks(runtimeArtifacts);
-  assert.deepEqual(merged?.consentTimeline, fallback?.consentTimeline);
+  assert.equal(merged?.consentTimeline ?? null, fallback?.consentTimeline);
   assert.deepEqual(merged?.requestPurposeClassificationConfidence, fallback?.requestPurposeClassificationConfidence);
 });
 

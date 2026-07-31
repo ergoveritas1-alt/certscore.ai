@@ -1,0 +1,92 @@
+{
+  "artifactType": "canonical_consent_control_flow_audit",
+  "artifactVersion": "1.0",
+  "generatedAt": "2026-07-27",
+  "mode": "read_only",
+  "repositories": {
+    "capture": "WS01",
+    "materializationAndConsumers": "WC01"
+  },
+  "corpus": {
+    "canonicalEvidenceBundles": 798,
+    "bundlesWithConsentObservation": 766,
+    "likelyConsentSurface": 381,
+    "firstLayerObservation": 254,
+    "readableBundleGeometryPairs": 328,
+    "pairedFirstLayerDisagreements": 32,
+    "laterGeometryErasures": 32,
+    "sameDocumentCompleteInventoryErasures": 6,
+    "geometryAdditions": 0,
+    "completedControlInventories": 67,
+    "incompletePreConsentRuntime": 310
+  },
+  "disagreementPatterns": [
+    {
+      "earlier": "111",
+      "later": "000",
+      "count": 12
+    },
+    {
+      "earlier": "111",
+      "later": "001",
+      "count": 7
+    },
+    {
+      "earlier": "110",
+      "later": "000",
+      "count": 4
+    },
+    {
+      "earlier": "111",
+      "later": "110",
+      "count": 3
+    },
+    {
+      "earlier": "101",
+      "later": "000",
+      "count": 2
+    },
+    {
+      "earlier": "001",
+      "later": "000",
+      "count": 2
+    },
+    {
+      "earlier": "101",
+      "later": "001",
+      "count": 1
+    },
+    {
+      "earlier": "100",
+      "later": "000",
+      "count": 1
+    }
+  ],
+  "knownRegressionScans": [
+    {
+      "domain": "oxfam.org",
+      "scanId": "5f6babc7-115c-4ea3-94ec-f10a4fabc5c5",
+      "defect": "later_geometry_erased_same_document_controls"
+    },
+    {
+      "domain": "oxfam.org",
+      "scanId": "9c43ef92-8627-4ddf-b4cf-60962d20bd87",
+      "defect": "later_collapsed_surface_erased_accept_and_necessary_only"
+    }
+  ],
+  "decision": {
+    "observationOwner": "WS01",
+    "assessmentOwner": "WC01",
+    "contractOwner": "@certscore/contracts",
+    "migrationMode": "direct_replacement",
+    "dualCanonicalPathAllowed": false,
+    "downstreamReclassificationAllowed": false
+  },
+  "releaseGates": {
+    "exactAroAgreementMinimum": 0.95,
+    "perFieldAgreementMinimum": 0.95,
+    "falsePositiveControlClaimMaximum": 0.01,
+    "pageAssessmentHashMismatchMaximum": 0,
+    "fabricatedNegativeMaximum": 0
+  }
+}

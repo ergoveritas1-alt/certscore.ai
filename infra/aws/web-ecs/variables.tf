@@ -307,13 +307,13 @@ variable "web_memory" {
 variable "web_desired_count" {
   description = "Desired task count per public host."
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "web_autoscaling_min_capacity" {
   description = "Minimum CertScore web task count when ECS service autoscaling is enabled."
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "web_autoscaling_max_capacity" {

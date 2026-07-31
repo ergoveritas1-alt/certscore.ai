@@ -1,6 +1,7 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { requirePlatformAdminContext } from "../../../server/admin/platform-admin";
+import { PendingLink } from "../../../components/ui/pending-link";
+import { AdminPendingActions } from "../../../components/admin/admin-pending-actions";
 
 type AdminLayoutProps = {
   children: ReactNode;
@@ -9,6 +10,7 @@ type AdminLayoutProps = {
 const navItems = [
   { href: "/app/admin", label: "Overview" },
   { href: "/app/admin/users", label: "Users" },
+  { href: "/app/admin/companies", label: "Workspaces" },
   { href: "/app/admin/scans", label: "Scans" },
   { href: "/app/admin/pulse", label: "API activity" },
   { href: "/app/admin/monitor-requests", label: "Monitor Requests" }
@@ -26,17 +28,18 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
 
       <nav className="flex min-w-0 flex-wrap gap-2">
         {navItems.map((item) => (
-          <Link
+          <PendingLink
             key={item.href}
             href={item.href}
-            className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-sm text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
-          >
-            {item.label}
-          </Link>
+            prefetch
+            className="app-raised-button rounded-full px-3.5 py-1.5 text-sm text-slate-700 hover:text-slate-950"
+            idleContent={item.label}
+            pendingContent="Opening…"
+          />
         ))}
       </nav>
 
-      {children}
+      <AdminPendingActions>{children}</AdminPendingActions>
     </div>
   );
 }

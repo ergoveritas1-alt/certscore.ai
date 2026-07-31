@@ -9,6 +9,7 @@ type ShareReportActionsProps = {
   scanId: string;
   showMonitorSite?: boolean;
   visualEvidenceHref?: string | null;
+  visualEvidenceOnly?: boolean;
 };
 
 const initialSendReportEmailActionState: SendReportEmailActionState = {
@@ -25,24 +26,24 @@ export function buildVisualEvidenceRetryHref(href: string, attempt: number) {
 
 function actionClassName(tone: "primary" | "secondary" = "secondary") {
   const base =
-    "inline-flex min-h-9 items-center justify-center rounded-full px-3 text-xs font-semibold shadow-sm transition";
+    "scan-report-button inline-flex min-h-9 items-center justify-center rounded-full px-3 text-xs font-semibold";
 
   if (tone === "primary") {
-    return `${base} border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white hover:brightness-[1.04]`;
+    return `${base} scan-report-button-primary text-white`;
   }
 
-  return `${base} border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950`;
+  return `${base} text-slate-700 hover:text-slate-950`;
 }
 
 function iconActionClassName(tone: "primary" | "secondary" = "secondary") {
   const base =
-    "group relative inline-flex h-10 w-10 items-center justify-center rounded-full text-sm shadow-sm transition focus:outline-none focus:ring-2 focus:ring-sky-200 focus:ring-offset-2";
+    "scan-report-button group relative inline-flex h-10 w-10 items-center justify-center rounded-full text-sm";
 
   if (tone === "primary") {
-    return `${base} border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white hover:brightness-[1.04]`;
+    return `${base} scan-report-button-primary text-white`;
   }
 
-  return `${base} border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950`;
+  return `${base} text-slate-700 hover:text-slate-950`;
 }
 
 function IconTooltip({ label }: { label: string }) {
@@ -121,6 +122,28 @@ function FullJsonIcon() {
   );
 }
 
+function TextIcon({ label }: { label: string }) {
+  return <span aria-hidden="true" className="text-[9px] font-bold tracking-tight">{label}</span>;
+}
+
+export function buildSdkEvidenceSnippet(scanId: string) {
+  return [
+    'import { CertScoreClient } from "@certscore/sdk";',
+    "",
+    "const certscore = new CertScoreClient({",
+    "  apiKey: process.env.CERTSCORE_API_KEY",
+    "});",
+    `const evidence = await certscore.pulse.evidence(${JSON.stringify(scanId)});`
+  ].join("\n");
+}
+
+export function buildMcpEvidenceInvocation(scanId: string) {
+  return JSON.stringify({
+    tool: "get_evidence",
+    arguments: { scanId }
+  }, null, 2);
+}
+
 function VisualEvidenceIcon() {
   return (
     <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24">
@@ -170,7 +193,8 @@ export function ShareReportActions({
   domainLabel,
   scanId,
   showMonitorSite = false,
-  visualEvidenceHref = null
+  visualEvidenceHref = null,
+  visualEvidenceOnly = false
 }: ShareReportActionsProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [currentUrl, setCurrentUrl] = useState("");
@@ -269,48 +293,52 @@ export function ShareReportActions({
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          aria-label={copyState === "copied" ? "Report URL copied" : "Copy link to report"}
-          className={iconActionClassName("primary")}
-          data-analytics-cta-type="share"
-          data-analytics-event="report_cta_clicked"
-          onClick={copyReportUrl}
-          title="Copy link to report"
-        >
-          <ShareIcon />
-          <IconTooltip label={copyState === "copied" ? "Report URL copied" : "Copy link to report"} />
-        </button>
-        <button
-          type="button"
-          aria-label="Email report"
-          className={iconActionClassName()}
-          data-analytics-cta-type="email"
-          data-analytics-event="report_cta_clicked"
-          onClick={() => setIsEmailDialogOpen(true)}
-          title="Email report"
-        >
-          <EmailIcon />
-          <IconTooltip label={emailState.success ? "Sent" : "Email report"} />
-        </button>
-        {showMonitorSite ? (
-          <Link
-            aria-label="Monitor this site"
-            className={iconActionClassName()}
-            data-analytics-cta-type="monitor"
-            data-analytics-event="report_cta_clicked"
-            href={monitorHref}
-            title="Monitor this site"
-          >
-            <MonitorIcon />
-            <IconTooltip label="Monitor this site" />
-          </Link>
+        {!visualEvidenceOnly ? (
+          <>
+            <button
+              type="button"
+              aria-label={copyState === "copied" ? "Report URL copied" : "Copy link to report"}
+              className={iconActionClassName("primary")}
+              data-analytics-cta-type="share"
+              data-analytics-event="report_cta_clicked"
+              onClick={copyReportUrl}
+              title="Copy link to report"
+            >
+              <ShareIcon />
+              <IconTooltip label={copyState === "copied" ? "Report URL copied" : "Copy link to report"} />
+            </button>
+            <button
+              type="button"
+              aria-label="Email report"
+              className={iconActionClassName()}
+              data-analytics-cta-type="email"
+              data-analytics-event="report_cta_clicked"
+              onClick={() => setIsEmailDialogOpen(true)}
+              title="Email report"
+            >
+              <EmailIcon />
+              <IconTooltip label={emailState.success ? "Sent" : "Email report"} />
+            </button>
+            {showMonitorSite ? (
+              <Link
+                aria-label="Monitor this site"
+                className={iconActionClassName()}
+                data-analytics-cta-type="monitor"
+                data-analytics-event="report_cta_clicked"
+                href={monitorHref}
+                title="Monitor this site"
+              >
+                <MonitorIcon />
+                <IconTooltip label="Monitor this site" />
+              </Link>
+            ) : null}
+          </>
         ) : null}
         {visualEvidenceHref ? (
           <button
             type="button"
-            aria-label="View captured image"
-            className={iconActionClassName()}
+            aria-label="View screengrab"
+            className={visualEvidenceOnly ? "app-raised-button group relative inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-700 hover:text-slate-950" : iconActionClassName()}
             data-analytics-cta-type="visual-evidence"
             data-analytics-event="report_cta_clicked"
             onClick={() => {
@@ -319,7 +347,7 @@ export function ShareReportActions({
               setVisualEvidenceZoom(1);
               setIsVisualEvidenceDialogOpen(true);
             }}
-            title="View captured image"
+            title="View screengrab"
           >
             <VisualEvidenceIcon />
             <IconTooltip label="View captured image" />
@@ -400,7 +428,7 @@ export function ShareReportActions({
                   <button
                     type="button"
                     aria-label="Zoom out captured image"
-                    className="inline-flex h-10 w-10 items-center justify-center text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
+                    className="scan-report-button inline-flex h-10 w-10 items-center justify-center text-slate-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
                     disabled={visualEvidenceZoom <= 0.5}
                     onClick={() => setVisualEvidenceZoom((value) => Math.max(0.5, Number((value - 0.25).toFixed(2))))}
                     title="Zoom out"
@@ -410,7 +438,7 @@ export function ShareReportActions({
                   <button
                     type="button"
                     aria-label="Reset captured image zoom"
-                    className="h-10 min-w-14 border-x border-slate-200 px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
+                    className="scan-report-button inline-flex h-10 min-w-14 items-center justify-center border-x-0 px-2 text-xs font-semibold text-slate-600 hover:text-slate-950"
                     onClick={() => setVisualEvidenceZoom(1)}
                     title="Reset zoom"
                   >
@@ -419,7 +447,7 @@ export function ShareReportActions({
                   <button
                     type="button"
                     aria-label="Zoom in captured image"
-                    className="inline-flex h-10 w-10 items-center justify-center text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
+                    className="scan-report-button inline-flex h-10 w-10 items-center justify-center text-slate-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
                     disabled={visualEvidenceZoom >= 3}
                     onClick={() => setVisualEvidenceZoom((value) => Math.min(3, Number((value + 0.25).toFixed(2))))}
                     title="Zoom in"
@@ -430,7 +458,7 @@ export function ShareReportActions({
                 <button
                   type="button"
                   aria-label="Close captured image"
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  className="scan-report-button inline-flex h-11 w-11 items-center justify-center rounded-xl text-slate-500 hover:text-slate-950"
                   onClick={closeVisualEvidenceDialog}
                 >
                   <CloseIcon />
@@ -493,24 +521,27 @@ export function ShareReportActions({
 }
 
 export function AgentSummaryActions({ domainLabel, scanId }: ShareReportActionsProps) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [copyState, setCopyState] = useState<{
+    label: string | null;
+    status: "idle" | "copied" | "failed";
+  }>({ label: null, status: "idle" });
   const [currentUrl, setCurrentUrl] = useState("");
 
   useEffect(() => {
     setCurrentUrl(window.location.href);
   }, []);
 
-  async function copyValue(value: string) {
+  async function copyValue(value: string, label: string) {
     try {
       if (!value || !navigator.clipboard) {
-        setCopyState("failed");
+        setCopyState({ label, status: "failed" });
         return;
       }
       await navigator.clipboard.writeText(value);
-      setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 2400);
+      setCopyState({ label, status: "copied" });
+      window.setTimeout(() => setCopyState({ label: null, status: "idle" }), 2400);
     } catch {
-      setCopyState("failed");
+      setCopyState({ label, status: "failed" });
     }
   }
 
@@ -536,24 +567,36 @@ export function AgentSummaryActions({ domainLabel, scanId }: ShareReportActionsP
               <ExternalLinkIcon />
               <IconTooltip label="View Pulse page" />
             </Link>
-            <button aria-label="Copy Pulse JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}`))} title="Copy Pulse JSON URL" type="button">
+            <button aria-label="Copy Pulse JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}`), "Pulse JSON URL")} title="Copy Pulse JSON URL" type="button">
               <JsonIcon />
               <IconTooltip label="Copy Pulse JSON URL" />
             </button>
-            <button aria-label="Copy Pulse Markdown URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&format=markdown`))} title="Copy Pulse Markdown URL" type="button">
+            <button aria-label="Copy Pulse Markdown URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&format=markdown`), "Pulse Markdown URL")} title="Copy Pulse Markdown URL" type="button">
               <MarkdownIcon />
               <IconTooltip label="Copy Pulse Markdown URL" />
             </button>
-            <button aria-label="Copy Full Pulse JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&detail=full`))} title="Copy Full Pulse JSON URL" type="button">
+            <button aria-label="Copy Evidence JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&detail=evidence`), "Evidence JSON URL")} title="Copy Evidence JSON URL" type="button">
+              <TextIcon label="EVD" />
+              <IconTooltip label="Copy Evidence JSON URL" />
+            </button>
+            <button aria-label="Copy Full Pulse JSON URL" className={iconActionClassName()} onClick={() => copyValue(absoluteAppUrl(`/api/v1/pulse?scanId=${scanId}&detail=full`), "Full Pulse JSON URL")} title="Copy Full Pulse JSON URL" type="button">
               <FullJsonIcon />
               <IconTooltip label="Copy Full Pulse JSON URL" />
             </button>
+            <button aria-label="Copy SDK evidence example" className={iconActionClassName()} onClick={() => copyValue(buildSdkEvidenceSnippet(scanId), "SDK evidence example")} title="Copy SDK evidence example" type="button">
+              <TextIcon label="SDK" />
+              <IconTooltip label="Copy SDK evidence example" />
+            </button>
+            <button aria-label="Copy MCP evidence invocation" className={iconActionClassName()} onClick={() => copyValue(buildMcpEvidenceInvocation(scanId), "MCP evidence invocation")} title="Copy MCP evidence invocation" type="button">
+              <TextIcon label="MCP" />
+              <IconTooltip label="Copy MCP evidence invocation" />
+            </button>
           </div>
         </div>
-        {copyState === "copied" ? <p className="mt-2 text-xs leading-5 text-emerald-700">Pulse URL copied.</p> : null}
-        {copyState === "failed" ? (
+        {copyState.status === "copied" ? <p className="mt-2 text-xs leading-5 text-emerald-700">{copyState.label} copied.</p> : null}
+        {copyState.status === "failed" ? (
           <p className="mt-2 text-xs leading-5 text-amber-700">
-            Copy was not available in this browser. Use the Pulse API links from this section.
+            Copy was not available in this browser. Open the Pulse API documentation for the equivalent request.
           </p>
         ) : null}
       </section>

@@ -3,6 +3,9 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  AgentSummaryActions,
+  buildMcpEvidenceInvocation,
+  buildSdkEvidenceSnippet,
   buildVisualEvidenceRetryHref,
   ShareReportActions,
   VISUAL_EVIDENCE_RETRY_DELAYS_MS
@@ -47,4 +50,27 @@ test("visual evidence modal hides broken image output and provides manual recove
   assert.match(source, /The captured image is temporarily unavailable\./);
   assert.match(source, />\s*Try again\s*</);
   assert.match(source, /buildVisualEvidenceRetryHref\(visualEvidenceHref, visualEvidenceLoadAttempt\)/);
+});
+
+test("agent summary exposes canonical API, SDK, and MCP evidence actions", () => {
+  const markup = renderToStaticMarkup(createElement(AgentSummaryActions, {
+    domainLabel: "cnn.com",
+    scanId: "scan-123"
+  }));
+
+  assert.match(markup, /View Pulse page/);
+  assert.match(markup, /Copy Pulse JSON URL/);
+  assert.match(markup, /Copy Pulse Markdown URL/);
+  assert.match(markup, /Copy Evidence JSON URL/);
+  assert.match(markup, /Copy Full Pulse JSON URL/);
+  assert.match(markup, /Copy SDK evidence example/);
+  assert.match(markup, /Copy MCP evidence invocation/);
+});
+
+test("agent SDK and MCP snippets use registered canonical evidence clients", () => {
+  assert.match(buildSdkEvidenceSnippet("scan-123"), /certscore\.pulse\.evidence\("scan-123"\)/);
+  assert.deepEqual(JSON.parse(buildMcpEvidenceInvocation("scan-123")), {
+    tool: "get_evidence",
+    arguments: { scanId: "scan-123" }
+  });
 });

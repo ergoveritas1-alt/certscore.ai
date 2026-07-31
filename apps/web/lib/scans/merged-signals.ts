@@ -276,6 +276,23 @@ function buildSiblingEvidenceForMergedSignal(signal: MergedSignalRecord, mergedS
     )
       ? true
       : null;
+    const explicitAcceptControlObserved = mergedSignals.some(
+      (entry) => entry.key === "privacy.accept_all_present" && entry.value === true
+    );
+    const ambiguousAcknowledgmentObserved = mergedSignals.some(
+      (entry) => entry.key === "privacy.ambiguous_acknowledgment_present" && entry.value === true
+    );
+    const impliedConsentLanguageObserved = mergedSignals.some(
+      (entry) => entry.key === "privacy.implied_consent_language_observed" && entry.value === true
+    );
+    const impliedConsentLanguageMatches = getMergedSignalStringArray(
+      mergedSignals,
+      "privacy.implied_consent_language_matches"
+    );
+    const consentControlSemanticRoles = getMergedSignalStringArray(
+      mergedSignals,
+      "privacy.first_layer_consent_control_roles"
+    );
     const requestPurposeClassificationConfidence = runtimeRequestUrls.map((requestUrl, index) => ({
       category: preconsentTrackerCategories[index] ?? preconsentTrackerCategories[0] ?? "tracking",
       confidence: signal.confidence ?? 0.8,
@@ -287,6 +304,11 @@ function buildSiblingEvidenceForMergedSignal(signal: MergedSignalRecord, mergedS
 
     return {
       consentActionableChoiceObserved,
+      explicitAcceptControlObserved,
+      ambiguousAcknowledgmentObserved,
+      impliedConsentLanguageObserved,
+      impliedConsentLanguageMatches,
+      consentControlSemanticRoles,
       consentSurfaceObserved,
       consentTimeline: {
         firstCmpVisibleMs,

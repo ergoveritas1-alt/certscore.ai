@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import { getDashboardContext } from "../../../server/auth";
-import { getOrganizationScans } from "../../../server/scans/get-organization-scans";
+import { getLatestOrganizationScanId } from "../../../server/scans/repository";
 
 export default async function SignalsPage() {
   const { organization } = await getDashboardContext();
-  const [latestScan] = await getOrganizationScans(organization.id, 1);
+  const latestScanId = await getLatestOrganizationScanId(organization.id);
 
-  if (latestScan) {
-    redirect(`/app/scans/${latestScan.id}`);
+  if (latestScanId) {
+    redirect(`/app/scans/${latestScanId}`);
   }
 
   redirect("/app/scans");

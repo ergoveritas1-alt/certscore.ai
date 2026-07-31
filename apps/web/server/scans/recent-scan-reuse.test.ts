@@ -41,6 +41,45 @@ function candidate(overrides: Partial<RecentScanReuseCandidate> = {}): RecentSca
   };
 }
 
+function verifiedV2LambdaResult(overrides: Record<string, unknown> = {}) {
+  return {
+    artifactAccess: {
+      checksumSource: "lambda_result_artifact_metadata",
+      localMirrorRequired: false,
+      productionReadMode: "verified_s3"
+    },
+    artifactMetadata: {
+      scanArtifactUri: {
+        sha256: "a".repeat(64),
+        sizeBytes: 42_000
+      }
+    },
+    artifactOnly: true,
+    artifactPointers: {
+      scanArtifactUri: "s3://ws01-scan-artifacts-199536052647-eu-west-1/v2-dag-lambda/prod/scan-123/CanonicalEvidenceBundle.json"
+    },
+    processor: "local-certscore-v2-dag-parallel-v1",
+    productionFindingIntegration: false,
+    resultStatus: "completed",
+    scannerRuntimeProvenance: {
+      awsRegion: "eu-west-1"
+    },
+    targetEnvironment: "production",
+    ...overrides
+  };
+}
+
+function v2Candidate(overrides: Partial<RecentScanReuseCandidate> = {}) {
+  return candidate({
+    pagesScanned: 0,
+    v2LambdaResultEvents: [verifiedV2LambdaResult()],
+    v2ParallelArtifactOnly: true,
+    v2ParallelLocalOnly: true,
+    v2ReportProcessor: "local-certscore-v2-dag-parallel-v1",
+    ...overrides
+  });
+}
+
 function eligibility(input: Partial<RecentScanReuseInput>, candidates: RecentScanReuseCandidate[]) {
   return evaluateRecentScanReuseCandidates({ ...baseInput, ...input }, candidates);
 }
@@ -98,11 +137,77 @@ test("coverage must equal or exceed the new request", () => {
   assert.equal(eligibility({ minPagesRequested: 4 }, [candidate({ pagesRequested: 10 })]).eligible, true);
 });
 
-test("completed scans with no usable coverage or a no-go outcome are never reusable", () => {
+test("completed scans without usable coverage are excluded unless an explicit no-go result is cooling down", () => {
   assert.equal(eligibility({}, [candidate({ pagesScanned: 0 })]).eligible, false);
   assert.equal(eligibility({}, [candidate({ coverageLevel: "limited_none" })]).eligible, false);
   assert.equal(eligibility({}, [candidate({ accessPostureClass: "early_loss" })]).eligible, false);
   assert.equal(eligibility({}, [candidate({ scanOutcome: "navigation_transport_failure" })]).eligible, false);
+  assert.equal(eligibility({}, [candidate({
+    accessPostureClass: "early_loss",
+    coverageLevel: "limited_none",
+    noGoDecision: "no_go",
+    pagesScanned: 0,
+    scanOutcome: "homepage_security_challenge",
+  })]).eligible, true);
+});
+
+test("a completed v2 Lambda scan reuses its verified canonical evidence bundle even when legacy pages scanned is zero", () => {
+  const result = eligibility({}, [v2Candidate({ id: "verified-v2-result" })]);
+
+  assert.equal(result.eligible, true);
+  assert.equal(result.candidate?.id, "verified-v2-result");
+});
+
+test("v2 Lambda reuse rejects missing, failed, malformed, or unverified canonical evidence", () => {
+  assert.equal(eligibility({}, [v2Candidate({ v2LambdaResultEvents: [] })]).eligible, false);
+  assert.equal(eligibility({}, [v2Candidate({
+    v2LambdaResultEvents: [verifiedV2LambdaResult({ resultStatus: "failed" })]
+  })]).eligible, false);
+  assert.equal(eligibility({}, [v2Candidate({
+    v2LambdaResultEvents: [verifiedV2LambdaResult({
+      artifactAccess: { productionReadMode: "unverified_s3" }
+    })]
+  })]).eligible, false);
+  assert.equal(eligibility({}, [v2Candidate({
+    v2LambdaResultEvents: [verifiedV2LambdaResult({
+      artifactMetadata: { scanArtifactUri: { sha256: "invalid", sizeBytes: 42_000 } }
+    })]
+  })]).eligible, false);
+  assert.equal(eligibility({}, [v2Candidate({
+    v2LambdaResultEvents: [verifiedV2LambdaResult({
+      artifactPointers: {
+        scanArtifactUri: "s3://ws01-scan-artifacts-199536052647-eu-west-1/v2-dag-lambda/prod/scan-123/not-canonical.json"
+      }
+    })]
+  })]).eligible, false);
+});
+
+test("v2 Lambda canonical evidence must match the requested scan region and report contract", () => {
+  assert.equal(eligibility({}, [v2Candidate({
+    v2LambdaResultEvents: [verifiedV2LambdaResult({
+      scannerRuntimeProvenance: { awsRegion: "eu-central-1" }
+    })]
+  })]).eligible, false);
+  assert.equal(eligibility({}, [v2Candidate({
+    v2LambdaResultEvents: [verifiedV2LambdaResult({
+      artifactPointers: {
+        scanArtifactUri: "s3://ws01-scan-artifacts-199536052647-eu-central-1/v2-dag-lambda/prod/scan-123/CanonicalEvidenceBundle.json"
+      }
+    })]
+  })]).eligible, false);
+  assert.equal(eligibility({}, [v2Candidate({ v2ReportProcessor: "other-processor" })]).eligible, false);
+  assert.equal(eligibility({}, [v2Candidate({ v2ParallelArtifactOnly: false })]).eligible, false);
+});
+
+test("verified v2 evidence does not bypass time, scope, target, coverage, or scan-type constraints", () => {
+  assert.equal(eligibility({}, [v2Candidate({ completedAt: "2026-07-10T11:59:59.999Z" })]).eligible, false);
+  assert.equal(eligibility({}, [v2Candidate({ organizationId: OTHER_ORG })]).eligible, false);
+  assert.equal(eligibility({}, [v2Candidate({
+    hostname: "other.example",
+    normalizedUrl: "https://other.example/"
+  })]).eligible, false);
+  assert.equal(eligibility({ minPagesRequested: 5 }, [v2Candidate({ pagesRequested: 4 })]).eligible, false);
+  assert.equal(eligibility({}, [v2Candidate({ scanType: "preview" })]).eligible, false);
 });
 
 test("newest eligible scan wins when several candidates qualify", () => {

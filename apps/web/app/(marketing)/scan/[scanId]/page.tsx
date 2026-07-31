@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
@@ -24,9 +25,15 @@ import {
   getLocalV2DagReportInput,
   materializeLocalV2DagScanDetail
 } from "../../../../server/scans/local-v2-dag-report";
+import {
+  getPersistedScanReportProjection,
+  loadPersistedScanReportProjection,
+  persistScanReportProjection
+} from "../../../../server/scans/scan-report-projection";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import {
   getPublicScanStatusProjection,
+  hasReportProjectionGraceElapsed,
   isPendingScanStatus
 } from "../../../../server/scans/scan-status-projection";
 
@@ -105,7 +112,11 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   if (!statusProjection) {
     notFound();
   }
-  if (isPendingScanStatus(statusProjection.status)) {
+  const waitingForReportProjection =
+    statusProjection.status === "completed" &&
+    !statusProjection.reportReady &&
+    !hasReportProjectionGraceElapsed(statusProjection);
+  if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
       <main className="min-h-screen bg-white">
         <SiteHeader />
@@ -113,27 +124,44 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
           <PendingScanDetailView
             createdAt={statusProjection.createdAt}
             domainHostname={statusProjection.domainHostname}
+            pendingPostCompletionWork={waitingForReportProjection}
             profile={statusProjection.profile}
             scanId={statusProjection.id}
             startedAt={statusProjection.startedAt}
-            status={statusProjection.status}
+            status={waitingForReportProjection ? "processing" : statusProjection.status}
           />
         </section>
         <SiteFooter />
       </main>
     );
   }
-  const scanRecord = await getPublicScanById(scanId);
+  const localPersistedReportProjection = statusProjection.reportReady
+    ? await loadPersistedScanReportProjection({ scanId })
+    : null;
+  const scanRecord = localPersistedReportProjection ?? await getPublicScanById(scanId);
 
   if (!scanRecord) {
     notFound();
   }
 
   const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
+  const persistedReportProjection =
+    localPersistedReportProjection ?? getPersistedScanReportProjection(scanRecord);
+  const persistedReportProjectionReady = Boolean(persistedReportProjection);
   const displayScanRecord =
     localV2DagReportInput && scanRecord.scan.status === "completed"
-      ? await materializeLocalV2DagScanDetail(scanRecord)
+      ? persistedReportProjection ?? await materializeLocalV2DagScanDetail(scanRecord)
       : scanRecord;
+  if (!persistedReportProjectionReady && displayScanRecord.scan.status === "completed") {
+    after(async () => {
+      await persistScanReportProjection(displayScanRecord, {
+        snapshot: displayScanRecord.snapshot,
+        runtimeArtifacts: displayScanRecord.runtimeArtifacts
+      }).catch((error) => {
+        console.error("Failed to refresh completed scan report projection", error);
+      });
+    });
+  }
   const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
     events: scanRecord.events,
     scanType: scanRecord.scan.scanType,

@@ -8,7 +8,14 @@ import path from "node:path";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { connect as tlsConnect } from "node:tls";
 import { chromium } from "playwright";
-import { canonicalEvidenceBundleSchema, type CanonicalEvidenceBundle, type ConsentFlowScenario, type ScreenshotArtifact } from "@certscore/contracts";
+import {
+  canonicalEvidenceBundleSchema,
+  classifyV2DagLambdaResultDisposition,
+  type CanonicalEvidenceBundle,
+  type ConsentFlowScenario,
+  type ScreenshotArtifact,
+  type V2DagLambdaResultPurpose,
+} from "@certscore/contracts";
 import {
   chromiumContextOptions,
   chromiumLaunchArgs,
@@ -59,13 +66,14 @@ export type LocalV2DagLambdaDispatchPayload = {
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
   debugOverrides?: LocalV2DagLambdaDebugOverrides;
   resultHandoff: "sqs";
+  resultPurpose: V2DagLambdaResultPurpose;
   resultQueueUrl: string;
   scanId: string;
   scannerRuntime: typeof LOCAL_V2_DAG_SCANNER_RUNTIME;
   strongEvidenceMode?: "webmd";
   targetEnvironment: "local" | "production";
   targetUrl: string;
-  vpcMode: "none";
+  vpcMode: "none" | "vpc";
   workerLane?: LocalV2DagLambdaWorkerLane;
 };
 
@@ -110,10 +118,21 @@ export type LocalV2DagLambdaResultMessage = {
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
+  resultPurpose: V2DagLambdaResultPurpose;
   scanId: string;
   scannerGitSha?: string;
   scannerImageTag?: string;
   scannerRuntimeVersion?: string;
+  scannerRuntimeProvenance?: {
+    awsRegion: LocalV2DagLambdaAwsRegion;
+    dispatchVpcMode: "none" | "vpc";
+    egressId?: string;
+    egressProvider?: string;
+    functionVersion?: string;
+    imageDigest?: string;
+    publicIpHash?: string;
+    runtimeVpcMode: "none" | "unknown" | "vpc";
+  };
   status: "completed" | "failed";
   targetEnvironment: "local" | "production";
 };
@@ -446,6 +465,14 @@ function parseQueueRegion(queueUrl: string): LocalV2DagLambdaAwsRegion {
 
 export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2DagLambdaDispatchPayload {
   const record = asRecord(typeof event === "string" ? JSON.parse(event) : event);
+  const scanId = requireString(record, "scanId");
+  const resultDisposition = classifyV2DagLambdaResultDisposition({
+    resultPurpose: record.resultPurpose,
+    scanId,
+  });
+  if (resultDisposition.kind === "invalid") {
+    throw new Error(`Local v2 DAG Lambda dispatch has an invalid result identity: ${resultDisposition.reason}.`);
+  }
   const coordinatorPlanSummary = parseCoordinatorPlanSummary(record.coordinatorPlanSummary);
   const debugOverrides = parseDebugOverrides(record.debugOverrides);
   const policySurfaceSeeds = parsePolicySurfaceSeeds(record.policySurfaceSeeds);
@@ -467,13 +494,14 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     ...(coordinatorPlanSummary ? { coordinatorPlanSummary } : {}),
     ...(debugOverrides ? { debugOverrides } : {}),
     resultHandoff: "sqs",
+    resultPurpose: resultDisposition.kind,
     resultQueueUrl: requireString(record, "resultQueueUrl"),
-    scanId: requireString(record, "scanId"),
+    scanId,
     scannerRuntime: LOCAL_V2_DAG_SCANNER_RUNTIME,
     ...(record.strongEvidenceMode === "webmd" || asRecord(record.debugOverrides).strongEvidenceMode === "webmd" ? { strongEvidenceMode: "webmd" as const } : {}),
     targetEnvironment: record.targetEnvironment === "production" ? "production" : "local",
     targetUrl: requireString(record, "targetUrl"),
-    vpcMode: "none",
+    vpcMode: record.vpcMode === "vpc" ? "vpc" : "none",
     ...(isWorkerLane(record.workerLane) ? { workerLane: record.workerLane } : {})
   };
 
@@ -489,8 +517,8 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   if (record.resultHandoff !== "sqs") {
     throw new Error("Local v2 DAG Lambda dispatch must hand results back through SQS.");
   }
-  if (record.vpcMode !== "none") {
-    throw new Error("Local v2 DAG Lambda dispatch must run outside a VPC.");
+  if (record.vpcMode !== "none" && record.vpcMode !== "vpc") {
+    throw new Error("Local v2 DAG Lambda dispatch must declare a supported network mode.");
   }
   if (record.artifactOnly !== true || record.productionFindingIntegration !== false) {
     throw new Error("Local v2 DAG Lambda dispatch must remain artifact-only and non-production.");
@@ -2336,6 +2364,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
   status: "completed" | "failed";
 }): LocalV2DagLambdaResultMessage {
   const scannerBuildProvenance = buildScannerBuildProvenance();
+  const scannerRuntimeProvenance = buildScannerRuntimeProvenance(input.payload);
   return {
     artifactOnly: true,
     ...(input.artifactMetadata ? { artifactMetadata: input.artifactMetadata } : {}),
@@ -2347,8 +2376,10 @@ export function buildLocalV2DagLambdaResultMessage(input: {
     ...(input.phaseTimings ? { phaseTimings: input.phaseTimings } : {}),
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
+    resultPurpose: input.payload.resultPurpose,
     scanId: input.payload.scanId,
     ...scannerBuildProvenance,
+    scannerRuntimeProvenance,
     status: input.status,
     targetEnvironment: input.payload.targetEnvironment
   };
@@ -2368,6 +2399,39 @@ function buildScannerBuildProvenance() {
     ...(scannerGitSha ? { scannerGitSha } : {}),
     ...(scannerImageTag ? { scannerImageTag } : {}),
     ...(scannerRuntimeVersion ? { scannerRuntimeVersion } : {})
+  };
+}
+
+export function buildScannerRuntimeProvenance(
+  payload: Pick<LocalV2DagLambdaDispatchPayload, "awsRegion" | "vpcMode">,
+  env: NodeJS.ProcessEnv = process.env,
+): NonNullable<LocalV2DagLambdaResultMessage["scannerRuntimeProvenance"]> {
+  const runtimeVpcMode = env.CERTSCORE_V2_DAG_LAMBDA_VPC_MODE === "vpc"
+    ? "vpc"
+    : env.CERTSCORE_V2_DAG_LAMBDA_VPC_MODE === "none"
+      ? "none"
+      : "unknown";
+  const bounded = (name: string, maxLength: number) => {
+    const value = env[name]?.trim();
+    return value ? value.slice(0, maxLength) : null;
+  };
+  const imageDigest = bounded("SCANNER_IMAGE_DIGEST", 80);
+  const publicIpHash = bounded("CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH", 96);
+  return {
+    awsRegion: payload.awsRegion,
+    dispatchVpcMode: payload.vpcMode,
+    ...(bounded("CERTSCORE_V2_DAG_LAMBDA_EGRESS_ID", 128)
+      ? { egressId: bounded("CERTSCORE_V2_DAG_LAMBDA_EGRESS_ID", 128) as string }
+      : {}),
+    ...(bounded("CERTSCORE_V2_DAG_LAMBDA_EGRESS_PROVIDER", 80)
+      ? { egressProvider: bounded("CERTSCORE_V2_DAG_LAMBDA_EGRESS_PROVIDER", 80) as string }
+      : {}),
+    ...(bounded("AWS_LAMBDA_FUNCTION_VERSION", 80)
+      ? { functionVersion: bounded("AWS_LAMBDA_FUNCTION_VERSION", 80) as string }
+      : {}),
+    ...(imageDigest && /^sha256:[a-f0-9]{64}$/i.test(imageDigest) ? { imageDigest } : {}),
+    ...(publicIpHash && /^sha256:[a-f0-9]{64}$/i.test(publicIpHash) ? { publicIpHash } : {}),
+    runtimeVpcMode,
   };
 }
 

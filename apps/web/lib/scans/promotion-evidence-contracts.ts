@@ -923,7 +923,7 @@ export function classifyRtbCookieSyncEvidenceRow(row: Record<string, unknown>): 
   const hasSyncPattern =
     /sync|idsync|match|user[-_]?match|cookie[-_]?sync|setuid/i.test(`${hostname} ${urlSample}`) ||
     syncEndpointPathShape ||
-    /redirect_sync|identifier_query|known_sync_host/i.test(reason);
+    /redirect_sync|identifier_query|known_sync_(?:host|endpoint)/i.test(reason);
   if (!hostname.includes(".") || !hasSyncPattern) {
     return null;
   }
@@ -935,7 +935,7 @@ export function classifyRtbCookieSyncEvidenceRow(row: Record<string, unknown>): 
   const hasCrossDomainRedirect = Boolean(redirectEtld && redirectEtld !== hostnameEtld);
   const knownEndpointShape =
     syncEndpointPathShape ||
-    /identifier_query/i.test(reason);
+    /identifier_query|known_sync_(?:host|endpoint)/i.test(reason);
   const categorySupportsSync = /rtb|identity|ad|advertis/i.test(category);
 
   let subtype: RtbCookieSyncEvidenceSubtype | null = null;

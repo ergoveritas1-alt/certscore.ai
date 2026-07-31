@@ -37,6 +37,9 @@ test("admin summary persistence retains structured no-go evidence and scan-linke
   assert.match(scanDetailSource, /normalizedSnapshot\.scan_no_go_assessment/);
   assert.match(migrationSource, /add column if not exists tranco_rank integer/);
   assert.match(migrationSource, /add column if not exists scan_no_go_assessment jsonb/);
+  assert.match(scanDetailSource, /mergePolicyDisclosureSummaries/);
+  assert.match(scanDetailSource, /article13DisclosureSignals/);
+  assert.match(scanDetailSource, /gdprTransparencyTopics/);
 });
 
 test("API activity resolves authenticated owners and linked scan enrichment", async () => {
@@ -46,7 +49,7 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   assert.match(source, /scan_completed_at/);
   assert.match(source, /ss\.top_finding_count::int as top_finding_count/);
   assert.match(source, /ss\.tranco_rank/);
-  assert.match(source, /trancoRankFromScanConfig/);
+  assert.match(source, /ss\.tranco_rank/);
   assert.match(source, /trancoRank:/);
   assert.match(source, /topFindingCount:/);
   assert.doesNotMatch(source, /materializeAdminScanSummar/);
@@ -62,8 +65,10 @@ test("API activity navigation is read-only and does not repair summaries", async
   assert.doesNotMatch(listSource, /materializeAdminScanSummar/);
   assert.doesNotMatch(pageSource, /materializeAdminScanSummaries/);
   assert.doesNotMatch(pageSource, /summary_repair/);
-  assert.match(pageSource, /Promise\.all\(\[/);
-  assert.match(pageSource, /listAdminPulseRequests\(requestListInput\)/);
+  assert.doesNotMatch(pageSource, /Promise\.all\(\[/);
+  assert.match(pageSource, /<Suspense fallback=\{<AdminPulseOverviewFallback \/>}/);
+  assert.match(pageSource, /<Suspense fallback=\{<AdminPulseFiltersFallback \/>}/);
+  assert.match(pageSource, /listAdminPulseRequestsPage\(requestListInput\)/);
 });
 
 test("API activity derives terminal state and score from canonical scan records", async () => {
@@ -73,20 +78,22 @@ test("API activity derives terminal state and score from canonical scan records"
   assert.match(source, /when s\.status in \('completed', 'failed'\)/);
   assert.match(source, /effective_status in \('completed', 'completed_limited'\)/);
   assert.match(source, /loadLatestVersionedScoreAssessments/);
-  assert.match(source, /selectConfiguredCustomerGdprEprivacyScore/);
-  assert.match(source, /score: selection\.assessment\.scoreValue/);
+  assert.match(source, /score: assessment\.scoreValue/);
 });
 
 test("completion materialization persists the admin summary before acknowledging success", async () => {
   const source = await readFile("apps/web/app/api/internal/scan-score-materialization/route.ts", "utf8");
   const scoreIndex = source.indexOf("persistCompletedLegacyGdprEprivacyAssessment");
-  const summaryIndex = source.indexOf("materializeAdminScanSummary", scoreIndex);
+  const summaryIndex = source.indexOf("persistAdminScanSummaryForRecord", scoreIndex);
   const completeIndex = source.indexOf("completeScoreMaterializationRequest", summaryIndex);
 
   assert.ok(scoreIndex >= 0);
   assert.ok(summaryIndex > scoreIndex);
   assert.ok(completeIndex > summaryIndex);
   assert.match(source, /Admin scan summary persistence was incomplete/);
+  assert.match(source, /scanRecord/);
+  assert.match(source, /classifyScoreMaterializationFailure/);
+  assert.match(source, /status: disposition\.retryable \? 503 : 422/);
 });
 
 test("Admin Scans navigation is read-only and Score Shadow has no admin surface", async () => {
@@ -97,6 +104,19 @@ test("Admin Scans navigation is read-only and Score Shadow has no admin surface"
   assert.doesNotMatch(pageSource, /summary_repair/);
   assert.match(pageSource, /Promise\.all\(\[/);
   assert.doesNotMatch(layoutSource, /scoring-shadow/);
+});
+
+test("Admin Scans separates requester identity from outbound scanner egress", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(pageSource, /\{ label: "Requester IP" \}, \{ label: "Scanner egress" \}/);
+  assert.match(pageSource, /Requester IP identifies who reached CertScore/);
+  assert.match(pageSource, /scan\.scannerEgressId/);
+  assert.match(listSource, /scannerEgressId: scannerEgress\.id/);
+  assert.match(listSource, /shouldUseLocalV2DagScanTool\(\)/);
+  assert.match(repositorySource, /scan_outcome,\s+stop_reason_code,\s+stop_reason_detail,\s+stop_reason_label,\s+egress_id,\s+egress_type,/);
 });
 
 test("Admin activity pagination supports a direct page jump", async () => {
@@ -139,15 +159,19 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
 
   assert.match(scansSource, /projectAdminNoGo/);
-  assert.match(scansSource, /runtimeAssessment: runtimeArtifact\?\.scan_no_go_assessment \?\? snapshot\?\.scan_no_go_assessment/);
-  assert.match(scansSource, /visualAccessReview: runtimeArtifact\?\.visual_access_review \?\? snapshot\?\.visual_access_review/);
-  assert.match(scansSource, /const scoreAssessment = noGo\.isNoGo \? null : scoreSelection\.assessment/);
+  assert.match(scansSource, /runtimeAssessment: runtimeArtifact\?\.scan_no_go_assessment \?\? overviewSnapshot\?\.scan_no_go_assessment/);
+  assert.match(scansSource, /visualAccessReview: runtimeArtifact\?\.visual_access_review \?\? overviewSnapshot\?\.visual_access_review/);
+  assert.match(scansSource, /const scoreAssessment = noGo\.isNoGo \? null : legacyScoreAssessmentMap\.get\(scan\.id\) \?\? null/);
   assert.match(pulseSource, /SCAN_NO_GO_SNAPSHOT_OUTCOMES/);
   assert.match(pulseSource, /PULSE_NO_GO_SQL/);
   assert.match(pulseSource, /const score = noGo\.isNoGo \? null : retainedScore/);
   assert.match(pulseSource, /if \(item\.noGoFlag\)/);
   assert.match(repositorySource, /scan_no_go_assessment/);
   assert.match(repositorySource, /visual_access_review/);
+  assert.match(repositorySource, /scanner_evidence_missing/);
+  assert.match(repositorySource, /completed_scan_backfill/);
+  assert.match(repositorySource, /from scan_snapshots\s+where scan_id = any\(\$1::uuid\[\]\)/);
+  assert.match(repositorySource, /from scan_runtime_artifacts\s+where scan_id = any\(\$1::uuid\[\]\)/);
   assert.match(scansPage, /scan\.noGoFlag/);
   assert.match(scansPage, /label: "Tranco"/);
   assert.match(pulsePage, /label: "Tranco"/);
@@ -326,7 +350,7 @@ test("admin summary persistence accepts completed scans without a canonical scor
 test("admin overview links cross-workspace scans through the admin detail route", async () => {
   const source = await readFile("apps/web/app/app/admin/page.tsx", "utf8");
 
-  assert.match(source, /href=\{`\/app\/admin\/scans\/\$\{scan\.linkedScanId\}`\}/);
+  assert.match(source, /href=\{`\/app\/admin\/scans\/\$\{scan\.scanId\}`\}/);
   assert.doesNotMatch(source, /href=\{scan\.scanViewHref\} idleContent="Inspect snapshot"/);
 });
 
@@ -374,4 +398,79 @@ test("localhost web development has enough heap for broad authenticated route QA
   const packageJson = await readFile("apps/web/package.json", "utf8");
 
   assert.match(packageJson, /max-old-space-size=4096/);
+});
+
+test("admin users paginate in SQL instead of loading the complete account history", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(pageSource, /listAdminUsersPage\(pageSize,/);
+  assert.doesNotMatch(pageSource, /listAdminUsers\(\)/);
+  assert.match(repositorySource, /selected_users as/);
+  assert.match(repositorySource, /limit \$1 offset \$2/);
+  assert.match(repositorySource, /where scans\.submitted_by_user_id = selected_users\.id/);
+});
+
+test("admin scans poll lightweight status data and refresh only after a status change", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const refreshSource = await readFile("apps/web/app/app/admin/scans/admin-scans-auto-refresh.tsx", "utf8");
+  const routeSource = await readFile("apps/web/app/api/admin/scans/live-status/route.ts", "utf8");
+
+  assert.match(pageSource, /<AdminScansAutoRefresh targets=\{liveTargets\}/);
+  assert.match(refreshSource, /fetch\("\/api\/admin\/scans\/live-status"/);
+  assert.match(refreshSource, /result\.fingerprint !== initialFingerprint/);
+  assert.doesNotMatch(refreshSource, /setInterval/);
+  assert.match(routeSource, /getAdminScanLiveStatus\(targets\)/);
+});
+
+test("API activity obtains rows and the filtered total in one paginated query", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
+
+  assert.match(pageSource, /listAdminPulseRequestsPage\(requestListInput\)/);
+  assert.doesNotMatch(pageSource, /countAdminPulseRequests\(requestListInput\)/);
+  assert.match(listSource, /count\(\*\) over\(\)::int as filtered_total_count/);
+  assert.match(listSource, /limit \$10 offset \$11/);
+});
+
+test("admin scan activity materializes filters once for pagination and the total", async () => {
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(repositorySource, /filtered_activity as materialized/);
+  assert.match(repositorySource, /paged_activity as/);
+  assert.match(repositorySource, /activity_total as/);
+  assert.doesNotMatch(repositorySource, /const \[pageResult, countResult\] = await Promise\.all/);
+});
+
+test("admin scan overview combines related aggregate counts", async () => {
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(repositorySource, /count\(\*\) filter \(\s*where coalesce\(fulfilled_by_scan_id, scan_id\) is null/);
+  assert.match(repositorySource, /as http_403_count/);
+  assert.match(repositorySource, /as http_429_count/);
+  assert.match(repositorySource, /as blocked_or_captcha_count/);
+});
+
+test("admin scan list logs its expensive production stages separately", async () => {
+  const listSource = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
+
+  assert.match(listSource, /app\.admin\.scans\.activity-page/);
+  assert.match(listSource, /app\.admin\.scans\.row-enrichment/);
+  assert.match(listSource, /app\.admin\.scans\.score-attribution/);
+});
+
+test("admin section navigation prefetches dynamic destinations and has a loading boundary", async () => {
+  const layoutSource = await readFile("apps/web/app/app/admin/layout.tsx", "utf8");
+  const loadingSource = await readFile("apps/web/app/app/admin/loading.tsx", "utf8");
+  const actionsSource = await readFile("apps/web/app/app/admin/scans/admin-scan-actions.tsx", "utf8");
+  const overviewSource = await readFile("apps/web/app/app/admin/page.tsx", "utf8");
+  const appShellSource = await readFile("apps/web/components/dashboard/app-shell.tsx", "utf8");
+
+  assert.match(layoutSource, /href=\{item\.href\}\s+prefetch\s/);
+  assert.doesNotMatch(layoutSource, /prefetch=\{false\}/);
+  assert.match(loadingSource, /aria-label="Loading admin page"/);
+  assert.match(loadingSource, /aria-busy="true"/);
+  assert.equal((actionsSource.match(/prefetch=\{false\}/g) ?? []).length, 2);
+  assert.equal((overviewSource.match(/prefetch=\{false\}/g) ?? []).length, 6);
+  assert.equal((appShellSource.match(/prefetch=\{false\}/g) ?? []).length, 2);
 });

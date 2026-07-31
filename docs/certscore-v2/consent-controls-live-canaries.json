@@ -1,0 +1,13 @@
+{
+  "version": "certscore.consent_controls_live_calibration.1",
+  "owner": "CertScore",
+  "artifactOnly": true,
+  "consentInteractionAllowed": false,
+  "targets": [
+    { "key": "owned-consent-controls-basic", "variant": "basic", "url": "https://certscore.ai/calibration/consent-controls/basic", "locale": "en", "accept": true, "reject": true, "options": true, "renderMode": "direct" },
+    { "key": "owned-consent-controls-delayed", "variant": "delayed", "url": "https://certscore.ai/calibration/consent-controls/delayed", "locale": "en", "accept": true, "reject": true, "options": true, "renderMode": "delayed" },
+    { "key": "owned-consent-controls-shadow-dom", "variant": "shadow-dom", "url": "https://certscore.ai/calibration/consent-controls/shadow-dom", "locale": "en", "accept": true, "reject": true, "options": true, "renderMode": "shadow_dom" },
+    { "key": "owned-consent-controls-localized-de", "variant": "localized-de", "url": "https://certscore.ai/calibration/consent-controls/localized-de", "locale": "de", "accept": true, "reject": true, "options": true, "renderMode": "direct" },
+    { "key": "owned-consent-controls-partial", "variant": "partial", "url": "https://certscore.ai/calibration/consent-controls/partial", "locale": "en", "accept": true, "reject": false, "options": true, "renderMode": "direct" }
+  ]
+}

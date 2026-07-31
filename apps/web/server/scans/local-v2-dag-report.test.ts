@@ -29,6 +29,50 @@ async function loadLocalV2DagReport() {
   return import("./local-v2-dag-report");
 }
 
+test("remote report artifacts start geometry as soon as the manifest resolves", async () => {
+  const { localV2DagReportPerformanceTestHelpers } = await loadLocalV2DagReport();
+  const events: string[] = [];
+  let resolveBundle: ((value: CanonicalEvidenceBundle) => void) | undefined;
+  let resolveGeometry: ((value: Record<string, unknown>) => void) | undefined;
+
+  const resultPromise = localV2DagReportPerformanceTestHelpers.loadLocalV2DagRemoteArtifacts({
+    readBundle: () => {
+      events.push("bundle:start");
+      return new Promise<CanonicalEvidenceBundle>((resolve) => {
+        resolveBundle = resolve;
+      });
+    },
+    readGeometry: async () => {
+      events.push("geometry:start");
+      return new Promise<Record<string, unknown>>((resolve) => {
+        resolveGeometry = resolve;
+      });
+    },
+    readManifest: async () => {
+      events.push("manifest:start");
+      return { auxiliaryArtifacts: [] };
+    }
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events, ["bundle:start", "manifest:start", "geometry:start"]);
+
+  resolveGeometry?.({ retainedControlCount: 1 });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(events.includes("geometry:start"), true);
+
+  const bundle = {
+    schemaVersion: "certscore.v2.canonical-evidence-bundle.v1"
+  } as CanonicalEvidenceBundle;
+  resolveBundle?.(bundle);
+
+  assert.deepEqual(await resultPromise, {
+    bundle,
+    consentControlGeometryEvidence: { retainedControlCount: 1 },
+    manifest: { auxiliaryArtifacts: [] }
+  });
+});
+
 test("getLocalV2PrimaryLanguage ranks declared, retained text, and URL evidence", async () => {
   const { getLocalV2PrimaryLanguage } = await loadLocalV2DagReport();
   assert.equal(getLocalV2PrimaryLanguage({
@@ -178,9 +222,11 @@ test("getLocalV2FinalDocumentUrl prefers retained final-page evidence after a cr
   }, "https://www.final-brand.example/home"), true);
 });
 
-test("summarizeFirstLayerConsentChoices retains IMOU banner text, controls, policy link, layer, and timestamp", async () => {
+test("summarizeFirstLayerConsentChoices fails closed when control geometry is missing", async () => {
   const { summarizeFirstLayerConsentChoices } = await loadLocalV2DagReport();
   const summary = summarizeFirstLayerConsentChoices({
+    normalizedUrl: "https://example.test/",
+    url: "https://example.test/",
     consentUiObservations: [{
       observationId: "consent_ui_pre_consent",
       observedAtMs: 1_420,
@@ -202,16 +248,19 @@ test("summarizeFirstLayerConsentChoices retains IMOU banner text, controls, poli
     }]
   } as unknown as CanonicalEvidenceBundle) as Record<string, unknown> | null;
 
-  assert.equal(summary?.layerInspected, "first_layer");
-  assert.equal(summary?.observedAtMs, 1_420);
-  assert.match(String(summary?.textSnippet ?? ""), /accept, reject or manage/i);
-  assert.deepEqual(summary?.visibleChoiceLabels, ["Manage", "Reject", "Accept"]);
-  assert.deepEqual(summary?.policyLinks, ["https://www.imou.com/policy#privacy-policy"]);
+  assert.equal(summary?.geometryAssessment, "incomplete");
+  assert.equal(summary?.layerInspected, "unknown");
+  assert.equal(summary?.acceptControlObserved, false);
+  assert.equal(summary?.rejectControlObserved, false);
+  assert.equal(summary?.managePreferencesControlObserved, false);
+  assert.deepEqual(summary?.visibleChoiceLabels, []);
 });
 
-test("summarizeFirstLayerConsentChoices discards malformed canonical control labels before geometry merge", async () => {
+test("summarizeFirstLayerConsentChoices uses only confirmed visible controls from completed geometry", async () => {
   const { summarizeFirstLayerConsentChoices } = await loadLocalV2DagReport();
   const summary = summarizeFirstLayerConsentChoices({
+    normalizedUrl: "https://example.test/",
+    url: "https://example.test/",
     consentUiObservations: [{
       observationId: "consent_ui_pre_consent",
       likelyPresent: true,
@@ -222,6 +271,7 @@ test("summarizeFirstLayerConsentChoices discards malformed canonical control lab
       ]
     }]
   } as unknown as CanonicalEvidenceBundle, {
+    pageUrl: "https://example.test/",
     candidates: [{
       actionType: "accept_all",
       boundingBox: { height: 40, width: 120 },
@@ -231,14 +281,653 @@ test("summarizeFirstLayerConsentChoices discards malformed canonical control lab
       label: "Accept",
       layer: "first_layer"
     }],
-    summary: { cmpDetected: true, cmpName: "Fixture CMP" }
+    summary: {
+      cmpDetected: true,
+      cmpName: "Fixture CMP",
+      confidence: 0.9,
+      firstLayerAccept: true,
+      firstLayerOptions: false,
+      firstLayerReject: false
+    }
   }) as Record<string, unknown> | null;
 
-  assert.deepEqual(summary?.visibleChoiceLabels, ["Reject", "Accept"]);
+  assert.equal(summary?.geometryAssessment, "complete");
+  assert.deepEqual(summary?.visibleChoiceLabels, ["Accept"]);
   assert.deepEqual(
     (summary?.controls as Array<{ label: string }>).map((control) => control.label),
-    ["Reject", "Accept"]
+    ["Accept"]
   );
+});
+
+test("completed same-document geometry does not erase an earlier complete canonical control inventory", async () => {
+  const { summarizeFirstLayerConsentChoices } = await loadLocalV2DagReport();
+  const summary = summarizeFirstLayerConsentChoices({
+    normalizedUrl: "https://oxfam.org/",
+    url: "https://oxfam.org/",
+    domSnapshots: [{
+      capturedAtMs: 8_617,
+      consentStateAtTime: "pre_consent",
+      textExcerpt: "Cookie Settings",
+      url: "https://www.oxfam.org/en"
+    }],
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 7_758,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      controls: [
+        {
+          actionType: "manage_preferences",
+          classifierReasonCodes: ["matched_options"],
+          label: "Cookie Settings",
+          matchedTerm: "cookie settings",
+          visible: true
+        },
+        {
+          actionType: "accept_all",
+          classifierReasonCodes: ["matched_accept"],
+          label: "Accept all cookies",
+          matchedTerm: "accept all cookies",
+          visible: true
+        },
+        {
+          actionType: "reject_all",
+          classifierReasonCodes: ["matched_reject", "variant_necessary_only"],
+          classifierVariant: "necessary_only",
+          label: "Accept only essential cookies",
+          matchedTerm: "only essential",
+          visible: true
+        }
+      ],
+      inventoryDiagnostics: {
+        candidateContainerCount: 1,
+        candidateControlCount: 3,
+        retainedControlCount: 3,
+        inventorySources: ["viewport"],
+        candidateLabels: [
+          "Cookie Settings",
+          "Accept all cookies",
+          "Accept only essential cookies"
+        ],
+        rejectionReasons: [],
+        timingMarkers: ["rapid_inventory_completed"]
+      }
+    }]
+  } as unknown as CanonicalEvidenceBundle, {
+    artifactVersion: "consent_control_geometry.v1",
+    pageUrl: "https://www.oxfam.org/en",
+    candidates: [{
+      actionType: "manage_preferences",
+      boundingBox: { height: 41, width: 70 },
+      decisionStatus: "confirmed_visible",
+      enabled: true,
+      intersectsViewport: true,
+      label: "Cookie Settings",
+      layer: "first_layer",
+      matchedLocale: "en",
+      matchedTerm: "cookie settings",
+      matchStrength: "direct"
+    }],
+    summary: {
+      cmpDetected: true,
+      cmpName: "Drupal EU Cookie Compliance module, non-TCF",
+      confidence: 0.77,
+      firstLayerAccept: false,
+      firstLayerOptions: true,
+      firstLayerReject: false,
+      limitations: [
+        "accept_all:Accept all cookies:hidden",
+        "reject_all:Accept only essential cookies:hidden"
+      ]
+    }
+  }) as Record<string, unknown>;
+
+  assert.equal(summary.acceptControlObserved, true);
+  assert.equal(summary.rejectControlObserved, true);
+  assert.equal(summary.managePreferencesControlObserved, true);
+  assert.deepEqual(
+    (summary.controls as Array<{ label: string }>).map((control) => control.label),
+    ["Cookie Settings", "Accept all cookies", "Accept only essential cookies"]
+  );
+});
+
+test("Oxfam-style completed geometry prevents rapid-DOM controls from reaching GDPR/ePrivacy rows", async () => {
+  const {
+    reconcileConsentSurfaceInspectionWithGeometry,
+    summarizeFirstLayerConsentChoices,
+  } = await loadLocalV2DagReport();
+  const bundle = {
+    url: "https://oxfam.org/",
+    normalizedUrl: "https://oxfam.org/",
+    domSnapshots: [{
+      capturedAtMs: 9_100,
+      consentStateAtTime: "pre_consent",
+      textExcerpt: "Oxfam stands for equality",
+      url: "https://www.oxfamamerica.org/",
+    }],
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 7_813,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      controls: [
+        { actionType: "manage_preferences", label: "Cookie Settings", visible: true },
+        { actionType: "accept_all", label: "Accept all cookies", visible: true },
+        { actionType: "reject_all", label: "Accept only essential cookies", visible: true },
+        { actionType: "manage_preferences", label: "Learn More", visible: true },
+      ],
+    }],
+  } as unknown as CanonicalEvidenceBundle;
+  const geometry = {
+    artifactVersion: "consent_control_geometry.v1",
+    pageUrl: "https://www.oxfamamerica.org/",
+    candidates: [{
+      actionType: "other",
+      boundingBox: { height: 50, width: 200 },
+      computedStyle: {
+        display: "inline-block",
+        opacity: "1",
+        pointerEvents: "none",
+        visibility: "hidden",
+      },
+      decisionStatus: "hidden",
+      enabled: true,
+      frameContext: {
+        frameKind: "main_frame",
+        frameUrl: "https://www.oxfamamerica.org/",
+      },
+      intersectsViewport: true,
+      label: "Learn More",
+      layer: "first_layer",
+    }],
+    summary: {
+      cmpDetected: true,
+      cmpName: "TrustArc",
+      confidence: 0.65,
+      firstLayerAccept: false,
+      firstLayerOptions: false,
+      firstLayerReject: false,
+      limitations: ["cmp_detected_without_visible_first_layer_controls"],
+    },
+    access: { status: "loaded" },
+  };
+  const choices = summarizeFirstLayerConsentChoices(bundle, geometry) as Record<string, unknown>;
+  const inspection = reconcileConsentSurfaceInspectionWithGeometry(
+    bundle,
+    geometry,
+    {
+      outcome: "indeterminate_limited_coverage",
+      coverageStatus: "limited",
+      inspectionCompleted: false,
+      inspectedPreInteraction: true,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      observedAtMs: 7_813,
+      evidenceSources: ["consent_ui_observation", "cmp_runtime"],
+      evidenceChannels: [],
+      limitationKeys: [
+        "cmp_runtime_without_actionable_surface",
+        "consent_surface_inspection_settled_inventory_missing",
+      ],
+    } as never,
+  );
+
+  assert.equal(choices.geometryAssessment, "complete");
+  assert.equal(choices.acceptControlObserved, false);
+  assert.equal(choices.rejectControlObserved, false);
+  assert.equal(choices.managePreferencesControlObserved, false);
+  assert.deepEqual(choices.visibleChoiceLabels, []);
+  assert.equal(inspection.outcome, "no_surface_observed_complete_coverage");
+  assert.equal(inspection.coverageStatus, "complete");
+  assert.equal(inspection.inspectionCompleted, true);
+  assert.equal(inspection.consentSurfaceObserved, false);
+  assert.equal(inspection.actionableControlObserved, false);
+  assert.deepEqual(inspection.limitationKeys, []);
+
+  const runtimeArtifacts = {
+    cmpFrameworkSignalObserved: true,
+    cmpRuntimeSignalLabels: ["js.hs-banner.com"],
+    cmp_vendor_name: "HubSpot Banner",
+    consentSurfaceInspection: inspection,
+    consentSurfaceObserved: false,
+    consentActionableChoiceObserved: false,
+    firstLayerConsentChoices: choices,
+    rejectPathDepthAndAvailability: {
+      completeRejectPathAvailable: false,
+      firstLayerConsentChoices: choices,
+      firstLayerCookieConsentBannerObserved: false,
+      gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+      rejectControlObserved: false,
+    },
+    hybridRuntimeEvidence: {
+      consentSurfaceInspection: inspection,
+      consentSurfaceObserved: false,
+      firstLayerConsentChoices: choices,
+      networkSummary: {
+        preConsentThirdPartyRequestCount: 19,
+      },
+      consentSummary: {
+        bannerPresent: false,
+        cmpDetected: true,
+        cmpFrameworkSignalObserved: true,
+        cmpName: "HubSpot Banner",
+      },
+    },
+  };
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    events: [],
+    runtimeArtifacts,
+    scanCompleted: true,
+    snapshot: {
+      cookie_banner_present: false,
+      runtime_capture_completed: true,
+      third_party_request_count: 19,
+    },
+  });
+
+  assert.equal(outcomes.cmp_framework_signal_observed?.status, "Observed");
+  assert.equal(outcomes.consent_surface_observed?.status, "Not observed");
+  assert.equal(
+    outcomes.accept_consent_control?.status,
+    "Not observed",
+    JSON.stringify(outcomes.accept_consent_control, null, 2),
+  );
+  assert.equal(outcomes.options_settings_preferences_control?.status, "Not observed");
+  assert.equal(outcomes.reject_all_path_availability?.status, "Review signal");
+
+  const unrelatedLimitedInspection = reconcileConsentSurfaceInspectionWithGeometry(
+    bundle,
+    geometry,
+    {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage",
+      coverageStatus: "limited",
+      inspectionCompleted: false,
+      limitationKeys: [
+        "cmp_runtime_without_actionable_surface",
+        "visual_capture_unavailable",
+      ],
+    } as never,
+  );
+  assert.equal(unrelatedLimitedInspection.outcome, "indeterminate_limited_coverage");
+  assert.equal(unrelatedLimitedInspection.coverageStatus, "limited");
+  assert.equal(unrelatedLimitedInspection.inspectionCompleted, false);
+});
+
+test("visible consent-like controls outside the recognized first layer keep coverage limited", async () => {
+  const { reconcileConsentSurfaceInspectionWithGeometry } = await loadLocalV2DagReport();
+  const bundle = {
+    url: "https://example.com/",
+    normalizedUrl: "https://example.com/",
+    domSnapshots: [{
+      capturedAtMs: 9_100,
+      consentStateAtTime: "pre_consent",
+      url: "https://example.com/",
+    }],
+  } as unknown as CanonicalEvidenceBundle;
+  const inspection = reconcileConsentSurfaceInspectionWithGeometry(
+    bundle,
+    {
+      artifactVersion: "consent_control_geometry.v1",
+      pageUrl: "https://example.com/",
+      access: { status: "loaded" },
+      candidates: [{
+        actionType: "accept_all",
+        boundingBox: { x: 419, y: 348, width: 528, height: 45 },
+        computedStyle: {
+          display: "inline",
+          opacity: "1",
+          pointerEvents: "auto",
+          visibility: "visible",
+        },
+        decisionStatus: "confirmed_visible",
+        enabled: true,
+        frameContext: {
+          frameKind: "main_frame",
+          frameUrl: "https://example.com/",
+        },
+        intersectsViewport: true,
+        label: "Accept all",
+        layer: "page_body",
+      }],
+      summary: {
+        cmpDetected: true,
+        cmpName: "Fixture CMP",
+        confidence: 0.55,
+        firstLayerAccept: false,
+        firstLayerOptions: false,
+        firstLayerReject: false,
+      },
+    },
+    {
+      outcome: "indeterminate_limited_coverage",
+      coverageStatus: "limited",
+      inspectionCompleted: false,
+      inspectedPreInteraction: true,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      observedAtMs: 7_813,
+      evidenceSources: ["consent_ui_observation", "cmp_runtime"],
+      evidenceChannels: [],
+      limitationKeys: ["consent_surface_inspection_settled_inventory_missing"],
+    } as never,
+  );
+
+  assert.equal(inspection.outcome, "indeterminate_limited_coverage");
+  assert.equal(inspection.coverageStatus, "limited");
+  assert.equal(inspection.inspectionCompleted, false);
+  assert.equal(inspection.consentSurfaceObserved, false);
+  assert.equal(inspection.actionableControlObserved, false);
+  assert.ok(inspection.limitationKeys.includes(
+    "consent_control_geometry_visible_candidate_layer_ambiguous"
+  ));
+});
+
+test("legacy SITS-style modal control clusters reconcile to observed first-layer controls", async () => {
+  const {
+    reconcileConsentSurfaceInspectionWithGeometry,
+    summarizeFirstLayerConsentChoices,
+  } = await loadLocalV2DagReport();
+  const bundle = {
+    url: "https://sits.example/",
+    normalizedUrl: "https://sits.example/",
+    domSnapshots: [{
+      capturedAtMs: 9_100,
+      consentStateAtTime: "pre_consent",
+      url: "https://sits.example/",
+    }],
+  } as unknown as CanonicalEvidenceBundle;
+  const candidateBase = {
+    boundingBox: { x: 419, y: 348, width: 528, height: 45 },
+    computedStyle: {
+      display: "inline",
+      opacity: "1",
+      pointerEvents: "auto",
+      visibility: "visible",
+    },
+    containerId: "container_11",
+    decisionStatus: "confirmed_visible",
+    enabled: true,
+    frameContext: {
+      frameKind: "main_frame",
+      frameUrl: "https://sits.example/",
+    },
+    intersectsViewport: true,
+    layer: "page_body",
+    occlusion: {
+      center: true,
+      topLeft: true,
+      topRight: true,
+      bottomLeft: true,
+      bottomRight: true,
+      checkedPoints: 5,
+      hitSelectorHints: [],
+    },
+  };
+  const geometry = {
+    artifactVersion: "consent_control_geometry.v1",
+    pageUrl: "https://sits.example/",
+    access: { status: "loaded" },
+    containers: [{
+      containerId: "container_11",
+      htmlExcerpt: '<div data-borlabs-cookie-consent-required="true" id="BorlabsCookieBox">',
+      layer: "page_body",
+      selectorHint: "#BorlabsCookieBox",
+      textExcerpt: "Data protection preference. We need your consent to use cookies.",
+    }],
+    candidates: [
+      { ...candidateBase, actionType: "accept_all", label: "Accept all" },
+      { ...candidateBase, actionType: "reject_all", label: "Accept essential cookies" },
+      { ...candidateBase, actionType: "manage_preferences", label: "Individual preferences" },
+      { ...candidateBase, actionType: "save_preferences", label: "Save consent" },
+    ],
+    summary: {
+      cmpDetected: false,
+      confidence: 0.55,
+      firstLayerAccept: false,
+      firstLayerOptions: false,
+      firstLayerReject: false,
+    },
+  };
+  const choices = summarizeFirstLayerConsentChoices(bundle, geometry);
+  const inspection = reconcileConsentSurfaceInspectionWithGeometry(
+    bundle,
+    geometry,
+    {
+      outcome: "indeterminate_limited_coverage",
+      coverageStatus: "limited",
+      inspectionCompleted: false,
+      inspectedPreInteraction: true,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      observedAtMs: 7_813,
+      evidenceSources: ["consent_ui_observation"],
+      evidenceChannels: [],
+      limitationKeys: ["consent_surface_inspection_settled_inventory_missing"],
+    } as never,
+  );
+
+  assert.equal(choices?.acceptControlObserved, true);
+  assert.equal(choices?.rejectControlObserved, true);
+  assert.equal(choices?.managePreferencesControlObserved, true);
+  assert.deepEqual(choices?.visibleChoiceLabels, [
+    "Accept all",
+    "Accept essential cookies",
+    "Individual preferences",
+    "Save consent",
+  ]);
+  assert.equal(inspection.outcome, "actionable_surface_observed");
+  assert.equal(inspection.consentSurfaceObserved, true);
+  assert.equal(inspection.actionableControlObserved, true);
+});
+
+test("missing auxiliary geometry does not erase completed canonical consent evidence", async () => {
+  const { reconcileConsentSurfaceInspectionWithGeometry } = await loadLocalV2DagReport();
+  const retainedInspection = {
+    outcome: "actionable_surface_observed",
+    coverageStatus: "complete",
+    inspectionCompleted: true,
+    inspectedPreInteraction: true,
+    consentSurfaceObserved: true,
+    actionableControlObserved: true,
+    observedAtMs: 9_940,
+    evidenceSources: ["consent_ui_observation", "control_inventory", "geometry"],
+    evidenceChannels: [],
+    limitationKeys: [],
+  } as const;
+  const reconciled = reconcileConsentSurfaceInspectionWithGeometry(
+    {
+      url: "https://sits.example/",
+      normalizedUrl: "https://sits.example/",
+      consentUiObservations: [{
+        observationId: "consent_ui_pre_consent",
+        observedAtMs: 9_940,
+        likelyPresent: true,
+        layerInspected: "first_layer",
+        acceptControlObserved: true,
+        rejectControlObserved: true,
+        managePreferencesControlObserved: true,
+        controls: [
+          { actionType: "accept_all", label: "Accept all", visible: true },
+          { actionType: "reject_all", label: "Accept essential cookies", visible: true },
+          { actionType: "manage_preferences", label: "Individual preferences", visible: true },
+        ],
+      }],
+    } as unknown as CanonicalEvidenceBundle,
+    null,
+    retainedInspection as never,
+  );
+
+  assert.deepEqual(reconciled, retainedInspection);
+});
+
+test("CNN retained Accept All and Show Purposes survive an incomplete geometry artifact", async () => {
+  const {
+    reconcileConsentSurfaceInspectionWithGeometry,
+    summarizeFirstLayerConsentChoices,
+  } = await loadLocalV2DagReport();
+  const bundle = {
+    url: "https://cnn.com/",
+    normalizedUrl: "https://cnn.com/",
+    screenshots: [{
+      artifactId: "screenshot_pre_consent_settled",
+      capturedAtMs: 29_670,
+      captureMethod: "primary_viewport_fallback",
+      path: "/tmp/screenshot-pre-consent-settled.png",
+      url: "https://edition.cnn.com/",
+      pagePhase: "network_idle",
+      consentStateAtTime: "pre_consent",
+    }],
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 16_194,
+      captureStatus: "observed",
+      captureDiagnostics: {
+        completedChannels: [],
+        timedOutChannels: [],
+        failedChannels: [],
+      },
+      likelyPresent: true,
+      basis: [
+        "inventory:rapid_first_layer_controls",
+        "control:accept_all:Accept All",
+        "control:manage_preferences:Show Purposes, Opens the preference center dialog",
+        "settled_control_inventory_completed",
+      ],
+      textExcerpt: "Accept All Essential Cookies Only Show Purposes Show Purposes",
+      layerInspected: "first_layer",
+      visibleChoiceLabels: [
+        "Accept All",
+        "Show Purposes, Opens the preference center dialog",
+      ],
+      acceptControlObserved: true,
+      rejectControlObserved: false,
+      managePreferencesControlObserved: true,
+      controls: [
+        {
+          actionType: "accept_all",
+          label: "Accept All",
+          visible: true,
+          selectorHint: "#onetrust-accept-btn-handler",
+        },
+        {
+          actionType: "manage_preferences",
+          label: "Show Purposes, Opens the preference center dialog",
+          visible: true,
+          selectorHint: "#onetrust-pc-btn-handler",
+        },
+      ],
+      inventoryDiagnostics: {
+        candidateContainerCount: 1,
+        candidateControlCount: 2,
+        retainedControlCount: 2,
+        inventorySources: ["viewport"],
+        candidateLabels: [
+          "Accept All",
+          "Show Purposes, Opens the preference center dialog",
+        ],
+        rejectionReasons: [],
+        timingMarkers: [
+          "rapid_inventory_completed",
+          "rapid_first_layer_inventory",
+          "early_exit_controls_found",
+        ],
+      },
+      evidenceRefs: [],
+      confidence: 0.86,
+    }],
+  } as unknown as CanonicalEvidenceBundle;
+  const incompleteGeometry = {
+    artifactVersion: "consent_control_geometry.v1",
+    pageUrl: "https://cnn.com/",
+    viewport: { width: 0, height: 0 },
+    candidates: [],
+    summary: {
+      cmpDetected: false,
+      confidence: 0,
+      firstLayerAccept: false,
+      firstLayerOptions: false,
+      firstLayerReject: false,
+      limitations: [
+        "A/R/O not evaluated because page access did not reach a loaded pre-consent state.",
+      ],
+    },
+    access: { status: "unknown" },
+  };
+  const choices = summarizeFirstLayerConsentChoices(
+    bundle,
+    incompleteGeometry,
+  ) as Record<string, unknown>;
+  const inspection = reconcileConsentSurfaceInspectionWithGeometry(
+    bundle,
+    incompleteGeometry,
+    {
+      outcome: "actionable_surface_observed",
+      coverageStatus: "limited",
+      inspectionCompleted: false,
+      inspectedPreInteraction: true,
+      consentSurfaceObserved: true,
+      actionableControlObserved: true,
+      observedAtMs: 16_194,
+      evidenceSources: ["consent_ui_observation", "control_inventory"],
+      evidenceChannels: [],
+      limitationKeys: ["consent_surface_inspection_runtime_partial"],
+    } as never,
+  );
+
+  assert.equal(choices.geometryAssessment, "incomplete");
+  assert.equal(choices.acceptControlObserved, true);
+  assert.equal(choices.rejectControlObserved, false);
+  assert.equal(choices.managePreferencesControlObserved, true);
+  assert.deepEqual(choices.visibleChoiceLabels, [
+    "Accept All",
+    "Show Purposes, Opens the preference center dialog",
+  ]);
+  assert.equal(inspection.outcome, "actionable_surface_observed");
+  assert.equal(inspection.consentSurfaceObserved, true);
+  assert.equal(inspection.actionableControlObserved, true);
+});
+
+test("completed consent geometry from a different document fails closed", async () => {
+  const { summarizeFirstLayerConsentChoices } = await loadLocalV2DagReport();
+  const choices = summarizeFirstLayerConsentChoices({
+    url: "https://before.example/",
+    normalizedUrl: "https://before.example/",
+    domSnapshots: [{
+      capturedAtMs: 2_000,
+      url: "https://after.example/",
+    }],
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 1_000,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      controls: [{ actionType: "accept_all", label: "Accept all", visible: true }],
+    }],
+  } as unknown as CanonicalEvidenceBundle, {
+    pageUrl: "https://before.example/",
+    candidates: [{
+      actionType: "accept_all",
+      boundingBox: { height: 40, width: 120 },
+      decisionStatus: "confirmed_visible",
+      enabled: true,
+      intersectsViewport: true,
+      label: "Accept all",
+      layer: "first_layer",
+    }],
+    summary: {
+      cmpDetected: true,
+      confidence: 0.9,
+      firstLayerAccept: true,
+      firstLayerOptions: false,
+      firstLayerReject: false,
+    },
+  }) as Record<string, unknown>;
+
+  assert.equal(choices.geometryAssessment, "document_mismatch");
+  assert.equal(choices.acceptControlObserved, false);
+  assert.deepEqual(choices.visibleChoiceLabels, []);
 });
 
 test("policy summary distinguishes discovered-but-budget-skipped privacy notices from absent notices", async () => {
@@ -287,6 +976,104 @@ test("observed rendered privacy links remain reportable when document fetch fail
   assert.equal(summary.privacyPolicyEvaluationState, "discovered_fetch_failed");
   assert.deepEqual(summary.privacyPolicyUrls, []);
   assert.deepEqual(summary.discoveredPrivacyPolicyUrls, ["https://example.test/privacy"]);
+});
+
+test("policy summary preserves the typed one-hop privacy-index evidence path", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const childSurface = {
+    observationId: "privacy-document-child",
+    parentObservationId: "privacy-policy-index",
+    parentSurfaceUrl: "https://example.test/privacy",
+    traversalDepth: 1,
+    selectionReasonCodes: [
+      "linked_from_retained_privacy_policy_index",
+      "mini_semantic_privacy_document_selection",
+    ],
+    surfaceType: "privacy_policy",
+    normalizedUrl: "https://example.test/policies/privacy-notice",
+    url: "https://example.test/policies/privacy-notice",
+    linkText: "Privacy Policy for this service",
+    status: "fetched",
+    documentFetchState: "fetched",
+    documentEvaluationState: "usable",
+    confidence: 0.95,
+    textExcerpt: "Example Privacy Policy. We process personal data to provide the service.",
+  } as CanonicalEvidenceBundle["policySurfaceObservations"][number];
+  const surfaces = dedupePolicySurfaces([childSurface], "https://example.test/");
+  const summary = summarizePolicySurfaces(surfaces, "example.test", {
+    discoveredPolicySurfaces: [childSurface],
+  });
+
+  assert.deepEqual(summary.selectedPrivacyPolicyDocument, {
+    documentUrl: "https://example.test/policies/privacy-notice",
+    observationId: "privacy-document-child",
+    parentObservationId: "privacy-policy-index",
+    parentSurfaceUrl: "https://example.test/privacy",
+    selectionReasonCodes: [
+      "linked_from_retained_privacy_policy_index",
+      "mini_semantic_privacy_document_selection",
+    ],
+    traversalDepth: 1,
+  });
+  assert.deepEqual(summary.privacyPolicyEvidencePaths, [{
+    childObservationId: "privacy-document-child",
+    documentEvaluationState: "usable",
+    documentFetchState: "fetched",
+    documentUrl: "https://example.test/policies/privacy-notice",
+    parentObservationId: "privacy-policy-index",
+    parentSurfaceUrl: "https://example.test/privacy",
+    selectionReasonCodes: [
+      "linked_from_retained_privacy_policy_index",
+      "mini_semantic_privacy_document_selection",
+    ],
+    traversalDepth: 1,
+  }]);
+});
+
+test("policy summary materializes structured named-cookie disclosures from cookie surfaces", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const sourceUrl = "https://www.oxfam.org/en/cookies";
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "oxfam-cookie-policy",
+    surfaceType: "cookie_policy",
+    url: sourceUrl,
+    normalizedUrl: sourceUrl,
+    confidence: 0.96,
+    status: "fetched",
+    textExcerpt: "Cookie name Provider Expiry Purpose __stripe_mid Stripe 1 year",
+    policyCookieDisclosures: [
+      {
+        cookieName: "__stripe_mid",
+        provider: "Stripe",
+        duration: "1 year",
+        purpose: "Necessary for credit card transactions.",
+        category: "essential",
+        sourceUrl,
+        evidenceRef: "policy_cookie_stripe_mid",
+        parserProvenance: "policy_cookie_table_dom.v1",
+        confidence: 0.96,
+      },
+      {
+        cookieName: "fundraiseup_cid",
+        provider: "Fundraise Up",
+        duration: "10 years",
+        purpose: "Persistent anti-fraud and analytics identifier.",
+        category: "essential",
+        sourceUrl,
+        evidenceRef: "policy_cookie_fundraiseup_cid",
+        parserProvenance: "policy_cookie_table_dom.v1",
+        confidence: 0.96,
+      },
+    ],
+  }] as never, "https://www.oxfam.org/");
+  const summary = summarizePolicySurfaces(surfaces, "oxfam.org");
+
+  assert.equal(summary.cookiePolicyPresent, true);
+  assert.deepEqual(
+    summary.policyCookieDisclosures.map((row) => row.cookieName),
+    ["__stripe_mid", "fundraiseup_cid"],
+  );
+  assert.deepEqual(summary.cookieDisclosures, summary.policyCookieDisclosures);
 });
 
 test("buildLocalV2NoGoSnapshotFields preserves every canonical no-go reason classification", async () => {
@@ -517,26 +1304,99 @@ test("canonical report counters dedupe repeated cookie writes and request rows",
     policySurfaceInspection: {
       outcome: "indeterminate_limited_coverage",
       coverageStatus: "limited",
+      linkDiscoveryCoverageStatus: "limited",
+      documentRetrievalCoverageStatus: "limited",
       inspectionCompleted: false,
       privacyPolicyObserved: false,
       observedSurfaceTypes: [],
       limitationKeys: ["policy_surface_inspection_runtime_failed"]
     },
     privacyPolicyPresent: false,
-    rawPrivacyPolicyCandidateCount: 0
+    unresolvedObservedPrivacyPolicyCandidateCount: 0
   }), false, "a failed policy module must not project an absent policy as complete coverage");
   assert.equal(deriveApplicablePolicyCoverageComplete({
     policySurfaceInspection: {
       outcome: "no_privacy_policy_observed_complete_coverage",
       coverageStatus: "complete",
+      linkDiscoveryCoverageStatus: "complete",
+      documentRetrievalCoverageStatus: "insufficient",
       inspectionCompleted: true,
       privacyPolicyObserved: false,
       observedSurfaceTypes: [],
       limitationKeys: []
     },
     privacyPolicyPresent: false,
-    rawPrivacyPolicyCandidateCount: 0
+    unresolvedObservedPrivacyPolicyCandidateCount: 0
   }), true, "a completed bounded negative search remains complete coverage");
+  assert.equal(deriveApplicablePolicyCoverageComplete({
+    policySurfaceInspection: {
+      outcome: "no_privacy_policy_observed_complete_coverage",
+      coverageStatus: "complete",
+      linkDiscoveryCoverageStatus: "complete",
+      documentRetrievalCoverageStatus: "insufficient",
+      inspectionCompleted: true,
+      privacyPolicyObserved: false,
+      observedSurfaceTypes: [],
+      limitationKeys: []
+    },
+    privacyPolicyPresent: false,
+    unresolvedObservedPrivacyPolicyCandidateCount: 1
+  }), false, "an observed privacy link whose document remains unresolved must retain limited policy coverage");
+});
+
+test("settled geometry with no controls resolves an earlier consent inventory timeout", async () => {
+  const { reconcileConsentSurfaceInspectionWithGeometry } = await loadLocalV2DagReport();
+  const bundle = {
+    url: "https://example.test/",
+    normalizedUrl: "https://example.test/",
+    domSnapshots: [{
+      capturedAtMs: 11_000,
+      consentStateAtTime: "pre_consent",
+      textExcerpt: "Example homepage content without a consent surface.",
+      url: "https://www.example.test/",
+    }],
+  } as unknown as CanonicalEvidenceBundle;
+  const inspection = reconcileConsentSurfaceInspectionWithGeometry(
+    bundle,
+    {
+      artifactVersion: "consent_control_geometry.v1",
+      pageUrl: "https://www.example.test/",
+      candidates: [],
+      containers: [],
+      summary: {
+        cmpDetected: false,
+        confidence: 0.55,
+        firstLayerAccept: false,
+        firstLayerOptions: false,
+        firstLayerReject: false,
+        limitations: [],
+      },
+      access: { status: "loaded" },
+    },
+    {
+      outcome: "indeterminate_limited_coverage",
+      coverageStatus: "limited",
+      inspectionCompleted: false,
+      inspectedPreInteraction: true,
+      consentSurfaceObserved: false,
+      actionableControlObserved: false,
+      observedAtMs: 10_000,
+      evidenceSources: ["consent_ui_observation", "dom_snapshot", "visual_capture"],
+      evidenceChannels: [],
+      limitationKeys: [
+        "consent_ui_capture_timed_out",
+        "consent_surface_inspection_observation_incomplete",
+        "consent_surface_inspection_settled_inventory_missing",
+      ],
+    } as never,
+  );
+
+  assert.equal(inspection.outcome, "no_surface_observed_complete_coverage");
+  assert.equal(inspection.coverageStatus, "complete");
+  assert.equal(inspection.inspectionCompleted, true);
+  assert.equal(inspection.consentSurfaceObserved, false);
+  assert.equal(inspection.actionableControlObserved, false);
+  assert.deepEqual(inspection.limitationKeys, []);
 });
 
 test("classifies script loading, ad collection, and identifier synchronization separately", async () => {
@@ -557,6 +1417,20 @@ test("classifies script loading, ad collection, and identifier synchronization s
     regulatoryRelevance: ["identifier_sync"],
     url: "https://sync.example.test/user_sync"
   }), "identifier_synchronization");
+  for (const url of [
+    "https://cm.g.doubleclick.net/pixel",
+    "https://am-match.taboola.com/pixel",
+    "https://ats.rlcdn.com/ats",
+    "https://nbcuni.demdex.net/event",
+    "https://gum.criteo.com/pixel"
+  ]) {
+    assert.equal(classifyRetainedRequestActivity({
+      category: "advertising",
+      collectionEndpointObserved: true,
+      resourceType: "fetch",
+      url
+    }), "identifier_synchronization", `${url} is a canonical ID-sync endpoint`);
+  }
   assert.equal(classifyRetainedRequestActivity({
     category: "analytics",
     collectionEndpointObserved: false,
@@ -680,6 +1554,56 @@ function makeScanRecord(overrides: Partial<ScanDetailResponse> = {}): ScanDetail
     validationFindings: [],
     ...overrides
   } as ScanDetailResponse;
+}
+
+function completedConsentGeometryFixture(input: {
+  cmpName?: string;
+  controls: Array<{
+    actionType: "accept_all" | "reject_all" | "manage_preferences";
+    label: string;
+  }>;
+  pageUrl: string;
+}) {
+  return {
+    artifactVersion: "consent_control_geometry.v1",
+    pageUrl: input.pageUrl,
+    candidates: input.controls.map((control, index) => ({
+      ...control,
+      boundingBox: {
+        bottom: 180 + index * 50,
+        height: 40,
+        left: 100,
+        right: 300,
+        top: 140 + index * 50,
+        width: 200,
+        x: 100,
+        y: 140 + index * 50,
+      },
+      decisionStatus: "confirmed_visible",
+      enabled: true,
+      frameContext: {
+        frameKind: "main_frame",
+        frameUrl: input.pageUrl,
+      },
+      intersectsViewport: true,
+      layer: "first_layer",
+      tagName: "button",
+    })),
+    containers: [{
+      layer: "first_layer",
+      textExcerpt: "Cookie consent preferences",
+    }],
+    summary: {
+      cmpDetected: Boolean(input.cmpName),
+      cmpName: input.cmpName,
+      confidence: 0.95,
+      firstLayerAccept: input.controls.some((control) => control.actionType === "accept_all"),
+      firstLayerOptions: input.controls.some((control) => control.actionType === "manage_preferences"),
+      firstLayerReject: input.controls.some((control) => control.actionType === "reject_all"),
+      limitations: [],
+    },
+    access: { status: "loaded" },
+  };
 }
 
 test("getLocalV2DagReportInput reads Lambda scan artifact URI from retained result event", async () => {
@@ -827,6 +1751,54 @@ test("resolveLocalV2DagVisualEvidencePointer resolves a mirrored screenshot with
       await resolveLocalV2DagVisualEvidencePointer(scanRecord, "toString"),
       null,
       "inherited object properties must not be accepted as artifact IDs"
+    );
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("resolveLocalV2DagVisualEvidencePointer resolves the local full-page JPEG artifact", async () => {
+  const { resolveLocalV2DagVisualEvidencePointer } = await loadLocalV2DagReport();
+  const scanId = "8f3f4d54-3137-4f3b-a0d4-4bdcfb8f94f3";
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/full-page-jpeg-"));
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await writeFile(path.join(outDir, "screenshot-pre-consent-full-page.jpg"), Buffer.from("jpeg"));
+
+    const scanRecord = makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        id: scanId,
+        scanConfigJson: {
+          ...makeScanRecord().scan.scanConfigJson,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    });
+
+    assert.deepEqual(
+      await resolveLocalV2DagVisualEvidencePointer(scanRecord, "local_v2:screenshot_pre_consent_full_page"),
+      {
+        bucket: null,
+        id: "local_v2:screenshot_pre_consent_full_page",
+        key: `local-v2-dag-scans/${scanId}/screenshot-pre-consent-full-page.jpg`,
+        mimeType: "image/jpeg",
+        status: "available"
+      }
     );
   } finally {
     if (previousAppUrl === undefined) {
@@ -1025,6 +1997,60 @@ test("dedupePolicySurfaces collapses equivalent privacy URLs before report proje
     [
       { pageUrl: "https://cnn.com/privacy", type: "privacy_policy" },
       { pageUrl: "https://cnn.com/terms", type: "terms" }
+    ]
+  );
+});
+
+test("dedupePolicySurfaces canonicalizes locale aliases and separates cookie preferences", async () => {
+  const { dedupePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "cookie-direct",
+      surfaceType: "cookie_policy",
+      url: "https://www.amazon.de/gp/help/customer/display.html?nodeId=201890250",
+      title: "Cookie policy",
+      confidence: 0.76,
+      textExcerpt: "Cookie policy text"
+    },
+    {
+      observationId: "cookie-locale-alias",
+      surfaceType: "cookie_policy",
+      url: "https://www.amazon.de/-/en/gp/help/customer/display.html?nodeId=201890250",
+      title: "Cookie policy",
+      confidence: 0.76,
+      textExcerpt: "Cookie policy text"
+    },
+    {
+      observationId: "cookie-preferences",
+      surfaceType: "cookie_policy",
+      url: "https://www.amazon.de/privacyprefs/customize?language=en&oCT=ads",
+      title: "Privacy preferences",
+      confidence: 0.82,
+      textExcerpt: "Cookie preferences"
+    }
+  ] as never, "https://amazon.de/");
+
+  assert.equal(surfaces.length, 2);
+  assert.deepEqual(
+    surfaces.map((row) => ({
+      pageUrl: row.pageUrl,
+      type: row.surface.surfaceType,
+      aliases: row.aliasUrls
+    })),
+    [
+      {
+        pageUrl: "https://amazon.de/gp/help/customer/display.html?nodeId=201890250",
+        type: "cookie_policy",
+        aliases: [
+          "https://www.amazon.de/gp/help/customer/display.html?nodeId=201890250",
+          "https://www.amazon.de/-/en/gp/help/customer/display.html?nodeId=201890250"
+        ]
+      },
+      {
+        pageUrl: "https://amazon.de/privacyprefs/customize?language=en&oCT=ads",
+        type: "cookie_settings",
+        aliases: ["https://www.amazon.de/privacyprefs/customize?language=en&oCT=ads"]
+      }
     ]
   );
 });
@@ -1448,6 +2474,61 @@ test("policy projection rejects empty fetched documents and audience-specific pr
   assert.deepEqual(summary.article13DisclosureTypesObserved, []);
 });
 
+test("summarizePolicySurfaces retains CNN's general WBD policy when its text mentions a child-specific policy", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const retainedPolicyText = [
+    "Warner Bros. Discovery Privacy Policy. This Privacy Policy explains how we collect, use, retain, share, and protect personal information when people use our services.",
+    "The controller determines the purposes and means of processing, and individuals may contact us about their privacy rights, legal basis, recipients, and international transfers.",
+    "Children's Privacy Policy. Services aimed at children have additional information for parents and legal guardians."
+  ].join(" ").repeat(24);
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "cnn-wbd-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://www.wbdprivacy.com/policycenter/b2c/",
+      normalizedUrl: "https://www.wbdprivacy.com/policycenter/b2c/",
+      finalUrl: "https://www.wbdprivacy.com/policycenter/b2c/",
+      status: "fetched",
+      documentEvaluationState: "usable",
+      title: "b2c | WBD Privacy Center",
+      linkText: "Privacy Policy",
+      textExcerpt: retainedPolicyText,
+      article13DisclosureSignals: [
+        {
+          disclosureType: "controller_contact",
+          status: "observed",
+          evidenceText: "The controller determines the purposes and means of processing.",
+          confidence: 0.9,
+          source: "deterministic"
+        },
+        {
+          disclosureType: "legal_basis",
+          status: "observed",
+          evidenceText: "We explain the lawful basis on which we rely to process personal information.",
+          confidence: 0.9,
+          source: "deterministic"
+        }
+      ]
+    },
+    {
+      observationId: "cnn-edition-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://edition.cnn.com/privacy",
+      status: "observed",
+      linkObservationState: "observed"
+    }
+  ] as never, "https://edition.cnn.com/");
+
+  const summary = summarizePolicySurfaces(surfaces, "cnn.com", {
+    discoveredPolicySurfaces: surfaces.map((row) => row.surface)
+  });
+
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.deepEqual(summary.article13DisclosureTypesObserved, ["controller_contact", "legal_basis"]);
+  assert.deepEqual(summary.privacyPolicyUrls, ["https://wbdprivacy.com/policycenter/b2c"]);
+});
+
 test("summarizePolicySurfaces prefers general privacy notices over cookie-specific surfaces for Article 13", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const surfaces = dedupePolicySurfaces([
@@ -1538,6 +2619,12 @@ test("summarizePolicySurfaces excludes privacy-service marketing when a canonica
         evidenceText: "Information on the controller pursuant to Art. 4 No. 7 GDPR: SITS Group AG. E-Mail: INFO@SITS.EXAMPLE.",
         confidence: 0.9,
         source: "deterministic"
+      }, {
+        disclosureType: "processing_purposes",
+        status: "observed",
+        evidenceText: "Your contact details are stored for the purpose of processing your enquiry and follow-up questions.",
+        confidence: 0.9,
+        source: "deterministic"
       }]
     },
     {
@@ -1559,6 +2646,26 @@ test("summarizePolicySurfaces excludes privacy-service marketing when a canonica
         confidence: 0.62,
         source: "deterministic"
       }]
+    },
+    {
+      observationId: "customer-story-false-positive",
+      surfaceType: "privacy_policy",
+      url: "https://sits.example/en/customer-stories/finstreet/",
+      normalizedUrl: "https://sits.example/en/customer-stories/finstreet/",
+      discoveryMethod: "homepage_link",
+      status: "fetched",
+      fetchable: true,
+      confidence: 0.76,
+      title: "Efficient Data Protection Management at finstreet",
+      textExcerpt: "Customer story: protection efforts. Everything had to be built from scratch.",
+      observedTopics: ["controller_contact"],
+      article13DisclosureSignals: [{
+        disclosureType: "controller_contact",
+        status: "partial",
+        evidenceText: "Protection efforts. Everything had to be built from scratch.",
+        confidence: 0.66,
+        source: "deterministic"
+      }]
     }
   ] as never, "https://sits.example/");
 
@@ -1571,7 +2678,9 @@ test("summarizePolicySurfaces excludes privacy-service marketing when a canonica
   assert.equal(controllerSignals[0]?.status, "observed");
   assert.match(controllerSignals[0]?.evidenceText ?? "", /SITS Group AG/i);
   assert.doesNotMatch(summary.retainedPrivacyPolicyTextExcerpt, /DPO-as-a-Service/i);
+  assert.doesNotMatch(summary.retainedPrivacyPolicyTextExcerpt, /built from scratch/i);
   assert.equal(summary.article13DisclosureTypesPartial.includes("controller_contact"), false);
+  assert.equal(summary.article13DisclosureTypesObserved.includes("processing_purposes"), true);
 });
 
 test("summarizePolicySurfaces retains substantive policy text beyond navigation chrome", async () => {
@@ -1994,6 +3103,46 @@ test("summarizePolicySurfaces rejects script/config text as Article 13 policy ev
   ), true);
 });
 
+test("summarizePolicySurfaces uses retained Lambda policy excerpts when local artifact paths are unavailable", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const retainedPolicyExcerpt = [
+    "Warner Bros. Discovery Privacy Policy explains how we process personal information and how you can exercise your rights.",
+    "We describe the purposes of processing, lawful bases, recipients and vendor categories, retention, international transfers, and contact details for the controller.",
+    "You may contact our Data Protection Officer and lodge a complaint with the supervisory authority in your country.",
+  ].join(" ").repeat(12);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "cnn-wbd-privacy",
+    surfaceType: "privacy_policy",
+    url: "https://www.wbdprivacy.com/policycenter/b2c/en-us/",
+    normalizedUrl: "https://www.wbdprivacy.com/policycenter/b2c/en-us/",
+    confidence: 0.95,
+    status: "fetched",
+    textExcerpt: "short retained front-loaded excerpt",
+    evidenceRefs: [{
+      refId: "ref_policy",
+      excerpt: retainedPolicyExcerpt,
+    }],
+    artifactRefs: [{
+      artifactId: "policy_surface_text",
+      path: "/tmp/certscore-v2-dag-lambda/missing/policy_surface_text.txt",
+      label: "privacy_policy normalized text",
+    }],
+    article13DisclosureSignals: [{
+      disclosureType: "legal_basis",
+      status: "observed",
+      evidenceText: "purposes of processing, lawful bases, recipients and vendor categories",
+      confidence: 0.9,
+      source: "deterministic",
+    }],
+  }] as never, "cnn.com");
+
+  const summary = summarizePolicySurfaces(surfaces, "cnn.com");
+
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.equal(summary.article13DisclosureTypesObserved.includes("legal_basis"), true);
+  assert.equal(summary.privacyPolicyTextCharacterCount >= retainedPolicyExcerpt.length, true);
+});
+
 test("summarizePolicySurfaces accepts substantive Portuguese policy text and production-credit topic evidence", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const evidenceText = "A base legal para o tratamento de dados pessoais inclui consentimento, contrato e legítimo interesse.";
@@ -2266,6 +3415,54 @@ test("summarizePolicySurfaces separates weak Article 13 candidates from validate
     signal.disclosureType === "data_retention" &&
     signal.rejectReason === "generic_storage_not_retention"
   ), true);
+});
+
+test("summarizePolicySurfaces retains stale transfer frameworks even when the source candidate was discarded", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const staleExcerpt = [
+    "Our payment provider is certified under the EU-US Privacy Shield.",
+    "When you provide your information to us, we will only use the information for the purposes for which it is provided."
+  ].join(" ");
+  const retentionExcerpt =
+    "How long do we keep your data? We retain it as long as necessary for the purpose for which it was collected.";
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "oxfam-like-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy",
+      normalizedUrl: "https://example.test/privacy",
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: `${retentionExcerpt} ${staleExcerpt}`,
+      discardedArticle13DisclosureSignals: [
+        {
+          confidence: 0.75,
+          disclosureType: "processing_purposes",
+          evidenceText: staleExcerpt,
+          rejectReason: "insufficient_row_specific_terms",
+          source: "deterministic",
+          status: "discarded"
+        }
+      ]
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", {
+    scanStartedAt: "2026-07-25T12:00:00.000Z"
+  });
+
+  assert.equal(summary.staleLegalFrameworkReferenceObserved, true);
+  assert.equal(summary.legalFrameworkValidityMatches.length, 1);
+  assert.equal(summary.legalFrameworkValidityMatches[0]?.canonicalId, "eu_us_privacy_shield");
+  assert.equal(summary.legalFrameworkValidityMatches[0]?.statusAtScan, "invalidated");
+  assert.match(summary.legalFrameworkValidityMatches[0]?.evidenceText ?? "", /Privacy Shield/i);
+  assert.equal(
+    summary.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "processing_purposes" &&
+      /How long do we keep/i.test(signal.evidenceText ?? "")
+    ),
+    false
+  );
 });
 
 test("summarizePolicySurfaces accepts GDPR Transparency candidates by default", async () => {
@@ -2882,7 +4079,6 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
       startedAt: "2026-06-17T13:13:50.000Z",
       url: "https://example.test/"
     }, null, 2)}\n`, "utf8");
-
     const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
       scan: {
         ...makeScanRecord().scan,
@@ -3106,7 +4302,7 @@ test("materializeLocalV2DagScanDetail keeps unknown third-party requests and lon
       snapshot: detail.snapshot
     });
     assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Insufficient evidence");
-    assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Insufficient evidence");
+    assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Not observed");
   } finally {
     process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
     await rm(outDir, { recursive: true, force: true });
@@ -3330,6 +4526,17 @@ test("materializeLocalV2DagScanDetail projects retained first-layer optional tog
       startedAt: "2026-06-17T13:13:50.000Z",
       url: "https://example.test/"
     }, null, 2)}\n`, "utf8");
+    await writeFile(
+      path.join(outDir, "ConsentControlGeometryEvidence.json"),
+      `${JSON.stringify(completedConsentGeometryFixture({
+        controls: [
+          { actionType: "reject_all", label: "Reject All" },
+          { actionType: "accept_all", label: "Accept All" },
+        ],
+        pageUrl: "https://example.test/",
+      }), null, 2)}\n`,
+      "utf8",
+    );
 
     const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
       scan: {
@@ -3475,6 +4682,19 @@ test("materializeLocalV2DagScanDetail reconciles canonical redirects, CMP traffi
       }],
       url: "https://d-zone.ca/"
     }, null, 2)}\n`, "utf8");
+    await writeFile(
+      path.join(outDir, "ConsentControlGeometryEvidence.json"),
+      `${JSON.stringify(completedConsentGeometryFixture({
+        cmpName: "Osano CMP",
+        controls: [
+          { actionType: "manage_preferences", label: "Storage Preferences" },
+          { actionType: "accept_all", label: "Accept All" },
+          { actionType: "reject_all", label: "Reject Non-Essential" },
+        ],
+        pageUrl: "https://www.cira.ca/en/cybersecurity/",
+      }), null, 2)}\n`,
+      "utf8",
+    );
 
     const base = makeScanRecord({
       policyEnrichment: [
@@ -3501,6 +4721,8 @@ test("materializeLocalV2DagScanDetail reconciles canonical redirects, CMP traffi
     const network = hybrid.networkSummary as Record<string, unknown>;
     const consent = detail.runtimeArtifacts?.consentSummary as Record<string, unknown>;
     const choices = detail.runtimeArtifacts?.firstLayerConsentChoices as Record<string, unknown>;
+    const consentAssessment = detail.runtimeArtifacts?.consentControlAssessment as Record<string, unknown>;
+    const consentAssessmentScan = consentAssessment.scan as Record<string, unknown>;
 
     assert.equal(detail.accessPostureSummary?.finalEffectiveUrl, "https://www.cira.ca/en/cybersecurity/");
     assert.deepEqual(navigation.redirectChain, ["https://d-zone.ca/", "https://www.cira.ca/en/cybersecurity/"]);
@@ -3510,6 +4732,7 @@ test("materializeLocalV2DagScanDetail reconciles canonical redirects, CMP traffi
     assert.equal(choices.nonEssentialDefaultsOff, true);
     assert.deepEqual(choices.rejectLabels, ["Reject Non-Essential"]);
     assert.equal((choices.screenshotRefs as unknown[]).length, 1);
+    assert.equal(consentAssessmentScan.scanId, base.scan.id);
     assert.deepEqual(detail.policyEnrichment.map((row) => row.pageUrl), ["https://cira.ca/en/privacy-policy"]);
   } finally {
     if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
@@ -3972,16 +5195,16 @@ test("materializeLocalV2DagScanDetail prefers pre-consent geometry proof screens
     const firstLayerChoices = detail.runtimeArtifacts?.firstLayerConsentChoices as Record<string, unknown> | undefined;
     assert.equal(detail.runtimeArtifacts?.cmpFrameworkSignalObserved, true);
     assert.equal(detail.runtimeArtifacts?.cmp_vendor_name, "Consentmanager");
-    assert.equal(firstLayerChoices?.acceptControlObserved, true);
+    assert.equal(firstLayerChoices?.acceptControlObserved, false);
     assert.equal(firstLayerChoices?.rejectControlObserved, true);
-    assert.equal(firstLayerChoices?.managePreferencesControlObserved, true);
-    assert.deepEqual(firstLayerChoices?.preferenceLabels, ["Set up the collection of your data"]);
+    assert.equal(firstLayerChoices?.managePreferencesControlObserved, false);
+    assert.deepEqual(firstLayerChoices?.preferenceLabels, []);
     assert.equal(
       (firstLayerChoices?.controls as Array<Record<string, unknown>> | undefined)?.some((control) =>
         control.actionType === "accept_all" && control.label === "Accept All"
       ),
-      true,
-      "canonical structured accept evidence must survive a clipped geometry diagnostic",
+      false,
+      "rapid structured controls must not survive a completed geometry rejection",
     );
   } finally {
     if (previousAppUrl === undefined) {
@@ -4869,7 +6092,7 @@ test("materializeLocalV2DagScanDetail withholds missing controls and score when 
     }));
 
     assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, true);
-    assert.equal(detail.runtimeArtifacts?.consent_surface_observed, true);
+    assert.equal(detail.runtimeArtifacts?.consent_surface_observed, null);
     assert.equal(detail.runtimeArtifacts?.critical_coverage_complete, false);
     assert.equal(detail.snapshot?.certscore_overall, null);
     assert.equal(detail.snapshot?.score_confidence, "withheld_incomplete_critical_coverage");
@@ -4899,7 +6122,10 @@ test("materializeLocalV2DagScanDetail withholds missing controls and score when 
     assert.equal(rejectPathArtifact?.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
     assert.equal(rejectPath?.status, "Not testable");
     assert.equal(rejectPath?.evidenceState, "not_testable");
-    assert.match(rejectPath?.limitation ?? "", /inspection did not complete/i);
+    assert.match(
+      rejectPath?.limitation ?? "",
+      /reject or equivalent refusal control availability cannot be determined/i
+    );
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;
@@ -5661,12 +6887,12 @@ test("materializeLocalV2DagScanDetail withholds consent choice quality when fall
 
     assert.equal(detail.runtimeArtifacts?.scan_no_go_assessment, undefined);
     assert.equal(detail.snapshot?.homepage_fetch_status, "success");
-    assert.equal(detail.snapshot?.cookie_banner_present, true);
-    assert.equal(detail.runtimeArtifacts?.consent_surface_observed, true);
-    assert.equal(rejectPath?.firstLayerCookieConsentBannerObserved, true);
-    assert.equal(rejectPath?.gdprEprivacyConsentSurfaceObserved, "confirmed");
-    assert.equal(firstLayerChoices?.rejectControlObserved, true);
-    assert.deepEqual(firstLayerChoices?.rejectLabels, ["Reject Optional"]);
+    assert.equal(detail.snapshot?.cookie_banner_present, null);
+    assert.equal(detail.runtimeArtifacts?.consent_surface_observed, null);
+    assert.equal(rejectPath?.firstLayerCookieConsentBannerObserved, false);
+    assert.equal(rejectPath?.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
+    assert.equal(firstLayerChoices?.rejectControlObserved, false);
+    assert.deepEqual(firstLayerChoices?.rejectLabels, []);
     assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_partial");
     assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, false);
     assert.equal(detail.snapshot?.preconsent_tracking_detected, false);

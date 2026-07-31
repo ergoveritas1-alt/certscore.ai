@@ -3,7 +3,8 @@ import test from "node:test";
 import type { SignalEnrichmentWorkflowState } from "@website-signal-risk-scanner/shared";
 import {
   hasPendingBrowserExtensionNormalization,
-  hasPendingPostCompletionFindingWork
+  hasPendingPostCompletionFindingWork,
+  shouldBackfillReportFindingCount
 } from "./scan-auto-refresh";
 
 function makeWorkflow(overrides: Partial<SignalEnrichmentWorkflowState> = {}): SignalEnrichmentWorkflowState {
@@ -146,5 +147,40 @@ test("hasPendingBrowserExtensionNormalization follows WS01 observed-signal lifec
       status: "completed"
     }),
     false
+  );
+});
+
+test("report finding count backfill only runs when a persisted snapshot can be updated", () => {
+  assert.equal(
+    shouldBackfillReportFindingCount({
+      hasPersistedSnapshot: false,
+      reportFindingCount: null,
+      scanType: "full"
+    }),
+    false
+  );
+  assert.equal(
+    shouldBackfillReportFindingCount({
+      hasPersistedSnapshot: true,
+      reportFindingCount: null,
+      scanType: "full"
+    }),
+    true
+  );
+  assert.equal(
+    shouldBackfillReportFindingCount({
+      hasPersistedSnapshot: true,
+      reportFindingCount: 12,
+      scanType: "full"
+    }),
+    false
+  );
+  assert.equal(
+    shouldBackfillReportFindingCount({
+      hasPersistedSnapshot: true,
+      reportFindingCount: 12,
+      scanType: "browser_extension"
+    }),
+    true
   );
 });

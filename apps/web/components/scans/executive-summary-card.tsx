@@ -1213,23 +1213,6 @@ function isMeasuredCountLensFinding(finding: RegulatoryLensFinding) {
   );
 }
 
-function capContextOnlyLensTone(input: {
-  findings: RegulatoryLensFinding[];
-  score: number;
-  tone: ReturnType<typeof buildTone>;
-}) {
-  if (input.tone.label !== "Needs work") {
-    return { score: input.score, tone: input.tone };
-  }
-  if (input.findings.length === 0 || input.findings.some((finding) => !isContextOnlyLensFinding(finding))) {
-    return { score: input.score, tone: input.tone };
-  }
-  return {
-    score: Math.max(input.score, 50),
-    tone: buildWatchTone()
-  };
-}
-
 function buildMappedRegulatoryLensFindings(input: {
   context?: Record<string, unknown>;
   findingIds: Set<string>;
@@ -1324,10 +1307,6 @@ function buildTone(score: number) {
   return { label: "Needs work", toneClass: "border-rose-200 bg-rose-50 text-rose-800" };
 }
 
-function buildWatchTone() {
-  return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
-}
-
 function buildMinimalRegulatoryLens(input: {
   acronym: string;
   detailTitle: string;
@@ -1383,7 +1362,7 @@ function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotic
   );
 }
 
-function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: string | null; durationMs?: number | null }) {
+function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: string | null; durationMs?: number | null; coverageLimitation?: string | null }) {
   const durationLabel = typeof input.durationMs === "number" && Number.isFinite(input.durationMs)
     ? `${(input.durationMs / 1000).toFixed(1)}s observed`
     : "Duration unavailable";
@@ -1395,14 +1374,21 @@ function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: strin
     ["Consent inspection", input.proof.consentInspection.replaceAll("_", " ")],
     ["Runtime coverage", input.proof.runtimeCoverage.replaceAll("_", " ")],
     ["Network activity", `${input.proof.networkActivity.status === "observed" ? "Observed" : "Not verified"} · ${input.proof.networkActivity.count ?? "—"} third-party requests`]
-  ] as const;
+  ] as Array<readonly [string, string]>;
+  if (input.coverageLimitation) {
+    rows.push(["Coverage limitation", input.coverageLimitation]);
+  }
   return (
-    <details className="group/scan-proof rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-slate-700 marker:hidden [&::-webkit-details-marker]:hidden">
-        <span>How this page was observed</span>
-        <span className="text-slate-400 transition group-open/scan-proof:rotate-90"><CompactChevronRightIcon /></span>
+    <details className="group/scan-proof relative inline-block">
+      <summary
+        aria-label="Show observation details"
+        className="inline-flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-900 marker:hidden [&::-webkit-details-marker]:hidden"
+        title="Show observation details"
+      >
+        <ScanReportDisclosureIcon className="h-5 w-5 group-open/scan-proof:rotate-90" />
       </summary>
-      <dl className="mt-3 space-y-2 text-xs leading-5">
+      <div className="absolute right-0 top-full z-30 mt-2 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
+      <dl className="space-y-2 text-xs leading-5">
         {rows.map(([label, value]) => (
           <div key={label} className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-2">
             <dt className="text-slate-500">{label}</dt>
@@ -1410,6 +1396,7 @@ function ScanProofPanel(input: { proof: ExecutiveScanProof; requestedHost: strin
           </div>
         ))}
       </dl>
+      </div>
     </details>
   );
 }
@@ -1446,6 +1433,7 @@ export function buildRegulatoryLenses(
     } | null;
     agencyMappings?: AgencyMapping[];
     benchmarkIndustry?: string | null;
+    gdprEprivacyPostureScore?: number | null;
     regulatoryRisk?: RegulatoryRiskAssessment | null;
     unifiedContext?: UnifiedRegulatoryContext | null;
   }
@@ -1520,16 +1508,23 @@ export function buildRegulatoryLenses(
       : null
   ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
 
-  const gdprScore = clampScore(
-    84 -
-      (hasTrackingConcern ? 32 : 0) -
-      (findingIds.has("cookie_disclosure_gap") ? 10 : 0) -
-      (beforeConsentCookieCount > 0 ? 14 : 0) -
-      (hasConsentConcern ? (hasTrackingConcern || beforeConsentCookieCount > 0 ? 16 : 6) : 0) -
-      (sensitiveTrackingFinding ? 12 : 0) -
-      (findingIds.has("session_recording_services_detected") ? 10 : 0)
-  );
-  const gdprDisplay = capContextOnlyLensTone({ findings: privacyTrackingNotes, score: gdprScore, tone: buildTone(gdprScore) });
+  const canonicalPostureScore =
+    typeof options?.gdprEprivacyPostureScore === "number" &&
+    Number.isFinite(options.gdprEprivacyPostureScore)
+      ? clampScore(options.gdprEprivacyPostureScore)
+      : null;
+  const gdprDisplay = canonicalPostureScore === null
+    ? {
+        score: null,
+        tone: {
+          label: "Not scored",
+          toneClass: "border-slate-300 bg-slate-100 text-slate-700"
+        }
+      }
+    : {
+        score: canonicalPostureScore,
+        tone: buildTone(canonicalPostureScore)
+      };
 
   const lenses: RegulatoryLens[] = [
     {
@@ -1965,6 +1960,16 @@ function BenchmarkMetricCard(input: {
             deltaPositive: "text-amber-700",
             deltaNegative: "text-orange-700"
           }
+        : input.label === "Non-essential storage"
+          ? {
+              card: "bg-white",
+              rail: "bg-rose-100/90",
+              fill: "bg-rose-500/85",
+              marker: "bg-red-500 shadow-[0_0_0_3px_rgba(254,242,242,0.95)]",
+              value: "text-slate-950",
+              deltaPositive: "text-rose-700",
+              deltaNegative: "text-red-700"
+            }
         : {
             card: "bg-white",
             rail: "bg-emerald-100/90",
@@ -1983,7 +1988,7 @@ function BenchmarkMetricCard(input: {
       : null;
   const metricNote = input.label === "Non-essential storage"
     ? [
-        "Non-essential cookie/storage observations before a recorded consent action. Essential and unclassified storage are excluded from this metric.",
+        "Counts non-essential storage found before consent. Essential storage is excluded.",
         input.note
       ].filter(Boolean).join(" ")
     : input.label === "Pre-consent storage"
@@ -1994,17 +1999,11 @@ function BenchmarkMetricCard(input: {
       : input.note;
   const benchmarkTooltip = [benchmarkTooltipBase, metricNote].filter(Boolean).join(" ");
   const isStorageMetric = input.label === "Non-essential storage" || input.label === "Pre-consent storage";
-  const inlineMetricNote = actualValue === null
-    ? isStorageMetric
-      ? null
-      : input.note ?? "Not measured because the relevant evidence coverage was incomplete."
-    : actualValue === 0
-      ? "Scanned, none detected."
-      : null;
   const displayLabel =
     input.label === "Third-party requests"
       ? "3rd-party requests"
       : input.label;
+  const displayValue = actualValue === null && isScoreMetric ? "Not scored" : actualValue ?? "—";
   return (
     <div className={`relative overflow-visible rounded-[1.1rem] border border-slate-200 px-3.5 py-2 ${tone.card}`}>
       <div className="flex items-start justify-between gap-3">
@@ -2014,14 +2013,15 @@ function BenchmarkMetricCard(input: {
       </div>
       <div className="mt-2">
         <div className="flex items-end gap-1.5">
-          <span className={`text-[2.15rem] font-semibold leading-none tracking-tight ${tone.value}`}>{actualValue ?? "—"}</span>
-          {input.maxValue ? <span className="pb-0.5 text-[1.35rem] leading-none text-slate-500">/100</span> : null}
-          <span className="pb-1">
-            <span className="sr-only">{benchmarkValue !== null ? `Expected ${benchmarkValue}` : "Expected benchmark unavailable"}</span>
-            {benchmarkTooltip ? <InfoTip align="start" placement="bottom" text={benchmarkTooltip} /> : null}
-          </span>
+          <span className={`text-[2.15rem] font-semibold leading-none tracking-tight ${actualValue === null && isScoreMetric ? "text-slate-500 text-[1.35rem]" : tone.value}`}>{displayValue}</span>
+          {input.maxValue && actualValue !== null ? <span className="pb-0.5 text-[1.35rem] leading-none text-slate-500">/100</span> : null}
+          {benchmarkTooltip ? (
+            <span className="pb-1">
+              {benchmarkValue !== null ? <span className="sr-only">Expected {benchmarkValue}</span> : null}
+              <InfoTip align="start" placement="bottom" text={benchmarkTooltip} />
+            </span>
+          ) : null}
         </div>
-        {inlineMetricNote ? <p className="mt-1.5 text-[10px] leading-4 text-slate-500">{inlineMetricNote}</p> : null}
       </div>
       <div className="mt-3 space-y-1">
         <div className={`relative h-2 rounded-full ${tone.rail}`}>
@@ -2168,14 +2168,6 @@ function CompactSnapshotPanel(input: { children: React.ReactNode; title: React.R
   );
 }
 
-function CompactChevronDownIcon() {
-  return (
-    <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
-      <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
 function CompactChevronRightIcon() {
   return (
     <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
@@ -2244,6 +2236,7 @@ function ExecutiveSignalSnapshotPane(input: {
   runtimeMetricsReliable?: boolean;
   scanProof?: ExecutiveScanProof | null;
   scanProofDurationMs?: number | null;
+  coverageLimitation?: string | null;
   requestedHost?: string | null;
 }) {
   const runtimeMetricsReliable = input.runtimeMetricsReliable !== false;
@@ -2255,22 +2248,31 @@ function ExecutiveSignalSnapshotPane(input: {
       ? `${input.beforeConsentCookieCount} ${input.beforeConsentCookieCount === 1 ? "cookie was" : "cookies were"} observed before consent; no third-party tracker vendor or domain was resolved for this scan.`
       : null;
   const consentSurfaceStatus = input.consentSurfaceStatus ?? "Not determined";
+  const cmpDetectedLabel = input.cmpVendorName
+    ? `${input.cmpDisplayName.replace(/\s+(?:banner|cmp)$/i, "")} CMP detected`
+    : null;
   const consentSurfaceLabel =
     consentSurfaceStatus === "Observed"
       ? (input.cmpVendorName ? input.cmpDisplayName : "Unknown CMP / consent banner")
       : consentSurfaceStatus === "Not observed"
-        ? (input.cmpVendorName ? `${input.cmpDisplayName} technology signal detected` : "No consent banner observed")
-        : "Consent banner not determined";
+        ? (cmpDetectedLabel ?? "No consent banner observed")
+        : input.cmpVendorName
+          ? cmpDetectedLabel
+          : "Consent banner not determined";
   const consentSurfaceNote =
-    consentSurfaceStatus === "Not determined" || consentSurfaceStatus === "Not testable"
-      ? "Consent inspection was incomplete or not representative; banner presence was not determined."
-      : null;
+    input.cmpVendorName && consentSurfaceStatus === "Not observed"
+      ? `${input.cmpDisplayName} technology was observed, but no visible consent banner was retained in this scan context.`
+      : input.cmpVendorName && (consentSurfaceStatus === "Not determined" || consentSurfaceStatus === "Not testable")
+        ? `${input.cmpDisplayName} CMP technology was observed, but visible banner presence could not be determined because consent inspection was incomplete or not representative.`
+        : consentSurfaceStatus === "Not determined" || consentSurfaceStatus === "Not testable"
+          ? "Consent inspection was incomplete or not representative; banner presence was not determined."
+          : null;
   return (
     <>
-      <div className="space-y-1">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
+        {input.scanProof ? <ScanProofPanel coverageLimitation={input.coverageLimitation} durationMs={input.scanProofDurationMs} proof={input.scanProof} requestedHost={input.requestedHost ?? null} /> : null}
       </div>
-      {input.scanProof ? <ScanProofPanel durationMs={input.scanProofDurationMs} proof={input.scanProof} requestedHost={input.requestedHost ?? null} /> : null}
       <CompactSnapshotPanel title="Consent platform">
         <div className="flex items-center gap-2">
           {runtimeMetricsReliable && input.cmpStatusAvailable ? (
@@ -2285,10 +2287,12 @@ function ExecutiveSignalSnapshotPane(input: {
             <CompactWarningBadgeIcon />
           )}
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-950">
-              {runtimeMetricsReliable ? consentSurfaceLabel : "Consent platform not testable"}
-            </p>
-            {consentSurfaceNote ? <p className="mt-1 text-xs leading-5 text-slate-500">{consentSurfaceNote}</p> : null}
+            <div className="flex items-center gap-1.5">
+              <p className="truncate text-sm font-semibold text-slate-950">
+                {runtimeMetricsReliable ? consentSurfaceLabel : "Consent platform not testable"}
+              </p>
+              {consentSurfaceNote ? <InfoTip align="start" placement="bottom" text={consentSurfaceNote} /> : null}
+            </div>
           </div>
         </div>
       </CompactSnapshotPanel>
@@ -2298,8 +2302,8 @@ function ExecutiveSignalSnapshotPane(input: {
             <span className="inline-flex min-w-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-semibold uppercase leading-4 tracking-[0.16em] text-slate-500">
               <span className="truncate">{trackerDetailLabel}</span>
             </span>
-            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition group-open/tracker-footprint:rotate-180">
-              <CompactChevronDownIcon />
+            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition group-open/tracker-footprint:rotate-90">
+              <CompactChevronRightIcon />
             </span>
           </summary>
           <div className="mt-3 max-h-[13.25rem] space-y-1.5 overflow-y-auto pr-1">
@@ -2409,11 +2413,21 @@ function formatTimelineSecondBadge(ms: number) {
   return `${seconds < 1 ? seconds.toFixed(2) : seconds.toFixed(1)}s`;
 }
 
+function getTimelineShortLabel(label: string) {
+  return label
+    .replace(/^(third[- ]party|pre[- ]consent)\s+/i, "")
+    .replace(/advertising vendor/i, "Ad vendor")
+    .replace(/performance monitoring/i, "Performance")
+    .replace(/cookies? and storage/i, "Cookies")
+    .replace(/requests?/i, "request")
+    .trim();
+}
+
 function buildPositionedTimelineEvents(input: { durationMs: number; events: ExecutiveTimelineEvent[] }) {
   const sorted = input.events
     .filter((event) => Number.isFinite(event.atMs) && event.atMs >= 0)
     .sort((left, right) => left.atMs - right.atMs)
-    .slice(0, 8);
+    .slice(0, 6);
   const firstEventTop = 17;
   const lastEventTop = 68;
   const minGap = sorted.length > 1
@@ -2441,11 +2455,12 @@ function ExecutiveTimelinePane(input: {
     durationMs: Math.max(1, durationMs),
     events
   });
+  const hiddenEventCount = Math.max(0, events.filter((event) => Number.isFinite(event.atMs) && event.atMs >= 0).length - positionedEvents.length);
 
   return (
     <div className="flex min-w-0 flex-col rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]" data-executive-timeline-pane>
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Scan Timeline</p>
-      <div className="relative mt-3 min-h-[17rem] flex-1 overflow-hidden rounded-[1.05rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)] px-3 py-3 shadow-inner shadow-slate-100/70">
+      <div className="relative mt-3 min-h-[17rem] flex-1 overflow-hidden rounded-[1.05rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(254,242,242,0.45)_0%,rgba(255,255,255,0.95)_58%,rgba(240,253,244,0.55)_86%,#f8fafc_100%)] px-3 py-3 shadow-inner shadow-slate-100/70">
         <div className="absolute bottom-5 left-[1.15rem] top-5 w-px bg-gradient-to-b from-slate-200 via-slate-300 to-slate-200" aria-hidden="true" />
         <div className="absolute left-2 right-3 top-3 flex items-center gap-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-300 bg-white shadow-sm" aria-hidden="true" />
@@ -2469,10 +2484,11 @@ function ExecutiveTimelinePane(input: {
               ) : (
                 <TimelineCategoryIcon label={event.label} />
               )}
-              <span className="min-w-0 truncate">{event.label}</span>
+              <span className="min-w-0 truncate">{getTimelineShortLabel(event.label)}</span>
             </span>
           </div>
         ))}
+        {hiddenEventCount > 0 ? <span className="absolute bottom-10 right-3 rounded-full border border-slate-200 bg-white/90 px-2 py-0.5 text-[9px] font-semibold text-slate-500">+{hiddenEventCount} more</span> : null}
         <div className="absolute bottom-3 left-2 right-3 flex items-center gap-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-700 bg-white shadow-sm" aria-hidden="true" />
           <span className="min-w-0 flex-1 rounded-lg border-2 border-[#0f8bd7] bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-950 shadow-sm">
@@ -4208,6 +4224,7 @@ export function ExecutiveSummaryCard(input: {
   } | null;
   agencyMappings?: AgencyMapping[];
   beforeConsentCookieCount: number;
+  beforeConsentStorageLimitation?: string | null;
   beforeConsentStorageMetricAvailable?: boolean;
   beforeConsentStorageScope?: "all_observed" | "nonessential_only";
   unclassifiedPreConsentStorageCount?: number;
@@ -4235,7 +4252,7 @@ export function ExecutiveSummaryCard(input: {
   regulatoryRisk?: RegulatoryRiskAssessment | null;
   resolvedVendorNames: string[];
   score: number | null;
-  scoreLabel?: "GDPR/ePrivacy evidence score" | "GDPR/ePrivacy posture score";
+  scoreLabel?: "Overall score" | "GDPR/ePrivacy evidence score" | "GDPR/ePrivacy posture score";
   scanDurationMs?: number | null;
   scanOutcome?: string | null;
   scanTimelineEvents?: ExecutiveTimelineEvent[] | null;
@@ -4293,9 +4310,13 @@ export function ExecutiveSummaryCard(input: {
     findings: regulatoryFindingInput
   });
   const unclassifiedStorageInfoNote = (input.unclassifiedPreConsentStorageCount ?? 0) > 0
-    ? `${input.unclassifiedPreConsentStorageCount} additional pre-consent storage record${input.unclassifiedPreConsentStorageCount === 1 ? " remains" : "s remain"} unclassified. These records are retained in the Pre-consent Cookies & Trackers table under their Unknown classification and may be grouped by vendor, purpose, and domain.`
+    ? `${input.unclassifiedPreConsentStorageCount} unclassified record${input.unclassifiedPreConsentStorageCount === 1 ? " was" : "s were"} found but not counted; ${input.unclassifiedPreConsentStorageCount === 1 ? "it appears" : "they appear"} as "Unknown" in the Pre-consent Cookies & Trackers table.`
     : null;
-  const storageMetricInfoNote = [cookieCountMismatchNote, unclassifiedStorageInfoNote]
+  const storageMetricInfoNote = [
+    input.beforeConsentStorageLimitation,
+    cookieCountMismatchNote,
+    unclassifiedStorageInfoNote
+  ]
     .filter((note): note is string => Boolean(note))
     .join(" ") || null;
   const executiveHeadlineFindings = displayedTopFindings.slice(0, 3).map((finding) => {
@@ -4319,6 +4340,7 @@ export function ExecutiveSummaryCard(input: {
   const recognizedCmpBrand = getRecognizedCmpBrand(input.cmpVendorName);
   const cmpDisplayName =
     recognizedCmpBrand?.label ??
+    input.cmpVendorName ??
     (input.cookieBannerPresent ? "Unknown CMP / consent banner" : "Consent banner not determined");
   const cmpStatusAvailable = Boolean(input.cookieBannerPresent || input.cmpVendorName);
   const fingerprintEvidence = input.fingerprintReasons.filter(Boolean);
@@ -4422,6 +4444,7 @@ export function ExecutiveSummaryCard(input: {
   const executiveHeadline = input.accessLimitationNotice
     ? input.accessLimitationNotice.message
     : formatTopFindingHeadline(executiveHeadlineFindings);
+  const coverageLimitation = input.accessLimitationNotice?.message ?? null;
   const narrativePresentation = deriveExecutiveNarrativePresentation({
     accessLimitationNotice: input.accessLimitationNotice,
     executiveHeadline,
@@ -4535,11 +4558,13 @@ export function ExecutiveSummaryCard(input: {
                 <div className="space-y-2">
                   <div className="grid gap-2 sm:grid-cols-3">
                     <BenchmarkMetricCard
-                      label={input.scoreLabel ?? "GDPR/ePrivacy evidence score"}
+                      label={input.scoreLabel ?? "Overall score"}
                       actualValue={input.score}
                       benchmarkValue={null}
                       maxValue={100}
-                      note="Weighted from evidence-gated GDPR/ePrivacy checklist rows. Scan coverage and evidence limitations affect how this score should be interpreted."
+                      note={input.score === null
+                        ? "Insufficient evidence to calculate a GDPR/ePrivacy posture score for this scan."
+                        : "Higher scores indicate stronger observed GDPR/ePrivacy posture. Lower scores indicate more issues requiring attention."}
                     />
                     <BenchmarkMetricCard
                       label="Third-party requests"
@@ -4647,7 +4672,7 @@ export function ExecutiveSummaryCard(input: {
           </div>
         </div>
 
-        <div className="grid min-w-0 items-stretch gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(11rem,0.85fr)] min-[1000px]:w-[31rem] min-[1000px]:grid-cols-[17.5rem_12.75rem]">
+        <div className="grid min-w-0 items-stretch gap-3 sm:grid-cols-[minmax(0,0.9fr)_minmax(11rem,0.95fr)] min-[1000px]:w-[31rem] min-[1000px]:grid-cols-[15.75rem_14.5rem]">
           <div
             className="min-w-0 space-y-3 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]"
             data-executive-snapshot-pane
@@ -4682,6 +4707,7 @@ export function ExecutiveSummaryCard(input: {
                 runtimeMetricsReliable={runtimeMetricsReliable}
                 scanProof={input.scanProof}
                 scanProofDurationMs={input.scanProofDurationMs}
+                coverageLimitation={coverageLimitation}
                 requestedHost={input.requestedHost}
               />
             )}

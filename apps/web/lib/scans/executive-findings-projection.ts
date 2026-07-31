@@ -4770,7 +4770,7 @@ function buildExecutiveShortSummary(
       ? `, with representative vendors including ${formatVendorList(vendors)}`
       : "";
     return `${trimTrailingSentencePunctuation(
-      `Observed runtime behavior showed third-party tracking before any recorded consent choice.${timingText}${vendorText}`
+      `Observed runtime behavior showed classified non-essential activity before any recorded affirmative consent choice.${timingText}${vendorText}`
     )}.`;
   }
 

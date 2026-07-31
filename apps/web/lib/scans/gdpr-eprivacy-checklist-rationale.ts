@@ -65,6 +65,29 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
   }
 
   if (item.id === "pre_consent_cookies_storage") {
+    const assessmentStatus = typeof evidence.preConsentStorageAssessmentStatus === "string"
+      ? evidence.preConsentStorageAssessmentStatus
+      : null;
+    const assessment = getRecord(evidence.preConsentStorageAssessment);
+    if (assessmentStatus === "partially_classified") {
+      return "Pre-consent storage was observed, but one or more records could not be classified as essential or non-essential or reconciled to the aggregate count.";
+    }
+    if (assessmentStatus === "snapshot_presence_only") {
+      return "Non-essential storage candidates were present in a pre-consent snapshot, but retained evidence did not confirm that they were written during the scan.";
+    }
+    if (assessmentStatus === "insufficient_evidence") {
+      return "Pre-consent storage capture or attribution was insufficient to determine whether non-essential storage was present.";
+    }
+    if (assessmentStatus === "classified_nonessential_observed") {
+      const count = getFirstNumberFromRecord(assessment, ["classifiedNonEssentialCount"]);
+      const provenWriteCount = getFirstNumberFromRecord(assessment, ["provenWriteCount"]) ?? 0;
+      const countPhrase = count === null
+        ? "Classified non-essential storage"
+        : `${count} classified non-essential storage record${count === 1 ? "" : "s"}`;
+      return provenWriteCount > 0
+        ? `${countPhrase} ${count === 1 ? "was" : "were"} retained before a recorded consent action; ${provenWriteCount} had write-level timing evidence.`
+        : `${countPhrase} ${count === 1 ? "was" : "were"} retained in pre-consent snapshot evidence; write-level timing was not retained.`;
+    }
     const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
       fallbackFirstSeenMs: firstSeenMs,
       item,
@@ -186,8 +209,25 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
 
   if (item.id === "session_replay_fingerprinting_review") {
     const replayEvidence = getRecord(evidence.sessionReplayEvidence);
-    const replayVendors = formatList(getStringArray(replayEvidence?.vendors).slice(0, 4));
-    const replayFirstSeenMs = getFirstNumberFromRecord(replayEvidence, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]);
+    const replayVendors = formatList(uniqueStrings([
+      ...getStringArray(replayEvidence?.vendors),
+      ...getStringArrayFromEvidenceKeys(evidence, [
+        "sessionReplayVendors",
+        "session_replay_vendors",
+        "observedRuntimeVendors",
+        "observed_runtime_vendors"
+      ]),
+      ...getEvidenceVendorNames(item)
+    ]).slice(0, 4));
+    const replayFirstSeenMs =
+      getFirstNumberFromRecord(replayEvidence, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]) ??
+      getFirstNumberFromRows([
+        replayEvidence?.requestPurposeClassification,
+        replayEvidence?.request_purpose_classification,
+        evidence.requestPurposeClassification,
+        evidence.request_purpose_classification
+      ]) ??
+      firstSeenMs;
     if (evidenceLabel === "Not observed") {
       return "No eligible session replay or behavioral-recording vendor was observed in retained runtime evidence.";
     }
@@ -299,7 +339,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
         : "A refusal path was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
     }
     if (evidenceLabel === "Potential gap") {
-      return "A first-layer reject-all or equivalent refusal path was expected from the observed consent surface but was not retained.";
+      return "The sufficiently retained first-layer consent surface did not show a reject, necessary-only, or equivalent refusal option. First-layer presentation expectations can vary by jurisdiction, so manual review is recommended.";
     }
   }
 
@@ -314,7 +354,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
         : "An accept consent control was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
     }
     if (evidenceLabel === "Potential gap") {
-      return "A first-layer accept consent control was expected from the observed consent surface but was not retained as structured control evidence.";
+      return "The retained first-layer consent surface did not confirm an explicit affirmative-choice control.";
     }
   }
 
@@ -329,7 +369,10 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
         : "An options/settings/preferences control was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
     }
     if (evidenceLabel === "Potential gap") {
-      return "A first-layer options/settings/preferences control was expected from the observed consent surface but was not retained as structured control evidence.";
+      return "The sufficiently retained first-layer consent surface did not show an options, settings, preferences, or manage-choices control.";
+    }
+    if (item.status === "Review signal" && evidence.balancedAcceptDeclineWithoutFirstLayerSettings === true) {
+      return "Accept and Decline controls were observed on the first-layer consent surface. A separate preferences or granular-settings control was not retained on that layer. This is not necessarily a compliance gap where refusal is as easy as acceptance. Verify whether users can later review, vary, or withdraw consent by purpose.";
     }
   }
 

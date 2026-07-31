@@ -56,9 +56,9 @@ test("RegulatoryChecklistSection can render baseline privacy options for non-adm
   assert.match(html, /Regulatory Diagnostics/);
   assert.match(html, /Privacy-law applicability context/);
   assert.match(html, /Applicability can depend on business facts or visitor geography CertScore has not verified/);
-  assert.match(html, /aria-label="Expand all evidence packets and correction steps"/);
+  assert.match(html, /aria-label="Collapse Regulatory Diagnostics"/);
   assert.doesNotMatch(html, /CCPA\/CPRA/);
-  assert.ok(html.indexOf("Expand all evidence packets and correction steps") < indexOfTabLabel(html, "GDPR/ePrivacy"));
+  assert.ok(html.indexOf("Collapse Regulatory Diagnostics") < indexOfTabLabel(html, "GDPR/ePrivacy"));
   assert.doesNotMatch(html, /Regulatory Review/);
   assert.match(html, /Alpha/);
   assert.doesNotMatch(html, /FTC/);
@@ -73,9 +73,9 @@ test("RegulatoryChecklistSection can render all checklist options for admin view
   assert.match(html, /Regulatory Diagnostics/);
   assert.match(html, /Privacy-law applicability context/);
   assert.match(html, /Applicability can depend on business facts or visitor geography CertScore has not verified/);
-  assert.match(html, /aria-label="Expand all evidence packets and correction steps"/);
+  assert.match(html, /aria-label="Collapse Regulatory Diagnostics"/);
   assert.doesNotMatch(html, /CCPA\/CPRA/);
-  assert.ok(html.indexOf("Expand all evidence packets and correction steps") < indexOfTabLabel(html, "GDPR/ePrivacy"));
+  assert.ok(html.indexOf("Collapse Regulatory Diagnostics") < indexOfTabLabel(html, "GDPR/ePrivacy"));
   assert.doesNotMatch(html, /Regulatory Review/);
   assert.match(html, /FTC/);
   assert.match(html, /UK GDPR \/ PECR/);
@@ -123,7 +123,7 @@ test("RegulatoryChecklistSection omits tab controls for single-tab report sectio
 
   assert.match(html, /GDPR \/ ePrivacy Evidence Review/);
   assert.match(html, /GDPR checklist/);
-  assert.match(html, /aria-label="Expand all evidence packets and correction steps"/);
+  assert.match(html, /aria-label="Collapse GDPR \/ ePrivacy Evidence Review"/);
   assert.doesNotMatch(html, />GDPR\/ePrivacy</);
 });
 

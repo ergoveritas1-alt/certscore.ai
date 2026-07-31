@@ -186,13 +186,20 @@ export type OrganizationDomainCompletedScanRow = {
 export type OrganizationScanSnapshotRow = {
   access_posture_class: AccessPostureClass | null;
   accessibility_score: number | null;
+  admin_industry_label?: string | null;
   auth_wall_detected: boolean | null;
   blocked_flag: boolean | null;
   captcha_flag: boolean | null;
   certscore_overall: number | null;
   cmp_vendor_name: string | null;
+  consent_control_assessment?: Record<string, unknown> | null;
+  consent_accept_observed?: boolean | null;
+  consent_evidence_status?: string | null;
+  consent_options_observed?: boolean | null;
+  consent_reject_observed?: boolean | null;
   consent_score: number | null;
   cookie_banner_present: boolean | null;
+  duration_ms?: number | null;
   highest_successful_tier: ScanExecutionTier | null;
   homepage_fetch_http_status: number | null;
   homepage_fetch_status: string | null;
@@ -203,6 +210,9 @@ export type OrganizationScanSnapshotRow = {
   recoverable_finding_classes: RecoverableFindingClass[] | null;
   regulatory_exposure_score: number | null;
   report_finding_count: number | null;
+  report_projection_computed_at?: string | null;
+  report_projection_status?: string | null;
+  report_projection_version?: string | null;
   robots_allowed: boolean | null;
   robots_fetch_http_status: number | null;
   robots_fetch_status: string | null;
@@ -216,6 +226,16 @@ export type OrganizationScanSnapshotRow = {
   stop_tier: ScanExecutionTier | null;
   total_signals: number;
   top_finding_count?: number | null;
+  score_coverage_confidence?: string | null;
+  score_coverage_ratio?: number | null;
+  score_scored_at?: string | null;
+  score_source?: string | null;
+  score_version?: string | null;
+  tranco_list_id?: string | null;
+  tranco_rank?: number | null;
+  tranco_snapshot_date?: string | null;
+  egress_id?: string | null;
+  egress_type?: string | null;
   verified_public_surfaces_count?: number | null;
   visual_access_review?: Record<string, unknown> | null;
 };
@@ -1236,6 +1256,7 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
   documentSources: Array<Record<string, unknown>>;
   events: ScanEventQueryRow[];
   macroEnrichment: Record<string, unknown> | null;
+  modelPolicyReviewArtifact: Record<string, unknown> | null;
   pageEvidence: Array<Record<string, unknown>>;
   policyEnrichment: Array<Record<string, unknown>>;
   policyReviewQueue: Array<Record<string, unknown>>;
@@ -1259,6 +1280,7 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
     policyEnrichment,
     policyReviewQueue,
     documentSources,
+    modelPolicyReviewResult,
     macroEnrichmentResult,
     pageEvidenceResult,
     signalHitsResult,
@@ -1338,6 +1360,22 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
       [scanId],
       { readOnly: true }
     ).then((result) => result.rows),
+    queryOne<Record<string, unknown>>(
+      `select review_json
+         from scan_model_review_artifacts
+        where scan_id = $1
+          and review_kind = 'policy_semantic'
+          and review_mode = 'enforced'
+          and review_status = 'completed'
+        order by updated_at desc
+        limit 1`,
+      [scanId],
+      { readOnly: true }
+    ).then((row) => ({ data: row, error: null as QueryErrorLike }))
+      .catch((error) => ({
+        data: null,
+        error: { message: getErrorMessage(error) } as QueryErrorLike
+      })),
     queryOne<Record<string, unknown>>(`select * from scan_macro_enrichments where scan_id = $1`, [scanId], { readOnly: true }).then(
       (row) => ({ data: row, error: null as QueryErrorLike })
     ).catch((error) => ({ data: null, error: { message: getErrorMessage(error) } as QueryErrorLike })),
@@ -1371,6 +1409,11 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
   if (macroEnrichmentResult.error && !isMissingOptionalTableError(macroEnrichmentResult.error)) {
     throw new Error(`Failed to load scan macro enrichment: ${macroEnrichmentResult.error.message}`);
   }
+  if (modelPolicyReviewResult.error && !isMissingOptionalTableError(modelPolicyReviewResult.error)) {
+    throw new Error(
+      `Failed to load scan policy model review: ${modelPolicyReviewResult.error.message}`
+    );
+  }
   if (pageEvidenceResult.error && !isMissingOptionalTableError(pageEvidenceResult.error)) {
     throw new Error(`Failed to load scan page evidence: ${pageEvidenceResult.error.message}`);
   }
@@ -1384,6 +1427,12 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
     documentSources,
     events,
     macroEnrichment: macroEnrichmentResult.data ?? null,
+    modelPolicyReviewArtifact:
+      modelPolicyReviewResult.data?.review_json &&
+      typeof modelPolicyReviewResult.data.review_json === "object" &&
+      !Array.isArray(modelPolicyReviewResult.data.review_json)
+        ? modelPolicyReviewResult.data.review_json as Record<string, unknown>
+        : null,
     pageEvidence: pageEvidenceResult.data,
     policyEnrichment,
     policyReviewQueue,
@@ -1671,7 +1720,11 @@ export async function loadOrganizationScanPageData(
   }))];
   const summaryScanIds = Array.from(
     scanRows.reduce((ids, scan) => {
-      const key = scan.domain_id ?? `scan:${scan.id}`;
+      // Use the same display-domain identity that the overview uses when it
+      // groups scans. Request-backed scans can have a raw domain_id that is
+      // different from the workspace/display domain, which otherwise leaves
+      // the latest overview row without its snapshot values.
+      const key = scan.display_domain_id ?? scan.domain_id ?? `scan:${scan.id}`;
       if (!ids.has(key)) {
         ids.set(key, scan.id);
       }
@@ -1924,6 +1977,36 @@ export async function loadOrganizationScanPageData(
     validationRuns,
     verdictByFindingId
   };
+}
+
+export async function getLatestOrganizationScanId(organizationId: string) {
+  const row = await queryOne<{ id: string }>(
+    `
+      with candidate_scan_ids as (
+        select s.id
+        from scans s
+        where s.organization_id = $1
+        union
+        select coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+        from scan_requests sr
+        where sr.organization_id = $1
+          and coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is not null
+        union
+        select d.latest_scan_id
+        from domains d
+        where d.organization_id = $1
+          and d.latest_scan_id is not null
+      )
+      select s.id
+      from candidate_scan_ids c
+      join scans s on s.id = c.id
+      order by s.created_at desc
+      limit 1
+    `,
+    [organizationId],
+    { readOnly: true }
+  );
+  return row?.id ?? null;
 }
 
 export { isMissingComplianceChangeEventsTable };

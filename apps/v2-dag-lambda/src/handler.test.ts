@@ -17,6 +17,7 @@ import {
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   artifactPointersFromS3Keys,
   buildLocalV2DagLambdaRuntimeDiagnostics,
+  buildScannerRuntimeProvenance,
   buildLocalV2DagLambdaScanTuning,
   handler,
   mergeLocalV2DagLambdaShardBundles,
@@ -40,6 +41,7 @@ function validPayload(overrides: Record<string, unknown> = {}) {
     productionFindingIntegration: false,
     profile: "tiny",
     resultHandoff: "sqs",
+    resultPurpose: "synthetic_verification",
     resultQueueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results",
     scanId: "scan-local-1",
     scannerRuntime: "certscore-v2-dag-parallel-path",
@@ -58,6 +60,18 @@ test("handler validates local v2 DAG Lambda dispatch contract", () => {
   assert.equal(parsed.artifactOnly, true);
   assert.equal(parsed.productionFindingIntegration, false);
   assert.equal(parsed.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
+  assert.equal(parsed.resultPurpose, "synthetic_verification");
+});
+
+test("handler preserves the typed persisted-scan result purpose for UUID-backed product scans", () => {
+  const parsed = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    callbackCorrelationId: "49037835-190b-4e67-9fe2-426d51d55069",
+    resultPurpose: "persisted_scan",
+    scanId: "49037835-190b-4e67-9fe2-426d51d55069",
+  }));
+
+  assert.equal(parsed.resultPurpose, "persisted_scan");
+  assert.equal(parsed.scanId, "49037835-190b-4e67-9fe2-426d51d55069");
 });
 
 test("handler bounds and validates policy surface seeds", () => {
@@ -252,7 +266,7 @@ test("handler bundle imports without browser-only PDF globals", async () => {
   assert.equal(typeof bundledHandler.handler, "function");
 });
 
-test("handler rejects wrong contract, processor, unsupported region, VPC, or production-integration flags", () => {
+test("handler rejects wrong contract, processor, unsupported region, network mode, or production-integration flags", () => {
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ contractVersion: "wrong" })),
     /contract version/
@@ -267,12 +281,36 @@ test("handler rejects wrong contract, processor, unsupported region, VPC, or pro
   );
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ vpcMode: "private" })),
-    /outside a VPC/
+    /supported network mode/
   );
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ productionFindingIntegration: true })),
     /artifact-only/
   );
+});
+
+test("handler accepts truthful VPC dispatch and emits bounded scanner runtime provenance", () => {
+  assert.equal(parseLocalV2DagLambdaDispatchPayload(validPayload({ vpcMode: "vpc" })).vpcMode, "vpc");
+  assert.deepEqual(buildScannerRuntimeProvenance(
+    { awsRegion: "eu-west-1", vpcMode: "vpc" },
+    {
+      AWS_LAMBDA_FUNCTION_VERSION: "$LATEST",
+      CERTSCORE_V2_DAG_LAMBDA_EGRESS_ID: "aws-nat:eu-west-1:eipalloc-123",
+      CERTSCORE_V2_DAG_LAMBDA_EGRESS_PROVIDER: "aws-nat-gateway",
+      CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH: `sha256:${"b".repeat(64)}`,
+      CERTSCORE_V2_DAG_LAMBDA_VPC_MODE: "vpc",
+      SCANNER_IMAGE_DIGEST: `sha256:${"a".repeat(64)}`,
+    },
+  ), {
+    awsRegion: "eu-west-1",
+    dispatchVpcMode: "vpc",
+    egressId: "aws-nat:eu-west-1:eipalloc-123",
+    egressProvider: "aws-nat-gateway",
+    functionVersion: "$LATEST",
+    imageDigest: `sha256:${"a".repeat(64)}`,
+    publicIpHash: `sha256:${"b".repeat(64)}`,
+    runtimeVpcMode: "vpc",
+  });
 });
 
 test("handler emits a validated completed SQS result without production findings", async () => {
@@ -327,6 +365,11 @@ test("handler emits a validated completed SQS result without production findings
   assert.equal(result.scannerGitSha, "abc123scanner");
   assert.equal(result.scannerImageTag, "scanner-image:abc123scanner");
   assert.equal(result.scannerRuntimeVersion, "v2-dag-runtime.1");
+  assert.deepEqual(result.scannerRuntimeProvenance, {
+    awsRegion: "eu-central-1",
+    dispatchVpcMode: "none",
+    runtimeVpcMode: "unknown"
+  });
   assert.equal(Object.hasOwn(result, "findings"), false);
   assert.equal(Object.hasOwn(result, "checklistRows"), false);
   assert.equal(Object.hasOwn(result, "score"), false);
@@ -574,6 +617,7 @@ test("terminal SQS publication is bounded and aborts the SDK call", async () => 
         contractVersion: "certscore.v2.lambda-dag-result.v1",
         processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
         productionFindingIntegration: false,
+        resultPurpose: "synthetic_verification",
         scanId: "scan-local-1",
         status: "failed",
         targetEnvironment: "local"
@@ -605,6 +649,7 @@ test("terminal SQS publication retries a stalled send within its total deadline"
       contractVersion: "certscore.v2.lambda-dag-result.v1",
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
       productionFindingIntegration: false,
+      resultPurpose: "synthetic_verification",
       scanId: "scan-local-retry",
       status: "completed",
       targetEnvironment: "local"

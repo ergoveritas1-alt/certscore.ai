@@ -5,6 +5,7 @@ import React, { useEffect } from "react";
 type ScanStatusAutoRefreshProps = {
   pendingBrowserExtensionNormalization?: boolean;
   pendingPostCompletionWork?: boolean;
+  reloadOnTerminal?: boolean;
   scanId?: string;
   silent?: boolean;
   status: string;
@@ -61,6 +62,35 @@ export function getPolledReadiness(payload: unknown) {
     browserReady: record.browserExtensionNormalizationReady === true,
     reportReady: reportReadiness?.status === "ready",
   };
+}
+
+export function getNavigablePolledScanStatus(
+  payload: unknown,
+  input: { pendingBrowserExtensionNormalization?: boolean } = {},
+) {
+  const status = getPolledScanStatus(payload);
+  if (!status) return null;
+
+  const readiness = getPolledReadiness(payload);
+  if (
+    input.pendingBrowserExtensionNormalization === true &&
+    !readiness.browserReady &&
+    (status === "completed" || status === "completed_limited")
+  ) {
+    return "processing";
+  }
+
+  // A completed scanner run is not yet a viewable report. The lightweight
+  // status endpoint applies the bounded projection grace period and reports
+  // `ready` after either projection completion or that fallback has elapsed.
+  if (
+    (status === "completed" || status === "completed_limited") &&
+    !readiness.reportReady
+  ) {
+    return "processing";
+  }
+
+  return status;
 }
 
 export function scanStatusPollDelayMs(failureCount: number, randomValue = Math.random()) {
@@ -200,6 +230,7 @@ function recordTerminalDetection(scanId: string, state: ReturnType<ReturnType<ty
 export function ScanStatusAutoRefresh({
   pendingBrowserExtensionNormalization = false,
   pendingPostCompletionWork = false,
+  reloadOnTerminal = true,
   scanId,
   silent = false,
   status,
@@ -211,7 +242,10 @@ export function ScanStatusAutoRefresh({
   });
 
   useEffect(() => {
-    if (!shouldRefresh || !scanId || isTerminalScanStatus(status)) return;
+    const completedButFinalizing =
+      (status === "completed" || status === "completed_limited") &&
+      (pendingPostCompletionWork || pendingBrowserExtensionNormalization);
+    if (!shouldRefresh || !scanId || (isTerminalScanStatus(status) && !completedButFinalizing)) return;
 
     const existing = activeScanPollers.get(scanId);
     if (existing) {
@@ -233,15 +267,14 @@ export function ScanStatusAutoRefresh({
         });
         if (!response.ok) return null;
         const payload = await response.json() as unknown;
-        const nextStatus = getPolledScanStatus(payload);
-        const readiness = getPolledReadiness(payload);
-        if (pendingBrowserExtensionNormalization && !readiness.browserReady) return "processing";
-        if (pendingPostCompletionWork && !readiness.reportReady) return "processing";
-        return nextStatus;
+        return getNavigablePolledScanStatus(payload, {
+          pendingBrowserExtensionNormalization,
+        });
       },
       isOnline: () => navigator.onLine,
       isVisible: () => document.visibilityState === "visible",
       onTerminal: () => {
+        if (!reloadOnTerminal) return;
         if (terminalNavigations.has(scanId)) return;
         terminalNavigations.add(scanId);
         recordTerminalDetection(scanId, poller.getState());
@@ -259,7 +292,7 @@ export function ScanStatusAutoRefresh({
         poller.stop();
       }
     };
-  }, [pendingBrowserExtensionNormalization, pendingPostCompletionWork, scanId, shouldRefresh, status]);
+  }, [pendingBrowserExtensionNormalization, pendingPostCompletionWork, reloadOnTerminal, scanId, shouldRefresh, status]);
 
   if (!shouldRefresh || silent) return null;
   const statusLabel = pendingBrowserExtensionNormalization

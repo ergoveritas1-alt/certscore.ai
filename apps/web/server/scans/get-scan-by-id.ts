@@ -1,5 +1,6 @@
 "use server";
 
+import { policyModelReviewArtifactSchema } from "@certscore/contracts";
 import {
   type AccessPostureClass,
   type BlockPageClassification,
@@ -85,8 +86,43 @@ import {
   buildScanExecutionProvenance,
   type ScanExecutionProvenanceRecord
 } from "./scan-execution-provenance";
-import { selectConfiguredCustomerGdprEprivacyScore } from "./customer-score-cutover-server";
 import { loadLatestVersionedScoreAssessments } from "./score-assessment-repository";
+import { withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-projection";
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function mergePolicyDisclosureSummaries(
+  existing: Record<string, unknown> | null,
+  incoming: Record<string, unknown> | null
+) {
+  if (!existing) return incoming;
+  if (!incoming) return existing;
+
+  const merged: Record<string, unknown> = { ...incoming, ...existing };
+  for (const key of [
+    "article13DisclosureSignals",
+    "article13_disclosure_signals",
+    "gdprTransparencyTopics",
+    "gdpr_transparency_topics",
+    "gdprTransparencyTopicCandidates",
+    "gdpr_transparency_topic_candidates",
+  ]) {
+    const values = [existing[key], incoming[key]].flatMap((value) =>
+      Array.isArray(value) ? value : []
+    );
+    if (values.length > 0) {
+      const deduped = values.filter((value, index, all) =>
+        all.findIndex((candidate) => JSON.stringify(candidate) === JSON.stringify(value)) === index
+      );
+      merged[key] = deduped.slice(0, 200);
+    }
+  }
+  return merged;
+}
 
 function normalizeTrackerScriptHostForDisplay(value: unknown) {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -712,6 +748,7 @@ async function loadScanDetailRecord(input: {
     documentSources,
     events,
     macroEnrichment,
+    modelPolicyReviewArtifact,
     pageEvidence,
     policyEnrichment,
     policyReviewQueue,
@@ -1229,15 +1266,33 @@ async function loadScanDetailRecord(input: {
           const transportSecuritySummary =
             browserExtensionMaterialization.hybridRuntimeEvidencePatch.transportSecuritySummary;
           const mergedHybridRecord = mergedHybrid as Record<string, unknown>;
-          const policyDisclosureSummary =
-            mergedHybridRecord.policySurfaceSummary ?? mergedHybridRecord.policy_surface_summary;
+          const existingPolicySummary =
+            recordValue(snapshotBackedRuntimeArtifacts?.policyDisclosureSummary) ??
+            recordValue(snapshotBackedRuntimeArtifacts?.policy_disclosure_summary) ??
+            recordValue(snapshotBackedRuntimeArtifacts?.policySurfaceSummary) ??
+            recordValue(snapshotBackedRuntimeArtifacts?.policy_surface_summary);
+          const extensionPolicySummary =
+            recordValue(mergedHybridRecord.policySurfaceSummary) ??
+            recordValue(mergedHybridRecord.policy_surface_summary);
+          const policyDisclosureSummary = mergePolicyDisclosureSummaries(
+            existingPolicySummary,
+            extensionPolicySummary
+          );
 
           return {
             ...(snapshotBackedRuntimeArtifacts ?? {}),
             consent_baseline_tracker_evidence_urls: browserExtensionMaterialization.preconsentTrackerEvidenceUrls,
             consent_baseline_tracker_vendor_names: browserExtensionMaterialization.preconsentTrackerVendors,
             consent_preconsent_violation_count: browserExtensionMaterialization.preconsentViolationCount,
-            hybrid_runtime_evidence: mergedHybrid,
+            hybrid_runtime_evidence: {
+              ...mergedHybrid,
+              ...(policyDisclosureSummary
+                ? {
+                    policySurfaceSummary: policyDisclosureSummary,
+                    policy_surface_summary: policyDisclosureSummary,
+                  }
+                : {}),
+            },
             initial_cookie_count: browserExtensionMaterialization.cookieCountTotal,
             policy_disclosure_summary: policyDisclosureSummary,
             policyDisclosureSummary,
@@ -1251,19 +1306,40 @@ async function loadScanDetailRecord(input: {
   const normalizedRuntimeArtifacts = browserExtensionRuntimeArtifacts
     ? withHybridRuntimeArtifactFallbacks(browserExtensionRuntimeArtifacts) ?? browserExtensionRuntimeArtifacts
     : null;
+  const parsedModelPolicyReview =
+    policyModelReviewArtifactSchema.safeParse(modelPolicyReviewArtifact);
+  const productionModelPolicyReview =
+    parsedModelPolicyReview.success &&
+    parsedModelPolicyReview.data.mode === "enforced" &&
+    parsedModelPolicyReview.data.status === "completed" &&
+    parsedModelPolicyReview.data.productionEligible &&
+    parsedModelPolicyReview.data.provenance.usedForProductionProjection
+      ? parsedModelPolicyReview.data
+      : null;
+  const modelReviewBackedRuntimeArtifacts = productionModelPolicyReview
+    ? {
+        ...(normalizedRuntimeArtifacts ?? {}),
+        policy_model_review_artifact: productionModelPolicyReview,
+        policyModelReviewArtifact: productionModelPolicyReview
+      }
+    : normalizedRuntimeArtifacts;
   const runtimeVendorDisclosureEvidence = deriveRuntimeVendorDisclosureEvidenceFromRetainedSources({
     documentSources: normalizedDocumentSources,
-    runtimeArtifacts: normalizedRuntimeArtifacts,
+    runtimeArtifacts: modelReviewBackedRuntimeArtifacts,
     trackerVendors: normalizedTrackerVendors
   });
-  const reportRuntimeArtifacts =
-    normalizedRuntimeArtifacts && runtimeVendorDisclosureEvidence.length > 0
+  const vendorDisclosureRuntimeArtifacts =
+    modelReviewBackedRuntimeArtifacts && runtimeVendorDisclosureEvidence.length > 0
       ? {
-          ...normalizedRuntimeArtifacts,
+          ...modelReviewBackedRuntimeArtifacts,
           runtime_vendor_disclosure_evidence: runtimeVendorDisclosureEvidence,
           runtimeVendorDisclosureEvidence: runtimeVendorDisclosureEvidence
         }
-      : normalizedRuntimeArtifacts;
+      : modelReviewBackedRuntimeArtifacts;
+  const reportRuntimeArtifacts = withPersistedFirstLayerConsentEvidence(
+    vendorDisclosureRuntimeArtifacts,
+    normalizedSnapshot
+  );
   const hybridRuntimeSignalPopulations = getHybridNanoSignalPopulations(reportRuntimeArtifacts).map((signal) => ({
     ...signal,
     observedAt: signal.observedAt ?? scanObservedAt,
@@ -1391,23 +1467,13 @@ async function loadScanDetailRecord(input: {
         organizationId: scanOrganizationId,
         scanId: input.scanId
       });
-  const [legacyScoreAssessmentMap, candidateScoreAssessmentMap] = await Promise.all([
-    loadLatestVersionedScoreAssessments({
-      scanIds: [input.scanId],
-      scoreKind: "gdpr_eprivacy_evidence"
-    }),
-    loadLatestVersionedScoreAssessments({
-      scanIds: [input.scanId],
-      scoreKind: "gdpr_eprivacy_posture"
-    })
-  ]);
-  const customerGdprEprivacyScoreSelection = selectConfiguredCustomerGdprEprivacyScore({
-    candidateAssessment: candidateScoreAssessmentMap.get(input.scanId) ?? null,
-    legacyAssessment: legacyScoreAssessmentMap.get(input.scanId) ?? null
+  const legacyScoreAssessmentMap = await loadLatestVersionedScoreAssessments({
+    scanIds: [input.scanId],
+    scoreKind: "gdpr_eprivacy_evidence"
   });
 
   return {
-    customerGdprEprivacyScoreSelection,
+    legacyScoreAssessment: legacyScoreAssessmentMap.get(input.scanId) ?? null,
     accessPostureSummary: {
       accessPostureClass: accessPostureSummary.accessPostureClass,
       highestSuccessfulTier,

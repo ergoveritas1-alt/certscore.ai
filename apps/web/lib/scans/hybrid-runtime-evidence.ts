@@ -873,11 +873,6 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
     getNestedObject(runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
     getNestedObject(hybrid, ["consentTimeline", "consent_timeline"]);
   const requestClassifications = getRequestClassificationRows(runtimeArtifacts, hybrid);
-  const baselineFirstRequestMs = getNumber(
-    requestClassifications
-      .map((row) => getNumber((row as Record<string, unknown>).baselineFirstRequestMs))
-      .find((value): value is number => typeof value === "number" && Number.isFinite(value))
-  ) ?? getNumber(timelineMarkers?.firstThirdPartyRequestMs) ?? getNumber(timelineMarkers?.firstRequestMs);
   const state0RequestRows = getNestedObjectArray(hybrid, [
     "preconsentState0RequestObservations",
     "preconsent_state0_request_observations"
@@ -896,7 +891,7 @@ export function buildPreconsentEvidenceQualityFallback(runtimeArtifacts: Record<
   );
   const firstNonEssentialRequestMs =
     getNumber(retainedTimeline?.firstNonEssentialRequestMs ?? retainedTimeline?.first_non_essential_request_ms) ??
-    (Number.isFinite(firstObservedRequestMs) ? firstObservedRequestMs : baselineFirstRequestMs);
+    (Number.isFinite(firstObservedRequestMs) ? firstObservedRequestMs : null);
   const normalizedFirstNonEssentialRequestMs = Number.isFinite(firstNonEssentialRequestMs) ? firstNonEssentialRequestMs : null;
   const preconsentTrackingCookieRows = buildRuntimeCookieInventory({ hybridRuntimeEvidence: hybrid, runtimeArtifacts }).rows.filter(
     (row) =>

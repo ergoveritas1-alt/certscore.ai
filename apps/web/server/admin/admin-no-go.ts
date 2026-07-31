@@ -1,11 +1,16 @@
-import { isScanNoGoSnapshotOutcome } from "@website-signal-risk-scanner/shared";
+import {
+  isScanNoGoSnapshotOutcome,
+  resolveScanNoGoPresentation,
+  type ScanNoGoLimitationKind,
+} from "@website-signal-risk-scanner/shared";
 
 type JsonRecord = Record<string, unknown> | null | undefined;
 
 export type AdminNoGoProjection = {
   isNoGo: boolean;
+  limitationKind: ScanNoGoLimitationKind | null;
   reason: string | null;
-  source: "snapshot" | "response" | "runtime_assessment" | "visual_review" | "access_posture" | "blocked" | "captcha" | null;
+  source: "snapshot" | "response" | "runtime_assessment" | "visual_review" | "access_posture" | "blocked" | "captcha" | "scanner_evidence" | null;
 };
 
 export type AdminNoGoProjectionInput = {
@@ -16,9 +21,56 @@ export type AdminNoGoProjectionInput = {
   runtimeAssessment?: JsonRecord;
   snapshotRuntimeAssessment?: JsonRecord;
   snapshotOutcome?: string | null;
+  snapshotStopReasonCode?: string | null;
   visualAccessReview?: JsonRecord;
   snapshotVisualAccessReview?: JsonRecord;
+  scannerEvidenceMissing?: boolean | null;
 };
+
+/**
+ * Select the value shown in admin activity tables.
+ *
+ * A stop reason is more specific than a broad legacy outcome for a no-go
+ * scan. For normal scans, however, the canonical scan outcome remains the
+ * source of truth and a non-no-go stop reason must not replace it.
+ */
+export function selectAdminScanOutcome(input: {
+  scanOutcome?: string | null;
+  stopReasonCode?: string | null;
+  noGoFlag?: boolean;
+  status?: string | null;
+}) {
+  const scanOutcome = stringValue(input.scanOutcome);
+  const stopReasonCode = stringValue(input.stopReasonCode);
+  if (input.noGoFlag) {
+    return stopReasonCode ?? scanOutcome ?? "no_go";
+  }
+  if (scanOutcome) return scanOutcome;
+  if (input.status === "failed") return "failed";
+  return stopReasonCode;
+}
+
+export function selectAdminActivityStatus(input: {
+  requestStatus?: string | null;
+  scanStatus?: string | null;
+}) {
+  const requestStatus = stringValue(input.requestStatus) ?? "unknown";
+  const scanStatus = stringValue(input.scanStatus);
+  if (["failed", "expired", "rate_limited", "no_go"].includes(requestStatus)) {
+    return requestStatus;
+  }
+  // A terminal failed scan must not be hidden by a request row that was
+  // recorded as completed after the request was accepted.
+  if (scanStatus === "failed") return "failed";
+  if (
+    scanStatus &&
+    ["completed", "completed_limited"].includes(scanStatus) &&
+    ["queued", "running", "finalizing"].includes(requestStatus)
+  ) {
+    return scanStatus;
+  }
+  return requestStatus;
+}
 
 function record(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -37,20 +89,35 @@ function firstString(value: unknown) {
 }
 
 export function projectAdminNoGo(input: AdminNoGoProjectionInput): AdminNoGoProjection {
-  if (isScanNoGoSnapshotOutcome(input.snapshotOutcome)) {
-    return { isNoGo: true, reason: input.snapshotOutcome ?? "no_go", source: "snapshot" };
+  const persistedNoGoReason = isScanNoGoSnapshotOutcome(input.snapshotOutcome)
+    ? input.snapshotOutcome
+    : isScanNoGoSnapshotOutcome(input.snapshotStopReasonCode)
+      ? input.snapshotStopReasonCode
+      : null;
+  if (persistedNoGoReason) {
+    const presentation = resolveScanNoGoPresentation(persistedNoGoReason);
+    return {
+      isNoGo: true,
+      limitationKind: persistedNoGoReason === "no_go"
+        ? null
+        : presentation.limitationKind,
+      reason: persistedNoGoReason === "no_go" ? "No-go" : presentation.customerTitle,
+      source: "snapshot",
+    };
   }
   if (input.responseDisposition === "no_go") {
-    return { isNoGo: true, reason: "API result disposition", source: "response" };
+    return { isNoGo: true, limitationKind: null, reason: "API result disposition", source: "response" };
   }
 
   const assessments = [record(input.runtimeAssessment), record(input.snapshotRuntimeAssessment)];
   const assessment = assessments.find((candidate) => stringValue(candidate?.decision ?? candidate?.scan_no_go_decision) === "no_go");
   if (assessment) {
     const reasonCodes = assessment?.reasonCodes ?? assessment?.reason_codes;
+    const reason = firstString(reasonCodes);
     return {
       isNoGo: true,
-      reason: firstString(reasonCodes) ?? "Runtime no-go assessment",
+      limitationKind: reason ? resolveScanNoGoPresentation(reason).limitationKind : null,
+      reason: reason ?? "Runtime no-go assessment",
       source: "runtime_assessment"
     };
   }
@@ -64,20 +131,32 @@ export function projectAdminNoGo(input: AdminNoGoProjectionInput): AdminNoGoProj
   if (visualDecision === "NO_GO") {
     return {
       isNoGo: true,
+      limitationKind: resolveScanNoGoPresentation(
+        stringValue(visualReview?.reasonCode ?? visualReview?.reason_code),
+        stringValue(visualReview?.pageState ?? visualReview?.page_state),
+      ).limitationKind,
       reason: stringValue(visualReview?.reasonCode ?? visualReview?.reason_code) ?? "Visual access review",
       source: "visual_review"
     };
   }
   if (input.accessPostureClass === "early_loss") {
-    return { isNoGo: true, reason: "Early access loss", source: "access_posture" };
+    return { isNoGo: true, limitationKind: null, reason: "Early access loss", source: "access_posture" };
   }
   if (input.captchaFlag) {
-    return { isNoGo: true, reason: "CAPTCHA or challenge", source: "captcha" };
+    return { isNoGo: true, limitationKind: "scanner_access_limitation", reason: "CAPTCHA or challenge", source: "captcha" };
   }
   if (input.blockedFlag) {
-    return { isNoGo: true, reason: "Access blocked", source: "blocked" };
+    return { isNoGo: true, limitationKind: "scanner_access_limitation", reason: "Access blocked", source: "blocked" };
   }
-  return { isNoGo: false, reason: null, source: null };
+  if (input.scannerEvidenceMissing) {
+    return {
+      isNoGo: true,
+      limitationKind: "scanner_access_limitation",
+      reason: "No scanner evidence retained",
+      source: "scanner_evidence"
+    };
+  }
+  return { isNoGo: false, limitationKind: null, reason: null, source: null };
 }
 
 export function adminNoGoSql(input: {
@@ -88,7 +167,9 @@ export function adminNoGoSql(input: {
   runtimeArtifacts: string;
   snapshotRuntimeAssessment?: string;
   snapshotOutcome: string;
+  snapshotStopReasonCode?: string;
   snapshotVisualAccessReview?: string;
+  scannerEvidenceMissing?: string;
   outcomesParameter?: string;
 }) {
   const responseDisposition = input.responseSummary
@@ -96,6 +177,7 @@ export function adminNoGoSql(input: {
     : "";
   return `(
     ${input.snapshotOutcome} = any(${input.outcomesParameter ?? "$5"}::text[])
+    ${input.snapshotStopReasonCode ? `or ${input.snapshotStopReasonCode} = any(${input.outcomesParameter ?? "$5"}::text[])` : ""}
     ${responseDisposition}
     or coalesce(${input.runtimeArtifacts}.scan_no_go_assessment ->> 'decision', ${input.runtimeArtifacts}.scan_no_go_assessment ->> 'scan_no_go_decision') = 'no_go'
     ${input.snapshotRuntimeAssessment ? `or coalesce(${input.snapshotRuntimeAssessment} ->> 'decision', ${input.snapshotRuntimeAssessment} ->> 'scan_no_go_decision') = 'no_go'` : ""}
@@ -104,5 +186,6 @@ export function adminNoGoSql(input: {
     or ${input.accessPosture} = 'early_loss'
     or coalesce(${input.blockedFlag}, false)
     or coalesce(${input.captchaFlag}, false)
+    ${input.scannerEvidenceMissing ? `or ${input.scannerEvidenceMissing}` : ""}
   )`;
 }

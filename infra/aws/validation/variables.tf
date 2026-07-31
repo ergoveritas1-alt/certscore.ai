@@ -219,6 +219,42 @@ variable "validation_openai_model" {
   default     = "gpt-5.4-nano"
 }
 
+variable "certscore_extraction_model" {
+  description = "Model used for bounded extraction and routine triage."
+  type        = string
+  default     = "gpt-5.4-nano"
+}
+
+variable "certscore_review_model" {
+  description = "Model used for interpretation-heavy policy and finding review."
+  type        = string
+  default     = "gpt-5.4-mini"
+}
+
+variable "certscore_escalation_model" {
+  description = "Optional model used only for bounded high-impact conflicting cases."
+  type        = string
+  default     = ""
+}
+
+variable "certscore_mini_review_enabled" {
+  description = "Whether approved precision-first Mini policy review is enabled."
+  type        = string
+  default     = "1"
+}
+
+variable "certscore_escalation_enabled" {
+  description = "Whether selective strong-model escalation is enabled. Disabled by default."
+  type        = string
+  default     = "0"
+}
+
+variable "certscore_model_review_mode" {
+  description = "Model review mode. Enforced permits only invariant-verified production projections."
+  type        = string
+  default     = "enforced"
+}
+
 variable "worker_concurrency" {
   description = "Validation worker rank-stage concurrency."
   type        = string

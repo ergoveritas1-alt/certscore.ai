@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildBrowserExtensionRequestInventoryRows,
+  buildReportSurfaceVendorProjection,
   buildRuntimeInventoryGroupRows,
   buildTrackerInventoryGroupRows,
   suppressUnsupportedCmpAliasRows,
   buildTrackerInventoryRows,
+  classifyInventoryEvidence,
   deriveInventoryMacroCategory,
   getInventoryGroupRowRenderKey,
   getTrackerConsentReviewPriority,
@@ -43,7 +45,7 @@ test("projects bounded BX01 request inventory without treating unresolved hosts 
     ]
   });
   const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
-  const oneTrust = groupedRows.find((row) => row.type === "tracker" && row.vendor === "OneTrust CMP");
+  const oneTrust = groupedRows.find((row) => row.canonicalEntity === "OneTrust, LLC");
   const priceSpider = groupedRows.find((row) => row.type === "tracker" && row.vendor === "cdn.pricespider.com");
 
   assert.equal(oneTrust?.purpose, "Cookie compliance");
@@ -99,10 +101,113 @@ test("derives Fable macro categories without replacing detailed purposes", () =>
   assert.equal(deriveInventoryMacroCategory({ purpose: "Tag management", priority: "medium", vendor: "Google Tag Manager" }), "Functional");
   assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "jQuery CDN" }), "Essential");
   assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "Instagram CDN" }), "Functional");
-  assert.equal(deriveInventoryMacroCategory({ purpose: "Unknown", priority: "review_needed", vendor: "unresolved.example" }), "Unknown");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "Embedded media", priority: "medium", vendor: "Example Player" }), "Functional");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "Unknown", priority: "medium", vendor: "unresolved.example" }), "Review");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "Unknown", priority: "review_needed", vendor: "unresolved.example" }), "Review");
 });
 
-test("classifies audience measurement as analytics unless advertising evidence is retained", () => {
+test("projects canonical embedded players without reclassifying them as analytics", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: ["player.vimeo.com"],
+    firstPartyDomain: "example.com",
+    preConsentVendors: ["Vimeo"],
+    resolvedVendors: ["Vimeo"],
+    sessionReplayVendors: [],
+    trackerVendors: [],
+    topObservedEntities: [{
+      category: "unknown",
+      label: "player.vimeo.com",
+      requestCount: 2,
+    }],
+    unresolvedHosts: [],
+  });
+  const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
+  const player = groupedRows.find((row) => row.rawProducts.includes("Vimeo Embedded Player"));
+
+  assert.equal(player?.purpose, "Embedded media");
+  assert.equal(player?.macroCategory, "Functional");
+  assert.equal(player?.priority, "medium");
+  assert.deepEqual(player?.regulatoryRelevance, [
+    "embedded_content",
+    "media_delivery",
+    "third_party_runtime",
+  ]);
+});
+
+test("keeps incompatible products from one legal entity in distinct inventory rows", () => {
+  const groupedRows = buildRuntimeInventoryGroupRows({
+    cookieRows: [],
+    trackerRows: [
+      {
+        category: "analytics",
+        confidence: 0.99,
+        domains: ["www.google-analytics.com"],
+        firstSeenMs: 100,
+        label: "Google Analytics",
+        observedVia: ["request"],
+        party: "third_party",
+        preConsent: true,
+        regulatoryRelevance: ["analytics", "audience_measurement"],
+        requestCount: 1,
+        source: "fixture",
+      },
+      {
+        category: "authentication",
+        confidence: 0.99,
+        domains: ["accounts.google.com"],
+        firstSeenMs: 150,
+        label: "Google Sign-in",
+        observedVia: ["request"],
+        party: "third_party",
+        preConsent: true,
+        regulatoryRelevance: ["authentication"],
+        requestCount: 1,
+        source: "fixture",
+      },
+    ],
+  });
+  const googleRows = groupedRows.filter((row) => row.canonicalEntity === "Google LLC");
+
+  assert.equal(googleRows.length, 2);
+  assert.deepEqual(
+    googleRows.map((row) => [row.rawProducts[0], row.purpose]).sort(),
+    [
+      ["Google Analytics", "Audience measurement"],
+      ["Google Sign-in", "Authentication"],
+    ],
+  );
+});
+
+test("keeps context-dependent runtime activity out of Essential evidence without a necessity basis", () => {
+  const base = {
+    macroCategory: "Essential" as const,
+    priority: "contextual" as const,
+    purposes: [] as string[]
+  };
+
+  assert.equal(classifyInventoryEvidence({ ...base, purpose: "Payment processors" }), "Contextual");
+  assert.equal(classifyInventoryEvidence({ ...base, purpose: "Authentication" }), "Contextual");
+  assert.equal(classifyInventoryEvidence({ ...base, purpose: "Consent management" }), "Contextual");
+  assert.equal(classifyInventoryEvidence({ ...base, purpose: "Necessary" }), "Essential");
+  assert.equal(classifyInventoryEvidence({ ...base, purpose: "Security" }), "Essential");
+});
+
+test("keeps risk and review classifications ahead of contextual macro categories", () => {
+  assert.equal(classifyInventoryEvidence({
+    macroCategory: "Functional",
+    priority: "medium",
+    purpose: "Tag management",
+    purposes: []
+  }), "Non-essential");
+  assert.equal(classifyInventoryEvidence({
+    macroCategory: "Review",
+    priority: "review_needed",
+    purpose: "Unknown",
+    purposes: []
+  }), "Review");
+});
+
+test("classifies pre-consent audience measurement as high-risk tracker evidence", () => {
   assert.equal(
     deriveInventoryMacroCategory({ purpose: "Audience measurement", priority: "medium", vendor: "Publisher analytics" }),
     "Analytics"
@@ -120,7 +225,58 @@ test("classifies audience measurement as analytics unless advertising evidence i
     requestCount: 1,
     source: "runtime requests",
     vendorDisplayCategory: "Analytics"
-  }), "medium");
+  }), "high");
+});
+
+test("scores composite tracker purposes by their highest recognized pre-consent risk", () => {
+  const hubSpotPriority = getTrackerConsentReviewPriority({
+    category: "analytics",
+    confidence: 0.95,
+    domains: ["js-eu1.hs-analytics.net", "js-eu1.hs-banner.com"],
+    firstSeenMs: 1690,
+    label: "HubSpot",
+    observedVia: ["request"],
+    party: "third_party",
+    preConsent: true,
+    regulatoryRelevance: [],
+    requestCount: 1,
+    source: "runtime requests",
+    vendorDisplayCategory: "Analytics, Marketing automation, Cookie compliance"
+  });
+  const leadfeederPriority = getTrackerConsentReviewPriority({
+    category: "analytics",
+    confidence: 0.95,
+    domains: ["sc.lfeeder.com"],
+    firstSeenMs: 3190,
+    label: "Leadfeeder",
+    observedVia: ["request"],
+    party: "third_party",
+    preConsent: true,
+    regulatoryRelevance: [],
+    requestCount: 1,
+    source: "runtime requests",
+    vendorDisplayCategory: "Analytics, Audience measurement"
+  });
+
+  assert.equal(hubSpotPriority, "medium");
+  assert.equal(leadfeederPriority, "high");
+});
+
+test("keeps unresolved composite tracker purposes at review priority", () => {
+  assert.equal(getTrackerConsentReviewPriority({
+    category: "unknown",
+    confidence: 0.8,
+    domains: ["unresolved.example"],
+    firstSeenMs: 1000,
+    label: "Unresolved vendor",
+    observedVia: ["request"],
+    party: "third_party",
+    preConsent: true,
+    regulatoryRelevance: [],
+    requestCount: 1,
+    source: "runtime requests",
+    vendorDisplayCategory: "Unknown, Unclassified"
+  }), "review_needed");
 });
 
 test("projects Adobe Launch host as tag management instead of unknown tracker", () => {
@@ -147,7 +303,7 @@ test("projects Adobe Launch host as tag management instead of unknown tracker", 
   assert.equal(adobeRow?.purpose, "Tag Management");
   assert.equal(adobeRow?.macroCategory, "Functional");
   assert.equal(adobeRow?.priority, "medium");
-  assert.equal(adobeRow?.party, "3rd");
+  assert.equal(adobeRow?.party, "third_party");
 });
 
 test("projects canonical hostless vendor labels with known purposes and categories", () => {
@@ -163,9 +319,9 @@ test("projects canonical hostless vendor labels with known purposes and categori
   });
 
   const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
-  const adobe = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Adobe Audience Manager / Experience Cloud");
-  const akamai = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Akamai mPulse");
-  const amazon = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Amazon Ads");
+  const adobe = groupedRows.find((row) => row.canonicalEntity === "Adobe Inc.");
+  const akamai = groupedRows.find((row) => row.canonicalEntity === "Akamai Technologies, Inc.");
+  const amazon = groupedRows.find((row) => row.canonicalEntity === "Amazon.com, Inc.");
 
   assert.deepEqual(
     [adobe, akamai, amazon].map((row) => [row?.purpose, row?.macroCategory, row?.priority, row?.confidence]),
@@ -234,12 +390,12 @@ test("keeps first-party Akamai security tracker inventory contextual", () => {
   });
 
   const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
-  const akamaiRow = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Akamai Bot Manager / Edge");
+  const akamaiRow = groupedRows.find((row) => row.canonicalEntity === "Akamai Technologies, Inc.");
 
   assert.equal(akamaiRow?.purpose, "Security");
   assert.equal(akamaiRow?.macroCategory, "Essential");
   assert.equal(akamaiRow?.priority, "contextual");
-  assert.equal(akamaiRow?.party, "—");
+  assert.equal(akamaiRow?.party, "first_party");
 });
 
 test("filters cookie names and cookie-domain tokens out of tracker display domains", () => {
@@ -314,8 +470,8 @@ test("filters cookie names and cookie-domain tokens out of tracker display domai
   });
 
   const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
-  const googleAnalytics = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Google Analytics");
-  const cloudflare = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Cloudflare Bot Management");
+  const googleAnalytics = groupedRows.find((row) => row.canonicalEntity === "Google LLC");
+  const cloudflare = groupedRows.find((row) => row.canonicalEntity === "Cloudflare, Inc.");
   const quantcastChoice = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Quantcast Choice CMP");
   const permutive = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Permutive");
   const didomi = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Didomi CMP");
@@ -573,6 +729,58 @@ test("treats publisher-owned related domains as first-party infrastructure", () 
     trackerVendors: [], topObservedEntities: [{ category: "unknown", label: "a.bildstatic.de", requestCount: 12 }], unresolvedHosts: ["a.bildstatic.de"]
   });
   assert.deepEqual(rows, []);
+});
+
+test("attributes Amazon-owned advertising and media hosts to the amazon.de entity", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: ["aax-eu.amazon-adsystem.com", "m.media-amazon.com"],
+    firstPartyDomain: "amazon.de",
+    preConsentVendors: ["Amazon Ads"],
+    resolvedVendors: ["Amazon Ads", "Amazon Media CDN"],
+    sessionReplayVendors: [],
+    trackerVendors: [{
+      beforeConsent: true,
+      confidence: 0.94,
+      detectionSource: "canonical_vendor_resolver",
+      matchedHostnames: ["aax-eu.amazon-adsystem.com"],
+      scriptHost: "aax-eu.amazon-adsystem.com",
+      vendorCategory: "advertising",
+      vendorName: "Amazon Ads"
+    } as never],
+    topObservedEntities: [{
+      category: "infrastructure",
+      label: "m.media-amazon.com",
+      requestCount: 4
+    }],
+    unresolvedHosts: []
+  });
+
+  const amazonAds = rows.find((row) => row.domains.includes("aax-eu.amazon-adsystem.com"));
+  assert.equal(amazonAds?.label, "Amazon");
+  assert.equal(amazonAds?.party, "first_party");
+  assert.equal(rows.some((row) => row.label === "Amazon Media CDN"), false);
+});
+
+test("canonical report vendor projection consolidates Amazon products and owned hosts to one vendor", () => {
+  const projection = buildReportSurfaceVendorProjection({
+    rawThirdPartyDomains: ["aax-eu.amazon-adsystem.com"],
+    resolvedVendorNames: ["Amazon Ads", "Amazon Media CDN"],
+    topObservedEntities: [
+      { category: "advertising", label: "Amazon Ads", requestCount: 1 },
+      { category: "infrastructure", label: "m.media-amazon.com", requestCount: 4 }
+    ],
+    unresolvedVendorHosts: ["aax-eu.amazon-adsystem.com"],
+    vendorCategoryCounts: { advertising: 1, infrastructure: 1 }
+  });
+
+  assert.deepEqual(projection.execSummary.resolvedVendorNames, ["Amazon"]);
+  assert.deepEqual(projection.execSummary.topObservedEntities, [{
+    category: "advertising",
+    label: "Amazon",
+    requestCount: 5
+  }]);
+  assert.deepEqual(projection.execSummary.unresolvedVendorHosts, []);
+  assert.deepEqual(projection.evidenceInventory.resolvedVendorNames, ["Amazon Ads", "Amazon Media CDN"]);
 });
 
 test("preserves literal Daily raw hosts and applies multi-label PSL party classification", () => {

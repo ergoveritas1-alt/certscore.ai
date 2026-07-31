@@ -94,6 +94,26 @@ test("deriveConcernPolicy keeps GDPR Transparency Article 13 concerns internal w
   assert.equal(ambiguous.regulatoryChecklistEligibility, "none");
 });
 
+test("deriveConcernPolicy projects paid decline evidence as a checklist-only review signal", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "consent.paid_decline_path.reject_with_subscription",
+      originType: "runtime_artifact",
+      title: "Paid decline path observed"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      consentPaidDeclinePathEvidence: true,
+      consentPaidDeclinePathState: "reject_with_subscription"
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.equal(policy.regulatoryChecklistEligibility, "review_signal");
+});
+
 test("deriveConcernPolicy blocks high-risk product projection for retail and bookstore context without explicit financial offer evidence", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({

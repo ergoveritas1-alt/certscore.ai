@@ -9,7 +9,10 @@ export type LoadTestQualityWarningCode =
   | "pages_regression_vs_baseline"
   | "access_blocker_label_spike"
   | "runtime_error_counter_spike"
-  | "egress_underperforms_peer";
+  | "egress_underperforms_peer"
+  | "scanner_access_limitation_rate"
+  | "scanner_capture_limitation_rate"
+  | "target_site_state_rate";
 
 export type LoadTestQualityMetricValues = {
   blockerLabelRate?: number | null;
@@ -17,6 +20,9 @@ export type LoadTestQualityMetricValues = {
   findingsPerCompleted: number;
   pagesScanned: number;
   runtimeErrorRate?: number | null;
+  scannerAccessLimitationRate?: number | null;
+  scannerCaptureLimitationRate?: number | null;
+  targetSiteStateRate?: number | null;
   zeroFindingRate: number;
 };
 
@@ -48,6 +54,7 @@ export type LoadTestQualityWarningInput = {
   batchId: string;
   blockerLabels?: string[];
   completionWindowLabel?: string;
+  confirmationWindowCount?: number;
   egressProvider?: string | null;
   egress_id?: string | null;
   generatedAt?: string;
@@ -196,6 +203,78 @@ export function evaluateLoadTestQualityWarnings(input: LoadTestQualityWarningInp
     baselineBlockerLabelRate === undefined || baselineBlockerLabelRate === null || metrics.blockerLabelRate === null || metrics.blockerLabelRate === undefined
       ? null
       : metrics.blockerLabelRate - baselineBlockerLabelRate;
+  const limitationRatesConfirmed =
+    (input.confirmationWindowCount ?? 0) >= 2 ||
+    completedCount >= 50;
+
+  if (limitationRatesConfirmed) {
+    const limitationWarnings: Array<{
+      baselineRate: number | null | undefined;
+      code: Extract<LoadTestQualityWarningCode,
+        "scanner_access_limitation_rate" | "scanner_capture_limitation_rate" | "target_site_state_rate">;
+      currentRate: number | null | undefined;
+      minimumRate: number;
+      minimumRise: number;
+      severity: LoadTestQualityWarningSeverity;
+      title: string;
+    }> = [
+      {
+        baselineRate: input.baseline?.scannerAccessLimitationRate,
+        code: "scanner_access_limitation_rate",
+        currentRate: metrics.scannerAccessLimitationRate,
+        minimumRate: 0.15,
+        minimumRise: 0.1,
+        severity: "warn",
+        title: "Scanner-access limitation"
+      },
+      {
+        baselineRate: input.baseline?.scannerCaptureLimitationRate,
+        code: "scanner_capture_limitation_rate",
+        currentRate: metrics.scannerCaptureLimitationRate,
+        minimumRate: 0.08,
+        minimumRise: 0.05,
+        severity: "critical",
+        title: "Scanner-capture limitation"
+      },
+      {
+        baselineRate: input.baseline?.targetSiteStateRate,
+        code: "target_site_state_rate",
+        currentRate: metrics.targetSiteStateRate,
+        minimumRate: 0.25,
+        minimumRise: 0.15,
+        severity: "warn",
+        title: "Target-site state"
+      }
+    ];
+
+    for (const limitation of limitationWarnings) {
+      if (limitation.currentRate === undefined || limitation.currentRate === null) continue;
+      const rise = limitation.baselineRate === undefined || limitation.baselineRate === null
+        ? null
+        : limitation.currentRate - limitation.baselineRate;
+      if (limitation.currentRate < limitation.minimumRate && (rise === null || rise < limitation.minimumRise)) {
+        continue;
+      }
+      warnings.push(
+        buildWarning({
+          baseline: input.baseline,
+          batchId: input.batchId,
+          code: limitation.code,
+          comparisonTier: rise !== null && rise >= limitation.minimumRise
+            ? input.baseline?.tier ?? "rolling"
+            : "no_baseline",
+          completedCount,
+          egressId,
+          egressProvider,
+          explanation: `${limitation.title} rate ${Math.round(limitation.currentRate * 100)}% crossed its confirmed warning threshold over ${completedCount} completed scans in ${input.confirmationWindowCount ?? 1} windows${rise !== null ? `; change versus baseline ${Math.round(rise * 100)} percentage points` : ""}.`,
+          generatedAt,
+          metrics,
+          severity: limitation.severity,
+          windowLabel: input.completionWindowLabel
+        })
+      );
+    }
+  }
 
   if (metrics.zeroFindingRate > 0.8) {
     warnings.push(

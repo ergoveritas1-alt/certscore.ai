@@ -8,7 +8,7 @@ export type ScanNoGoReasonCode =
   | "blank_or_unusable_page" | "loading_or_stalled" | "not_found_404" | "parked_or_placeholder"
   | "site_not_ready" | "captcha_or_challenge" | "access_denied_or_forbidden_page" | "rate_limited_429"
   | "server_error_5xx" | "configuration_error" | "maintenance_or_unavailable" | "tls_or_certificate_error"
-  | "unsupported_region" | "navigation_transport_failure" | "visual_capture_failed_or_placeholder"
+  | "unsupported_region" | "target_unreachable_or_unsuitable" | "navigation_transport_failure" | "visual_capture_failed_or_placeholder"
   | "retained_visual_error_shell" | "unknown";
 export type ScanNoGoLimitationKind = "target_site_state" | "scanner_access_limitation" | "scanner_capture_limitation";
 export interface ScanNoGoResult {
@@ -293,6 +293,47 @@ export interface PreConsentCookiesTrackersRow {
   purpose?: string | null;
   priority?: "high" | "medium" | "review_needed" | "contextual" | "unknown";
   confidence?: "high" | "medium" | "low" | "unknown";
+  canonicalEntity?: string | null;
+  purposes?: string[];
+  domains?: string[];
+  products?: string[];
+  setByThirdPartyScript?: boolean;
+  set_by_third_party_script?: boolean;
+  cookieDetails?: Array<{
+    name: string;
+    domain?: string | null;
+    expiresAt?: string | null;
+    lifespanSeconds?: number | null;
+    lifespanSource?: string | null;
+    longLived?: boolean;
+    description?: string | null;
+    dataTypes?: string[];
+    setByThirdPartyScript?: boolean;
+    set_by_third_party_script?: boolean;
+    setterScriptUrl?: string | null;
+    initiatorChain?: string[];
+  }>;
+  dataFlows?: Array<{
+    endpoint: string;
+    idSync: boolean;
+    networkDestination: {
+      ip: string | null;
+      country: string | null;
+      countryCode: string | null;
+      asn: number | null;
+      provider: string | null;
+      label: "server location (may be CDN edge)";
+    };
+    controllingEntity: {
+      legalEntity: string | null;
+      headquartersCountry: string | null;
+    };
+    transferMechanism: {
+      mechanism: "adequacy_decision" | "dpf_certified" | "sccs_assumed_unverified" | "unknown";
+      basis: string;
+      verifiedAsOf: string;
+    };
+  }>;
   phase?: "pre_consent";
   evidenceBasis?: "runtime_observation" | "policy_surface_detection" | "accessibility_check" | "public_report_projection";
   observedBeforeConsent?: boolean;
@@ -311,6 +352,8 @@ export interface PreConsentCookiesTrackers {
     trackerCount: number;
     cookieCount: number;
     requestCount: number;
+    vendorCount?: number;
+    domainCount?: number;
     totalRowCount?: number;
     truncated?: boolean;
     [key: string]: unknown;
@@ -351,6 +394,8 @@ export interface PulseMeta {
   schemaVersion?: string;
   pulseVersion?: string;
   projectionVersion?: string;
+  reportProjectionVersion?: string | null;
+  reportProjectionSourceHash?: string | null;
   generatedAt?: string;
   source?: string;
   format?: PulseFormat;
