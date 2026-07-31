@@ -80,7 +80,7 @@ test("MCP export preserves every supported no-go reason", () => {
     "blank_or_unusable_page", "loading_or_stalled", "not_found_404", "parked_or_placeholder",
     "site_not_ready", "captcha_or_challenge", "access_denied_or_forbidden_page", "rate_limited_429",
     "server_error_5xx", "configuration_error", "maintenance_or_unavailable", "tls_or_certificate_error",
-    "unsupported_region", "navigation_transport_failure", "visual_capture_failed_or_placeholder",
+    "unsupported_region", "target_unreachable_or_unsuitable", "navigation_transport_failure", "visual_capture_failed_or_placeholder",
     "retained_visual_error_shell", "unknown"
   ] as const;
   for (const reasonCode of reasons) {

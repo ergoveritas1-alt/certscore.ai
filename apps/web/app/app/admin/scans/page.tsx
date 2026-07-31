@@ -29,7 +29,7 @@ function normalizeFreshness(value: string | undefined): AdminScanListFreshness {
   return freshnesses.includes(value as AdminScanListFreshness) ? value as AdminScanListFreshness : "any";
 }
 function normalizeTimeSpan(value: string | undefined): AdminScanListTimeSpan {
-  return timeSpans.includes(value as AdminScanListTimeSpan) ? value as AdminScanListTimeSpan : "all";
+  return timeSpans.includes(value as AdminScanListTimeSpan) ? value as AdminScanListTimeSpan : "31d";
 }
 function normalizeAccess(value: string | undefined): AdminScanListAccess {
   return accessValues.includes(value as AdminScanListAccess) ? value as AdminScanListAccess : "any";
@@ -87,9 +87,18 @@ function formatAdminScanDuration(scan: Pick<AdminScanListItem, "completedAt" | "
 }
 
 function getAccessLabel(scan: AdminScanListItem) {
+  if (scan.noGoFlag) {
+    const category = scan.noGoLimitationKind === "scanner_access_limitation"
+      ? "Access"
+      : scan.noGoLimitationKind === "scanner_capture_limitation"
+        ? "Capture"
+        : scan.noGoLimitationKind === "target_site_state"
+          ? "Target"
+          : "No-go";
+    return `${category} · ${scan.interruptionLabel ?? scan.noGoReason ?? "No-go"}`;
+  }
   if (scan.captchaFlag) return "CAPTCHA";
   if (scan.blockedFlag || scan.accessPostureClass === "early_loss") return scan.homepageFetchHttpStatus ? `Blocked · ${scan.homepageFetchHttpStatus}` : "Blocked";
-  if (scan.noGoFlag) return scan.interruptionLabel ?? scan.noGoReason ?? "No-go";
   if (scan.accessPostureClass === "robots_limited") return "Robots-limited";
   if (scan.accessPostureClass === "degraded_but_useful") return "Limited";
   return scan.rowKind === "scan" ? "Clear" : "—";
@@ -134,7 +143,15 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const normalizedPage = Math.min(currentPage, totalPages);
   const scans = scanPage.items;
-  const hasActiveScans = scans.some((scan) => scan.status === "queued" || scan.status === "running");
+  const liveTargets = scans.flatMap((scan) => {
+    if (!["queued", "running", "finalizing"].includes(scan.status)) return [];
+    const id = scan.rowKind === "scan" ? scan.scanId : scan.requestPublicId;
+    return id ? [{
+      id,
+      kind: scan.rowKind,
+      status: scan.status
+    } as const] : [];
+  });
 
   return (
     <AdminNavigationProvider>
@@ -143,7 +160,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-1">
             <CardTitle>Scan Admin</CardTitle>
-            <p className="text-sm text-slate-500">Compact operational view of newest scan activity. Caller IP is the public address that reached CertScore, not the scanned site.</p>
+            <p className="text-sm text-slate-500">Requester IP identifies who reached CertScore. Scanner egress identifies the outbound runtime that reached the target site.</p>
           </div>
           <p className="text-sm text-slate-500">
             {scanMetrics.totalPhysicalScans} runs · {scanMetrics.totalScanRequests} requests
@@ -151,7 +168,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
         </div>
       </CardHeader>
       <CardContent className="min-w-0 space-y-3 pt-0">
-        <AdminScansAutoRefresh hasActiveScans={hasActiveScans} />
+        <AdminScansAutoRefresh targets={liveTargets} />
         <AdminScansFilterForm hasFilters={hasFilters}>
           <input aria-label="Filter by domain, scan ID, email, requester, IP, or source; use field not-equal syntax to exclude" className="h-10 min-w-[28rem] flex-[1_1_32rem] rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Domain, scan_id, email, requester, IP · source:homepage-anonymous · ip!=66.*" />
           <select aria-label="Filter scans by status" className="h-10 w-[7.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeStatus} name="status">{statuses.map((status) => <option key={status} value={status}>{status === "any" ? "Any status" : formatFilterLabel(status)}</option>)}</select>
@@ -175,9 +192,9 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-          <table className="min-w-[1700px] table-fixed text-left text-xs">
+          <table className="min-w-[1860px] table-fixed text-left text-xs">
             <colgroup>
-              <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "170px" }} />
+              <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "190px" }} /><col style={{ width: "170px" }} />
               <col style={{ width: "150px" }} /><col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} />
               <col style={{ width: "210px" }} /><col style={{ width: "110px" }} /><col style={{ width: "80px" }} />
               <col style={{ width: "180px" }} /><col style={{ width: "65px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} />
@@ -187,9 +204,9 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
               <tr>
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" },
-                  { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
+                  { label: "Requester IP" }, { label: "Scanner egress" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
-                  { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
+                  { label: "A/R/O" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }
                 ].map(({ label, className }) => <th key={label} className={`border-b border-slate-200 px-2.5 py-1.5 font-semibold ${className ?? ""}`}>{label}</th>)}
               </tr>
@@ -204,12 +221,13 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                 });
                 const status = getOperationalStatus(scan);
                 const freshness = getScanFreshnessBadge(scan);
-                const duration = scan.rowKind === "scan" ? formatAdminScanDuration(scan) : null;
+                const duration = scan.linkedScanId ? formatAdminScanDuration(scan) : null;
                 const scanFromMarker = getScanFromMarkerInput(scan.scanFromValue);
                 return (
                   <tr key={scan.activityId} className="group h-[52px] hover:bg-slate-50/70">
                     <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50" title={status.label}><span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /><span className={status.label === "No-go" ? "text-rose-700" : "text-slate-700"}>{status.label}</span></span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={scan.requesterName ?? provenance.label}>{scan.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${requesterIpLabel(scan)} · ${scan.requesterIpSource.replaceAll("_", " ")}`}>{requesterIpLabel(scan)}</p></td>
+                    <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] text-slate-700" title={scan.scannerEgressId ?? "Scanner egress not recorded"}>{scan.scannerEgressId ?? "Not recorded"}</p><p className="mt-0.5 truncate text-[10px] text-slate-400" title={scan.scannerEgressProvider ?? undefined}>{scan.scannerEgressProvider ?? "Outbound runtime"}</p></td>
                     <td className="whitespace-nowrap px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}</td>
                     <td className="px-2.5 py-1.5">
                       <div className="flex min-w-0 items-center gap-1.5">
@@ -223,13 +241,14 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                     <td className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.topFindingCount ?? "—"}</span></td>
                     <td className="px-2.5 py-1.5"><p className="whitespace-nowrap">Privacy {scan.privacyPolicyPresent === true ? "✓" : scan.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={scan.cmpVendorName ?? undefined}>CMP {scan.cmpVendorName ?? "—"}</p></td>
                     <td className="px-2.5 py-1.5"><span className={status.label === "No-go" || status.label === "Failed" ? "font-semibold text-rose-700" : "text-slate-700"}>{getAccessLabel(scan)}</span>{scan.interruptionLabel ? <p className="truncate text-[10px] text-slate-400" title={scan.interruptionReason ?? undefined}>{scan.interruptionLabel}</p> : null}</td>
+                    <td className="whitespace-nowrap px-2.5 py-1.5 font-medium text-slate-700" title="Accept / Reject / Options controls observed on the first consent layer">{scan.consentAro ? `A${scan.consentAro.accept === true ? "✓" : scan.consentAro.accept === false ? "—" : "?"} R${scan.consentAro.reject === true ? "✓" : scan.consentAro.reject === false ? "—" : "?"} O${scan.consentAro.options === true ? "✓" : scan.consentAro.options === false ? "—" : "?"}` : "—"}</td>
                     <td className={`px-2.5 py-1.5 font-medium ${duration && (duration.includes("m") || Number.parseFloat(duration) > 60) ? "text-amber-700" : "text-slate-800"}`}>{duration ?? (scan.status === "running" ? "Running" : "—")}</td>
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.scanOutcome ?? undefined}>{formatScanOutcome(scan.scanOutcome, scan.noGoFlag)}</td>
                     <td className="px-2.5 py-1.5" title={scan.scanFromLabel}><span aria-label={scan.scanFromLabel} className="inline-flex"><ScanFromMarker flag={"flag" in scanFromMarker ? scanFromMarker.flag : undefined} icon={"icon" in scanFromMarker ? scanFromMarker.icon : undefined} selected /></span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${freshness.className}`}>{freshness.label}</span></td>
                     <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700" title={scan.primaryLanguage ? `${scan.primaryLanguageConfidence ?? "unknown"} confidence · ${(scan.primaryLanguageSource ?? "unknown").replaceAll("_", " ")}` : "No reliable retained language evidence"}>{scan.primaryLanguage ?? "—"}</td>
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.industry ?? undefined}>{scan.industry ?? "—"}</td>
-                    <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 group-hover:bg-slate-50">{scan.linkedScanId && scan.scanViewHref ? <AdminScanActions compact scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} /> : <span className="text-slate-400">—</span>}</td>
+                    <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 group-hover:bg-slate-50">{scan.linkedScanId && scan.scanViewHref ? <AdminScanActions compact domainLabel={scan.domainHostname ?? scan.requestedUrl ?? "Scanned website"} scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} visualEvidenceHref={scan.visualEvidenceHref} /> : <span className="text-slate-400">—</span>}</td>
                   </tr>
                 );
               })}

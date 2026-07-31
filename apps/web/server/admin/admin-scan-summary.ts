@@ -6,6 +6,7 @@ import { getAnonymousScanById, getScanById } from "../scans/get-scan-by-id";
 import type { PublicScanRecord } from "../scans/get-public-scan-record";
 import { materializeLocalV2DagScanDetail } from "../scans/local-v2-dag-report";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
+import { persistScanReportProjection } from "../scans/scan-report-projection";
 import { projectAdminNoGo } from "./admin-no-go";
 import { persistAdminScanSummary } from "./repository";
 
@@ -21,6 +22,31 @@ export type AdminScanSummary = {
 };
 
 const summaryPromises = new Map<string, Promise<AdminScanSummary | null>>();
+
+async function timedAdminPersistencePhase<T>(
+  scanId: string,
+  phase: "report_projection" | "admin_summary",
+  operation: () => Promise<T>,
+) {
+  const startedAt = Date.now();
+  try {
+    const result = await operation();
+    console.info("[scan-materialization] phase completed", {
+      durationMs: Date.now() - startedAt,
+      phase,
+      scanId,
+    });
+    return result;
+  } catch (error) {
+    console.error("[scan-materialization] phase failed", {
+      durationMs: Date.now() - startedAt,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      phase,
+      scanId,
+    });
+    throw error;
+  }
+}
 
 function recordString(record: Record<string, unknown> | null, key: string) {
   const value = record?.[key];
@@ -44,7 +70,10 @@ function recordObject(record: Record<string, unknown> | null, key: string) {
     : null;
 }
 
-export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRecord): Promise<AdminScanSummary | null> {
+export async function persistAdminScanSummaryForRecord(
+  scanRecord: PublicScanRecord,
+  source: { snapshot?: unknown; runtimeArtifacts?: unknown } = {}
+): Promise<AdminScanSummary | null> {
   if (!scanRecord || scanRecord.scan.status !== "completed") {
     return null;
   }
@@ -71,8 +100,12 @@ export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRec
     const id = (finding as Record<string, unknown>).id;
     return typeof id === "string" && id.trim() ? [id.trim()] : [];
   });
-  const snapshot = scanRecord.snapshot;
-  const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  const snapshot = source.snapshot && typeof source.snapshot === "object" && !Array.isArray(source.snapshot)
+    ? source.snapshot as Record<string, unknown>
+    : scanRecord.snapshot;
+  const runtimeArtifacts = source.runtimeArtifacts && typeof source.runtimeArtifacts === "object" && !Array.isArray(source.runtimeArtifacts)
+    ? source.runtimeArtifacts as Record<string, unknown>
+    : scanRecord.runtimeArtifacts;
   const scanNoGoAssessment = recordObject(runtimeArtifacts, "scan_no_go_assessment") ??
     recordObject(runtimeArtifacts, "scanNoGoAssessment");
   const visualAccessReview = recordObject(runtimeArtifacts, "visual_access_review") ??
@@ -101,15 +134,26 @@ export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRec
     topFindingCount: noGo.isNoGo ? 0 : topFindingIds.length
   };
 
-  await persistAdminScanSummary({
-    scanId,
+  const persistedProjection = await timedAdminPersistencePhase(scanId, "report_projection", () =>
+    persistScanReportProjection(scanRecord, source)
+  );
+
+  await timedAdminPersistencePhase(scanId, "admin_summary", () =>
+    persistAdminScanSummary({
+      scanId,
+      ...summary,
+      topFindingCount: persistedProjection.topFindingCount ?? summary.topFindingCount,
+      trancoRank: trancoRankFromScanConfig(scanRecord.scan.scanConfigJson),
+      scanNoGoAssessment,
+      visualAccessReview,
+      visualEvidenceArtifacts
+    })
+  );
+  return {
     ...summary,
-    trancoRank: trancoRankFromScanConfig(scanRecord.scan.scanConfigJson),
-    scanNoGoAssessment,
-    visualAccessReview,
-    visualEvidenceArtifacts
-  });
-  return summary;
+    score: persistedProjection.score ?? summary.score,
+    topFindingCount: persistedProjection.topFindingCount ?? summary.topFindingCount
+  };
 }
 
 async function buildAndPersistAdminScanSummary(scanId: string, organizationId: string | null): Promise<AdminScanSummary | null> {
@@ -121,8 +165,14 @@ async function buildAndPersistAdminScanSummary(scanId: string, organizationId: s
   const rawRecord = resolvedOrganizationId
     ? await getScanById({ organizationId: resolvedOrganizationId, scanId })
     : await getAnonymousScanById(scanId);
-  const scanRecord = rawRecord ? await materializeLocalV2DagScanDetail(rawRecord) : null;
-  return scanRecord ? persistAdminScanSummaryForRecord(scanRecord) : null;
+  if (!rawRecord) {
+    return null;
+  }
+  const scanRecord = await materializeLocalV2DagScanDetail(rawRecord);
+  return persistAdminScanSummaryForRecord(scanRecord, {
+    snapshot: rawRecord.snapshot,
+    runtimeArtifacts: rawRecord.runtimeArtifacts
+  });
 }
 
 export function materializeAdminScanSummary(scanId: string, organizationId: string | null) {

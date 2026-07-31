@@ -12,6 +12,8 @@ export type AdminScanQueryRow = {
   completed_at: string | null;
   created_at: string;
   domain_id: string | null;
+  egress_id?: string | null;
+  egress_provider?: string | null;
   id: string;
   organization_id: string | null;
   pages_requested?: number;
@@ -77,6 +79,16 @@ export type AdminScanOrganizationRow = {
   name: string;
 };
 
+export type AdminScanDetailSummaryRow = AdminScanQueryRow & {
+  accessibility_rule_count: number;
+  change_count: number;
+  domain_hostname: string | null;
+  organization_name: string | null;
+  page_count: number;
+  snapshot: Record<string, unknown> | null;
+  tracker_vendor_count: number;
+};
+
 export type AdminScanSnapshotRow = {
   admin_industry_label?: string | null;
   admin_summary_generated_at?: string | null;
@@ -87,6 +99,11 @@ export type AdminScanSnapshotRow = {
   captcha_flag: boolean | null;
   certscore_overall: number | null;
   cmp_vendor_name?: string | null;
+  consent_accept_observed?: boolean | null;
+  consent_evidence_status?: string | null;
+  consent_options_observed?: boolean | null;
+  consent_reject_observed?: boolean | null;
+  duration_ms?: number | null;
   egress_id?: string | null;
   egress_type?: string | null;
   highest_successful_tier?: ScanExecutionTier | null;
@@ -95,6 +112,9 @@ export type AdminScanSnapshotRow = {
   legal_coverage_score?: number | null;
   normalized_body_hash?: string | null;
   report_finding_count?: number | null;
+  report_projection_computed_at?: string | null;
+  report_projection_status?: string | null;
+  report_projection_version?: string | null;
   privacy_policy_present?: boolean | null;
   recoverable_finding_classes?: RecoverableFindingClass[] | null;
   robots_fetch_http_status: number | null;
@@ -102,9 +122,20 @@ export type AdminScanSnapshotRow = {
   scan_outcome?: string | null;
   scan_no_go_assessment?: Record<string, unknown> | null;
   scan_timestamp?: string | null;
+  stop_reason_code?: string | null;
+  stop_reason_detail?: string | null;
+  stop_reason_label?: string | null;
+  score_coverage_confidence?: string | null;
+  score_coverage_ratio?: number | null;
+  score_scored_at?: string | null;
+  score_source?: string | null;
+  score_version?: string | null;
   tranco_rank?: number | null;
+  tranco_list_id?: string | null;
+  tranco_snapshot_date?: string | null;
   site_language_primary?: string | null;
   visual_access_review?: Record<string, unknown> | null;
+  visual_evidence_artifact_id?: string | null;
   stop_tier?: ScanExecutionTier | null;
   total_signals?: number;
   top_finding_count?: number | null;
@@ -115,7 +146,9 @@ export type AdminRuntimeArtifactRow = {
   scan_id: string;
   scan_no_go_assessment?: Record<string, unknown> | null;
   visual_access_review?: Record<string, unknown> | null;
+  visual_evidence_artifact_id?: string | null;
   visual_evidence_artifacts?: unknown[] | null;
+  scanner_evidence_missing?: boolean | null;
   [key: string]: unknown;
 };
 
@@ -125,6 +158,15 @@ export type AdminScanActivityPageRef = {
   request_public_id: string | null;
   row_kind: "request" | "scan";
   scan_id: string | null;
+};
+
+type AdminScanActivityPageResultRow = {
+  activity_at: string | null;
+  activity_id: string | null;
+  request_public_id: string | null;
+  row_kind: "request" | "scan" | null;
+  scan_id: string | null;
+  total_count: number;
 };
 
 export type AdminScanActivityFilters = {
@@ -152,7 +194,23 @@ const SCAN_ACTIVITY_NO_GO_SQL = adminNoGoSql({
   runtimeArtifacts: "sra",
   snapshotRuntimeAssessment: "ss.scan_no_go_assessment",
   snapshotOutcome: "ss.scan_outcome",
+  snapshotStopReasonCode: "ss.stop_reason_code",
   snapshotVisualAccessReview: "ss.visual_access_review",
+  scannerEvidenceMissing: `(
+    s.status = 'completed'
+    and exists (
+      select 1
+      from public.scan_events recovery
+      where recovery.scan_id = s.id
+        and recovery.metadata_json ->> 'recoveryMode' = 'completed_scan_backfill'
+    )
+    and not exists (
+      select 1
+      from public.scan_events scanner
+      where scanner.scan_id = s.id
+        and scanner.event_type in ('full_scan.started', 'full_scan.completed', 'preview_scan.started', 'preview_scan.completed')
+    )
+  )`,
   outcomesParameter: "$12"
 });
 
@@ -228,10 +286,21 @@ function adminScanActivityBaseSql() {
         when coalesce(ss.blocked_flag, false) or ss.access_posture_class = 'early_loss' then 'blocked'
         when ss.access_posture_class = 'robots_limited' then 'robots_limited'
         when ss.access_posture_class = 'degraded_but_useful' then 'limited'
+        when s.status = 'completed'
+          and exists (
+            select 1 from public.scan_events recovery
+            where recovery.scan_id = s.id
+              and recovery.metadata_json ->> 'recoveryMode' = 'completed_scan_backfill'
+          )
+          and not exists (
+            select 1 from public.scan_events scanner
+            where scanner.scan_id = s.id
+              and scanner.event_type in ('full_scan.started', 'full_scan.completed', 'preview_scan.started', 'preview_scan.completed')
+          ) then 'unknown'
         when s.id is not null then 'clear'
         else 'unknown'
       end as access_filter
-      ,ss.scan_outcome as outcome_filter
+      ,coalesce(nullif(trim(ss.stop_reason_code), ''), ss.scan_outcome) as outcome_filter
     from public.scans s
     left join public.domains d on d.id = s.domain_id
     left join public.industries ind on ind.id = d.industry_primary_id
@@ -264,6 +333,7 @@ function adminScanActivityBaseSql() {
                 prq.requested_by::text, prq.request_context::text) ilike '%' || $1 || '%'
       )
     )
+    and ($7::timestamptz is null or coalesce(s.completed_at, s.started_at, s.created_at) >= $7::timestamptz)
     and ($13::text[] is null or not (
       exists (
         select 1 from public.scan_requests srq
@@ -349,10 +419,21 @@ function adminScanActivityBaseSql() {
         when coalesce(ss.blocked_flag, false) or ss.access_posture_class = 'early_loss' then 'blocked'
         when ss.access_posture_class = 'robots_limited' then 'robots_limited'
         when ss.access_posture_class = 'degraded_but_useful' then 'limited'
+        when s.status = 'completed'
+          and exists (
+            select 1 from public.scan_events recovery
+            where recovery.scan_id = s.id
+              and recovery.metadata_json ->> 'recoveryMode' = 'completed_scan_backfill'
+          )
+          and not exists (
+            select 1 from public.scan_events scanner
+            where scanner.scan_id = s.id
+              and scanner.event_type in ('full_scan.started', 'full_scan.completed', 'preview_scan.started', 'preview_scan.completed')
+          ) then 'unknown'
         when s.id is not null then 'clear'
         else 'unknown'
       end as access_filter
-      ,ss.scan_outcome as outcome_filter
+      ,coalesce(nullif(trim(ss.stop_reason_code), ''), ss.scan_outcome) as outcome_filter
     from public.scan_requests sr
     left join public.scans s on s.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
     left join public.domains d on d.id = s.domain_id
@@ -381,6 +462,7 @@ function adminScanActivityBaseSql() {
                   prq.requested_by::text, prq.request_context::text) ilike '%' || $1 || '%'
         )
       )
+      and ($7::timestamptz is null or sr.requested_at >= $7::timestamptz)
       and ($13::text[] is null or not (
         concat_ws(' ', coalesce(au.email, bau.email, ''), sr.requested_by::text) ilike any($13::text[])
         or exists (
@@ -422,7 +504,7 @@ function adminScanActivityBaseSql() {
             ) ilike any($18::text[])
         )
       ))
-  ), filtered_activity as (
+  ), filtered_activity as materialized (
     select *
     from scan_activity
     where (
@@ -475,26 +557,115 @@ export async function loadAdminScanActivityPageRefs(
     exclusionArray(parsedSearch.exclusions.email), exclusionArray(parsedSearch.exclusions.ip),
     exclusionArray(parsedSearch.exclusions.source)
   ];
+
+  const canUseBoundedActivityPath = Boolean(
+    since &&
+    !queryText &&
+    !status &&
+    !freshness &&
+    !language &&
+    !industry &&
+    !access &&
+    !outcome &&
+    !source &&
+    parsedSearch.exclusions.requester.length === 0 &&
+    parsedSearch.exclusions.domain.length === 0 &&
+    parsedSearch.exclusions.scanId.length === 0 &&
+    parsedSearch.exclusions.email.length === 0 &&
+    parsedSearch.exclusions.ip.length === 0 &&
+    parsedSearch.exclusions.source.length === 0
+  );
+
+  if (canUseBoundedActivityPath) {
+    const boundedResult = await query<AdminScanActivityPageResultRow>(
+      `select activity.row_kind,
+              activity.activity_id,
+              activity.scan_id::text as scan_id,
+              activity.request_public_id,
+              activity.activity_at,
+              count(*) over ()::int as total_count
+         from (
+           select 'scan'::text as row_kind,
+                  ('scan:' || s.id::text) as activity_id,
+                  s.id as scan_id,
+                  null::text as request_public_id,
+                  coalesce(s.completed_at, s.started_at, s.created_at) as activity_at
+             from public.scans s
+            where coalesce(s.completed_at, s.started_at, s.created_at) >= $1::timestamptz
+              and ($2::text is null or coalesce(s.scan_config_json ->> 'scanFrom', 'default') = $2)
+           union all
+           select 'request'::text as row_kind,
+                  ('request:' || sr.public_id) as activity_id,
+                  coalesce(sr.fulfilled_by_scan_id, sr.scan_id) as scan_id,
+                  sr.public_id as request_public_id,
+                  sr.requested_at as activity_at
+             from public.scan_requests sr
+            where sr.requested_at >= $1::timestamptz
+              and (coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is null or sr.resolution_mode = 'reused_existing_scan')
+              and ($2::text is null or coalesce(sr.request_context ->> 'scanFrom', 'default') = $2)
+         ) activity
+        order by activity.activity_at desc, activity.activity_id desc
+        limit $3 offset $4`,
+      [since, scanFrom, limit, offset],
+      { readOnly: true }
+    );
+    return {
+      rows: boundedResult.rows.flatMap((row): AdminScanActivityPageRef[] => {
+        if (!row.row_kind || !row.activity_id || !row.activity_at) return [];
+        return [{
+          activity_at: row.activity_at,
+          activity_id: row.activity_id,
+          request_public_id: row.request_public_id,
+          row_kind: row.row_kind,
+          scan_id: row.scan_id
+        }];
+      }),
+      totalCount: boundedResult.rows[0]?.total_count ?? 0
+    };
+  }
+
   const baseSql = adminScanActivityBaseSql();
-  const [pageResult, countResult] = await Promise.all([
-    query<AdminScanActivityPageRef>(
-      `${baseSql}
+  const result = await query<AdminScanActivityPageResultRow>(
+    `${baseSql},
+     paged_activity as (
        select row_kind, activity_id, scan_id::text as scan_id, request_public_id, activity_at
-       from filtered_activity
-       order by activity_at desc, activity_id desc
-       limit $8 offset $9`,
-      params,
-      { readOnly: true }
-    ),
-    queryOne<{ total_count: number }>(
-      `${baseSql}
-       select count(*)::int as total_count, max($8::int) as requested_limit, max($9::int) as requested_offset
-       from filtered_activity`,
-      params,
-      { readOnly: true }
-    )
-  ]);
-  return { rows: pageResult.rows, totalCount: countResult?.total_count ?? 0 };
+         from filtered_activity
+        order by activity_at desc, activity_id desc
+        limit $8 offset $9
+     ),
+     activity_total as (
+       select count(*)::int as total_count
+         from filtered_activity
+     )
+     select paged_activity.row_kind,
+            paged_activity.activity_id,
+            paged_activity.scan_id,
+            paged_activity.request_public_id,
+            paged_activity.activity_at,
+            activity_total.total_count
+       from activity_total
+       left join paged_activity on true
+      order by paged_activity.activity_at desc nulls last,
+               paged_activity.activity_id desc nulls last`,
+    params,
+    { readOnly: true }
+  );
+  const rows = result.rows.flatMap((row): AdminScanActivityPageRef[] => {
+    if (!row.row_kind || !row.activity_id || !row.activity_at) {
+      return [];
+    }
+    return [{
+      activity_at: row.activity_at,
+      activity_id: row.activity_id,
+      request_public_id: row.request_public_id,
+      row_kind: row.row_kind,
+      scan_id: row.scan_id
+    }];
+  });
+  return {
+    rows,
+    totalCount: result.rows[0]?.total_count ?? 0
+  };
 }
 
 export async function loadAdminScanFilterOptions(): Promise<AdminScanFilterOptions> {
@@ -516,9 +687,13 @@ export async function loadAdminScanFilterOptions(): Promise<AdminScanFilterOptio
       { readOnly: true }
     ),
     query<{ value: string }>(
-      `select distinct scan_outcome as value
-         from public.scan_snapshots
-        where nullif(trim(scan_outcome), '') is not null
+      `select distinct value
+         from (
+           select scan_outcome as value from public.scan_snapshots
+           union all
+           select stop_reason_code as value from public.scan_snapshots
+         ) outcomes
+        where nullif(trim(value), '') is not null
         order by value asc`,
       [],
       { readOnly: true }
@@ -612,6 +787,7 @@ export type AdminValidationVerdictRow = {
 };
 
 export type AdminUserRow = {
+  account_role: string;
   auth_provider: string;
   created_at: string;
   email: string;
@@ -768,6 +944,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
 }> {
   const scansResult = await query<AdminScanQueryRow>(
     `select id, organization_id, domain_id, scan_type, status, created_at, started_at, completed_at, pages_scanned, scan_config_json,
+            egress_id, egress_provider,
             (select sp.page_language
                from scan_pages sp
               where sp.scan_id = scans.id
@@ -844,7 +1021,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
     return new Map(result.rows.flatMap((row) => row.top_finding_count === null ? [] : [[row.scan_id, row.top_finding_count] as const]));
   };
 
-  const [domainsResult, organizationsResult, snapshotsResult, diagnosticEventsResult, runtimeArtifactsResult, topFindingCounts] = await Promise.all([
+  const [domainsResult, organizationsResult, snapshotsResult, diagnosticEventsResult, runtimeArtifactsResult, scannerEvidenceResult, topFindingCounts] = await Promise.all([
     domainIds.length
       ? query<AdminScanDomainRow>(
           `select id, hostname
@@ -874,6 +1051,11 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
                   report_finding_count,
                   privacy_policy_present,
                   cmp_vendor_name,
+                  consent_accept_observed,
+                  consent_evidence_status,
+                  consent_options_observed,
+                  consent_reject_observed,
+                  duration_ms,
                   homepage_fetch_http_status,
                   robots_fetch_http_status,
                   blocked_flag,
@@ -886,10 +1068,31 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
                   verified_public_surfaces_count,
                   site_language_primary,
                   scan_outcome,
+                  stop_reason_code,
+                  stop_reason_detail,
+                  stop_reason_label,
+                  egress_id,
+                  egress_type,
                   tranco_rank,
+                  tranco_list_id,
+                  tranco_snapshot_date,
+                  score_coverage_confidence,
+                  score_coverage_ratio,
+                  score_scored_at,
+                  score_source,
+                  score_version,
+                  report_projection_computed_at,
+                  report_projection_status,
+                  report_projection_version,
                   scan_no_go_assessment,
                   visual_access_review,
-                  visual_evidence_artifacts
+                  (
+                    select coalesce(nullif(artifact->>'id', ''), 'initial_load:' || (artifact->>'key'))
+                      from jsonb_array_elements(visual_evidence_artifacts) as artifact
+                     where artifact->>'status' = 'available'
+                       and nullif(trim(artifact->>'key'), '') is not null
+                     limit 1
+                  ) as visual_evidence_artifact_id
              from scan_snapshots
             where scan_id = any($1::uuid[])`,
           [scanIds],
@@ -909,19 +1112,51 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
       : Promise.resolve({ rows: [] as AdminScanDiagnosticEventRow[] }),
     scanIds.length
       ? query<AdminRuntimeArtifactRow>(
-          `select sra.scan_id,
-                  coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
-                  coalesce(sra.visual_access_review, ss.visual_access_review) as visual_access_review,
-                  coalesce(sra.visual_evidence_artifacts, ss.visual_evidence_artifacts) as visual_evidence_artifacts
-             from scan_snapshots ss
-             left join scan_runtime_artifacts sra on sra.scan_id = ss.scan_id
-            where ss.scan_id = any($1::uuid[])`,
+          `select scan_id,
+                  scan_no_go_assessment,
+                  visual_access_review,
+                  (
+                    select coalesce(nullif(artifact->>'id', ''), 'initial_load:' || (artifact->>'key'))
+                      from jsonb_array_elements(visual_evidence_artifacts) as artifact
+                     where artifact->>'status' = 'available'
+                       and nullif(trim(artifact->>'key'), '') is not null
+                     limit 1
+                  ) as visual_evidence_artifact_id
+             from scan_runtime_artifacts
+            where scan_id = any($1::uuid[])`,
           [scanIds],
           { readOnly: true }
         )
       : Promise.resolve({ rows: [] as AdminRuntimeArtifactRow[] }),
+    scanIds.length
+      ? query<{ scan_id: string; has_recovery: boolean | null; has_scanner_event: boolean | null }>(
+          `select scan_id,
+                  bool_or(metadata_json ->> 'recoveryMode' = 'completed_scan_backfill') as has_recovery,
+                  bool_or(event_type in ('full_scan.started', 'full_scan.completed', 'preview_scan.started', 'preview_scan.completed')) as has_scanner_event
+             from scan_events
+            where scan_id = any($1::uuid[])
+              and (
+                metadata_json ->> 'recoveryMode' = 'completed_scan_backfill'
+                or event_type in ('full_scan.started', 'full_scan.completed', 'preview_scan.started', 'preview_scan.completed')
+              )
+            group by scan_id`,
+          [scanIds],
+          { readOnly: true }
+        )
+      : Promise.resolve({ rows: [] as Array<{ scan_id: string; has_recovery: boolean | null; has_scanner_event: boolean | null }> }),
     loadTopFindingCounts()
   ]);
+
+  const scannerEvidenceByScanId = new Map(
+    scannerEvidenceResult.rows.map((row) => [row.scan_id, row] as const)
+  );
+  const runtimeArtifacts = runtimeArtifactsResult.rows.map((row) => {
+    const evidence = scannerEvidenceByScanId.get(row.scan_id);
+    return {
+      ...row,
+      scanner_evidence_missing: evidence?.has_recovery === true && evidence.has_scanner_event !== true
+    };
+  });
 
   return {
     diagnosticEvents: diagnosticEventsResult.rows,
@@ -932,7 +1167,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
       ...snapshot,
       top_finding_count: snapshot.top_finding_count ?? (snapshot.scan_id ? topFindingCounts.get(snapshot.scan_id) ?? null : null)
     })),
-    runtimeArtifacts: runtimeArtifactsResult.rows,
+    runtimeArtifacts,
     scanRows,
     validationFindingRows: [],
     validationRuns: [],
@@ -1124,100 +1359,42 @@ export async function persistAdminScanSummary(input: {
   }
 }
 
-export async function loadAdminScanDetailData(scanId: string): Promise<{
-  accessibilityRuleCounts: Array<Record<string, unknown>>;
-  changes: Array<Record<string, unknown>>;
-  domain: AdminScanDomainRow | null;
-  organization: AdminScanOrganizationRow | null;
-  localV2DagLambdaEvents: Array<Record<string, unknown>>;
-  pages: Array<Record<string, unknown>>;
-  policyEnrichment: Array<Record<string, unknown>>;
-  policyReviewQueue: Array<Record<string, unknown>>;
-  runtimeArtifacts: Record<string, unknown> | null;
-  runtimeContextEvents: Array<Record<string, unknown>>;
-  scan: AdminScanQueryRow | null;
-  snapshot: Record<string, unknown> | null;
-  trackerVendors: Array<Record<string, unknown>>;
-}> {
-  const scan = await queryOne<AdminScanQueryRow>(
-    `select id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_requested, pages_scanned, scan_config_json
-       from scans
-      where id = $1`,
+export async function loadAdminScanDetailSummaryData(scanId: string): Promise<AdminScanDetailSummaryRow | null> {
+  return queryOne<AdminScanDetailSummaryRow>(
+    `select s.id,
+            s.organization_id,
+            s.domain_id,
+            s.scan_type,
+            s.status,
+            s.created_at,
+            s.started_at,
+            s.completed_at,
+            s.pages_requested,
+            s.pages_scanned,
+            s.scan_config_json,
+            d.hostname as domain_hostname,
+            o.name as organization_name,
+            to_jsonb(ss) as snapshot,
+            (select count(*)::int from scan_tracker_vendors stv where stv.scan_id = s.id) as tracker_vendor_count,
+            (select count(*)::int from scan_accessibility_rule_counts sarc where sarc.scan_id = s.id) as accessibility_rule_count,
+            (select count(*)::int from scan_pages sp where sp.scan_id = s.id) as page_count,
+            (select count(*)::int from compliance_change_events cce where cce.scan_id_current = s.id) as change_count
+       from scans s
+       left join domains d on d.id = s.domain_id
+       left join organizations o on o.id = s.organization_id
+       left join scan_snapshots ss on ss.scan_id = s.id
+      where s.id = $1`,
     [scanId],
     { readOnly: true }
   );
+}
 
-  if (!scan) {
-    return {
-      accessibilityRuleCounts: [],
-      changes: [],
-      domain: null,
-      localV2DagLambdaEvents: [],
-      organization: null,
-      pages: [],
-      policyEnrichment: [],
-      policyReviewQueue: [],
-      runtimeArtifacts: null,
-      runtimeContextEvents: [],
-      scan: null,
-      snapshot: null,
-      trackerVendors: []
-    };
-  }
-
-  const [
-    snapshot,
-    trackerVendors,
-    accessibilityRuleCounts,
-    pages,
-    changes,
-    domain,
-    organization,
-    runtimeArtifacts,
-    runtimeContextEvents,
-    localV2DagLambdaEvents,
-    policyEnrichment,
-    policyReviewQueue
-  ] = await Promise.all([
-    queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [scanId], { readOnly: true }),
-    query<Record<string, unknown>>(
-      `select vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, before_consent, script_host, matched_signature_id
-         from scan_tracker_vendors
-        where scan_id = $1
-        order by vendor_name asc`,
-      [scanId],
-      { readOnly: true }
-    ).then((result) => result.rows),
-    query<Record<string, unknown>>(
-      `select rule_code, rule_group, severity, instance_count
-         from scan_accessibility_rule_counts
-        where scan_id = $1
-        order by instance_count desc`,
-      [scanId],
-      { readOnly: true }
-    ).then((result) => result.rows),
-    query<Record<string, unknown>>(
-      `select page_type, page_url, fetch_status, fetched_via, normalized_content_hash, title_hash, page_language
-         from scan_pages
-        where scan_id = $1
-        order by page_type asc`,
-      [scanId],
-      { readOnly: true }
-    ).then((result) => result.rows),
-    query<Record<string, unknown>>(
-      `select event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp
-         from compliance_change_events
-        where scan_id_current = $1
-        order by event_timestamp desc`,
-      [scanId],
-      { readOnly: true }
-    ).then((result) => result.rows),
-    scan.domain_id
-      ? queryOne<AdminScanDomainRow>(`select hostname from domains where id = $1`, [scan.domain_id], { readOnly: true })
-      : Promise.resolve(null),
-    scan.organization_id
-      ? queryOne<AdminScanOrganizationRow>(`select name from organizations where id = $1`, [scan.organization_id], { readOnly: true })
-      : Promise.resolve(null),
+export async function loadAdminScanRuntimeDiagnosticsData(scanId: string): Promise<{
+  localV2DagLambdaEvents: Array<Record<string, unknown>>;
+  runtimeArtifacts: Record<string, unknown> | null;
+  runtimeContextEvents: Array<Record<string, unknown>>;
+}> {
+  const [runtimeArtifacts, runtimeContextEvents, localV2DagLambdaEvents] = await Promise.all([
     queryOne<Record<string, unknown>>(
       `select sra.*,
               coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
@@ -1234,7 +1411,8 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
          from scan_events
         where scan_id = $1
           and event_type = 'scanner.runtime_context'
-        order by created_at desc`,
+        order by created_at desc
+        limit 1`,
       [scanId],
       { readOnly: true }
     ).then((result) => result.rows),
@@ -1250,23 +1428,76 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
             'v2_lambda_result.received',
             'v2_lambda_result.failed'
           )
-        order by created_at asc`,
+        order by created_at asc
+        limit 25`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows)
+  ]);
+
+  return {
+    localV2DagLambdaEvents,
+    runtimeArtifacts,
+    runtimeContextEvents
+  };
+}
+
+export async function loadAdminScanReviewDiagnosticsData(scanId: string): Promise<{
+  policyReviewQueue: Array<Record<string, unknown>>;
+}> {
+  const policyReviewQueue = await query<Record<string, unknown>>(
+    `select *
+       from policy_review_queue
+      where scan_id = $1
+      order by created_at asc
+      limit 100`,
+    [scanId],
+    { readOnly: true }
+  ).then((result) => result.rows);
+
+  return { policyReviewQueue };
+}
+
+export async function loadAdminScanInventoryDiagnosticsData(scanId: string): Promise<{
+  accessibilityRuleCounts: Array<Record<string, unknown>>;
+  changes: Array<Record<string, unknown>>;
+  pages: Array<Record<string, unknown>>;
+  trackerVendors: Array<Record<string, unknown>>;
+}> {
+  const [trackerVendors, accessibilityRuleCounts, pages, changes] = await Promise.all([
+    query<Record<string, unknown>>(
+      `select vendor_name, vendor_category, detection_source, confidence, first_party_or_third_party, before_consent, script_host, matched_signature_id
+         from scan_tracker_vendors
+        where scan_id = $1
+        order by vendor_name asc
+        limit 250`,
       [scanId],
       { readOnly: true }
     ).then((result) => result.rows),
     query<Record<string, unknown>>(
-      `select *
-         from policy_enrichment
+      `select rule_code, rule_group, severity, instance_count
+         from scan_accessibility_rule_counts
         where scan_id = $1
-        order by created_at asc`,
+        order by instance_count desc
+        limit 250`,
       [scanId],
       { readOnly: true }
     ).then((result) => result.rows),
     query<Record<string, unknown>>(
-      `select *
-         from policy_review_queue
+      `select page_type, page_url, fetch_status, fetched_via, normalized_content_hash, title_hash, page_language
+         from scan_pages
         where scan_id = $1
-        order by created_at asc`,
+        order by page_type asc
+        limit 100`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select event_type, field_name, old_value_text, new_value_text, severity, event_group, event_timestamp
+         from compliance_change_events
+        where scan_id_current = $1
+        order by event_timestamp desc
+        limit 100`,
       [scanId],
       { readOnly: true }
     ).then((result) => result.rows)
@@ -1275,16 +1506,7 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
   return {
     accessibilityRuleCounts,
     changes,
-    domain,
-    localV2DagLambdaEvents,
-    organization,
     pages,
-    policyEnrichment,
-    policyReviewQueue,
-    runtimeArtifacts,
-    runtimeContextEvents,
-    scan,
-    snapshot,
     trackerVendors
   };
 }
@@ -1304,12 +1526,14 @@ export async function loadAdminUsersData(): Promise<{
               users.auth_provider,
               users.created_at,
               users.updated_at,
+              coalesce(login_activity.account_role, 'user') as account_role,
               login_activity.last_login_at
          from users
          left join lateral (
-           select max(better_auth_sessions.created_at) as last_login_at
+           select max(better_auth_users.role) as account_role,
+                  max(better_auth_sessions.created_at) as last_login_at
              from better_auth_users
-             join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
+             left join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
             where better_auth_users.email = users.email
          ) login_activity on true
         order by users.created_at desc`,
@@ -1333,6 +1557,88 @@ export async function loadAdminUsersData(): Promise<{
     memberships,
     organizations,
     scans,
+    users
+  };
+}
+
+export async function loadAdminUsersPageData(limit: number, offset = 0): Promise<{
+  totalCount: number;
+  users: AdminUserOverviewRow[];
+}> {
+  const normalizedLimit = Math.min(Math.max(limit, 1), 100);
+  const normalizedOffset = Math.max(offset, 0);
+  const [totalCountRow, users] = await Promise.all([
+    queryOne<{ total_count: number }>(
+      `select count(*)::int as total_count
+         from users`,
+      [],
+      { readOnly: true }
+    ),
+    query<AdminUserOverviewRow>(
+      `with selected_users as (
+         select id, email, full_name, auth_provider, created_at, updated_at
+           from users
+          order by created_at desc
+          limit $1 offset $2
+       ),
+       selected_memberships as (
+         select distinct on (organization_members.user_id)
+                organization_members.user_id,
+                organization_members.organization_id,
+                organization_members.role
+           from organization_members
+           join selected_users on selected_users.id = organization_members.user_id
+          order by organization_members.user_id, organization_members.created_at desc
+       ),
+       login_activity as (
+         select better_auth_users.email,
+                max(better_auth_users.role) as account_role,
+                max(better_auth_sessions.created_at) as last_login_at
+           from better_auth_users
+           left join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
+           join selected_users on selected_users.email = better_auth_users.email
+          group by better_auth_users.email
+       )
+       select selected_users.id,
+              selected_users.email,
+              selected_users.full_name,
+              selected_users.auth_provider,
+              selected_users.created_at,
+              selected_users.updated_at,
+              coalesce(login_activity.account_role, 'user') as account_role,
+              login_activity.last_login_at,
+              selected_memberships.organization_id,
+              selected_memberships.role as membership_role,
+              organizations.name as organization_name,
+              organizations.slug as organization_slug,
+              organizations.plan,
+              organizations.plan_status,
+              coalesce(user_activity.domain_count, 0)::int as domain_count,
+              coalesce(user_activity.total_scans, 0)::int as total_scans,
+              coalesce(user_activity.completed_scans, 0)::int as completed_scans,
+              user_activity.last_scan_at,
+              user_activity.last_completed_scan_at
+         from selected_users
+         left join login_activity on login_activity.email = selected_users.email
+         left join selected_memberships on selected_memberships.user_id = selected_users.id
+         left join organizations on organizations.id = selected_memberships.organization_id
+         left join lateral (
+           select count(distinct scans.domain_id)::int as domain_count,
+                  count(*)::int as total_scans,
+                  count(*) filter (where scans.completed_at is not null)::int as completed_scans,
+                  max(scans.created_at) as last_scan_at,
+                  max(scans.completed_at) as last_completed_scan_at
+             from scans
+            where scans.submitted_by_user_id = selected_users.id
+         ) user_activity on true
+        order by selected_users.created_at desc`,
+      [normalizedLimit, normalizedOffset],
+      { readOnly: true }
+    ).then((result) => result.rows)
+  ]);
+
+  return {
+    totalCount: totalCountRow?.total_count ?? 0,
     users
   };
 }
@@ -1369,6 +1675,7 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
               users.auth_provider,
               users.created_at,
               users.updated_at,
+              coalesce(login_activity.account_role, 'user') as account_role,
               login_activity.last_login_at,
               membership.organization_id,
               membership.role as membership_role,
@@ -1376,16 +1683,17 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
               organizations.slug as organization_slug,
               organizations.plan,
               organizations.plan_status,
-              coalesce(domain_counts.domain_count, 0)::int as domain_count,
-              coalesce(scan_counts.total_scans, 0)::int as total_scans,
-              coalesce(scan_counts.completed_scans, 0)::int as completed_scans,
-              scan_counts.last_scan_at,
-              scan_counts.last_completed_scan_at
+              coalesce(user_activity.domain_count, 0)::int as domain_count,
+              coalesce(user_activity.total_scans, 0)::int as total_scans,
+              coalesce(user_activity.completed_scans, 0)::int as completed_scans,
+              user_activity.last_scan_at,
+              user_activity.last_completed_scan_at
          from users
          left join lateral (
-           select max(better_auth_sessions.created_at) as last_login_at
+           select max(better_auth_users.role) as account_role,
+                  max(better_auth_sessions.created_at) as last_login_at
              from better_auth_users
-             join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
+             left join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
             where better_auth_users.email = users.email
          ) login_activity on true
          left join lateral (
@@ -1397,18 +1705,14 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
          ) membership on true
          left join organizations on organizations.id = membership.organization_id
          left join lateral (
-           select count(*)::int as domain_count
-             from domains
-            where domains.organization_id = membership.organization_id
-         ) domain_counts on membership.organization_id is not null
-         left join lateral (
-           select count(*)::int as total_scans,
-                  count(*) filter (where completed_at is not null)::int as completed_scans,
-                  max(created_at) as last_scan_at,
-                  max(completed_at) as last_completed_scan_at
+           select count(distinct scans.domain_id)::int as domain_count,
+                  count(*)::int as total_scans,
+                  count(*) filter (where scans.completed_at is not null)::int as completed_scans,
+                  max(scans.created_at) as last_scan_at,
+                  max(scans.completed_at) as last_completed_scan_at
              from scans
-            where scans.organization_id = membership.organization_id
-         ) scan_counts on membership.organization_id is not null
+            where scans.submitted_by_user_id = users.id
+         ) user_activity on true
         order by users.created_at desc
         limit $1`,
       [normalizedLimit],
@@ -1766,42 +2070,7 @@ export async function updateAdminOrganizationPlan(input: {
 
 export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCounts> {
   await ensureScanRequestLogTable();
-  const [totalScansResult, totalScanRequestsResult, unlinkedScanRequestsResult, http403Result, http429Result, blockedOrCaptchaResult, scanFromResult] = await Promise.all([
-    query<{ count: string }>(`select count(*)::text as count from scans`, [], { readOnly: true }),
-    query<{ count: string }>(`select count(*)::text as count from scan_requests`, [], { readOnly: true }),
-    query<{ count: string }>(
-      `select count(*)::text as count
-         from scan_requests
-        where coalesce(fulfilled_by_scan_id, scan_id) is null
-           or resolution_mode = 'reused_existing_scan'`,
-      [],
-      { readOnly: true }
-    ),
-    query<{ count: string }>(
-      `select count(*)::text as count
-         from scan_snapshots
-        where homepage_fetch_http_status = 403
-           or robots_fetch_http_status = 403`,
-      [],
-      { readOnly: true }
-    ),
-    query<{ count: string }>(
-      `select count(*)::text as count
-         from scan_snapshots
-        where homepage_fetch_http_status = 429
-           or robots_fetch_http_status = 429`,
-      [],
-      { readOnly: true }
-    ),
-    query<{ count: string }>(
-      `select count(*)::text as count
-         from scan_snapshots
-        where blocked_flag = true
-           or captcha_flag = true
-           or scan_outcome = 'content_capture_degraded'`,
-      [],
-      { readOnly: true }
-    ),
+  const [scanFromResult, scanRequestCounts, snapshotCounts] = await Promise.all([
     query<{ count: string; scan_from: string }>(
       `select coalesce(scan_config_json->>'scanFrom', 'default') as scan_from,
               count(*)::text as count
@@ -1809,12 +2078,40 @@ export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCo
         group by coalesce(scan_config_json->>'scanFrom', 'default')`,
       [],
       { readOnly: true }
+    ),
+    queryOne<{ total_count: number; unlinked_count: number }>(
+      `select count(*)::int as total_count,
+              count(*) filter (
+                where coalesce(fulfilled_by_scan_id, scan_id) is null
+                   or resolution_mode = 'reused_existing_scan'
+              )::int as unlinked_count
+         from scan_requests`,
+      [],
+      { readOnly: true }
+    ),
+    queryOne<{ blocked_or_captcha_count: number; http_403_count: number; http_429_count: number }>(
+      `select count(*) filter (
+                where homepage_fetch_http_status = 403
+                   or robots_fetch_http_status = 403
+              )::int as http_403_count,
+              count(*) filter (
+                where homepage_fetch_http_status = 429
+                   or robots_fetch_http_status = 429
+              )::int as http_429_count,
+              count(*) filter (
+                where blocked_flag = true
+                   or captcha_flag = true
+                   or scan_outcome = 'content_capture_degraded'
+              )::int as blocked_or_captcha_count
+         from scan_snapshots`,
+      [],
+      { readOnly: true }
     )
   ]);
 
-  const totalPhysicalScans = Number(totalScansResult.rows[0]?.count ?? "0");
-  const totalScanRequests = Number(totalScanRequestsResult.rows[0]?.count ?? "0");
-  const totalUnlinkedScanRequests = Number(unlinkedScanRequestsResult.rows[0]?.count ?? "0");
+  const totalPhysicalScans = scanFromResult.rows.reduce((total, row) => total + Number(row.count), 0);
+  const totalScanRequests = scanRequestCounts?.total_count ?? 0;
+  const totalUnlinkedScanRequests = scanRequestCounts?.unlinked_count ?? 0;
 
   return {
     totalScans: totalPhysicalScans + totalUnlinkedScanRequests,
@@ -1825,9 +2122,9 @@ export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCo
       label: formatScanFromLabel(scanFrom),
       value: scanFrom
     })),
-    http403Count: Number(http403Result.rows[0]?.count ?? "0"),
-    http429Count: Number(http429Result.rows[0]?.count ?? "0"),
-    blockedOrCaptchaCount: Number(blockedOrCaptchaResult.rows[0]?.count ?? "0")
+    http403Count: snapshotCounts?.http_403_count ?? 0,
+    http429Count: snapshotCounts?.http_429_count ?? 0,
+    blockedOrCaptchaCount: snapshotCounts?.blocked_or_captcha_count ?? 0
   };
 }
 

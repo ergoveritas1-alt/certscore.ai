@@ -4,11 +4,17 @@ import {
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./supported-languages";
 export * from "./consent-control-label-classifier";
+export * from "./consent-language-classifier";
 export * from "./gdpr-transparency-topic-classifier";
 export * from "./article13-disclosure-rejection";
+export * from "./legal-framework-validity";
 export * from "./privacy-surface-classifier";
 export * from "./privacy-evidence-locale-registry";
 export * from "./supported-languages";
+export * from "./model-assistance";
+export * from "./consent-control-assessment";
+export * from "./consent-control-calibration";
+export * from "./lambda-result-disposition";
 
 export const directVsInferredSchema = z.enum([
   "direct",
@@ -22,6 +28,15 @@ export const supportedPrivacyEvidenceLocaleSchema = z.enum(SUPPORTED_PRIVACY_EVI
 export const supportedGdprTransparencyLocaleSchema = z.enum(SUPPORTED_GDPR_TRANSPARENCY_LOCALES);
 export const consentControlLocaleSchema = supportedPrivacyEvidenceLocaleSchema;
 export const consentControlMatchStrengthSchema = z.enum(["direct", "equivalent", "contextual", "weak"]);
+export const consentControlSemanticRoleSchema = z.enum([
+  "explicit_accept",
+  "ambiguous_acknowledgment",
+  "reject",
+  "necessary_only",
+  "preferences",
+  "dismiss",
+  "unknown",
+]);
 export const consentControlClassifierReasonCodesSchema = z.array(z.string().max(80)).max(16).optional();
 export const consentControlInventorySourceSchema = z.enum([
   "viewport",
@@ -218,6 +233,17 @@ export const responseSizeSchema = z.object({
   responseHeadersSize: z.number().int().nonnegative().optional(),
 });
 
+export const networkDestinationSchema = z.object({
+  ip: z.string().max(64),
+  country: z.string().length(2).optional(),
+  countryCode: z.string().length(2).optional(),
+  city: z.string().max(120).optional(),
+  asn: z.number().int().positive().optional(),
+  provider: z.string().max(160).optional(),
+  source: z.enum(["cdp_remote_ip", "cdp_remote_ip_geolite2"]),
+  locationLabel: z.literal("server location (may be CDN edge)"),
+});
+
 export const setCookieMetadataSchema = z.object({
   name: z.string(),
   domain: z.string().optional(),
@@ -275,6 +301,8 @@ export const networkEventSchema = runtimeEvidenceEventSchema.extend({
   isMainFrame: z.boolean().optional(),
   isSubFrame: z.boolean().optional(),
   isThirdParty: z.boolean().optional(),
+  idSyncEndpoint: z.boolean().optional(),
+  networkDestination: networkDestinationSchema.optional(),
   parentRequestId: z.string().optional(),
   redirectChainRequestIds: z.array(z.string()).default([]),
   responsibleScriptUrl: z.string().optional(),
@@ -311,6 +339,7 @@ export const networkResponseEventSchema = runtimeEvidenceEventSchema.extend({
   setCookieHeaders: z.array(z.string()).default([]),
   setCookieMetadata: z.array(setCookieMetadataSchema).default([]),
   cookieNamesSet: z.array(z.string()).default([]),
+  networkDestination: networkDestinationSchema.optional(),
   responseHeaders: safeResponseHeadersSchema.optional(),
   cacheHeaders: z.record(z.string()).default({}),
   locationRedirectHeader: z.string().optional(),
@@ -331,12 +360,21 @@ export const cookieEventSchema = runtimeEvidenceEventSchema.extend({
   httpOnly: z.boolean().optional(),
   sourceRequestId: z.string().optional(),
   sourceResponseEventId: z.string().optional(),
+  setByThirdPartyScript: z.boolean().optional(),
+  setterScriptUrl: z.string().max(2_000).optional(),
+  initiatorChain: z.array(z.string().max(2_000)).max(12).optional(),
+  lifespanSeconds: z.number().int().nonnegative().optional(),
+  lifespanSource: z.enum(["max_age", "expires", "browser_expiry", "session"]).optional(),
+  description: z.string().max(500).optional(),
+  dataTypes: z.array(z.string().max(120)).max(12).optional(),
   cookieParty: z.enum(["first_party", "third_party", "unknown"]).default("unknown"),
   vendorAssociated: z.boolean().default(false),
   associatedVendorRef: z.string().optional(),
   cookiePurpose: z.enum([
     "analytics",
     "advertising",
+    "marketing",
+    "personalization",
     "session_replay",
     "consent_management",
     "tag_management",
@@ -448,14 +486,29 @@ export const consentUiObservationSchema = z.object({
     actionType: z.enum(["accept_all", "reject_all", "manage_preferences", "save_preferences", "do_not_sell_share", "other"]),
     tagName: z.string().max(32).optional(),
     role: z.string().max(64).optional(),
+    presentationType: z.enum(["dedicated_button", "inline_link", "persistent_link", "unknown"]).optional(),
     selectorHint: z.string().max(160).optional(),
     visible: z.boolean().default(true),
+    layer: z.enum(["first_layer", "unknown"]).optional(),
+    semanticRole: consentControlSemanticRoleSchema.optional(),
+    confidence: confidenceSchema.optional(),
+    nearbyConsentText: z.string().max(500).optional(),
+    artifactRef: z.string().max(240).optional(),
     matchedTerm: z.string().max(120).optional(),
     matchedLocale: consentControlLocaleSchema.optional(),
     matchStrength: consentControlMatchStrengthSchema.optional(),
     classifierReasonCodes: consentControlClassifierReasonCodesSchema,
     classifierVariant: z.string().max(80).optional(),
   })).default([]),
+  impliedConsentLanguageObserved: z.boolean().default(false).optional(),
+  impliedConsentLanguageEvidence: z.array(z.object({
+    classifierId: z.string().max(120),
+    matchedExcerpt: z.string().max(240),
+    confidence: confidenceSchema,
+    observedLayer: z.enum(["first_layer", "unknown"]),
+    observedAtMs: z.number().int().nonnegative().nullable().optional(),
+    sourceArtifactRef: z.string().max(240),
+  })).max(12).default([]).optional(),
   inventoryDiagnostics: z.object({
     candidateContainerCount: z.number().int().nonnegative(),
     candidateControlCount: z.number().int().nonnegative(),
@@ -523,6 +576,16 @@ export const transportSecurityFormObservationSchema = z.object({
   hasSensitiveFieldHint: z.boolean().default(false),
 });
 
+const transportCertificateObservationSchema = z.object({
+  inputUrl: transportUrlSchema,
+  validCertificate: z.boolean().optional(),
+  subject: z.string().max(240).optional(),
+  issuer: z.string().max(240).optional(),
+  validFrom: z.string().max(40).optional(),
+  validTo: z.string().max(40).optional(),
+  chainCertificateCount: z.number().int().nonnegative().max(32).optional(),
+});
+
 export const transportSecurityObservationSchema = z.object({
   observationId: z.string(),
   observedAtMs: z.number().int().nonnegative(),
@@ -551,9 +614,15 @@ export const transportSecurityObservationSchema = z.object({
     inputUrl: transportUrlSchema.optional(),
     validCertificate: z.boolean().optional(),
     finalUrl: transportUrlSchema.optional(),
+    certificateSubject: z.string().max(240).optional(),
+    certificateIssuer: z.string().max(240).optional(),
+    certificateValidFrom: z.string().max(40).optional(),
+    certificateValidTo: z.string().max(40).optional(),
+    certificateChainCount: z.number().int().nonnegative().max(32).optional(),
     errorCategory: transportProbeErrorCategorySchema.optional(),
     errorMessage: z.string().max(240).optional(),
   }),
+  tlsCertificateObservations: z.array(transportCertificateObservationSchema).max(4).default([]),
   mixedContent: z.object({
     loadedHttpSubresources: z.array(transportSecuritySubresourceSchema).max(25).default([]),
     blockedHttpSubresources: z.array(transportSecuritySubresourceSchema).max(25).default([]),
@@ -663,6 +732,7 @@ export const consentActionCandidateSchema = z.object({
   visible: z.boolean().default(true),
   enabled: z.boolean().default(true),
   confidence: confidenceSchema,
+  semanticRole: consentControlSemanticRoleSchema.optional(),
   matchedTerm: z.string().max(120).optional(),
   matchedLocale: consentControlLocaleSchema.optional(),
   matchStrength: consentControlMatchStrengthSchema.optional(),
@@ -681,7 +751,10 @@ export const consentActionCandidateSchema = z.object({
   screenshotArtifactRefs: z.array(artifactRefSchema).default([]),
   assistMetadata: z.array(z.object({
     assistId: z.string(),
-    modelAssistProvider: z.literal("nano"),
+    modelAssistProvider: z.string().min(1).max(120),
+    modelAssistRole: z.enum(["extraction", "review", "escalation"]).optional(),
+    requestedModel: z.string().min(1).max(120).optional(),
+    resolvedModel: z.string().min(1).max(120).optional(),
     assistType: z.literal("consent_ui_classification"),
     confidence: confidenceSchema,
     uncertaintyNotes: z.array(z.string()).default([]),
@@ -1230,6 +1303,21 @@ export const domSnapshotArtifactSchema = z.object({
   consentStateAtTime: consentStateSchema,
 });
 
+export const policyCookieDisclosureObservationSchema = z.object({
+  cookieName: z.string().min(1).max(200),
+  provider: z.string().max(240).optional(),
+  duration: z.string().max(160).optional(),
+  purpose: z.string().max(640).optional(),
+  category: z.enum(["essential", "non_essential", "unknown"]).default("unknown"),
+  sourceUrl: z.string(),
+  evidenceRef: z.string().max(240),
+  parserProvenance: z.enum([
+    "policy_cookie_table_dom.v1",
+    "policy_cookie_table_text.v1",
+  ]),
+  confidence: z.number().min(0).max(1),
+});
+
 export const policySurfaceObservationSchema = z.object({
   observationId: z.string(),
   sourceScanner: z.string().default("policy_surface"),
@@ -1252,6 +1340,10 @@ export const policySurfaceObservationSchema = z.object({
   url: z.string(),
   normalizedUrl: z.string().optional(),
   linkText: z.string().optional(),
+  parentObservationId: z.string().optional(),
+  parentSurfaceUrl: z.string().max(500).optional(),
+  traversalDepth: z.number().int().min(0).max(1).optional(),
+  selectionReasonCodes: z.array(z.string().max(120)).max(12).optional(),
   selector: z.string().optional(),
   surroundingTextExcerpt: z.string().optional(),
   discoveryMethod: z.enum([
@@ -1276,6 +1368,24 @@ export const policySurfaceObservationSchema = z.object({
   linkObservationState: z.enum(["observed", "candidate", "not_observed"]).optional(),
   documentFetchState: z.enum(["not_attempted", "fetched", "failed", "skipped_budget"]).optional(),
   documentEvaluationState: z.enum(["not_attempted", "usable", "insufficient", "blocked"]).optional(),
+  documentOwnerEntity: z.string().max(240).optional(),
+  targetRelationship: z.enum([
+    "target_controller",
+    "first_party_brand",
+    "service_provider",
+    "unrelated",
+    "unknown",
+  ]).optional(),
+  ownershipConfidence: z.number().min(0).max(1).optional(),
+  ownershipReasonCodes: z.array(z.string().max(120)).max(12).optional(),
+  contentCoverage: z.object({
+    status: z.enum(["complete", "partial", "truncated", "malformed"]),
+    sourceTextChars: z.number().int().nonnegative(),
+    extractedSectionCount: z.number().int().nonnegative(),
+    retainedSectionCount: z.number().int().nonnegative(),
+    retainedTableRowCount: z.number().int().nonnegative(),
+    limitationKeys: z.array(z.string().max(120)).max(16).default([]),
+  }).optional(),
   httpStatus: z.number().int().optional(),
   finalUrl: z.string().optional(),
   redirectChain: z.array(z.string().max(500)).max(8).optional(),
@@ -1290,6 +1400,8 @@ export const policySurfaceObservationSchema = z.object({
     "scan_budget_exhausted",
     "low_quality_access_challenge",
     "insufficient_policy_text",
+    "content_decoding_failed",
+    "decompressed_body_too_large",
   ]).optional(),
   matchedLocale: supportedPrivacyEvidenceLocaleSchema.optional(),
   classifierProvenance: z.literal("privacy_surface_classifier.v1").optional(),
@@ -1412,10 +1524,13 @@ export const policySurfaceObservationSchema = z.object({
     sourceUrl: z.string(),
     heading: z.string().max(160),
     textExcerpt: z.string().max(1_200),
+    sourceTextChars: z.number().int().nonnegative().optional(),
+    extractionState: z.enum(["complete", "truncated", "malformed"]).optional(),
     charStart: z.number().int().nonnegative().optional(),
     charEnd: z.number().int().nonnegative().optional(),
     quality: z.enum(["strong", "partial", "limited"]).default("partial"),
   })).default([]),
+  policyCookieDisclosures: z.array(policyCookieDisclosureObservationSchema).max(250).default([]),
   retainedArticle13SectionEvidence: z.array(z.object({
     coverageArea: z.enum([
       "controller_contact",
@@ -1446,7 +1561,10 @@ export const policySurfaceObservationSchema = z.object({
   artifactRefs: z.array(artifactRefSchema).default([]),
   assistMetadata: z.array(z.object({
     assistId: z.string(),
-    modelAssistProvider: z.literal("nano"),
+    modelAssistProvider: z.string().min(1).max(120),
+    modelAssistRole: z.enum(["extraction", "review", "escalation"]).optional(),
+    requestedModel: z.string().min(1).max(120).optional(),
+    resolvedModel: z.string().min(1).max(120).optional(),
     assistType: z.enum([
       "link_classification",
       "topic_extraction",
@@ -1666,6 +1784,8 @@ export const policySurfaceInspectionOutcomeSchema = z.object({
     "indeterminate_limited_coverage",
   ]),
   coverageStatus: z.enum(["complete", "limited"]),
+  linkDiscoveryCoverageStatus: z.enum(["complete", "limited"]).default("limited"),
+  documentRetrievalCoverageStatus: z.enum(["usable", "insufficient", "limited"]).default("limited"),
   inspectionCompleted: z.boolean(),
   privacyPolicyObserved: z.boolean(),
   observedSurfaceTypes: z.array(policySurfaceObservationSchema.shape.surfaceType).max(16).default([]),
@@ -1686,18 +1806,36 @@ export function derivePolicySurfaceInspectionOutcome(input: {
   const privacyPolicyObserved = retainedObservations.some((observation) =>
     observation.surfaceType === "privacy_policy"
   );
+  const usablePrivacyDocumentRetained = observations.some((observation) =>
+    observation.surfaceType === "privacy_policy" &&
+    observation.status === "fetched" &&
+    observation.documentEvaluationState !== "insufficient"
+  );
   const inspectionCompleted = policyRun?.status === "completed";
   const limitationKeys = [
     !policyRun ? "policy_surface_inspection_runtime_not_run" : null,
     policyRun && policyRun.status !== "completed"
       ? `policy_surface_inspection_runtime_${policyRun.status}`
       : null,
+    privacyPolicyObserved && !usablePrivacyDocumentRetained
+      ? "privacy_policy_link_observed_document_not_retained"
+      : null,
   ].filter((value): value is string => value !== null)
     .filter((value, index, values) => values.indexOf(value) === index)
     .slice(0, 16);
-  const coverageStatus = privacyPolicyObserved || inspectionCompleted
+  const linkDiscoveryCoverageStatus = privacyPolicyObserved || inspectionCompleted
     ? "complete" as const
     : "limited" as const;
+  const documentRetrievalCoverageStatus = usablePrivacyDocumentRetained
+    ? "usable" as const
+    : privacyPolicyObserved
+      ? "insufficient" as const
+      : inspectionCompleted
+        ? "insufficient" as const
+        : "limited" as const;
+  const coverageStatus = privacyPolicyObserved && !usablePrivacyDocumentRetained
+    ? "limited" as const
+    : linkDiscoveryCoverageStatus;
   const outcome = privacyPolicyObserved
     ? "privacy_policy_observed" as const
     : inspectionCompleted
@@ -1707,6 +1845,8 @@ export function derivePolicySurfaceInspectionOutcome(input: {
   return policySurfaceInspectionOutcomeSchema.parse({
     outcome,
     coverageStatus,
+    linkDiscoveryCoverageStatus,
+    documentRetrievalCoverageStatus,
     inspectionCompleted,
     privacyPolicyObserved,
     observedSurfaceTypes: [...new Set(retainedObservations.map((observation) => observation.surfaceType))],
@@ -1734,14 +1874,131 @@ export const consentSurfaceInspectionOutcomeSchema = z.object({
     "dom_snapshot",
     "visual_capture",
   ])).max(5),
+  evidenceChannels: z.array(z.object({
+    channel: z.enum([
+      "navigation_network",
+      "viewport_screenshot",
+      "dom_snapshot",
+      "accessibility_tree",
+      "page_script_inventory",
+      "cmp_runtime",
+      "geometry",
+    ]),
+    status: z.enum(["observed", "not_observed", "inspection_incomplete"]),
+    evidenceCount: z.number().int().nonnegative().max(100_000),
+    reasonCodes: z.array(z.string().max(120)).max(8).default([]),
+  })).max(7).default([]),
   limitationKeys: z.array(z.string().max(120)).max(16).default([]),
 });
+
+type ConsentEvidenceChannel = z.infer<typeof consentSurfaceInspectionOutcomeSchema>["evidenceChannels"][number];
+
+function deriveConsentEvidenceChannels(input: {
+  cmpRuntimeObservations: z.infer<typeof cmpRuntimeObservationSchema>[];
+  consentUiObservations: z.infer<typeof consentUiObservationSchema>[];
+  domSnapshots: z.infer<typeof domSnapshotArtifactSchema>[];
+  modulesRun: z.infer<typeof scanModuleRunSchema>[];
+  networkEvents: z.infer<typeof networkEventSchema>[];
+  screenshots: z.infer<typeof screenshotArtifactSchema>[];
+  visualCapture?: z.infer<typeof visualCaptureSummarySchema>;
+}): ConsentEvidenceChannel[] {
+  const preConsentRun = input.modulesRun.find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
+  const runtimeIncomplete = preConsentRun?.status !== "completed";
+  const observations = input.consentUiObservations;
+  const hasObservationBasis = (pattern: RegExp) => observations.some((observation) =>
+    observation.basis.some((basis) => pattern.test(basis))
+  );
+  const channelCompleted = (channelName: "accessibility_tree" | "dom_inventory") =>
+    observations.some((observation) =>
+      observation.captureDiagnostics?.completedChannels.includes(channelName) === true
+    );
+  const channelIncomplete = (channelName: "accessibility_tree" | "dom_inventory") =>
+    observations.some((observation) =>
+      observation.captureDiagnostics?.timedOutChannels.includes(channelName) === true ||
+      observation.captureDiagnostics?.failedChannels.includes(channelName) === true
+    );
+  const channel = (
+    name: ConsentEvidenceChannel["channel"],
+    status: ConsentEvidenceChannel["status"],
+    evidenceCount: number,
+    reasonCodes: string[] = [],
+  ): ConsentEvidenceChannel => ({
+    channel: name,
+    status,
+    evidenceCount: Math.max(0, Math.min(100_000, evidenceCount)),
+    reasonCodes: [...new Set(reasonCodes)].slice(0, 8),
+  });
+  const visualAvailable = input.visualCapture?.status === "available" || input.screenshots.length > 0;
+  const domObserved = input.domSnapshots.some((snapshot) =>
+    snapshot.consentStateAtTime === "pre_consent" && (snapshot.textExcerpt?.trim().length ?? 0) > 0
+  );
+  const accessibilityIncomplete = channelIncomplete("accessibility_tree");
+  const accessibilityObserved =
+    channelCompleted("accessibility_tree") ||
+    hasObservationBasis(/accessibility_tree/i) && !accessibilityIncomplete;
+  const pageScriptIncomplete = channelIncomplete("dom_inventory");
+  const pageScriptObserved =
+    channelCompleted("dom_inventory") ||
+    hasObservationBasis(/(?:rapid|first_layer|generic_consent_surface|shadow_root|same_origin_frame|viewport|full_document)/i) &&
+      !pageScriptIncomplete;
+  const geometryObserved = hasObservationBasis(/geometry:(?:captured|confirmed)|geometry_proof/i);
+  const geometryIncomplete = hasObservationBasis(/geometry_capture_unavailable|geometry.*(?:failed|unavailable)/i);
+  const consentObservationIncomplete =
+    observations.some((observation) => observation.captureStatus === "incomplete") ||
+    hasObservationBasis(/bounded_capture_timeout_or_failure|probe_failed|runtime_partial/i);
+
+  return [
+    channel(
+      "navigation_network",
+      input.networkEvents.length > 0 ? "observed" : runtimeIncomplete ? "inspection_incomplete" : "not_observed",
+      input.networkEvents.length,
+      input.networkEvents.length > 0 ? [] : runtimeIncomplete ? ["runtime_incomplete"] : ["no_network_events_retained"],
+    ),
+    channel(
+      "viewport_screenshot",
+      visualAvailable ? "observed" : runtimeIncomplete ? "inspection_incomplete" : "not_observed",
+      input.screenshots.length,
+      visualAvailable ? [] : runtimeIncomplete ? ["visual_capture_incomplete"] : ["no_visual_artifact_retained"],
+    ),
+    channel(
+      "dom_snapshot",
+      domObserved ? "observed" : runtimeIncomplete ? "inspection_incomplete" : "not_observed",
+      input.domSnapshots.length,
+      domObserved ? [] : runtimeIncomplete ? ["dom_snapshot_incomplete"] : ["no_substantive_dom_snapshot"],
+    ),
+    channel(
+      "accessibility_tree",
+      accessibilityObserved ? "observed" : accessibilityIncomplete || consentObservationIncomplete ? "inspection_incomplete" : "not_observed",
+      accessibilityObserved ? observations.filter((observation) => observation.basis.some((basis) => /accessibility_tree/i.test(basis))).length : 0,
+      accessibilityObserved ? [] : accessibilityIncomplete || consentObservationIncomplete ? ["accessibility_inventory_incomplete"] : ["no_accessibility_evidence"],
+    ),
+    channel(
+      "page_script_inventory",
+      pageScriptObserved ? "observed" : pageScriptIncomplete || consentObservationIncomplete ? "inspection_incomplete" : "not_observed",
+      pageScriptObserved ? observations.reduce((sum, observation) => sum + observation.controls.length, 0) : 0,
+      pageScriptObserved ? [] : pageScriptIncomplete || consentObservationIncomplete ? ["page_script_inventory_incomplete"] : ["no_page_script_inventory"],
+    ),
+    channel(
+      "cmp_runtime",
+      input.cmpRuntimeObservations.length > 0 ? "observed" : runtimeIncomplete ? "inspection_incomplete" : "not_observed",
+      input.cmpRuntimeObservations.length,
+      input.cmpRuntimeObservations.length > 0 ? [] : runtimeIncomplete ? ["cmp_runtime_incomplete"] : ["no_cmp_runtime_signal"],
+    ),
+    channel(
+      "geometry",
+      geometryObserved ? "observed" : geometryIncomplete || runtimeIncomplete ? "inspection_incomplete" : "not_observed",
+      geometryObserved ? observations.reduce((sum, observation) => sum + observation.controls.length, 0) : 0,
+      geometryObserved ? [] : geometryIncomplete ? ["geometry_capture_unavailable"] : runtimeIncomplete ? ["runtime_incomplete"] : ["no_geometry_evidence"],
+    ),
+  ];
+}
 
 export function deriveConsentSurfaceInspectionOutcome(input: {
   cmpRuntimeObservations?: z.infer<typeof cmpRuntimeObservationSchema>[];
   consentUiObservations?: z.infer<typeof consentUiObservationSchema>[];
   domSnapshots?: z.infer<typeof domSnapshotArtifactSchema>[];
   modulesRun?: z.infer<typeof scanModuleRunSchema>[];
+  networkEvents?: z.infer<typeof networkEventSchema>[];
   runtimeCoverage?: z.infer<typeof runtimeCoverageSummarySchema>;
   screenshots?: z.infer<typeof screenshotArtifactSchema>[];
   visualCapture?: z.infer<typeof visualCaptureSummarySchema>;
@@ -1756,21 +2013,40 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
   const actionableControlObserved = observations.some((observation) =>
     observation.layerInspected === "first_layer" &&
     (
-      observation.acceptControlObserved ||
+      (observation.acceptControlObserved && observation.controls.length === 0) ||
       observation.rejectControlObserved ||
       observation.managePreferencesControlObserved ||
       observation.controls.some((control) =>
         control.visible !== false &&
-        ["accept_all", "reject_all", "manage_preferences", "save_preferences"].includes(control.actionType)
+        (
+          control.semanticRole === "explicit_accept" ||
+          control.semanticRole === "reject" ||
+          control.semanticRole === "necessary_only" ||
+          control.semanticRole === "preferences" ||
+          (
+            !control.semanticRole &&
+            ["accept_all", "reject_all", "manage_preferences", "save_preferences"].includes(control.actionType)
+          )
+        )
       )
     )
   );
-  const consentSurfaceObserved = Boolean(visibleObservation || (input.cmpRuntimeObservations ?? []).length > 0);
+  // A CMP runtime observation identifies consent-management technology, but it
+  // does not prove that a user-visible consent surface was rendered. Keep the
+  // technology signal separate from the consent-surface observation so a
+  // script/library signal cannot be projected as a confirmed banner.
+  const consentSurfaceObserved = Boolean(visibleObservation);
   const preConsentRun = (input.modulesRun ?? []).find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
   const observationFailed = observations.length === 0 || observations.some((observation) =>
-    observation.basis.includes("bounded_capture_timeout_or_failure") ||
-    observation.basis.includes("inventory:probe_failed") ||
-    observation.basis.includes("geometry_capture_unavailable")
+    observation.captureStatus === "incomplete" ||
+    (
+      observation.captureStatus === undefined &&
+      (
+        observation.basis.includes("bounded_capture_timeout_or_failure") ||
+        observation.basis.includes("inventory:probe_failed") ||
+        observation.basis.includes("geometry_capture_unavailable")
+      )
+    )
   );
   const settledInventoryCompleted = observations.some((observation) =>
     observation.basis.includes("settled_control_inventory_completed")
@@ -1813,6 +2089,15 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
       (input.screenshots ?? []).some((artifact) => artifact.consentStateAtTime === "pre_consent")
     ) ? "visual_capture" as const : null,
   ].filter((value): value is NonNullable<typeof value> => value !== null);
+  const evidenceChannels = deriveConsentEvidenceChannels({
+    cmpRuntimeObservations: input.cmpRuntimeObservations ?? [],
+    consentUiObservations: observations,
+    domSnapshots: input.domSnapshots ?? [],
+    modulesRun: input.modulesRun ?? [],
+    networkEvents: input.networkEvents ?? [],
+    screenshots: input.screenshots ?? [],
+    visualCapture: input.visualCapture,
+  });
   const outcome = consentSurfaceObserved
     ? actionableControlObserved
       ? "actionable_surface_observed" as const
@@ -1830,6 +2115,7 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     actionableControlObserved,
     observedAtMs: visibleObservation?.observedAtMs ?? latestObservation?.observedAtMs ?? null,
     evidenceSources,
+    evidenceChannels,
     limitationKeys: inspectionLimitationKeys,
   });
 }
@@ -2125,6 +2411,7 @@ export type ScanModuleRun = z.infer<typeof scanModuleRunSchema>;
 export type RuntimeEvidenceEvent = z.infer<typeof runtimeEvidenceEventSchema>;
 export type NetworkEvent = z.infer<typeof networkEventSchema>;
 export type NetworkResponseEvent = z.infer<typeof networkResponseEventSchema>;
+export type NetworkDestination = z.infer<typeof networkDestinationSchema>;
 export type CookieEvent = z.infer<typeof cookieEventSchema>;
 export type SetCookieMetadata = z.infer<typeof setCookieMetadataSchema>;
 export type CookieSnapshot = z.infer<typeof cookieSnapshotSchema>;
@@ -2154,6 +2441,7 @@ export type ScreenshotArtifact = z.infer<typeof screenshotArtifactSchema>;
 export type VisualCaptureSummary = z.infer<typeof visualCaptureSummarySchema>;
 export type DomSnapshotArtifact = z.infer<typeof domSnapshotArtifactSchema>;
 export type PolicySurfaceObservation = z.infer<typeof policySurfaceObservationSchema>;
+export type PolicyCookieDisclosureObservation = z.infer<typeof policyCookieDisclosureObservationSchema>;
 export type NormalizedVendorObservation = z.infer<
   typeof normalizedVendorObservationSchema
 >;

@@ -19,6 +19,10 @@ import {
 } from "./local-v2-dag-lambda-result-poller";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 
+function scanUuid(index: number) {
+  return `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+}
+
 function buildResultMessage(overrides: Record<string, unknown> = {}) {
   return JSON.stringify({
     artifactOnly: true,
@@ -29,7 +33,8 @@ function buildResultMessage(overrides: Record<string, unknown> = {}) {
     contractVersion: LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
-    scanId: "scan-local-1",
+    resultPurpose: "persisted_scan",
+    scanId: scanUuid(1),
     status: "completed",
     targetEnvironment: "local",
     ...overrides
@@ -60,7 +65,7 @@ test("SQS poller validates and deletes completed and failed local v2 DAG message
             {
               Body: buildResultMessage({
                 error: { message: "scan failed" },
-                scanId: "scan-local-2",
+                scanId: scanUuid(2),
                 status: "failed"
               }),
               MessageId: "message-2",
@@ -94,7 +99,7 @@ test("SQS poller validates and deletes completed and failed local v2 DAG message
     handled: 2,
     received: 2
   });
-  assert.deepEqual(handled, ["scan-local-1", "scan-local-2"]);
+  assert.deepEqual(handled, [scanUuid(1), scanUuid(2)]);
   assert.deepEqual(deleted, ["receipt-1", "receipt-2"]);
 });
 
@@ -108,7 +113,7 @@ test("SQS poller handles at most three result messages concurrently", async () =
         return {
           $metadata: {},
           Messages: Array.from({ length: 6 }, (_, index) => ({
-            Body: buildResultMessage({ scanId: `scan-local-${index + 1}` }),
+            Body: buildResultMessage({ scanId: scanUuid(index + 1) }),
             MessageId: `message-${index + 1}`,
             ReceiptHandle: `receipt-${index + 1}`
           }))
@@ -163,7 +168,10 @@ test("SQS poller deletes manual smoke results that do not belong to a local scan
           $metadata: {},
           Messages: [
             {
-              Body: buildResultMessage({ scanId: "postdeploy-cnn-eu-ie-proxy-123" }),
+              Body: buildResultMessage({
+                resultPurpose: undefined,
+                scanId: "postdeploy-cnn-eu-ie-proxy-123",
+              }),
               MessageId: "message-smoke",
               ReceiptHandle: "receipt-smoke"
             }
@@ -205,7 +213,10 @@ test("SQS poller deletes A/R/O diagnostic Lambda results that do not belong to W
           $metadata: {},
           Messages: [
             {
-              Body: buildResultMessage({ scanId: "aro-gate-adversarial-zeit-de-1782705130742" }),
+              Body: buildResultMessage({
+                resultPurpose: undefined,
+                scanId: "aro-gate-adversarial-zeit-de-1782705130742",
+              }),
               MessageId: "message-aro",
               ReceiptHandle: "receipt-aro"
             }
@@ -238,6 +249,70 @@ test("SQS poller deletes A/R/O diagnostic Lambda results that do not belong to W
   assert.deepEqual(deleted, ["receipt-aro"]);
 });
 
+test("SQS poller acknowledges synthetic results and preserves invalid identities for investigation", async () => {
+  const deleted: string[] = [];
+  let handleCalls = 0;
+  const sqsClient = {
+    async send(command: ReceiveMessageCommand | DeleteMessageCommand) {
+      if (command instanceof ReceiveMessageCommand) {
+        return {
+          $metadata: {},
+          Messages: [
+            {
+              Body: buildResultMessage({
+                resultPurpose: "synthetic_verification",
+                scanId: "bounded-verification-id",
+              }),
+              MessageId: "message-typed",
+              ReceiptHandle: "receipt-typed",
+            },
+            {
+              Body: buildResultMessage({
+                resultPurpose: undefined,
+                scanId: "regional-vpc-parity-eu-west-1-example-com-123",
+              }),
+              MessageId: "message-regional",
+              ReceiptHandle: "receipt-regional",
+            },
+            {
+              Body: buildResultMessage({
+                resultPurpose: "persisted_scan",
+                scanId: "not-a-uuid",
+              }),
+              MessageId: "message-invalid",
+              ReceiptHandle: "receipt-invalid",
+            },
+          ],
+        };
+      }
+
+      deleted.push(String(command.input.ReceiptHandle));
+      return { $metadata: {} };
+    },
+  };
+
+  const result = await pollLocalV2DagLambdaResultQueue({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/local-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
+    },
+    handleMessage: async () => {
+      handleCalls += 1;
+      throw new Error("non-persistable results must not reach ingestion");
+    },
+    sqsClient,
+  });
+
+  assert.deepEqual(result, {
+    deleted: 2,
+    failed: 1,
+    handled: 0,
+    received: 3,
+  });
+  assert.equal(handleCalls, 0);
+  assert.deepEqual(deleted.sort(), ["receipt-regional", "receipt-typed"]);
+});
+
 test("SQS poller drains configured regional result queues", async () => {
   const receivedQueueUrls: string[] = [];
   const deletedQueueUrls: string[] = [];
@@ -250,7 +325,7 @@ test("SQS poller drains configured regional result queues", async () => {
           $metadata: {},
           Messages: [
             {
-              Body: buildResultMessage({ scanId: `scan-${receivedQueueUrls.length}` }),
+              Body: buildResultMessage({ scanId: scanUuid(receivedQueueUrls.length) }),
               MessageId: `message-${receivedQueueUrls.length}`,
               ReceiptHandle: `receipt-${receivedQueueUrls.length}`
             }
@@ -582,34 +657,28 @@ test("local web poller records Lambda result before marking scan completed", asy
   );
   assert.match(source, /readRetainedScanCompletionDiagnostics/);
   assert.match(source, /coverage_level = 'limited_none'/);
-  assert.match(source, /scan_outcome = \$2/);
+  assert.match(source, /blocked_flag = excluded\.blocked_flag/);
+  assert.match(source, /captcha_flag = excluded\.captcha_flag/);
+  assert.match(source, /insert into scan_snapshots/);
+  assert.match(source, /on conflict \(scan_id\) do update/);
+  assert.match(source, /scan_no_go_assessment/);
+  assert.match(source, /visual_access_review/);
+  assert.match(source, /scannerRuntimeProvenance/);
+  assert.match(source, /public_ip_hash = coalesce\(\$4, public_ip_hash\)/);
+  assert.match(source, /scan_outcome = excluded\.scan_outcome/);
   assert.match(source, /pages_scanned = case when \$2::int = 0 then 0/);
 });
 
-test("completed Lambda results are not acknowledged without both immutable score projections", () => {
+test("completed Lambda results require only the active immutable score projection", () => {
   assert.doesNotThrow(() => assertLocalV2DagCompletionScorePersistence({
-    reason: "inserted",
-    shadowModelVersion: "candidate-v3",
-    shadowReason: "inserted"
+    reason: "inserted"
   }));
   assert.doesNotThrow(() => assertLocalV2DagCompletionScorePersistence({
-    reason: "already_persisted",
-    shadowModelVersion: "candidate-v3",
-    shadowReason: "already_persisted"
+    reason: "already_persisted"
   }));
   assert.throws(
     () => assertLocalV2DagCompletionScorePersistence({
-      reason: "scan_not_completed_or_missing",
-      shadowModelVersion: null,
-      shadowReason: null
-    }),
-    /score persistence is incomplete/
-  );
-  assert.throws(
-    () => assertLocalV2DagCompletionScorePersistence({
-      reason: "inserted",
-      shadowModelVersion: "candidate-v3",
-      shadowReason: "persistence_failed"
+      reason: "scan_not_completed_or_missing"
     }),
     /score persistence is incomplete/
   );

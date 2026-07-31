@@ -1,9 +1,12 @@
-import { LocalV2DagScanProgressCard } from "./scan-submit-progress";
+import React from "react";
+import { ScanReportLoadingCard } from "./scan-report-loading-card";
 import { ScanStatusAutoRefresh } from "./scan-status-auto-refresh";
+import { LocalV2DagScanProgressCard } from "./scan-submit-progress";
 
 export function PendingScanDetailView({
   createdAt,
   domainHostname,
+  pendingPostCompletionWork = false,
   profile,
   scanId,
   startedAt,
@@ -11,6 +14,7 @@ export function PendingScanDetailView({
 }: {
   createdAt: string;
   domainHostname: string | null;
+  pendingPostCompletionWork?: boolean;
   profile: string;
   scanId: string;
   startedAt: string | null;
@@ -24,12 +28,24 @@ export function PendingScanDetailView({
           Scan: {domainHostname?.trim() || "website"}
         </h1>
       </div>
-      <LocalV2DagScanProgressCard
-        createdAt={createdAt}
-        profileValue={profile}
-        startedAt={startedAt}
+      {pendingPostCompletionWork ? (
+        <ScanReportLoadingCard
+          description="The scan is complete. We’re organizing the evidence into your report now, and it will open automatically when it’s ready."
+          title="Finishing your report"
+        />
+      ) : (
+        <LocalV2DagScanProgressCard
+          createdAt={createdAt}
+          profileValue={profile}
+          startedAt={startedAt}
+        />
+      )}
+      <ScanStatusAutoRefresh
+        pendingPostCompletionWork={pendingPostCompletionWork}
+        scanId={scanId}
+        silent
+        status={status}
       />
-      <ScanStatusAutoRefresh scanId={scanId} silent status={status} />
     </div>
   );
 }

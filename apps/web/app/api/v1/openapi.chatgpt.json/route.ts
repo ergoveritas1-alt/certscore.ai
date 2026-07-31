@@ -13,6 +13,9 @@ export function GET(request: Request) {
     "X-CertScore.ai-Pulse": "v1",
     "X-CertScore.ai-Route": "openapi-chatgpt",
     "X-CertScore.ai-Request-Id": id,
+    "X-CertScore-Pulse": "v1",
+    "X-CertScore-Route": "openapi-chatgpt",
+    "X-CertScore-Request-Id": id,
     "X-Content-Type-Options": "nosniff"
   }), request);
 

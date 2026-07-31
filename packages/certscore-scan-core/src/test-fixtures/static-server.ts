@@ -27,6 +27,7 @@ export type StaticFixturePage =
   | "consent-compact-analytics-controls"
   | "consent-compact-cookie-controls"
   | "consent-compact-privacy-settings-controls"
+  | "consent-contextual-approval-offscreen"
   | "consent-contextual-continue-accept"
   | "consent-deny-non-essential"
   | "consent-generic-learn-more-page-context"
@@ -43,7 +44,10 @@ export type StaticFixturePage =
   | "consent-no-reject"
   | "consent-late-first-layer-controls"
   | "consent-late-first-layer-choice-controls"
+  | "consent-late-without-cmp-runtime"
   | "consent-late-cmp-choice-controls"
+  | "consent-renderer-contention-delayed-controls"
+  | "consent-transparent-input-overlays"
   | "consent-privacy-choice-surface-reject-success"
   | "consent-privacy-choice-only"
   | "consent-privacy-opt-out-ad-comparison"
@@ -126,6 +130,7 @@ export type StaticFixturePage =
   | "policy-secondary-third-party-links"
   | "policy-onetrust-index-json"
   | "policy-onetrust-notice-json"
+  | "policy-privacy-document-index"
   | "policy-privacy-center-link"
   | "policy-rendered-article13-better"
   | "policy-rendered-incomplete-substantive"
@@ -205,6 +210,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-compact-analytics-controls": "consent-compact-analytics-controls",
   "consent-compact-cookie-controls": "consent-compact-cookie-controls",
   "consent-compact-privacy-settings-controls": "consent-compact-privacy-settings-controls",
+  "consent-contextual-approval-offscreen": "consent-contextual-approval-offscreen",
   "consent-contextual-continue-accept": "consent-contextual-continue-accept",
   "consent-deny-non-essential": "consent-deny-non-essential",
   "consent-generic-learn-more-page-context": "consent-generic-learn-more-page-context",
@@ -221,7 +227,10 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-no-reject": "consent-no-reject",
   "consent-late-first-layer-controls": "consent-late-first-layer-controls",
   "consent-late-first-layer-choice-controls": "consent-late-first-layer-choice-controls",
+  "consent-late-without-cmp-runtime": "consent-late-without-cmp-runtime",
   "consent-late-cmp-choice-controls": "consent-late-cmp-choice-controls",
+  "consent-renderer-contention-delayed-controls": "consent-renderer-contention-delayed-controls",
+  "consent-transparent-input-overlays": "consent-transparent-input-overlays",
   "consent-privacy-choice-surface-reject-success": "consent-privacy-choice-surface-reject-success",
   "consent-privacy-choice-only": "consent-privacy-choice-only",
   "consent-privacy-opt-out-ad-comparison": "consent-privacy-opt-out-ad-comparison",
@@ -304,6 +313,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-secondary-third-party-links": "policy-secondary-third-party-links",
   "policy-onetrust-index-json": "policy-onetrust-index-json",
   "policy-onetrust-notice-json": "policy-onetrust-notice-json",
+  "policy-privacy-document-index": "policy-privacy-document-index",
   "policy-privacy-center-link": "policy-privacy-center",
   "policy-rendered-article13-better": "policy-rendered-article13-better",
   "policy-rendered-incomplete-substantive": "policy-rendered-incomplete-substantive",
@@ -1298,7 +1308,10 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     manage: caseName === "consent-manage-preferences",
     lateFirstLayerControls: caseName === "consent-late-first-layer-controls",
     lateFirstLayerChoiceControls: caseName === "consent-late-first-layer-choice-controls",
+    lateWithoutCmpRuntime: caseName === "consent-late-without-cmp-runtime",
     lateCmpChoiceControls: caseName === "consent-late-cmp-choice-controls",
+    rendererContentionDelayedControls: caseName === "consent-renderer-contention-delayed-controls",
+    transparentInputOverlays: caseName === "consent-transparent-input-overlays",
     cmpScriptLateSettings: caseName === "consent-cmp-script-late-settings",
     cmpScriptOffscreenContextControls: caseName === "consent-cmp-script-offscreen-context-controls",
     cmpScriptOffscreenFooterSettings: caseName === "consent-cmp-script-offscreen-footer-settings",
@@ -1311,6 +1324,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     compactAnalyticsControls: caseName === "consent-compact-analytics-controls",
     compactCookieControls: caseName === "consent-compact-cookie-controls",
     compactPrivacySettingsControls: caseName === "consent-compact-privacy-settings-controls",
+    contextualApprovalOffscreen: caseName === "consent-contextual-approval-offscreen",
     firstLayerNecessaryToggleOnly: caseName === "consent-first-layer-necessary-toggle-only",
     firstLayerOptionalToggleOff: caseName === "consent-first-layer-optional-toggle-off",
     firstLayerOptionalToggleOn: caseName === "consent-first-layer-optional-toggle-on",
@@ -1398,6 +1412,21 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
       </script>
     `;
   }
+  if (options.lateWithoutCmpRuntime) {
+    return `
+      <section>
+        <p>Fixture page whose consent surface is injected after ordinary post-settle retries.</p>
+      </section>
+      <div id="late-consent-root"></div>
+      <script>
+        setTimeout(() => {
+          const target = document.getElementById("late-consent-root");
+          if (!target) return;
+          target.innerHTML = '<div id="late-consent-banner" role="dialog" aria-label="Cookie consent"><p>Choose how this site may use optional cookies.</p><span role="button" tabindex="0">Accept all cookies</span><span role="button" tabindex="0">Accept only essential cookies</span><span role="button" tabindex="0">Cookie settings</span></div>';
+        }, 6500);
+      </script>
+    `;
+  }
   if (options.localizedControls) {
     return `
       <section>
@@ -1464,6 +1493,21 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
       </section>
     `;
   }
+  if (options.contextualApprovalOffscreen) {
+    return `
+      <main style="min-height: 1280px;">
+        <h1>Consent approval fixture</h1>
+        <p>Primary content appears before a compact consent surface.</p>
+      </main>
+      <section id="compact-cookie-consent" style="padding: 16px; border: 1px solid #111;">
+        <p>This website uses cookies to improve your experience. We also use cookies to show relevant ads and analyze traffic statistics.</p>
+        <button id="approval-control" type="button">I’m happy with that</button>
+      </section>
+      <script>
+        window.OneTrust = { fixture: true };
+      </script>
+    `;
+  }
   if (options.lateFirstLayerChoiceControls) {
     return `
       <section>
@@ -1500,6 +1544,41 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
           if (!target) return;
           target.innerHTML = '<button id="settings" type="button">Cookie settings</button><button id="accept-all" type="button">Accept</button><button id="reject-all" type="button">Reject</button>';
         }, 3200);
+      </script>
+    `;
+  }
+  if (options.transparentInputOverlays) {
+    return `
+      <main><h1>Generic commerce fixture</h1></main>
+      <section role="dialog" aria-label="Cookie choices" style="position: fixed; inset: auto 0 0; padding: 24px; background: white;">
+        <h2>Cookies and privacy choices</h2>
+        <p>Choose whether optional analytics and advertising cookies may be used.</p>
+        <label style="display: inline-block; position: relative; padding: 10px 18px; background: #ffd814;">
+          <span>Accept</span>
+          <input aria-label="Accept" value="Accept" type="button" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.01;">
+        </label>
+        <label style="display: inline-block; position: relative; padding: 10px 18px; background: #eee;">
+          <span>Decline</span>
+          <input aria-label="Decline" value="Decline" type="button" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.01;">
+        </label>
+        <a href="/preferences">Customise</a>
+      </section>
+    `;
+  }
+  if (options.rendererContentionDelayedControls) {
+    return `
+      <main><h1>Delayed consent fixture</h1></main>
+      <div id="delayed-consent-root"></div>
+      <script>
+        setTimeout(() => {
+          const target = document.getElementById("delayed-consent-root");
+          if (!target) return;
+          target.innerHTML = '<section role="dialog" aria-label="Cookie choices"><p>Choose whether optional analytics cookies may be used.</p><button>Accept</button><button>Decline</button><a href="/preferences">Customise</a></section>';
+          const blockedUntil = performance.now() + 7600;
+          while (performance.now() < blockedUntil) {
+            Math.sqrt(144);
+          }
+        }, 250);
       </script>
     `;
   }
@@ -2010,6 +2089,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-noisy-policy-body": `<a href="/policies/noisy-privacy">Privacy Policy</a>`,
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,
+    "policy-privacy-document-index": `<a href="/policies/privacy-index">Privacy Policy</a>`,
     "policy-onetrust-notice-json": `<a href="/policies/onetrust-shell">Privacy Policy</a>`,
     "policy-rendered-article13-better": `<a href="/rendered-article13-better/privacy">Politique de confidentialité</a>`,
     "policy-rendered-incomplete-substantive": `<a href="/rendered-incomplete-substantive/privacy">Privacy Policy</a>`,
@@ -2685,6 +2765,29 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "en-us | WBD Privacy Center",
       body: "Processing Error. Close Privacy Center. Nested OneTrust NoticeApi LoadNotices shell.",
     },
+    "/policies/privacy-index": {
+      title: "Privacy Policy",
+      body: "Select the privacy notice that applies to this service.",
+    },
+    "/policies/privacy-notice-current": {
+      title: "Privacy Policy",
+      body: [
+        "Privacy Policy. This notice explains how Example Test collects and processes personal data.",
+        "We process account, contact, device, and usage information to provide the service, secure accounts, communicate with users, and improve our products.",
+        "Depending on the activity, our legal bases include contract, consent, legal obligations, and legitimate interests.",
+        "Recipients may include hosting providers, payment processors, analytics providers, professional advisers, and public authorities where required.",
+        "We retain personal data only for as long as needed for the purposes described in this notice and applicable legal requirements.",
+        "Individuals may request access, correction, deletion, restriction, portability, or object to certain processing by contacting privacy@example.test.",
+        "International transfers may use adequacy decisions or standard contractual clauses.",
+        "You may contact our data protection officer and lodge a complaint with a supervisory authority.",
+        "Additional policy context describes controller identity, contact routes, data categories, sources, service purposes, recipients, retention criteria, security practices, transfers, individual rights, complaint channels, and policy updates.",
+        "Further explanatory text repeats the target-owned privacy notice context so the retained document is long enough for deterministic bounded policy extraction and review.",
+      ].join(" ").repeat(3),
+    },
+    "/policies/privacy-notice-legacy": {
+      title: "Archived Privacy Policy",
+      body: "Archived privacy policy retained for historical reference only.",
+    },
     "/accessibility": {
       title: "Accessibility Statement",
       body: "Accessibility statement. Contact us if you experience barriers accessing our public website.",
@@ -2697,6 +2800,34 @@ function policyDocumentHtml(pathname: string): string | undefined {
   const doc = docs[pathname];
   if (!doc) {
     return undefined;
+  }
+  if (pathname === "/policies/privacy-index") {
+    return `<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>${escapeHtml(doc.title)}</title></head>
+  <body>
+    <main>
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+      <a href="/policies/privacy-notice-legacy">Previous Privacy Policy</a>
+      <a href="/policies/privacy-notice-current">Privacy Policy for this service</a>
+      <a href="/support/privacy-faq">Privacy FAQ</a>
+    </main>
+  </body>
+</html>`;
+  }
+  if (pathname === "/policies/privacy-notice-legacy") {
+    return `<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>${escapeHtml(doc.title)}</title></head>
+  <body>
+    <main>
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+      <a href="/policies/privacy-notice-current">Open the current Privacy Policy</a>
+    </main>
+  </body>
+</html>`;
   }
   if (pathname === "/policies/privacy-with-third-party-links") {
     return `<!doctype html>

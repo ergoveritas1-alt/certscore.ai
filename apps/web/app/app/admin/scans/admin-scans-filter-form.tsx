@@ -41,14 +41,14 @@ export function AdminScansFilterForm({ basePath = "/app/admin/scans", children, 
       {children}
       <button
         aria-label={isPending ? "Applying scan filters" : "Apply scan filters"}
-        className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70"
+        className="app-raised-button app-raised-button-dark inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70"
         disabled={isPending}
         type="submit"
       >
         {isPending ? <span aria-hidden="true" className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : null}
         {isPending ? "Filtering…" : "Filter"}
       </button>
-      {hasFilters ? <Link className="inline-flex h-10 shrink-0 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700" href={clearHref ?? basePath}>Clear</Link> : null}
+      {hasFilters ? <Link className="app-raised-button inline-flex h-10 shrink-0 items-center rounded-lg px-4 text-sm font-semibold text-slate-700" href={clearHref ?? basePath} prefetch={false}>Clear</Link> : null}
     </form>
   );
 }

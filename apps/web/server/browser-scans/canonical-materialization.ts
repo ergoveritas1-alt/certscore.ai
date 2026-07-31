@@ -1,3 +1,4 @@
+import { classifyConsentControlLabel } from "@certscore/contracts";
 import {
   BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
   BROWSER_SCAN_SOURCE_ID,
@@ -28,6 +29,11 @@ function signalOptionalBoolean(signals: BrowserScanObservedSignalPackageInput["o
 function signalStringArray(signals: BrowserScanObservedSignalPackageInput["observedSignals"], key: string) {
   const signal = signals.find((candidate) => candidate.key === key && candidate.valueType === "string_array");
   return Array.isArray(signal?.value) ? uniqueStrings(signal.value.filter((value): value is string => typeof value === "string")) : [];
+}
+
+function signalString(signals: BrowserScanObservedSignalPackageInput["observedSignals"], key: string) {
+  const signal = signals.find((candidate) => candidate.key === key && candidate.valueType === "text");
+  return typeof signal?.value === "string" ? signal.value : "";
 }
 
 function signalObservedAtMs(signals: BrowserScanObservedSignalPackageInput["observedSignals"], key: string) {
@@ -96,7 +102,31 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
   const acceptAllPresent = signalBoolean(signals, "privacy.accept_all_present");
   const rejectAllPresent = signalBoolean(signals, "privacy.reject_all_present");
   const granularPreferencesPresent = signalBoolean(signals, "privacy.granular_preferences_present");
+  const consentBannerDetectedMs = signalObservedAtMs(signals, "privacy.cookie_banner_present");
   const firstLayerConsentLabels = signalStringArray(signals, "privacy.first_layer_consent_labels");
+  const firstLayerConsentContext = signalString(signals, "privacy.first_layer_consent_context");
+  const firstLayerConsentRoles = new Map(
+    signalStringArray(signals, "privacy.first_layer_consent_control_roles").flatMap((value) => {
+      const splitAt = value.lastIndexOf("|");
+      return splitAt > 0 ? [[value.slice(0, splitAt), value.slice(splitAt + 1)]] : [];
+    })
+  );
+  const impliedConsentLanguageObserved = signalBoolean(signals, "privacy.implied_consent_language_observed");
+  const impliedConsentLanguageEvidence = signalStringArray(signals, "privacy.implied_consent_language_matches").flatMap((value) => {
+    const [classifierId, confidenceValue, ...excerptParts] = value.split("|");
+    const confidence = Number(confidenceValue);
+    const matchedExcerpt = excerptParts.join("|").slice(0, 240);
+    return classifierId && Number.isFinite(confidence) && matchedExcerpt
+      ? [{
+          classifierId,
+          confidence,
+          matchedExcerpt,
+          observedAtMs: signalObservedAtMs(signals, "privacy.implied_consent_language_observed"),
+          observedLayer: "first_layer" as const,
+          sourceArtifactRef: `bx01.consent_ui:${consentBannerDetectedMs ?? 0}:banner`
+        }]
+      : [];
+  });
   const doNotSellLinkPresent = signalBoolean(signals, "privacy.do_not_sell_link_present");
   const preconsentTrackingDetected = signalBoolean(signals, "privacy.preconsent_tracking_detected");
   const privacyPolicyPresent = signalBoolean(signals, "disclosure.privacy_policy_present");
@@ -119,7 +149,6 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
   const firstThirdPartyRequestMs = signalObservedAtMs(signals, "privacy.preconsent_tracking_detected");
   const firstRequestMs = signalObservedAtMs(signals, "privacy.third_party_request_count");
   const firstCookieSeenMs = signalObservedAtMs(signals, "privacy.cookie_count_total");
-  const consentBannerDetectedMs = signalObservedAtMs(signals, "privacy.cookie_banner_present");
   const score = deriveBrowserScanScore({
     acceptAllPresent,
     cookieBannerPresent,
@@ -163,6 +192,53 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
   const thirdPartyCookieRows = cookieInventory.filter((row) => row.party === "third_party");
   const beforeConsentCookieRows = cookieInventory.filter((row) => row.beforeConsent);
   const beforeConsentThirdPartyCookieRows = thirdPartyCookieRows.filter((row) => row.beforeConsent);
+  const firstEligibleNonEssentialStorageMs = cookieInventory
+    .filter((row) => {
+      if (!row.beforeConsent) return false;
+      const purpose = row.purpose?.trim().toLowerCase() ?? "unknown";
+      return !new Set([
+        "cdn",
+        "consent_management",
+        "essential",
+        "functional",
+        "infrastructure",
+        "performance",
+        "security"
+      ]).has(purpose);
+    })
+    .map((row) => row.firstObservedAtMs)
+    .sort((left, right) => left - right)[0] ?? null;
+  const consentControls = firstLayerConsentLabels.map((label) => {
+    const classification = classifyConsentControlLabel({
+      label,
+      contextText: firstLayerConsentContext,
+      hasConsentContext: cookieBannerPresent
+    });
+    const semanticRole = (firstLayerConsentRoles.get(label) ?? classification.semanticRole) as typeof classification.semanticRole;
+    const actionType =
+      semanticRole === "explicit_accept" || semanticRole === "ambiguous_acknowledgment"
+        ? "accept_all" as const
+        : semanticRole === "reject" || semanticRole === "necessary_only"
+          ? "reject_all" as const
+          : semanticRole === "preferences"
+            ? "manage_preferences" as const
+            : "other" as const;
+    return {
+      actionType,
+      artifactRef: `bx01.consent_ui:${consentBannerDetectedMs ?? 0}:${label}`,
+      classifierReasonCodes: classification.reasonCodes,
+      classifierVariant: classification.variant,
+      confidence: classification.confidence,
+      label,
+      layer: "first_layer" as const,
+      matchedLocale: classification.matchedLocale,
+      matchedTerm: classification.matchedTerm,
+      matchStrength: classification.matchStrength,
+      nearbyConsentText: firstLayerConsentContext.slice(0, 500) || undefined,
+      semanticRole,
+      visible: true
+    };
+  });
 
   return {
     acceptAllPresent,
@@ -240,10 +316,35 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
         rejectControlObserved: rejectAllPresent,
         source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE
       },
+      consentUiObservations: [{
+        acceptControlObserved: consentControls.some((control) => control.semanticRole === "explicit_accept"),
+        basis: [
+          BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
+          "settled_control_inventory_completed"
+        ],
+        captureStatus: "observed",
+        confidence: 0.82,
+        controls: consentControls,
+        evidenceRefs: [`bx01.consent_ui:${consentBannerDetectedMs ?? 0}:banner`],
+        impliedConsentLanguageEvidence,
+        impliedConsentLanguageObserved,
+        layerInspected: "first_layer",
+        likelyPresent: cookieBannerPresent,
+        managePreferencesControlObserved: consentControls.some((control) => control.semanticRole === "preferences"),
+        observationId: `bx01-consent-ui-${consentBannerDetectedMs ?? 0}`,
+        observedAtMs: consentBannerDetectedMs ?? 0,
+        rejectControlObserved: consentControls.some((control) =>
+          control.semanticRole === "reject" || control.semanticRole === "necessary_only"
+        ),
+        textExcerpt: firstLayerConsentContext.slice(0, 500) || undefined,
+        visibleChoiceLabels: firstLayerConsentLabels
+      }],
       firstLayerConsentChoices: {
         acceptControlObserved: acceptAllPresent,
         capturedBeforeInteraction: true,
+        controls: consentControls,
         firstLayerCookieConsentBannerObserved: cookieBannerPresent,
+        gdprEprivacyConsentSurfaceObserved: cookieBannerPresent ? "confirmed" : "unconfirmed",
         layerInspected: "first_layer",
         managePreferencesObserved: granularPreferencesPresent,
         preferenceControlObserved: granularPreferencesPresent,
@@ -324,6 +425,7 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
       timelineMarkers: {
         consentBannerDetectedMs,
         firstCookieSeenMs,
+        firstNonEssentialStorageMs: firstEligibleNonEssentialStorageMs,
         firstNonEssentialRequestMs: firstThirdPartyRequestMs,
         firstRequestMs,
         firstThirdPartyRequestMs

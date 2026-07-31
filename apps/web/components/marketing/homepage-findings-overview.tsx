@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FindingReferenceItem } from "../../lib/marketing/finding-atlas";
 
 type HomepageFindingsOverviewProps = {
@@ -67,7 +67,7 @@ const HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDINGS = [
   },
   {
     id: "reject_decline_control_available",
-    title: "Reject / decline control available",
+    title: "Decline consent control",
     category: "Consent Controls",
     criticalityChip: "High criticality",
     href: "/findings/reject_option_missing_or_hidden",
@@ -472,6 +472,7 @@ function getFindingHref(finding: HomepageChecklistFinding, referenceFindingIds: 
 export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewProps) {
   const carouselFindings = HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDINGS;
   const [activeIndex, setActiveIndex] = useState(0);
+  const [showRawEvidence, setShowRawEvidence] = useState(false);
   const activeFinding = useMemo(
     () => carouselFindings[activeIndex] ?? carouselFindings[0],
     [activeIndex, carouselFindings]
@@ -483,35 +484,57 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
   }
 
   function showPrevious() {
+    setShowRawEvidence(false);
     setActiveIndex((current) => (current === 0 ? carouselFindings.length - 1 : current - 1));
   }
 
   function showNext() {
+    setShowRawEvidence(false);
     setActiveIndex((current) => (current === carouselFindings.length - 1 ? 0 : current + 1));
   }
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "ArrowLeft") {
+        setShowRawEvidence(false);
+        setActiveIndex((current) => (current === 0 ? carouselFindings.length - 1 : current - 1));
+      }
+      if (event.key === "ArrowRight") {
+        setShowRawEvidence(false);
+        setActiveIndex((current) => (current === carouselFindings.length - 1 ? 0 : current + 1));
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
     <section className="border-y border-slate-200 bg-white">
       <div className="mx-auto max-w-6xl px-6 py-12">
-        <div className="grid gap-6 lg:grid-cols-[0.64fr_1.36fr] lg:items-start">
-          <div className="max-w-sm space-y-4">
+        <div className="grid gap-5 lg:h-[30rem] lg:grid-cols-[0.64fr_1.36fr] lg:items-stretch">
+          <div className="flex max-w-sm flex-col gap-3">
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Findings overview</p>
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
-                Browse the GDPR/ePrivacy evidence checklist CertScore.ai can surface.
-              </h2>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Review the evidence.</h2>
             </div>
 
-            <div className="flex h-[22rem] flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-none">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Finding highlights</p>
-              <p className="mt-2 line-clamp-3 text-[1.35rem] font-semibold tracking-tight text-slate-950">{activeFinding.title}</p>
-              <p className="mt-2 line-clamp-5 text-[13px] leading-5 text-slate-600">{activeFinding.overview}</p>
+            <div className="flex min-h-[18rem] flex-1 flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.25)]">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Finding navigator</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{activeIndex + 1} of {carouselFindings.length}</p>
+              </div>
+              <div className="mt-4 space-y-3">
+                <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">{activeFinding.category}</span>
+                <p className="max-w-[19rem] text-sm leading-5 text-slate-600">Browse retained signals one at a time. The detail panel shows the evidence and review context.</p>
+              </div>
 
-              <div className="mt-auto flex items-center gap-3 pt-4">
+              <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <div className="flex items-center gap-2">
                 <button
                   type="button"
                   aria-label="Show previous finding"
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-900 shadow-sm shadow-slate-200/70 transition hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-950 hover:text-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-sky-200 bg-[linear-gradient(180deg,#ffffff_0%,#f0f9ff_100%)] text-slate-900 shadow-[0_2px_0_rgba(186,230,253,0.9),0_8px_16px_-12px_rgba(14,116,144,0.6)] transition hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-[0_3px_0_rgba(125,211,252,0.95),0_12px_20px_-12px_rgba(14,116,144,0.75)] active:translate-y-0.5 active:shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
                   onClick={showPrevious}
                 >
                   <ArrowIcon direction="left" />
@@ -519,11 +542,12 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                 <button
                   type="button"
                   aria-label="Show next finding"
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-900 shadow-sm shadow-slate-200/70 transition hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-950 hover:text-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-sky-200 bg-[linear-gradient(180deg,#ffffff_0%,#f0f9ff_100%)] text-slate-900 shadow-[0_2px_0_rgba(186,230,253,0.9),0_8px_16px_-12px_rgba(14,116,144,0.6)] transition hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-[0_3px_0_rgba(125,211,252,0.95),0_12px_20px_-12px_rgba(14,116,144,0.75)] active:translate-y-0.5 active:shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
                   onClick={showNext}
                 >
                   <ArrowIcon direction="right" />
                 </button>
+                </div>
                 <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
                   {String(activeIndex + 1).padStart(2, "0")} / {String(carouselFindings.length).padStart(2, "0")}
                 </p>
@@ -531,17 +555,14 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,252,255,1)_0%,rgba(255,255,255,0.98)_64%,rgba(249,253,250,0.98)_100%)] p-5 shadow-[0_24px_56px_rgba(15,23,42,0.08)]">
+          <div className="relative h-full overflow-y-auto rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,252,255,1)_0%,rgba(255,255,255,0.98)_64%,rgba(249,253,250,0.98)_100%)] p-4 shadow-[0_24px_56px_rgba(15,23,42,0.08)]">
             <div
               aria-hidden="true"
               className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,rgba(15,139,215,0.9)_0%,rgba(103,199,240,0.78)_58%,rgba(71,181,74,0.7)_100%)]"
             />
-            <div className="relative grid min-h-[18rem] gap-5 lg:grid-cols-[1fr_0.78fr]">
-              <div className="space-y-4">
+            <div className="relative grid h-full min-h-0 gap-4 lg:grid-cols-[1fr_0.78fr]">
+              <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                    {activeFinding.category}
-                  </span>
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
                     {activeFinding.criticalityChip}
                   </span>
@@ -550,17 +571,14 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                   </span>
                 </div>
                 <div>
-                  <h3 className="text-2xl font-semibold tracking-tight text-slate-950">{activeFinding.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">{activeFinding.overview}</p>
+                  <h3 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">{activeFinding.title}</h3>
+                  <p className="mt-2 text-sm leading-5 text-slate-600">{activeFinding.overview}</p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Brief regulatory context</p>
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Why this matters</p>
                   <p className="mt-2 text-sm font-semibold text-slate-950">{activeFinding.regulatoryLabel}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">{activeFinding.regulatoryCopy}</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                      GDPR / ePrivacy
-                    </span>
+                  <p className="mt-1 text-xs leading-4 text-slate-500">{activeFinding.regulatoryCopy}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
                       Evidence review
                     </span>
@@ -568,18 +586,39 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                 </div>
               </div>
 
-              <div className="flex flex-col rounded-[1.5rem] border border-slate-200 bg-white p-4">
+              <div className="flex flex-col rounded-[1.5rem] border border-slate-200 bg-white p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Example evidence</p>
-                <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-950 p-3">
-                  <p className="text-xs font-semibold text-slate-100">{activeFinding.evidence.title}</p>
-                  <div className="mt-2 space-y-1 font-mono text-[11px] leading-5 text-slate-300">
-                    {activeFinding.evidence.lines.map((line) => (
-                      <p key={line} className="break-all">{line}</p>
-                    ))}
+                <div className="mt-2 rounded-2xl border border-slate-800 bg-slate-950 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-semibold text-slate-100">{activeFinding.evidence.title}</p>
+                    <div className="flex shrink-0 gap-1">
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-sky-200">Structured</span>
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">Retained</span>
+                    </div>
                   </div>
+                  {showRawEvidence ? (
+                    <div className="mt-2 space-y-1 font-mono text-[11px] leading-5 text-slate-300">
+                      {activeFinding.evidence.lines.map((line) => <p key={line} className="break-all">{line}</p>)}
+                    </div>
+                  ) : (
+                    <div className="mt-2 space-y-1 text-xs leading-5 text-slate-300">
+                      {activeFinding.evidence.lines.map((line) => {
+                        try {
+                          const parsed = JSON.parse(line) as Record<string, unknown>;
+                          const entries = Object.entries(parsed);
+                          return <p key={line}><span className="text-slate-500">{entries[0]?.[0]}:</span> {String(entries[0]?.[1] ?? "—")}</p>;
+                        } catch {
+                          return <p key={line}>{line}</p>;
+                        }
+                      })}
+                    </div>
+                  )}
+                  <button className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300" onClick={() => setShowRawEvidence((current) => !current)} type="button">
+                    {showRawEvidence ? "Readable view" : "View raw"}
+                  </button>
                 </div>
-                <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Reviewer prompts</p>
-                <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
+                <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Reviewer prompts</p>
+                <ul className="mt-1.5 space-y-2 text-sm leading-5 text-slate-600">
                   <li className="flex gap-2">
                     <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
                     <span>{activeFinding.reviewPrompt}</span>
@@ -588,7 +627,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                 <div className="mt-auto pt-4">
                   <Link
                     href={getFindingHref(activeFinding, referenceFindingIds)}
-                    className="inline-flex h-10 items-center justify-center rounded-md border border-slate-950 bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                    className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-900 bg-[linear-gradient(180deg,#334155_0%,#0f172a_100%)] px-4 text-sm font-semibold text-white shadow-[0_3px_0_#020617,0_12px_22px_-15px_rgba(2,6,23,0.9)] transition hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
                   >
                     View full finding
                   </Link>

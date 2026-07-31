@@ -29,6 +29,7 @@
     "@certscore/contracts": "workspace:*",
     "@certscore/vendor-resolver": "workspace:*",
     "@website-signal-risk-scanner/shared": "workspace:*",
+    "maxmind": "^5.0.6",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.51.1",
     "tldts": "^7.4.2"

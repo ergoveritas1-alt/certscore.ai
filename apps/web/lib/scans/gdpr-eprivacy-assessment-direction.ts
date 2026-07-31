@@ -9,6 +9,8 @@ export type AssessmentDirection =
   | "review_signal"
   | "potential_concern"
   | "technical_limitation";
+export type GdprEprivacyAssessmentSummaryCounts =
+  Record<AssessmentDirection | "gap_observed", number>;
 
 const RISK_SIGNAL_ROW_IDS = new Set([
   "pre_consent_cookies_storage",
@@ -18,7 +20,6 @@ const RISK_SIGNAL_ROW_IDS = new Set([
   "analytics_vendor_observed",
   "session_replay_fingerprinting_review",
   "device_identification_fingerprinting_signal_observed",
-  "third_party_service_connection_pre_consent",
   "third_party_iframe_pre_consent",
   "social_media_embed_pre_consent",
   "embedded_content_pre_consent"
@@ -49,17 +50,55 @@ const NEUTRAL_WHEN_OBSERVED_ROW_IDS = new Set([
 const POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS = new Set([
   "pre_consent_cookies_storage",
   "pre_consent_third_party_tracking",
-  "third_party_service_connection_pre_consent",
   "third_party_iframe_pre_consent",
   "social_media_embed_pre_consent",
   "embedded_content_pre_consent"
 ]);
 
+export function summarizeGdprEprivacyAssessmentDirections(
+  items: GdprEprivacyCoverageChecklistItem[]
+): GdprEprivacyAssessmentSummaryCounts {
+  return items.reduce<GdprEprivacyAssessmentSummaryCounts>((counts, item) => {
+    const direction = getAssessmentDirection(item);
+    if (direction === "technical_limitation") {
+      counts.technical_limitation += 1;
+    } else if (direction === "positive_signal") {
+      counts.positive_signal += 1;
+    } else if (direction === "neutral_signal") {
+      counts.neutral_signal += 1;
+    } else if (item.assessmentStatus === "gap_observed" || item.status === "Gap observed") {
+      counts.gap_observed += 1;
+    } else if (direction === "potential_concern") {
+      counts.potential_concern += 1;
+    } else {
+      counts.review_signal += 1;
+    }
+    return counts;
+  }, {
+    gap_observed: 0,
+    neutral_signal: 0,
+    positive_signal: 0,
+    potential_concern: 0,
+    review_signal: 0,
+    technical_limitation: 0
+  });
+}
+
 export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): EvidenceLabel {
-  if (item.assessmentStatus === "coverage_limitation" || item.evidenceState === "not_testable" || item.status === "Not testable") {
-    return "Not testable";
+  if (item.status === "Insufficient evidence") {
+    return "Not confirmed";
   }
-  if (item.status === "Not confirmed" && retainedPolicyExtractionLimited(item)) {
+  if (
+    (item.status === "Not confirmed" || item.status === "Not testable") &&
+    retainedPolicySurfaceExtractionLimited(item)
+  ) {
+    return "Not confirmed";
+  }
+  if (
+    item.assessmentStatus === "coverage_limitation" ||
+    item.status === "Not testable" ||
+    item.evidenceState === "not_testable"
+  ) {
     return "Not testable";
   }
   if (item.status === "Not confirmed" && isRowSpecificExtractionNotConfirmed(item)) {
@@ -68,7 +107,7 @@ export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): Evide
   if (item.status === "Gap observed") {
     return "Potential gap";
   }
-  if (item.status === "Insufficient evidence" || item.status === "Not confirmed" || item.status === "Review signal") {
+  if (item.status === "Not confirmed" || item.status === "Review signal") {
     return "Partial concern";
   }
   if (item.evidenceState === "observed" || item.status === "Observed") {
@@ -86,6 +125,33 @@ function retainedPolicyExtractionLimited(item: GdprEprivacyCoverageChecklistItem
     recordValueAsRecord(policySurfaceSummary, "policy_text_extraction_health");
   const status = health?.policyTextExtractionStatus ?? health?.policy_text_extraction_status;
   return typeof status === "string" && status !== "ok";
+}
+
+function retainedPolicySurfaceExtractionLimited(item: GdprEprivacyCoverageChecklistItem) {
+  if (!retainedPolicyExtractionLimited(item)) {
+    return false;
+  }
+
+  const policySurfaceSummary = retainedRecord(item, "policySurfaceSummary") ?? retainedRecord(item, "policy_surface_summary");
+  const retainedEvidence = item.criticalEvidence.retainedEvidence;
+  const extractionHealth = retainedRecord(item, "policyTextExtractionHealth") ??
+    retainedRecord(item, "policy_text_extraction_health") ??
+    (policySurfaceSummary?.policyTextExtractionHealth && typeof policySurfaceSummary.policyTextExtractionHealth === "object" ? policySurfaceSummary.policyTextExtractionHealth as Record<string, unknown> : null) ??
+    (policySurfaceSummary?.policy_text_extraction_health && typeof policySurfaceSummary.policy_text_extraction_health === "object" ? policySurfaceSummary.policy_text_extraction_health as Record<string, unknown> : null);
+  const policyUrlRetained = policySurfaceSummary?.policyUrlRetained ?? policySurfaceSummary?.policy_url_retained ?? extractionHealth?.policyUrlRetained ?? extractionHealth?.policy_url_retained ?? retainedEvidence.policyUrlRetained ?? retainedEvidence.policy_url_retained;
+  const policySurfaceObserved = policySurfaceSummary?.privacyPolicyPresent ??
+    policySurfaceSummary?.privacy_policy_present ??
+    policySurfaceSummary?.policySurfaceObserved ??
+    policySurfaceSummary?.policy_surface_observed ??
+    retainedEvidence.privacyPolicyPresent ??
+    retainedEvidence.privacy_policy_present ??
+    retainedEvidence.policySurfaceObserved ??
+    retainedEvidence.policy_surface_observed ??
+    extractionHealth?.policySurfaceObserved ??
+    extractionHealth?.policy_surface_observed;
+  const policyUrls = policySurfaceSummary?.privacyPolicyUrls ?? policySurfaceSummary?.privacy_policy_urls ?? retainedEvidence.privacyPolicyUrls ?? retainedEvidence.privacy_policy_urls;
+
+  return policyUrlRetained === true || policySurfaceObserved === true || (Array.isArray(policyUrls) && policyUrls.length > 0);
 }
 
 function isRowSpecificExtractionNotConfirmed(item: GdprEprivacyCoverageChecklistItem) {
@@ -355,7 +421,6 @@ function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem)
       return "potential_concern";
     case "device_identification_fingerprinting_signal_observed":
       return getDeviceIdentificationDirection(item);
-    case "third_party_service_connection_pre_consent":
     case "third_party_iframe_pre_consent":
     case "embedded_content_pre_consent":
       return getEmbeddedContentDirection(item);
@@ -373,6 +438,9 @@ function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem)
 export function getAssessmentDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection {
   const evidenceLabel = getEvidenceLabel(item);
   if (evidenceLabel === "Not testable") {
+    return "technical_limitation";
+  }
+  if (evidenceLabel === "Not confirmed" && retainedPolicySurfaceExtractionLimited(item)) {
     return "technical_limitation";
   }
   if (evidenceLabel === "Potential gap" || item.assessmentStatus === "gap_observed") {

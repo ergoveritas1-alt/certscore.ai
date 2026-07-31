@@ -53,7 +53,7 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
     disclaimer: PULSE_STANDARD_DISCLAIMER
   });
 
-  assert.match(markdown, /^# CertScore Pulse/m);
+  assert.match(markdown, /^# CertScore\.ai Pulse/m);
   assert.match(markdown, /\| Domain \| kbdlab\.io \|/);
   assert.match(markdown, /\| High-priority findings \| 0 \|/);
   assert.match(markdown, /## Summary/);
@@ -76,6 +76,32 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
   assert.match(markdown, /## Disclaimer/);
   assert.match(markdown, /not legal advice/);
   assert.doesNotMatch(markdown, /\bclean\b/i);
+});
+
+test("Pulse markdown uses canonical counts and renders withheld scores without a false denominator", () => {
+  const markdown = renderPulseMarkdown({
+    counts: { totalObservationCount: 6 },
+    domain: "cnn.com",
+    executiveSummary: {
+      issuesToReview: 1,
+      score: null,
+      thirdPartyRequests: 25,
+      cookiesPreConsent: 0
+    },
+    links: {},
+    meta: { detail: "standard" },
+    scanId: "d0810b2c-de88-4471-a318-c9a2067f0e03",
+    scanStatus: "completed",
+    summary: { score: null, riskLevel: "unknown" },
+    topFindings: [{ id: "pre_consent_tracking_detected", criticality: "high" }],
+    coverage: { status: "partial" },
+    feedback: {}
+  });
+
+  assert.match(markdown, /\| Score \| Not available \|/);
+  assert.doesNotMatch(markdown, /Not available\/100/);
+  assert.match(markdown, /\| Total observations \| 6 \|/);
+  assert.match(markdown, /Executive report: Not available; 1 issue to review/);
 });
 
 test("Pulse markdown explains Cerebras-style site-not-ready no-go without raw codes", () => {
@@ -208,13 +234,13 @@ test("GPT Action markdown uses GPT-safe no-finding copy and CertScore footer lin
 
   assert.match(markdown, /No top automated findings were surfaced in this scan/);
   assert.match(markdown, /\*\*Coverage limitation:\*\*/);
-  assert.match(markdown, /View this scan on CertScore: https:\/\/certscore\.ai\/scan\/scan_123/);
+  assert.match(markdown, /View this scan on CertScore\.ai: https:\/\/certscore\.ai\/scan\/scan_123/);
   assert.match(markdown, /Explore finding definitions: https:\/\/certscore\.ai\/findings/);
   assert.doesNotMatch(markdown, /guides\/findings/);
   assert.equal((markdown.match(/Findings reference:|Explore finding definitions:/g) ?? []).length, 1);
   assert.match(markdown, /Run another scan: https:\/\/certscore\.ai/);
   assert.equal((markdown.match(/## Disclaimer/g) ?? []).length, 1);
-  assert.equal((markdown.match(/CertScore outputs are automated public-web observations for review/g) ?? []).length, 1);
+  assert.equal((markdown.match(/CertScore\.ai outputs are automated public-web observations for review/g) ?? []).length, 1);
 });
 
 test("Pulse markdown leads with report-backed executive and GDPR/ePrivacy surfaced results", () => {

@@ -1,0 +1,2814 @@
+{
+  "contractVersion": "policy_review_adjudicated_evaluation.v1",
+  "generatedAt": "2026-07-26T03:21:54.526Z",
+  "adjudicationPath": "/Users/benmasek/WC01/outputs/policy-review-adjudication-20260725/reviewed-decisions.v3.json",
+  "caseCount": 25,
+  "referenceCounts": {
+    "human_adjudicated_disagreement": 86,
+    "three_model_consensus_unreviewed": 114
+  },
+  "baseline": {
+    "rowCount": 200,
+    "completedRowCount": 200,
+    "failedRowCount": 0,
+    "exactAgreementCount": 148,
+    "exactAgreementRate": 0.74,
+    "observedPrecision": 0.8290598290598291,
+    "observedRecall": 0.8220338983050848
+  },
+  "updated": {
+    "rowCount": 200,
+    "completedRowCount": 200,
+    "failedRowCount": 0,
+    "exactAgreementCount": 98,
+    "exactAgreementRate": 0.49,
+    "observedPrecision": 0.9298245614035088,
+    "observedRecall": 0.4491525423728814
+  },
+  "humanSubset": {
+    "rowCount": 86,
+    "completedRowCount": 86,
+    "failedRowCount": 0,
+    "exactAgreementCount": 39,
+    "exactAgreementRate": 0.45348837209302323,
+    "observedPrecision": 0.9565217391304348,
+    "observedRecall": 0.5365853658536586
+  },
+  "byTopic": {
+    "processing_purposes": {
+      "rowCount": 25,
+      "completedRowCount": 25,
+      "failedRowCount": 0,
+      "exactAgreementCount": 4,
+      "exactAgreementRate": 0.16,
+      "observedPrecision": null,
+      "observedRecall": 0
+    },
+    "legal_basis": {
+      "rowCount": 25,
+      "completedRowCount": 25,
+      "failedRowCount": 0,
+      "exactAgreementCount": 9,
+      "exactAgreementRate": 0.36,
+      "observedPrecision": 1,
+      "observedRecall": 0.14285714285714285
+    },
+    "data_retention": {
+      "rowCount": 25,
+      "completedRowCount": 25,
+      "failedRowCount": 0,
+      "exactAgreementCount": 15,
+      "exactAgreementRate": 0.6,
+      "observedPrecision": 1,
+      "observedRecall": 0.6363636363636364
+    },
+    "international_transfers": {
+      "rowCount": 25,
+      "completedRowCount": 25,
+      "failedRowCount": 0,
+      "exactAgreementCount": 6,
+      "exactAgreementRate": 0.24,
+      "observedPrecision": null,
+      "observedRecall": 0
+    },
+    "vendor_disclosures": {
+      "rowCount": 25,
+      "completedRowCount": 25,
+      "failedRowCount": 0,
+      "exactAgreementCount": 17,
+      "exactAgreementRate": 0.68,
+      "observedPrecision": 0.9333333333333333,
+      "observedRecall": 0.7777777777777778
+    },
+    "data_subject_rights": {
+      "rowCount": 25,
+      "completedRowCount": 25,
+      "failedRowCount": 0,
+      "exactAgreementCount": 17,
+      "exactAgreementRate": 0.68,
+      "observedPrecision": 1,
+      "observedRecall": 0.7333333333333333
+    },
+    "cookie_inventory": {
+      "rowCount": 25,
+      "completedRowCount": 25,
+      "failedRowCount": 0,
+      "exactAgreementCount": 22,
+      "exactAgreementRate": 0.88,
+      "observedPrecision": 0.8636363636363636,
+      "observedRecall": 1
+    },
+    "policy_runtime_consistency": {
+      "rowCount": 25,
+      "completedRowCount": 25,
+      "failedRowCount": 0,
+      "exactAgreementCount": 8,
+      "exactAgreementRate": 0.32,
+      "observedPrecision": null,
+      "observedRecall": 0
+    }
+  },
+  "failedCases": [],
+  "mismatchCount": 102,
+  "mismatches": [
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "amazon-20260629",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"We use your personal information to operate, provide, develop, and improve the products and services that we offer our customers. These purposes include: Purchase and delivery of products and services. ... Provide, troubleshoot, and improve Amazon Services. ... Recommendations and personalization. ... Provide voice, image and camera services. ... Comply with legal obligations.\"",
+          "\"We use your personal information to provide functionality, analyze performance, fix errors, and improve the usability and effectiveness of the Amazon Services. Recommendations and personalization. We use your personal information to recommend features, products, and services that might be of interest to you, identify your preferences, and personalize your experience with Amazon Services.\""
+        ],
+        "rationale": "The retained policy text expressly lists processing purposes and examples of use, including purchase/delivery, troubleshooting/improvement, recommendations/personalization, device services, and legal compliance.",
+        "reasonCodes": [
+          "PURPOSES_EXPLICITLY_LISTED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing legal-basis language; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "legal_basis_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "amazon-20260629",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Legal-basis references are retained and, on a practical reading, disclose the bases relied on. Evidence: \"By using Amazon Services, you are consenting to the practices described in this Privacy Notice\" and \"Comply with legal obligations\" (policy_surface_b27095be/777bee15). Reasoning: Consent framing plus a legal-obligation reference tied to processing are legal-basis disclosures in substance, even if not organized as a GDPR-style mapping. Disagreement: Mini/Sol demand a formal basis-to-processing mapping; the retained language is close enough to the topic's intent to count, with the informality noted for the reviewer.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained retention section ended before a period or substantive criterion was captured, so the result cannot be determined from retained evidence.",
+        "reasonCodes": [
+          "retention_period_or_criteria_retained",
+          "retention_evidence_truncated_or_incomplete"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "amazon-20260629",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "A generic reference to retaining data does not establish a retention period or substantive retention criteria.\n\nReason codes: generic_retention_mention_without_period_or_criteria\n\n5.6 Sol confidence: 80%",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "ambiguous",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "data_retention"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for International-transfer disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "international_transfers_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "amazon-20260629",
+      "expected": {
+        "confidence": 0.97,
+        "evidenceExcerpts": [
+          "\"Amazon.com, Inc. participates in the EU-US Data Privacy Framework, the UK Extension to the EU-US Data Privacy Framework, and the Swiss-US Data Privacy Framework.\"",
+          "\"We share customers' personal information only as described below and with subsidiaries Amazon.com, Inc. controls...\""
+        ],
+        "rationale": "The retained policy contains an explicit cross-border transfer framework participation statement and a disclosure statement about sharing with subsidiaries and third parties.",
+        "reasonCodes": [
+          "TRANSFER_MECHANISM_OR_CROSS_BORDER_DISCLOSURE"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "policy_advertising_identifier_disclosure_vs_runtime_third_party_ad_cookie",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "amazon-20260629",
+      "expected": {
+        "confidence": 0.9,
+        "evidenceExcerpts": [
+          "Policy: \"we use cookies and other identifiers\"; Runtime: cookies observed including \"session-id\", \"session-token\", and \"ad-id\" on amazon.com / amazon-adsystem.com.",
+          "Policy: \"We provide ad companies with information that allows them to serve you with more useful and relevant Amazon ads\"; Runtime: tracker vendor observed: \"Amazon Ads\" with matched cookie name \"ad-id\"."
+        ],
+        "rationale": "The retained policy statements about cookies and advertising align with runtime observations of first-party and third-party cookies and an Amazon Ads tracker vendor.",
+        "reasonCodes": [
+          "POLICY_AND_RUNTIME_ALIGN_ON_COOKIES_AND_ADVERTISING"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "bbc-20260611",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Strong exception: the capture ends at the table of contents. Evidence: policy_surface_7bbab3c1 truncates at \"3. HOW WE USE YOUR INFORMATION\" with no body text. Reasoning: The heading proves a purposes section exists in the real document, so calling it not-observed would be affirmatively wrong, and no substantive text exists to observe — the truncation is the whole story. Disagreement: Mini's weak observed rests on a heading; a heading is not a disclosure.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "insufficient_retained_evidence",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.9,
+        "evidenceExcerpts": [
+          "\"our Cookies Notice explains how we use web technologies such as cookies.\""
+        ],
+        "rationale": "The retained policy text references a Cookies Notice, which is a substantive disclosure signal tied to a named notice category.",
+        "reasonCodes": [
+          "vendor_or_notice_reference"
+        ],
+        "status": "observed"
+      },
+      "caseId": "bbc-20260611",
+      "expected": {
+        "confidence": 0.22,
+        "evidenceExcerpts": [
+          "\"For example, our Cookies Notice explains how we use web technologies such as cookies.\""
+        ],
+        "rationale": "The retained text mentions a Cookies Notice, but it does not retain any vendor list or third-party disclosure details.",
+        "reasonCodes": [
+          "MENTION_OF_NOTICE_ONLY",
+          "NO_VENDOR_LIST_RETAINED"
+        ],
+        "status": "insufficient_retained_evidence",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "vendor_disclosures"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "policy_mentions_cookies_but_runtime_shows_preconsent_third_party_tracking",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "bbc-20260611",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "The policy excerpt references a Cookies Notice, and the runtime packet shows pre-consent tracking and third-party cookies. The retained evidence is limited, but there is no direct contradiction in the captured materials.\n\nRetained evidence:\n• \"For example, our Cookies Notice explains how we use web technologies such as cookies.\"\n• CONFLICT: \"Sourcepoint CMP\"\n\nEvidence refs: policy_surface_7bbab3c1\n\nReason codes: POLICY_MENTIONS_COOKIES_NOTICE, RUNTIME_SHOWS_PRECONSENT_TRACKING\n\nMini confidence: 84%",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "caltech-20260701",
+      "expected": {
+        "confidence": 0.97,
+        "evidenceExcerpts": [
+          "\"We may use information we collect from and about you for the following purposes: To maintain, provide, operate, support, and improve the sites and Events and any other offerings we may provide; To identify you by your device(s) and to match your device(s) with other browsers or devices you use for the purpose of providing relevant and easier access to content and other operational purposes; To provide technical support and assistance; To communicate with you and similar audiences about Caltech, including about our Events, research, charitable opportunities, and other information that we think may be of interest to you. This may include working with our partners to serve you and similar audiences relevant advertisements across other websites; To respond to your inquiries; To enhance your experience on the sites or in connection with Events; To secure the sites and detect fraud and illegal activity, including cyberattacks or attempts to commit identity theft; To engage in internal analytics, marketing research, auditing, and reporting; To connect with vendors and service providers for our business operations; To comply with the law or legal orders and protect the safety, rights, pro",
+          "\"Web server logs may collect and store certain system-related information automatically. This information can be used to help us make our sites more useful for you. With this data, we learn about the number of visitors to our sites and the types of technology our visitors use. The information collected may be used in aggregate to inform decisions about website content and structure. It may also be used for troubleshooting purposes, or to detect and investigate abuse or other violations of Institute policies.\""
+        ],
+        "rationale": "The notice expressly lists multiple processing purposes, including site operation, support, improvement, analytics, security, advertising, vendor/business operations, and legal compliance.",
+        "reasonCodes": [
+          "PURPOSES_LISTED",
+          "ANALYTICS",
+          "SECURITY",
+          "ADVERTISING",
+          "SERVICE_PROVISION"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained evidence does not establish complete, usable coverage of the governing source required to support an absence conclusion.",
+        "reasonCodes": [
+          "no_substantive_legal_basis_language_retained",
+          "consent_like_acceptance_not_legal_basis",
+          "sufficient_coverage_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "caltech-20260701",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Processing-tied legal bases appear in the retained notice. Evidence: disclosure \"when you provide us your consent to do so\" (Section 3) and processing \"To comply with the law or legal orders\" (Section 2) (policy_surface_5ec8250f). Reasoning: Consent and legal obligation are explicitly tied to specific processing, satisfying the topic's intent even though the fuller GDPR supplement (linked, unretained) likely elaborates. Disagreement: Mini/Sol treat these as incidental mentions; Sonnet's reading that they are enumerated bases tied to processing is the more practical one.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained retention section ended before a period or substantive criterion was captured, so the result cannot be determined from retained evidence.",
+        "reasonCodes": [
+          "retention_term_present",
+          "retention_evidence_truncated_or_incomplete"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "caltech-20260701",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Retention is genuinely absent from a fully captured notice. Evidence: policy_surface_5ec8250f spans all ten sections with no retention period or criteria anywhere, not even 'as long as necessary'. Reasoning: Adequate coverage plus absent disclosure is the definition of this category. Disagreement: Mini's template ambiguous presumes a generic retention mention that is not in the retained text.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "data_retention"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for International-transfer disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "international_transfers_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "caltech-20260701",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"Caltech is located in the United States and operates the sites from the United States. If you are located outside of the United States, please be aware that any information you provide to us and/or that we collect from you, including personal data, will be transferred from your country of origin to the United States, which may have different data protection laws than your jurisdiction.\"",
+          "\"We may also transfer information that we collect about you to third parties across borders and from your country or jurisdiction to other countries or jurisdictions around the world.\""
+        ],
+        "rationale": "The notice explicitly states transfers from outside the United States to the United States and cross-border transfers to other countries or jurisdictions.",
+        "reasonCodes": [
+          "CROSS_BORDER_TRANSFER"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained evidence does not completely capture the governing rights section, so substantive rights coverage cannot be determined.",
+        "reasonCodes": [
+          "opt_out_or_unsubscribe_rights_signal",
+          "rights_evidence_truncated_or_incomplete"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "caltech-20260701",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No substantive rights disclosure in the retained notice. Evidence: in-document content is limited to email unsubscribe and ad-network opt-out links; EEA/UK users are pointed to an external GDPR page (policy_surface_5ec8250f). Reasoning: Taking the retained notice as the disclosure, access/correction/deletion/portability/objection rights are not stated — the majority's final call. Caveat: the linked GDPR page was not retained; a follow-up capture could change this. Disagreement: Sol's ambiguous adds no information the reviewer can act on.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "data_subject_rights"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "policy_allows_interest_based_advertising",
+          "runtime_preconsent_analytics_cookies_observed",
+          "no_comparable_consent_controls_observed",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "caltech-20260701",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Disclosed technologies match observed ones with no contradiction. Evidence: policy discloses cookies for advertising/analytics and security purposes (policy_surface_5ec8250f); runtime shows Cloudflare Bot Management and Google Analytics. Reasoning: Alignment on the retained anchors; the notice makes no consent-gating promise, so pre-consent GA is not a contradiction. Disagreement: Sonnet's conflicting hangs a consent gate on a footer link label, which is not a policy representation.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "certscore-20260630",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"Processing purposes: CertScore.ai processes personal data and service data for account administration, authentication, scan and report delivery, monitoring, customer support, billing, security, fraud and abuse prevention, product reliability, optional analytics after consent, legal or business recordkeeping, and responding to privacy requests.\"",
+          "\"CertScore.ai may process public website scan data to generate evidence-led reports, support remediation review, preserve limited evidence context, compare changes over time, and operate monitoring or validation workflows requested by users.\""
+        ],
+        "rationale": "The retained privacy policy contains a direct substantive processing-purposes passage listing multiple purposes and describing scan-data use.",
+        "reasonCodes": [
+          "PURPOSES_EXPLICITLY_LISTED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.86,
+        "evidenceExcerpts": [
+          "“optional analytics after consent”"
+        ],
+        "rationale": "The retained packet includes a consent reference for optional analytics, but no general legal-basis framework or substantive legal-basis language for the policy overall.",
+        "reasonCodes": [
+          "no_general_legal_basis_framework_retained",
+          "consent_mentioned_only_as_operational_condition"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "certscore-20260630",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No named legal basis for CertScore's own processing in a substantively retained policy. Evidence: Section 8 references consent only for optional analytics cookies; /gdpr basis language concerns scanned third-party sites (policy_surface_b12224f0, 47450f37). Reasoning: Cookie-consent mechanics are not a lawful-basis framework; the policy is otherwise well captured (rows 3, 22), supporting the final absence call. Disagreement: Sol stretches an analytics-consent gate into a legal-basis disclosure.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for International-transfer disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "international_transfers_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "certscore-20260630",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"CertScore.ai is operated from the United States and uses service providers that may process information in the United States and other countries.\"",
+          "\"Where personal information is transferred across borders, CertScore.ai reviews vendor, contractual, security, and operational safeguards as part of service operation.\"",
+          "\"Cross-border processing may occur for hosting, storage, payment processing, email delivery, analytics, support, security, and other operational purposes described in this policy.\""
+        ],
+        "rationale": "The retained policy directly states cross-border processing and identifies the United States and other countries.",
+        "reasonCodes": [
+          "CROSS_BORDER_PROCESSING_EXPLICIT"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.95,
+        "evidenceExcerpts": [
+          "“CertScore.ai uses cookies and similar technologies to operate the service, maintain sessions, remember preferences, protect accounts, and understand usage.”"
+        ],
+        "rationale": "The scan retained 19 identifiable cookie/storage names from policy evidence.",
+        "reasonCodes": [
+          "no_specific_cookie_or_storage_identifier_retained",
+          "retained_cookie_storage_name_observed",
+          "policy_cookie_name_observed"
+        ],
+        "status": "observed"
+      },
+      "caseId": "certscore-20260630",
+      "expected": {
+        "confidence": 0.91,
+        "evidenceExcerpts": [
+          "\"CertScore.ai uses cookies and similar technologies to operate the service, maintain sessions, remember preferences, protect accounts, and understand usage.\"",
+          "\"Optional analytics and session-insight tools, including Google Analytics and Microsoft Clarity, are intended to run only after analytics consent is allowed.\""
+        ],
+        "rationale": "The retained policy discusses cookies and similar technologies, but no specific cookie identifiers are named in the retained evidence, so cookie inventory is not observed.",
+        "reasonCodes": [
+          "NO_SPECIFIC_COOKIE_IDENTIFIERS_NAMED"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "cookie_inventory"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "comparable_policy_and_runtime_evidence_present",
+          "consent_controls_observed",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "certscore-20260630",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Policy and runtime align on the consent surface with no established contradiction. Evidence: policy describes accept/reject/manage analytics controls; runtime confirms all three (\"Reject analytics\",\"Allow analytics\",\"Cookie settings\"). Reasoning: The retained anchors match; the lone preConsentTracking flag is unidentified (thirdPartyVendors/thirdPartyCookiesPreConsent both false, tracker/cookie journeys 0) and cannot be tied to any policy-covered analytics tool, so it is a review footnote rather than a conflict. Disagreement: Sol's conflicting rests on that unattributed flag; Sonnet's insufficient understates the clean, retained policy-runtime match on consent controls.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "cimediacloud-20260629",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "“We process your personal information for the following purposes: As required for business purposes or to establish and fulfill a contract with you; for example, if you access or use Ci, create a Ci user account, or purchase or subscribe to Ci services.”",
+          "“As required by Sony MCS to enable our business and pursue our legitimate interests, in particular: to provide services you have requested, and respond to any comments or co…”"
+        ],
+        "rationale": "The privacy policy expressly states processing purposes, including contract/business purposes and legitimate interests, with examples of account administration, service delivery, transactions, communications, and support.",
+        "reasonCodes": [
+          "PURPOSES_EXPRESSLY_LISTED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing legal-basis language; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "legal_basis_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "cimediacloud-20260629",
+      "expected": {
+        "confidence": 0.97,
+        "evidenceExcerpts": [
+          "“We process your personal information for the following purposes: As required for business purposes or to establish and fulfill a contract with you…”",
+          "“As required by Sony MCS to enable our business and pursue our legitimate interests…”",
+          "“where we have asked for your consent to process your data, to withdraw this consent…”"
+        ],
+        "rationale": "The policy explicitly references contract/business purposes, legitimate interests, and consent as bases for processing.",
+        "reasonCodes": [
+          "LEGAL_BASIS_EXPRESSLY_LISTED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for International-transfer disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "international_transfers_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "cimediacloud-20260629",
+      "expected": {
+        "confidence": 0.96,
+        "evidenceExcerpts": [
+          "“Where information is transferred outside the UK and where this is to a Sony MCS affiliate or vendor in a country that is not subject to an adequacy decision by the UK ICO, data is adequately protected by the UK IDTA, or other authorized transfer mechanism.”",
+          "“Where information is transferred outside the EU and where this is to a Sony MCS affiliate or vendor in a country that is not subject to an adequacy decision by the EU Commission, data is adequately protected by EU Commission approved standard contractual clauses or another authorized transfer mechanism.”"
+        ],
+        "rationale": "The policy states cross-border transfers and identifies transfer mechanisms for EU and UK transfers.",
+        "reasonCodes": [
+          "INTERNATIONAL_TRANSFER_MECHANISM_STATED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "policy_mentions_cookie_use",
+          "runtime_preconsent_third_party_cookies_observed",
+          "runtime_consent_controls_present_but_tracking_observed",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "cimediacloud-20260629",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Retained runtime evidence corroborates the policy’s specific disclosure of Google Analytics and DoubleClick. This is bounded consistency evidence and does not establish that every observed runtime vendor or pre-consent behavior is fully described by the retained policy capture.\n\nRetained evidence:\n• We may use analytics tools and other third-party technologies such as Google Analytics and DoubleClick Cookies to collect non-personal information, including information that has been de-identified or pseudonymized, in the form of various usage and user metrics when you use Ci or visit our websites.\n• product=\"Google Analytics\"; matchedCookieNames=[\"_ga_8GRRL10YHF\",\"_ga\",\"_ga_2YKWNLLBJP\",\"_ga_HMD5WKX8SG\"]\n\nEvidence refs: policy_surface_16cf055d, runtimeContext.trackerVendors\n\nReason codes: DISCLOSED_ANALYTICS_OBSERVED_AT_RUNTIME, DISCLOSED_AD_TECH_OBSERVED_AT_RUNTIME, CONSISTENCY_ASSESSMENT_BOUNDED_TO_RETAINED_EVIDENCE\n\n5.6 Sol confidence: 90%",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "cnn-20260629",
+      "expected": {
+        "confidence": 0.93,
+        "evidenceExcerpts": [
+          "\"We use these recordings to diagnose issues and identify areas for improvement and further engagement.\"",
+          "\"Below, we explain our various purposes, any processing activities that we believe may need further explanation and, where necessary, the ‘lawful basis’ on which we rely to process your information.\"",
+          "\"We need some information about you to provide our services and products.\""
+        ],
+        "rationale": "The retained policy text expressly states processing purposes, including using recordings to diagnose issues and improve engagement, and generally describes purposes for processing personal information.",
+        "reasonCodes": [
+          "PURPOSES_EXPLICIT",
+          "PROCESSING_PURPOSE_LANGUAGE"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing legal-basis language; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "legal_basis_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "cnn-20260629",
+      "expected": {
+        "confidence": 0.9,
+        "evidenceExcerpts": [
+          "\"Below, we explain our various purposes, any processing activities that we believe may need further explanation and, where necessary, the ‘lawful basis’ on which we rely to process your information.\"",
+          "\"Under the laws of some countries outside of the European Economic Area and the United Kingdom we may need your or your adult’s consent to our processing of your information set forth in this Privacy Policy.\"",
+          "\"Subject to any indications you or your adult may give us to the contrary... you or your adult consent to our use of your information in accordance with this Privacy Policy.\""
+        ],
+        "rationale": "The policy includes explicit lawful-basis language, including consent and a statement that lawful bases are explained where necessary.",
+        "reasonCodes": [
+          "LEGAL_BASIS_EXPRESSED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained retention section ended before a period or substantive criterion was captured, so the result cannot be determined from retained evidence.",
+        "reasonCodes": [
+          "retention_period_or_criteria_retained",
+          "retention_evidence_truncated_or_incomplete"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "cnn-20260629",
+      "expected": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A generic reference to retaining data does not establish a retention period or substantive retention criteria.",
+        "reasonCodes": [
+          "generic_retention_mention_without_period_or_criteria"
+        ],
+        "status": "ambiguous",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "data_retention"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for International-transfer disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "international_transfers_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "cnn-20260629",
+      "expected": {
+        "confidence": 0.92,
+        "evidenceExcerpts": [
+          "\"In certain jurisdictions in Latin America and Asia, by accepting this Privacy Policy, you consent that your information could be stored, transferred, transmitted and/or processed outside your country, and that your information could be shared with third parties\""
+        ],
+        "rationale": "The policy explicitly states that information could be transferred, transmitted, processed outside the country, and shared with third parties.",
+        "reasonCodes": [
+          "CROSS_BORDER_TRANSFER_EXPLICIT"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "policy_purpose_vs_runtime_tracking_mismatch",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "cnn-20260629",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Disclosed tracking matches observed tracking; no gating promise is contradicted. Evidence: policy discloses recording of user interactions and sharing with service providers (policy_surface_96ce8a40/38ed1769); runtime shows tracking, vendors, and a consent UI. Reasoning: The \"by providing your information... you consent\" clause is implied-consent framing, not an affirmative gate, so pre-consent tracking is consistent with the retained representations. Disagreement: Sonnet's conflicting builds a consent gate the text never promises; noted for follow-up: rejectControlObserved=false is a signal worth a human look.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "ebay-20260701",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "“5. Purposes and legal bases for data processing and categories of recipients”",
+          "“Below you will find a summary of the purposes for which we process your personal data”",
+          "“5.1 We process your personal data in order to fulfill our contract with you and to provide you with our Ser”"
+        ],
+        "rationale": "The retained policy text expressly states that it summarizes purposes for processing personal data and includes a section titled purposes and legal bases for data processing.",
+        "reasonCodes": [
+          "PURPOSES_SECTION_PRESENT",
+          "PROCESSING_PURPOSES_EXPRESSLY_STATED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing legal-basis language; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "legal_basis_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "ebay-20260701",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "“5. Purposes and legal bases for data processing and categories of recipients”",
+          "“sorted by our legal basis for this processing”",
+          "“5.8 Automated decision-making. ... we have obtained your consent, or we are required by applicable law to use such technology.”",
+          "“In addition, you can withdraw your consent and object to our processing of your personal data on the basis of our legitimate interests.”"
+        ],
+        "rationale": "The retained policy text explicitly references legal bases for processing, including consent and legitimate interests, and organizes processing by legal basis.",
+        "reasonCodes": [
+          "LEGAL_BASIS_SECTION_PRESENT",
+          "CONSENT_AND_LEGITIMATE_INTEREST_REFERENCED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for International-transfer disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "international_transfers_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "ebay-20260701",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "“6. Cross-border data transfers”",
+          "“We may transfer your personal data to recipients ... who may be located anywhere in the world.”",
+          "“We will only transfer your personal data from the European Economic Area (EEA), United Kingdom or Switzerland to third countries”",
+          "“on the basis of appropriate safeguards or if otherwise authorized by applicable law.”"
+        ],
+        "rationale": "The retained policy text expressly addresses cross-border transfers and third-country transfer conditions.",
+        "reasonCodes": [
+          "CROSS_BORDER_TRANSFER_SECTION_PRESENT",
+          "THIRD_COUNTRY_TRANSFER_LANGUAGE"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "ikea-20260629",
+      "expected": {
+        "confidence": 0.97,
+        "evidenceExcerpts": [
+          "“We use your personal information to help you with whatever matter you submit to us.”",
+          "“We will use your e-mail address for the sole purpose of sending you our newsletter.”",
+          "“We use your contact details and booking information to make the reservation and provide you with the requested services.”",
+          "“We also use your contact details and booking information to improve our museum and related services and to inform you about future exhibitions.”",
+          "“These cookies help us display relevant content based on how you interact with our site”",
+          "“We and our partners use these cookies to track visitors across websites with the purpose to display advertisements tailored to your interests”"
+        ],
+        "rationale": "The retained policy text explicitly states several processing purposes, including customer support, newsletter delivery, reservation/service fulfillment, service improvement, future exhibitions, content personalization, and advertising.",
+        "reasonCodes": [
+          "PURPOSES_EXPLICITLY_STATED",
+          "MULTIPLE_PROCESSING_CONTEXTS"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing legal-basis language; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "legal_basis_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "ikea-20260629",
+      "expected": {
+        "confidence": 0.96,
+        "evidenceExcerpts": [
+          "“We base our processing of this data on the legal ground of legitimate interest.”",
+          "“We base our processing of this data on the legal basis of performance of an agreement”",
+          "“We base our processing of this data on the legal basis of legitimate interest.”",
+          "“We base our processing of this data on your consent.”",
+          "“We base the processing of data through these cookies on our legitimate interest.”"
+        ],
+        "rationale": "The retained policy text expressly identifies legal bases for multiple processing activities, including legitimate interest, performance of an agreement, and consent.",
+        "reasonCodes": [
+          "LEGAL_BASIS_EXPRESSLY_STATED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for International-transfer disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "international_transfers_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "ikea-20260629",
+      "expected": {
+        "confidence": 0.9,
+        "evidenceExcerpts": [
+          "“These third parties may be in the Netherlands as well as within other countries in the European Economic Area (EEA). Sometimes they may also be outside the EEA.”",
+          "“We have concluded agreements with our service providers and business partners, to ensure that your personal information is protected, both within and outside the EEA.”",
+          "“Please be aware that requests addressed to any of the above addresses will be submitted to Inter IKEA Group.”"
+        ],
+        "rationale": "The retained policy states that third parties may be located inside and outside the EEA and that agreements are in place to protect information both within and outside the EEA.",
+        "reasonCodes": [
+          "THIRD_PARTY_LOCATIONS_STATED",
+          "CROSS_BORDER_PROCESSING_STATED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "policy_mentions_consent_controls_but_runtime_shows_preconsent_tracking",
+          "policy_claims_non_essential_withdrawal_flow_but_runtime_observes_tracking_before_consent",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "ikea-20260629",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Runtime behavior matches the policy's consent model. Evidence: policy states functional cookies are always set without consent and non-essential cookies stop on withdrawal; runtime shows only first-party functional/security/consent cookies, OneTrust CMP with accept/reject controls, and no pre-consent third-party activity. Reasoning: Every retained runtime signal aligns with the retained representations. Disagreement: Sol's ambiguous rests on one unknown-purpose cookie (ikexp_id), a minor gap.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "kbdlab-20260630",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"[How we use your information] We use the information we collect in various ways, including to: Provide, operate, and maintain our website Improve, personalize, and expand our website Understand and analyze how you use our website Develop new products, services, features, and functionality Communicate with you, either directly or through one of our partners, including for customer service, to provide you with updates and other information relating to the website, and for marketing and promotional purposes Send you emails Find and prevent fraud\""
+        ],
+        "rationale": "The retained privacy policy contains a direct list of processing purposes, including website operation, personalization, analytics, product development, communications, marketing, email, and fraud prevention.",
+        "reasonCodes": [
+          "explicit_purpose_list"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing legal-basis language; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "legal_basis_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "kbdlab-20260630",
+      "expected": {
+        "confidence": 0.91,
+        "evidenceExcerpts": [
+          "\"[GDPR Data Protection Rights] ... The right to access ... The right to rectification ... The right to erasure ... The right to restrict processing ... The right to object to processing ... The right to data portability ...\""
+        ],
+        "rationale": "The retained policy includes data subject rights language, but no retained passage states a lawful basis for processing such as consent, contract, legal obligation, vital interests, public task, or legitimate interests.",
+        "reasonCodes": [
+          "rights_not_legal_basis",
+          "no_lawful_basis_section_retained"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.86,
+        "evidenceExcerpts": [],
+        "rationale": "The retained policy text does not preserve a retention period or substantive retention criterion for personal data.",
+        "reasonCodes": [
+          "no_retention_period_or_criteria_retained"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "kbdlab-20260630",
+      "expected": {
+        "confidence": 0.89,
+        "evidenceExcerpts": [
+          "\"This policy is not applicable to any information collected offline or via channels other than this website.\"",
+          "\"If you think that your child provided this kind of information on our website, we strongly encourage you to contact us immediately and we will do our best efforts to promptly remove such information from our records.\""
+        ],
+        "rationale": "The retained policy mentions prompt removal of children's information on request, but it does not provide a general retention period, retention criteria, or storage duration for personal data.",
+        "reasonCodes": [
+          "no_retention_period_or_criteria_retained"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "data_retention"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained evidence does not establish complete, usable coverage of the governing source required to support an absence conclusion.",
+        "reasonCodes": [
+          "usable_policy_surface_no_transfer_disclosure_retained",
+          "sufficient_coverage_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "kbdlab-20260630",
+      "expected": {
+        "confidence": 0.88,
+        "evidenceExcerpts": [
+          "\"This Privacy Policy applies only to our online activities and is valid for visitors to our website...\""
+        ],
+        "rationale": "No retained passage describes international transfers, transfer destinations, or transfer safeguards/frameworks.",
+        "reasonCodes": [
+          "no_transfer_mechanism_or_cross_border_transfer_text_retained"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.99,
+        "evidenceExcerpts": [
+          "\"Like any other website, KBD Lab uses 'cookies'.\"",
+          "\"__Host-next-auth.csrf-token\""
+        ],
+        "rationale": "The scan retained 14 identifiable cookie/storage names from runtime evidence.",
+        "reasonCodes": [
+          "specific_cookie_identifier_retained",
+          "retained_cookie_storage_name_observed",
+          "runtime_cookie_storage_name_observed"
+        ],
+        "status": "observed"
+      },
+      "caseId": "kbdlab-20260630",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — The retained cookie section is category-only with no named inventory. Evidence: \"Like any other website, KBD Lab uses 'cookies'... to store information including visitors' preferences\" (policy_surface_a3f43701). Reasoning: The blog-style policy's cookie section appears fully captured and names nothing; no granular named list appears in this row's retained packet. Disagreement: Mini's insufficient posits an unretained dedicated inventory, but this boilerplate policy format is itself the disclosure surface.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "cookie_inventory"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "policy_says_cookies_used_for_preferences_and_optimization",
+          "runtime_shows_preconsent_third_party_tracking_without_consent_ui",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "kbdlab-20260630",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Strong retained contradiction: undisclosed behavioral tracking with no consent mechanism. Evidence: policy discloses only preference and ad-partner cookies while invoking GDPR rights; runtime shows preConsentTrackingObserved, thirdPartyCookiesPreConsentObserved, and sessionReplayOrBehavioralAnalyticsObserved all true (Microsoft Clarity; MUID/SRM_B/MR), consentBannerLikelyPresent=false, no controls. Reasoning: An entire undisclosed tracking category running unconsented against the policy's representations is material. Disagreement: Sol's ambiguous frames a category-level omission as mere generality.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "conflicting",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "mit-20260626",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "“We process your personal information collected on the main MIT website to facilitate our online interactions with you.”",
+          "“The information gathered is used to improve web services for visitors.”"
+        ],
+        "rationale": "The retained privacy policy expressly states a processing purpose for personal information and separately states an analytics/improvement purpose for Google Analytics.",
+        "reasonCodes": [
+          "PURPOSE_EXPLICIT",
+          "ANALYTICS_PURPOSE_EXPLICIT"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing legal-basis language; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "legal_basis_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "mit-20260626",
+      "expected": {
+        "confidence": 0.97,
+        "evidenceExcerpts": [
+          "“We only collect and process your personal information in furtherance of MIT’s legitimate interests and/or to fulfill any contractual obligations with you.”"
+        ],
+        "rationale": "The policy explicitly names legitimate interests and contractual obligations as the basis for processing.",
+        "reasonCodes": [
+          "LEGAL_BASIS_EXPRESSED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained retention section ended before a period or substantive criterion was captured, so the result cannot be determined from retained evidence.",
+        "reasonCodes": [
+          "retention_period_or_criteria_present",
+          "retention_evidence_truncated_or_incomplete"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "mit-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Specific retention criteria beyond bare necessity are retained. Evidence: records kept for the \"lifelong\" MIT relationship until opt-out, then a \"core set\" retained for archival/scientific/historical research and legal-claims defense, plus IRS-driven financial retention (policy_surface_93e2e8ea). Reasoning: Duration concept, post-opt-out scope, and purpose-specific criteria are substantive. Disagreement: Mini/Sol's unquoted generic template does not engage this text; majority rejected.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "data_retention"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for International-transfer disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "international_transfers_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "mit-20260626",
+      "expected": {
+        "confidence": 0.96,
+        "evidenceExcerpts": [
+          "“By providing information directly to MIT, you consent to the transfer of your personal information outside of the European Economic Area to the United States.”"
+        ],
+        "rationale": "The policy expressly describes transfer of personal information outside the EEA to the United States.",
+        "reasonCodes": [
+          "TRANSFER_OUTSIDE_EEA_EXPLICIT"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "directly_comparable_runtime_fact_present",
+          "no_material_disagreement_retained",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "mit-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No material discrepancy retained. Evidence: policy states the main site uses no cookies except Google Analytics'; runtime shows one vendor (Google Tag Manager), zero cookies captured, no banner, no pre-consent third-party cookies. Reasoning: GTM is a delivery mechanism consistent with a GA deployment; nothing observed contradicts the retained representation. Disagreement: Sol's ambiguous rests on the GTM/GA product distinction, which produced no retained contradiction.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "purpose_statement_present",
+          "purpose_examples_present",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "nbcnews-20260626",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"[PERSONAL INFORMATION WE COLLECT AND PURPOSES] ... Below we explain the categories of information we collect and the purposes for which we use them.\"",
+          "\"We may rely on the following legal bases: Performance of a contract ... Legitimate interest ... Legal obligation ...\""
+        ],
+        "rationale": "The retained privacy policy expressly states that it explains the purposes for which information is used and lists examples of those purposes.",
+        "reasonCodes": [
+          "PURPOSES_EXPLICITLY_STATED",
+          "MULTIPLE_PROCESSING_PURPOSES_LISTED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "legal_basis_language_present",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "nbcnews-20260626",
+      "expected": {
+        "confidence": 0.97,
+        "evidenceExcerpts": [
+          "\"LEGAL BASIS FOR USE OF YOUR INFORMATION. ... we may rely on the following legal bases: Performance of a contract ... Legitimate interest ... Legal obligation ...\""
+        ],
+        "rationale": "The policy contains a dedicated legal-basis section naming specific bases such as performance of a contract, legitimate interest, and legal obligation.",
+        "reasonCodes": [
+          "LEGAL_BASES_EXPRESSLY_LISTED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "retention_period_disclosed",
+          "retention_criteria_disclosed",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "nbcnews-20260626",
+      "expected": {
+        "confidence": 0.99,
+        "evidenceExcerpts": [
+          "\"HOW LONG WE KEEP YOUR INFORMATION. ... We will keep your personal information only for as long as it is necessary to fulfill the purposes described above, unless a longer retention is required or permitted by law.\"",
+          "\"For example, we retain your email address as an authentication credential ... as long as you have an account with us ... If you opt out of email marketing, we maintain your email on our suppression list for an extended time to comply with your request.\""
+        ],
+        "rationale": "The retained policy includes a retention section describing retention criteria and concrete examples of retention periods and suppression-list retention.",
+        "reasonCodes": [
+          "RETENTION_PERIODS_DESCRIBED",
+          "RETENTION_FACTORS_LISTED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "data_retention"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "cross_border_contact_and_representative_disclosure",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "nbcnews-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Transfer disclosures are absent from a substantially retained corpus. Evidence: privacy policy, cookie notice, and terms (policy_surface_228175e7, d3839543, 44827012) include UK/EU representatives and a Japan joint-use provision but no destinations, circumstances, or mechanisms. Reasoning: Representative contacts are governance signals, not transfer disclosures; the corpus depth supports concluding the disclosure is absent rather than unretrieved. Disagreement: Mini counts representative contacts as transfer evidence; Sol's coverage doubt is noted but the breadth of retained documents favors the final call.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "recipient_categories_present",
+          "named_vendor_examples_present",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "nbcnews-20260626",
+      "expected": {
+        "confidence": 0.99,
+        "evidenceExcerpts": [
+          "\"Service Providers: We engage vendors to perform business purposes on our behalf and provide information to them to enable them to provide us with such business purposes, including research and analytics, hosting, transaction and payment processing, promotion administration, fraud prevention, identity management, acquisition and other services.\"",
+          "\"Advertising Partners: We may disclose informat...\""
+        ],
+        "rationale": "The policy expressly discloses categories of recipients such as service providers, audience measurement/analytics companies, advertising partners, and related businesses.",
+        "reasonCodes": [
+          "THIRD_PARTY_DISCLOSURE_CATEGORIES_LISTED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "vendor_disclosures"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "rights_menu_present",
+          "opt_out_rights_present",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "nbcnews-20260626",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"YOUR RIGHTS. ... you may be able to ask us to: provide access ... update or correct your information delete certain information restrict the use of or object to the processing of your information ... request a list of third parties ... Opt out of the sale or sharing or processing for targeted advertising\"",
+          "\"California residents may opt out of the 'sale' of their personal information and the sharing of their personal information for cross context behavioral advertising\"",
+          "\"To opt out of such 'sale' or 'sharing,' follow the steps below.\""
+        ],
+        "rationale": "The retained documents list access, correction, deletion, restriction/object, third-party list, and opt-out rights, including California-specific opt-out mechanisms.",
+        "reasonCodes": [
+          "RIGHTS_AND_OPT_OUTS_LISTED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "data_subject_rights"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "policy_promise_vs_runtime_surface_mismatch",
+          "runtime_lane_present_but_controls_absent",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "nbcnews-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Strong retained contradiction: policy-described controls absent while ad tracking fired pre-consent. Evidence: policy directs users to a \"Your Privacy Choices\" toggle, GPC recognition, and TCF participation (policy_surface_44827012); runtime shows preConsentTracking and thirdPartyCookiesPreConsent true (Adobe demdex ~4.4s), OneTrust detected but consentBannerLikelyPresent=false, no controls observed. Reasoning: Represented choice mechanics were not found while gated behavior ran anyway — both sides retained. Disagreement: Sol's observed never addresses the missing represented controls.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "conflicting",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "numastays-20260626",
+      "expected": {
+        "confidence": 0.96,
+        "evidenceExcerpts": [
+          "\"We detail the scope of data processing, processing purposes and legal bases below.\"",
+          "\"When contacting us, e.g. by e-mail or telephone, the data provided to us (e.g. names and e-mail addresses) will be stored by us in order to answer questions.\"",
+          "\"the processing of the data provided as part of the application is carried out for the purpose of implementing the application process.\"",
+          "\"To ensure communication with the Guest, Numa collects the Guest's email address and telephone number.\""
+        ],
+        "rationale": "The retained policy text expressly states several processing purposes, including answering inquiries, implementing the application process, and ensuring communication with guests.",
+        "reasonCodes": [
+          "PURPOSES_EXPRESSLY_STATED",
+          "MULTIPLE_PROCESSING_CONTEXTS"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing legal-basis language; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "legal_basis_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "numastays-20260626",
+      "expected": {
+        "confidence": 0.97,
+        "evidenceExcerpts": [
+          "\"Art. 6 para. 1 s. 1 it. a GDPR serves as our legal basis for processing operations for which we obtain consent.\"",
+          "\"Art. 6 para. 1 s. 1 lit. b GDPR is the legal basis insofar as the processing of personal data is necessary for the performance of a contract\"",
+          "\"Art. 6 para. 1 s. 1 lit. c GDPR applies if we fulfill a legal obligation by processing personal data\"",
+          "\"Art. 6 para. 1 s. 1 lit. f GDPR serves as the legal basis when we can rely on legitimate interests to process personal data\""
+        ],
+        "rationale": "The privacy policy expressly identifies multiple legal bases under GDPR, including consent, contract necessity, legal obligation, and legitimate interests.",
+        "reasonCodes": [
+          "LEGAL_BASIS_EXPRESSLY_STATED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for International-transfer disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "international_transfers_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "numastays-20260626",
+      "expected": {
+        "confidence": 0.96,
+        "evidenceExcerpts": [
+          "\"Insofar as we transfer data to service providers or other third parties outside the EEA, the security of the data during the transfer is guaranteed by adequacy decisions of the EU Commission\"",
+          "\"If no adequacy decision exists (e.g. for the USA), the legal basis for the data transfer are usually, i.e. unless we indicate otherwise, standard contractual clauses.\"",
+          "\"The legal basis for the transfer to a country outside the EEA are adequacy decision.\""
+        ],
+        "rationale": "The privacy policy expressly discusses transfers outside the EEA and names adequacy decisions and standard contractual clauses as transfer mechanisms.",
+        "reasonCodes": [
+          "TRANSFER_MECHANISM_STATED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "policy_runtime_mismatch_preconsent_tracking",
+          "policy_runtime_mismatch_consent_flow",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "numastays-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Strong retained contradiction on consent gating. Evidence: policy ties consent-dependent processing to Art. 6(1)(a) and limits legitimate interest to technically necessary cookies (policy_surface_365f869c); runtime shows preConsentTrackingObserved=true, thirdPartyVendorsObserved=true, ad/analytics vendors (Google Ads/DoubleClick, GA, Klaviyo) active pre-consent with a Consentmanager CMP present. Reasoning: Both the gating representation and the contradicting behavior are retained — the paradigm conflicting case. Disagreement: Mini's observed ignores the pre-consent activity; Sol's fragmentation concern moderates confidence but not the finding.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "conflicting",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "oxfam-root-20260725",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"We will only use the information for the purposes for which it is provided, for any compatible purposes and to fulfil our legal or regulatory obligations unless you have agreed for your data to be used for other purposes.\"",
+          "\"This enables us to analyze and improve the content of our site and the navigation experience of users.\"",
+          "\"Oxfam International uses such tools to analyze and assess the success of Oxfam campaigns and communications, the level of interest in issues Oxfam cares about, and the level of social media activity resulting from media stories about Oxfam or Oxfam/NGO activities.\"",
+          "\"Essential cookies help make a website usable by enabling basic functions like: anonymised basic analytics for e.g google analytics\""
+        ],
+        "rationale": "The retained policy and cookie notice contain substantive processing-purpose statements describing use for provided/compatible purposes, site analytics and improvement, campaign/social-media assessment, and cookie-enabled basic analytics.",
+        "reasonCodes": [
+          "purpose_limitation_statement",
+          "analytics_and_improvement_purpose",
+          "social_media_measurement_purpose",
+          "cookie_purpose_disclosure"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for International-transfer disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "international_transfers_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "oxfam-root-20260725",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Strong retained inconsistency: a valid mechanism cited alongside an invalidated one. Evidence: transfers to Affiliates \"under the EC's model data protection clauses\" plus payment provider \"certified under the EU-US Privacy Shield\" (policy_surface_66b78aa7). Reasoning: Privacy Shield was invalidated in July 2020 and superseded by the EU-US DPF long before the 2026-07-25 scan; the rules bar counting stale framework language as affirmative disclosure and this is a material retained contradiction, flagged as a review signal. Disagreement: Mini's observed credits the defunct framework.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "conflicting",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "policy_requires_consent_for_marketing_or_nonessential_cookies",
+          "runtime_preconsent_tracking_observed",
+          "runtime_third_party_cookies_preconsent_observed",
+          "runtime_no_actionable_consent_surface_retained",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "oxfam-root-20260725",
+      "expected": {
+        "confidence": 0.93,
+        "evidenceExcerpts": [
+          "Policy: \"We will only use the information for the purposes for which it is provided...\"",
+          "Policy: \"We do not use this information to attempt to find out the identities of those visiting our website.\"",
+          "Policy: \"We never sell or share your information with entities outside Oxfam for their marketing purposes.\""
+        ],
+        "rationale": "The retained runtime evidence shows third-party tracking, advertising, and analytics activity, which materially extends beyond the policy’s high-level disclosures and creates a policy/runtime mismatch on observed tracking behavior.",
+        "reasonCodes": [
+          "runtime_third_party_tracking_observed",
+          "runtime_preconsent_tracking_observed",
+          "runtime_advertising_and_analytics_trackers"
+        ],
+        "status": "conflicting",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "oxfam-www-20260725",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"We will only use the information for the purposes for which it is provided, for any compatible purposes and to fulfil our legal or regulatory obligations unless you have agreed for your data to be used for other purposes.\"",
+          "\"When you visit our website, we collect data on your location. This allows us to direct you to the website of the Oxfam Affiliate in your geographic region if this is necessary to perform any of your requested actions.\"",
+          "\"We also use cookies on our website to collect standard internet log-on information and details of visitor behavior patterns (e.g. to find out the number of visitors to different parts of the site). This enables us to analyze and improve the content of our site and the navigation experience of users.\"",
+          "\"Oxfam International uses such tools to analyze and assess the success of Oxfam campaigns and communications, the level of interest in issues Oxfam cares about, and the level of social media activity resulting from media stories about Oxfam or Oxfam/NGO activities.\"",
+          "\"Oxfam America uses your personal information only in furtherance of our fundraising, educational, and advocacy objectives.\"",
+          "\"Oxfam America uses personal information to: Provide and improve our Sites; Contact you, including for fundraising purposes; Fulfill your requests for products, services, and information; Analyze the use of the Sites and user data to understand and improve the Sites, our programs, and outreach; Customize advertising content you see when you visit other sites;\""
+        ],
+        "rationale": "The retained privacy notices explicitly describe multiple processing purposes, including site operation, analytics, marketing communications, fundraising, advocacy, and directing users to regional affiliate sites.",
+        "reasonCodes": [
+          "PURPOSES_EXPLICIT",
+          "ANALYTICS",
+          "MARKETING",
+          "SITE_OPERATION",
+          "ADVOCACY"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for International-transfer disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "international_transfers_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "oxfam-www-20260725",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Same invalidated-framework inconsistency on the www surface. Evidence: SCC/model-clause disclosure plus \"certified under the EU-US Privacy Shield\" (policy_surface_66b78aa7, c6e5a2a9) against a 2026-07-25 scan date. Reasoning: Citing a CJEU-invalidated mechanism as an active safeguard alongside current-mechanism claims is a material retained inconsistency — a review signal, not a legal determination. Disagreement: Mini's observed counts the stale framework as affirmative transfer disclosure.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "conflicting",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "preconsent_third_party_tracking_observed",
+          "policy_mentions_cookies_and_behavioral_ads",
+          "no_actionable_consent_surface_retained",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "oxfam-www-20260725",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Strong retained contradiction: a promised first-visit consent banner that runtime never found. Evidence: \"a message will appear giving you the opportunity to accept all cookies or decline\" (policy_surface_413f7cff); runtime consentUi captureStatus 'no_evidence', likelyPresent=false, with preConsentTracking, thirdPartyCookiesPreConsent, and sessionReplay all true plus undisclosed vendors (e.g., HubSpot) beyond the cookie table. Reasoning: A concrete representation is contradicted by retained runtime capture. Disagreement: Sol's mixed-scope caveat moderates confidence but does not neutralize the banner contradiction.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "conflicting",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "purpose_disclosure_present",
+          "purpose_list_present",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "sega-20260626",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"We collect personal information about you and the devices you use to access and interact with us and our Products. We collect: (a) Registration information... (f) Information about your use of our Products... (h) Information from anti-cheat and anti-hacking technologies...\"",
+          "\"We may share your personal data with third-party partners for marketing purposes... and to help us build core audiences, custom audiences and lookalike audiences.\"",
+          "\"The following chart provides information about our practices... the purposes for which we use the information... Provide the Products and customer service... Personalize your experience and customize the Products... Our marketing and advertising purposes... Bug detection and error reporting... Security, fraud, and legal compliance\"",
+          "\"SEGA, its subsidiaries and affiliates... use cookies and similar technologies to distinguish you from other users... These technologies can also be used to collect anonymised statistics about your browsing experience on our Websites and to support our electronic marketing activities.\""
+        ],
+        "rationale": "The retained policy and notice text expressly lists collection/use purposes, including product delivery, customer service, personalization, marketing/advertising, analytics, bug detection, security/fraud/legal compliance, and anti-cheat/anti-hacking.",
+        "reasonCodes": [
+          "PURPOSES_EXPRESSLY_LISTED",
+          "MULTIPLE_DOCUMENTS_CONSISTENT"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "lawful_basis_language_present",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "sega-20260626",
+      "expected": {
+        "confidence": 0.97,
+        "evidenceExcerpts": [
+          "\"We will only collect and process personal information about you where we have a lawful basis in your country. As stated throughout this Privacy Policy, our lawful bases include consent... contract... to comply with our legal obligations, and our general business operations.\""
+        ],
+        "rationale": "The policy expressly identifies lawful bases used for processing, including consent, contract, legal obligations, and general business operations.",
+        "reasonCodes": [
+          "LEGAL_BASIS_EXPRESSLY_LISTED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "transfer_disclosure_present",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "sega-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — The policy discloses transfers subject to safeguards, meeting the topic's intent. Evidence: disclosures \"subject to legally required security, contractual and transfer safeguards\" plus sharing across the wider SEGA Group and \"If such transfer is subject to any mandatory restrictions under applicable laws, we will comply\" (policy_surface_a139c595). Reasoning: The policy acknowledges cross-entity transfers and commits to safeguards/legal restrictions — a transfer disclosure in substance, though without named mechanisms or destinations (flagged for the reviewer). Disagreement: Sonnet/Sol's stricter mechanism bar would leave a genuine, if thin, disclosure uncredited.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "recipient_categories_present",
+          "named_third_party_categories_present",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "sega-20260626",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"We may disclose your personal information to: (a) SEGA companies within the wider SEGA Group; (b) Service providers; (c) Platform Operators; (d) Other unaffiliated third parties... advertising, analytics...\"",
+          "\"Service providers and vendors in order to undertake various activities or services on our behalf in supporting our Products.\"",
+          "\"Categories of third parties to whom we disclose the personal information... Service providers Advertising partners and advertisers Affiliates Entities for legal and security purposes Entities for sales or transfer of business or assets Unaffiliated third parties for their advertising purposes\"",
+          "\"SEGA uses a range of technical tools, including advertising IDs, CAPIs, tags, web beacons, tracking pixels, and cookies\""
+        ],
+        "rationale": "The retained documents identify multiple third-party categories and examples of service providers, vendors, advertising partners, affiliates, and platform operators.",
+        "reasonCodes": [
+          "THIRD_PARTY_CATEGORIES_EXPRESSLY_LISTED",
+          "VENDOR_DISCLOSURE_DETAILS"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "vendor_disclosures"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "rights_or_choices_signals_present",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "sega-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Substantive rights beyond opt-out preferences are retained. Evidence: GPC-based opt-out of sale/sharing/targeted advertising under applicable law, marketing unsubscribe, and an EEA/UK right to refer complaints to a supervisory authority (policy_surface_a139c595). Reasoning: A supervisory-authority complaint right and a statutory opt-out are enumerated data-subject rights. Disagreement: Mini/Sol applied an opt-out-only template without engaging the complaint-referral passage; majority rejected.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "data_subject_rights"
+    },
+    {
+      "actual": {
+        "confidence": 0.99,
+        "evidenceExcerpts": [
+          "“we, and/or our service providers may use cookies and similar technologies (including but not limited to web beacons and tracking pixels) (collectively ‘cookies’)”",
+          "“SEGA uses a range of technical tools, including advertising IDs, CAPIs, tags, web beacons, tracking pixels, and cookies”",
+          "runtime cookies: “__Host-authjs.csrf-token”, “__Secure-authjs.callback-url”"
+        ],
+        "rationale": "The scan retained 5 identifiable cookie/storage names from runtime evidence.",
+        "reasonCodes": [
+          "specific_cookie_names_retained",
+          "storage_identifier_retained",
+          "retained_cookie_storage_name_observed",
+          "runtime_cookie_storage_name_observed"
+        ],
+        "status": "observed"
+      },
+      "caseId": "sega-20260626",
+      "expected": {
+        "confidence": 0.9,
+        "evidenceExcerpts": [],
+        "rationale": "Retained cookie-policy evidence did not contain a typed or directly named cookie identifier; categories alone do not establish a named-cookie inventory.",
+        "reasonCodes": [
+          "deterministic_named_cookie_inventory_required",
+          "cookie_categories_without_named_identifiers"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "cookie_inventory"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "policy_runtime_mismatch",
+          "preconsent_tracking_observed",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "sega-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — The storage-specific consent promise is not contradicted by retained runtime facts. Evidence: policy gates \"the storage of Cookies\" (except strictly necessary) on consent (policy_surface_b3469665); runtime shows thirdPartyCookiesPreConsentObserved=false — no pre-consent cookie storage — with pre-consent vendor requests noted. Reasoning: The retained promise concerns storage, and storage was not observed pre-consent, so the retained packet shows consistency on the actual representation; pre-consent vendor contact is flagged as a follow-up signal. Disagreement: Mini/Sonnet's conflicting extends the storage promise to all tracker activity, beyond the retained text; majority rejected.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "purpose_section_retained",
+          "use_case_specific_language_retained",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vogue-20260701",
+      "expected": {
+        "confidence": 0.97,
+        "evidenceExcerpts": [
+          "\"How We Use Your Personal Information\" ... \"To Provide Our Products and Services and Fulfill Your Requests . We use your Personal Information to provide and maintain our Products and Services; process and fulfill your requests or orders; communicate with you about your use of our Products and Services; provide you with customer support and respond to your inquiries...\"",
+          "\"To Improve Our Products and Services . We use your Personal Information to understand and analyze our users and how our Products and Services are used by them, to improve, repair...\"",
+          "\"Personalization, Marketing, and Promotional Purposes. We use your Personal Information to tailor the Content and information, including adve...\"",
+          "\"Financial Incentive ... Personal Information you provide to us as part of this Program may be used for Targeted Advertising or marketing and disclosed to our Identity Resolution Partners...\""
+        ],
+        "rationale": "The retained policy text explicitly states several substantive processing purposes, including providing services, fulfilling requests, improving services, and personalization/marketing.",
+        "reasonCodes": [
+          "PURPOSES_EXPLICITLY_LISTED",
+          "MULTIPLE_PROCESSING_PURPOSES"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "legal_basis_language_retained",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vogue-20260701",
+      "expected": {
+        "confidence": 0.95,
+        "evidenceExcerpts": [
+          "\"Where required by applicable local law, our legal bases for processing your Personal Information are as follows: Performance of a contract: We process Personal Information where necessary for the performance of our contractual obligations to you.\"",
+          "\"Compliance with legal obligations: We process Personal Information where necessary to comply with the legal obligations to which we are subject.\""
+        ],
+        "rationale": "The policy expressly names legal bases for processing, including performance of a contract and compliance with legal obligations.",
+        "reasonCodes": [
+          "LEGAL_BASIS_EXPRESSLY_STATED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "retention_criteria_retained",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vogue-20260701",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — A retention criterion is stated in the policy's dedicated section. Evidence: §9 Retention: data kept as \"reasonably necessary and proportionate to achieve the purpose(s)... unless a longer retention period is required or allowed by law\" (policy_surface_74e43122). Reasoning: A purpose-necessity-plus-proportionality criterion with a legal-hold exception is a retention disclosure in substance, though generic — noted for the reviewer. Disagreement: Sonnet's ambiguous applies the boilerplate discount; under the finality preference the stated criterion carries the intent of the topic.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "data_retention"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "international_transfer_section_retained",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vogue-20260701",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No transfer substance appears despite the section being reached twice. Evidence: \"13. International Transfers.\" appears in the ToC and in-body, each time followed by legal-basis/contact-us content with no destinations, circumstances, or mechanisms anywhere in either retained document (policy_surface_96906465, 74e43122). Reasoning: Two passes over the section produced no transfer language and no framework claims exist to evaluate — the majority's final call. Caveat: the heading-then-unrelated-text pattern suggests extraction damage; a re-capture is advisable. Disagreement: Sol's insufficient is defensible but less actionable.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "named_recipients_retained",
+          "recipient_categories_retained",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vogue-20260701",
+      "expected": {
+        "confidence": 0.95,
+        "evidenceExcerpts": [
+          "\"We may need to share your Personal Information with our subsidiaries, service providers, social media companies such as Meta (Facebook & Instagram), YouTube, TikTok, Pinterest, LinkedIn, and X, third-party cons...\"",
+          "\"We may disclose Personal Information we collect about you to service providers, who perform certain functions and business operations on our behalf.\"",
+          "\"...disclosed to our Identity Resolution Partners...\""
+        ],
+        "rationale": "The policy names categories of recipients and specific third parties/vendors to whom personal information may be disclosed.",
+        "reasonCodes": [
+          "THIRD_PARTY_RECIPIENTS_NAMED",
+          "VENDOR_DISCLOSURE_SUBSTANTIVE"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "vendor_disclosures"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "rights_list_retained",
+          "appeal_right_retained",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vogue-20260701",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "\"To exercise your rights to know, access, correct, delete, restrict, object, or portability...\"",
+          "\"If you are a resident of the EEA, Switzerland, or the United Kingdom, and wish to exercise your rights under applicable local law...\"",
+          "\"You may have a right to appeal a decision we make relating to requests to exercise your rights under applicable local law.\"",
+          "\"...including your right to opt-out of 'sales' and/or 'sharing' of Personal Information...\""
+        ],
+        "rationale": "The retained policy text expressly lists multiple data subject/privacy rights and an appeal mechanism.",
+        "reasonCodes": [
+          "RIGHTS_LISTED",
+          "APPEALS_MENTIONED"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "data_subject_rights"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "policy_promise_vs_runtime_preconsent_tracking",
+          "policy_promise_vs_runtime_missing_controls",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vogue-20260701",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Disclosed opt-out/advertising model aligns with runtime under a US framework. Evidence: policy honors GPC and names Google, Meta, TikTok, LinkedIn among recipients; runtime shows those vendors plus a Sourcepoint CMP with banner likely present. Reasoning: The consent language is conditional (\"where required by applicable law\") within a CPRA-style opt-out model, so pre-consent tracking does not contradict a retained representation. Disagreement: Sonnet's conflicting infers a universal consent gate the text never promises; unobserved banner controls remain a capture-quality note.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.12,
+        "evidenceExcerpts": [
+          "\"Der ID. Polo Ab € 33.790,00 inkl. MwSt. ...\"",
+          "\"Entdecke den neuen ID.3 Neo und melde dich zum Newsletter an um keine weiteren Infos zu verpassen.\"",
+          "\"Sichere dir jetzt mit nur wenigen Klicks deinen ID. Polo ... hinterlege die Reservierungsgebühr von € 250,- bequem per Kreditkarte, Apple Pay oder Google Pay.\""
+        ],
+        "rationale": "The retained packet text is dominated by marketing/product content and does not retain a substantive privacy-purpose passage. Absence could be due to incomplete capture, so this is not enough to mark observed or not_observed_with_sufficient_coverage.",
+        "reasonCodes": [
+          "coverage_incomplete_for_policy_semantics",
+          "retained_text_is_marketing_surface_not_privacy_policy_content"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "volkswagen-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No processing-purpose disclosure exists in the captured surfaces. Evidence: all six privacy-labeled documents are full-length vehicle-marketing pages (ID.3 Neo newsletter, ID. Polo reservation) with zero purpose language. Reasoning: Taking the retained corpus at face value, the topic is simply not addressed — Sonnet's position. Caveat for follow-up: all six privacy URLs resolving to marketing pages suggests a capture routing problem, so a re-scan is advisable. Disagreement: Mini reads marketing calls-to-action as purposes, a keyword-level error.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.11,
+        "evidenceExcerpts": [],
+        "rationale": "No retained passage states a legal basis such as consent, contract, legitimate interests, or legal obligation. The packet does not provide enough retained policy text to distinguish absence from incomplete capture.",
+        "reasonCodes": [
+          "coverage_incomplete_for_policy_semantics",
+          "no_retained_legal_basis_passage"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "volkswagen-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No legal-basis language in the retained corpus. Evidence: none of the six retained documents mentions consent, contract, legal obligation, vital interests, public task, or legitimate interests. Reasoning: Taking the corpus at face value, the topic is unaddressed (Sonnet's call). Re-scan caveat: all privacy URLs returned marketing pages. Disagreement: Mini/Sol's insufficient is defensible but non-final; the caveat preserves their concern.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.11,
+        "evidenceExcerpts": [],
+        "rationale": "There is no retained retention-period or substantive-criteria passage in the packet. The available text is not sufficient to conclude non-disclosure.",
+        "reasonCodes": [
+          "coverage_incomplete_for_policy_semantics",
+          "no_retained_retention_passage"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "volkswagen-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No retention periods or criteria of any kind in the retained corpus. Evidence: all six documents are vehicle-marketing content. Reasoning: The topic is unaddressed in what was captured; re-scan caveat as in row 63. Disagreement: Mini/Sol's insufficient carries the capture concern, retained here as a caveat rather than the verdict.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "data_retention"
+    },
+    {
+      "actual": {
+        "confidence": 0.11,
+        "evidenceExcerpts": [],
+        "rationale": "No retained passage discloses international transfers, recipient countries, or transfer mechanisms. The packet does not retain enough policy text for a coverage-based absence finding.",
+        "reasonCodes": [
+          "coverage_incomplete_for_policy_semantics",
+          "no_retained_transfer_passage"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "volkswagen-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No destinations, circumstances, or mechanisms (current or obsolete) anywhere in the retained corpus. Evidence: marketing-only surfaces. Reasoning: No transfer language and no framework claims exist to evaluate; re-scan caveat as in row 63. Disagreement: Mini/Sol's insufficient noted as the caveat.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.11,
+        "evidenceExcerpts": [
+          "\"Alle Cookies akzeptieren\"",
+          "\"OneTrust CMP\"",
+          "\"Google Tag Manager\""
+        ],
+        "rationale": "Runtime evidence shows OneTrust CMP and Google Tag Manager, but the retained policy text does not disclose named vendors or recipient categories. Because the policy surface is not retained, this remains insufficient retained evidence for the policy disclosure topic.",
+        "reasonCodes": [
+          "runtime_vendor_observation_only",
+          "no_retained_policy_vendor_passage"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "volkswagen-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No vendor/processor disclosure appears in the retained documents. Evidence: six marketing-content surfaces name no processors or recipient categories; OneTrust and Google Tag Manager appear only in runtime telemetry. Reasoning: Within the retained corpus the disclosure is absent; runtime vendor detection is not a policy disclosure. Same re-scan caveat as row 9. Disagreement: Mini's observed substitutes telemetry for disclosure.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "vendor_disclosures"
+    },
+    {
+      "actual": {
+        "confidence": 0.11,
+        "evidenceExcerpts": [],
+        "rationale": "No retained passage describes privacy rights such as access, deletion, objection, portability, or complaint rights. The packet does not support a coverage-safe absence determination.",
+        "reasonCodes": [
+          "coverage_incomplete_for_policy_semantics",
+          "no_retained_rights_passage"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "volkswagen-20260626",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No rights disclosed in any retained document. Evidence: marketing-only surfaces; runtime consentUi shows only cookie-preference controls, which do not establish rights coverage. Reasoning: Topic unaddressed in the captured corpus; re-scan caveat as in row 63. Disagreement: Mini/Sol's insufficient noted as the caveat.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "data_subject_rights"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "purpose_disclosed",
+          "targeted_advertising_disclosed",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vox-20260701",
+      "expected": {
+        "confidence": 0.96,
+        "evidenceExcerpts": [
+          "“We and our third-party service providers (including any third-party content, advertising, and analytics providers) automatically collect certain information from your device or web browser when you interact with the Services to help us understand how our users use the Services and to target advertising to you”",
+          "“Purposes For This Information. We and our third-party service providers use such Usage Data for a variety of purposes including to diagnose problems with our servers and software, to administer the Services, to gather demogra”",
+          "“We may contract with third parties to collect this information on our behalf for analytics purposes.”"
+        ],
+        "rationale": "The retained privacy notice expressly states processing purposes, including understanding service use, targeting advertising, diagnosing problems, administering the services, and analytics collection.",
+        "reasonCodes": [
+          "PURPOSES_EXPLICIT",
+          "THIRD_PARTY_PROCESSING"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "legal_basis_terms_listed",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vox-20260701",
+      "expected": {
+        "confidence": 0.93,
+        "evidenceExcerpts": [
+          "“Legal Basis:. se your personal data in the following circumstances: Where we need to perform the contract we are about to enter into or have entered into with you. Where it is necessary for our legitimate interests (or those of a third party) and your interests and fundamental rights do not override those interests. Where you have consented to a certain use of your personal data. Where we need to comply with a legal or regulatory obligation.”",
+          "“re relying on your consent to process your personal data, you have the right to withdraw your consent at any time by contacting us at vmprivacy@voxmedia.com.”"
+        ],
+        "rationale": "The retained notice includes an explicit legal-basis section listing contract, legitimate interests, consent, and legal/regulatory obligation.",
+        "reasonCodes": [
+          "LEGAL_BASIS_EXPLICIT"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "retention_period_disclosed",
+          "retention_criteria_disclosed",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vox-20260701",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Necessity criterion plus a concrete retention-exception scenario are retained. Evidence: \"retain your Personal Data for the period necessary to fulfill the purposes... unless a longer retention period\" plus retention of deletion-request records and minimum data to keep data deleted (policy_surface_a3216e04). Reasoning: The deletion-record scenario adds substance beyond boilerplate. Disagreement: Sonnet weighs only the truncated generic clause.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "data_retention"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "cross_border_transfer_disclosed",
+          "transfer_safeguard_disclosed",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vox-20260701",
+      "expected": {
+        "confidence": 0.94,
+        "evidenceExcerpts": [
+          "“Data Transfer: We may transfer personal data from the EEA, Switzerland, and the UK to the United States and other countries, some of which have not been determined by the European Commission or the UK Secretary of State to have an adequate level of data protection.”",
+          "“Where we use certain service providers, we may use specific contracts approved by the European Commission and/or UK Secretary of State which give personal data the same protection it has in Europe.”"
+        ],
+        "rationale": "The retained notice expressly describes transfers from EEA/Switzerland/UK to the United States and other countries.",
+        "reasonCodes": [
+          "CROSS_BORDER_TRANSFER_EXPLICIT"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "recipient_categories_disclosed",
+          "named_entity_disclosed",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vox-20260701",
+      "expected": {
+        "confidence": 0.97,
+        "evidenceExcerpts": [
+          "“We and our third-party service providers (including any third-party content, advertising, and analytics providers) automatically collect certain information”",
+          "“We may contract with third parties to collect this information on our behalf for analytics purposes.”",
+          "“We and our third-party service providers use such Usage Data”"
+        ],
+        "rationale": "The notice explicitly references third-party service providers and third parties collecting and using information on the site’s behalf.",
+        "reasonCodes": [
+          "THIRD_PARTY_SERVICE_PROVIDERS_EXPLICIT"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "vendor_disclosures"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "access_right_disclosed",
+          "deletion_right_disclosed",
+          "opt_out_right_disclosed",
+          "complaint_right_disclosed",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vox-20260701",
+      "expected": {
+        "confidence": 0.98,
+        "evidenceExcerpts": [
+          "“You have the right to direct us to not sell your Personal Information at any time”",
+          "“Right to know. You have the right to know whether we process your Personal Data and to access such Personal Data.”",
+          "“Right to data portability. You have the right to obtain a copy of your Personal Data”",
+          "“Right to delete. You have the right to delete Personal Data”",
+          "“Right to opt out. You have the right to opt out of the processing of the Personal Data for purposes of: (i) targeted advertising; (ii) the sale of Personal Data; or (iii) profiling”"
+        ],
+        "rationale": "The retained notice lists multiple data-subject rights, including access/know, portability, deletion, opt-out, and California-specific rights.",
+        "reasonCodes": [
+          "RIGHTS_EXPLICIT"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "data_subject_rights"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "preconsent_tracking_observed",
+          "runtime_policy_mismatch",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "vox-20260701",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Disclosed automatic collection by ad/analytics providers matches runtime. Evidence: \"We and our third-party service providers (including any third-party content, advertising, and analytics providers) automatically collect certain information... to target advertising\" (policy_surface_a3216e04); runtime shows matching third-party tracking. Reasoning: \"Consent is one legal basis\" is not a gating commitment, so pre-consent activity under a US model contradicts nothing retained. Disagreement: Sonnet infers a consent gate from a legal-basis mention; the CMP-present/no-controls capture is noted as a signal.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "w3-20260614",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No purpose-specific processing language in the retained document. Evidence: policy_surface_4437db21 is mission framing (\"Creating a more trustworthy web and protecting user privacy...\"). Reasoning: Aspirational language is not a purposes disclosure; taking the capture as given, the topic is unaddressed. Caveat: the governing W3C privacy notice was likely not this page, so a targeted re-capture would firm this up. Disagreement: Mini mistakes mission text for purposes; Sol's insufficient is defensible but less final than the evidence allows.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.41,
+        "evidenceExcerpts": [],
+        "rationale": "The retained excerpt does not include legal-basis terminology such as consent, contract, legitimate interests, or similar processing-law basis language.",
+        "reasonCodes": [
+          "no_retained_legal_basis_language"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "w3-20260614",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No legal-basis reference in the retained document. Evidence: policy_surface_4437db21 contains mission/navigation content only. Reasoning: Taking the capture at face value, the topic is unaddressed (Mini/Sonnet). Caveat: the governing W3C privacy notice was likely never captured, so a targeted re-scan is recommended before treating this as final. Disagreement: Sol's insufficient survives as the caveat rather than the verdict.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "legal_basis"
+    },
+    {
+      "actual": {
+        "confidence": 0.39,
+        "evidenceExcerpts": [],
+        "rationale": "No retained passage addresses retention periods or substantive retention criteria.",
+        "reasonCodes": [
+          "no_retention_terms_retained"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "w3-20260614",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No retention language in the retained document. Evidence: policy_surface_4437db21, mission/navigation content only. Reasoning: Topic unaddressed in the capture; same re-scan caveat as row 71. Disagreement: Sol's insufficient preserved as the caveat.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "data_retention"
+    },
+    {
+      "actual": {
+        "confidence": 0.38,
+        "evidenceExcerpts": [],
+        "rationale": "No retained passage discloses cross-border transfer practices, destinations, or transfer mechanisms.",
+        "reasonCodes": [
+          "no_transfer_disclosure_retained"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "w3-20260614",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No transfer destinations, circumstances, or mechanisms in the retained document. Evidence: policy_surface_4437db21. Reasoning: Topic unaddressed; same re-scan caveat as row 71. Disagreement: Sol's insufficient preserved as the caveat.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "international_transfers"
+    },
+    {
+      "actual": {
+        "confidence": 0.4,
+        "evidenceExcerpts": [],
+        "rationale": "The retained policy text does not identify vendors, processors, or recipient categories.",
+        "reasonCodes": [
+          "no_named_vendors_or_categories_retained"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "w3-20260614",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No processors, vendors, or recipient categories in the retained document, and no runtime third-party vendors observed. Evidence: policy_surface_4437db21; runtimeContext thirdPartyVendorsObserved=false. Reasoning: Both retained surfaces are silent, supporting absence; re-scan caveat as row 71. Disagreement: Sol's insufficient preserved as the caveat.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "vendor_disclosures"
+    },
+    {
+      "actual": {
+        "confidence": 0.4,
+        "evidenceExcerpts": [],
+        "rationale": "No retained passage describes privacy rights, request mechanisms, or related rights signals.",
+        "reasonCodes": [
+          "no_rights_language_retained"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "w3-20260614",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No data-subject rights mentioned in the retained document. Evidence: policy_surface_4437db21. Reasoning: Topic unaddressed; re-scan caveat as row 71. Disagreement: Sol's insufficient preserved as the caveat.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "data_subject_rights"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Retained text did not meet the canonical relevance floor for Processing-purpose disclosure; nearby or disclosure-shaped wording is not sufficient.",
+        "reasonCodes": [
+          "processing_purposes_topic_relevance_not_deterministically_confirmed"
+        ],
+        "status": "ambiguous"
+      },
+      "caseId": "weather-20260614",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Purpose disclosures are directly retained in the settings surfaces. Evidence: \"control how your data is used, including to tailor advertising to your likely interests based on your activities\" and \"We may use or share your data with our data vendors\" (policy_surface_11bb7b9f, 5a840362). Reasoning: Interest-based advertising and vendor sharing are stated data-use purposes on a legitimate disclosure surface. Disagreement: Sonnet's insufficient evaluates different surfaces and does not engage these passages.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "The retained evidence does not completely capture the governing rights section, so substantive rights coverage cannot be determined.",
+        "reasonCodes": [
+          "opt_out_right_retained",
+          "rights_heading_retained",
+          "rights_evidence_truncated_or_incomplete"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "weather-20260614",
+      "expected": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "Email unsubscribe or advertising opt-out language does not establish substantive data-subject rights such as access, correction, deletion, objection, portability, or complaint rights.",
+        "reasonCodes": [
+          "preference_or_opt_out_language_without_substantive_rights"
+        ],
+        "status": "ambiguous",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "data_subject_rights"
+    },
+    {
+      "actual": {
+        "confidence": 0.8,
+        "evidenceExcerpts": [],
+        "rationale": "A reliable policy/runtime comparison requires a governing target policy, usable runtime coverage, and directly comparable retained evidence.",
+        "reasonCodes": [
+          "policy_runtime_same_jurisdiction_same_choice_disagree",
+          "policy_runtime_comparison_precondition_not_met"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "weather-20260614",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — Runtime behavior matches the disclosed opt-out-by-default model. Evidence: do-not-sell page states sharing is the default when cookies are enabled (CPRA framework) (policy_surface_11bb7b9f); runtime shows extensive pre-consent ad-vendor activity with no consent banner. Reasoning: Under a disclosed opt-out model, pre-consent tracking is the represented behavior. Disagreement: Sol's insufficient understates the concrete default-on representation the runtime confirms.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "observed",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "policy_runtime_consistency"
+    },
+    {
+      "actual": {
+        "confidence": 0.78,
+        "evidenceExcerpts": [],
+        "rationale": "The retained passages were not attributed to the scanned organization or a confirmed first-party brand, so they cannot establish this target-policy result.",
+        "reasonCodes": [
+          "purpose_language_retained",
+          "cited_policy_sources_not_attributed_to_target"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "wikipedia-20260613",
+      "expected": {
+        "confidence": 0.93,
+        "evidenceExcerpts": [
+          "\"We use it to figure out how to make the Wikimedia Sites more engaging and accessible, to see which ideas work, and to make learning and contributing more fun. Put simply: we use this information to make the Wikimedia Sites better for you.\""
+        ],
+        "rationale": "The retained policy text directly states how information is used for product/site improvement and engagement/accessibility purposes.",
+        "reasonCodes": [
+          "PURPOSE_USE_EXPLICIT"
+        ],
+        "status": "observed",
+        "provenance": "three_model_consensus_unreviewed"
+      },
+      "topic": "processing_purposes"
+    },
+    {
+      "actual": {
+        "confidence": 0.88,
+        "evidenceExcerpts": [],
+        "rationale": "No retained excerpt names vendors or recipient categories.",
+        "reasonCodes": [
+          "no_named_vendors_or_categories_retained"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "wikipedia-20260613",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — The sharing topic is engaged but no vendors or recipient categories are disclosed. Evidence: \"We do not sell or rent your Personal Information, nor do we give it to others to sell you anything\" (policy_surface_dd917c15). Reasoning: The retained passage squarely addresses sharing and names no processors or categories — Sonnet's final call. Caveat: the excerpt is a fragment of a long policy, so a fuller capture could surface the service-providers section. Disagreement: Mini/Sol's insufficient survives as the caveat.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "vendor_disclosures"
+    },
+    {
+      "actual": {
+        "confidence": 0.2,
+        "evidenceExcerpts": [
+          "\"meet.google.com or calendar.google.com DocuSign docusign.co.uk or docusign.com BHN Rewards bhnrewards.com or app.rybbon.net or myprepaidcenter.com\""
+        ],
+        "rationale": "The retained text names some third-party services, but it does not preserve a substantive international-transfer disclosure for the target policy, such as transfer destinations, safeguards, or transfer conditions.",
+        "reasonCodes": [
+          "recipient_or_vendor_fragment_without_transfer_mechanism",
+          "no_retained_cross_border_transfer_statement"
+        ],
+        "status": "insufficient_retained_evidence"
+      },
+      "caseId": "wise-20260611",
+      "expected": {
+        "confidence": null,
+        "evidenceExcerpts": [],
+        "rationale": "Fable 5 seed — No transfer substance in the retained material. Evidence: research policy names vendor domains (Google, DocuSign, BHN Rewards) with a generic data-protection-agreements assurance; no destinations, circumstances, or mechanisms anywhere (policy_surface_7b196d21). Reasoning: The retained evidence engages adjacent topics without any transfer disclosure — Sonnet's call. Caveat: main policy pages captured navigation only; re-scan advisable. Disagreement: Mini/Sol's insufficient preserved as the caveat.",
+        "reasonCodes": [
+          "human_adjudicated_disagreement"
+        ],
+        "status": "not_observed_with_sufficient_coverage",
+        "provenance": "human_adjudicated_disagreement"
+      },
+      "topic": "international_transfers"
+    }
+  ],
+  "benchmarkLimitations": [
+    "legacy_packets_precede_typed_policy_ownership_and_coverage",
+    "legacy_reference_combines_transfer_disclosure_with_stale_framework_validity",
+    "agreement_metrics_are_diagnostic_not_rollout_quality",
+    "fresh_current_contract_packets_require_evidence_only_review"
+  ],
+  "formalIndependentReviewSatisfied": false,
+  "productionEligible": false
+}

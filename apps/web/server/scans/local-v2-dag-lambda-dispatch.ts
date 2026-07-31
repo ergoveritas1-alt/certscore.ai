@@ -6,6 +6,7 @@ import {
   type LocalV2DagLambdaAwsRegion,
   type LocalV2DagLambdaDebugOverrides,
   type LocalV2DagLambdaTargetEnvironment,
+  type LocalV2DagLambdaVpcMode,
   type LocalV2DagScanProfile
 } from "./local-v2-dag-scan-config";
 
@@ -31,12 +32,13 @@ export type LocalV2DagLambdaDispatchPayload = {
   productionFindingIntegration: false;
   profile: LocalV2DagScanProfile;
   resultHandoff: "sqs";
+  resultPurpose: "persisted_scan";
   resultQueueUrl: string;
   scanId: string;
   scannerRuntime: "certscore-v2-dag-parallel-path";
   targetEnvironment: LocalV2DagLambdaTargetEnvironment;
   targetUrl: string;
-  vpcMode: "none";
+  vpcMode: LocalV2DagLambdaVpcMode;
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   policySurfaceSeeds?: Array<Pick<SharedCrawlSeedHint, "confidence" | "hintType" | "source" | "url">>;
 };
@@ -97,7 +99,7 @@ export type LocalV2DagLambdaDispatchSummary = {
   resultHandoff: "sqs";
   simulatedLocalLambda: boolean;
   targetEnvironment: LocalV2DagLambdaTargetEnvironment;
-  vpcMode: "none";
+  vpcMode: LocalV2DagLambdaVpcMode;
 };
 
 export type LocalV2DagLambdaResultStatus = "completed" | "failed";
@@ -166,10 +168,21 @@ export type LocalV2DagLambdaResultMessage = {
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
+  resultPurpose: "persisted_scan";
   scanId: string;
   scannerGitSha?: string;
   scannerImageTag?: string;
   scannerRuntimeVersion?: string;
+  scannerRuntimeProvenance?: {
+    awsRegion: LocalV2DagLambdaAwsRegion;
+    dispatchVpcMode: LocalV2DagLambdaVpcMode;
+    egressId?: string;
+    egressProvider?: string;
+    functionVersion?: string;
+    imageDigest?: string;
+    publicIpHash?: string;
+    runtimeVpcMode: LocalV2DagLambdaVpcMode | "unknown";
+  };
   status: LocalV2DagLambdaResultStatus;
   targetEnvironment: LocalV2DagLambdaTargetEnvironment;
 };
@@ -249,6 +262,34 @@ function requireString(value: unknown, field: string): string {
   return normalized;
 }
 
+function parseScannerRuntimeProvenance(
+  value: unknown,
+): LocalV2DagLambdaResultMessage["scannerRuntimeProvenance"] {
+  const record = asRecord(value);
+  if (Object.keys(record).length === 0 || !isLocalV2DagLambdaAwsRegion(record.awsRegion)) {
+    return undefined;
+  }
+  const dispatchVpcMode = record.dispatchVpcMode === "vpc" ? "vpc" : record.dispatchVpcMode === "none" ? "none" : null;
+  const runtimeVpcMode = record.runtimeVpcMode === "vpc" || record.runtimeVpcMode === "none" || record.runtimeVpcMode === "unknown"
+    ? record.runtimeVpcMode
+    : null;
+  if (!dispatchVpcMode || !runtimeVpcMode) {
+    return undefined;
+  }
+  const imageDigest = stringValue(record.imageDigest);
+  const publicIpHash = stringValue(record.publicIpHash);
+  return {
+    awsRegion: record.awsRegion,
+    dispatchVpcMode,
+    ...(stringValue(record.egressId) ? { egressId: (stringValue(record.egressId) as string).slice(0, 128) } : {}),
+    ...(stringValue(record.egressProvider) ? { egressProvider: (stringValue(record.egressProvider) as string).slice(0, 80) } : {}),
+    ...(stringValue(record.functionVersion) ? { functionVersion: (stringValue(record.functionVersion) as string).slice(0, 80) } : {}),
+    ...(imageDigest && /^sha256:[a-f0-9]{64}$/i.test(imageDigest) ? { imageDigest } : {}),
+    ...(publicIpHash && /^sha256:[a-f0-9]{64}$/i.test(publicIpHash) ? { publicIpHash } : {}),
+    runtimeVpcMode,
+  };
+}
+
 function requireAwsRegion(value: unknown): LocalV2DagLambdaAwsRegion {
   if (!isLocalV2DagLambdaAwsRegion(value)) {
     throw new Error("Local v2 DAG Lambda dispatch target AWS region is not supported.");
@@ -279,7 +320,7 @@ export function summarizeLocalV2DagLambdaDispatchForEvent(
     simulatedLocalLambda: intent.simulatedLocalLambda === true,
     targetEnvironment:
       intent.targetEnvironment === "production" ? "production" : "local",
-    vpcMode: "none"
+    vpcMode: intent.vpcMode === "vpc" ? "vpc" : "none"
   };
 }
 
@@ -303,8 +344,8 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
   if (intent.resultHandoff !== "sqs") {
     throw new Error("Local v2 DAG Lambda dispatch must hand results back through SQS.");
   }
-  if (intent.vpcMode !== "none") {
-    throw new Error("Local v2 DAG Lambda dispatch must run outside a VPC.");
+  if (intent.vpcMode !== "none" && intent.vpcMode !== "vpc") {
+    throw new Error("Local v2 DAG Lambda dispatch must declare a supported network mode.");
   }
   if (intent.contractVersion !== LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION) {
     throw new Error("Local v2 DAG Lambda dispatch contract version is not supported.");
@@ -329,13 +370,14 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     productionFindingIntegration: false,
     profile: getProfile(config),
     resultHandoff: "sqs",
+    resultPurpose: "persisted_scan",
     resultQueueUrl: requireString(intent.resultQueueUrl, "resultQueueUrl"),
     scanId: requireString(input.scanId, "scanId"),
     scannerRuntime: "certscore-v2-dag-parallel-path",
     targetEnvironment:
       intent.targetEnvironment === "production" ? "production" : "local",
     targetUrl: requireString(config.normalizedUrl, "normalizedUrl"),
-    vpcMode: "none"
+    vpcMode: intent.vpcMode
   };
 }
 
@@ -623,6 +665,7 @@ export function parseLocalV2DagLambdaResultMessage(
     contractVersion: LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
+    resultPurpose: "persisted_scan",
     scanId: requireString(record.scanId, "scanId"),
     status,
     targetEnvironment
@@ -654,6 +697,10 @@ export function parseLocalV2DagLambdaResultMessage(
   const scannerRuntimeVersion = stringValue(record.scannerRuntimeVersion);
   if (scannerRuntimeVersion) {
     parsed.scannerRuntimeVersion = scannerRuntimeVersion.slice(0, 80);
+  }
+  const scannerRuntimeProvenance = parseScannerRuntimeProvenance(record.scannerRuntimeProvenance);
+  if (scannerRuntimeProvenance) {
+    parsed.scannerRuntimeProvenance = scannerRuntimeProvenance;
   }
   if (errorMessage) {
     parsed.error = {

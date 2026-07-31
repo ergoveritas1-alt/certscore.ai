@@ -1,7 +1,8 @@
 import "server-only";
 
-import { betterAuth } from "better-auth";
+import { betterAuth, type Auth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import { admin } from "better-auth/plugins";
 import { getWritePool } from "@website-signal-risk-scanner/db";
 import { createGmailTransport, getGmailConfig } from "../email/gmail";
 import {
@@ -9,6 +10,8 @@ import {
   isPublicAccountCreationEnabled
 } from "../access-control";
 import { findBetterAuthUserById } from "../users/repository";
+import { buildPasswordEmailContent } from "../auth-flows/password-email-content";
+import { getPasswordEmailPurpose } from "../auth-flows/password-email-purpose";
 import { BETTER_AUTH_COOKIE_PREFIX, BETTER_AUTH_SESSION_COOKIE_NAME } from "./constants";
 import { getBetterAuthBaseURLConfig, getBetterAuthEnv } from "./env";
 
@@ -27,7 +30,10 @@ function getGoogleProviderConfig(env: ReturnType<typeof getBetterAuthEnv>) {
 }
 
 async function canCreateAuthUser(email: string | null | undefined) {
-  return isPublicAccountCreationEnabled() && isAllowedAuthEmail(email);
+  // Public sign-up is enforced by emailAndPassword.disableSignUp. This hook
+  // must also allow passwordless users created by an authenticated company
+  // manager when public sign-up is paused.
+  return isAllowedAuthEmail(email);
 }
 
 async function canCreateAuthSession(userId: string | null | undefined) {
@@ -45,7 +51,13 @@ async function canCreateAuthSession(userId: string | null | undefined) {
   }
 }
 
-function createAuth() {
+type BetterAuthInstance = Auth<any> & {
+  api: Auth<any>["api"] & {
+    createUser: (...args: any[]) => Promise<any>;
+  };
+};
+
+function createAuth(): BetterAuthInstance {
   const env = getBetterAuthEnv();
 
   return betterAuth({
@@ -81,14 +93,14 @@ function createAuth() {
     databaseHooks: {
       session: {
         create: {
-          before: async (session) => {
+          before: async (session: { userId?: unknown }) => {
             return canCreateAuthSession(typeof session.userId === "string" ? session.userId : null);
           }
         }
       },
       user: {
         create: {
-          before: async (user) => {
+          before: async (user: { email?: unknown }) => {
             return canCreateAuthUser(typeof user.email === "string" ? user.email : null);
           }
         }
@@ -100,33 +112,39 @@ function createAuth() {
       requireEmailVerification: false,
       revokeSessionsOnPasswordReset: true,
       resetPasswordTokenExpiresIn: PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS,
-      sendResetPassword: async ({ user, url }) => {
+      sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
         const gmailConfig = getGmailConfig();
 
         if (!gmailConfig) {
-          return;
+          throw new Error("Email delivery is not configured. Set GMAIL_SMTP_USER and GMAIL_SMTP_APP_PASSWORD.");
         }
 
         const transporter = createGmailTransport(gmailConfig);
+        const purpose = getPasswordEmailPurpose();
+        const content = buildPasswordEmailContent({
+          email: user.email,
+          purpose,
+          url
+        });
 
-        await transporter.sendMail({
+        const delivery = await transporter.sendMail({
           from: `"CertScore.ai" <${gmailConfig.fromEmail}>`,
-          subject: "Reset your CertScore.ai password",
-          text: [
-            "We received a request to reset your CertScore.ai password.",
-            "",
-            "Use this secure link to choose a new password:",
-            url,
-            "",
-            `If you did not request a reset for ${user.email}, you can ignore this email.`
-          ].join("\n"),
+          subject: content.subject,
+          text: content.text,
           to: user.email
+        });
+        console.info("Password email sent", {
+          accepted: delivery.accepted,
+          email: user.email,
+          messageId: delivery.messageId,
+          purpose,
+          rejected: delivery.rejected
         });
       }
     },
     emailVerification: {
       sendOnSignUp: true,
-      sendVerificationEmail: async ({ user, url }) => {
+      sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
         const gmailConfig = getGmailConfig();
 
         if (!gmailConfig) {
@@ -150,7 +168,7 @@ function createAuth() {
         });
       }
     },
-    plugins: [nextCookies()],
+    plugins: [nextCookies(), admin({ defaultRole: "user" })],
     secret: env.BETTER_AUTH_SECRET,
     session: {
       cookieCache: {
@@ -171,6 +189,9 @@ function createAuth() {
       google: getGoogleProviderConfig(env)
     },
     user: {
+      deleteUser: {
+        enabled: true
+      },
       fields: {
         createdAt: "created_at",
         emailVerified: "email_verified",
@@ -186,10 +207,8 @@ function createAuth() {
       },
       modelName: "better_auth_verifications"
     }
-  });
+  }) as BetterAuthInstance;
 }
-
-type BetterAuthInstance = ReturnType<typeof createAuth>;
 
 let authSingleton: BetterAuthInstance | null = null;
 

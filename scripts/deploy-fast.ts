@@ -49,6 +49,7 @@ type RunJson = {
 };
 
 const SCANNER_REGIONS = ["eu-central-1", "eu-west-1", "us-west-2"] as const;
+const SCANNER_BUILD_REGION = "eu-central-1" as const;
 const WEB_WORKFLOW = "web-aws-ecs-deploy.yml";
 const VALIDATION_WORKFLOW = "validation-aws-deploy.yml";
 const DB_WORKFLOW = "prod-db-migrate.yml";
@@ -436,24 +437,41 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
         }
       })));
 
+      const sourceImageUri = `199536052647.dkr.ecr.${SCANNER_BUILD_REGION}.amazonaws.com/certscore-v2-dag-local-lambda:${input.ref}`;
+      const sourceRuntimeBaseUri = `199536052647.dkr.ecr.${SCANNER_BUILD_REGION}.amazonaws.com/certscore-v2-dag-local-lambda:runtime-base`;
+      await run([
+        "bash",
+        "scripts/local-v2-dag-lambda/build-push-dev-image.sh"
+      ], {
+        env: {
+          AWS_REGION: SCANNER_BUILD_REGION,
+          BUILD_GIT_SHA: input.ref,
+          BUILD_IMAGE_TAG: input.ref,
+          CERTSCORE_V2_DAG_LAMBDA_IMAGE_TAG: input.ref,
+          CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE: input.pushRuntimeBase ? "true" : "false",
+          CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN: "true",
+          CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE: useRuntimeBase ? "true" : "false",
+          CERTSCORE_V2_DAG_LAMBDA_SKIP_BUILD_CACHE_PUSH: "true",
+          DOCKER_CONFIG: dockerConfigByRegion[SCANNER_BUILD_REGION]
+        }
+      });
+
       const results = await Promise.all(SCANNER_REGIONS.map(async (region) => {
         const regionStart = Date.now();
         const imageUri = `199536052647.dkr.ecr.${region}.amazonaws.com/certscore-v2-dag-local-lambda:${input.ref}`;
-        await run([
-          "bash",
-          "scripts/local-v2-dag-lambda/build-push-dev-image.sh"
-        ], {
-          env: {
-            AWS_REGION: region,
-            BUILD_GIT_SHA: input.ref,
-            BUILD_IMAGE_TAG: input.ref,
-            CERTSCORE_V2_DAG_LAMBDA_IMAGE_TAG: input.ref,
-            CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE: input.pushRuntimeBase ? "true" : "false",
-            CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN: "true",
-            CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE: useRuntimeBase ? "true" : "false",
-            DOCKER_CONFIG: dockerConfigByRegion[region]
-          }
-        });
+        if (region !== SCANNER_BUILD_REGION) {
+          await run([
+            "bash",
+            "scripts/local-v2-dag-lambda/replicate-dev-image.sh",
+            sourceImageUri,
+            ...(input.pushRuntimeBase ? [sourceRuntimeBaseUri] : [])
+          ], {
+            env: {
+              AWS_REGION: region,
+              DOCKER_CONFIG: dockerConfigByRegion[region]
+            }
+          });
+        }
         await run([
           "bash",
           "scripts/local-v2-dag-lambda/setup-dev-aws-image.sh",
@@ -475,6 +493,13 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
       for (const result of results) {
         details[result.region] = `${formatDuration(result.durationMs)} ${result.imageUri}`;
       }
+      await run([
+        "node",
+        "--import",
+        "tsx",
+        "scripts/check-regional-scanner-parity.ts",
+      ]);
+      details.regionParity = "passed";
       return details;
     } finally {
       await rm(dockerConfigRoot, { force: true, recursive: true });

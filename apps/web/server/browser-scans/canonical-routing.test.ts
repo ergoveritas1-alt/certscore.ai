@@ -5,6 +5,7 @@ import {
   buildNormalizedConcerns,
   buildUnifiedFindingCandidatesFromConcerns
 } from "../../lib/scans/normalized-concerns";
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import { buildRuntimeCookieInventory } from "../../lib/scans/runtime-cookie-evidence";
 import {
   buildBrowserExtensionRequestInventoryRows,
@@ -130,12 +131,113 @@ test("BX01 Neosporin-style capture projects contextual cookies and request inven
   assert.equal(cookieRows[0]?.cookieName, "OptanonConsent");
   assert.equal(cookieRows[0]?.timingEvidence, "before_consent_cookie_write");
   assert.equal(trackerRows.length, 3);
-  assert.equal(groupedRows.length, 4);
+  assert.equal(groupedRows.length, 3);
   assert.ok(groupedRows.some((row) => row.vendor === "OneTrust" || row.vendor === "OneTrust CMP"));
   assert.ok(groupedRows.some((row) => row.domains.includes("cdn.pricespider.com")));
   assert.equal(materialized.preconsentTrackingDetected, false);
   assert.equal(materialized.preconsentViolationCount, 0);
   assert.equal(JSON.stringify(materialized).includes("cookieValue"), false);
+});
+
+test("BX01 codeable-style consent evidence preserves ambiguity and eligible storage timing", () => {
+  const event = (event_json: BrowserScanEventRow["event_json"]): BrowserScanEventRow => ({
+    event_json,
+    event_type: event_json.eventType,
+    observed_at_ms: event_json.observedAtMs
+  });
+  const evidence = summarizeBrowserEvidence({
+    artifacts: [],
+    events: [
+      event({
+        acceptObserved: true,
+        bannerObserved: true,
+        buttonsObserved: ["OK"],
+        eventType: "consent_ui_observed",
+        firstLayerButtonCount: 1,
+        manageObserved: false,
+        matchedTextSnippets: ["By using this site you agree to analytics cookies."],
+        observedAtMs: 500,
+        rejectObserved: false
+      }),
+      event({
+        consentInteractionObserved: false,
+        cookieName: "__cf_bm",
+        domain: ".codeable.io",
+        eventType: "cookie_observed",
+        observedAtMs: 422,
+        path: "/",
+        valueCaptured: false
+      }),
+      event({
+        consentInteractionObserved: false,
+        cookieName: "ajs_anonymous_id",
+        domain: ".codeable.io",
+        eventType: "cookie_observed",
+        observedAtMs: 663,
+        path: "/",
+        valueCaptured: false
+      }),
+      event({
+        consentInteractionObserved: false,
+        eventType: "network_request",
+        hostname: "api.segment.io",
+        observedAtMs: 663,
+        resourceType: "fetch",
+        url: "https://api.segment.io/v1/t"
+      })
+    ],
+    targetHostname: "www.codeable.io"
+  });
+
+  const observedPackage = buildBrowserObservedSignalPackageFromEvidence({ evidence });
+  const materialized = deriveBrowserScanCanonicalMaterializationFromObservedSignals(
+    observedPackage.observedSignals,
+    observedPackage.evidenceInventory
+  );
+  const consentObservation = materialized.hybridRuntimeEvidencePatch.consentUiObservations[0];
+
+  assert.equal(materialized.acceptAllPresent, false);
+  assert.equal(consentObservation?.likelyPresent, true);
+  assert.equal(consentObservation?.controls[0]?.semanticRole, "ambiguous_acknowledgment");
+  assert.equal(consentObservation?.controls[0]?.layer, "first_layer");
+  assert.match(consentObservation?.controls[0]?.nearbyConsentText ?? "", /you agree/i);
+  assert.equal(consentObservation?.impliedConsentLanguageObserved, true);
+  assert.equal(consentObservation?.rejectControlObserved, false);
+  assert.equal(consentObservation?.managePreferencesControlObserved, false);
+  assert.equal(materialized.hybridRuntimeEvidencePatch.timelineMarkers.firstCookieSeenMs, 422);
+  assert.equal(materialized.hybridRuntimeEvidencePatch.timelineMarkers.firstNonEssentialStorageMs, 663);
+  assert.equal(materialized.preconsentTrackingDetected, true);
+
+  const policyOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    runtimeArtifacts: {
+      consentSurfaceInspection: {
+        coverageStatus: "complete",
+        inspectedPreInteraction: true,
+        inspectionCompleted: true,
+        outcome: "actionable_surface_observed"
+      },
+      consentSurfaceObserved: true,
+      hybridRuntimeEvidence: materialized.hybridRuntimeEvidencePatch
+    },
+    scanCompleted: true,
+    snapshot: {
+      cookie_banner_present: true,
+      preconsent_tracking_detected: true
+    }
+  });
+  assert.equal(policyOutcomes.consent_surface_observed?.status, "Observed");
+  assert.equal(policyOutcomes.accept_consent_control?.status, "Gap observed");
+  assert.equal(policyOutcomes.reject_all_path_availability?.status, "Gap observed");
+  assert.equal(policyOutcomes.options_settings_preferences_control?.status, "Gap observed");
+  assert.equal(
+    policyOutcomes.pre_consent_cookies_storage?.criticalEvidence.retainedEvidence.firstPreconsentCookieOrStorageObservedMs,
+    663
+  );
+
+  const jsonRoundTrip = JSON.parse(JSON.stringify(materialized.hybridRuntimeEvidencePatch)) as typeof materialized.hybridRuntimeEvidencePatch;
+  assert.equal(jsonRoundTrip.consentUiObservations[0]?.controls[0]?.semanticRole, "ambiguous_acknowledgment");
+  assert.equal(jsonRoundTrip.consentUiObservations[0]?.impliedConsentLanguageObserved, true);
 });
 
 test("WS01-normalized BX01 signals enter the canonical concern pipeline", () => {
@@ -233,6 +335,36 @@ test("WS01-normalized BX01 signals enter the canonical concern pipeline", () => 
         source: "browser_extension_bx01",
         value: ["tag_manager"],
         valueType: "string_array"
+      },
+      {
+        confidence: 0.82,
+        key: "privacy.ambiguous_acknowledgment_present",
+        label: "Ambiguous consent acknowledgment present",
+        populationStatus: "present",
+        reportSignalSource: "snapshot_signal",
+        source: "browser_extension_bx01",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.9,
+        key: "privacy.implied_consent_language_observed",
+        label: "Implied-consent language observed",
+        populationStatus: "present",
+        reportSignalSource: "snapshot_signal",
+        source: "browser_extension_bx01",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.82,
+        key: "privacy.first_layer_consent_control_roles",
+        label: "First-layer consent control semantic roles",
+        populationStatus: "present",
+        reportSignalSource: "snapshot_signal",
+        source: "browser_extension_bx01",
+        value: ["OK|ambiguous_acknowledgment"],
+        valueType: "string_array"
       }
     ]
   });
@@ -253,6 +385,15 @@ test("WS01-normalized BX01 signals enter the canonical concern pipeline", () => 
       Array.isArray(candidate.fallbackEvidence?.preconsent_tracker_evidence_urls) &&
       candidate.fallbackEvidence.preconsent_tracker_evidence_urls.includes("https://www.googletagmanager.com/gtm.js?id=GTM-TEST")
     )
+  );
+  const preconsentCandidate = reviewCandidates.find(
+    (candidate) => candidate.signalKey === "privacy.preconsent_tracking_detected"
+  );
+  assert.equal(preconsentCandidate?.fallbackEvidence?.ambiguousAcknowledgmentObserved, true);
+  assert.equal(preconsentCandidate?.fallbackEvidence?.impliedConsentLanguageObserved, true);
+  assert.deepEqual(
+    preconsentCandidate?.fallbackEvidence?.consentControlSemanticRoles,
+    ["OK|ambiguous_acknowledgment"]
   );
 });
 

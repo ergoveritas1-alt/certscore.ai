@@ -134,6 +134,31 @@ test("requires policy context for an ambiguous French privacy label", () => {
   assert.equal(classification.reasonCodes.includes("policy_context_satisfied"), true);
 });
 
+test("does not classify generic data-protection marketing or customer stories as privacy policies", () => {
+  for (const input of [
+    {
+      linkText: "Efficient Data Protection Management at finstreet",
+      url: "https://example.test/customer-stories/finstreet/",
+      surroundingText: "Customer story about building a data protection program from scratch.",
+    },
+    {
+      linkText: "Data Protection",
+      url: "https://example.test/security-advisory/dataprivacy/",
+      surroundingText: "Explore our consulting and managed security services.",
+    },
+  ]) {
+    assert.equal(classifyPrivacySurface(input).surfaceType, "unknown", input.url);
+  }
+
+  const policy = classifyPrivacySurface({
+    linkText: "Data Protection",
+    url: "https://example.test/legal/data-protection",
+    surroundingText: "Legal policy notice for processing personal data.",
+  });
+  assert.equal(policy.surfaceType, "privacy_policy");
+  assert.equal(policy.reasonCodes.includes("policy_context_satisfied"), true);
+});
+
 test("classifies canonical terms surfaces across supported locales", () => {
   const examples = [
     ["Terms", "en"],
@@ -173,6 +198,21 @@ test("uses URL patterns as canonical surface hints without display-layer inferen
   assert.equal(classification.reasonCodes.includes("matched_url_pattern"), true);
 });
 
+test("classifies English data-protection privacy surfaces", () => {
+  const labelClassification = classifyPrivacySurface({
+    linkText: "Data Protection & Privacy"
+  });
+  assert.equal(labelClassification.surfaceType, "privacy_policy");
+  assert.equal(labelClassification.matchedLocale, "en");
+
+  const pathClassification = classifyPrivacySurface({
+    linkText: "Legal",
+    url: "https://www.loopia.com/about-loopia/data-protection/"
+  });
+  assert.equal(pathClassification.surfaceType, "privacy_policy");
+  assert.equal(pathClassification.reasonCodes.includes("matched_url_pattern"), true);
+});
+
 test("uses localized URL patterns as canonical surface hints", () => {
   const examples = [
     ["https://example.test/datenschutz", "privacy_policy"],
@@ -190,6 +230,28 @@ test("uses localized URL patterns as canonical surface hints", () => {
     const classification = classifyPrivacySurface({ linkText: "Legal", url });
     assert.equal(classification.surfaceType, surfaceType, url);
     assert.equal(classification.reasonCodes.includes("matched_url_pattern"), true, url);
+  }
+});
+
+test("classifies common localized data-protection paths through the locale registry", () => {
+  const paths = [
+    "https://example.test/data-protection",
+    "https://example.test/proteccion-de-datos",
+    "https://example.test/protezione-dei-dati",
+    "https://example.test/gegevensbescherming",
+    "https://example.test/ochrona-danych",
+    "https://example.test/protecao-de-dados",
+    "https://example.test/dataskydd",
+    "https://example.test/databeskyttelse",
+    "https://example.test/tietosuoja",
+    "https://example.test/andmekaitse",
+    "https://example.test/datu-aizsardziba",
+    "https://example.test/duomenu-apsauga",
+  ];
+
+  for (const url of paths) {
+    const classification = classifyPrivacySurface({ linkText: "Legal", url });
+    assert.equal(classification.surfaceType, "privacy_policy", url);
   }
 });
 

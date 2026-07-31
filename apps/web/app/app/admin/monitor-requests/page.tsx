@@ -1,4 +1,5 @@
-import Link from "next/link";
+import NextLink from "next/link";
+import type { ComponentProps } from "react";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import {
   getMonitorSiteRequestCounts,
@@ -40,6 +41,10 @@ type MonitorRequestsPageProps = {
     status?: string;
   }>;
 };
+
+function Link(props: ComponentProps<typeof NextLink>) {
+  return <NextLink {...props} prefetch={false} />;
+}
 
 function normalizeStatus(value: string | undefined): AdminMonitorSiteRequestStatus | null {
   return statuses.includes(value as AdminMonitorSiteRequestStatus) ? (value as AdminMonitorSiteRequestStatus) : null;

@@ -1,0 +1,887 @@
+{
+  "contractVersion": "policy_review_gold_corpus.v1",
+  "description": "Human-adjudicated 25-case policy-review calibration corpus. The product owner reviewed all 200 topic rows using retained evidence and a three-model comparison.",
+  "entries": [
+    {
+      "caseId": "oxfam-www-20260725",
+      "scanId": "14db7117-170b-429e-ab29-9f6c6f380bc9",
+      "targetUrl": "https://www.oxfam.org/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/oxfam-www-20260725.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "conflicting",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "conflicting"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "conflicting"
+      }
+    },
+    {
+      "caseId": "caltech-20260701",
+      "scanId": "27016495-eda2-4190-99f1-18bb396dc59e",
+      "targetUrl": "https://caltech.edu/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/caltech-20260701.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "not_observed_with_sufficient_coverage",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "not_observed_with_sufficient_coverage",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "not_observed_with_sufficient_coverage",
+        "data_retention": "ambiguous",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "not_observed_with_sufficient_coverage",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "ikea-20260629",
+      "scanId": "71da1d11-7a54-441a-8139-c55dd9de254b",
+      "targetUrl": "https://ikea.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/ikea-20260629.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "oxfam-root-20260725",
+      "scanId": "e1783741-9488-42a7-8eda-c1c7fbda305b",
+      "targetUrl": "https://oxfam.org/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/oxfam-root-20260725.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "conflicting",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "conflicting"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "conflicting"
+      }
+    },
+    {
+      "caseId": "vogue-20260701",
+      "scanId": "0c67a9e8-ce03-48fc-a84f-bdba55a32df7",
+      "targetUrl": "https://vogue.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/vogue-20260701.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "not_observed_with_sufficient_coverage",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "not_observed_with_sufficient_coverage",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "vox-20260701",
+      "scanId": "272c2430-6326-459b-94c3-5c4d67543dc4",
+      "targetUrl": "https://vox.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/vox-20260701.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "ebay-20260701",
+      "scanId": "8b123788-df9d-4a42-a7a1-e0f98c9b3ddf",
+      "targetUrl": "https://ebay.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/ebay-20260701.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "insufficient_retained_evidence"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "ambiguous",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "kbdlab-20260630",
+      "scanId": "0fc40344-5fd0-415a-84ee-3967c2ca2e8e",
+      "targetUrl": "https://kbdlab.io/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/kbdlab-20260630.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "not_observed_with_sufficient_coverage",
+        "data_retention": "not_observed_with_sufficient_coverage",
+        "international_transfers": "not_observed_with_sufficient_coverage",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "conflicting"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "not_observed_with_sufficient_coverage",
+        "data_retention": "not_observed_with_sufficient_coverage",
+        "international_transfers": "not_observed_with_sufficient_coverage",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "conflicting"
+      }
+    },
+    {
+      "caseId": "certscore-20260630",
+      "scanId": "c66accbb-7896-4d8d-845f-dcf8d381208e",
+      "targetUrl": "https://certscore.ai/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/certscore-20260630.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "not_observed_with_sufficient_coverage",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "not_observed_with_sufficient_coverage",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "not_observed_with_sufficient_coverage",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "not_observed_with_sufficient_coverage",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "amazon-20260629",
+      "scanId": "61d5c4de-2ded-4efd-93b4-96e4aa1e4ed2",
+      "targetUrl": "https://amazon.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/amazon-20260629.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "ambiguous",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "not_observed_with_sufficient_coverage",
+        "data_retention": "ambiguous",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "bbc-20260611",
+      "scanId": "scan_1781161315403_bbc.com",
+      "targetUrl": "https://bbc.com/",
+      "bundlePath": "artifacts/v2-calibration-lab-bbc-com-standard-20260611T070155/bbc.com/CanonicalEvidenceBundle.json",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/bbc-20260611.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "insufficient_retained_evidence",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "insufficient_retained_evidence",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "insufficient_retained_evidence",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "wikipedia-20260613",
+      "scanId": "scan_1781358480517_wikipedia.org",
+      "targetUrl": "https://wikipedia.org/",
+      "bundlePath": "artifacts/v2-calibration-lab-wikipedia-org-policy-20260613T134759/wikipedia.org/CanonicalEvidenceBundle.json",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/wikipedia-20260613.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "not_observed_with_sufficient_coverage",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "insufficient_retained_evidence"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "insufficient_retained_evidence",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "insufficient_retained_evidence"
+      }
+    },
+    {
+      "caseId": "cnn-20260629",
+      "scanId": "63fea849-cde3-4c00-aff7-c12d19e38435",
+      "targetUrl": "https://cnn.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/cnn-20260629.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "ambiguous",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "ambiguous",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "cimediacloud-20260629",
+      "scanId": "95613a02-6e64-427c-88b7-0648a703c167",
+      "targetUrl": "https://cimediacloud.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/cimediacloud-20260629.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "conflicting"
+      }
+    },
+    {
+      "caseId": "nbcnews-20260626",
+      "scanId": "3e84d326-bb8c-4f78-b7ff-477ff451fcc7",
+      "targetUrl": "https://nbcnews.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/nbcnews-20260626.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "not_observed_with_sufficient_coverage",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "conflicting"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "conflicting"
+      }
+    },
+    {
+      "caseId": "hubspot-20260611",
+      "scanId": "scan_1781161149660_hubspot.com",
+      "targetUrl": "https://hubspot.com/",
+      "bundlePath": "artifacts/v2-calibration-lab-hubspot-com-standard-20260611T065908/hubspot.com/CanonicalEvidenceBundle.json",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/hubspot-20260611.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "insufficient_retained_evidence",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "insufficient_retained_evidence",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "insufficient_retained_evidence"
+      },
+      "baseline": {
+        "processing_purposes": "insufficient_retained_evidence",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "insufficient_retained_evidence",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "conflicting"
+      }
+    },
+    {
+      "caseId": "sonymcs-20260626",
+      "scanId": "76255872-7d8d-42dd-a6e9-7d4b22b66fd8",
+      "targetUrl": "https://sonymcs.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/sonymcs-20260626.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "insufficient_retained_evidence",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "insufficient_retained_evidence",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "insufficient_retained_evidence"
+      },
+      "baseline": {
+        "processing_purposes": "insufficient_retained_evidence",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "insufficient_retained_evidence",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "insufficient_retained_evidence"
+      }
+    },
+    {
+      "caseId": "wise-20260611",
+      "scanId": "scan_1781218592361_wise.com",
+      "targetUrl": "https://wise.com/",
+      "bundlePath": "artifacts/v2-calibration-lab-wise-com-full-20260611T225631/wise.com/CanonicalEvidenceBundle.json",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/wise-20260611.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "insufficient_retained_evidence",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "not_observed_with_sufficient_coverage",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "insufficient_retained_evidence"
+      },
+      "baseline": {
+        "processing_purposes": "insufficient_retained_evidence",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "not_observed_with_sufficient_coverage",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "sega-20260626",
+      "scanId": "55a66e22-72f7-4f53-8302-4c48579612a1",
+      "targetUrl": "https://sega.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/sega-20260626.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "ambiguous",
+        "cookie_inventory": "not_observed_with_sufficient_coverage",
+        "policy_runtime_consistency": "conflicting"
+      }
+    },
+    {
+      "caseId": "weather-20260614",
+      "scanId": "scan_1781404832215_weather.com",
+      "targetUrl": "https://weather.com/",
+      "bundlePath": "artifacts/v2-calibration-lab-weather-com-standard-20260614T024027/weather.com/CanonicalEvidenceBundle.json",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/weather-20260614.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "ambiguous",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "ambiguous",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "w3-20260614",
+      "scanId": "scan_1781405003291_w3.org",
+      "targetUrl": "https://w3.org/",
+      "bundlePath": "artifacts/v2-calibration-lab-w3-org-standard-20260614T024316/w3.org/CanonicalEvidenceBundle.json",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/w3-20260614.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "not_observed_with_sufficient_coverage",
+        "legal_basis": "not_observed_with_sufficient_coverage",
+        "data_retention": "not_observed_with_sufficient_coverage",
+        "international_transfers": "not_observed_with_sufficient_coverage",
+        "vendor_disclosures": "not_observed_with_sufficient_coverage",
+        "data_subject_rights": "not_observed_with_sufficient_coverage",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "insufficient_retained_evidence"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "not_observed_with_sufficient_coverage",
+        "data_retention": "not_observed_with_sufficient_coverage",
+        "international_transfers": "not_observed_with_sufficient_coverage",
+        "vendor_disclosures": "not_observed_with_sufficient_coverage",
+        "data_subject_rights": "not_observed_with_sufficient_coverage",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "volkswagen-20260626",
+      "scanId": "13043968-1c94-45a1-a757-a5418479f2aa",
+      "targetUrl": "https://volkswagen.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/volkswagen-20260626.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "not_observed_with_sufficient_coverage",
+        "legal_basis": "not_observed_with_sufficient_coverage",
+        "data_retention": "not_observed_with_sufficient_coverage",
+        "international_transfers": "not_observed_with_sufficient_coverage",
+        "vendor_disclosures": "not_observed_with_sufficient_coverage",
+        "data_subject_rights": "not_observed_with_sufficient_coverage",
+        "cookie_inventory": "not_observed_with_sufficient_coverage",
+        "policy_runtime_consistency": "insufficient_retained_evidence"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "lufthansa-20260626",
+      "scanId": "285326d3-88b7-497b-a27f-d593671014d3",
+      "targetUrl": "https://lufthansa.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/lufthansa-20260626.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "insufficient_retained_evidence",
+        "legal_basis": "insufficient_retained_evidence",
+        "data_retention": "insufficient_retained_evidence",
+        "international_transfers": "insufficient_retained_evidence",
+        "vendor_disclosures": "insufficient_retained_evidence",
+        "data_subject_rights": "insufficient_retained_evidence",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "insufficient_retained_evidence"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "mit-20260626",
+      "scanId": "e797a74b-172c-494d-8c32-98a50190daef",
+      "targetUrl": "https://mit.edu/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/mit-20260626.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "not_observed_with_sufficient_coverage",
+        "policy_runtime_consistency": "observed"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "ambiguous",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "observed"
+      }
+    },
+    {
+      "caseId": "numastays-20260626",
+      "scanId": "a272ad42-649c-4316-93c9-283261218db3",
+      "targetUrl": "https://numastays.com/",
+      "modelArtifactPath": "apps/validation-worker/artifacts/policy-review-model-benchmark-v1/gpt-5.4-mini-production-projection-v1/numastays-20260626.json",
+      "reviewStatus": "human_adjudicated",
+      "reviewBasis": "human_model_comparison",
+      "reviewer": "ben-masek",
+      "reviewedAt": "2026-07-25T22:00:00.000Z",
+      "evidenceNotes": [
+        "The product owner reviewed the complete three-model comparison and retained evidence, including unanimous and disagreement rows.",
+        "Disagreement decisions are retained in the reviewed adjudication workbook; unanimous rows were explicitly accepted during the same human review.",
+        "Cookie/storage-name presence, substantive retention evidence, policy ownership, topic relevance, transfer disclosure, and stale-framework validity follow the approved canonical rules."
+      ],
+      "expected": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "observed",
+        "policy_runtime_consistency": "conflicting"
+      },
+      "baseline": {
+        "processing_purposes": "observed",
+        "legal_basis": "observed",
+        "data_retention": "observed",
+        "international_transfers": "observed",
+        "vendor_disclosures": "observed",
+        "data_subject_rights": "observed",
+        "cookie_inventory": "insufficient_retained_evidence",
+        "policy_runtime_consistency": "observed"
+      }
+    }
+  ]
+}

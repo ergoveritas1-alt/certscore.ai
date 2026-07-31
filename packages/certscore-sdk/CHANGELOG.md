@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## 0.2.7
+
+- Expose the canonical report projection version and source hash in Pulse metadata.
+- Keep SDK Evidence JSON responses aligned with the report, public Pulse API, and MCP evidence tool.
+
 ## 0.2.6
 
 - Type the no-account scan allowance and higher-volume support guidance returned by API v2 scan creation.

@@ -5,9 +5,9 @@ import {
 import {
   findRuntimeCookieNameVendor,
   findRuntimeEntityOwner,
-  hostsShareRuntimeEntity,
   isLikelyCookieName,
   normalizeRuntimeInventoryHost,
+  runtimeRegistrableDomain,
   type RuntimeVendorAttributionEvidence
 } from "./runtime-vendor-ownership";
 
@@ -18,12 +18,14 @@ export type RuntimeCookiePriorityGroupRow = {
   attributionEvidence?: RuntimeVendorAttributionEvidence | null;
   confidence: RuntimeCookieInventoryConfidence;
   cookieNames: string[];
+  cookieDetails: RuntimeCookieEvidenceRow[];
   domains: string[];
   firstSeenMs: number | null;
   party: "first_party" | "third_party" | "unknown" | "mixed";
   priority: RuntimeCookieReviewPriority;
   purpose: string;
   syncedIdentifiers?: string[];
+  setByThirdPartyScript: boolean;
   timingEvidence?: RuntimeCookieEvidenceRow["timingEvidence"] | "mixed";
   vendor: string;
 };
@@ -278,7 +280,12 @@ function mergePartyValues<T extends string>(left: T, right: T): T | "mixed" {
 }
 
 function normalizeCookieParty(row: RuntimeCookieEvidenceRow, firstPartyDomain: string | null | undefined) {
-  return firstPartyDomain && row.domain && hostsShareRuntimeEntity(row.domain, firstPartyDomain) ? "first_party" : row.party;
+  const cookieSite = runtimeRegistrableDomain(row.domain);
+  const scannedSite = runtimeRegistrableDomain(firstPartyDomain);
+  if (cookieSite && scannedSite) {
+    return cookieSite === scannedSite ? "first_party" : "third_party";
+  }
+  return row.party;
 }
 
 export function buildRuntimeCookiePriorityGroups(
@@ -297,10 +304,12 @@ export function buildRuntimeCookiePriorityGroups(
       attributionEvidence: attribution.attributionEvidence,
       confidence: getRuntimeCookieInventoryConfidence(row),
       cookieNames: cookieName ? [cookieName] : [],
+      cookieDetails: [row],
       domains: domain ? [domain] : [],
       firstSeenMs: getRuntimeCookieFirstSeenMs(row),
       party: normalizeCookieParty(row, options.firstPartyDomain),
       priority: getRuntimeCookieReviewPriority(row),
+      setByThirdPartyScript: row.setByThirdPartyScript === true,
       purpose,
       syncedIdentifiers: getRuntimeCookieSyncedIdentifiers(row, vendor),
       timingEvidence: row.timingEvidence,
@@ -318,6 +327,9 @@ export function buildRuntimeCookiePriorityGroups(
           ? candidate.confidence
           : existing.confidence,
       cookieNames: uniqueStrings([...existing.cookieNames, ...candidate.cookieNames]),
+      cookieDetails: [...existing.cookieDetails, ...candidate.cookieDetails].filter((detail, index, all) =>
+        all.findIndex((item) => `${item.cookieName}\u0000${item.domain ?? ""}` === `${detail.cookieName}\u0000${detail.domain ?? ""}`) === index
+      ),
       domains: uniqueStrings([...existing.domains, ...candidate.domains]),
       firstSeenMs:
         existing.firstSeenMs !== null && candidate.firstSeenMs !== null
@@ -327,6 +339,7 @@ export function buildRuntimeCookiePriorityGroups(
       priority: runtimeCookiePriorityWeight(candidate.priority) > runtimeCookiePriorityWeight(existing.priority)
         ? candidate.priority
         : existing.priority,
+      setByThirdPartyScript: existing.setByThirdPartyScript || candidate.setByThirdPartyScript,
       syncedIdentifiers: uniqueStrings([...(existing.syncedIdentifiers ?? []), ...(candidate.syncedIdentifiers ?? [])]),
       timingEvidence: existing.timingEvidence === candidate.timingEvidence ? existing.timingEvidence : "mixed"
     });

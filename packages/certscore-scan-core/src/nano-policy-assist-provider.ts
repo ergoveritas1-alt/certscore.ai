@@ -4,10 +4,13 @@ import type {
   NanoTopicExtractionInput,
   NanoTopicExtractionResult,
   PolicyNanoAssistProvider,
+  PrivacyDocumentLinkSelectionInput,
+  PrivacyDocumentLinkSelectionResult,
 } from "./scanners/policy-surface-scanner.js";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_NANO_MODEL = "gpt-5.4-nano";
+const DEFAULT_REVIEW_MODEL = "gpt-5.4-mini";
 
 const surfaceTypes = [
   "privacy_policy",
@@ -78,6 +81,7 @@ const MIN_GUESSED_LINK_CONFIDENCE = 0.82;
 interface OpenAiNanoPolicyAssistProviderOptions {
   apiKey: string;
   model?: string;
+  reviewModel?: string;
   fetchImpl?: typeof fetch;
 }
 
@@ -90,7 +94,14 @@ export function createOpenAiNanoPolicyAssistProviderFromEnv(
   }
   return createOpenAiNanoPolicyAssistProvider({
     apiKey,
-    model: env.CERTSCORE_V2_NANO_POLICY_MODEL?.trim() || env.VALIDATION_NANO_MODEL?.trim() || DEFAULT_NANO_MODEL,
+    model:
+      env.CERTSCORE_V2_NANO_POLICY_MODEL?.trim() ||
+      env.CERTSCORE_EXTRACTION_MODEL?.trim() ||
+      env.VALIDATION_NANO_MODEL?.trim() ||
+      DEFAULT_NANO_MODEL,
+    reviewModel:
+      env.CERTSCORE_REVIEW_MODEL?.trim() ||
+      DEFAULT_REVIEW_MODEL,
   });
 }
 
@@ -99,6 +110,7 @@ export function createOpenAiNanoPolicyAssistProvider(
 ): PolicyNanoAssistProvider {
   const fetchImpl = options.fetchImpl ?? fetch;
   const model = options.model?.trim() || DEFAULT_NANO_MODEL;
+  const reviewModel = options.reviewModel?.trim() || DEFAULT_REVIEW_MODEL;
 
   return {
     async classifyLinks(input) {
@@ -145,6 +157,30 @@ export function createOpenAiNanoPolicyAssistProvider(
       });
       return normalizeLinkClassification(input, parsed);
     },
+    async selectPrivacyDocumentLink(input) {
+      const parsed = await callNanoJson(fetchImpl, {
+        apiKey: options.apiKey,
+        model: reviewModel,
+        system:
+          "You select at most one directly linked privacy-policy document from a retained privacy-policy index. Return JSON only. Select only from the supplied candidateId values. A document does not need a date. Prefer a clearly labeled, target-owned general privacy policy or privacy notice that is worthwhile to fetch and review. When dates are present, prefer the clearly current or newest version, but never infer currentness from an ambiguous date. Reject cookie-only notices, terms, archived-only documents, unrelated entities, generic navigation, support pages, and links that appear to be another index. This is a single bounded second-hop decision: do not propose following links inside the selected document. If no candidate is sufficiently likely to be the substantive target privacy notice, return selectedCandidateId null and shouldFetch false. Do not make legal conclusions.",
+        user: {
+          indexUrl: input.indexUrl,
+          indexTitle: input.indexTitle,
+          indexTextExcerpt: input.indexTextExcerpt,
+          candidates: input.candidates,
+          outputShape: {
+            selectedCandidateId: "one supplied candidateId or null",
+            shouldFetch: true,
+            confidence: "0..1",
+            reason: "short evidence-scoped selection reason",
+            uncertaintyNotes: ["optional"],
+          },
+        },
+        maxCompletionTokens: 500,
+        signal: input.signal,
+      });
+      return normalizePrivacyDocumentLinkSelection(input, parsed);
+    },
     async extractTopics(input) {
       const parsed = await callNanoJson(fetchImpl, {
         apiKey: options.apiKey,
@@ -180,6 +216,30 @@ export function createOpenAiNanoPolicyAssistProvider(
       });
       return normalizeTopicExtraction(input, parsed);
     },
+  };
+}
+
+function normalizePrivacyDocumentLinkSelection(
+  input: PrivacyDocumentLinkSelectionInput,
+  parsed: Record<string, unknown>,
+): PrivacyDocumentLinkSelectionResult {
+  const candidateIds = new Set(input.candidates.map((candidate) => candidate.candidateId));
+  const rawSelectedCandidateId = stringValue(parsed.selectedCandidateId);
+  const selectedCandidateId = candidateIds.has(rawSelectedCandidateId)
+    ? rawSelectedCandidateId
+    : null;
+  const confidence = confidenceValue(parsed.confidence, 0.5);
+  const shouldFetch =
+    booleanValue(parsed.shouldFetch, false) &&
+    selectedCandidateId !== null &&
+    confidence >= 0.72;
+  return {
+    assistId: input.assistId,
+    selectedCandidateId: shouldFetch ? selectedCandidateId : null,
+    shouldFetch,
+    confidence,
+    reason: stringValue(parsed.reason).slice(0, 240),
+    uncertaintyNotes: stringArray(parsed.uncertaintyNotes, 5),
   };
 }
 

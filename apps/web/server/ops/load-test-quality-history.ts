@@ -61,6 +61,11 @@ const BLOCKER_LABELS = [
   "robots_or_policy_block",
   "timeout_or_navigation_failure"
 ];
+const NO_GO_LIMITATION_LABELS = {
+  scannerAccessLimitationRate: "no_go:scanner_access_limitation",
+  scannerCaptureLimitationRate: "no_go:scanner_capture_limitation",
+  targetSiteStateRate: "no_go:target_site_state"
+} as const;
 
 function countRecordValue(record: Record<string, number>, key: string, increment = 1) {
   record[key] = (record[key] ?? 0) + increment;
@@ -166,6 +171,15 @@ export function windowToMetricValues(window: ScannerQualityWindow): LoadTestQual
     completedCount: window.completedCount,
     findingsPerCompleted: window.findingsPerCompleted,
     pagesScanned: window.pagesScanned,
+    scannerAccessLimitationRate:
+      (window.labelCounts[NO_GO_LIMITATION_LABELS.scannerAccessLimitationRate] ?? 0) /
+      Math.max(1, window.completedCount),
+    scannerCaptureLimitationRate:
+      (window.labelCounts[NO_GO_LIMITATION_LABELS.scannerCaptureLimitationRate] ?? 0) /
+      Math.max(1, window.completedCount),
+    targetSiteStateRate:
+      (window.labelCounts[NO_GO_LIMITATION_LABELS.targetSiteStateRate] ?? 0) /
+      Math.max(1, window.completedCount),
     zeroFindingRate: window.zeroFindingRate
   };
 }
@@ -184,6 +198,8 @@ export function buildRollingBaseline(windows: ScannerQualityWindow[]): LoadTestQ
     (sum, window) => sum + BLOCKER_LABELS.reduce((inner, label) => inner + (window.labelCounts[label] ?? 0), 0),
     0
   );
+  const limitationCount = (label: string) =>
+    eligible.reduce((sum, window) => sum + (window.labelCounts[label] ?? 0), 0);
 
   return {
     blockerLabelRate: blockerCount / completedCount,
@@ -191,6 +207,12 @@ export function buildRollingBaseline(windows: ScannerQualityWindow[]): LoadTestQ
     findingsPerCompleted: findings / completedCount,
     label: `rolling:${eligible.map((window) => window.batchId).join(",")}`,
     pagesScanned,
+    scannerAccessLimitationRate:
+      limitationCount(NO_GO_LIMITATION_LABELS.scannerAccessLimitationRate) / completedCount,
+    scannerCaptureLimitationRate:
+      limitationCount(NO_GO_LIMITATION_LABELS.scannerCaptureLimitationRate) / completedCount,
+    targetSiteStateRate:
+      limitationCount(NO_GO_LIMITATION_LABELS.targetSiteStateRate) / completedCount,
     tier: "rolling",
     zeroFindingRate: zeroFindingCount / completedCount
   };

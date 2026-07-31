@@ -1,5 +1,9 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
-import { evaluateLoadTestQualityWarnings } from "@website-signal-risk-scanner/shared";
+import {
+  evaluateLoadTestQualityWarnings,
+  projectExternalScanNoGo,
+  type ScanNoGoLimitationKind
+} from "@website-signal-risk-scanner/shared";
 import { OPS_SCAN_STATUS_FINDING_IDS } from "../scans/ops-status-finding-ids";
 import { buildOpsInterruptionSummary } from "../scans/ops-interruption-summary";
 import {
@@ -31,6 +35,7 @@ export type NormalScanQualityRow = {
   homepageFetchHttpStatus?: number | null;
   homepageFetchStatus?: string | null;
   pagesScanned: number;
+  scanNoGoLimitationKind?: ScanNoGoLimitationKind | null;
   rateLimitSuspected?: boolean | null;
   robotsAllowed?: boolean | null;
   robotsFetchHttpStatus?: number | null;
@@ -65,6 +70,7 @@ type NormalScanQualityDbRow = {
   pages_scanned: number;
   rate_limit_suspected: boolean | null;
   report_finding_count: number | null;
+  scan_no_go_assessment: Record<string, unknown> | null;
   robots_allowed: boolean | null;
   robots_fetch_http_status: number | null;
   robots_fetch_status: string | null;
@@ -75,6 +81,7 @@ type NormalScanQualityDbRow = {
   stop_reason_detail: string | null;
   stop_reason_http_status: number | null;
   stop_reason_label: string | null;
+  visual_access_review: Record<string, unknown> | null;
 };
 
 export type NormalScannerQualityAggregationResult = {
@@ -139,6 +146,10 @@ function dbRowToNormalScanQualityRow(row: NormalScanQualityDbRow): NormalScanQua
     robotsFetchHttpStatus: row.robots_fetch_http_status,
     robotsFetchStatus: row.robots_fetch_status,
     scanId: row.id,
+    scanNoGoLimitationKind: projectExternalScanNoGo({
+      scan_no_go_assessment: row.scan_no_go_assessment,
+      visual_access_review: row.visual_access_review
+    })?.noGo.limitationKind ?? null,
     scannerSlot: row.scanner_slot,
     scannerTaskArn: row.scanner_task_arn,
     status: row.status,
@@ -254,6 +265,9 @@ export function buildNormalScannerQualityWindow(input: {
     });
     for (const label of interruption.categories.length > 0 ? interruption.categories : ["none"]) {
       countRecordValue(labelCounts, label);
+    }
+    if (row.scanNoGoLimitationKind) {
+      countRecordValue(labelCounts, `no_go:${row.scanNoGoLimitationKind}`);
     }
     if (row.scannerTaskArn) {
       countRecordValue(scannerTaskCounts, row.scannerTaskArn);
@@ -468,15 +482,18 @@ async function loadPendingNormalScanRows(input: {
         ss.homepage_fetch_http_status,
         ss.homepage_fetch_status,
         ss.rate_limit_suspected,
+        coalesce(sra.scan_no_go_assessment, ss.scan_no_go_assessment) as scan_no_go_assessment,
         ss.robots_allowed,
         ss.robots_fetch_http_status,
         ss.robots_fetch_status,
         ss.stop_reason_code,
         ss.stop_reason_detail,
         ss.stop_reason_http_status,
-        ss.stop_reason_label
+        ss.stop_reason_label,
+        coalesce(sra.visual_access_review, ss.visual_access_review) as visual_access_review
       from scans s
       left join scan_snapshots ss on ss.scan_id = s.id
+      left join scan_runtime_artifacts sra on sra.scan_id = s.id
       where s.status = 'completed'
         and s.completed_at is not null
         and coalesce(s.egress_id, ss.egress_id, 'unknown-egress') = $1
@@ -572,6 +589,7 @@ export async function persistPendingNormalScannerQualityWindows(input: { egressI
         egressProvider: evaluationWindow?.egressProvider ?? window.egressProvider,
         egress_id: evaluationWindow?.egress_id ?? window.egress_id,
         generatedAt: new Date().toISOString(),
+        confirmationWindowCount: nonOverlappingEvaluationWindows.length,
         labelCounts: evaluationWindow?.labelCounts ?? window.labelCounts,
         metrics: evaluationWindow ? windowToMetricValues(evaluationWindow) : windowToMetricValues(window)
       });

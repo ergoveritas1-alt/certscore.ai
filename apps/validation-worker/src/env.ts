@@ -34,6 +34,17 @@ const workerEnvSchema = z.object({
   VALIDATION_TRANCO_SOURCE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   VALIDATION_OPENAI_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4-nano")),
   VALIDATION_NANO_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4-nano")),
+  CERTSCORE_EXTRACTION_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4-nano")),
+  CERTSCORE_REVIEW_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4-mini")),
+  CERTSCORE_ESCALATION_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
+  CERTSCORE_MINI_REVIEW_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional())
+    .transform((value) => value === "1"),
+  CERTSCORE_ESCALATION_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional())
+    .transform((value) => value === "1"),
+  CERTSCORE_MODEL_REVIEW_MODE: z.preprocess(
+    emptyStringToUndefined,
+    z.enum(["shadow", "enforced"]).default("shadow")
+  ),
   WEB_BOT_AUTH_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional()).transform((value) => value === "1"),
   WEB_BOT_AUTH_PRIVATE_KEY_PEM: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
   WEB_BOT_AUTH_SIGNATURE_AGENT_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),

@@ -43,6 +43,52 @@ export function isArticle13DisclosureEvidenceUsable(
   return article13DisclosureRejectReason(value, disclosureType, options) === null;
 }
 
+export function hasSubstantiveProcessingPurposesEvidence(value: string) {
+  const text = normalizeArticle13Whitespace(value);
+  const purposeOutcomePattern =
+    /\b(?:provide|deliver|operate|maintain|improve|develop|personalize|communicate|respond|answer|process|fulfil|fulfill|protect|secure|prevent|detect|measure|analy[sz]e|comply|send|administer|manage|support|facilitate|handle|perform|conduct|ensure|keep records?|follow[- ]?up|authenticate|optimise|optimize)\b/i;
+  if (
+    /\b(?:privacy shield|data privacy framework|\bdpf\b|standard contractual clauses?|\bsccs?\b|adequacy decision|international data transfer|cross-border transfer)\b/i.test(text) &&
+    !/\b(?:purpose(?:s)? of (?:the )?(?:processing|collection|use)|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for))\b/i.test(text)
+  ) {
+    return false;
+  }
+
+  return (
+    /\b(?:purpose(?:s)? of (?:the )?(?:processing|collection|use)(?: of (?:your )?(?:personal )?(?:data|information))?|why we (?:process|collect|use) (?:your )?(?:personal )?(?:data|information)|what do we use (?:your )?(?:personal )?(?:data|information) for|purposes? for which (?:we )?(?:process|collect|use))\b/i.test(text) ||
+    (
+      /\b(?:we|[a-z][a-z0-9&.'’-]*(?:\s+[a-z][a-z0-9&.'’-]*){0,5})\s+(?:(?:use|uses|process|processes|collect|collects|store|stores)\s+(?:and\s+use\s+)?|describes?\s+processing\s+)(?:your )?(?:(?:personal )?(?:data|information)|details|email address|contact details|name|payment information|donation information)\b.{0,100}\b(?:to|for(?: the purpose of)?)\b.{1,160}/i.test(text) &&
+      purposeOutcomePattern.test(text)
+    ) ||
+    (
+      /\b(?:personal data|personal information|your data|your information|your details|contact details|application data|application documents|(?:the )?data)\b.{0,100}\b(?:is|are|may be|will be)?\s*(?:used|processed|collected|stored)\b.{0,100}\b(?:to|for(?: the purpose of)?)\b.{1,160}/i.test(text) &&
+      purposeOutcomePattern.test(text)
+    )
+  );
+}
+
+export function hasSubstantiveLegalBasisEvidence(value: string) {
+  const text = normalizeArticle13Whitespace(value);
+  const explicitBasisFraming =
+    /\b(?:legal bas(?:is|es)|lawful bas(?:is|es)|basis for processing|article\s*6|pursuant to article\s*6)\b/i.test(text);
+  if (explicitBasisFraming) {
+    return true;
+  }
+
+  const processingContext =
+    /\b(?:process|processing|use|using|collect|collecting|hold|holding)\b.{0,100}\b(?:personal data|personal information|your data|your information|data|information)\b/i.test(text) ||
+    /\b(?:personal data|personal information|your data|your information)\b.{0,100}\b(?:process|processing|processed|use|used|collect|collected|hold|held)\b/i.test(text);
+  if (!processingContext) {
+    return false;
+  }
+
+  const basisRelationship =
+    /\b(?:rely|relies|based|basis|necessary|needed|required)\b.{0,100}\b(?:consent|contract|legal obligation|legitimate interest|public task|public interest|vital interest)\b/i.test(text) ||
+    /\b(?:consent|performance of (?:a )?contract|contractual necessity|legal obligation|legitimate interests?|public task|public interest|vital interests?)\b.{0,100}\b(?:basis|process|processing|use|collect|hold|necessary|required)\b/i.test(text) ||
+    /\b(?:we|the controller)\s+(?:process|use|collect|hold)\b.{0,160}\b(?:with your consent|to (?:perform|fulfil|fulfill) (?:a|our) contract|to comply with (?:a|our) legal obligation|for our legitimate interests?|in the public interest|to protect vital interests?)\b/i.test(text);
+  return basisRelationship;
+}
+
 export function article13DisclosureRejectReason(
   value: string,
   disclosureType: Article13DisclosureType | string | undefined,
@@ -318,12 +364,12 @@ function hasScanCoreRowSpecificArticle13Terms(
   const text = normalizeArticle13Whitespace(value);
   switch (disclosureType) {
     case "controller_contact":
-      return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:policy|privacy)|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
+      return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:privacy )?(?:policy|notice)|privacy officer|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
         !looksLikeArticle13PageChrome(text, { mode: "scan_core" });
     case "processing_purposes":
-      return /\b(?:purpose(?:s)?|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|provide (?:our )?services|personalize)\b/i.test(text);
+      return hasSubstantiveProcessingPurposesEvidence(text);
     case "legal_basis":
-      return /\b(?:legal basis|lawful basis|legitimate interests?|performance of (?:a )?contract|contractual necessity|legal obligation|public task|public interest|vital interests?|with your consent|consent to)\b/i.test(text);
+      return hasSubstantiveLegalBasisEvidence(text);
     case "recipients_or_vendor_categories":
       return /\b(?:recipients|service providers|processors|vendors?|partners|affiliates|third parties|third-party|advertising partners?|analytics providers?)\b/i.test(text);
     case "data_retention":
@@ -332,7 +378,7 @@ function hasScanCoreRowSpecificArticle13Terms(
     case "data_subject_rights":
       return hasSubstantiveRightsDisclosure(text);
     case "international_transfers":
-      return /\b(?:data transfers?|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|transfer (?:your )?(?:personal )?(?:data|information).{0,80}outside (?:your )?country|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)))\b/i.test(text);
+      return /\b(?:data transfers?|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|other jurisdictions|other countries|outside)|transfer (?:your )?(?:personal )?(?:data|information).{0,80}outside (?:your )?country|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)))\b/i.test(text);
     case "dpo_contact":
       return /\b(?:data protection officer|\bdpo\b|data protection contact)\b/i.test(text);
     case "supervisory_authority":
@@ -351,12 +397,12 @@ function hasRetainedReportRowSpecificArticle13Terms(
   const text = normalizeArticle13Whitespace(value);
   switch (disclosureType) {
     case "controller_contact":
-      return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:policy|privacy)|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
+      return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:privacy )?(?:policy|notice)|privacy officer|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
         !looksLikeArticle13PageChrome(text, { mode: "retained_report" });
     case "processing_purposes":
-      return /\b(?:purpose(?:s)?|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|provide (?:our )?services|personalize)\b/i.test(text);
+      return hasSubstantiveProcessingPurposesEvidence(text);
     case "legal_basis":
-      return /\b(?:legal basis|lawful basis|legitimate interests?|performance of (?:a )?contract|contractual necessity|legal obligation|public task|public interest|vital interests?|with your consent|consent to)\b/i.test(text);
+      return hasSubstantiveLegalBasisEvidence(text);
     case "recipients_or_vendor_categories":
       return /\b(?:recipients|service providers|processors|vendors?|partners|affiliates|third parties|third-party|advertising partners?|analytics providers?)\b/i.test(text);
     case "data_retention":
@@ -365,7 +411,7 @@ function hasRetainedReportRowSpecificArticle13Terms(
     case "data_subject_rights":
       return hasSubstantiveRightsDisclosure(text);
     case "international_transfers":
-      return /\b(?:data transfers?.{0,320}(?:servers around the world|outside (?:of )?the country|legal frameworks?|data privacy frameworks?|safeguards)|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|transfer (?:your )?(?:personal )?(?:data|information).{0,80}outside (?:your )?country|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,260}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries|countries outside)|agreements?.{0,260}(?:personal information|personal data|data|information).{0,260}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)))\b/i.test(text);
+      return /\b(?:data transfers?.{0,320}(?:servers around the world|outside (?:of )?the country|legal frameworks?|data privacy frameworks?|safeguards)|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|other jurisdictions|other countries|outside)|transfer (?:your )?(?:personal )?(?:data|information).{0,80}outside (?:your )?country|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,260}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries|countries outside)|agreements?.{0,260}(?:personal information|personal data|data|information).{0,260}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)))\b/i.test(text);
     case "dpo_contact":
       return /\b(?:data protection officer|\bdpo\b|data protection contact)\b/i.test(text);
     case "supervisory_authority":
@@ -384,6 +430,13 @@ function hasLocalizedArticle13EvidenceContext(
   const normalized = normalizeArticle13Whitespace(value);
   const canonicalMatch = classifyGdprTransparencyTopics({ text: normalized }).matches
     .find((match) => match.topic === disclosureType);
+  if (
+    canonicalMatch?.matchedLocale === "en" &&
+    disclosureType === "legal_basis" &&
+    !hasSubstantiveLegalBasisEvidence(normalized)
+  ) {
+    return false;
+  }
   if (canonicalMatch && disclosureType !== "dpo_contact") {
     return true;
   }

@@ -1,4 +1,5 @@
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy, type PrimaryScanCategoryId } from "./signal-taxonomy";
+import { canonicalConsentSurfaceCompatibilityFromSnapshot } from "./consent-assessment-compatibility";
 
 export type ScanDetailSupplementalSignalRecord = {
   category: string;
@@ -134,7 +135,7 @@ export function deriveSupplementalSnapshotSignals(input: {
     typeof snapshot.privacy_contact_channel_type === "string" ? snapshot.privacy_contact_channel_type : null;
   const consentMechanismType =
     typeof snapshot.consent_mechanism_type === "string" ? snapshot.consent_mechanism_type : null;
-  const cookieBannerPresent = snapshot.cookie_banner_present === true;
+  const cookieBannerPresent = canonicalConsentSurfaceCompatibilityFromSnapshot(snapshot);
   const cmpVendorName = typeof snapshot.cmp_vendor_name === "string" ? snapshot.cmp_vendor_name : null;
   const consentInteractionModel =
     typeof snapshot.consent_interaction_model === "string" ? snapshot.consent_interaction_model : null;
@@ -168,7 +169,7 @@ export function deriveSupplementalSnapshotSignals(input: {
     "privacy.consent_surface_missing",
     "Consent surface missing",
     consentMechanismType === "none" &&
-      !cookieBannerPresent &&
+      cookieBannerPresent === false &&
       !cmpVendorName &&
       (!consentInteractionModel || consentInteractionModel === "none")
   );

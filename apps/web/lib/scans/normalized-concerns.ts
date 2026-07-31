@@ -1,4 +1,12 @@
 import {
+  classifyGdprTransparencyTopics,
+  consentControlAssessmentSchema,
+  evaluateLegalFrameworkValidity,
+  hasStaleLegalFrameworkReference,
+  hasSubstantiveProcessingPurposesEvidence,
+  policyModelReviewArtifactSchema,
+} from "@certscore/contracts";
+import {
   getReportUnifiedFinding,
   getReportUnifiedFindingByAlias,
   getReportUnifiedFindingForSignal,
@@ -45,6 +53,7 @@ import {
   CONSENT_GOVERNANCE_DISCLOSURE_CONCERN_ID,
   getConsentGovernanceDisclosureEvidence
 } from "./consent-governance-disclosure";
+import { buildPreConsentStorageAssessment } from "./runtime-cookie-evidence";
 import {
   isRuntimeRequestEvidenceUrl,
   stripReportUrlAnnotation
@@ -136,7 +145,20 @@ export type NormalizedConcernExternalSurfacingEligibility = "eligible" | "audit_
 
 export type NormalizedConcernAssertionLevel = "weak" | "moderate" | "strong";
 
-export type NormalizedConcernRegulatoryChecklistEligibility = "observed" | "review_signal" | "none";
+export type NormalizedConcernRegulatoryChecklistEligibility =
+  | "gap_observed"
+  | "observed"
+  | "review_signal"
+  | "none";
+
+export type ConsentOptionsControlProminenceState =
+  | "dedicated_button"
+  | "first_layer_control"
+  | "inline_link"
+  | "persistent_link"
+  | "balanced_accept_decline_no_first_layer_settings"
+  | "no_granular_controls_retained"
+  | "insufficient_retained_evidence";
 
 export type NormalizedConcernNegativeEvidenceFlag =
   | "no_consent_surface_observed"
@@ -165,6 +187,7 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "weak_policy_anchor"
   | "boilerplate_policy_anchor"
   | "policy_semantic_review_incomplete"
+  | "stale_legal_framework_reference_observed"
   | "runtime_tracking_review_incomplete"
   | "runtime_page_context_invalid"
   | "possible_policy_runtime_mismatch"
@@ -1382,7 +1405,7 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
       continue;
     }
 
-    if (/operator_relationship|policyRightsSignals|rights_signals?|policyBoilerplateSignals|policyPositiveSnippetKeys|policy_positive_snippet_keys/i.test(key)) {
+    if (/operator_relationship|policyRightsSignals|rights_signals?|policyBoilerplateSignals|policyPositiveSnippetKeys|policy_positive_snippet_keys|classifierReasonCodes|classifier_reason_codes|reasonCodes|reason_codes/i.test(key)) {
       addEntity(entities, key, stringValues);
       continue;
     }
@@ -2435,6 +2458,73 @@ function buildCmpLoadOrderConcerns(
   ];
 }
 
+function buildRtbCookieSyncConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const hybridRuntimeEvidence = getRuntimeRecord(runtimeArtifacts, [
+    "hybridRuntimeEvidence",
+    "hybrid_runtime_evidence"
+  ]);
+  const rows = [
+    ...getRuntimeObjectArray(runtimeArtifacts, [
+      "rtbCookieSyncObservations",
+      "rtb_cookie_sync_observations",
+      "rtb_cookie_sync_evidence"
+    ]),
+    ...getRuntimeObjectArray(hybridRuntimeEvidence, [
+      "rtbCookieSyncObservations",
+      "rtb_cookie_sync_observations",
+      "rtb_cookie_sync_evidence"
+    ])
+  ];
+  const dedupedRows = rows.filter((row, index, allRows) => {
+    const identity = (candidate: Record<string, unknown>) => JSON.stringify([
+      getRuntimeString(candidate, ["hostname", "host", "domain"]),
+      getRuntimeString(candidate, ["pathSample", "path_sample"]),
+      getRuntimeNumber(candidate, ["timestampMs", "timestamp_ms", "tsMs", "ts_ms"])
+    ]);
+    return allRows.findIndex((candidate) => identity(candidate) === identity(row)) === index;
+  }).slice(0, 12);
+  const consentTimeline =
+    getRuntimeRecord(runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
+    getRuntimeRecord(hybridRuntimeEvidence, ["timelineMarkers", "timeline_markers"]);
+  const rawEvidence = {
+    consentSurfaceObserved:
+      getRuntimeBoolean(runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) ??
+      getRuntimeBoolean(hybridRuntimeEvidence, ["consentSurfaceObserved", "consent_surface_observed"]),
+    consentTimeline,
+    preconsent_tracking_detected: dedupedRows.length > 0,
+    rtb_cookie_sync_evidence: dedupedRows,
+    rtb_cookie_sync_observations: dedupedRows,
+    rtb_cookie_sync_vendors: uniqueStrings(
+      dedupedRows.map((row) => getRuntimeString(row, ["vendorName", "vendor_name", "vendor"]))
+    )
+  };
+  if (!hasConcreteRtbCookieSyncEvidence(rawEvidence)) {
+    return [];
+  }
+  const endpoints = uniqueStrings(
+    dedupedRows.map((row) => getRuntimeString(row, ["hostname", "host", "domain"]))
+  );
+  return [buildConcernFromSharedInput({
+    categoryId: "preconsent_tracking_incidents",
+    description: "A known advertising identity-sync endpoint was observed during the retained pre-consent request sequence.",
+    domainContext,
+    evidence: endpoints.map((endpoint) => `Pre-consent identity-sync endpoint: ${endpoint}`),
+    observedValue: `${dedupedRows.length} endpoint${dedupedRows.length === 1 ? "" : "s"}`,
+    originKey: "runtime_privacy.rtb_cookie_sync_observed",
+    originType: "runtime_artifact",
+    rawEvidence,
+    severity: "high",
+    signalKey: "privacy.rtb_cookie_sync_observed",
+    signalLabel: "Adtech identity sync-like request observed",
+    signalSource: "runtime_artifact_signal",
+    sourceType: "signal",
+    title: "Adtech identity sync-like request observed"
+  })];
+}
+
 function getPolicyDisclosureSummaryForGdprTransparency(
   runtimeArtifacts: Record<string, unknown> | null | undefined
 ) {
@@ -2443,6 +2533,27 @@ function getPolicyDisclosureSummaryForGdprTransparency(
 
 function getGdprTransparencyArticle13Signals(summary: Record<string, unknown> | null | undefined) {
   return getPlainRecordArray(summary?.article13DisclosureSignals ?? summary?.article13_disclosure_signals);
+}
+
+function getGdprTransparencyScanDate(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+) {
+  const scanMetadata = getRuntimeRecord(runtimeArtifacts, [
+    "scanMetadata",
+    "scan_metadata",
+  ]);
+  const policySummary = getPolicyDisclosureSummaryForGdprTransparency(runtimeArtifacts);
+  return (
+    getRuntimeString(runtimeArtifacts, [
+      "scanStartedAt",
+      "scan_started_at",
+      "startedAt",
+      "started_at",
+    ]) ??
+    getRuntimeString(scanMetadata, ["startedAt", "started_at"]) ??
+    getRuntimeString(policySummary, ["scanStartedAt", "scan_started_at"]) ??
+    null
+  );
 }
 
 function getGdprTransparencyArticle13ConcernState(
@@ -2500,7 +2611,25 @@ function buildGdprTransparencyArticle13Concerns(
         getStringValue(signal.selectedPolicySectionUrl ?? signal.selected_policy_section_url) ??
         getStringValue(signal.surfaceUrl ?? signal.surface_url);
       const locale = getStringValue(signal.matchedLocale ?? signal.matched_locale);
-      const state = getGdprTransparencyArticle13ConcernState(signal);
+      const frameworkValidityMatches = evaluateLegalFrameworkValidity(
+        evidenceText ?? "",
+        getGdprTransparencyScanDate(runtimeArtifacts),
+      );
+      const staleLegalFrameworkReferenceObserved =
+        hasStaleLegalFrameworkReference(frameworkValidityMatches);
+      const processingPurposesEvidenceSubstantive =
+        topic !== "processing_purposes" ||
+        hasSubstantiveProcessingPurposesEvidence(evidenceText ?? "") ||
+        classifyGdprTransparencyTopics({
+          text: evidenceText ?? "",
+        }).matches.some((match) => match.topic === "processing_purposes");
+      const extractedState = getGdprTransparencyArticle13ConcernState(signal);
+      const state =
+        !processingPurposesEvidenceSubstantive && extractedState === "sufficient"
+          ? "ambiguous"
+          : staleLegalFrameworkReferenceObserved && topic === "international_transfers"
+            ? "partial"
+            : extractedState;
       const evidence = uniqueStrings([evidenceText, sourceUrl]);
 
       return buildConcernFromSharedInput({
@@ -2522,6 +2651,7 @@ function buildGdprTransparencyArticle13Concerns(
           gdprTransparencyArticle13Evidence: true,
           gdprTransparencyArticle13Topic: topic,
           gdprTransparencyEvidenceProfile: profile,
+          legalFrameworkValidityMatches: frameworkValidityMatches,
           matchStrength: getStringValue(signal.matchStrength ?? signal.match_strength),
           matchedLocale: locale,
           matchedTerm: getStringValue(signal.matchedTerm ?? signal.matched_term),
@@ -2533,7 +2663,9 @@ function buildGdprTransparencyArticle13Concerns(
           signalKey: `privacy.gdpr_transparency.article13.${topic}`,
           sourceUrl,
           sourceUrls: sourceUrl ? [sourceUrl] : [],
-          policySnippets: evidenceText ? [evidenceText] : []
+          policySnippets: evidenceText ? [evidenceText] : [],
+          processingPurposesEvidenceSubstantive,
+          staleLegalFrameworkReferenceObserved
         },
         severity: "low",
         signalKey: `privacy.gdpr_transparency.article13.${topic}`,
@@ -2543,6 +2675,157 @@ function buildGdprTransparencyArticle13Concerns(
         title: `GDPR Transparency Article 13 topic observed: ${topic}`
       });
     });
+}
+
+const GDPR_TRANSPARENCY_MINI_REVIEW_PROFILE =
+  "gdpr_transparency_mini_review_v1";
+
+const POLICY_MODEL_TOPIC_TO_GDPR_TRANSPARENCY_TOPIC = {
+  processing_purposes: "processing_purposes",
+  legal_basis: "legal_basis",
+  data_retention: "data_retention",
+  international_transfers: "international_transfers",
+  vendor_disclosures: "recipients_or_vendor_categories",
+  data_subject_rights: "data_subject_rights",
+} as const;
+
+function buildGdprTransparencyModelReviewConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const rawArtifact = getRuntimeRecord(runtimeArtifacts, [
+    "policyModelReviewArtifact",
+    "policy_model_review_artifact"
+  ]);
+  const parsed = policyModelReviewArtifactSchema.safeParse(rawArtifact);
+  if (
+    !parsed.success ||
+    parsed.data.mode !== "enforced" ||
+    parsed.data.status !== "completed" ||
+    !parsed.data.productionEligible ||
+    !parsed.data.provenance.usedForProductionProjection
+  ) {
+    return [];
+  }
+
+  return parsed.data.rows.flatMap((row) => {
+    const topic =
+      POLICY_MODEL_TOPIC_TO_GDPR_TRANSPARENCY_TOPIC[
+        row.topic as keyof typeof POLICY_MODEL_TOPIC_TO_GDPR_TRANSPARENCY_TOPIC
+      ];
+    if (
+      !topic ||
+      row.status !== "observed" ||
+      row.confidence < 0.85 ||
+      row.evidenceExcerpts.length === 0 ||
+      !row.reasonCodes.includes("policy_review_invariants_applied_v1")
+    ) {
+      return [];
+    }
+
+    const evidenceText = row.evidenceExcerpts[0] ?? null;
+    const sourceUrl = row.sourceUrls[0] ?? null;
+    return [buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "Mini-assisted policy review retained a directly relevant passage that passed deterministic topic, ownership, coverage, and evidence invariants.",
+      domainContext,
+      evidence: uniqueStrings([evidenceText, sourceUrl]),
+      observedValue: "sufficient",
+      originKey: `gdpr_transparency.article13.${topic}`,
+      originType: "runtime_artifact",
+      rawEvidence: {
+        classifierProvenance: "mini_policy_semantic_review.v2",
+        classifierReasonCodes: row.reasonCodes,
+        confidence: row.confidence,
+        gdprTransparencyArticle13ConcernState: "sufficient",
+        gdprTransparencyArticle13Evidence: true,
+        gdprTransparencyArticle13Topic: topic,
+        gdprTransparencyEvidenceProfile:
+          GDPR_TRANSPARENCY_MINI_REVIEW_PROFILE,
+        gdprTransparencyModelReviewEvidence: true,
+        modelRequested: parsed.data.provenance.requestedModel,
+        modelResolved: parsed.data.provenance.resolvedModel,
+        pageType: "privacy_policy",
+        policyIsPrimarySource: true,
+        policySnippets: [evidenceText],
+        productionCredit: true,
+        productionCreditProfile: GDPR_TRANSPARENCY_MINI_REVIEW_PROFILE,
+        selectedEvidenceStrength: "strong",
+        signalKey: `privacy.gdpr_transparency.article13.${topic}`,
+        sourceDocumentIds: row.sourceDocumentIds,
+        sourceUrl,
+        sourceUrls: row.sourceUrls,
+      },
+      severity: "low",
+      signalKey: `privacy.gdpr_transparency.article13.${topic}`,
+      signalLabel: `GDPR Transparency policy topic observed: ${topic}`,
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: `GDPR Transparency policy topic observed: ${topic}`
+    })];
+  });
+}
+
+function buildGdprTransparencyLegalFrameworkValidityConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const summary = getPolicyDisclosureSummaryForGdprTransparency(runtimeArtifacts);
+  const matches = getPlainRecordArray(
+    summary?.legalFrameworkValidityMatches ??
+    summary?.legal_framework_validity_matches
+  );
+
+  return matches.flatMap((match) => {
+    const statusAtScan = getStringValue(match.statusAtScan ?? match.status_at_scan);
+    if (
+      statusAtScan !== "invalidated" &&
+      statusAtScan !== "superseded" &&
+      statusAtScan !== "not_yet_effective"
+    ) {
+      return [];
+    }
+
+    const canonicalId =
+      getStringValue(match.canonicalId ?? match.canonical_id) ?? "unknown";
+    const canonicalName =
+      getStringValue(match.canonicalName ?? match.canonical_name) ??
+      "time-sensitive legal framework";
+    const evidenceText = getStringValue(match.evidenceText ?? match.evidence_text);
+    const sourceUrl = getStringValue(match.sourceUrl ?? match.source_url);
+    const reviewMessage = getStringValue(match.reviewMessage ?? match.review_message);
+
+    return [buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        reviewMessage ??
+        `A ${statusAtScan.replaceAll("_", " ")} legal-framework reference was retained and requires policy review.`,
+      domainContext,
+      evidence: uniqueStrings([evidenceText, sourceUrl]),
+      observedValue: statusAtScan,
+      originKey: `gdpr_transparency.legal_framework_validity.${canonicalId}`,
+      originType: "runtime_artifact",
+      rawEvidence: {
+        gdprTransparencyLegalFrameworkValidityEvidence: true,
+        legalFrameworkValidityMatch: match,
+        legalFrameworkValidityMatches: [match],
+        pageType: "privacy_policy",
+        policyIsPrimarySource: true,
+        policySnippets: evidenceText ? [evidenceText] : [],
+        signalKey: "privacy.gdpr_transparency.stale_legal_framework_reference",
+        sourceUrl,
+        sourceUrls: sourceUrl ? [sourceUrl] : [],
+        staleLegalFrameworkReferenceObserved: true,
+      },
+      severity: "medium",
+      signalKey: "privacy.gdpr_transparency.stale_legal_framework_reference",
+      signalLabel: `Stale legal-framework reference observed: ${canonicalName}`,
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: `Stale legal-framework reference observed: ${canonicalName}`,
+    })];
+  });
 }
 
 const SCAN_NO_GO_CONFIDENCE_THRESHOLD = 0.9;
@@ -2710,6 +2993,224 @@ function buildRuntimeCoverageLimitationConcerns(
   ];
 }
 
+function getConsentControlAssessmentForConcern(
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+) {
+  const hybridRuntimeEvidence = getRuntimeRecord(runtimeArtifacts, [
+    "hybridRuntimeEvidence",
+    "hybrid_runtime_evidence"
+  ]);
+  for (const candidate of [
+    getRuntimeRecord(runtimeArtifacts, [
+      "consentControlAssessment",
+      "consent_control_assessment"
+    ]),
+    getRuntimeRecord(hybridRuntimeEvidence, [
+      "consentControlAssessment",
+      "consent_control_assessment"
+    ])
+  ]) {
+    const parsed = consentControlAssessmentSchema.safeParse(candidate);
+    if (parsed.success) {
+      return parsed.data;
+    }
+  }
+  return null;
+}
+
+function buildConsentOptionsControlProminenceConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  if (!assessment) {
+    return [];
+  }
+
+  const firstLayerOptions = assessment.evidence.filter(
+    (evidence) => evidence.intent === "options" && evidence.layer === "first_layer"
+  );
+  const persistentOptions = assessment.evidence.filter(
+    (evidence) =>
+      evidence.intent === "options" &&
+      evidence.layer === "deeper_layer" &&
+      evidence.presentationType === "persistent_link"
+  );
+  const state: ConsentOptionsControlProminenceState =
+    firstLayerOptions.some((evidence) => evidence.presentationType === "dedicated_button")
+      ? "dedicated_button"
+      : firstLayerOptions.some((evidence) => evidence.presentationType === "inline_link")
+        ? "inline_link"
+        : firstLayerOptions.length > 0
+          ? "first_layer_control"
+          : persistentOptions.length > 0
+            ? "persistent_link"
+            : assessment.assessmentStatus !== "complete" ||
+                assessment.coverage.status !== "complete" ||
+                assessment.surface.status !== "observed_actionable"
+              ? "insufficient_retained_evidence"
+              : assessment.controls.accept.state === "observed" &&
+                  assessment.controls.reject.state === "observed"
+                ? "balanced_accept_decline_no_first_layer_settings"
+                : "no_granular_controls_retained";
+  const retainedControls = [...firstLayerOptions, ...persistentOptions]
+    .slice(0, 8)
+    .map((evidence) => ({
+      artifactRefs: evidence.artifactRefs.slice(0, 8),
+      evidenceId: evidence.evidenceId,
+      label: evidence.label,
+      layer: evidence.layer,
+      presentationType: evidence.presentationType
+    }));
+  const runtimeEvidenceArtifacts = uniqueStrings([
+    ...retainedControls.flatMap((control) => control.artifactRefs),
+    "scan_runtime_artifacts.consent_control_assessment"
+  ]);
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "Typed consent-control observations were assessed for first-layer settings availability and control prominence before GDPR/ePrivacy checklist projection.",
+      domainContext,
+      evidence: retainedControls
+        .map((control) => control.label)
+        .filter((label): label is string => Boolean(label)),
+      observedValue: state,
+      originKey: `consent.options_control_prominence.${state}`,
+      originType: "runtime_artifact",
+      rawEvidence: {
+        consentControlAssessmentStatus: assessment.assessmentStatus,
+        consentControlCoverageStatus: assessment.coverage.status,
+        consentOptionsControlProminenceEvidence: true,
+        consentOptionsControlProminenceState: state,
+        consentSurfaceStatus: assessment.surface.status,
+        firstLayerAcceptState: assessment.controls.accept.state,
+        firstLayerOptionsState: assessment.controls.options.state,
+        firstLayerRejectState: assessment.controls.reject.state,
+        retainedConsentOptionsControls: retainedControls,
+        runtimeEvidenceArtifacts
+      },
+      severity: state === "no_granular_controls_retained" ? "medium" : "low",
+      signalKey: "privacy.consent_options_control_prominence",
+      signalLabel: "Consent options control prominence",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Consent options control prominence"
+    })
+  ];
+}
+
+function buildConsentPaidDeclinePathConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  if (!assessment) {
+    return [];
+  }
+
+  const retainedControls = assessment.evidence
+    .filter((evidence) =>
+      evidence.controlVariant === "reject_with_subscription" &&
+      evidence.layer === "first_layer" &&
+      evidence.visible === true &&
+      evidence.actionable === true
+    )
+    .slice(0, 8)
+    .map((evidence) => ({
+      artifactRefs: evidence.artifactRefs.slice(0, 8),
+      evidenceId: evidence.evidenceId,
+      label: evidence.label,
+      layer: evidence.layer,
+      controlVariant: evidence.controlVariant
+    }));
+  if (retainedControls.length === 0) {
+    return [];
+  }
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "A typed first-layer decline control was retained as a paid subscription variant rather than a free reject-all control.",
+      domainContext,
+      evidence: retainedControls
+        .map((control) => control.label)
+        .filter((label): label is string => Boolean(label)),
+      observedValue: "reject_with_subscription",
+      originKey: "consent.paid_decline_path.reject_with_subscription",
+      originType: "runtime_artifact",
+      rawEvidence: {
+        consentControlAssessmentStatus: assessment.assessmentStatus,
+        consentControlCoverageStatus: assessment.coverage.status,
+        consentPaidDeclinePathEvidence: true,
+        consentPaidDeclinePathState: "reject_with_subscription",
+        freeRejectControlState: assessment.controls.reject.state,
+        retainedConsentPaidDeclineControls: retainedControls,
+        runtimeEvidenceArtifacts: uniqueStrings([
+          ...retainedControls.flatMap((control) => control.artifactRefs),
+          "scan_runtime_artifacts.consent_control_assessment"
+        ])
+      },
+      severity: "low",
+      signalKey: "privacy.consent_paid_decline_path",
+      signalLabel: "Paid decline path",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Paid decline path observed"
+    })
+  ];
+}
+
+function buildPreConsentStorageAssessmentConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = buildPreConsentStorageAssessment({ runtimeArtifacts });
+  const evidence = assessment.evidenceRows
+    .slice(0, 12)
+    .map((row) => `storage:${row.name}${row.domain ? `@${row.domain}` : ""}`);
+  const runtimeEvidenceArtifacts = evidence.length > 0
+    ? evidence
+    : assessment.aggregateObservedCount !== null
+      ? ["scan_runtime_artifacts.hybrid_runtime_evidence.storage_summary"]
+      : [];
+
+  if (
+    assessment.status === "insufficient_evidence" &&
+    runtimeEvidenceArtifacts.length === 0
+  ) {
+    return [];
+  }
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "Verified retained storage evidence was reconciled into one typed pre-consent storage assessment before concern policy and checklist projection.",
+      domainContext,
+      evidence,
+      observedValue: assessment.status,
+      originKey: `storage.preconsent_assessment.${assessment.status}`,
+      originType: "runtime_artifact",
+      rawEvidence: {
+        preConsentStorageAssessment: assessment,
+        preConsentStorageAssessmentEvidence: true,
+        runtimeEvidenceArtifacts
+      },
+      severity: assessment.status === "classified_nonessential_observed"
+        ? "medium"
+        : "low",
+      signalKey: "privacy.preconsent_storage_assessment",
+      signalLabel: "Pre-consent storage assessment",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Pre-consent storage assessment"
+    })
+  ];
+}
+
 
 export function buildNormalizedConcerns(input: {
   domainContext?: ScanDomainContext;
@@ -2727,8 +3228,14 @@ export function buildNormalizedConcerns(input: {
     }),
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildPreConsentStorageAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCmpLoadOrderConcerns(input.runtimeArtifacts, input.domainContext),
-    ...buildGdprTransparencyArticle13Concerns(input.runtimeArtifacts, input.domainContext)
+    ...buildRtbCookieSyncConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildGdprTransparencyArticle13Concerns(input.runtimeArtifacts, input.domainContext),
+    ...buildGdprTransparencyModelReviewConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildGdprTransparencyLegalFrameworkValidityConcerns(input.runtimeArtifacts, input.domainContext)
   ];
 
   return [

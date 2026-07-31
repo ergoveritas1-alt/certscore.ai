@@ -516,7 +516,7 @@ export async function extractNanoDocumentSourceWithLlm(row: NanoDocumentSourceRo
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: env.VALIDATION_NANO_MODEL,
+      model: env.CERTSCORE_EXTRACTION_MODEL,
       temperature: 0,
       response_format: { type: "json_object" },
       messages: [
@@ -580,7 +580,7 @@ export async function extractNanoDocumentSourceWithLlm(row: NanoDocumentSourceRo
     ...normalized,
     metadata: {
       ...normalized.metadata,
-      model: payload.model ?? env.VALIDATION_NANO_MODEL,
+      model: payload.model ?? env.CERTSCORE_EXTRACTION_MODEL,
       model_usage:
         payload.usage && typeof payload.usage === "object"
           ? {

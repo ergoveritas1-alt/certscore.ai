@@ -3,6 +3,7 @@
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
 import {
   loadAdminUserOverviewData,
+  loadAdminUsersPageData,
   loadAdminUsersData,
   type AdminUserOverviewMetricsRow,
   type AdminUserOverviewRow,
@@ -15,6 +16,7 @@ import {
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminUserListItem = {
+  accountRole: string;
   authProvider: string;
   completedScans: number;
   createdAt: string;
@@ -99,6 +101,7 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
     const organization = membership ? organizationMap.get(membership.organization_id) ?? null : null;
 
     return {
+      accountRole: user.account_role,
       id: user.id,
       email: user.email,
       fullName: user.full_name,
@@ -121,8 +124,21 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
   });
 }
 
+export async function listAdminUsersPage(limit = 25, offset = 0): Promise<{
+  items: AdminUserListItem[];
+  totalCount: number;
+}> {
+  await requirePlatformAdminContext();
+  const page = await loadAdminUsersPageData(limit, offset);
+  return {
+    items: page.users.map(mapAdminUserOverviewRow),
+    totalCount: page.totalCount
+  };
+}
+
 function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
   return {
+    accountRole: row.account_role,
     id: row.id,
     email: row.email,
     fullName: row.full_name,

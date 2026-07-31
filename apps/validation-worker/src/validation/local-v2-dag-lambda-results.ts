@@ -11,6 +11,7 @@ import {
   type MessageSystemAttributeName,
   type Message
 } from "@aws-sdk/client-sqs";
+import { classifyV2DagLambdaResultDisposition } from "@certscore/contracts";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -32,6 +33,18 @@ const ORPHAN_RECONCILIATION_AGE_MS = 75_000;
 
 type LambdaResultStatus = "completed" | "failed";
 type LambdaTargetEnvironment = "local" | "production";
+type LambdaAwsRegion = "eu-central-1" | "eu-west-1" | "us-west-2";
+
+type ScannerRuntimeProvenance = {
+  awsRegion: LambdaAwsRegion;
+  dispatchVpcMode: "none" | "vpc";
+  egressId?: string;
+  egressProvider?: string;
+  functionVersion?: string;
+  imageDigest?: string;
+  publicIpHash?: string;
+  runtimeVpcMode: "none" | "unknown" | "vpc";
+};
 
 type LambdaResultMessage = {
   artifactMetadata?: Record<string, unknown>;
@@ -43,6 +56,7 @@ type LambdaResultMessage = {
   scanId: string;
   scannerGitSha?: string;
   scannerImageTag?: string;
+  scannerRuntimeProvenance?: ScannerRuntimeProvenance;
   scannerRuntimeVersion?: string;
   status: LambdaResultStatus;
   targetEnvironment: LambdaTargetEnvironment;
@@ -86,22 +100,17 @@ export type LocalV2DagLambdaResultPollerOptions = {
 };
 
 async function completedScanScoresExist(scanId: string) {
-  const row = await queryOne<{ legacy_exists: boolean; shadow_exists: boolean }>(
+  const row = await queryOne<{ legacy_exists: boolean }>(
     `select exists (
               select 1 from public.scan_score_assessments
                where scan_id = $1::uuid
                  and score_kind = 'gdpr_eprivacy_evidence'
                  and score_version = 'gdpr-eprivacy-evidence.legacy-v1'
-            ) as legacy_exists,
-            exists (
-              select 1 from public.scan_score_assessments
-               where scan_id = $1::uuid
-                 and score_kind = 'gdpr_eprivacy_risk_shadow'
-            ) as shadow_exists`,
+            ) as legacy_exists`,
     [scanId],
     { readOnly: true }
   );
-  return row?.legacy_exists === true && row.shadow_exists === true;
+  return row?.legacy_exists === true;
 }
 
 export async function ensureCompletedScanScoresPersisted(input: {
@@ -141,13 +150,24 @@ export async function ensureCompletedScanScoresPersisted(input: {
     }
   );
   if (!response.ok) {
+    const failure = await response.json().catch(() => null) as {
+      code?: unknown;
+      retryable?: unknown;
+    } | null;
+    if (response.status === 422 && failure?.retryable === false) {
+      console.error("[validation-worker] terminal score materialization failure acknowledged", {
+        code: typeof failure.code === "string" ? failure.code.slice(0, 120) : "contract_validation_failed",
+        scanId: input.scanId,
+      });
+      return { alreadyPersisted: false, terminalFailure: true as const };
+    }
     throw new Error(`Score materialization endpoint returned HTTP ${response.status}.`);
   }
   const result = await response.json() as { complete?: unknown };
   if (result.complete !== true || !(await completedScanScoresExist(input.scanId))) {
-    throw new Error("Score materialization endpoint did not confirm persisted legacy and shadow assessments.");
+    throw new Error("Score materialization endpoint did not confirm persisted legacy assessment.");
   }
-  return { alreadyPersisted: false };
+  return { alreadyPersisted: false, terminalFailure: false as const };
 }
 
 type LambdaResultConsumerMetadata = {
@@ -191,6 +211,40 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function stringValue(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function parseScannerRuntimeProvenance(value: unknown): ScannerRuntimeProvenance | undefined {
+  const record = asRecord(value);
+  const awsRegion =
+    record.awsRegion === "eu-central-1" || record.awsRegion === "eu-west-1" || record.awsRegion === "us-west-2"
+      ? record.awsRegion
+      : null;
+  const dispatchVpcMode = record.dispatchVpcMode === "vpc" || record.dispatchVpcMode === "none"
+    ? record.dispatchVpcMode
+    : null;
+  const runtimeVpcMode =
+    record.runtimeVpcMode === "vpc" || record.runtimeVpcMode === "none" || record.runtimeVpcMode === "unknown"
+      ? record.runtimeVpcMode
+      : null;
+  if (!awsRegion || !dispatchVpcMode || !runtimeVpcMode) {
+    return undefined;
+  }
+  const imageDigest = stringValue(record.imageDigest);
+  const publicIpHash = stringValue(record.publicIpHash);
+  return {
+    awsRegion,
+    dispatchVpcMode,
+    ...(stringValue(record.egressId) ? { egressId: (stringValue(record.egressId) as string).slice(0, 128) } : {}),
+    ...(stringValue(record.egressProvider)
+      ? { egressProvider: (stringValue(record.egressProvider) as string).slice(0, 80) }
+      : {}),
+    ...(stringValue(record.functionVersion)
+      ? { functionVersion: (stringValue(record.functionVersion) as string).slice(0, 80) }
+      : {}),
+    ...(imageDigest && /^sha256:[a-f0-9]{64}$/i.test(imageDigest) ? { imageDigest } : {}),
+    ...(publicIpHash && /^sha256:[a-f0-9]{64}$/i.test(publicIpHash) ? { publicIpHash } : {}),
+    runtimeVpcMode
+  };
 }
 
 function parseLambdaHandlerTiming(value: unknown): LambdaHandlerTiming | undefined {
@@ -255,7 +309,10 @@ export function productionArtifactChainRejectReason(input: {
   return null;
 }
 
-function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: LambdaTargetEnvironment): LambdaResultMessage {
+export function parseLambdaResultMessage(
+  raw: string,
+  expectedTargetEnvironment: LambdaTargetEnvironment
+): LambdaResultMessage {
   const record = asRecord(JSON.parse(raw));
   if (record.artifactOnly !== true || record.productionFindingIntegration !== false) {
     throw new Error("Lambda result must remain artifact-only with production finding integration disabled.");
@@ -284,6 +341,7 @@ function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: Lambda
   const handlerTiming = parseLambdaHandlerTiming(record.handlerTiming);
   const artifactMetadata = asRecord(record.artifactMetadata);
   const artifactPointers = asRecord(record.artifactPointers);
+  const scannerRuntimeProvenance = parseScannerRuntimeProvenance(record.scannerRuntimeProvenance);
   if (targetEnvironment === "production" && status === "completed") {
     const artifactChainRejectReason = productionArtifactChainRejectReason({ artifactMetadata, artifactPointers });
     if (artifactChainRejectReason) {
@@ -303,6 +361,7 @@ function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: Lambda
     scanId,
     ...(stringValue(record.scannerGitSha) ? { scannerGitSha: (stringValue(record.scannerGitSha) as string).slice(0, 80) } : {}),
     ...(stringValue(record.scannerImageTag) ? { scannerImageTag: (stringValue(record.scannerImageTag) as string).slice(0, 160) } : {}),
+    ...(scannerRuntimeProvenance ? { scannerRuntimeProvenance } : {}),
     ...(stringValue(record.scannerRuntimeVersion)
       ? { scannerRuntimeVersion: (stringValue(record.scannerRuntimeVersion) as string).slice(0, 80) }
       : {}),
@@ -319,17 +378,8 @@ function messageBody(message: Message) {
 }
 
 export function getManualSmokeResultScanId(rawMessage: unknown) {
-  try {
-    const record = asRecord(typeof rawMessage === "string" ? JSON.parse(rawMessage) : rawMessage);
-    const scanId = typeof record.scanId === "string" ? record.scanId : "";
-    return (
-      scanId.startsWith("manual-") ||
-      scanId.startsWith("postdeploy-") ||
-      scanId.startsWith("aro-gate-")
-    ) ? scanId : null;
-  } catch {
-    return null;
-  }
+  const disposition = classifyV2DagLambdaResultDisposition(rawMessage);
+  return disposition.kind === "synthetic_verification" ? disposition.scanId : null;
 }
 
 export function getLambdaResultTargetEnvironment(rawMessage: unknown): LambdaTargetEnvironment | null {
@@ -774,6 +824,9 @@ export async function recordLocalV2DagLambdaResult(
           resultStatus: parsedMessage.status,
           ...(parsedMessage.scannerGitSha ? { scannerGitSha: parsedMessage.scannerGitSha } : {}),
           ...(parsedMessage.scannerImageTag ? { scannerImageTag: parsedMessage.scannerImageTag } : {}),
+          ...(parsedMessage.scannerRuntimeProvenance
+            ? { scannerRuntimeProvenance: parsedMessage.scannerRuntimeProvenance }
+            : {}),
           ...(parsedMessage.scannerRuntimeVersion ? { scannerRuntimeVersion: parsedMessage.scannerRuntimeVersion } : {}),
           targetEnvironment: parsedMessage.targetEnvironment,
           v2ArtifactsRemainInternal: true,
@@ -788,6 +841,18 @@ export async function recordLocalV2DagLambdaResult(
     `update scans
         set completed_at = coalesce(completed_at, $2::timestamptz),
             error_message = case when $3 = 'failed' then $4 else error_message end,
+            egress_id = coalesce($5, egress_id),
+            egress_provider = coalesce($6, egress_provider),
+            scan_config_json = jsonb_set(
+              scan_config_json,
+              '{execution,v2DagLambda}',
+              coalesce(scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || jsonb_build_object(
+                'completedAt', $2::timestamptz,
+                'dispatchState', case when $3 = 'failed' then 'failed' else 'completed' end,
+                'runtimeProvenance', $7::jsonb
+              ),
+              true
+            ),
             status = case when $3 = 'failed' then 'failed' else 'completed' end
       where id = $1
         and status in ('queued', 'running')`,
@@ -795,9 +860,31 @@ export async function recordLocalV2DagLambdaResult(
       parsedMessage.scanId,
       parsedMessage.completedAt,
       parsedMessage.status,
-      parsedMessage.error?.message ?? null
+      parsedMessage.error?.message ?? null,
+      parsedMessage.scannerRuntimeProvenance?.egressId ?? null,
+      parsedMessage.scannerRuntimeProvenance?.egressProvider ?? null,
+      parsedMessage.scannerRuntimeProvenance
+        ? JSON.stringify(parsedMessage.scannerRuntimeProvenance)
+        : null
     ]
   );
+  if (parsedMessage.scannerRuntimeProvenance) {
+    await query(
+      `update scan_snapshots
+          set egress_id = coalesce($2, egress_id),
+              egress_type = coalesce($3, egress_type),
+              public_ip_hash = coalesce($4, public_ip_hash),
+              region = coalesce($5, region)
+        where scan_id = $1`,
+      [
+        parsedMessage.scanId,
+        parsedMessage.scannerRuntimeProvenance.egressId ?? null,
+        parsedMessage.scannerRuntimeProvenance.egressProvider ?? null,
+        parsedMessage.scannerRuntimeProvenance.publicIpHash ?? null,
+        parsedMessage.scannerRuntimeProvenance.awsRegion
+      ]
+    );
+  }
   await query(
     `update pulse_requests
         set status = case when $3 = 'failed' then 'failed' else 'completed' end,
@@ -840,6 +927,27 @@ export async function recordLocalV2DagLambdaResult(
   }
 }
 
+async function persistScannerRuntimeSnapshot(parsedMessage: LambdaResultMessage) {
+  if (!parsedMessage.scannerRuntimeProvenance) {
+    return;
+  }
+  await query(
+    `update scan_snapshots
+        set egress_id = coalesce($2, egress_id),
+            egress_type = coalesce($3, egress_type),
+            public_ip_hash = coalesce($4, public_ip_hash),
+            region = coalesce($5, region)
+      where scan_id = $1`,
+    [
+      parsedMessage.scanId,
+      parsedMessage.scannerRuntimeProvenance.egressId ?? null,
+      parsedMessage.scannerRuntimeProvenance.egressProvider ?? null,
+      parsedMessage.scannerRuntimeProvenance.publicIpHash ?? null,
+      parsedMessage.scannerRuntimeProvenance.awsRegion
+    ]
+  );
+}
+
 function parseSqsEpochMillis(value: string | undefined) {
   if (!value) {
     return null;
@@ -876,18 +984,29 @@ async function pollOnce(input: {
   const messages = response.Messages ?? [];
   const outcomes = await mapWithConcurrency(messages, RESULT_BATCH_CONCURRENCY, async (message) => {
     const rawMessage = messageBody(message);
-    const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
-    if (manualSmokeScanId) {
+    const disposition = classifyV2DagLambdaResultDisposition(rawMessage);
+    if (disposition.kind === "synthetic_verification") {
       await input.client.send(new DeleteMessageCommand({
         QueueUrl: input.queueUrl,
         ReceiptHandle: receiptHandle(message)
       }));
-      console.warn("[validation-worker] ignored manual v2 DAG Lambda smoke result", {
+      console.warn("[validation-worker] acknowledged non-persistable v2 DAG Lambda result", {
+        disposition: disposition.kind,
         messageId: message.MessageId ?? null,
         queueRegion: input.queueRegion,
-        scanId: manualSmokeScanId
+        reason: disposition.reason,
+        scanId: disposition.scanId
       });
       return { deleted: 1, failed: 0, handled: 0 };
+    }
+    if (disposition.kind === "invalid") {
+      console.error("[validation-worker] rejected invalid v2 DAG Lambda result identity", {
+        messageId: message.MessageId ?? null,
+        queueRegion: input.queueRegion,
+        reason: disposition.reason,
+        scanId: disposition.scanId
+      });
+      return { deleted: 0, failed: 1, handled: 0 };
     }
     try {
       const parsed = parseLambdaResultMessage(rawMessage, input.targetEnvironment);
@@ -906,6 +1025,7 @@ async function pollOnce(input: {
           targetEnvironment: parsed.targetEnvironment,
           webBaseUrl: input.webBaseUrl
         });
+        await persistScannerRuntimeSnapshot(parsed);
       }
       await input.client.send(new DeleteMessageCommand({
         QueueUrl: input.queueUrl,

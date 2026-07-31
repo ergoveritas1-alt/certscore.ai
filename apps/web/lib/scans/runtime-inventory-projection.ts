@@ -1,5 +1,9 @@
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 import {
+  isCanonicalIdSyncEndpoint,
+  resolveCanonicalVendorLegalContext
+} from "@certscore/vendor-resolver";
+import {
   isKnownCmpInfrastructureHost,
   isKnownCmpVendorLabel
 } from "../../../../packages/shared/src/known-cmps";
@@ -15,6 +19,7 @@ import {
 } from "./runtime-cookie-priority";
 import {
   findRuntimeEntityOwner,
+  findRuntimeCanonicalEntityOwner,
   findRuntimeCookieOwner,
   findRuntimeRequestOwner,
   findRuntimeVendorLabelOwner,
@@ -26,7 +31,30 @@ import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 
 export type ConsentReviewPriority = RuntimeCookieReviewPriority;
 export type InventoryConfidence = RuntimeCookieInventoryConfidence;
-export type InventoryMacroCategory = "Advertising" | "Analytics" | "Essential" | "Functional" | "Unknown";
+export type InventoryMacroCategory = "Advertising" | "Analytics" | "Essential" | "Functional" | "Review";
+export type InventoryEvidenceClassification = "Contextual" | "Essential" | "Non-essential" | "Review";
+
+export type PreConsentDataFlow = {
+  controllingEntity: {
+    legalEntity: string | null;
+    headquartersCountry: string | null;
+  };
+  endpoint: string;
+  idSync: boolean;
+  networkDestination: {
+    ip: string | null;
+    country: string | null;
+    countryCode: string | null;
+    asn: number | null;
+    provider: string | null;
+    label: "server location (may be CDN edge)";
+  };
+  transferMechanism: {
+    mechanism: "adequacy_decision" | "dpf_certified" | "sccs_assumed_unverified" | "unknown";
+    basis: string;
+    verifiedAsOf: string;
+  };
+};
 
 export type TrackerInventoryRow = {
   attributionEvidence?: RuntimeVendorAttributionEvidence | null;
@@ -49,6 +77,7 @@ export type TrackerInventoryRow = {
 export type CookieInventoryGroupRow = {
   attributionEvidence?: RuntimeVendorAttributionEvidence | null;
   confidence: InventoryConfidence;
+  cookieDetails: RuntimeCookieEvidenceRow[];
   cookieNames: string[];
   domains: string[];
   firstSeenMs: number | null;
@@ -56,6 +85,7 @@ export type CookieInventoryGroupRow = {
   party: "first_party" | "third_party" | "unknown" | "mixed";
   priority: ConsentReviewPriority;
   purpose: string;
+  setByThirdPartyScript: boolean;
   syncedIdentifiers?: string[];
   timingEvidence?: RuntimeCookieEvidenceRow["timingEvidence"] | "mixed";
   vendor: string;
@@ -68,7 +98,7 @@ export type TrackerInventoryGroupRow = {
   domains: string[];
   firstSeenMs: number | null;
   macroCategory: InventoryMacroCategory;
-  party: "3rd" | "—" | "mixed";
+  party: "first_party" | "third_party" | "unknown" | "mixed";
   preConsent: boolean;
   rawProducts: string[];
   regulatoryRelevance: string[];
@@ -80,9 +110,31 @@ export type TrackerInventoryGroupRow = {
   vendor: string;
 };
 
-export type InventoryGroupRow =
-  | (CookieInventoryGroupRow & { type: "cookie" })
-  | (TrackerInventoryGroupRow & { type: "tracker" });
+export type InventoryGroupRow = {
+  attributionEvidence?: RuntimeVendorAttributionEvidence | null;
+  attributionSignatures: string[];
+  canonicalEntity: string | null;
+  confidence: InventoryConfidence;
+  cookieDetails: RuntimeCookieEvidenceRow[];
+  dataFlows: PreConsentDataFlow[];
+  cookieNames: string[];
+  domains: string[];
+  firstSeenMs: number | null;
+  macroCategory: InventoryMacroCategory;
+  party: "first_party" | "third_party" | "unknown" | "mixed";
+  preConsent: boolean;
+  priority: ConsentReviewPriority;
+  purpose: string;
+  purposes: string[];
+  rawProducts: string[];
+  regulatoryRelevance: string[];
+  requestCount: number | null;
+  setByThirdPartyScript: boolean;
+  syncedIdentifiers?: string[];
+  timingEvidence?: RuntimeCookieEvidenceRow["timingEvidence"] | "mixed";
+  type: "cookie" | "tracker";
+  vendor: string;
+};
 
 export function isTimedPreConsentInventoryRow(row: TrackerInventoryRow) {
   if ((row.cookieNames?.length ?? 0) > 0) {
@@ -91,7 +143,10 @@ export function isTimedPreConsentInventoryRow(row: TrackerInventoryRow) {
   return row.preConsent === true && row.firstSeenMs !== null;
 }
 
-export function getInventoryGroupRowRenderKey(row: InventoryGroupRow, index: number) {
+export function getInventoryGroupRowRenderKey(
+  row: Pick<InventoryGroupRow, "type" | "vendor" | "purpose" | "cookieNames" | "domains" | "priority" | "party">,
+  index: number
+) {
   return JSON.stringify([
     row.type,
     row.vendor,
@@ -141,6 +196,64 @@ function getOptionalNumber(record: Record<string, unknown>, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+export function buildPreConsentDataFlows(
+  hybridRuntimeEvidence: Record<string, unknown> | null | undefined
+): PreConsentDataFlow[] {
+  const rows = getObjectArray(
+    hybridRuntimeEvidence?.requestObservations ?? hybridRuntimeEvidence?.request_observations
+  );
+  const flowsByKey = new Map<string, PreConsentDataFlow>();
+  for (const row of rows) {
+    const endpoint = normalizeInventoryHostname(
+      getOptionalString(row, "domain") ??
+      getOptionalString(row, "hostname") ??
+      getOptionalString(row, "requestUrl")
+    );
+    if (!endpoint) continue;
+    const owner = findRuntimeRequestOwner(getOptionalString(row, "requestUrl") ?? endpoint) ??
+      findRuntimeEntityOwner(endpoint);
+    const legalContext = resolveCanonicalVendorLegalContext(owner?.entity);
+    const destination = getRecord(row.networkDestination ?? row.network_destination);
+    const ip = destination ? getOptionalString(destination, "ip") : null;
+    const country = destination ? getOptionalString(destination, "country") : null;
+    const countryCode = destination
+      ? getOptionalString(destination, "countryCode") ??
+        getOptionalString(destination, "country_code")
+        ?? (/^[A-Z]{2}$/i.test(country ?? "") ? country : null)
+      : null;
+    const asn = destination ? getOptionalNumber(destination, "asn") : null;
+    const provider = destination ? getOptionalString(destination, "provider") : null;
+    const mechanism = legalContext?.transferMechanism ?? {
+      basis: "No verified transfer-mechanism entry is available in the canonical vendor knowledge base.",
+      mechanism: "unknown" as const,
+      verifiedAsOf: "2026-07-23",
+    };
+    const flow: PreConsentDataFlow = {
+      controllingEntity: {
+        legalEntity: legalContext?.controllingEntity ?? owner?.entity ?? null,
+        headquartersCountry: legalContext?.headquartersCountry ?? null,
+      },
+      endpoint,
+      idSync: row.idSyncEndpoint === true || row.id_sync_endpoint === true || isCanonicalIdSyncEndpoint(endpoint),
+      networkDestination: {
+        ip,
+        country,
+        countryCode,
+        asn,
+        provider,
+        label: "server location (may be CDN edge)",
+      },
+      transferMechanism: {
+        basis: mechanism.basis,
+        mechanism: mechanism.mechanism,
+        verifiedAsOf: mechanism.verifiedAsOf,
+      },
+    };
+    flowsByKey.set(`${endpoint}\u0000${ip ?? ""}`, flow);
+  }
+  return [...flowsByKey.values()];
+}
+
 function isCmpVendorDomain(value: string | null | undefined) {
   return isKnownCmpInfrastructureHost(value);
 }
@@ -165,12 +278,51 @@ function isFunctionalButNotCmpVendorLabel(value: string | null | undefined) {
   return isCmpOrFunctionalVendorLabel(value) && !isCmpVendorLabel(value);
 }
 
+function canonicalExecVendorOwner(value: string) {
+  return findRuntimeVendorLabelOwner(value) ??
+    findRuntimeEntityOwner(value) ??
+    findRuntimeCanonicalEntityOwner(value);
+}
+
+function canonicalizeExecTopObservedEntities(
+  entities: ReportVendorSurfaceProjectionInput["topObservedEntities"]
+) {
+  const grouped = new Map<string, ReportVendorSurfaceProjectionInput["topObservedEntities"][number]>();
+  for (const entity of entities) {
+    const owner = canonicalExecVendorOwner(entity.label);
+    const label = owner?.vendor ?? entity.label;
+    const existing = grouped.get(label.toLowerCase());
+    if (!existing) {
+      grouped.set(label.toLowerCase(), {
+        ...entity,
+        label
+      });
+      continue;
+    }
+    grouped.set(label.toLowerCase(), {
+      ...existing,
+      requestCount: existing.requestCount + entity.requestCount
+    });
+  }
+  return [...grouped.values()];
+}
+
 export function buildReportSurfaceVendorProjection(input: ReportVendorSurfaceProjectionInput) {
-  const execSummaryResolvedVendorNames = input.resolvedVendorNames.filter((name) => !isFunctionalButNotCmpVendorLabel(name));
+  const execSummaryResolvedVendorNames = uniqueStrings(
+    input.resolvedVendorNames
+      .filter((name) => !isFunctionalButNotCmpVendorLabel(name))
+      .map((name) => canonicalExecVendorOwner(name)?.vendor ?? name)
+  );
   const execSummaryThirdPartyDomains = uniqueStrings(input.rawThirdPartyDomains).filter((domain) => !isCmpOrFunctionalVendorDomain(domain));
-  const execSummaryTopObservedEntities = input.topObservedEntities.filter((entity) => (
-    !isFunctionalButNotCmpVendorLabel(entity.label) &&
-    !isFunctionalButNotCmpVendorDomain(entity.label)
+  const execSummaryTopObservedEntities = canonicalizeExecTopObservedEntities(
+    input.topObservedEntities.filter((entity) => (
+      !isFunctionalButNotCmpVendorLabel(entity.label) &&
+      !isFunctionalButNotCmpVendorDomain(entity.label)
+    ))
+  );
+  const execSummaryUnresolvedVendorHosts = uniqueStrings(input.unresolvedVendorHosts).filter((host) => (
+    !isCmpOrFunctionalVendorDomain(host) &&
+    !canonicalExecVendorOwner(host)
   ));
   const execSummaryCmpCategoryCount = uniqueStrings([
     ...execSummaryResolvedVendorNames.filter(isCmpVendorLabel),
@@ -184,7 +336,7 @@ export function buildReportSurfaceVendorProjection(input: ReportVendorSurfacePro
       resolvedVendorNames: execSummaryResolvedVendorNames,
       thirdPartyDomains: execSummaryThirdPartyDomains,
       topObservedEntities: execSummaryTopObservedEntities,
-      unresolvedVendorHosts: uniqueStrings(input.unresolvedVendorHosts).filter((host) => !isCmpOrFunctionalVendorDomain(host)),
+      unresolvedVendorHosts: execSummaryUnresolvedVendorHosts,
       vendorCategoryCounts: execSummaryCmpCategoryCount > 0
         ? {
             ...input.vendorCategoryCounts,
@@ -556,6 +708,14 @@ export function buildTrackerInventoryRows(input: {
       vendorName: vendor
     });
     const vendorOwner = findRuntimeVendorLabelOwner(vendor);
+    const hasOwnedFirstPartyEntityObservation = Boolean(vendorOwner && input.topObservedEntities.some((entity) => {
+      const hostname = normalizeInventoryHostname(entity.label);
+      return Boolean(
+        hostname &&
+        isFirstPartyHost(hostname) &&
+        findRuntimeCanonicalEntityOwner(hostname)?.entity === vendorOwner.entity
+      );
+    }));
     const hasConcreteObservedRow = [...rows.values()].some((row) =>
       (
         row.label.toLowerCase() === vendor.toLowerCase() ||
@@ -566,7 +726,7 @@ export function buildTrackerInventoryRows(input: {
         row.domains.length > 0 ||
         row.observedVia.some((value) => !/^(resolver|vendor resolver)$/i.test(value))
       )
-    );
+    ) || hasOwnedFirstPartyEntityObservation;
     if (hasConcreteObservedRow) {
       continue;
     }
@@ -702,6 +862,15 @@ function normalizeInventoryPurpose(value: string | null | undefined) {
   return (value ?? "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "unknown";
 }
 
+function getInventoryPurposeTokens(values: Array<string | null | undefined>) {
+  return new Set(
+    values
+      .flatMap((value) => (value ?? "").split(/[,;|/]+/))
+      .map((value) => normalizeInventoryPurpose(value))
+      .filter((value) => value !== "unknown"),
+  );
+}
+
 export function deriveInventoryMacroCategory(input: {
   priority?: ConsentReviewPriority | null;
   purpose?: string | null;
@@ -719,7 +888,7 @@ export function deriveInventoryMacroCategory(input: {
   if (/^(security|necessary|payment|payment_processors|authentication|cookie_compliance|consent|consent_management)$/.test(purpose)) {
     return "Essential";
   }
-  if (/^(tag_management|tag_manager|functional|customer_support|personalization|personalisation|embedded_content)$/.test(purpose)) {
+  if (/^(tag_management|tag_manager|functional|customer_support|personalization|personalisation|embedded_content|embedded_media)$/.test(purpose)) {
     return "Functional";
   }
   if (/^(cdn|cdn_static)$/.test(purpose)) {
@@ -727,20 +896,49 @@ export function deriveInventoryMacroCategory(input: {
       ? "Functional"
       : "Essential";
   }
-  if (input.priority === "contextual") {
-    return "Essential";
-  }
   if (input.priority === "high") {
     return "Advertising";
   }
-  if (input.priority === "medium") {
-    return "Analytics";
+  return "Review";
+}
+
+export function classifyInventoryEvidence(
+  row: Pick<InventoryGroupRow, "macroCategory" | "priority" | "purpose" | "purposes">
+): InventoryEvidenceClassification {
+  if (row.priority === "high" || row.priority === "medium") {
+    return "Non-essential";
   }
-  return "Unknown";
+  if (row.priority === "review_needed" || row.macroCategory === "Review") {
+    return "Review";
+  }
+
+  const purposeTokens = getInventoryPurposeTokens([row.purpose, ...row.purposes]);
+  if (
+    purposeTokens.has("cookie_compliance") ||
+    purposeTokens.has("consent") ||
+    purposeTokens.has("consent_management")
+  ) {
+    return "Contextual";
+  }
+
+  // A functional-looking category does not prove the observed activity was
+  // necessary in this page context. Payment, authentication, CDN, and generic
+  // functional activity remain contextual without an explicit necessity basis.
+  if (purposeTokens.has("necessary") || purposeTokens.has("security")) {
+    return "Essential";
+  }
+
+  return "Contextual";
 }
 
 export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {
-  const purpose = normalizeInventoryPurpose(getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance));
+  const purposeLabels = [
+    getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance),
+    row.vendorDisplayCategory,
+    row.category,
+    ...(row.regulatoryRelevance ?? [])
+  ];
+  const purposeTokens = getInventoryPurposeTokens(purposeLabels);
   const confidence = getTrackerInventoryConfidence(row);
   const normalizedLabel = row.label.toLowerCase();
   const isLinkedInAdsPixel =
@@ -750,19 +948,52 @@ export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): Conse
   if (isLinkedInAdsPixel) {
     return row.preConsent ? "high" : "review_needed";
   }
-  if (/^(advertising|advertising_measurement|retargeting|session_replay|fingerprinting)$/.test(purpose)) {
+  const hasHighRiskPurpose = [
+    "advertising",
+    "advertising_measurement",
+    "ad_measurement",
+    "retargeting",
+    "audience_measurement",
+    "session_replay",
+    "fingerprinting"
+  ].some((purpose) => purposeTokens.has(purpose));
+  if (hasHighRiskPurpose) {
     return row.preConsent ? "high" : "medium";
   }
-  if (/^(personalization|personalisation)$/.test(purpose) && confidence === "low") {
+  const hasMediumRiskPurpose = [
+    "analytics",
+    "experimentation",
+    "personalization",
+    "personalisation",
+    "a_b_testing",
+    "embedded_content",
+    "tag_management",
+    "tag_manager",
+    "marketing_automation"
+  ].some((purpose) => purposeTokens.has(purpose));
+  if ((purposeTokens.has("personalization") || purposeTokens.has("personalisation")) && confidence === "low") {
     return "review_needed";
   }
-  if (/^(analytics|audience_measurement|experimentation|personalization|personalisation|a_b_testing|embedded_content|tag_management|tag_manager|marketing_automation)$/.test(purpose)) {
+  if (hasMediumRiskPurpose) {
     return row.preConsent ? "medium" : "contextual";
   }
-  if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics)$/.test(purpose)) {
+  const hasContextualPurpose = [
+    "security",
+    "payment",
+    "payment_processors",
+    "authentication",
+    "cookie_compliance",
+    "consent",
+    "consent_management",
+    "performance_monitoring",
+    "telemetry",
+    "diagnostics",
+    "telemetry_diagnostics"
+  ].some((purpose) => purposeTokens.has(purpose));
+  if (hasContextualPurpose) {
     return "contextual";
   }
-  if (/^(cdn_static|cdn|functional|publisher_infrastructure)$/.test(purpose)) {
+  if (["cdn_static", "cdn", "functional", "publisher_infrastructure"].some((purpose) => purposeTokens.has(purpose))) {
     return "contextual";
   }
   if (row.category === "unknown" || row.category === "unresolved_host" || row.domains.length === 0) {
@@ -790,15 +1021,15 @@ export function getTrackerInventoryConfidence(row: TrackerInventoryRow): Invento
 
 function formatTrackerParty(row: TrackerInventoryRow) {
   if (row.party === "first_party") {
-    return "—";
+    return "first_party" as const;
   }
   if (row.party === "mixed") {
     return "mixed";
   }
   if (row.party === "third_party") {
-    return "3rd";
+    return "third_party" as const;
   }
-  return row.preConsent ? "3rd" : "—";
+  return row.preConsent ? "third_party" as const : "unknown" as const;
 }
 
 function priorityWeight(priority: ConsentReviewPriority) {
@@ -954,15 +1185,113 @@ export function suppressUnsupportedCmpAliasRows(rows: TrackerInventoryRow[]) {
 
 export function buildRuntimeInventoryGroupRows(input: {
   cookieRows: RuntimeCookieEvidenceRow[];
+  dataFlows?: PreConsentDataFlow[];
   firstPartyDomain?: string | null;
   trackerRows: TrackerInventoryRow[];
 }) {
   const groupedCookieRows = buildCookieInventoryGroupRows(input.cookieRows, { firstPartyDomain: input.firstPartyDomain });
   const groupedTrackerRows = buildTrackerInventoryGroupRows(input.trackerRows);
-  return [
-    ...groupedCookieRows.map((row) => ({ ...row, type: "cookie" as const })),
-    ...groupedTrackerRows.map((row) => ({ ...row, type: "tracker" as const }))
-  ].sort(compareInventoryPriorityRows);
+  const candidates: InventoryGroupRow[] = [
+    ...groupedCookieRows.map((row): InventoryGroupRow => {
+      const owner = row.cookieDetails
+        .map((detail) => findRuntimeCookieOwner(detail.cookieName, detail.domain))
+        .find((candidate) => candidate !== null) ??
+        findRuntimeVendorLabelOwner(row.vendor) ??
+        row.domains.map(findRuntimeEntityOwner).find((candidate) => candidate !== null);
+      return {
+        ...row,
+        attributionSignatures: row.attributionEvidence?.signatureId ? [row.attributionEvidence.signatureId] : [],
+        canonicalEntity: owner?.entity ?? null,
+        dataFlows: (input.dataFlows ?? []).filter((flow) =>
+          flow.controllingEntity.legalEntity && flow.controllingEntity.legalEntity === owner?.entity
+        ),
+        preConsent: row.cookieDetails.some((detail) => detail.observedBeforeConsent === true),
+        purposes: [row.purpose],
+        rawProducts: [owner?.product ?? row.vendor],
+        regulatoryRelevance: owner?.regulatoryRelevance ?? [],
+        requestCount: null,
+        type: "cookie",
+        vendor: owner?.vendor ?? row.vendor,
+      };
+    }),
+    ...groupedTrackerRows.map((row): InventoryGroupRow => {
+      const owner = findRuntimeVendorLabelOwner(row.vendor) ??
+        row.domains.map(findRuntimeEntityOwner).find((candidate) => candidate !== null);
+      return {
+        ...row,
+        canonicalEntity: owner?.entity ?? null,
+        cookieDetails: [],
+        dataFlows: (input.dataFlows ?? []).filter((flow) =>
+          flow.controllingEntity.legalEntity && flow.controllingEntity.legalEntity === owner?.entity ||
+          row.domains.includes(flow.endpoint)
+        ),
+        purposes: [row.purpose],
+        rawProducts: [owner?.product ?? row.rawProducts[0] ?? row.vendor],
+        setByThirdPartyScript: false,
+        type: "tracker",
+        vendor: owner?.vendor ?? row.vendor,
+      };
+    }),
+  ];
+  const compatibleRows = new Map<string, InventoryGroupRow>();
+  for (const candidate of candidates) {
+    const productIdentity = candidate.rawProducts
+      .map((product) => product.trim().toLowerCase())
+      .filter(Boolean)
+      .sort()
+      .join("|") || candidate.vendor.toLowerCase();
+    const key = JSON.stringify([
+      candidate.canonicalEntity?.toLowerCase() ?? null,
+      productIdentity,
+      candidate.macroCategory,
+      normalizeInventoryPurpose(candidate.purpose),
+    ]);
+    const existing = compatibleRows.get(key);
+    if (!existing) {
+      compatibleRows.set(key, candidate);
+      continue;
+    }
+    const priority = priorityWeight(candidate.priority) > priorityWeight(existing.priority)
+      ? candidate.priority
+      : existing.priority;
+    const purposes = uniqueStrings([...existing.purposes, ...candidate.purposes]);
+    compatibleRows.set(key, {
+      ...existing,
+      attributionSignatures: uniqueStrings([...existing.attributionSignatures, ...candidate.attributionSignatures]),
+      confidence: confidenceWeight(candidate.confidence) > confidenceWeight(existing.confidence)
+        ? candidate.confidence
+        : existing.confidence,
+      cookieDetails: [...existing.cookieDetails, ...candidate.cookieDetails],
+      dataFlows: [...existing.dataFlows, ...candidate.dataFlows].filter((flow, index, all) =>
+        all.findIndex((item) => `${item.endpoint}\u0000${item.networkDestination.ip ?? ""}` === `${flow.endpoint}\u0000${flow.networkDestination.ip ?? ""}`) === index
+      ),
+      cookieNames: uniqueStrings([...existing.cookieNames, ...candidate.cookieNames]),
+      domains: uniqueStrings([...existing.domains, ...candidate.domains]),
+      firstSeenMs: existing.firstSeenMs !== null && candidate.firstSeenMs !== null
+        ? Math.min(existing.firstSeenMs, candidate.firstSeenMs)
+        : existing.firstSeenMs ?? candidate.firstSeenMs,
+      macroCategory: deriveInventoryMacroCategory({
+        priority,
+        purpose: purposes.length === 1 ? purposes[0] : candidate.macroCategory === "Advertising" || existing.macroCategory === "Advertising"
+          ? "advertising"
+          : purposes[0],
+        vendor: existing.vendor,
+      }),
+      party: mergePartyValues(existing.party, candidate.party),
+      preConsent: existing.preConsent || candidate.preConsent,
+      priority,
+      purpose: purposes.length === 1 ? purposes[0] ?? "Review" : "Multiple purposes",
+      purposes,
+      rawProducts: uniqueStrings([...existing.rawProducts, ...candidate.rawProducts]),
+      regulatoryRelevance: uniqueStrings([...existing.regulatoryRelevance, ...candidate.regulatoryRelevance]),
+      requestCount: (existing.requestCount ?? 0) + (candidate.requestCount ?? 0) || null,
+      setByThirdPartyScript: existing.setByThirdPartyScript || candidate.setByThirdPartyScript,
+      syncedIdentifiers: uniqueStrings([...(existing.syncedIdentifiers ?? []), ...(candidate.syncedIdentifiers ?? [])]),
+      timingEvidence: existing.timingEvidence === candidate.timingEvidence ? existing.timingEvidence : "mixed",
+      type: existing.type === "tracker" || candidate.type === "tracker" ? "tracker" : "cookie",
+    });
+  }
+  return [...compatibleRows.values()].sort(compareInventoryPriorityRows);
 }
 
 export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailResponse) {
@@ -993,10 +1322,17 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
   }));
   const browserExtensionRequestRows = buildBrowserExtensionRequestInventoryRows(hybridRuntimeEvidence);
   const trackerRows = browserExtensionRequestRows.length > 0 ? browserExtensionRequestRows : canonicalTrackerRows;
+  const dataFlows = buildPreConsentDataFlows(hybridRuntimeEvidence);
 
   return {
     cookieRows,
+    dataFlows,
     trackerRows,
-    groupedRows: buildRuntimeInventoryGroupRows({ cookieRows, firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost, trackerRows })
+    groupedRows: buildRuntimeInventoryGroupRows({
+      cookieRows,
+      dataFlows,
+      firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
+      trackerRows
+    })
   };
 }

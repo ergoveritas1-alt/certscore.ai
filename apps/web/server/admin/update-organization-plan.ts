@@ -4,13 +4,14 @@ import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { ADMIN_PLAN_STATUSES, PLAN_CODES } from "../../lib/admin/plan-options";
 import { updateAdminOrganizationPlan } from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 const schema = z.object({
   organizationId: z.string().uuid("Invalid organization."),
-  plan: z.enum(["free", "individual", "pro", "team"]),
-  planStatus: z.enum(["active", "trialing", "past_due", "paused"])
+  plan: z.enum(PLAN_CODES),
+  planStatus: z.enum(ADMIN_PLAN_STATUSES)
 });
 
 export async function updateOrganizationPlanFormAction(formData: FormData): Promise<void> {

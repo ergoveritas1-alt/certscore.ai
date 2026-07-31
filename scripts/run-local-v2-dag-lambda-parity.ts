@@ -217,6 +217,7 @@ async function main() {
       profile: args.profile,
       ...(args.debugOverrides ? { debugOverrides: args.debugOverrides } : {}),
       resultHandoff: "sqs",
+      resultPurpose: "synthetic_verification",
       resultQueueUrl: "local://certscore-v2-dag-local-parity-results",
       scanId: args.scanId,
       scannerRuntime: "certscore-v2-dag-parallel-path",

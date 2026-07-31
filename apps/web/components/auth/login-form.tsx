@@ -172,6 +172,10 @@ export function LoginForm(input?: {
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-700">Account access</h2>
+          <p className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-950">{isCreateAccount ? "Create your workspace" : "Welcome back"}</p>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            {isCreateAccount ? "Start with a focused, evidence-led review." : "Sign in to continue reviewing your workspace."}
+          </p>
         </div>
 
         {allowCreateAccount ? (
@@ -222,12 +226,12 @@ export function LoginForm(input?: {
       ) : null}
 
       {input?.allowGoogle ? (
-        <div className="space-y-4 rounded-[28px] border border-slate-200/90 bg-[linear-gradient(180deg,rgba(248,250,252,0.82)_0%,rgba(255,255,255,0.98)_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+        <div className="space-y-4">
           <a
-            className="group flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] px-4 py-3 text-sm font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:bg-[linear-gradient(180deg,#ffffff_0%,#f3f8ff_100%)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.08)]"
+            className="group flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl border-2 border-sky-200 bg-[linear-gradient(180deg,#ffffff_0%,#eff8ff_100%)] px-4 py-3 text-base font-semibold text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_3px_0_rgba(125,211,252,0.9),0_14px_28px_-16px_rgba(14,116,144,0.7)] transition hover:-translate-y-0.5 hover:border-sky-400 hover:bg-[linear-gradient(180deg,#ffffff_0%,#e0f2fe_100%)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_4px_0_rgba(56,189,248,0.95),0_18px_32px_-16px_rgba(14,116,144,0.82)] active:translate-y-0.5 active:shadow-[inset_0_2px_5px_rgba(15,23,42,0.16)]"
             href={`/auth/google?next=${encodeURIComponent(nextPath)}`}
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition group-hover:border-slate-300">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-sky-200 bg-white shadow-[0_2px_6px_rgba(15,23,42,0.1)] transition group-hover:border-sky-300">
               <GoogleMark />
             </span>
             <span className="tracking-[0.01em]">Continue with Google</span>

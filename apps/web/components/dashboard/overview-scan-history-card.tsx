@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import type { OrganizationScanListItem } from "../../server/scans/get-organization-scans";
@@ -79,14 +80,14 @@ export function OverviewScanHistoryCard({ scans }: OverviewScanHistoryCardProps)
             <p className="text-xs text-slate-500">Showing {start + 1}–{Math.min(start + visibleGroups.length, groups.length)} of {groups.length}</p>
             <div className="flex items-center gap-2">
               <select aria-label="Rows per page" className="h-8 rounded-full border border-slate-300 bg-white px-3 text-xs" onChange={(event) => { setPageSize(Number(event.target.value)); setCurrentPage(1); }} value={pageSize}>{PAGE_SIZE_OPTIONS.map((option) => <option key={option} value={option}>{option} per page</option>)}</select>
-              <button className="h-8 rounded-full border border-slate-300 bg-white px-3 text-xs disabled:opacity-40" disabled={page <= 1} onClick={() => setCurrentPage((value) => Math.max(1, value - 1))} type="button">Previous</button>
-              <button className="h-8 rounded-full border border-slate-300 bg-white px-3 text-xs disabled:opacity-40" disabled={page >= totalPages} onClick={() => setCurrentPage((value) => Math.min(totalPages, value + 1))} type="button">Next</button>
+              <button className="app-raised-button h-8 rounded-full px-3 text-xs disabled:opacity-40" disabled={page <= 1} onClick={() => setCurrentPage((value) => Math.max(1, value - 1))} type="button">Previous</button>
+              <button className="app-raised-button h-8 rounded-full px-3 text-xs disabled:opacity-40" disabled={page >= totalPages} onClick={() => setCurrentPage((value) => Math.min(totalPages, value + 1))} type="button">Next</button>
             </div>
           </div>
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="table-fixed text-left text-xs" style={{ minWidth: "1125px" }}>
               <colgroup><col style={{ width: "40px" }} /><col style={{ width: "180px" }} /><col style={{ width: "75px" }} /><col style={{ width: "60px" }} /><col style={{ width: "205px" }} /><col style={{ width: "80px" }} /><col style={{ width: "60px" }} /><col style={{ width: "95px" }} /><col style={{ width: "155px" }} /><col style={{ width: "175px" }} /></colgroup>
-              <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr>{["Status", "Website", "Evidence score", "Top", "Privacy / CMP", "Time", "From", "Freshness", "Scanned", "Actions"].map((label) => <th className="border-b border-slate-200 px-2.5 py-1.5 font-semibold" key={label}>{label}</th>)}</tr></thead>
+              <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr>{["Status", "Website", "Score", "Top", "Privacy / CMP", "Time", "From", "Freshness", "Scanned", "Actions"].map((label) => <th className="border-b border-slate-200 px-2.5 py-1.5 font-semibold" key={label}>{label}</th>)}</tr></thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {visibleGroups.map((group) => {
                   const latest = group.scans[0];
@@ -105,8 +106,8 @@ export function OverviewScanHistoryCard({ scans }: OverviewScanHistoryCardProps)
                     <td className="px-2.5 py-1.5"><span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">{freshnessLabel(latest.freshRescanRequested)}</span></td>
                     <td className="px-2.5 py-1.5 text-[11px] text-slate-600">{formatDateTime(latest.completedAt ?? latest.createdAt)}</td>
                     <td className="px-2.5 py-1.5"><div className="flex items-center gap-1">
-                      <PendingButtonLink ariaLabel="View latest scan" className="h-8 w-8 rounded-full border border-slate-300 bg-white p-0" href={`/app/scans/${latest.id}`} idleContent={<ViewIcon />} pendingContent="…" size="sm" title="View latest scan" variant="secondary" />
-                      {earlier.length > 0 ? <details className="relative"><summary aria-label="Earlier scans" className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full border border-slate-300 bg-white [&::-webkit-details-marker]:hidden"><HistoryIcon /></summary><div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl"><p className="px-2 py-1 text-xs font-semibold text-slate-900">Earlier scans</p>{earlier.map((scan) => <a className="block rounded-lg px-2 py-1.5 text-xs hover:bg-slate-50" href={`/app/scans/${scan.id}`} key={scan.id}>{formatDateTime(scan.completedAt ?? scan.createdAt)} · {scan.certscoreOverall ?? "—"}<span className="text-slate-400">/100 · {scan.scoreLabel ?? "Not scored"}</span></a>)}</div></details> : null}
+                      <PendingButtonLink ariaLabel="View latest scan" className="h-8 w-8 rounded-full border border-slate-300 bg-white p-0" href={`/app/scans/${latest.id}`} idleContent={<ViewIcon />} pendingContent="…" prefetch={false} size="sm" title="View latest scan" variant="secondary" />
+                      {earlier.length > 0 ? <details className="relative"><summary aria-label="Earlier scans" className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full border border-slate-300 bg-white [&::-webkit-details-marker]:hidden"><HistoryIcon /></summary><div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl"><p className="px-2 py-1 text-xs font-semibold text-slate-900">Earlier scans</p>{earlier.map((scan) => <Link className="block rounded-lg px-2 py-1.5 text-xs hover:bg-slate-50" href={`/app/scans/${scan.id}`} key={scan.id} prefetch={false}>{formatDateTime(scan.completedAt ?? scan.createdAt)} · {scan.certscoreOverall ?? "—"}<span className="text-slate-400">/100 · {scan.scoreLabel ?? "Not scored"}</span></Link>)}</div></details> : null}
                     </div></td>
                   </tr>;
                 })}

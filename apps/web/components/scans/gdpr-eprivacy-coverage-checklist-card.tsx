@@ -17,7 +17,8 @@ import {
   getAssessmentDirection,
   getEvidenceLabel,
   type AssessmentDirection,
-  type EvidenceLabel
+  type EvidenceLabel,
+  type GdprEprivacyAssessmentSummaryCounts
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
@@ -122,7 +123,6 @@ const REPORT_ROW_GROUPS = [
       "advertising_retargeting_vendor_signal_observed",
       "retargeting_behavioral_advertising_signal_observed",
       "analytics_vendor_observed",
-      "third_party_service_connection_pre_consent",
       "third_party_iframe_pre_consent",
       "social_media_embed_pre_consent",
       "embedded_content_pre_consent"
@@ -192,10 +192,10 @@ function getGdprTransparencyPolicyReviewPayload(item: GdprEprivacyCoverageCheckl
   const rowSpecificSectionEvidence =
     getRecord(evidence.rowSpecificSectionEvidence) ??
     getRecord(evidence.row_specific_section_evidence);
-  const summary = getRecord(evidence.policySurfaceSummary) ?? getRecord(evidence.policy_surface_summary);
-  if (!summary) {
-    return null;
-  }
+  const summary =
+    getRecord(evidence.policySurfaceSummary) ??
+    getRecord(evidence.policy_surface_summary) ??
+    {};
   const fullRetainedPolicyText =
     getString(summary.retainedPrivacyPolicyTextExcerpt) ??
     getString(summary.retained_privacy_policy_text_excerpt) ??
@@ -264,6 +264,12 @@ function getGdprTransparencyPolicyReviewPayload(item: GdprEprivacyCoverageCheckl
     return null;
   }
   const sourceUrl = [
+    getString(rowSpecificSectionEvidence?.selectedPolicySectionUrl),
+    getString(rowSpecificSectionEvidence?.selected_policy_section_url),
+    getString(article13Signal?.selectedPolicySectionUrl),
+    getString(article13Signal?.selected_policy_section_url),
+    getString(article13Signal?.sourceUrl),
+    getString(article13Signal?.source_url),
     ...getStringArray(summary.privacyPolicyUrls),
     ...getStringArray(summary.privacy_policy_urls),
     getString(summary.selectedPolicySectionUrl),
@@ -1059,39 +1065,11 @@ function getDisplayEvidenceRefs(item: GdprEprivacyCoverageChecklistItem) {
   return item.evidenceRefs.map(humanizeEvidenceToken).slice(0, 6);
 }
 
-export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivacyCoverageChecklistItem[] }) {
-  const summaryCounts = items.reduce<Record<AssessmentDirection | "gap_observed", number>>((counts, item) => {
-    const direction = getAssessmentDirection(item);
-    if (direction === "technical_limitation") {
-      counts.technical_limitation += 1;
-      return counts;
-    }
-    if (direction === "positive_signal") {
-      counts.positive_signal += 1;
-      return counts;
-    }
-    if (direction === "neutral_signal") {
-      counts.neutral_signal += 1;
-      return counts;
-    }
-    if (item.assessmentStatus === "gap_observed" || item.status === "Gap observed") {
-      counts.gap_observed += 1;
-      return counts;
-    }
-    if (direction === "potential_concern") {
-      counts.potential_concern += 1;
-      return counts;
-    }
-    counts.review_signal += 1;
-    return counts;
-  }, {
-    gap_observed: 0,
-    neutral_signal: 0,
-    positive_signal: 0,
-    potential_concern: 0,
-    review_signal: 0,
-    technical_limitation: 0
-  });
+export function GdprEprivacyCoverageSummaryPills({
+  summaryCounts
+}: {
+  summaryCounts: GdprEprivacyAssessmentSummaryCounts;
+}) {
   type DecisionMixSegment = {
     color: string;
     count: number;
@@ -1111,7 +1089,7 @@ export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivac
       color: "#d97706",
       count: summaryCounts.potential_concern,
       direction: "potential_concern",
-      label: "partial concern",
+      label: "partial",
       tooltip: "Rows with review-relevant evidence that may indicate a concern, but where context, scope, or evidence strength makes the signal less direct."
     },
     {
@@ -1139,7 +1117,7 @@ export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivac
       color: "#94a3b8",
       count: summaryCounts.technical_limitation,
       direction: "technical_limitation",
-      label: "coverage limited",
+      label: "limited",
       tooltip: "Rows where retained coverage did not support testing this area."
     }
   ] satisfies DecisionMixSegment[]).filter((item) => item.count > 0);
@@ -1149,7 +1127,7 @@ export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivac
   return (
     <div
       aria-label={`GDPR/ePrivacy checklist rating mix: ${summaryLabel}`}
-      className="ml-auto flex min-w-[18rem] max-w-xl shrink-0 flex-col items-stretch justify-start rounded-2xl border border-slate-200 bg-white/85 px-3 py-2 shadow-sm"
+      className="ml-auto flex min-w-[18rem] max-w-3xl shrink-0 flex-col items-stretch justify-start rounded-2xl border border-slate-200 bg-white/85 px-3 py-2 shadow-sm"
     >
       <div className="mb-1 flex items-baseline justify-between gap-3">
         <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Rating mix</span>
@@ -1168,7 +1146,7 @@ export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivac
           />
         ))}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
+      <div className="mt-2 flex flex-nowrap items-center justify-end gap-x-4 overflow-x-auto">
         {statusSummary.map((item) => (
           <span key={item.direction} className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] text-slate-600">
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
@@ -1243,12 +1221,6 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
     return item.status === "Observed" || item.status === "Review signal"
       ? "Analytics or measurement vendor evidence was observed in the retained runtime context."
       : "No analytics or measurement vendor signal was observed in the retained runtime context.";
-  }
-
-  if (item.id === "third_party_service_connection_pre_consent") {
-    return item.status === "Gap observed" || item.status === "Observed" || item.status === "Review signal"
-      ? "Known 3rd party embed or service connections were retained before a recorded consent action."
-      : "No known 3rd party embed or service connection was observed before a recorded consent action.";
   }
 
   if (item.id === "third_party_iframe_pre_consent") {
@@ -1687,33 +1659,25 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     ]);
   }
 
-  if (item.id === "third_party_service_connection_pre_consent" || item.id === "third_party_iframe_pre_consent") {
+  if (item.id === "third_party_iframe_pre_consent") {
     const hosts = uniqueStrings([
       ...getStringArrayFromEvidenceKeys(evidence, ["embeddedContentHosts", "embedded_content_hosts", "embeddedHosts", "embedded_hosts"]),
       ...getNestedRecordStrings(evidence.embeddedContentObservations, ["host", "hostname", "domain"])
     ]).slice(0, 4);
     const purposeParts = getEmbeddedContentPurposeParts(evidence);
     if (evidenceLabel === "Not observed") {
-      return item.id === "third_party_iframe_pre_consent"
-        ? "No eligible 3rd party iframe embed was observed before a recorded consent action."
-        : "No eligible 3rd party embed or service connection was observed before a recorded consent action.";
+      return "No eligible 3rd party iframe embed was observed before a recorded consent action.";
     }
     if (purposeParts.length > 0) {
       return joinRationaleParts([
-        item.id === "third_party_iframe_pre_consent"
-          ? `3rd party iframe embeds loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`
-          : `3rd party embed or service connections occurred before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`,
+        `3rd party iframe embeds loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`,
         formatFirstSeenPhrase(firstSeenMs)
       ]);
     }
     return joinRationaleParts([
       hosts.length > 0
-        ? item.id === "third_party_iframe_pre_consent"
-          ? `3rd party iframe embeds loaded before any recorded consent action: ${formatList(hosts)}`
-          : `3rd party embed or service connections occurred before any recorded consent action: ${formatList(hosts)}`
-        : item.id === "third_party_iframe_pre_consent"
-          ? "3rd party iframe embeds loaded before any recorded consent action"
-          : "3rd party embed or service connections occurred before any recorded consent action",
+        ? `3rd party iframe embeds loaded before any recorded consent action: ${formatList(hosts)}`
+        : "3rd party iframe embeds loaded before any recorded consent action",
       formatFirstSeenPhrase(firstSeenMs)
     ]);
   }
@@ -1729,7 +1693,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
         : "A refusal path was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
     }
     if (evidenceLabel === "Potential gap") {
-      return "A first-layer reject-all or equivalent refusal path was expected from the observed consent surface but was not retained.";
+      return "The sufficiently retained first-layer consent surface did not show a reject, necessary-only, or equivalent refusal option. First-layer presentation expectations can vary by jurisdiction, so manual review is recommended.";
     }
   }
 
@@ -1744,7 +1708,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
         : "An accept consent control was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
     }
     if (evidenceLabel === "Potential gap") {
-      return "A first-layer accept consent control was expected from the observed consent surface but was not retained as structured control evidence.";
+      return "The retained first-layer consent surface did not confirm an explicit affirmative-choice control.";
     }
   }
 
@@ -1759,7 +1723,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
         : "An options/settings/preferences control was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
     }
     if (evidenceLabel === "Potential gap") {
-      return "A first-layer options/settings/preferences control was expected from the observed consent surface but was not retained as structured control evidence.";
+      return "The sufficiently retained first-layer consent surface did not show an options, settings, preferences, or manage-choices control.";
     }
   }
 
@@ -2625,7 +2589,7 @@ function RowToolButton({
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "group/tool inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition",
+        "scan-report-button group/tool inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
         active
           ? icon === "evidence"
             ? "border-sky-300 bg-sky-50 text-sky-700 shadow-sm"
@@ -2736,7 +2700,7 @@ function PolicyExcerptModal({
           </div>
           <button
             aria-label="Close policy excerpt"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+            className="scan-report-button inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-500 hover:text-slate-900"
             type="button"
             onClick={onClose}
           >
@@ -2837,6 +2801,11 @@ function ChecklistRows({
                 <div className="min-w-0 space-y-1.5">
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <p className="min-w-0 font-medium text-slate-950">{item.label}</p>
+                    <InfoTip
+                      align="start"
+                      placement="bottom"
+                      text={`This finding explains how the scan evaluates ${item.label.toLowerCase()}. Use the status and evidence packet to interpret the retained signal; it is review context, not a legal conclusion.`}
+                    />
                     <span
                       className={cn(
                         "inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.1em]",
@@ -2852,7 +2821,7 @@ function ChecklistRows({
             </div>
             <div className="min-w-0 space-y-1">
               <div className="hidden items-start gap-2 md:flex">
-                <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                <div className="flex w-[6.75rem] shrink-0 items-center gap-1 pt-0.5">
                   {showPolicyReview ? (
                     <RowToolButton
                       active={false}
@@ -2881,7 +2850,7 @@ function ChecklistRows({
                 <p className="line-clamp-2 min-w-0 text-sm leading-6 text-slate-600">{renderRationaleText(rowRationale)}</p>
               </div>
               <div className="flex items-start gap-2 md:hidden">
-                <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                <div className="flex w-[6.75rem] shrink-0 items-center gap-1 pt-0.5">
                   {showPolicyReview ? (
                     <RowToolButton
                       active={false}

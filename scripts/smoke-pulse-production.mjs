@@ -33,6 +33,9 @@ function assertDisclaimer(body, url) {
 }
 
 function assertPulseHeaders(result, route) {
+  assert.equal(result.response.headers.get("x-certscore.ai-pulse"), "v1", `${result.url} omitted X-CertScore.ai-Pulse`);
+  assert.equal(result.response.headers.get("x-certscore.ai-route"), route, `${result.url} omitted X-CertScore.ai-Route=${route}`);
+  assert.match(result.response.headers.get("x-certscore.ai-request-id") ?? "", /.+/, `${result.url} omitted X-CertScore.ai-Request-Id`);
   assert.equal(result.response.headers.get("x-certscore-pulse"), "v1", `${result.url} omitted X-CertScore-Pulse`);
   assert.equal(result.response.headers.get("x-certscore-route"), route, `${result.url} omitted X-CertScore-Route=${route}`);
   assert.match(result.response.headers.get("x-certscore-request-id") ?? "", /.+/, `${result.url} omitted X-CertScore-Request-Id`);
@@ -74,7 +77,7 @@ async function main() {
   const docs = await get("/api-pulse");
   assert.equal(docs.response.status, 200);
   assert.match(docs.contentType, /^text\/html\b/);
-  assert.match(docs.bodyText, /CertScore Pulse API/);
+  assert.match(docs.bodyText, /CertScore(?:\.ai)? Pulse API/);
   results.push(docs);
 
   const health = await get("/api/v1/pulse-health");

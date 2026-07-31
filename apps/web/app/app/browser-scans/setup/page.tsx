@@ -77,12 +77,12 @@ export default async function BrowserScanSetupPage({ searchParams }: SetupPagePr
         <h1 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">Scan from your Chrome browser</h1>
         <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
           Use your normal Chrome session when CertScore.ai&apos;s hosted scanner cannot verify a representative public page.
-          The extension runs only after you start it and uploads bounded evidence; cookie values are never captured.
+          The extension runs only after you start it and uploads bounded evidence, including cookie names and attributes; cookie values are never captured.
         </p>
         {scan ? <p className="mt-4 text-sm text-slate-300">Preparing to rescan <strong className="text-white">{scan.scan.domainHostname ?? "this site"}</strong>.</p> : null}
         <div className="mt-7 flex flex-wrap gap-3">
           <a className="inline-flex min-h-12 items-center rounded-xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" href={storeUrl} rel="noreferrer" target="_blank">Add the CertScore.ai extension to Chrome</a>
-          {scan ? <Link className="inline-flex min-h-12 items-center rounded-xl border border-slate-600 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800" href={`/app/scans/${encodeURIComponent(scan.scan.id)}`}>Back to scan report</Link> : null}
+          {scan ? <Link className="inline-flex min-h-12 items-center rounded-xl border border-slate-600 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800" href={`/app/scans/${encodeURIComponent(scan.scan.id)}`} prefetch={false}>Back to scan report</Link> : null}
         </div>
       </header>
 

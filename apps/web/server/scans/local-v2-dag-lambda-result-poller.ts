@@ -8,6 +8,7 @@ import {
   type Message,
   type ReceiveMessageCommandOutput
 } from "@aws-sdk/client-sqs";
+import { classifyV2DagLambdaResultDisposition } from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -23,6 +24,7 @@ import {
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   getSqsQueueRegion,
   getLocalV2DagLambdaTargetEnvironment,
+  shouldUseLocalV2DagScanTool,
   type LocalV2DagLambdaTargetEnvironment
 } from "./local-v2-dag-scan-config";
 
@@ -47,6 +49,8 @@ type RetainedScanCompletionDiagnostics = {
   noGo: boolean;
   pageState: string | null;
   reasonCode: string | null;
+  scanNoGoAssessment: Record<string, unknown> | null;
+  visualAccessReview: Record<string, unknown> | null;
 };
 
 export type LocalV2DagLambdaResultPollerEnv = {
@@ -121,6 +125,8 @@ async function readRetainedScanCompletionDiagnostics(
       (visualReview.goNoGo ?? visualReview.go_no_go) === "NO_GO",
     pageState: typeof pageState === "string" ? pageState : null,
     reasonCode: typeof reasonCode === "string" ? reasonCode : null,
+    scanNoGoAssessment: Object.keys(assessment).length > 0 ? assessment : null,
+    visualAccessReview: Object.keys(visualReview).length > 0 ? visualReview : null,
   };
 }
 
@@ -130,20 +136,6 @@ function messageBody(message: Message) {
   }
 
   return message.Body;
-}
-
-function getManualSmokeResultScanId(rawMessage: unknown) {
-  try {
-    const record = asRecord(typeof rawMessage === "string" ? JSON.parse(rawMessage) : rawMessage);
-    const scanId = typeof record.scanId === "string" ? record.scanId : "";
-    return (
-      scanId.startsWith("manual-") ||
-      scanId.startsWith("postdeploy-") ||
-      scanId.startsWith("aro-gate-")
-    ) ? scanId : null;
-  } catch {
-    return null;
-  }
 }
 
 function getReceiptHandle(message: Message) {
@@ -424,6 +416,33 @@ export async function recordLocalV2DagLambdaResultEvent(
     throw new Error(`Cannot record local v2 DAG Lambda result for unknown scan ${parsedMessage.scanId}.`);
   }
 
+  if (shouldUseLocalV2DagScanTool()) {
+    if (parsedMessage.scannerRuntimeProvenance) {
+      const {
+        egressId: _egressId,
+        egressProvider: _egressProvider,
+        publicIpHash: _publicIpHash,
+        ...localRuntimeProvenance
+      } = parsedMessage.scannerRuntimeProvenance;
+      parsedMessage.scannerRuntimeProvenance = localRuntimeProvenance;
+    }
+    await query(
+      `update scans
+          set egress_id = null,
+              egress_provider = null
+        where id = $1`,
+      [parsedMessage.scanId]
+    );
+    await query(
+      `update scan_snapshots
+          set egress_id = null,
+              egress_type = null,
+              public_ip_hash = null
+        where scan_id = $1`,
+      [parsedMessage.scanId]
+    );
+  }
+
   const artifactMirror = await mirrorLocalV2DagLambdaArtifacts({
     mirrorAuxiliaryArtifacts: false,
     parsedMessage,
@@ -534,6 +553,9 @@ export async function recordLocalV2DagLambdaResultEvent(
           ...(parsedMessage.scannerGitSha ? { scannerGitSha: parsedMessage.scannerGitSha } : {}),
           ...(parsedMessage.scannerImageTag ? { scannerImageTag: parsedMessage.scannerImageTag } : {}),
           ...(parsedMessage.scannerRuntimeVersion ? { scannerRuntimeVersion: parsedMessage.scannerRuntimeVersion } : {}),
+          ...(parsedMessage.scannerRuntimeProvenance
+            ? { scannerRuntimeProvenance: parsedMessage.scannerRuntimeProvenance }
+            : {}),
           targetEnvironment: parsedMessage.targetEnvironment,
           v2ArtifactsRemainInternal: true,
           ...(parsedMessage.error ? { error: parsedMessage.error } : {})
@@ -570,12 +592,15 @@ export async function recordLocalV2DagLambdaResultEvent(
     `update scans
         set completed_at = coalesce(completed_at, $2::timestamptz),
             error_message = case when $3 = 'failed' then $4 else error_message end,
+            egress_id = coalesce($5, egress_id),
+            egress_provider = coalesce($6, egress_provider),
             scan_config_json = jsonb_set(
               scan_config_json,
               '{execution,v2DagLambda}',
               coalesce(scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || jsonb_build_object(
                 'completedAt', $2::timestamptz,
-                'dispatchState', case when $3 = 'failed' then 'failed' else 'completed' end
+                'dispatchState', case when $3 = 'failed' then 'failed' else 'completed' end,
+                'runtimeProvenance', $7::jsonb
               ),
               true
             ),
@@ -586,9 +611,31 @@ export async function recordLocalV2DagLambdaResultEvent(
       parsedMessage.scanId,
       parsedMessage.completedAt,
       parsedMessage.status,
-      parsedMessage.error?.message ?? null
+      parsedMessage.error?.message ?? null,
+      parsedMessage.scannerRuntimeProvenance?.egressId ?? null,
+      parsedMessage.scannerRuntimeProvenance?.egressProvider ?? null,
+      parsedMessage.scannerRuntimeProvenance
+        ? JSON.stringify(parsedMessage.scannerRuntimeProvenance)
+        : null,
     ]
   );
+  if (parsedMessage.scannerRuntimeProvenance) {
+    await query(
+      `update scan_snapshots
+          set egress_id = coalesce($2, egress_id),
+              egress_type = coalesce($3, egress_type),
+              public_ip_hash = coalesce($4, public_ip_hash),
+              region = coalesce($5, region)
+        where scan_id = $1`,
+      [
+        parsedMessage.scanId,
+        parsedMessage.scannerRuntimeProvenance.egressId ?? null,
+        parsedMessage.scannerRuntimeProvenance.egressProvider ?? null,
+        parsedMessage.scannerRuntimeProvenance.publicIpHash ?? null,
+        parsedMessage.scannerRuntimeProvenance.awsRegion,
+      ],
+    );
+  }
   if (parsedMessage.status === "completed" && retainedDiagnostics) {
     const pagesScanned = retainedDiagnostics.noGo ? 0 : 1;
     await query(
@@ -603,22 +650,43 @@ export async function recordLocalV2DagLambdaResultEvent(
         retainedDiagnostics.pageState,
       );
       await query(
-        `update scan_snapshots
-            set access_posture_class = 'early_loss',
-                blocked_flag = true,
-                coverage_level = 'limited_none',
-                homepage_fetch_status = 'failed',
-                pages_scanned = 0,
-                scan_outcome = $2,
-                stop_reason_code = $2,
-                stop_reason_detail = $3,
-                stop_reason_label = $4
-          where scan_id = $1`,
+        `insert into scan_snapshots (
+           scan_id, organization_id, domain_id, pages_requested, pages_scanned,
+           access_posture_class, blocked_flag, captcha_flag, coverage_level,
+           homepage_fetch_status, scan_outcome, stop_reason_code,
+           stop_reason_detail, stop_reason_label, scan_no_go_assessment,
+           visual_access_review
+         )
+         select s.id, s.organization_id, s.domain_id,
+                greatest(coalesce(s.pages_requested, s.pages_scanned, 1), 1),
+                0, 'early_loss', $5, $6, 'limited_none', 'failed', $2, $2,
+                $3, $4, $7::jsonb, $8::jsonb
+           from scans s
+          where s.id = $1
+            and s.organization_id is not null
+            and s.domain_id is not null
+         on conflict (scan_id) do update
+           set access_posture_class = 'early_loss',
+               blocked_flag = excluded.blocked_flag,
+               captcha_flag = excluded.captcha_flag,
+               coverage_level = 'limited_none',
+               homepage_fetch_status = 'failed',
+               pages_scanned = 0,
+               scan_outcome = excluded.scan_outcome,
+               stop_reason_code = excluded.stop_reason_code,
+               stop_reason_detail = excluded.stop_reason_detail,
+               stop_reason_label = excluded.stop_reason_label,
+               scan_no_go_assessment = coalesce(excluded.scan_no_go_assessment, scan_snapshots.scan_no_go_assessment),
+               visual_access_review = coalesce(excluded.visual_access_review, scan_snapshots.visual_access_review)`,
         [
           parsedMessage.scanId,
           retainedDiagnostics.reasonCode ?? "unknown_access_limitation",
           presentation.explanation,
           presentation.snapshotStopReasonLabel,
+          presentation.limitationKind === "scanner_access_limitation",
+          presentation.code === "captcha_or_challenge",
+          retainedDiagnostics.scanNoGoAssessment ? JSON.stringify(retainedDiagnostics.scanNoGoAssessment) : null,
+          retainedDiagnostics.visualAccessReview ? JSON.stringify(retainedDiagnostics.visualAccessReview) : null,
         ]
       );
     }
@@ -662,6 +730,31 @@ export async function recordLocalV2DagLambdaResultEvent(
     }
   }
   if (parsedMessage.status === "completed") {
+    // Build the persisted report read model before the status endpoint reports
+    // the scan as viewable. Otherwise the browser can navigate into the
+    // expensive request-time materialization path while this handoff is still
+    // finishing, which can surface as a transient origin/Cloudflare 502.
+    try {
+      const { getAnonymousScanById, getScanById } = await import("./get-scan-by-id");
+      const { materializeLocalV2DagScanDetail } = await import("./local-v2-dag-report");
+      const { persistScanReportProjection } = await import("./scan-report-projection");
+      const completedScan = context.organizationId
+        ? await getScanById({ organizationId: context.organizationId, scanId: parsedMessage.scanId })
+        : await getAnonymousScanById(parsedMessage.scanId);
+      if (completedScan) {
+        const materializedScan = await materializeLocalV2DagScanDetail(completedScan);
+        await persistScanReportProjection(materializedScan, {
+          snapshot: materializedScan.snapshot,
+          runtimeArtifacts: materializedScan.runtimeArtifacts
+        });
+      }
+    } catch (error) {
+      console.error(JSON.stringify({
+        event: "scan.report_projection.completion_persistence_failed",
+        scanId: parsedMessage.scanId,
+        error: error instanceof Error ? error.message : String(error)
+      }));
+    }
     const { persistCompletedLegacyGdprEprivacyAssessment } = await import("./score-assessment-lifecycle");
     const scorePersistence = await persistCompletedLegacyGdprEprivacyAssessment({
       organizationId: context.organizationId,
@@ -672,23 +765,18 @@ export async function recordLocalV2DagLambdaResultEvent(
     console.info(JSON.stringify({
       event: "scan.score_assessment.completion_persisted",
       legacyReason: scorePersistence.reason,
-      scanId: parsedMessage.scanId,
-      shadowModelVersion: "shadowModelVersion" in scorePersistence ? scorePersistence.shadowModelVersion : null,
-      shadowReason: "shadowReason" in scorePersistence ? scorePersistence.shadowReason : null
+      scanId: parsedMessage.scanId
     }));
   }
 }
 
 export function assertLocalV2DagCompletionScorePersistence(result: {
   reason: string;
-  shadowModelVersion?: string | null;
-  shadowReason?: string | null;
 }) {
   const legacyPersisted = result.reason === "inserted" || result.reason === "already_persisted";
-  const shadowPersisted = result.shadowReason === "inserted" || result.shadowReason === "already_persisted";
-  if (!legacyPersisted || !shadowPersisted || !result.shadowModelVersion) {
+  if (!legacyPersisted) {
     throw new Error(
-      `Completed scan score persistence is incomplete (legacy=${result.reason}, shadow=${result.shadowReason ?? "missing"}, model=${result.shadowModelVersion ?? "missing"}).`
+      `Completed scan score persistence is incomplete (legacy=${result.reason}).`
     );
   }
 }
@@ -805,18 +893,29 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
 
     const messageResults = await mapWithConcurrency(messages, RESULT_BATCH_CONCURRENCY, async (message) => {
       const rawMessage = messageBody(message);
-      const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
-      if (manualSmokeScanId) {
+      const disposition = classifyV2DagLambdaResultDisposition(rawMessage);
+      if (disposition.kind === "synthetic_verification") {
         await sqsClient.send(new DeleteMessageCommand({
           QueueUrl: queueUrl,
           ReceiptHandle: getReceiptHandle(message)
         }));
-        console.warn("[web] ignored manual local v2 DAG Lambda smoke result", {
+        console.warn("[web] acknowledged non-persistable local v2 DAG Lambda result", {
+          disposition: disposition.kind,
           messageId: message.MessageId ?? null,
           queueRegion: getSqsQueueRegion(queueUrl),
-          scanId: manualSmokeScanId
+          reason: disposition.reason,
+          scanId: disposition.scanId
         });
         return { deleted: 1, failed: 0, handled: 0 };
+      }
+      if (disposition.kind === "invalid") {
+        console.error("[web] rejected invalid local v2 DAG Lambda result identity", {
+          messageId: message.MessageId ?? null,
+          queueRegion: getSqsQueueRegion(queueUrl),
+          reason: disposition.reason,
+          scanId: disposition.scanId
+        });
+        return { deleted: 0, failed: 1, handled: 0 };
       }
       try {
         await handleMessage(rawMessage, {

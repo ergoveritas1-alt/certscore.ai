@@ -243,7 +243,8 @@ const PUBLIC_TITLE_OVERRIDES: Record<string, string> = {
   sensitive_data_collection_with_third_party_tracking_present: "Sensitive input surface with third-party tracking context",
   session_recording_services_detected: "Session replay service signal observed",
   forced_consent_interaction: "Consent prompt appeared to require interaction",
-  reject_option_missing_or_hidden: "Reject/refusal option not observed or nested",
+  pre_consent_tracking_detected: "Non-essential analytics initiated before a recorded affirmative choice",
+  reject_option_missing_or_hidden: "Decline consent control",
   rtb_cookie_sync_observed: "Adtech identity sync-like request observed",
   third_party_cookie_pre_consent: "Third-party cookie or storage observed before consent"
 };
@@ -486,7 +487,7 @@ const OBSERVED: Record<string, string> = {
   visual_contrast_accessibility_issue:
     "Retained automated accessibility evidence showed text or controls with contrast-related signals that may fall below the applicable automated threshold for the detected element and state.",
   pre_consent_tracking_detected:
-    "Runtime evidence showed a classified non-essential tracking, analytics, advertising, cross-site measurement, or storage signal before CertScore.ai observed a consent action or a prior consent state associated with that purpose.",
+    "Analytics-classified or other promotion-grade non-essential activity was observed before any recorded affirmative consent action. Retained consent-surface evidence, including ambiguous acknowledgment or implied-consent language when present, is supporting context rather than proof of affirmative choice.",
   semantic_labeling_accessibility_issue:
     "Retained automated accessibility evidence showed controls, links, form fields, regions, headings, or ARIA attributes with label, accessible-name, role, relationship, or name/role/value signals that may require semantic accessibility review.",
   fingerprinting_related_signals_observed:
@@ -510,7 +511,7 @@ const OBSERVED: Record<string, string> = {
   forced_consent_interaction:
     "Retained consent-surface evidence showed a consent prompt, overlay, or interaction state that appeared to block ordinary page access or require interaction before the scan could continue within the observed public-page scope.",
   reject_option_missing_or_hidden:
-    "Retained consent-surface evidence showed that a reject, decline, or equivalent refusal control was not observed on the initial consent layer, or appeared less directly available than the accept path within the observed scan scope.",
+    "A sufficiently retained first-layer consent surface did not show a reject, necessary-only, or equivalent refusal option, or the refusal path appeared less directly available. First-layer presentation expectations can vary by jurisdiction, so manual review is recommended.",
   sensitive_data_collection_with_third_party_tracking_present:
     "Retained page and runtime evidence showed a sensitive-input or sensitive-context surface alongside third-party tracking, analytics, advertising, replay, or measurement context in the observed scan scope.",
   asymmetric_consent_ui:

@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   article13DisclosureRejectReason,
+  hasSubstantiveLegalBasisEvidence,
+  hasSubstantiveProcessingPurposesEvidence,
   isArticle13DisclosureEvidenceUsable,
   type Article13DisclosureRejectionMode,
 } from "./article13-disclosure-rejection";
@@ -12,6 +14,88 @@ const rejectionModes: Article13DisclosureRejectionMode[] = [
   "retained_report",
   "multilingual_classifier",
 ];
+
+test("Privacy Shield transfer wording does not qualify as processing-purposes evidence", () => {
+  const text = "Our payment provider is certified under the EU-US Privacy Shield.";
+
+  assert.equal(hasSubstantiveProcessingPurposesEvidence(text), false);
+  assert.equal(
+    article13DisclosureRejectReason(text, "processing_purposes", { mode: "retained_report" }),
+    "insufficient_row_specific_terms",
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "We process your email address to process your donation and send a receipt.",
+      "processing_purposes",
+      { mode: "retained_report" },
+    ),
+    true,
+  );
+});
+
+test("passive purpose disclosures for enquiries and applications qualify as processing-purpose evidence", () => {
+  for (const text of [
+    "Your details from the form, including the contact details you provide, will be stored by us for the purpose of processing the enquiry and follow-up questions.",
+    "Application documents are stored in our recruiting system to process your application and contact you about the role.",
+    "Part of the data is collected to ensure error-free provision of the website. Other data may be used to analyse your user behaviour.",
+  ]) {
+    assert.equal(hasSubstantiveProcessingPurposesEvidence(text), true, text);
+    assert.equal(
+      article13DisclosureRejectReason(text, "processing_purposes", { mode: "retained_report" }),
+      null,
+      text,
+    );
+  }
+});
+
+test("retention-purpose wording does not qualify as processing-purposes evidence", () => {
+  const retentionText =
+    "How long do we keep your data? We retain it as long as necessary for the purpose for which it was collected.";
+
+  assert.equal(hasSubstantiveProcessingPurposesEvidence(retentionText), false);
+  assert.equal(
+    article13DisclosureRejectReason(retentionText, "processing_purposes", {
+      mode: "retained_report",
+    }),
+    "insufficient_row_specific_terms",
+  );
+});
+
+test("retention legal-obligation wording does not qualify as legal-basis evidence", () => {
+  const retentionText =
+    "Additional Information About Data Retention. After you close your account, we will delete your personal information, except if we need it to comply with our legal obligations and defend our rights. We retain such information for as long as required by law.";
+
+  assert.equal(hasSubstantiveLegalBasisEvidence(retentionText), false);
+  for (const mode of rejectionModes) {
+    assert.equal(
+      article13DisclosureRejectReason(retentionText, "legal_basis", { mode }),
+      "insufficient_row_specific_terms",
+      `${mode} should reject retention-only legal-obligation wording as legal-basis evidence`,
+    );
+  }
+});
+
+test("processing-linked legal obligations qualify as legal-basis evidence", () => {
+  const legalBasisText =
+    "We process your personal data to perform our contract, comply with our legal obligations, and pursue our legitimate interests.";
+
+  assert.equal(hasSubstantiveLegalBasisEvidence(legalBasisText), true);
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(legalBasisText, "legal_basis", {
+      mode: "retained_report",
+    }),
+    true,
+  );
+});
+
+test("named-controller purpose statements qualify as processing-purposes evidence", () => {
+  assert.equal(
+    hasSubstantiveProcessingPurposesEvidence(
+      "Aruba processes personal data to handle contact requests, provide contracted services, protect network security, and prevent fraud.",
+    ),
+    true,
+  );
+});
 
 test("Article 13 rejection contract rejects navigation chrome consistently across modes", () => {
   const navigation =

@@ -33,6 +33,85 @@ test("unknown checklist rows withhold scoring instead of receiving a silent fall
   assert.match(result.summary, /configuration is missing/i);
 });
 
+test("balanced Accept and Decline without first-layer settings does not incur a material score penalty", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [{
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          balancedAcceptDeclineWithoutFirstLayerSettings: true,
+        },
+      },
+      evidenceState: "observed",
+      id: "options_settings_preferences_control",
+      status: "Review signal",
+    }],
+  });
+
+  assert.equal(result.score, 100);
+});
+
+test("contextual inline and persistent settings links do not incur a material score penalty", () => {
+  for (const optionsControlProminence of ["inline_link", "persistent_link"]) {
+    const result = deriveRegulatoryCoverageScore({
+      framework: "gdpr_eprivacy",
+      rows: [{
+        assessmentStatus: "review_signal",
+        criticalEvidence: {
+          retainedEvidence: { optionsControlProminence },
+        },
+        evidenceState: "observed",
+        id: "options_settings_preferences_control",
+        status: "Review signal",
+      }],
+    });
+
+    assert.equal(result.score, 100, optionsControlProminence);
+  }
+});
+
+test("storage classification limitations do not incur a substantive concern penalty", () => {
+  for (const preConsentStorageAssessmentStatus of [
+    "partially_classified",
+    "snapshot_presence_only"
+  ]) {
+    const result = deriveRegulatoryCoverageScore({
+      framework: "gdpr_eprivacy",
+      rows: [{
+        assessmentStatus: "review_signal",
+        criticalEvidence: {
+          retainedEvidence: { preConsentStorageAssessmentStatus }
+        },
+        evidenceState: "observed",
+        id: "pre_consent_cookies_storage",
+        status: "Review signal"
+      }]
+    });
+
+    assert.equal(result.score, 100, preConsentStorageAssessmentStatus);
+  }
+});
+
+test("confirmed non-essential pre-consent storage retains its substantive score effect", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [{
+      assessmentStatus: "gap_observed",
+      criticalEvidence: {
+        retainedEvidence: {
+          preConsentStorageAssessmentStatus: "classified_nonessential_observed"
+        }
+      },
+      evidenceState: "observed",
+      id: "pre_consent_cookies_storage",
+      status: "Gap observed"
+    }]
+  });
+
+  assert.equal(result.score, 0);
+});
+
 test("California score is derived from evidence-gated checklist rows", () => {
   const score = deriveRegulatoryCoverageScore({
     framework: "california",

@@ -58,6 +58,48 @@ export type KnownCmpDetectionInput = {
 
 export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
+    aliases: [
+      "Amazon Privacy Preferences",
+      "Amazon Cookies and Advertising Choices",
+      "Cookies and Advertising Choices"
+    ],
+    canonicalName: "Amazon Privacy Preferences",
+    domains: [],
+    domSelectors: [],
+    evidenceTreatment: "cmp_infrastructure",
+    reopenControlHints: ["amazon privacy preferences", "cookies and advertising choices", "cookie notice"],
+    role: "consent management platform",
+    standards: [],
+    urlPatterns: [/\/(?:privacyprefs)\/(?:retail|customize)(?:\/|[?#]|$)/i]
+  },
+  {
+    aliases: [
+      "Drupal EU Cookie Compliance",
+      "EU Cookie Compliance",
+      "Drupal Cookie Compliance",
+      "eu_cookie_compliance",
+    ],
+    canonicalName: "Drupal EU Cookie Compliance module, non-TCF",
+    cookieNames: ["cookie-agreed", "cookie-agreed-version", "cookie-agreed-categories"],
+    domains: [],
+    domSelectors: [
+      "#sliding-popup",
+      ".eu-cookie-compliance-banner",
+      "[id*='eu-cookie-compliance' i]",
+      "[class*='eu-cookie-compliance' i]",
+    ],
+    evidenceTreatment: "cmp_infrastructure",
+    globalNames: ["drupalSettings.eu_cookie_compliance"],
+    reopenControlHints: ["cookie settings", "privacy settings", "change cookie settings"],
+    role: "consent management platform",
+    standards: [],
+    urlPatterns: [
+      /(?:^|\/)modules\/contrib\/eu_cookie_compliance(?:\/|[?#]|$)/i,
+      /(?:^|\/)libraries\/eu_cookie_compliance(?:\/|[?#]|$)/i,
+      /eu_cookie_compliance(?:\.min)?\.js(?:[?#]|$)/i,
+    ],
+  },
+  {
     aliases: ["CookiePro", "Optanon", "OptanonConsent", "OptanonAlertBoxClosed"],
     canonicalName: "OneTrust",
     cookieNames: ["OptanonConsent", "OptanonAlertBoxClosed"],

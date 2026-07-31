@@ -29,10 +29,32 @@ test("canonical no-go detection covers every persisted reason-specific outcome",
   for (const presentation of Object.values(SCAN_NO_GO_REASON_PRESENTATIONS)) {
     assert.ok(SCAN_NO_GO_SNAPSHOT_OUTCOMES.includes(presentation.snapshotScanOutcome));
     assert.equal(isScanNoGoSnapshotOutcome(presentation.snapshotScanOutcome), true);
+    assert.equal(
+      resolveScanNoGoPresentation(presentation.snapshotScanOutcome).limitationKind,
+      presentation.limitationKind,
+    );
   }
   assert.equal(isScanNoGoSnapshotOutcome("no_go"), true);
   assert.equal(isScanNoGoSnapshotOutcome("completed_successfully"), false);
   assert.equal(isScanNoGoSnapshotOutcome(null), false);
+});
+
+test("legacy reachability outcomes remain visible as no-go", () => {
+  for (const outcome of [
+    "reachability_blocked_homepage_403",
+    "reachability_blocked_homepage_401",
+    "reachability_blocked_challenge_suspected",
+    "reachability_blocked_captcha",
+    "reachability_blocked_auth_wall",
+    "reachability_blocked_geo_or_reputation",
+    "transport_failure",
+    "timeout_navigation",
+    "unknown_access_limitation",
+    "domain_inactive_or_unstable",
+    "verification_incomplete"
+  ]) {
+    assert.equal(isScanNoGoSnapshotOutcome(outcome), true, outcome);
+  }
 });
 
 test("projects a public-safe structured no-go result without diagnostic codes", () => {

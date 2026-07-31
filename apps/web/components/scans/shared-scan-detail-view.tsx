@@ -42,13 +42,15 @@ import {
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
 import {
   getAssessmentDirection,
-  getEvidenceLabel
+  getEvidenceLabel,
+  summarizeGdprEprivacyAssessmentDirections
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { ScanPageHeader } from "./scan-page-header";
+import { InventorySortButton, InventorySortRuntime } from "./inventory-table-sort";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { NoGoBrowserExtensionRecovery } from "./no-go-browser-extension-recovery";
 import {
@@ -116,6 +118,7 @@ import {
   isMeaningfulPolicyText,
   normalizePolicySnippet
 } from "../../lib/scans/policy-snippet-normalization";
+import { getProductionPolicyModelReviewRevision } from "../../lib/scans/policy-model-review-revision";
 import {
   getPolicyEvidenceSnippets,
   getPolicyActionableFlags,
@@ -128,18 +131,20 @@ import {
 import { isGenericBrowserCookieHelpUrl } from "../../lib/scans/policy-surface-url-hygiene";
 import { deriveHighRiskTrackingContext } from "../../lib/scans/high-risk-tracking-context";
 import {
+  buildPreConsentStorageAssessment,
   buildRuntimeCookieInventory,
-  countEligibleNonEssentialPreconsentStorageMetricRows,
-  countUnclassifiedNonEssentialPreconsentStorageRows,
   isEligibleNonEssentialPreconsentStorageRow,
+  projectPreConsentStorageMetric,
   type RuntimeCookieEvidenceRow
 } from "../../lib/scans/runtime-cookie-evidence";
 import { buildScanProof } from "../../lib/scans/scan-proof";
 import {
   buildReportSurfaceVendorProjection,
+  buildPreConsentDataFlows,
   buildRuntimeInventoryGroupRows,
   buildTrackerInventoryGroupRows,
   buildTrackerInventoryRows,
+  classifyInventoryEvidence,
   deriveInventoryMacroCategory,
   formatGroupedParty,
   getInventoryGroupRowRenderKey,
@@ -149,6 +154,7 @@ import {
   type ConsentReviewPriority,
   type InventoryConfidence,
   type InventoryGroupRow,
+  type PreConsentDataFlow,
   type TrackerInventoryRow
 } from "../../lib/scans/runtime-inventory-projection";
 import {
@@ -174,16 +180,9 @@ import {
 } from "../../lib/scans/finding-evidence-contracts";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
-import {
-  deriveGdprEprivacyCoverageChecklist,
-  type GdprEprivacyCoverageChecklistInput,
-  type GdprEprivacyCoverageChecklistItem
-} from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
-import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
+import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
-import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
-import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import {
   formatCollectionEndpointType,
 } from "../../lib/scans/tracker-risk";
@@ -191,6 +190,10 @@ import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { PendingButtonLink } from "../ui/pending-link";
 import { ViewerTimestamp } from "../time/viewer-timestamp";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
+import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
+import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "../../server/scans/scan-detail-checklist";
+export { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
+export { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "../../server/scans/scan-detail-checklist";
 
 export { getTrackerConsentReviewPriority };
 
@@ -519,17 +522,17 @@ function InventoryConfidenceCell({ confidence }: { confidence: InventoryConfiden
   );
 }
 
-function InventoryTypeIcon({ type }: { type: "cookie" | "tracker" }) {
+function InventoryTypeIcon({ emphasized = false, type }: { emphasized?: boolean; type: "cookie" | "tracker" }) {
   if (type === "cookie") {
     return (
       <span
         aria-label="Cookie"
-        className="inline-flex h-5 w-5 items-center justify-center text-sky-700"
+        className={`inline-flex items-center justify-center text-sky-700 ${emphasized ? "h-6 w-6 rounded-md bg-slate-100 text-sky-800 ring-1 ring-inset ring-slate-200" : "h-5 w-5"}`}
         title="Cookie"
       >
-        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-          <path d="M20 13.2A8 8 0 1 1 10.8 4a3.1 3.1 0 0 0 3 4 3.2 3.2 0 0 0 4.1 4.1c.6.2 1.2.5 2.1 1.1Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-          <path d="M8.5 9.5h.01M7.5 15h.01M12.5 14h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
+        <svg aria-hidden="true" className={emphasized ? "h-4 w-4" : "h-3.5 w-3.5"} fill="none" viewBox="0 0 24 24">
+          <path d="M20 13.2A8 8 0 1 1 10.8 4a3.1 3.1 0 0 0 3 4 3.2 3.2 0 0 0 4.1 4.1c.6.2 1.2.5 2.1 1.1Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={emphasized ? 2.2 : 1.8} />
+          <path d="M8.5 9.5h.01M7.5 15h.01M12.5 14h.01" stroke="currentColor" strokeLinecap="round" strokeWidth={emphasized ? 3.1 : 2.6} />
         </svg>
       </span>
     );
@@ -538,40 +541,132 @@ function InventoryTypeIcon({ type }: { type: "cookie" | "tracker" }) {
   return (
     <span
       aria-label="Tracker"
-      className="inline-flex h-5 w-5 items-center justify-center text-violet-700"
+      className={`inline-flex items-center justify-center text-violet-700 ${emphasized ? "h-6 w-6 rounded-md bg-slate-100 text-violet-800 ring-1 ring-inset ring-slate-200" : "h-5 w-5"}`}
       title="Tracker"
     >
-      <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-        <path d="M17.6 7.3A7 7 0 0 0 5.3 10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
-        <path d="M15.2 7.4h2.7V4.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
-        <path d="M6.4 16.7A7 7 0 0 0 18.7 14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
-        <path d="M8.8 16.6H6.1v2.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
+      <svg aria-hidden="true" className={emphasized ? "h-4 w-4" : "h-3.5 w-3.5"} fill="none" viewBox="0 0 24 24">
+        <path d="M17.6 7.3A7 7 0 0 0 5.3 10" stroke="currentColor" strokeLinecap="round" strokeWidth={emphasized ? 2.25 : 1.9} />
+        <path d="M15.2 7.4h2.7V4.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={emphasized ? 2.25 : 1.9} />
+        <path d="M6.4 16.7A7 7 0 0 0 18.7 14" stroke="currentColor" strokeLinecap="round" strokeWidth={emphasized ? 2.25 : 1.9} />
+        <path d="M8.8 16.6H6.1v2.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={emphasized ? 2.25 : 1.9} />
       </svg>
     </span>
   );
 }
 
-function formatInventoryParty(value: "first_party" | "third_party" | "unknown" | string | null | undefined) {
-  if (value === "first_party") {
-    return "1st";
+function formatCookieLifespan(seconds: number | null) {
+  if (seconds === null) return "Not retained";
+  if (seconds === 0) return "Session";
+  const days = Math.round(seconds / 86_400);
+  if (days >= 365) return `${(days / 365).toFixed(days >= 730 ? 1 : 2)} years`;
+  if (days >= 1) return `${days} day${days === 1 ? "" : "s"}`;
+  const hours = Math.max(1, Math.round(seconds / 3_600));
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
+function getInventoryTypeDisclosureClasses(row: InventoryGroupRow) {
+  const evidence = classifyInventoryEvidence(row);
+  if (evidence === "Essential") {
+    return "border-sky-300 bg-gradient-to-b from-white to-blue-50/70 text-blue-700 shadow-[0_2px_0_0_rgb(191_219_254)] hover:border-sky-500 hover:from-blue-50/80 hover:to-blue-100/70 hover:shadow-[0_3px_0_0_rgb(147_197_253)] group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-blue-50/80 group-open/cookie-detail:shadow-none";
   }
-  if (value === "third_party") {
-    return "3rd";
+  if (evidence === "Review") {
+    return "border-sky-300 bg-gradient-to-b from-white to-amber-50/70 text-amber-700 shadow-[0_2px_0_0_rgb(253_230_138)] hover:border-sky-500 hover:from-amber-50/80 hover:to-amber-100/70 hover:shadow-[0_3px_0_0_rgb(252_211_77)] group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-amber-50/80 group-open/cookie-detail:shadow-none";
   }
-  return "—";
+  if (evidence === "Contextual") {
+    return "border-sky-300 bg-gradient-to-b from-white to-sky-50/70 text-sky-700 shadow-[0_2px_0_0_rgb(186,230,253)] hover:border-sky-500 hover:from-sky-50/80 hover:to-sky-100/70 hover:shadow-[0_3px_0_0_rgb(125,211,252)] group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-sky-50/80 group-open/cookie-detail:shadow-none";
+  }
+  return "border-sky-300 bg-gradient-to-b from-white to-red-50/70 text-red-700 shadow-[0_2px_0_0_rgb(254_202_202)] hover:border-sky-500 hover:from-red-50/80 hover:to-red-100/70 hover:shadow-[0_3px_0_0_rgb(252_165_165)] group-open/cookie-detail:border-sky-600 group-open/cookie-detail:bg-red-50/80 group-open/cookie-detail:shadow-none";
+}
+
+function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
+  if (row.cookieDetails.length === 0 && row.domains.length === 0 && row.rawProducts.length === 0) {
+    return <InventoryTypeIcon type={row.type} />;
+  }
+  return (
+    <details className="group/cookie-detail relative z-10 open:z-40" name="preconsent-inventory-evidence">
+      <summary
+        aria-label={`Show retained vendor evidence for ${row.vendor}`}
+        className={`inline-flex h-8 min-w-[3.5rem] cursor-pointer list-none items-center justify-center rounded-lg border px-1.5 transition-all duration-150 hover:-translate-y-px active:translate-y-px active:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 group-open/cookie-detail:translate-y-px marker:hidden [&::-webkit-details-marker]:hidden ${getInventoryTypeDisclosureClasses(row)}`}
+        title="Show retained requests, cookies, and storage metadata"
+      >
+        <InventoryTypeIcon emphasized type={row.type} />
+        <span className="ml-1 inline-flex h-5 w-4 items-center justify-end border-l border-sky-200 pl-1 group-hover/cookie-detail:border-sky-300 group-open/cookie-detail:border-sky-400">
+          <svg aria-hidden="true" className="h-3 w-3 transition-transform group-open/cookie-detail:rotate-180" fill="none" viewBox="0 0 12 12">
+            <path d="m2.5 4 3.5 3.5L9.5 4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+          </svg>
+        </span>
+      </summary>
+      <div className="relative mt-2 w-[34rem] max-w-[80vw] rounded-xl border border-slate-200 bg-white p-3 shadow-[0_18px_42px_-16px_rgba(15,23,42,0.45)]">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Retained vendor evidence</p>
+        <dl className="mb-2 grid grid-cols-[7rem_1fr] gap-x-2 rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] leading-4 text-slate-600">
+          <dt className="font-medium text-slate-500">Products</dt><dd>{row.rawProducts.join(", ") || row.vendor}</dd>
+          <dt className="font-medium text-slate-500">Request endpoints</dt><dd className="break-all">{row.domains.join(", ") || "Not retained"}</dd>
+          <dt className="font-medium text-slate-500">Requests</dt><dd>{row.requestCount ?? "Not retained"}</dd>
+          <dt className="font-medium text-slate-500">Storage items</dt><dd>{row.cookieDetails.length}</dd>
+        </dl>
+        <div className="max-h-72 space-y-2 overflow-auto">
+          {row.cookieDetails.map((cookie) => (
+            <div key={`${cookie.cookieName}:${cookie.domain ?? ""}`} className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] leading-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono font-semibold text-slate-900">{cookie.cookieName}</span>
+                {cookie.longLived ? <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-rose-700">&gt;12 months</span> : null}
+                {cookie.setByThirdPartyScript ? <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-700">3rd-party script context</span> : null}
+              </div>
+              <p className="mt-1 text-slate-600">{cookie.description ?? "Purpose is not yet classified; manual review is recommended."}</p>
+              <dl className="mt-1 grid grid-cols-[7rem_1fr] gap-x-2 text-slate-600">
+                <dt className="font-medium text-slate-500">Domain</dt><dd className="break-all">{cookie.domain ?? "Not retained"}</dd>
+                <dt className="font-medium text-slate-500">Lifespan</dt><dd>{formatCookieLifespan(cookie.lifespanSeconds ?? null)}</dd>
+                <dt className="font-medium text-slate-500">Data types</dt><dd>{cookie.dataTypes?.join(", ") || "Review required"}</dd>
+                <dt className="font-medium text-slate-500">Initiator</dt><dd className="break-all">{cookie.setterScriptUrl ?? cookie.initiatorUrl ?? "Not retained"}</dd>
+                <dt className="font-medium text-slate-500">Initiator chain</dt><dd className="break-all">{cookie.initiatorChain?.join(" → ") || "Not retained"}</dd>
+              </dl>
+            </div>
+          ))}
+          {row.cookieDetails.length === 0 ? <p className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] text-slate-500">No cookie storage metadata was retained for this vendor.</p> : null}
+        </div>
+        <p className="mt-2 text-[10px] leading-4 text-slate-500">Cookie values are redacted; names, attributes, timing, and bounded initiator metadata are retained.</p>
+      </div>
+    </details>
+  );
 }
 
 function formatInventoryCellForCopy(value: string | number | null | undefined) {
   return String(value ?? "—").replace(/[\t\r\n]+/g, " ").trim() || "—";
 }
 
-function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; rows: InventoryGroupRow[] }) {
-  const segments = [
-    { color: "#fb7185", count: rows.filter((row) => row.priority === "high").length, label: "High" },
-    { color: "#fbbf24", count: rows.filter((row) => row.priority === "review_needed").length, label: "Review" },
-    { color: "#38bdf8", count: rows.filter((row) => row.priority === "medium").length, label: "Medium" },
-    { color: "#94a3b8", count: rows.filter((row) => row.priority === "contextual").length, label: "Contextual" }
-  ];
+export function buildInventoryPartyAttributionSegments(
+  rows: Array<Pick<InventoryGroupRow, "party">>
+) {
+  return [
+    {
+      color: "#3b82f6",
+      count: rows.filter((row) => row.party === "first_party").length,
+      filter: "first_party",
+      label: "1st party"
+    },
+    {
+      color: "#8b5cf6",
+      count: rows.filter((row) => row.party === "third_party").length,
+      filter: "third_party",
+      label: "3rd party"
+    },
+    {
+      color: "#f59e0b",
+      count: rows.filter((row) => row.party === "mixed").length,
+      filter: "mixed",
+      label: "Mixed"
+    },
+    {
+      color: "#94a3b8",
+      count: rows.filter((row) => row.party === "unknown").length,
+      filter: "unknown",
+      label: "Unknown"
+    }
+  ] as const;
+}
+
+function InventoryPartyAttributionDonut({ rows }: { rows: InventoryGroupRow[] }) {
+  const segments = buildInventoryPartyAttributionSegments(rows);
   const total = Math.max(rows.length, 1);
   let cursor = 0;
   const gradientStops = segments.flatMap((segment) => {
@@ -583,21 +678,22 @@ function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; 
   const gradient = rows.length > 0 ? `conic-gradient(${gradientStops.join(", ")})` : "conic-gradient(#e2e8f0 0 100%)";
 
   return (
-    <div className={`flex items-center gap-3 ${compact ? "" : "mt-3"}`}>
+    <div className="mt-3 flex items-start gap-3">
       <div
-        aria-label="Priority distribution"
-        className={`${compact ? "h-14 w-14" : "h-20 w-20"} grid shrink-0 place-items-center rounded-full`}
+        aria-label="Party attribution distribution"
+        className="grid h-20 w-20 shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50"
         style={{ background: gradient }}
       >
-        <div className={`${compact ? "h-8 w-8 text-[10px]" : "h-11 w-11 text-[11px]"} grid place-items-center rounded-full bg-white font-semibold text-slate-600 shadow-sm`}>
+        <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-base font-semibold leading-none text-slate-900 shadow-sm">
           {rows.length}
         </div>
       </div>
-      <div className={`${compact ? "grid-cols-4 gap-x-2" : "grid-cols-2 gap-x-3 gap-y-1.5"} grid min-w-0 flex-1`}>
+      <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-1.5">
         {segments.map((segment) => (
-          <div key={segment.label} className="flex min-w-0 items-center gap-1.5">
+          <div key={segment.filter} className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter={segment.filter} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
-            <span className="truncate text-[11px] font-medium text-slate-500">{compact && segment.label === "Contextual" ? "Ctx" : segment.label}</span>
+            <span className="truncate text-[11px] font-medium text-slate-500">{segment.label}</span>
+            <InfoTip align="end" placement="top" text={`Inventory rows whose Party value is ${segment.label.toLowerCase()}.`} />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{segment.count}</span>
           </div>
         ))}
@@ -607,21 +703,39 @@ function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; 
 }
 
 function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
+  const purposeColorRank = (purpose: string) => {
+    const normalized = purpose.toLowerCase();
+    if (/advertis|marketing|retarget|tracking/.test(normalized)) return 0;
+    if (/essential|functional|necessary|security/.test(normalized)) return 2;
+    return 1;
+  };
   const purposeCounts = Array.from(rows.reduce((counts, row) => {
     counts.set(row.purpose, (counts.get(row.purpose) ?? 0) + 1);
     return counts;
   }, new Map<string, number>())).sort((left, right) => {
+    const colorRankDelta = purposeColorRank(left[0]) - purposeColorRank(right[0]);
+    if (colorRankDelta !== 0) return colorRankDelta;
     const countDelta = right[1] - left[1];
     return countDelta !== 0 ? countDelta : left[0].localeCompare(right[0]);
   });
-  const topPurposes = purposeCounts.slice(0, 4);
+  const purposeLimit = purposeCounts.length === 5 ? 5 : 4;
+  const topPurposes = purposeCounts.slice(0, purposeLimit);
   const hiddenPurposeCount = Math.max(0, purposeCounts.length - topPurposes.length);
-  const colors = ["#0ea5e9", "#8b5cf6", "#14b8a6", "#f59e0b"];
+  const hiddenPurposes = purposeCounts.slice(topPurposes.length);
+  const getPurposeColor = (purpose: string, index: number) => {
+    const palettes = {
+      risk: ["#dc2626", "#ef4444", "#f87171", "#b91c1c"],
+      review: ["#d97706", "#f59e0b", "#fbbf24", "#f97316"],
+      neutral: ["#2563eb", "#3b82f6", "#60a5fa", "#38bdf8"]
+    };
+    const rank = purposeColorRank(purpose);
+    return (rank === 0 ? palettes.risk : rank === 2 ? palettes.neutral : palettes.review)[index % 4] ?? "#f59e0b";
+  };
   const visibleTotal = topPurposes.reduce((total, [, count]) => total + count, 0);
   const otherTotal = Math.max(0, rows.length - visibleTotal);
   const chartSegments = [
-    ...topPurposes.map(([purpose, count], index) => ({ color: colors[index] ?? "#64748b", count, label: purpose })),
-    ...(otherTotal > 0 ? [{ color: "#cbd5e1", count: otherTotal, label: "Other" }] : [])
+    ...topPurposes.map(([purpose, count], index) => ({ color: getPurposeColor(purpose, index), count, label: purpose })),
+    ...(otherTotal > 0 ? [{ color: "#f59e0b", count: otherTotal, label: "Other" }] : [])
   ];
   let cursor = 0;
   const gradientStops = chartSegments.flatMap((segment) => {
@@ -633,30 +747,43 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
   const gradient = rows.length > 0 ? `conic-gradient(${gradientStops.join(", ")})` : "conic-gradient(#e2e8f0 0 100%)";
 
   return (
-    <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+    <div className="min-h-0 overflow-visible rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Purpose mix</p>
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex items-start gap-3">
         <div
           aria-label="Purpose distribution"
-          className="grid h-20 w-20 shrink-0 place-items-center rounded-full"
+          className="grid h-20 w-20 shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50"
           style={{ background: gradient }}
         >
-          <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-[11px] font-semibold text-slate-600 shadow-sm">
+          <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-base font-semibold leading-none text-slate-900 shadow-sm">
             {rows.length}
           </div>
         </div>
-        <div className="grid min-w-0 flex-1 gap-2">
+        <div className="grid min-w-0 flex-1 gap-0">
         {topPurposes.length > 0 ? topPurposes.map(([purpose, count]) => (
-          <div key={purpose} className="flex min-w-0 items-center gap-2">
+          <div key={purpose} className="flex min-h-5 min-w-0 cursor-pointer items-center gap-2 rounded-md px-1 py-0 transition-colors hover:bg-slate-100" data-inventory-filter={purpose.toLowerCase()} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: chartSegments.find((segment) => segment.label === purpose)?.color ?? "#64748b" }} />
-            <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-600">{purpose}</span>
-            <span className="text-xs font-semibold text-slate-800">{count}</span>
+            <span className="min-w-0 truncate text-xs font-medium text-slate-600">{purpose}</span>
+            <InfoTip align="end" placement="top" text={`Rows classified with the ${purpose.toLowerCase()} purpose.`} />
+            <span className="ml-auto text-xs font-semibold text-slate-800">{count}</span>
           </div>
         )) : (
           <p className="text-xs leading-5 text-slate-500">No retained purposes.</p>
         )}
-        {hiddenPurposeCount > 0 ? (
-          <p className="text-xs leading-5 text-slate-500">+{hiddenPurposeCount} more purpose{hiddenPurposeCount === 1 ? "" : "s"}</p>
+        {hiddenPurposeCount >= 2 ? (
+          <details className="group/purpose-more text-xs leading-5 text-slate-500">
+            <summary className="cursor-pointer list-none font-medium text-sky-700 underline decoration-sky-200 underline-offset-2 marker:hidden [&::-webkit-details-marker]:hidden">
+              +{hiddenPurposeCount} more purposes
+            </summary>
+            <div className="mt-1.5 grid gap-1 border-l-2 border-slate-200 pl-2">
+              {hiddenPurposes.map(([purpose, count]) => (
+                <div key={purpose} className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="truncate">{purpose}</span>
+                  <span className="shrink-0 font-semibold text-slate-700">{count}</span>
+                </div>
+              ))}
+            </div>
+          </details>
         ) : null}
         </div>
       </div>
@@ -666,22 +793,103 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
 
 function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   const copyRows = [
-    ["Type", "Vendor", "Purpose", "Priority", "First seen", "Cookie name(s)", "Domain", "Confidence", "Party", "Category"],
+    ["Type", "Vendor", "Purpose", "Evidence", "First seen", "Cookie name(s)", "Domain", "Destination", "Confidence", "Party", "Category", "Priority"],
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
-      row.purpose,
-      CONSENT_REVIEW_PRIORITY_LABELS[row.priority],
+      getInventoryPurposeLabel(row),
+      classifyInventoryEvidence(row),
       formatFirstSeenMs(row.firstSeenMs),
       row.cookieNames.join(", ") || "—",
       row.domains.join(", ") || "—",
+      row.dataFlows.map((flow) => [
+        flow.networkDestination.countryCode ?? "unknown edge",
+        flow.controllingEntity.headquartersCountry ? `${flow.controllingEntity.headquartersCountry}-controlled` : null,
+        flow.idSync ? "ID sync" : null
+      ].filter(Boolean).join(" / ")).join(", ") || "—",
       INVENTORY_CONFIDENCE_LABELS[row.confidence],
       formatGroupedParty(row.party),
-      getRuntimeInventoryMacroCategory(row)
+      getRuntimeInventoryMacroCategory(row),
+      CONSENT_REVIEW_PRIORITY_LABELS[row.priority]
     ])
   ];
 
   return copyRows.map((row) => row.map(formatInventoryCellForCopy).join("\t")).join("\n");
+}
+
+function getInventoryPurposeLabel(row: Pick<InventoryGroupRow, "purpose" | "purposes">) {
+  return row.purposes.length > 0 ? row.purposes.join(", ") : row.purpose;
+}
+
+function countryFlag(countryCode: string | null) {
+  if (!countryCode || !/^[A-Z]{2}$/i.test(countryCode)) return "◌";
+  return [...countryCode.toUpperCase()]
+    .map((letter) => String.fromCodePoint(127397 + letter.charCodeAt(0)))
+    .join("");
+}
+
+function InventoryDataFlowCell({ row }: { row: InventoryGroupRow }) {
+  const flow = row.dataFlows[0];
+  if (!flow) return <span className="text-slate-400">Not retained</span>;
+  const country = flow.networkDestination.countryCode;
+  const title = row.dataFlows.map((candidate) => [
+    `Endpoint: ${candidate.endpoint}`,
+    `${candidate.networkDestination.label}: ${candidate.networkDestination.ip ?? "IP not retained"}${candidate.networkDestination.countryCode ? ` (${candidate.networkDestination.countryCode})` : ""}`,
+    `Controlling entity: ${candidate.controllingEntity.legalEntity ?? "Unknown"}${candidate.controllingEntity.headquartersCountry ? ` (${candidate.controllingEntity.headquartersCountry})` : ""}`,
+    `Transfer mechanism: ${candidate.transferMechanism.mechanism.replaceAll("_", " ")}; verified as of ${candidate.transferMechanism.verifiedAsOf}`,
+    candidate.idSync ? "Known ID-sync endpoint observed pre-consent." : null
+  ].filter(Boolean).join("\n")).join("\n\n");
+  const headquartersCountry = flow.controllingEntity.headquartersCountry;
+  const provider = flow.networkDestination.provider;
+  return (
+    <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 leading-4" title={title}>
+      {country ? (
+        <span className="inline-flex items-center gap-1 font-semibold text-slate-700">
+          <span aria-hidden="true">{countryFlag(country)}</span>
+          <span>{country}</span>
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+          {headquartersCountry ? (
+            <span className="font-medium text-slate-500" title="Controlling entity headquarters country">
+              {countryFlag(headquartersCountry)} HQ
+            </span>
+          ) : provider ? <span className="truncate max-w-[7rem]">{provider}</span> : null}
+          <InfoTip
+            align="end"
+            className="shrink-0"
+            placement="top"
+            text={`Server country was not retained for this endpoint; the flag indicates controlling-entity headquarters, not server storage location.${provider ? ` Network provider: ${provider}.` : ""}`}
+          />
+        </span>
+      )}
+      {flow.idSync ? <span className="rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">ID sync</span> : null}
+      {row.dataFlows.length > 1 ? <span className="text-[10px] font-medium text-slate-500">+{row.dataFlows.length - 1} more</span> : null}
+    </span>
+  );
+}
+
+function PreConsentDataFlowSummary({ rows }: { rows: InventoryGroupRow[] }) {
+  const flows = rows.flatMap((row) => row.dataFlows).filter((flow, index, all) =>
+    all.findIndex((candidate) =>
+      `${candidate.endpoint}\u0000${candidate.networkDestination.ip ?? ""}` ===
+      `${flow.endpoint}\u0000${flow.networkDestination.ip ?? ""}`
+    ) === index
+  );
+  if (flows.length === 0) return null;
+  const uniqueEntities = new Set(flows.map((flow) => flow.controllingEntity.legalEntity).filter(Boolean));
+  const usControlled = new Set(flows.filter((flow) => flow.controllingEntity.headquartersCountry === "US").map((flow) => flow.controllingEntity.legalEntity ?? flow.endpoint)).size;
+  const euControlled = new Set(flows.filter((flow) => ["AT", "BE", "BG", "HR", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"].includes(flow.controllingEntity.headquartersCountry ?? "")).map((flow) => flow.controllingEntity.legalEntity ?? flow.endpoint)).size;
+  const adequacyCountry = new Set(flows.filter((flow) => flow.transferMechanism.mechanism === "adequacy_decision").map((flow) => flow.controllingEntity.legalEntity ?? flow.endpoint)).size;
+  const headquartersSummary = [
+    usControlled > 0 ? <span key="us" className="cursor-help" title="Unique controlling entities headquartered in the United States">🇺🇸 {usControlled} US HQ</span> : null,
+    euControlled > 0 ? <span key="eu" className="cursor-help" title="Unique controlling entities headquartered in the European Union">🇪🇺 {euControlled} EU HQ</span> : null
+  ].filter(Boolean);
+  return (
+    <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+      Pre-consent flows: {flows.length} endpoint{flows.length === 1 ? "" : "s"} · {uniqueEntities.size} entit{uniqueEntities.size === 1 ? "y" : "ies"} · {headquartersSummary.length > 0 ? headquartersSummary.map((item, index) => <span key={index}>{index > 0 ? " · " : null}{item}</span>) : <span className="cursor-help" title="No controlling-entity headquarters country was retained. This does not indicate where data is stored.">Controlling HQ not identified</span>}{adequacyCountry > 0 ? <> · <span className="cursor-help" title="Unique entities using an adequacy decision as the transfer mechanism">{adequacyCountry} adequacy-country</span></> : null}. Server locations are CDN-edge observations, not asserted storage locations.
+    </p>
+  );
 }
 
 function getRuntimeInventoryMacroCategory(row: InventoryGroupRow) {
@@ -692,61 +900,90 @@ function getRuntimeInventoryMacroCategory(row: InventoryGroupRow) {
   });
 }
 
+function InventoryEvidenceCell({ row }: { row: InventoryGroupRow }) {
+  const evidence = classifyInventoryEvidence(row);
+  const tone = evidence === "Essential"
+    ? "bg-blue-100 text-blue-700"
+    : evidence === "Contextual"
+      ? "bg-sky-100 text-sky-700"
+    : evidence === "Review"
+      ? "bg-amber-100 text-amber-800"
+      : "bg-red-100 text-red-700";
+  return <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-4 ${tone}`}>{evidence}</span>;
+}
+
 function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) {
   const beforeConsentCount = rows.filter((row) =>
     row.type === "tracker"
       ? row.preConsent && row.firstSeenMs !== null
       : row.firstSeenMs !== null || /snapshot|pre-consent/i.test(row.timingEvidence ?? "")
   ).length;
-  const necessaryCount = rows.filter((row) => {
-    const category = getRuntimeInventoryMacroCategory(row).toLowerCase();
-    return category === "essential" || category === "functional";
-  }).length;
-  const nonEssentialCount = rows.length - necessaryCount;
+  const necessaryCount = rows.filter((row) => classifyInventoryEvidence(row) === "Essential").length;
+  const contextualCount = rows.filter((row) => classifyInventoryEvidence(row) === "Contextual").length;
+  const reviewCount = rows.filter((row) => classifyInventoryEvidence(row) === "Review").length;
+  const nonEssentialCount = Math.max(0, rows.length - necessaryCount - contextualCount - reviewCount);
 
-  const segments = [
-    {
-      label: "Observed before consent",
-      value: beforeConsentCount,
-      detail: "Retained runtime evidence"
-    },
-    {
-      label: "Strictly necessary / functional",
-      value: necessaryCount,
-      detail: "Classified from the evidence"
-    },
-    {
-      label: "Non-essential or review",
-      value: nonEssentialCount,
-      detail: "Analytics, advertising, or unclear"
-    }
-  ];
+  const totalClassified = necessaryCount + contextualCount + nonEssentialCount + reviewCount;
+  const necessaryShare = totalClassified > 0 ? (necessaryCount / totalClassified) * 100 : 0;
+  const contextualShare = totalClassified > 0 ? (contextualCount / totalClassified) * 100 : 0;
+  const nonEssentialShare = totalClassified > 0 ? (nonEssentialCount / totalClassified) * 100 : 0;
+  const reviewShare = totalClassified > 0 ? (reviewCount / totalClassified) * 100 : 0;
+  const donut = totalClassified > 0
+    ? `conic-gradient(#ef4444 0 ${nonEssentialShare}%, #f59e0b ${nonEssentialShare}% ${nonEssentialShare + reviewShare}%, #38bdf8 ${nonEssentialShare + reviewShare}% ${nonEssentialShare + reviewShare + contextualShare}%, #3b82f6 ${nonEssentialShare + reviewShare + contextualShare}% 100%)`
+    : "conic-gradient(#cbd5e1 0 100%)";
 
   return (
-    <div className="grid gap-2 sm:grid-cols-3" aria-label="Consent evidence segmentation">
-      {segments.map((segment) => (
-        <div key={segment.label} className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">{segment.label}</p>
-            <span className="text-sm font-semibold text-slate-900">{segment.value ?? "—"}</span>
+    <div className="min-h-0 overflow-visible rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3" aria-label="Consent evidence segmentation">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Evidence mix</p>
+      <div className="mt-3 flex items-start gap-3">
+        <div className="relative grid h-20 w-20 shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50" style={{ background: donut }}>
+          <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-center text-[11px] font-semibold text-slate-600 shadow-sm">
+            <span className="text-base leading-none text-slate-900">{beforeConsentCount}</span>
           </div>
-          <p className="mt-1 text-[11px] leading-4 text-slate-500">{segment.detail}</p>
         </div>
-      ))}
+        <div className="grid min-w-0 flex-1 gap-2">
+          <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="non-essential" role="button" tabIndex={0}>
+            <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
+            <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Non-essential</span>
+            <InfoTip align="start" placement="top" text="Advertising, analytics, marketing, personalization, or other non-essential activity." />
+            <span className="ml-auto text-[11px] font-semibold text-slate-700">{nonEssentialCount}</span>
+          </div>
+          <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="review" role="button" tabIndex={0}>
+            <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+            <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Review</span>
+            <InfoTip align="start" placement="top" text="Unknown, ambiguous, or insufficiently classified evidence needing review." />
+            <span className="ml-auto text-[11px] font-semibold text-slate-700">{reviewCount}</span>
+          </div>
+          <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="necessary" role="button" tabIndex={0}>
+            <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+            <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Essential</span>
+            <InfoTip align="start" placement="top" text="Activity with an explicit retained necessity or security basis in the tested context." />
+            <span className="ml-auto text-[11px] font-semibold text-slate-700">{necessaryCount}</span>
+          </div>
+          <div className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter="contextual" role="button" tabIndex={0}>
+            <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500" />
+            <span className="min-w-0 truncate text-[11px] font-medium text-slate-500">Contextual</span>
+            <InfoTip align="start" placement="top" text="Consent-management, payment, authentication, CDN, functional, or other context-dependent activity without an explicit retained necessity basis." />
+            <span className="ml-auto text-[11px] font-semibold text-slate-700">{contextualCount}</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
 function RuntimeInventoryTable({
   cookieRows,
+  dataFlows,
   firstPartyDomain,
   trackerRows
 }: {
   cookieRows: RuntimeCookieEvidenceRow[];
+  dataFlows: PreConsentDataFlow[];
   firstPartyDomain?: string | null;
   trackerRows: TrackerInventoryRow[];
 }) {
-  const groupedInventoryRows = buildRuntimeInventoryGroupRows({ cookieRows, firstPartyDomain, trackerRows });
+  const groupedInventoryRows = buildRuntimeInventoryGroupRows({ cookieRows, dataFlows, firstPartyDomain, trackerRows });
   const copyPayload = buildRuntimeInventoryCopyPayload(groupedInventoryRows);
 
   return (
@@ -754,7 +991,14 @@ function RuntimeInventoryTable({
       <details className="group/inventory relative overflow-visible rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]" open>
         <summary className="flex min-h-[4.75rem] cursor-pointer list-none flex-wrap items-center gap-3 px-3.5 py-4 pr-14 marker:hidden [&::-webkit-details-marker]:hidden lg:px-5 lg:pr-16">
           <ScanReportDisclosureIcon className="group-open/inventory:rotate-90" />
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Pre-consent Cookies & Trackers</p>
+          <p className="inline-flex items-center gap-1.5 text-sm font-medium uppercase tracking-[0.18em] text-slate-500">
+            Pre-consent Cookies &amp; Trackers (grouped)
+            <InfoTip
+              align="start"
+              placement="top"
+              text="Related cookies, trackers, requests, and storage records are grouped by recognized vendor or entity. Grouped rows may be fewer than the total observed records because multiple records can belong to the same service."
+            />
+          </p>
         </summary>
         <CopyJsonButton
           className="absolute right-3 top-4 z-20 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-950 lg:right-5"
@@ -762,67 +1006,109 @@ function RuntimeInventoryTable({
           payload={copyPayload}
         />
         <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:px-5">
-          <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
-          <div className="grid gap-4 lg:grid-cols-[minmax(17rem,0.9fr)_minmax(0,2.1fr)] lg:items-start">
-          <div className="grid gap-3 sm:grid-cols-2 lg:h-[317px] lg:grid-cols-1 lg:grid-rows-2">
+          <div className="grid gap-3 lg:grid-cols-3 lg:items-stretch">
+            <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
             <InventoryPurposeCard rows={groupedInventoryRows} />
-            <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Priority mix</p>
-              <InventoryPriorityDonut rows={groupedInventoryRows} />
+            <div className="min-h-0 overflow-visible rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Party attribution</p>
+              <InventoryPartyAttributionDonut rows={groupedInventoryRows} />
             </div>
           </div>
-          <div className="overflow-hidden rounded-xl border border-slate-200 lg:h-[317px]">
-            <div className="max-h-[340px] overflow-auto lg:h-full lg:max-h-none">
-            <table className="w-full min-w-[1200px] table-fixed border-collapse text-left text-[13px]">
-              <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
+          <div className="space-y-2 lg:hidden" aria-label="Cookies and trackers mobile list">
+            {groupedInventoryRows.map((row, index) => (
+              <article key={`mobile-${getInventoryGroupRowRenderKey(row, index)}`} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{row.vendor}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{getInventoryPurposeLabel(row)}</p>
+                  </div>
+                  <InventoryPriorityCell priority={row.priority} />
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                  <span>{row.type === "cookie" ? "Cookie" : "Tracker"}</span>
+                  <span className="text-right"><InventoryEvidenceCell row={row} /></span>
+                  <span className="text-right">{formatInventoryTiming(row)}</span>
+                  <span className="truncate">{row.domains.join(", ") || "Domain not retained"}</span>
+                  <span className="text-right">{formatGroupedParty(row.party)}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="hidden overflow-hidden rounded-xl border border-slate-200 lg:block">
+            <div className="max-h-[370px] overflow-auto">
+            <InventorySortRuntime tableId="preconsent-inventory-table" />
+            <table id="preconsent-inventory-table" className="w-[1280px] min-w-[1280px] max-w-[1280px] table-fixed border-collapse text-left text-[13px]">
+              <caption className="sr-only">Pre-consent cookies and trackers inventory</caption>
+              <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500 shadow-[0_2px_8px_-6px_rgba(15,23,42,0.55)]">
                 <tr>
-                  <th className="w-[50px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Type</th>
-                  <th className="w-[190px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Vendor</th>
-                  <th className="w-[130px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Purpose</th>
-                  <th className="w-[130px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Priority</th>
-                  <th className="w-[98px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">First seen</th>
-                  <th className="w-[150px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Cookie names</th>
-                  <th className="w-[210px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Domain</th>
-                  <th className="w-[96px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Confidence</th>
-                  <th className="w-[64px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Party</th>
-                  <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Category</th>
+                  <th title="Cookie or tracker evidence type" className="sticky left-0 top-0 z-30 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="type" label="Type" /></th>
+                  <th title="Resolved vendor or first-party entity" className="sticky left-[90px] top-0 z-30 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="vendor" label="Vendor" /></th>
+                  <th title="Observed purpose classification" className="sticky top-0 z-20 w-[130px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
+                  <th title="Consent evidence classification" className="sticky top-0 z-20 w-[105px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Evidence</th>
+                  <th title="Elapsed time from scan start to observation" className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
+                  <th title="Names retained for the grouped vendor or entity; tracker rows may include associated cookie names." className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">
+                    <span className="inline-flex items-center gap-1">
+                      Name(s)
+                      <InfoTip align="start" placement="top" text="Names retained for the grouped vendor or entity. Tracker rows may include associated cookie names; a dash means no name was retained." />
+                    </span>
+                  </th>
+                  <th className="sticky top-0 z-20 w-[150px] max-w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Domain</th>
+                  <th className="sticky top-0 z-20 w-[120px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Server location</th>
+                  <th className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Confidence</th>
+                  <th className="sticky top-0 z-20 w-[50px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Party</th>
+                  <th className="sticky top-0 z-20 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Category</th>
+                  <th title="Review priority based on retained evidence" className="sticky top-0 z-20 w-[100px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="priority" label="Priority" /></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
                 {groupedInventoryRows.map((row, index) => (
-                  <tr key={getInventoryGroupRowRenderKey(row, index)} className="h-10">
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">
-                      <InventoryTypeIcon type={row.type} />
+                  <tr
+                    key={getInventoryGroupRowRenderKey(row, index)}
+                    className={`group h-10 transition-colors odd:bg-slate-50/25 hover:bg-sky-50/55 ${index === 0 || groupedInventoryRows[index - 1]?.vendor !== row.vendor ? "border-t-2 border-slate-200" : ""}`}
+                    data-category={getRuntimeInventoryMacroCategory(row)}
+                    data-vendor={row.vendor}
+                    data-type={row.type}
+                    data-purpose={getInventoryPurposeLabel(row)}
+                    data-inventory-row
+                    data-pre-consent={row.preConsent ? "true" : "false"}
+                    data-first-seen={row.firstSeenMs ?? ""}
+                    data-priority={row.priority}
+                    data-search={`${row.vendor} ${getInventoryPurposeLabel(row)} ${row.cookieNames.join(" ")} ${row.domains.join(" ")}`.toLowerCase()}
+                  >
+                    <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-2 py-1.5 align-top group-hover:bg-sky-50/55 has-[details[open]]:z-40">
+                      <InventoryTypeDisclosure row={row} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">
+                    <td className="sticky left-[90px] z-10 truncate whitespace-nowrap bg-white px-2 py-1.5 align-middle group-hover:bg-sky-50/55">
                       <InventoryVendorCell label={row.vendor} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">{row.purpose}</td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={getInventoryPurposeLabel(row)}>{getInventoryPurposeLabel(row)}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5 align-middle"><InventoryEvidenceCell row={row} /></td>
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
+                    <td className="max-w-[132px] truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
+                    <td className="max-w-[150px] truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
+                    <td className="px-2 py-1.5 align-top"><InventoryDataFlowCell row={row} /></td>
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
+                      <InventoryConfidenceCell confidence={row.confidence} />
+                    </td>
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">{formatGroupedParty(row.party)}</td>
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">{getRuntimeInventoryMacroCategory(row)}</td>
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
                       <InventoryPriorityCell
                         priority={row.priority}
                       />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">
-                      <InventoryConfidenceCell confidence={row.confidence} />
-                    </td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">{formatGroupedParty(row.party)}</td>
-                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">{getRuntimeInventoryMacroCategory(row)}</td>
                   </tr>
                 ))}
                 {groupedInventoryRows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-5 text-center text-slate-500" colSpan={10}>No retained cookie or tracker rows for this scan.</td>
+                    <td className="px-3 py-5 text-center text-slate-500" colSpan={12}>No retained cookie or tracker rows for this scan.</td>
                   </tr>
                 ) : null}
               </tbody>
             </table>
             </div>
           </div>
-          </div>
+          <PreConsentDataFlowSummary rows={groupedInventoryRows} />
         </div>
       </details>
     </section>
@@ -1448,7 +1734,7 @@ function deriveConsentGatingPolicyAnchor(row: Record<string, unknown> | null) {
 
 function deriveConsentGatingPolicyAnchorFromRows(rows: Array<Record<string, unknown>>) {
   const privacyPolicyAnchor = rows
-    .filter((row) => getPolicyPageType(row) === "privacy_policy" || getPolicyPageType(row) === "cookie_policy")
+    .filter((row) => getPolicyPageType(row) === "privacy_policy" || getPolicyPageType(row) === "cookie_policy" || getPolicyPageType(row) === "cookie_settings")
     .map((row) => deriveConsentGatingPolicyAnchor(row))
     .find(Boolean);
   if (privacyPolicyAnchor) {
@@ -3064,7 +3350,7 @@ function humanizePolicyFlag(flag: string) {
 
 function isReportPolicySurfaceRow(row: Record<string, unknown>) {
   const pageType = String(getPolicyPageType(row) ?? "");
-  if (pageType !== "privacy_policy" && pageType !== "terms_of_service" && pageType !== "cookie_policy") {
+  if (pageType !== "privacy_policy" && pageType !== "terms_of_service" && pageType !== "cookie_policy" && pageType !== "cookie_settings") {
     return false;
   }
   return !(pageType === "cookie_policy" && isGenericBrowserCookieHelpUrl(getPolicyPageUrl(row)));
@@ -3139,7 +3425,9 @@ function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, un
             ? "Privacy policy"
             : pageType === "terms_of_service"
               ? "Terms of service"
-              : "Cookie policy",
+              : pageType === "cookie_settings"
+                ? "Cookie preferences"
+                : "Cookie policy",
         pageUrl,
         summary,
         topics
@@ -3148,7 +3436,7 @@ function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, un
     .filter((item) => item.summary || item.topics.length > 0 || item.flags.length > 0);
 }
 
-function getSnapshotPolicySurfaceLabel(pageType: "privacy_policy" | "terms_of_service" | "cookie_policy") {
+function getSnapshotPolicySurfaceLabel(pageType: "privacy_policy" | "terms_of_service" | "cookie_policy" | "cookie_settings") {
   switch (pageType) {
     case "privacy_policy":
       return "Privacy policy";
@@ -3156,6 +3444,8 @@ function getSnapshotPolicySurfaceLabel(pageType: "privacy_policy" | "terms_of_se
       return "Terms of service";
     case "cookie_policy":
       return "Cookie policy";
+    case "cookie_settings":
+      return "Cookie preferences";
   }
 }
 
@@ -3235,7 +3525,7 @@ function getRuntimeKeyPageDiscoverySummary(runtimeArtifacts: Record<string, unkn
 
 function getVerifiedKeyPageSurface(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
-  pageType: "privacy_policy" | "terms_of_service" | "cookie_policy"
+  pageType: "privacy_policy" | "terms_of_service" | "cookie_policy" | "cookie_settings"
 ) {
   const summary = getRuntimeKeyPageDiscoverySummary(runtimeArtifacts);
   const pageSummaries = [
@@ -3264,7 +3554,7 @@ function deriveSnapshotPolicySurfaceFallbacks(
 
   const existingLabels = new Set(existingSurfaces.map((surface) => surface.pageLabel.toLowerCase()));
   const fallbackInputs: Array<{
-    pageType: "privacy_policy" | "terms_of_service" | "cookie_policy";
+    pageType: "privacy_policy" | "terms_of_service" | "cookie_policy" | "cookie_settings";
     present: boolean;
   }> = [
     { pageType: "privacy_policy", present: snapshot.privacy_policy_present === true },
@@ -3292,7 +3582,10 @@ function deriveSnapshotPolicySurfaceFallbacks(
         pageUrl
       };
     })
-    .filter((surface) => !existingLabels.has(surface.pageLabel.toLowerCase()));
+    .filter((surface) =>
+      !existingLabels.has(surface.pageLabel.toLowerCase()) &&
+      !hasExistingPolicySurfaceUrl(existingSurfaces, surface.pageUrl)
+    );
 }
 
 function deriveDiscoveredPrivacyPolicySurfaceFallbacks(
@@ -3326,6 +3619,139 @@ function deriveDiscoveredPrivacyPolicySurfaceFallbacks(
   }));
 }
 
+function deriveRetainedPolicySummarySurfaceFallbacks(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  existingSurfaces: ExecutivePolicySurface[]
+): ExecutivePolicySurface[] {
+  const summary = getPolicyDisclosureSummary(runtimeArtifacts);
+  if (!summary) {
+    return [];
+  }
+
+  const existingLabels = new Set(existingSurfaces.map((surface) => surface.pageLabel.toLowerCase()));
+  const disclosedCookieNames = uniqueStrings([
+    ...getRecordStringArray(summary, "disclosedCookieNames"),
+    ...getRecordStringArray(summary, "disclosed_cookie_names")
+  ]);
+  const inputs: Array<{
+    details: string[];
+    pageLabel: "Privacy policy" | "Cookie policy";
+    present: boolean;
+    urls: string[];
+  }> = [
+    {
+      pageLabel: "Privacy policy",
+      present:
+        getRecordBoolean(summary, "privacyPolicyPresent") === true ||
+        getRecordBoolean(summary, "privacy_policy_present") === true,
+      urls: uniqueStrings([
+        ...getRecordStringArray(summary, "privacyPolicyUrls"),
+        ...getRecordStringArray(summary, "privacy_policy_urls")
+      ]),
+      details: ["Privacy-policy surface and URL were retained by scanner evidence."]
+    },
+    {
+      pageLabel: "Cookie policy",
+      present:
+        getRecordBoolean(summary, "cookiePolicyPresent") === true ||
+        getRecordBoolean(summary, "cookie_policy_present") === true,
+      urls: uniqueStrings([
+        ...getRecordStringArray(summary, "cookiePolicyUrls"),
+        ...getRecordStringArray(summary, "cookie_policy_urls")
+      ]),
+      details: [
+        "Cookie-policy surface and URL were retained by scanner evidence.",
+        disclosedCookieNames.length > 0
+          ? `Named-cookie inventory retained (${disclosedCookieNames.length} cookies).`
+          : null
+      ].filter((value): value is string => Boolean(value))
+    }
+  ];
+
+  return inputs.flatMap<ExecutivePolicySurface>((input) => {
+    if (!input.present || existingLabels.has(input.pageLabel.toLowerCase())) {
+      return [];
+    }
+    if (input.urls.length === 0) {
+      return [{
+        details: input.details,
+        pageLabel: input.pageLabel,
+        pageUrl: null
+      }];
+    }
+    return input.urls
+      .slice(0, 3)
+      .filter((pageUrl) => !hasExistingPolicySurfaceUrl(existingSurfaces, pageUrl))
+      .map((pageUrl) => ({
+        details: input.details,
+        pageLabel: input.pageLabel,
+        pageUrl
+      }));
+  });
+}
+
+function hasExistingPolicySurfaceUrl(existingSurfaces: ExecutivePolicySurface[], pageUrl: string | null) {
+  const normalizedUrl = normalizePolicySurfaceUrlForCompare(pageUrl);
+  return normalizedUrl !== null && existingSurfaces.some((surface) =>
+    normalizePolicySurfaceUrlForCompare(surface.pageUrl) === normalizedUrl
+  );
+}
+
+function deriveChecklistPolicySurfaceFallbacks(
+  checklistRows: GdprEprivacyCoverageChecklistItem[] | null | undefined,
+  existingSurfaces: ExecutivePolicySurface[]
+): ExecutivePolicySurface[] {
+  if (!checklistRows) {
+    return [];
+  }
+
+  const existingLabels = new Set(existingSurfaces.map((surface) => surface.pageLabel.toLowerCase()));
+  return checklistRows.flatMap<ExecutivePolicySurface>((row) => {
+    if (row.status !== "Observed") {
+      return [];
+    }
+
+    const retainedEvidence = row.criticalEvidence.retainedEvidence;
+    if (row.id === "privacy_notice_availability" && !existingLabels.has("privacy policy")) {
+      const rawUrls = uniqueStrings([
+        ...getRecordStringArray(retainedEvidence, "privacyPolicyUrls"),
+        ...getRecordStringArray(retainedEvidence, "privacy_policy_urls")
+      ]);
+      const urls = rawUrls.filter((pageUrl) => !hasExistingPolicySurfaceUrl(existingSurfaces, pageUrl));
+      return (rawUrls.length > 0 ? urls.slice(0, 3) : [null]).map((pageUrl) => ({
+        details: ["Reachable privacy-notice surface retained by the canonical GDPR/ePrivacy checklist evidence."],
+        pageLabel: "Privacy policy",
+        pageUrl
+      }));
+    }
+
+    if (row.id === "cookie_notice_policy_availability" && !existingLabels.has("cookie policy")) {
+      const rawUrls = uniqueStrings([
+        ...getRecordStringArray(retainedEvidence, "cookiePolicyUrls"),
+        ...getRecordStringArray(retainedEvidence, "cookie_policy_urls")
+      ]);
+      const urls = rawUrls.filter((pageUrl) => !hasExistingPolicySurfaceUrl(existingSurfaces, pageUrl));
+      const disclosedCookieNames = uniqueStrings([
+        ...getRecordStringArray(retainedEvidence, "disclosedCookieNames"),
+        ...getRecordStringArray(retainedEvidence, "disclosed_cookie_names")
+      ]);
+      const details = [
+        "Cookie-policy surface was retained by the canonical GDPR/ePrivacy checklist evidence.",
+        disclosedCookieNames.length > 0
+          ? `Named-cookie inventory retained (${disclosedCookieNames.length} cookies).`
+          : null
+      ].filter((value): value is string => Boolean(value));
+      return (rawUrls.length > 0 ? urls.slice(0, 3) : [null]).map((pageUrl) => ({
+        details,
+        pageLabel: "Cookie policy",
+        pageUrl
+      }));
+    }
+
+    return [];
+  });
+}
+
 const EXECUTIVE_RETENTION_HEADING_PATTERN =
   /\b(?:how long (?:we )?(?:keep|retain)|retention(?: period)?|data retention|storage period|retaining your information)\b/i;
 const EXECUTIVE_RETENTION_LIFECYCLE_PATTERN =
@@ -3342,10 +3768,15 @@ function normalizePolicySurfaceUrlForCompare(value: string | null | undefined) {
     const url = new URL(value);
     url.hash = "";
     url.search = "";
+    url.pathname = url.pathname.replace(/^\/-\/[a-z]{2}(?:-[a-z]{2})?\//i, "/");
     return url.toString().replace(/\/$/, "").toLowerCase();
   } catch {
-    return value.trim().replace(/[#?].*$/, "").replace(/\/$/, "").toLowerCase() || null;
+    return value.trim().replace(/^https?:\/\/[^/]+\/-\/[a-z]{2}(?:-[a-z]{2})?\//i, (prefix) => prefix.replace(/-\/[a-z]{2}(?:-[a-z]{2})?\/$/i, "/")).replace(/[#?].*$/, "").replace(/\/$/, "").toLowerCase() || null;
   }
+}
+
+function isCookiePreferencePolicySurfaceUrl(value: string | null | undefined) {
+  return Boolean(value && /\/(?:privacy|cookie)[-_]?(?:prefs?|preferences?|settings?)(?:\/|$)/i.test(value));
 }
 
 function isSecurityOnlyPolicySnippet(value: string | null | undefined) {
@@ -3418,7 +3849,7 @@ function selectExecutiveRetainedPolicySectionSummary(input: {
   const generalRetention = retentionSections.find((section) =>
     !/cookie/i.test(`${getRecordString(section, "heading") ?? ""} ${getRecordString(section, "textExcerpt") ?? getRecordString(section, "text_excerpt") ?? ""}`)
   );
-  const selectedSection = input.pageType === "cookie_policy"
+  const selectedSection = input.pageType === "cookie_policy" || input.pageType === "cookie_settings"
     ? cookieSpecific ?? retentionSections[0]
     : generalRetention ?? retentionSections[0];
   if (!selectedSection) {
@@ -3431,13 +3862,17 @@ function selectExecutiveRetainedPolicySectionSummary(input: {
 export function deriveExecutivePolicySurfaces(
   policyEnrichments: Array<Record<string, unknown>>,
   snapshot?: Record<string, unknown> | null,
-  runtimeArtifacts?: Record<string, unknown> | null
+  runtimeArtifacts?: Record<string, unknown> | null,
+  checklistRows?: GdprEprivacyCoverageChecklistItem[] | null,
+  requestedDomain?: string | null
 ): ExecutivePolicySurface[] {
   const enrichedSurfaces = policyEnrichments
     .filter(isExecutivePolicySurfaceRow)
     .map((row) => {
-      const pageType = String(getPolicyPageType(row) ?? "");
       const pageUrl = getPolicyPageUrl(row);
+      const pageType = isCookiePreferencePolicySurfaceUrl(pageUrl)
+        ? "cookie_settings"
+        : String(getPolicyPageType(row) ?? "");
       const summary = selectExecutiveRetainedPolicySectionSummary({
         pageType,
         pageUrl,
@@ -3475,15 +3910,35 @@ export function deriveExecutivePolicySurfaces(
             ? "Privacy policy"
             : pageType === "terms_of_service"
               ? "Terms of service"
-              : "Cookie policy",
+              : pageType === "cookie_settings"
+                ? "Cookie preferences"
+                : "Cookie policy",
         pageUrl
       };
     })
     .filter((surface) => surface.pageUrl || surface.details.length > 0);
+  const retainedSummarySurfaces = deriveRetainedPolicySummarySurfaceFallbacks(
+    runtimeArtifacts,
+    enrichedSurfaces
+  );
+  const checklistSurfaces = deriveChecklistPolicySurfaceFallbacks(
+    checklistRows,
+    [...enrichedSurfaces, ...retainedSummarySurfaces]
+  );
+  const snapshotFallbackSurfaces = deriveSnapshotPolicySurfaceFallbacks(
+    snapshot,
+    [...enrichedSurfaces, ...retainedSummarySurfaces, ...checklistSurfaces],
+    runtimeArtifacts
+  );
   const combinedSurfaces = [
     ...enrichedSurfaces,
-    ...deriveSnapshotPolicySurfaceFallbacks(snapshot, enrichedSurfaces, runtimeArtifacts),
-    ...deriveDiscoveredPrivacyPolicySurfaceFallbacks(runtimeArtifacts, enrichedSurfaces)
+    ...retainedSummarySurfaces,
+    ...checklistSurfaces,
+    ...snapshotFallbackSurfaces,
+    ...deriveDiscoveredPrivacyPolicySurfaceFallbacks(
+      runtimeArtifacts,
+      [...enrichedSurfaces, ...retainedSummarySurfaces, ...checklistSurfaces, ...snapshotFallbackSurfaces]
+    )
   ];
   const scanIsNonRepresentative = Boolean(
     snapshot && (
@@ -3496,11 +3951,16 @@ export function deriveExecutivePolicySurfaces(
   if (scanIsNonRepresentative) {
     return [];
   }
-  const siteDomain = snapshot
-    ? getRecordString(snapshot, "registered_domain") ?? getRecordString(snapshot, "domain")
-    : null;
+  const siteDomain =
+    requestedDomain ??
+    (snapshot
+      ? getRecordString(snapshot, "registered_domain") ?? getRecordString(snapshot, "domain")
+      : null);
   const dedupedSurfaces = Array.from(combinedSurfaces.reduce((byUrl, surface) => {
-    const key = normalizePolicySurfaceUrlForCompare(surface.pageUrl) ?? `${surface.pageLabel}:${surface.details.join("|")}`;
+    const normalizedUrl = normalizePolicySurfaceUrlForCompare(surface.pageUrl);
+    const key = normalizedUrl
+      ? `${surface.pageLabel.toLowerCase()}:${normalizedUrl}`
+      : `${surface.pageLabel}:${surface.details.join("|")}`;
     const existing = byUrl.get(key);
     if (!existing) {
       byUrl.set(key, surface);
@@ -5774,6 +6234,81 @@ export function getHomepagePreviewGateIdleLabel(href: string) {
   return href.includes("mode=create_account") ? "Create account to view" : "Sign in to view";
 }
 
+type ScanReportRenderProjection = {
+  derivedContext: ScanReportUnifiedFindingState["derivedContext"];
+  globalUnifiedFindings: ScanReportUnifiedFindingState["globalUnifiedFindings"];
+  normalizedConcerns: NonNullable<ScanReportUnifiedFindingState["normalizedConcerns"]>;
+  ownerUnifiedFindings: UnifiedFindingDisplayPacket[];
+};
+
+// Keep only the compact projection for a short completed-report viewing window.
+// The bounded revision check avoids rebuilding the much larger canonical analyst
+// draft tree during reloads and nearby report switches without retaining that tree.
+const SCAN_REPORT_RENDER_PROJECTION_CACHE_TTL_MS = 120_000;
+const SCAN_REPORT_RENDER_PROJECTION_CACHE_MAX_ENTRIES = 6;
+const scanReportRenderProjectionCache = new Map<string, {
+  expiresAt: number;
+  projection: ScanReportRenderProjection;
+  revision: string;
+}>();
+
+function getScanReportRenderRevision(scanRecord: ScanDetailResponse) {
+  return [
+    scanRecord.scan.status,
+    scanRecord.scan.completedAt ?? "",
+    scanRecord.events.length,
+    scanRecord.mergedSignals.length,
+    scanRecord.policyEnrichment.length,
+    scanRecord.signalHits.length,
+    scanRecord.signals.length,
+    scanRecord.validationFindings.length,
+    scanRecord.snapshot?.report_finding_count ?? "",
+    getProductionPolicyModelReviewRevision(scanRecord.runtimeArtifacts)
+  ].join(":");
+}
+
+function buildScanReportRenderProjection(scanRecord: ScanDetailResponse): ScanReportRenderProjection {
+  const state = debugBuildScanReportUnifiedFindingState(scanRecord);
+
+  return {
+    derivedContext: state.derivedContext,
+    globalUnifiedFindings: state.globalUnifiedFindings,
+    normalizedConcerns: state.normalizedConcerns ?? [],
+    ownerUnifiedFindings: buildScanReportUnifiedFindingsFromState(state)
+  };
+}
+
+function getScanReportRenderProjection(scanRecord: ScanDetailResponse): ScanReportRenderProjection {
+  if (scanRecord.scan.status !== "completed") {
+    return buildScanReportRenderProjection(scanRecord);
+  }
+
+  const revision = getScanReportRenderRevision(scanRecord);
+  const cached = scanReportRenderProjectionCache.get(scanRecord.scan.id);
+  if (cached && cached.expiresAt > Date.now() && cached.revision === revision) {
+    scanReportRenderProjectionCache.delete(scanRecord.scan.id);
+    scanReportRenderProjectionCache.set(scanRecord.scan.id, cached);
+    return cached.projection;
+  }
+
+  const projection = buildScanReportRenderProjection(scanRecord);
+  scanReportRenderProjectionCache.set(scanRecord.scan.id, {
+    expiresAt: Date.now() + SCAN_REPORT_RENDER_PROJECTION_CACHE_TTL_MS,
+    projection,
+    revision
+  });
+
+  while (scanReportRenderProjectionCache.size > SCAN_REPORT_RENDER_PROJECTION_CACHE_MAX_ENTRIES) {
+    const oldestScanId = scanReportRenderProjectionCache.keys().next().value;
+    if (typeof oldestScanId !== "string") {
+      break;
+    }
+    scanReportRenderProjectionCache.delete(oldestScanId);
+  }
+
+  return projection;
+}
+
 export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailResponse): ScanReportUnifiedFindingState {
   const snapshot = scanRecord.snapshot;
   if (!snapshot) {
@@ -5790,6 +6325,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
         taxonomySnapshotSections: []
       },
       globalUnifiedFindings: [] as UnifiedFindingDisplayPacket[],
+      normalizedConcerns: [],
       sectionDrafts: []
     };
   }
@@ -5820,6 +6356,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
         taxonomySnapshotSections: []
       },
       globalUnifiedFindings: [] as UnifiedFindingDisplayPacket[],
+      normalizedConcerns: [],
       sectionDrafts: []
     };
   }
@@ -6479,44 +7016,6 @@ function ResultCategorySection(input: {
   );
 }
 
-export function deriveSharedScanDetailGdprEprivacyCoverageChecklist(input: {
-  coverageLimited: boolean;
-  events?: ScanDetailResponse["events"];
-  policyEnrichmentCount: number;
-  projectedFindings?: GdprEprivacyCoverageChecklistInput["projectedFindings"];
-  runtimeArtifacts: ScanDetailResponse["runtimeArtifacts"];
-  runtimeCookieRows?: RuntimeCookieEvidenceRow[];
-  runtimeTrackerPriorityRows?: GdprEprivacyCoverageChecklistInput["runtimeTrackerPriorityRows"];
-  scanCompleted: boolean;
-  snapshot: ScanDetailResponse["snapshot"];
-  unifiedFindings: UnifiedFindingDisplayPacket[];
-}): GdprEprivacyCoverageChecklistItem[] {
-  const runtimeArtifactNormalizedConcerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: input.runtimeArtifacts,
-    validationFindings: []
-  });
-  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    coverageLimited: input.coverageLimited,
-    events: input.events,
-    normalizedConcerns: runtimeArtifactNormalizedConcerns,
-    policyEnrichmentCount: input.policyEnrichmentCount,
-    runtimeArtifacts: input.runtimeArtifacts,
-    scanCompleted: input.scanCompleted,
-    snapshot: input.snapshot
-  });
-
-  return deriveGdprEprivacyCoverageChecklist({
-    coverageLimited: input.coverageLimited,
-    coverageOutcomes,
-    projectedFindings: input.projectedFindings,
-    runtimeCookieRows: input.runtimeCookieRows,
-    runtimeTrackerPriorityRows: input.runtimeTrackerPriorityRows,
-    scanCompleted: input.scanCompleted,
-    unifiedFindings: input.unifiedFindings
-  });
-}
-
 type SharedScanDetailViewProps = {
   analyticsScanSource?: "homepage" | "dashboard" | "unknown";
   autoRefresh?: ReactNode;
@@ -6786,12 +7285,10 @@ export async function SharedScanDetailView({
   const hybridRuntimeSummaryRows = getHybridRuntimeSummaryRows(runtimeArtifacts);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
   const hybridVendorSummary = getRecord(hybridRuntimeEvidence?.vendorSummary);
-  const hybridStorageSummary = getRecord(hybridRuntimeEvidence?.storageSummary);
   const hybridFingerprintSummary = getRecord(hybridRuntimeEvidence?.fingerprintSummary);
   const hybridNavigationSummary = getRecord(hybridRuntimeEvidence?.navigationSummary);
   const hybridUiSummary = getRecord(hybridRuntimeEvidence?.uiSummary);
   const hybridMediaSummary = getRecord(hybridRuntimeEvidence?.mediaSummary);
-  const runtimeInitialCookieCount = getRecordNumber(runtimeArtifacts, "initial_cookie_count") ?? getRecordNumber(runtimeArtifacts, "initialCookieCount") ?? 0;
   const certScoreSummary = deriveCertScoreFindings(scanRecord);
   const fallbackEvidence = previewPayload?.supplementalEvidence ?? previewPayload?.fallbackEvidence ?? null;
   const fallbackEvidenceRelation =
@@ -6839,19 +7336,24 @@ export async function SharedScanDetailView({
     runtimeArtifacts
   });
   const cookieInventoryRows = runtimeCookieInventory.rows;
-  const observedNonEssentialPreConsentStorageCount = countEligibleNonEssentialPreconsentStorageMetricRows(cookieInventoryRows);
-  const unclassifiedPreConsentStorageCount = countUnclassifiedNonEssentialPreconsentStorageRows(cookieInventoryRows);
+  const preConsentDataFlows = buildPreConsentDataFlows(hybridRuntimeEvidence);
+  const preConsentStorageAssessment = buildPreConsentStorageAssessment({
+    hybridRuntimeEvidence,
+    runtimeArtifacts,
+    runtimeCookieRows: cookieInventoryRows
+  });
+  const preConsentStorageMetric = projectPreConsentStorageMetric(preConsentStorageAssessment);
+  const observedNonEssentialPreConsentStorageCount =
+    preConsentStorageAssessment.classifiedNonEssentialCount;
+  const unclassifiedPreConsentStorageCount =
+    preConsentStorageAssessment.unclassifiedCount;
   const promotionGradePreConsentStorageCount = cookieInventoryRows.filter(isEligibleNonEssentialPreconsentStorageRow).length;
-  const cookiesBeforeConsentCount = cookieInventoryRows.length > 0
-    ? observedNonEssentialPreConsentStorageCount
-    : Math.max(
-        getRecordNumber(hybridStorageSummary, "cookiesBeforeConsentCount") ?? 0,
-        certScoreSummary.cookieNamesBeforeConsent.length,
-        runtimeInitialCookieCount
-      );
-  const beforeConsentStorageScope = cookieInventoryRows.length > 0
-    ? "nonessential_only" as const
-    : "all_observed" as const;
+  const cookiesBeforeConsentCount = preConsentStorageMetric.value ?? 0;
+  const beforeConsentStorageMetricAvailable = preConsentStorageMetric.available;
+  const beforeConsentStorageLimitation = preConsentStorageMetric.available
+    ? null
+    : preConsentStorageMetric.explanation;
+  const beforeConsentStorageScope = preConsentStorageMetric.scope;
   const trackerInventoryRows = buildTrackerInventoryRows({
     domains: inventoryThirdPartyDomains,
     firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
@@ -6873,8 +7375,8 @@ export async function SharedScanDetailView({
     vendor: row.vendor
   }));
   const reviewSectionError: string | null = null;
-  const scanReportUnifiedFindingState = debugBuildScanReportUnifiedFindingState(scanRecord);
-  const { taxonomySnapshotSections } = scanReportUnifiedFindingState.derivedContext;
+  const scanReportRenderProjection = getScanReportRenderProjection(scanRecord);
+  const { taxonomySnapshotSections } = scanReportRenderProjection.derivedContext;
 
   const preConsentTrackingObserved =
     snapshot?.preconsent_tracking_detected === true ||
@@ -6932,7 +7434,7 @@ export async function SharedScanDetailView({
   const showHomepagePreviewGate = previewMode === "homepage" && Boolean(createAccountHref);
   const baseFindingEvidenceDiagnostics =
     snapshot && !reviewSectionError
-      ? filterContradictoryPositiveSurfaceFindings(buildScanReportUnifiedFindingsFromState(scanReportUnifiedFindingState))
+      ? filterContradictoryPositiveSurfaceFindings(scanReportRenderProjection.ownerUnifiedFindings)
       : [];
   const supplementalRuntimeFindingDiagnostics = buildSupplementalRuntimeUnifiedFindingPackets(previewPayload);
   const findingEvidenceDiagnostics = filterContradictoryPositiveSurfaceFindings(mergeUnifiedFindingPacketsById([
@@ -6999,7 +7501,6 @@ export async function SharedScanDetailView({
     executiveAccessLimitationNotice
   });
   const isNoGoReport = executiveAccessLimitationNotice?.finding.id === "scan_quality_visual_no_go";
-  const executivePolicySurfaces = deriveExecutivePolicySurfaces(scanRecord.policyEnrichment, scanRecord.snapshot, runtimeArtifacts);
   const executiveScanInterruptions = deriveExecutiveScanInterruptions(scanRecord.snapshot, scanRecord.events);
   const executiveRuntimeMetricsReliable = scanRecord.snapshot?.runtime_counts_retained !== false;
   const executiveCoverageLevel =
@@ -7034,6 +7535,7 @@ export async function SharedScanDetailView({
   const gdprEprivacyCoverageChecklist = deriveSharedScanDetailGdprEprivacyCoverageChecklist({
     coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
     events: scanRecord.events,
+    normalizedConcerns: scanReportRenderProjection.normalizedConcerns,
     policyEnrichmentCount: scanRecord.policyEnrichment.length,
     projectedFindings: allExecutiveFindings,
     runtimeArtifacts,
@@ -7044,10 +7546,16 @@ export async function SharedScanDetailView({
     unifiedFindings: findingEvidenceDiagnostics
   });
   const reportableGdprEprivacyCoverageChecklist = getReportableGdprEprivacyCoverageItems(gdprEprivacyCoverageChecklist);
-  const gdprEprivacyCoverageScore = deriveRegulatoryCoverageScore({
-    framework: "gdpr_eprivacy",
-    rows: reportableGdprEprivacyCoverageChecklist
-  });
+  const gdprEprivacyAssessmentSummaryCounts = summarizeGdprEprivacyAssessmentDirections(
+    reportableGdprEprivacyCoverageChecklist
+  );
+  const executivePolicySurfaces = deriveExecutivePolicySurfaces(
+    scanRecord.policyEnrichment,
+    scanRecord.snapshot,
+    runtimeArtifacts,
+    gdprEprivacyCoverageChecklist,
+    scanRecord.scan.domainHostname
+  );
   const consentSurfaceCoverageItem = gdprEprivacyCoverageChecklist.find((item) => item.id === "consent_surface_observed");
   const executiveCookieBannerPresent =
     consentSurfaceCoverageItem?.status === "Observed"
@@ -7062,11 +7570,12 @@ export async function SharedScanDetailView({
     scanRecord.snapshot,
     "critical_coverage_complete",
   );
-  const storedCustomerGdprEprivacyAssessment = scanRecord.customerGdprEprivacyScoreSelection?.assessment ?? null;
+  const canonicalOverallScore = deriveCanonicalOverallScoreForReport({
+    checklistRows: gdprEprivacyCoverageChecklist,
+    unifiedFindings: findingEvidenceDiagnostics
+  });
   const executiveDisplayedScore = browserCoverageSufficient && criticalCoverageComplete !== false
-    ? storedCustomerGdprEprivacyAssessment
-      ? storedCustomerGdprEprivacyAssessment.scoreValue
-      : gdprEprivacyCoverageScore.score
+    ? canonicalOverallScore
     : null;
   const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {
@@ -7129,6 +7638,7 @@ export async function SharedScanDetailView({
     accessibilitySignals: executiveAccessibilitySignals,
     agencyMappings: scanRecord.agencyMappings,
     benchmarkIndustry: scanRecord.domainBenchmark?.industry ?? null,
+    gdprEprivacyPostureScore: executiveDisplayedScore,
     regulatoryRisk: scanRecord.regulatoryRisk
   };
   const executiveRegulatoryLenses = buildRegulatoryLensesFromUnifiedPackets(
@@ -7137,7 +7647,7 @@ export async function SharedScanDetailView({
     regulatoryLensOptions
   );
   const regulatoryChecklistUnifiedFindings = filterContradictoryPositiveSurfaceFindings(mergeUnifiedFindingPacketsById([
-    ...scanReportUnifiedFindingState.globalUnifiedFindings,
+    ...scanReportRenderProjection.globalUnifiedFindings,
     ...findingEvidenceDiagnostics
   ]));
   const betaRegulatoryFindingSources = buildBetaRegulatoryFindingSources({
@@ -7222,13 +7732,6 @@ export async function SharedScanDetailView({
             ) : null}
           </>
         }
-        statusLabel={isIncompleteScanCoverage ? "Limited" : undefined}
-        statusTone={isIncompleteScanCoverage ? "info" : undefined}
-        leadingBadges={showRegulatoryChecklistSection ? (
-          <span className="inline-flex shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">
-            Beta
-          </span>
-        ) : null}
         scanFromLabel={scanRecord.scan.scanFromLabel}
         scanFromValue={scanRecord.scan.scanFromValue}
         status={scanRecord.scan.status}
@@ -7282,9 +7785,8 @@ export async function SharedScanDetailView({
                 accessibilitySignals={executiveAccessibilitySignals}
             agencyMappings={scanRecord.agencyMappings}
             beforeConsentCookieCount={cookiesBeforeConsentCount}
-            beforeConsentStorageMetricAvailable={
-              cookiesBeforeConsentCount > 0 || unclassifiedPreConsentStorageCount === 0
-            }
+            beforeConsentStorageLimitation={beforeConsentStorageLimitation}
+            beforeConsentStorageMetricAvailable={beforeConsentStorageMetricAvailable}
             unclassifiedPreConsentStorageCount={unclassifiedPreConsentStorageCount}
             beforeConsentStorageScope={beforeConsentStorageScope}
             coverageDiagnosticIndicators={scanCalibrationSummary.coverage.diagnosticIndicators}
@@ -7307,7 +7809,7 @@ export async function SharedScanDetailView({
             regulatoryRisk={scanRecord.regulatoryRisk}
             resolvedVendorNames={executiveResolvedVendorNames}
             score={executiveDisplayedScore}
-            scoreLabel={`${scanRecord.customerGdprEprivacyScoreSelection?.label ?? "GDPR/ePrivacy evidence"} score`}
+            scoreLabel="Overall score"
             scanDurationMs={scanDurationMs}
             scanProof={scanProof}
             scanProofDurationMs={scanDurationMs}
@@ -7343,6 +7845,7 @@ export async function SharedScanDetailView({
           {isNoGoReport ? null : (
             <RuntimeInventoryTable
               cookieRows={cookieInventoryRows}
+              dataFlows={preConsentDataFlows}
               firstPartyDomain={scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost}
               trackerRows={trackerInventoryRows}
             />
@@ -7350,7 +7853,11 @@ export async function SharedScanDetailView({
           {showRegulatoryChecklistSection ? (
             <RegulatoryChecklistSection
               headingLabel="GDPR / ePrivacy Evidence Checklist"
-              headingTrailing={<GdprEprivacyCoverageSummaryPills items={reportableGdprEprivacyCoverageChecklist} />}
+              headingTrailing={
+                <GdprEprivacyCoverageSummaryPills
+                  summaryCounts={gdprEprivacyAssessmentSummaryCounts}
+                />
+              }
               showAdvancedEvidenceToggle
               tabs={[
                 {
@@ -7358,7 +7865,7 @@ export async function SharedScanDetailView({
                     <GdprEprivacyCoverageChecklistCard
                       defaultOpen
                       gdprEprivacyLens={gdprEprivacyExecutiveLens}
-                      items={gdprEprivacyCoverageChecklist}
+                      items={reportableGdprEprivacyCoverageChecklist}
                       showSummaryStrip={false}
                     />
                   ),

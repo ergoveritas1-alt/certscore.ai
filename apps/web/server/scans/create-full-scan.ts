@@ -601,7 +601,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Scan created but event logging failed.",
-      scanId: null
+      scanId: scan.id
     };
   }
 
@@ -696,7 +696,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Scan created but latest scan update failed.",
-      scanId: null
+      scanId: scan.id
     };
   }
 

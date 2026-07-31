@@ -10,6 +10,7 @@ import {
   getLambdaResultTargetEnvironment,
   getManualSmokeResultScanId,
   mirrorLocalV2DagLambdaArtifacts,
+  parseLambdaResultMessage,
   productionArtifactChainRejectReason
 } from "./local-v2-dag-lambda-results";
 
@@ -103,6 +104,19 @@ test("validation worker identifies manual Lambda smoke results for queue cleanup
     getManualSmokeResultScanId(JSON.stringify({ scanId: "aro-gate-adversarial-zeit-de-1782705130742" })),
     "aro-gate-adversarial-zeit-de-1782705130742"
   );
+  assert.equal(
+    getManualSmokeResultScanId(JSON.stringify({
+      scanId: "regional-vpc-parity-us-west-2-example-com-123"
+    })),
+    "regional-vpc-parity-us-west-2-example-com-123"
+  );
+  assert.equal(
+    getManualSmokeResultScanId(JSON.stringify({
+      resultPurpose: "synthetic_verification",
+      scanId: "bounded-verification-id"
+    })),
+    "bounded-verification-id"
+  );
   assert.equal(getManualSmokeResultScanId(JSON.stringify({ scanId: "49037835-190b-4e67-9fe2-426d51d55069" })), null);
 });
 
@@ -141,6 +155,60 @@ test("production result handoff requires verifiable canonical artifact pointers"
   }) ?? "", /s3:\/\//);
 });
 
+test("validation worker retains bounded scanner runtime provenance from Lambda results", () => {
+  const result = parseLambdaResultMessage(JSON.stringify({
+    artifactOnly: true,
+    artifactMetadata: {
+      manifestUri: { sha256: "a".repeat(64), sizeBytes: 100 },
+      scanArtifactUri: { sha256: "b".repeat(64), sizeBytes: 200 }
+    },
+    artifactPointers: {
+      manifestUri: "s3://certscore-artifacts/scan/LocalV2DagLambdaManifest.json",
+      scanArtifactUri: "s3://certscore-artifacts/scan/CanonicalEvidenceBundle.json"
+    },
+    completedAt: "2026-07-23T15:48:45.112Z",
+    contractVersion: "certscore.v2.lambda-dag-result.v1",
+    processor: "local-certscore-v2-dag-parallel-v1",
+    productionFindingIntegration: false,
+    scanId: "fca91cbb-cb56-4d8b-8056-a94d5472bf86",
+    scannerRuntimeProvenance: {
+      awsRegion: "eu-west-1",
+      dispatchVpcMode: "vpc",
+      egressId: "aws-nat:eu-west-1:eipalloc-0123456789abcdef0",
+      egressProvider: "aws-nat-gateway",
+      functionVersion: "$LATEST",
+      imageDigest: `sha256:${"c".repeat(64)}`,
+      publicIpHash: `sha256:${"d".repeat(64)}`,
+      runtimeVpcMode: "vpc"
+    },
+    status: "completed",
+    targetEnvironment: "production"
+  }), "production");
+
+  assert.deepEqual(result.scannerRuntimeProvenance, {
+    awsRegion: "eu-west-1",
+    dispatchVpcMode: "vpc",
+    egressId: "aws-nat:eu-west-1:eipalloc-0123456789abcdef0",
+    egressProvider: "aws-nat-gateway",
+    functionVersion: "$LATEST",
+    imageDigest: `sha256:${"c".repeat(64)}`,
+    publicIpHash: `sha256:${"d".repeat(64)}`,
+    runtimeVpcMode: "vpc"
+  });
+});
+
+test("validation worker persists scanner provenance before score materialization", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+
+  assert.match(source, /scannerRuntimeProvenance:\s*parsedMessage\.scannerRuntimeProvenance/);
+  assert.match(source, /egress_id = coalesce\(\$5, egress_id\)/);
+  assert.match(source, /'runtimeProvenance', \$7::jsonb/);
+  assert.match(source, /public_ip_hash = coalesce\(\$4, public_ip_hash\)/);
+  const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted");
+  const snapshotIndex = source.indexOf("await persistScannerRuntimeSnapshot", scoreIndex);
+  assert.ok(snapshotIndex > scoreIndex, "snapshot provenance must be persisted after score materialization creates the row");
+});
+
 test("validation worker Lambda result poller retains leases and bounds result concurrency", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
@@ -150,6 +218,9 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /RESULT_BATCH_CONCURRENCY\s*=\s*3/);
   assert.match(source, /MaxNumberOfMessages:\s*RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /mapWithConcurrency\(messages, RESULT_BATCH_CONCURRENCY/);
+  assert.match(source, /classifyV2DagLambdaResultDisposition\(rawMessage\)/);
+  assert.match(source, /acknowledged non-persistable v2 DAG Lambda result/);
+  assert.match(source, /rejected invalid v2 DAG Lambda result identity/);
   assert.match(source, /async function loopQueue\(queueUrl: string\)/);
   assert.match(source, /for \(const queueUrl of queueUrls\)/);
   assert.doesNotMatch(source, /Promise\.all\(queueUrls\.map/);
@@ -167,6 +238,8 @@ test("validation worker persists completion scores before acknowledging a Lambda
   assert.match(source, /scan_score_materialization_requests/);
   assert.match(source, /result\.complete !== true/);
   assert.match(source, /completedScanScoresExist/);
+  assert.match(source, /response\.status === 422 && failure\?\.retryable === false/);
+  assert.match(source, /terminal score materialization failure acknowledged/);
 });
 
 test("validation worker synchronizes linked API activity before acknowledging a Lambda result", async () => {

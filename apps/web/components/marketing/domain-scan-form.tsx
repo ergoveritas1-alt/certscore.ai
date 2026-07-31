@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Input } from "@website-signal-risk-scanner/ui";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
 import { CERTSCORE_CHROME_EXTENSION_STORE_URL } from "../../lib/browser-extension";
@@ -232,6 +232,15 @@ function normalizeBrowserScanTarget(rawDomain: string) {
   return url.toString();
 }
 
+function isValidScanTarget(rawDomain: string) {
+  try {
+    const normalized = normalizeBrowserScanTarget(rawDomain);
+    return Boolean(new URL(normalized).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function waitForBx01Message(requestId: string, expectedType: string, timeoutMs: number) {
   return new Promise<Bx01WindowMessage>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
@@ -350,7 +359,7 @@ export function DomainScanForm({
   emptySubmitDomain = "",
   helperText,
   inputLabel = "Website domain",
-  inputPlaceholder = "Enter yoursite.com",
+  inputPlaceholder,
   mode = "preview",
   requestSource,
   sampleDomains = [],
@@ -358,6 +367,7 @@ export function DomainScanForm({
   variant = "default"
 }: DomainScanFormProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const canUseLocalExtensionScan = allowLocalExtensionScan && allowRestrictedScanOptions;
   const allowedDefaultScanFrom = restrictLocalExtensionScanFrom({
     allowLocalExtensionScan,
@@ -376,11 +386,36 @@ export function DomainScanForm({
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
   const [scanFrom, setScanFrom] = useState<ScanFrom>(allowedDefaultScanFrom);
   const [heroPlaceholder, setHeroPlaceholder] = useState(HERO_IDLE_PLACEHOLDER);
+  const [recentScanReusedFromUrl, setRecentScanReusedFromUrl] = useState(false);
+  const staticPlaceholder = inputPlaceholder ?? HERO_IDLE_PLACEHOLDER;
   const isSubmittingRef = useRef(false);
   const scanProgress = useScanProgressClock(isSubmitting);
   const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
+  const scanButtonArmed = isValidScanTarget(effectiveSubmitDomain);
   const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
   const expectsRecentScanReuse = shouldExpectRecentScanReuse({ freshRescan, hasRecentReusableScan, mode });
+
+  useEffect(() => {
+    setRecentScanReusedFromUrl(new URLSearchParams(window.location.search).get("recentScanReused") === "1");
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!recentScanReusedFromUrl) {
+      return;
+    }
+
+    setErrorMessage(RECENT_SCAN_REUSED_MESSAGE);
+    setMessageTone("info");
+  }, [recentScanReusedFromUrl]);
+
+  useEffect(() => {
+    if (!pathname.startsWith("/app/scans/") || recentScanReusedFromUrl) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setMessageTone("error");
+  }, [pathname, recentScanReusedFromUrl]);
 
   useEffect(() => {
     if (typeof window === "undefined" || window.location.pathname.startsWith("/scan/") || window.location.pathname.startsWith("/app/scans/")) {
@@ -488,7 +523,7 @@ export function DomainScanForm({
         clearTimeout(timer);
       }
     };
-  }, [variant]);
+  }, [compact, variant]);
 
   useEffect(() => {
     if (!canUseLocalExtensionScan && scanFrom === "local_extension") {
@@ -764,6 +799,12 @@ export function DomainScanForm({
         return;
       }
 
+      // Clear transient submit state before navigating to the result. This is
+      // important for fresh scans too: the report route can reuse this form
+      // instance while the new scan is being materialized.
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
+
       if (payload.scanId) {
         saveActiveScanSession({
           campaignAttribution: campaignAttribution ?? undefined,
@@ -819,13 +860,17 @@ export function DomainScanForm({
               setDomain(event.target.value);
               resetValidationState();
             }}
-            placeholder={variant === "homepage-hero" ? heroPlaceholder : inputPlaceholder}
+            placeholder={variant === "homepage-hero" ? heroPlaceholder : staticPlaceholder}
             type="text"
             value={domain}
             aria-label={inputLabel}
           />
           {mode === "full" ? (
-            <div className={variant === "homepage-hero" ? "absolute right-[8.25rem] top-1/2 -translate-y-1/2 scale-150 sm:right-[8.75rem]" : compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
+            <div className={variant === "homepage-hero"
+              ? `absolute ${isSubmitting ? "right-[10rem] sm:right-[10.5rem]" : "right-[8.75rem] sm:right-[9.25rem]"} top-1/2 -translate-y-1/2 scale-150`
+              : compact
+              ? `absolute ${isSubmitting ? "right-[8.5rem]" : "right-[5.9rem]"} top-1/2 z-10 -translate-y-1/2`
+              : `absolute ${isSubmitting ? "right-[10.25rem]" : "right-[8rem]"} top-1/2 -translate-y-1/2`}>
               <ScanFromSelect
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
@@ -842,23 +887,9 @@ export function DomainScanForm({
                 value={scanFrom}
                 variant="icon"
               />
-              {variant === "homepage-hero" ? (
-                <svg
-                  aria-hidden="true"
-                  className="pointer-events-none absolute -bottom-0.5 left-1/2 h-2 w-2 -translate-x-1/2 text-slate-500"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  viewBox="0 0 12 8"
-                >
-                  <path d="m2 2 4 4 4-4" />
-                </svg>
-              ) : null}
             </div>
           ) : (
-            <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
+            <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[8rem] top-1/2 -translate-y-1/2"}>
               <ScanFromSelect
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
@@ -876,12 +907,14 @@ export function DomainScanForm({
             aria-label={buttonLabel}
             className={
               variant === "homepage-hero"
-                ? "absolute right-1.5 top-1/2 h-11 w-[118px] -translate-y-1/2 rounded-[13px] border border-emerald-300/70 bg-[linear-gradient(135deg,#45c957_0%,#56bd58_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(34,197,94,0.28)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-emerald-300/40 sm:h-[52px] sm:w-[126px] sm:text-base"
+                ? `absolute right-1.5 top-1/2 h-11 ${isSubmitting ? "w-[8.5rem] sm:w-[9rem]" : "w-[118px] sm:w-[126px]"} -translate-y-1/2 rounded-[13px] border border-emerald-300/70 bg-[linear-gradient(135deg,#45c957_0%,#56bd58_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(34,197,94,0.28)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-emerald-300/40 sm:h-[52px] sm:text-base`
                 : compact
-                ? "absolute right-2 top-1/2 h-8 -translate-y-1/2 rounded-full border-0 bg-slate-950 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800"
-                : "absolute right-3 top-1/2 h-11 w-[104px] -translate-y-1/2 rounded-xl border-0 bg-[linear-gradient(135deg,#47b54a_0%,#5ec158_58%,#7ccf79_100%)] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(71,181,74,0.16)] hover:brightness-[1.04]"
+                ? scanButtonArmed
+                  ? `scan-report-button scan-report-button-primary scan-form-button absolute right-2 top-1/2 z-20 h-8 ${isSubmitting ? "w-[7.5rem]" : "w-[4.5rem]"} -translate-y-1/2 rounded-full border border-sky-600 bg-[linear-gradient(180deg,#38bdf8_0%,#0284c7_100%)] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_3px_0_0_rgba(3,105,161,0.55),0_10px_22px_-7px_rgba(14,165,233,0.7)] ring-1 ring-sky-300/70 transition-[filter,box-shadow] duration-150 hover:-translate-y-1/2 hover:border-sky-500 hover:brightness-110 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_4px_0_0_rgba(3,105,161,0.5),0_13px_24px_-7px_rgba(14,165,233,0.8)] active:-translate-y-1/2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 disabled:!opacity-100`
+                  : "scan-report-button scan-report-button-primary absolute right-2 top-1/2 h-8 min-w-[4.5rem] -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(180deg,#38bdf8_0%,#0284c7_100%)] px-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_3px_0_0_rgba(3,105,161,0.55),0_10px_22px_-7px_rgba(14,165,233,0.7)] transition-[filter,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 disabled:!opacity-100"
+                : `absolute right-3 top-1/2 h-11 ${isSubmitting ? "w-[8.5rem]" : "w-[104px]"} -translate-y-1/2 rounded-xl border-0 bg-[linear-gradient(135deg,#47b54a_0%,#5ec158_58%,#7ccf79_100%)] px-4 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(71,181,74,0.16)] hover:brightness-[1.04]`
             }
-            disabled={isSubmitting}
+            disabled={isSubmitting || !scanButtonArmed}
             type="submit"
           >
             {isSubmitting ? (

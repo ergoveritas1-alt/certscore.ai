@@ -2,7 +2,7 @@ import { isMeaningfulPolicyText } from "./policy-snippet-normalization";
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 
 export type PolicyEnrichmentRow = Record<string, unknown>;
-export const MAX_PUBLIC_POLICY_SURFACES = 5;
+export const MAX_PUBLIC_POLICY_SURFACES = 4;
 
 export type PublicPolicySurfaceProjection = {
   type: string;
@@ -102,12 +102,17 @@ export function prioritizePublicPolicySurfaces<T extends PublicPolicySurfaceProj
   const firstParty = deduped.filter((surface) =>
     Boolean(siteDomain && policySurfaceRegistrableDomain(surface.url) === siteDomain)
   );
-  const eligible = firstParty.length > 0 ? firstParty : deduped;
+  const eligible = firstParty.length > 0
+    ? deduped.filter((surface) =>
+        surface.url === null ||
+        policySurfaceRegistrableDomain(surface.url) === siteDomain
+      )
+    : deduped;
   const ranked = eligible
     .map((surface, index) => ({ index, score: publicPolicySurfaceScore(surface, siteDomain), surface }))
     .sort((left, right) => right.score - left.score || left.index - right.index);
   const selected = ranked.slice(0, limit);
-  for (const pattern of [/privacy/i, /cookie/i, /terms/i]) {
+  for (const pattern of [/privacy/i, /cookie/i, /terms/i, /accessibility/i]) {
     const candidate = ranked.find((entry) => pattern.test(entry.surface.type));
     if (!candidate || selected.includes(candidate) || selected.length === 0) continue;
     const replaceIndex = [...selected].reverse().findIndex((entry) =>

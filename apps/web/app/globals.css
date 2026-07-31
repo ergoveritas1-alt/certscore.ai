@@ -15,6 +15,192 @@ a {
   @apply transition-colors;
 }
 
+@keyframes scan-hourglass-flip {
+  0%, 18% {
+    transform: rotate(0deg);
+  }
+  42%, 58% {
+    transform: rotate(180deg);
+  }
+  82%, 100% {
+    transform: rotate(360deg);
+  }
+}
+
+.scan-hourglass {
+  position: relative;
+  width: 2.25rem;
+  height: 3rem;
+  animation: scan-hourglass-flip 3.2s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.scan-hourglass::before,
+.scan-hourglass::after {
+  position: absolute;
+  left: 0;
+  width: 2.25rem;
+  height: 0.32rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0ea5e9, #6366f1);
+  content: "";
+}
+
+.scan-hourglass::before {
+  top: 0;
+}
+
+.scan-hourglass::after {
+  bottom: 0;
+}
+
+.scan-hourglass__top,
+.scan-hourglass__bottom {
+  position: absolute;
+  left: 0.22rem;
+  width: 1.8rem;
+  height: 1.42rem;
+  border: 0.18rem solid #38bdf8;
+  background: linear-gradient(135deg, rgba(224, 242, 254, 0.85), rgba(224, 231, 255, 0.7));
+}
+
+.scan-hourglass__top {
+  top: 0.26rem;
+  clip-path: polygon(0 0, 100% 0, 62% 100%, 38% 100%);
+}
+
+.scan-hourglass__bottom {
+  bottom: 0.26rem;
+  clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%);
+}
+
+.scan-hourglass__sand {
+  position: absolute;
+  left: 0.92rem;
+  top: 0.7rem;
+  width: 0.42rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  background: linear-gradient(#38bdf8 0 42%, transparent 42% 55%, #6366f1 55% 100%);
+  box-shadow: 0 0.8rem 0 -0.11rem #6366f1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-hourglass {
+    animation: none;
+  }
+}
+
+@layer components {
+  .scan-report-button {
+    border: 1px solid rgb(186 230 253);
+    background-image: linear-gradient(180deg, rgb(255 255 255) 0%, rgb(240 249 255) 100%);
+    box-shadow: 0 2px 0 0 rgb(186 230 253);
+    transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease, filter 150ms ease;
+  }
+
+  .scan-report-button:hover:not(:disabled) {
+    border-color: rgb(14 165 233);
+    box-shadow: 0 3px 0 0 rgb(125 211 252);
+    transform: translateY(-1px);
+  }
+
+  .scan-report-button:active:not(:disabled) {
+    box-shadow: none;
+    transform: translateY(1px);
+  }
+
+  .scan-report-button:focus-visible {
+    outline: 2px solid rgb(14 165 233);
+    outline-offset: 2px;
+  }
+
+  .scan-report-button-primary {
+    border-color: transparent;
+    background-image: linear-gradient(135deg, #0f8bd7 0%, #1ea7e1 62%, #67c7f0 100%);
+    box-shadow: 0 2px 0 0 rgb(3 105 161);
+  }
+
+  .scan-report-button-primary:hover:not(:disabled) {
+    border-color: transparent;
+    filter: brightness(1.04);
+    box-shadow: 0 3px 0 0 rgb(3 105 161);
+  }
+
+  .scan-report-button-dark {
+    border-color: rgb(15 23 42);
+    background-image: linear-gradient(180deg, rgb(30 41 59) 0%, rgb(2 6 23) 100%);
+    box-shadow: 0 2px 0 0 rgb(2 6 23);
+  }
+
+  .scan-report-button-dark:hover:not(:disabled) {
+    border-color: rgb(30 41 59);
+    box-shadow: 0 3px 0 0 rgb(2 6 23);
+  }
+
+  .certscore-app-content .ui-button:not(.scan-report-button),
+  .app-raised-button {
+    border: 1px solid rgb(186 230 253);
+    background-image: linear-gradient(180deg, rgb(255 255 255) 0%, rgb(240 249 255) 100%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      0 2px 0 rgb(186 230 253),
+      0 8px 18px -12px rgb(14 116 144 / 0.55);
+    translate: 0 0;
+    transition:
+      translate 150ms ease,
+      box-shadow 150ms ease,
+      border-color 150ms ease,
+      filter 150ms ease;
+  }
+
+  .certscore-app-content .ui-button:not(.scan-report-button):hover:not(:disabled),
+  .app-raised-button:hover:not(:disabled) {
+    border-color: rgb(14 165 233);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.95),
+      0 3px 0 rgb(125 211 252),
+      0 12px 22px -13px rgb(14 116 144 / 0.68);
+    translate: 0 -1px;
+  }
+
+  .certscore-app-content .ui-button:not(.scan-report-button):active:not(:disabled),
+  .app-raised-button:active:not(:disabled) {
+    box-shadow: inset 0 2px 4px rgb(15 23 42 / 0.14);
+    translate: 0 1px;
+  }
+
+  .certscore-app-content .ui-button-primary:not(.scan-report-button),
+  .app-raised-button-dark {
+    border-color: rgb(30 41 59);
+    background-image: linear-gradient(180deg, rgb(51 65 85) 0%, rgb(15 23 42) 100%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.18),
+      0 3px 0 rgb(2 6 23),
+      0 10px 20px -13px rgb(2 6 23 / 0.9);
+  }
+
+  .certscore-app-content .ui-button-primary:not(.scan-report-button):hover:not(:disabled),
+  .app-raised-button-dark:hover:not(:disabled) {
+    border-color: rgb(51 65 85);
+    filter: brightness(1.08);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.22),
+      0 4px 0 rgb(2 6 23),
+      0 14px 24px -14px rgb(2 6 23 / 0.95);
+  }
+
+  .certscore-app-content .ui-button-primary:not(.scan-report-button):active:not(:disabled),
+  .app-raised-button-dark:active:not(:disabled) {
+    box-shadow: inset 0 2px 5px rgb(2 6 23 / 0.65);
+  }
+}
+
+.scan-form-button:hover:not(:disabled),
+.scan-form-button:active:not(:disabled) {
+  transform: translateY(-50%);
+}
+
 .status-sheen-label {
   position: relative;
   display: inline-block;

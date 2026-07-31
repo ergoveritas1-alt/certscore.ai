@@ -2219,14 +2219,41 @@ function hasStableLinkedDiscoveryPath(rawEvidence: Record<string, unknown> | nul
 }
 
 function isGdprTransparencyArticle13EvidenceConcern(rawEvidence: Record<string, unknown> | null | undefined) {
+  const profile = getFirstString(rawEvidence, [
+    "gdprTransparencyEvidenceProfile",
+    "gdpr_transparency_evidence_profile"
+  ]);
+  const creditProfile = getFirstString(rawEvidence, [
+    "productionCreditProfile",
+    "production_credit_profile"
+  ]);
+  const provenance = getFirstString(rawEvidence, [
+    "classifierProvenance",
+    "classifier_provenance"
+  ]);
+  const approvedDeterministicEvidence =
+    profile === "gdpr_transparency_multilingual_article13_v1" &&
+    creditProfile === "gdpr_transparency_multilingual_article13_v1" &&
+    provenance === "gdpr_transparency_topic_classifier.v1";
+  const approvedModelReviewEvidence =
+    rawEvidence?.gdprTransparencyModelReviewEvidence === true &&
+    profile === "gdpr_transparency_mini_review_v1" &&
+    creditProfile === "gdpr_transparency_mini_review_v1" &&
+    provenance === "mini_policy_semantic_review.v2";
+
   return rawEvidence?.gdprTransparencyArticle13Evidence === true &&
-    getFirstString(rawEvidence, ["gdprTransparencyEvidenceProfile", "gdpr_transparency_evidence_profile"]) ===
-      "gdpr_transparency_multilingual_article13_v1" &&
     rawEvidence.productionCredit === true &&
-    getFirstString(rawEvidence, ["productionCreditProfile", "production_credit_profile"]) ===
-      "gdpr_transparency_multilingual_article13_v1" &&
-    getFirstString(rawEvidence, ["classifierProvenance", "classifier_provenance"]) ===
-      "gdpr_transparency_topic_classifier.v1";
+    (approvedDeterministicEvidence || approvedModelReviewEvidence);
+}
+
+function isGdprTransparencyLegalFrameworkValidityConcern(
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  return rawEvidence?.gdprTransparencyLegalFrameworkValidityEvidence === true &&
+    getBooleanEvidence(rawEvidence, [
+      "staleLegalFrameworkReferenceObserved",
+      "stale_legal_framework_reference_observed"
+    ]) === true;
 }
 
 function getGdprTransparencyArticle13ChecklistEligibility(
@@ -2254,6 +2281,80 @@ function getGdprTransparencyArticle13ChecklistEligibility(
   return topic && GDPR_TRANSPARENCY_ARTICLE13_CHECKLIST_OBSERVED_TOPICS.has(topic)
     ? "observed"
     : "review_signal";
+}
+
+function getConsentOptionsControlChecklistEligibility(input: {
+  originKey: string;
+  rawEvidence: Record<string, unknown> | null | undefined;
+}): NormalizedConcernRegulatoryChecklistEligibility | null {
+  if (
+    !input.originKey.startsWith("consent.options_control_prominence.") ||
+    input.rawEvidence?.consentOptionsControlProminenceEvidence !== true
+  ) {
+    return null;
+  }
+
+  const state = getFirstString(input.rawEvidence, [
+    "consentOptionsControlProminenceState",
+    "consent_options_control_prominence_state"
+  ]);
+  if (state === "dedicated_button" || state === "first_layer_control") {
+    return "observed";
+  }
+  if (
+    state === "inline_link" ||
+    state === "persistent_link" ||
+    state === "balanced_accept_decline_no_first_layer_settings"
+  ) {
+    return "review_signal";
+  }
+  if (state === "no_granular_controls_retained") {
+    return "gap_observed";
+  }
+  return "none";
+}
+
+function getConsentPaidDeclinePathChecklistEligibility(input: {
+  originKey: string;
+  rawEvidence: Record<string, unknown> | null | undefined;
+}): NormalizedConcernRegulatoryChecklistEligibility | null {
+  if (
+    input.originKey !== "consent.paid_decline_path.reject_with_subscription" ||
+    input.rawEvidence?.consentPaidDeclinePathEvidence !== true
+  ) {
+    return null;
+  }
+
+  return getFirstString(input.rawEvidence, [
+    "consentPaidDeclinePathState",
+    "consent_paid_decline_path_state"
+  ]) === "reject_with_subscription"
+    ? "review_signal"
+    : "none";
+}
+
+function getPreConsentStorageAssessmentChecklistEligibility(input: {
+  originKey: string;
+  rawEvidence: Record<string, unknown> | null | undefined;
+}): NormalizedConcernRegulatoryChecklistEligibility | null {
+  if (
+    !input.originKey.startsWith("storage.preconsent_assessment.") ||
+    input.rawEvidence?.preConsentStorageAssessmentEvidence !== true
+  ) {
+    return null;
+  }
+
+  const assessment = input.rawEvidence.preConsentStorageAssessment;
+  const status = assessment && typeof assessment === "object" && !Array.isArray(assessment)
+    ? getFirstString(assessment as Record<string, unknown>, ["status"])
+    : null;
+  if (status === "classified_nonessential_observed") {
+    return "gap_observed";
+  }
+  if (status === "partially_classified" || status === "snapshot_presence_only") {
+    return "review_signal";
+  }
+  return "none";
 }
 
 function isGuessedOnlyDiscovery(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -2356,6 +2457,48 @@ export function deriveConcernPolicy(input: {
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
 
   const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  const consentPaidDeclinePathChecklistEligibility = getConsentPaidDeclinePathChecklistEligibility({
+    originKey: input.concern.originKey,
+    rawEvidence: input.rawEvidence
+  });
+  if (consentPaidDeclinePathChecklistEligibility !== null) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility: consentPaidDeclinePathChecklistEligibility
+    };
+  }
+  const consentOptionsChecklistEligibility = getConsentOptionsControlChecklistEligibility({
+    originKey: input.concern.originKey,
+    rawEvidence: input.rawEvidence
+  });
+  if (consentOptionsChecklistEligibility !== null) {
+    return {
+      allowedNarrativeTier:
+        consentOptionsChecklistEligibility === "observed" ? "moderate" : "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility: consentOptionsChecklistEligibility
+    };
+  }
+  const preConsentStorageChecklistEligibility = getPreConsentStorageAssessmentChecklistEligibility({
+    originKey: input.concern.originKey,
+    rawEvidence: input.rawEvidence
+  });
+  if (preConsentStorageChecklistEligibility !== null) {
+    return {
+      allowedNarrativeTier:
+        preConsentStorageChecklistEligibility === "observed" ? "moderate" : "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility: preConsentStorageChecklistEligibility
+    };
+  }
+
   if (suggestedUnifiedFindingId === "cookie_retention_lifetime_review_signal") {
     const review = evaluateCookieRetentionReview(input.rawEvidence);
     return {
@@ -3281,8 +3424,27 @@ export function deriveConcernPolicy(input: {
     };
   }
 
+  if (isGdprTransparencyLegalFrameworkValidityConcern(input.rawEvidence)) {
+    negativeEvidenceFlags.add("stale_legal_framework_reference_observed");
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility: "review_signal"
+    };
+  }
+
   if (isGdprTransparencyArticle13EvidenceConcern(input.rawEvidence)) {
     const regulatoryChecklistEligibility = getGdprTransparencyArticle13ChecklistEligibility(input.rawEvidence);
+    if (
+      getBooleanEvidence(input.rawEvidence, [
+        "staleLegalFrameworkReferenceObserved",
+        "stale_legal_framework_reference_observed"
+      ]) === true
+    ) {
+      negativeEvidenceFlags.add("stale_legal_framework_reference_observed");
+    }
     return {
       allowedNarrativeTier:
         getFirstString(input.rawEvidence, [

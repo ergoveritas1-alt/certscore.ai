@@ -44,7 +44,7 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
 
   return (
     <div className="space-y-6">
-      <Link className="text-sm font-semibold text-sky-700" href="/app/admin/pulse">
+      <Link className="app-raised-button inline-flex rounded-lg px-3 py-2 text-sm font-semibold text-sky-700" href="/app/admin/pulse" prefetch={false}>
         Back to API activity
       </Link>
 
@@ -243,7 +243,7 @@ function Field({ label, value }: { label: string; value: string }) {
 
 function AdminLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link className="block rounded-lg border border-slate-200 px-3 py-2 font-semibold text-sky-700" href={href}>
+    <Link className="app-raised-button block rounded-lg px-3 py-2 font-semibold text-sky-700" href={href} prefetch={false}>
       {label}
     </Link>
   );

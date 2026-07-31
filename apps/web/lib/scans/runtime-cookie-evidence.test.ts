@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildCookieDisclosureGapEvidence,
+  buildPreConsentStorageAssessment,
   buildRuntimeCookieInventory,
   classifyRuntimeCookieCategory,
   countEligibleNonEssentialPreconsentStorageMetricRows,
@@ -10,7 +11,8 @@ import {
   getRuntimeCookiePrimaryProvider,
   isEligibleNonEssentialPreconsentStorageMetricRow,
   isEligibleNonEssentialPreconsentStorageRow,
-  isFunctionalCookieExcludedFromTrackingEvidence
+  isFunctionalCookieExcludedFromTrackingEvidence,
+  projectPreConsentStorageMetric
 } from "./runtime-cookie-evidence";
 import {
   buildRuntimeCookiePriorityGroups,
@@ -314,6 +316,150 @@ test("keeps confirmed non-essential count visible alongside unclassified pre-con
   assert.equal(hasUnresolvedNonEssentialPreconsentStorageEvidence([confirmed, unknown]), true);
 });
 
+test("canonical pre-consent storage assessment reconciles essential-only storage to a conclusive zero", () => {
+  const assessment = buildPreConsentStorageAssessment({
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [{
+          beforeConsent: true,
+          category: "necessary",
+          cookieName: "OptanonConsent",
+          domain: "example.test",
+          nonEssential: false,
+          party: "first_party"
+        }],
+        storageSummary: {
+          cookiesBeforeConsentCount: 1
+        }
+      }
+    }
+  });
+  const metric = projectPreConsentStorageMetric(assessment);
+
+  assert.equal(assessment.status, "classified_zero");
+  assert.equal(assessment.classifiedEssentialCount, 1);
+  assert.equal(assessment.classifiedNonEssentialCount, 0);
+  assert.equal(assessment.reconciliationStatus, "reconciled");
+  assert.deepEqual(metric, {
+    available: true,
+    explanation: "Storage was scanned and no non-essential storage was detected in the reported scope.",
+    label: "Non-essential storage",
+    scope: "nonessential_only",
+    status: "measured_zero",
+    value: 0
+  });
+});
+
+test("canonical pre-consent storage assessment withholds zero when aggregate rows cannot be attributed", () => {
+  const assessment = buildPreConsentStorageAssessment({
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        storageSummary: {
+          cookiesBeforeConsentCount: 3
+        }
+      }
+    }
+  });
+  const metric = projectPreConsentStorageMetric(assessment);
+
+  assert.equal(assessment.status, "partially_classified");
+  assert.equal(assessment.reconciliationStatus, "aggregate_exceeds_attributed_rows");
+  assert.equal(metric.status, "partially_classified");
+  assert.equal(metric.value, null);
+  assert.doesNotMatch(metric.explanation, /none detected/i);
+});
+
+test("canonical pre-consent storage assessment counts a classified non-essential write once", () => {
+  const assessment = buildPreConsentStorageAssessment({
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [{
+          beforeConsent: true,
+          category: "analytics",
+          cookieName: "_ga",
+          domain: "example.test",
+          nonEssential: true,
+          party: "first_party",
+          setAtMs: 612
+        }],
+        storageSummary: {
+          cookiesBeforeConsentCount: 1
+        }
+      }
+    }
+  });
+  const metric = projectPreConsentStorageMetric(assessment);
+
+  assert.equal(assessment.status, "classified_nonessential_observed");
+  assert.equal(assessment.classifiedNonEssentialCount, 1);
+  assert.equal(assessment.provenWriteCount, 1);
+  assert.equal(assessment.evidenceRows[0]?.name, "_ga");
+  assert.equal(assessment.evidenceRows[0]?.firstObservedMs, 612);
+  assert.equal(metric.status, "measured_positive");
+  assert.equal(metric.value, 1);
+});
+
+test("canonical pre-consent storage assessment preserves an observed Amazon ubid signal alongside unclassified rows", () => {
+  const assessment = buildPreConsentStorageAssessment({
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [
+          {
+            beforeConsent: true,
+            cookieName: "ubid-acbde",
+            domain: "amazon.de",
+            setAtMs: 500
+          },
+          {
+            beforeConsent: true,
+            cookieName: "mystery-amazon-cookie",
+            domain: "amazon.de",
+            setAtMs: 520
+          }
+        ],
+        storageSummary: {
+          cookiesBeforeConsentCount: 2
+        }
+      }
+    }
+  });
+  const metric = projectPreConsentStorageMetric(assessment);
+
+  assert.equal(assessment.status, "classified_nonessential_observed");
+  assert.equal(assessment.classifiedNonEssentialCount, 1);
+  assert.equal(assessment.unclassifiedCount, 1);
+  assert.equal(assessment.reconciliationStatus, "reconciled");
+  assert.equal(assessment.evidenceRows.find((row) => row.name === "ubid-acbde")?.essentiality, "non_essential");
+  assert.equal(metric.status, "measured_positive");
+  assert.equal(metric.value, 1);
+  assert.match(metric.explanation, /1 additional pre-consent record remains unclassified/i);
+});
+
+test("canonical pre-consent storage assessment keeps snapshot candidates timing-unconfirmed", () => {
+  const assessment = buildPreConsentStorageAssessment({
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [{
+          beforeConsent: true,
+          cookieName: "AMP_abc",
+          domain: "example.test",
+          setMethod: "browser_snapshot"
+        }],
+        storageSummary: {
+          cookiesBeforeConsentCount: 1
+        }
+      }
+    }
+  });
+  const metric = projectPreConsentStorageMetric(assessment);
+
+  assert.equal(assessment.status, "snapshot_presence_only");
+  assert.equal(assessment.provenWriteCount, 0);
+  assert.equal(metric.status, "partially_classified");
+  assert.equal(metric.value, null);
+  assert.match(metric.explanation, /write timing was not confirmed/i);
+});
+
 test("Aruba cookies use cookie-specific ownership and reject unrelated Cloudflare inheritance", () => {
   const inventory = buildRuntimeCookieInventory({
     hybridRuntimeEvidence: {
@@ -379,7 +525,7 @@ test("canonical security-cookie classification overrides stale advertising flags
     }
   });
 
-  assert.equal(inventory.rows[0]?.category, "necessary");
+  assert.equal(inventory.rows[0]?.category, "security");
   assert.equal(inventory.rows[0]?.nonEssential, false);
   assert.equal(inventory.rows[0]?.essentiality, "essential");
   assert.equal(getRuntimeCookiePrimaryProvider(inventory.rows[0]!), "Cloudflare");
@@ -432,7 +578,10 @@ test("classifies named measurement identifiers and leaves unknown identifiers un
     }
   });
   const rows = new Map(inventory.rows.map((row) => [row.cookieName, row]));
-  for (const name of ["_dd_s", "_zitok", "ebEventToTrack", "stableId"]) {
+  assert.equal(rows.get("_dd_s")?.category, "security");
+  assert.equal(rows.get("_dd_s")?.essentiality, "essential");
+  assert.equal(rows.get("_dd_s")?.nonEssential, false);
+  for (const name of ["_zitok", "ebEventToTrack", "stableId"]) {
     assert.equal(rows.get(name)?.category, "analytics");
     assert.equal(rows.get(name)?.essentiality, "unknown");
     assert.equal(rows.get(name)?.nonEssential, false);

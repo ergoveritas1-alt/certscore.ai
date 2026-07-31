@@ -115,7 +115,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "cmp_framework_signal_observed",
-    label: "Consent framework / CMP signal",
+    label: "CMP framework",
     explanation: "Whether a consent-management framework, CMP vendor, or CMP runtime signal was observed in the pre-consent/public-web context.",
     findingIds: ["consent_surface_observed"],
     defaultFindingStatus: "Observed",
@@ -124,8 +124,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "reject_all_path_availability",
-    label: "Reject / decline control",
-    explanation: "Whether a first-layer reject, decline, refuse, or continue-without-accepting option was observed on the retained consent surface.",
+    label: "Decline consent control",
+    explanation: "Whether a first-layer reject, necessary-only, decline, refuse, or equivalent refusal option was observed on a sufficiently retained consent surface.",
     findingIds: [
       "accept_only_banner",
       "dismiss_without_reject",
@@ -234,15 +234,6 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
-    id: "third_party_service_connection_pre_consent",
-    label: "3rd party service connections before consent",
-    explanation: "Whether retained scanner evidence showed known 3rd party embed/service connections before a recorded consent action.",
-    findingIds: [],
-    defaultFindingStatus: "Gap observed",
-    notObservedText: "No known 3rd party embed/service connection was retained before a recorded consent action.",
-    requiresPublicWebCoverage: true
-  },
-  {
     id: "third_party_iframe_pre_consent",
     label: "3rd party iframes before consent",
     explanation: "Whether retained scanner evidence showed known 3rd party iframe embeds before a recorded consent action.",
@@ -262,8 +253,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "embedded_content_pre_consent",
-    label: "Embedded 3rd party services before consent",
-    explanation: "Whether retained scanner evidence showed known embedded media, map, social, form/chat, or video-ad services before a recorded consent action.",
+    label: "Embedded third-party services before consent",
+    explanation: "Whether retained scanner evidence showed iframe, embed, widget, or visibly integrated third-party services before a recorded consent action. This row does not represent all background analytics or network requests.",
     findingIds: [],
     defaultFindingStatus: "Gap observed",
     notObservedText: "No known embedded 3rd party service was retained before a recorded consent action.",
@@ -493,11 +484,11 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "dpo_contact_point_disclosure",
-    label: "DPO / privacy contact point",
-    explanation: "Whether retained privacy-policy evidence identified a DPO, privacy office, privacy contact, or data-protection contact point.",
+    label: "Privacy contact point",
+    explanation: "Whether retained privacy-policy evidence identified a privacy officer, privacy office, privacy contact, DPO, or data-protection contact point.",
     findingIds: ["privacy_contact_path_present"],
     defaultFindingStatus: "Observed",
-    notObservedText: "No canonical DPO or data-protection contact point evidence was retained for this scan context.",
+    notObservedText: "No canonical privacy or data-protection contact point evidence was retained for this scan context.",
     requiresPublicWebCoverage: true
   },
   {
@@ -1012,6 +1003,25 @@ function mergeCoverageOutcomePreconsentTimingEvidence(input: {
     return input.coverageOutcome.criticalEvidence;
   }
 
+  if (input.rowId === "session_replay_fingerprinting_review" && input.coverageOutcome) {
+    const outcomeRetained = input.coverageOutcome.criticalEvidence.retainedEvidence;
+    const sessionReplayEvidence = getSessionReplayEvidenceFromOutcome(input.coverageOutcome);
+    const browserDeviceEntropyEvidence = getBrowserDeviceEntropyEvidenceFromOutcome(input.coverageOutcome);
+    if (sessionReplayEvidence || browserDeviceEntropyEvidence) {
+      return {
+        ...input.criticalEvidence,
+        retainedEvidence: {
+          ...input.criticalEvidence.retainedEvidence,
+          ...(sessionReplayEvidence ? { sessionReplayEvidence } : {}),
+          ...(browserDeviceEntropyEvidence ? { browserDeviceEntropyEvidence } : {}),
+          ...(outcomeRetained.sessionReplayObserved !== undefined
+            ? { sessionReplayObserved: outcomeRetained.sessionReplayObserved }
+            : {})
+        }
+      };
+    }
+  }
+
   const retainedTiming = getCoverageOutcomePreconsentTimingRetainedEvidence(input.rowId, input.coverageOutcome);
   const retainedTimingEntries = Object.entries(retainedTiming).filter(([, value]) => {
     if (value === null || value === undefined) {
@@ -1222,8 +1232,35 @@ function synthesizePreconsentThirdPartyCookieOutcome(rows: RuntimeCookieEvidence
 function synthesizePreconsentThirdPartyTrackingOutcome(
   rows: GdprEprivacyCoverageChecklistInput["runtimeTrackerPriorityRows"] | undefined
 ) {
+  const trackingRelevanceTokens = new Set([
+    "a_b_testing",
+    "ad_measurement",
+    "advertising",
+    "advertising_measurement",
+    "analytics",
+    "audience_measurement",
+    "behavioral_tracking",
+    "conversion_tracking",
+    "cross_site_tracking",
+    "event_tracking",
+    "experimentation",
+    "fingerprinting",
+    "identifier_sync",
+    "marketing_attribution",
+    "retargeting",
+    "session_replay",
+    "tracking",
+  ]);
+  const normalizeToken = (value: string) =>
+    value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const isTrackingRelevant = (row: NonNullable<typeof rows>[number]) =>
+    [row.purpose, ...(row.regulatoryRelevance ?? [])]
+      .flatMap((value) => [value, ...value.split(/[,;|/]+/)])
+      .map(normalizeToken)
+      .some((token) => trackingRelevanceTokens.has(token));
   const thirdPartyRows = (rows ?? [])
     .filter((row) => row.party === "3rd" || row.party === "mixed" || row.party === "third_party")
+    .filter(isTrackingRelevant)
     .sort(compareRuntimePriorityEvidenceRows);
   if (thirdPartyRows.length === 0) {
     return undefined;
@@ -3316,6 +3353,11 @@ export function deriveGdprEprivacyCoverageChecklist(
     .filter((definition) => shouldIncludeChecklistRowDefinition(definition, input.coverageOutcomes?.[definition.id]))
     .map((definition) => {
     const directCoverageOutcome = input.coverageOutcomes?.[definition.id];
+    const canonicalPreconsentStorageOutcome =
+      definition.id === "pre_consent_cookies_storage" &&
+      typeof directCoverageOutcome?.criticalEvidence.retainedEvidence.preConsentStorageAssessmentStatus === "string"
+        ? directCoverageOutcome
+        : undefined;
     const synthesizedPreconsentCookieOutcome =
       definition.id === "pre_consent_cookies_storage"
         ? synthesizePreconsentThirdPartyCookieOutcome(input.runtimeCookieRows)
@@ -3333,7 +3375,10 @@ export function deriveGdprEprivacyCoverageChecklist(
         combinedReplayFingerprintingOutcome?.criticalEvidence.retainedEvidence.fingerprintingObserved === true
       )
         ? combinedReplayFingerprintingOutcome
-        : synthesizedPreconsentCookieOutcome ?? synthesizedPreconsentTrackingOutcome ?? directCoverageOutcome;
+        : canonicalPreconsentStorageOutcome ??
+          synthesizedPreconsentCookieOutcome ??
+          synthesizedPreconsentTrackingOutcome ??
+          directCoverageOutcome;
     const matchingFindings = definition.findingIds.flatMap((id) => {
       const finding = findingsById.get(id);
       return finding && isFindingEligibleForCoverageRow(definition.id, finding) ? [finding] : [];

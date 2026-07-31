@@ -8,11 +8,12 @@ import {
   type ReportPrimaryPillarDefinition,
   type ReportSectionDefinition
 } from "@website-signal-risk-scanner/shared";
-import { classifyConsentControlLabel } from "@certscore/contracts";
+import { classifyConsentControlLabel, consentControlAssessmentSchema } from "@certscore/contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { buildValidationFindingLookup } from "./validation-review-linking";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import type { NormalizedConcern } from "./normalized-concerns";
 import {
   dedupeHeadlineFindings,
   deriveConsentAuditFindings
@@ -85,6 +86,7 @@ export type ScanReportUnifiedFindingState = {
     taxonomySnapshotSections: Array<{ description: string; fields: string[]; title: string }>;
   };
   globalUnifiedFindings: UnifiedFindingDisplayPacket[];
+  normalizedConcerns?: NormalizedConcern[];
   sectionDrafts: Array<{
     pillar?: ReportPrimaryPillarDefinition;
     sections: ScanReportUnifiedFindingSectionDraft[];
@@ -1599,7 +1601,33 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     "consentUiPathEvidence",
     "consent_ui_path_evidence"
   ]);
+  const consentControlAssessmentCandidate =
+    getRuntimeObject(input.runtimeArtifacts, ["consentControlAssessment", "consent_control_assessment"]) ??
+    getRuntimeObject(hybridRuntimeEvidenceRecord, ["consentControlAssessment", "consent_control_assessment"]);
+  const parsedConsentControlAssessment = consentControlAssessmentSchema.safeParse(consentControlAssessmentCandidate);
+  const consentControlAssessment = parsedConsentControlAssessment.success
+    ? parsedConsentControlAssessment.data
+    : null;
+  const assessmentControlState = (key: "accept" | "reject" | "options") => {
+    const state = consentControlAssessment?.controls[key].state;
+    return state === "observed" ? true : state === "not_observed" ? false : undefined;
+  };
+  const assessmentFirstLayerConsentChoices: Record<string, unknown> | null =
+    consentControlAssessment
+    ? {
+        acceptControlObserved: assessmentControlState("accept"),
+        acceptVisibleOnFirstLayer: assessmentControlState("accept"),
+        capturedBeforeInteraction: true,
+        controlInventoryComplete: consentControlAssessment.coverage.status === "complete",
+        layerInspected: consentControlAssessment.coverage.status === "complete" ? "first_layer" : "unknown",
+        managePreferencesControlObserved: assessmentControlState("options"),
+        rejectControlObserved: assessmentControlState("reject"),
+        rejectVisibleOnFirstLayer: assessmentControlState("reject"),
+        settingsVisibleOnFirstLayer: assessmentControlState("options"),
+      }
+    : null;
   const firstLayerConsentChoices =
+    assessmentFirstLayerConsentChoices ??
     getRuntimeObject(hybridRuntimeEvidenceRecord, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
     getRuntimeObject(retainedConsentUiPathEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
     getRuntimeObject(input.runtimeArtifacts, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
@@ -1630,7 +1658,10 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   const firstAcceptActionMs = getFiniteNumber(consentTimeline?.firstAcceptActionMs ?? consentTimeline?.first_accept_action_ms);
   const firstUserActionMs = getFiniteNumber(consentTimeline?.firstUserActionMs ?? consentTimeline?.first_user_action_ms);
   const consentSurfaceObserved =
-    getRuntimeBoolean(input.runtimeArtifacts, [
+    consentControlAssessment
+      ? consentControlAssessment.surface.status === "observed_actionable" ||
+        consentControlAssessment.surface.status === "observed_non_actionable"
+      : getRuntimeBoolean(input.runtimeArtifacts, [
       "consentSurfaceObserved",
       "consent_surface_observed"
     ]) ??
@@ -2412,6 +2443,7 @@ export function buildScanReportUnifiedFindingState(
         taxonomySnapshotSections: []
       },
       globalUnifiedFindings: [],
+      normalizedConcerns: [],
       sectionDrafts: []
     };
   }
@@ -2575,7 +2607,11 @@ export function buildScanReportUnifiedFindingState(
       !linkedValidationFindingIds.has(String(finding.id ?? "")) &&
       !reviewFindingCandidates.some((candidate) => candidateCoversValidationFinding(candidate, finding as Record<string, unknown>))
   );
+  let normalizedConcerns: NormalizedConcern[] = [];
   const globalUnifiedFindings = dependencies.filterContradictoryPositiveSurfaceFindings(buildUnifiedFindingDisplayPackets({
+    captureNormalizedConcerns: (concerns) => {
+      normalizedConcerns = concerns;
+    },
     coverageSummary: {
       legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
       pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned),
@@ -2605,6 +2641,7 @@ export function buildScanReportUnifiedFindingState(
       taxonomySnapshotSections
     },
     globalUnifiedFindings,
+    normalizedConcerns,
     sectionDrafts
   };
 }
@@ -2760,6 +2797,7 @@ export function debugBuildScanReportUnifiedFindingStateForScan(scanRecord: Recor
         taxonomySnapshotSections: []
       },
       globalUnifiedFindings: [],
+      normalizedConcerns: [],
       sectionDrafts: []
     };
   }
@@ -2790,6 +2828,7 @@ export function debugBuildScanReportUnifiedFindingStateForScan(scanRecord: Recor
         taxonomySnapshotSections: []
       },
       globalUnifiedFindings: [],
+      normalizedConcerns: [],
       sectionDrafts: []
     };
   }

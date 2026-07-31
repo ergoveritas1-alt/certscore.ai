@@ -78,6 +78,9 @@ jobs:
       VALIDATION_WORKER_RUNTIME_BASE_CACHE_TAG: ${{ vars.VALIDATION_WORKER_RUNTIME_BASE_CACHE_TAG || 'validation-worker-runtime-base-cache' }}
       VALIDATION_WORKER_LAMBDA_RESULT_POLL_ENABLED: "1"
       VALIDATION_WORKER_LAMBDA_RESULT_POLL_SECONDS: "2"
+      CERTSCORE_REVIEW_MODEL: ${{ vars.CERTSCORE_REVIEW_MODEL || 'gpt-5.4-mini' }}
+      CERTSCORE_MINI_REVIEW_ENABLED: "1"
+      CERTSCORE_MODEL_REVIEW_MODE: "enforced"
 
     steps:
       - name: Checkout
@@ -225,7 +228,6 @@ jobs:
             --sbom=false \
             --target validation-worker-runtime-base \
             --cache-from "type=registry,ref=${VALIDATION_WORKER_RUNTIME_BASE_CACHE}" \
-            --cache-to "type=registry,ref=${VALIDATION_WORKER_RUNTIME_BASE_CACHE},mode=max" \
             -f apps/validation-worker/Dockerfile \
             -t "${VALIDATION_WORKER_RUNTIME_BASE_IMAGE}" \
             --push \
@@ -247,7 +249,6 @@ jobs:
             --provenance=false \
             --sbom=false \
             --cache-from "type=registry,ref=${WORKER_CACHE}" \
-            --cache-to "type=registry,ref=${WORKER_CACHE},mode=max" \
             -f apps/validation-worker/Dockerfile \
             "${runtime_base_args[@]}" \
             --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
@@ -283,6 +284,9 @@ jobs:
                         | map(select(
                             .name != "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED"
                             and .name != "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS"
+                            and .name != "CERTSCORE_REVIEW_MODEL"
+                            and .name != "CERTSCORE_MINI_REVIEW_ENABLED"
+                            and .name != "CERTSCORE_MODEL_REVIEW_MODE"
                           ))
                         + [
                             {
@@ -292,6 +296,18 @@ jobs:
                             {
                               "name": "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS",
                               "value": env.VALIDATION_WORKER_LAMBDA_RESULT_POLL_SECONDS
+                            },
+                            {
+                              "name": "CERTSCORE_REVIEW_MODEL",
+                              "value": env.CERTSCORE_REVIEW_MODEL
+                            },
+                            {
+                              "name": "CERTSCORE_MINI_REVIEW_ENABLED",
+                              "value": env.CERTSCORE_MINI_REVIEW_ENABLED
+                            },
+                            {
+                              "name": "CERTSCORE_MODEL_REVIEW_MODE",
+                              "value": env.CERTSCORE_MODEL_REVIEW_MODE
                             }
                           ]
                       )

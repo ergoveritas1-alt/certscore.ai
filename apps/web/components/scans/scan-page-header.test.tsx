@@ -43,7 +43,7 @@ test("ScanPageHeader places scan source badge above the created timestamp row", 
   assert.doesNotMatch(html, /<p[^>]*>Scan executed from Germany/);
   assert.match(
     html,
-    /<\/div><div class="flex flex-wrap items-center gap-1\.5 text-sm font-normal text-slate-400">Created Jun 4, 2026, 8:13 AM PDT \(scan time: 5 sec\)<\/div>/
+    /<\/div><div class="flex flex-wrap items-center gap-1\.5 text-xs font-normal text-slate-400">Created Jun 4, 2026, 8:13 AM PDT \(scan time: 5 sec\)<\/div>/
   );
 });
 
@@ -58,5 +58,20 @@ test("ScanPageHeader shows no regional context for default scan source", () => {
     })
   );
 
+  assert.doesNotMatch(html, /regional consent interfaces can differ/);
+});
+
+test("ScanPageHeader uses a browser-origin icon for Chrome extension scans", () => {
+  const html = renderToStaticMarkup(
+    createElement(ScanPageHeader, {
+      scanFromLabel: "Chrome browser",
+      scanFromValue: "local_extension",
+      status: "completed",
+      title: "Scan: codeable.io"
+    })
+  );
+
+  assert.match(html, /Scan source: Chrome browser/);
+  assert.match(html, /<circle cx="8" cy="9" r="1\.2"/);
   assert.doesNotMatch(html, /regional consent interfaces can differ/);
 });

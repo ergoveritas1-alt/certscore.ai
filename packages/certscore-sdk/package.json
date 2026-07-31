@@ -1,6 +1,6 @@
 {
   "name": "@certscore/sdk",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Official TypeScript SDK for the CertScore Pulse API.",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,6 +20,9 @@
     "LICENSE",
     "CHANGELOG.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ergoveritas1-alt/certscore.ai.git",

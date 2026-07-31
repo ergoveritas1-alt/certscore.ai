@@ -18,12 +18,13 @@ import {
 } from "../scans/preconsent-public-evidence";
 import { CANONICAL_VENDOR_RESOLVER_VERSION } from "@certscore/vendor-resolver";
 import {
+  buildPreConsentStorageAssessment,
   buildRuntimeCookieInventory,
   countEligibleNonEssentialPreconsentStorageMetricRows,
-  countUnclassifiedNonEssentialPreconsentStorageRows,
   hasUnresolvedNonEssentialPreconsentStorageEvidence,
   getRuntimeCookiePrimaryProvider,
-  isEligibleNonEssentialPreconsentStorageRow
+  isEligibleNonEssentialPreconsentStorageRow,
+  projectPreConsentStorageMetric
 } from "../scans/runtime-cookie-evidence";
 import {
   buildTrackerInventoryGroupRows,
@@ -35,6 +36,8 @@ import {
 import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
 import { meaningfulPolicySurfaceTitle, prioritizePublicPolicySurfaces } from "../scans/policy-enrichment-row";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
+import { withPersistedFirstLayerConsentEvidence } from "../../server/scans/scan-report-consent-projection";
 import {
   getKnownCmpVendorForHost,
   getKnownCmpVendorName,
@@ -261,7 +264,7 @@ export function projectedPolicySurfaceRows(scanRecord: ScanDetailResponse) {
   return prioritizePublicPolicySurfaces([...retained.values()].map((surface) => ({
     ...surface,
     url: surface.url
-  })), { siteDomain: scanRecord.scan.domainHostname });
+  })), { limit: 5, siteDomain: scanRecord.scan.domainHostname });
 }
 
 function safeRecordSubset(record: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -386,42 +389,49 @@ function buildPulseReportSurface(input: {
       note: statusBasis
     };
   });
-  const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
-    gdprEprivacyArea: {
-      id: "gdpr_eprivacy",
-      rows: reportableGdprRows,
-      title: "GDPR / ePrivacy"
-    }
-  });
-  const regulatoryGapFindingIds = new Set(regulatoryGapTopFindings.map((finding) => finding.id));
   const neutralChecklistFindingIds = new Set(gdprEprivacyChecklist
     .filter((row) => row.status === "Not observed" || row.status === "Not confirmed" || row.status === "Not testable")
     .map((row) => `regulatory_gap__gdpr_eprivacy__${row.id}`));
-  const publicExecutiveFindings = executive.findings.filter((finding) =>
-    isPublicPulseApiFinding(finding) &&
-    finding.id !== "consent_dark_patterns_detected" &&
-    !neutralChecklistFindingIds.has(finding.id)
+  const projectableChecklistRows = reportableGdprRows.filter(
+    (row) => row.assessmentStatus === "gap_observed"
   );
-  const publicExecutiveTopFindings = executive.topFindings.filter((finding) =>
-    isPublicPulseApiFinding(finding) &&
-    finding.id !== "consent_dark_patterns_detected" &&
-    !neutralChecklistFindingIds.has(finding.id)
-  );
-  const allFindings = [
-    ...regulatoryGapTopFindings.filter((finding) => finding.id !== "consent_dark_patterns_detected"),
-    ...publicExecutiveFindings.filter((finding) => !regulatoryGapFindingIds.has(finding.id))
-  ];
-  const topFindings = regulatoryGapTopFindings.length > 0 ? regulatoryGapTopFindings : publicExecutiveTopFindings;
+  const checklistFindings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      rows: projectableChecklistRows,
+      title: "GDPR / ePrivacy"
+    }
+  });
+  const { allFindings, topFindings } = selectPublicPulseFindingsFromUnifiedProjection({
+    checklistFindings,
+    findings: executive.findings,
+    neutralChecklistFindingIds,
+    topFindings: executive.topFindings
+  });
   const gdprEprivacyScoreAssessment = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: reportableGdprRows
   });
   const gdprEprivacyScore = gdprEprivacyScoreAssessment.score;
-  const storedCustomerScoreAssessment = input.scanRecord.customerGdprEprivacyScoreSelection?.assessment ?? null;
-  const customerScoreAssessment = storedCustomerScoreAssessment ?? gdprEprivacyScoreAssessment;
-  const score = boundedScore(storedCustomerScoreAssessment
-    ? storedCustomerScoreAssessment.scoreValue
-    : gdprEprivacyScore);
+  const canonicalScore = deriveCanonicalOverallScoreForReport({
+    checklistRows: gdprEprivacyChecklist,
+    unifiedFindings: unifiedFindingPackets
+  });
+  const persistedReportScore =
+    scanRecord.snapshot?.report_projection_status === "ready"
+      ? finiteNumber(scanRecord.snapshot.certscore_overall)
+      : null;
+  const score = boundedScore(persistedReportScore ?? canonicalScore);
+  const customerScoreAssessment = {
+    coverageConfidence: gdprEprivacyScoreAssessment.coverageConfidence,
+    coverageRatio: gdprEprivacyScoreAssessment.coverageRatio,
+    scoreKind: "overall" as const,
+    scoreSource: stringValue(scanRecord.snapshot?.score_source) ?? "canonical.gdpr_eprivacy",
+    scoreStatus: score === null ? "withheld" as const : "scored" as const,
+    scoreValue: score,
+    scoreVersion: stringValue(scanRecord.snapshot?.score_version) ?? "gdpr-eprivacy-evidence.legacy-v1",
+    withholdingReason: score === null ? "canonical_overall_score_unavailable" : null
+  };
   const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerInventoryRows);
   const preConsentTrackerRows = groupedTrackerRows
     .filter((row) => row.firstSeenMs !== null)
@@ -455,6 +465,31 @@ function buildPulseReportSurface(input: {
     topFindings,
     trackerInventoryRows,
     unifiedFindingPackets
+  };
+}
+
+export function selectPublicPulseFindingsFromUnifiedProjection(input: {
+  checklistFindings?: CertScoreFinding[];
+  findings: CertScoreFinding[];
+  neutralChecklistFindingIds?: ReadonlySet<string>;
+  topFindings: CertScoreFinding[];
+}) {
+  const neutralChecklistFindingIds = input.neutralChecklistFindingIds ?? new Set<string>();
+  const eligible = (finding: CertScoreFinding) =>
+    isPublicPulseApiFinding(finding) &&
+    finding.id !== "consent_dark_patterns_detected" &&
+    !neutralChecklistFindingIds.has(finding.id);
+
+  const checklistFindings = (input.checklistFindings ?? []).filter(eligible);
+  const checklistFindingIds = new Set(checklistFindings.map((finding) => finding.id));
+  const canonicalFindings = input.findings.filter((finding) => eligible(finding) && !checklistFindingIds.has(finding.id));
+  const canonicalTopFindings = input.topFindings.filter(
+    (finding) => eligible(finding) && !checklistFindingIds.has(finding.id)
+  );
+
+  return {
+    allFindings: [...checklistFindings, ...canonicalFindings],
+    topFindings: [...checklistFindings, ...canonicalTopFindings]
   };
 }
 
@@ -769,7 +804,6 @@ function eventEvidencePhase(event: Record<string, unknown>) {
 const REGULATORY_RUNTIME_WRAPPER_ROW_IDS = new Set([
   "pre_consent_third_party_tracking",
   "pre_consent_cookies_storage",
-  "third_party_service_connection_pre_consent",
   "social_media_embed_pre_consent",
   "embedded_content_pre_consent",
   "session_replay_fingerprinting_review",
@@ -1531,6 +1565,52 @@ function buildSummaryArtifact(input: {
   };
 }
 
+function consentChoicesFromProjectedChecklistRows(rows: Array<{
+  assessmentStatus: string;
+  evidenceRefs?: string[];
+  id: string;
+  status: string;
+}>): Record<string, unknown> | null {
+  const controlIds = new Set([
+    "accept_consent_control",
+    "options_settings_preferences_control",
+    "reject_all_path_availability"
+  ]);
+  const controlRows = rows.filter((row) => controlIds.has(row.id));
+  if (controlRows.length === 0) return null;
+
+  const stateFor = (id: string) => {
+    const row = controlRows.find((candidate) => candidate.id === id);
+    if (!row) return null;
+    if (row.status === "Observed") return true;
+    if (row.status === "Not observed" || (id === "reject_all_path_availability" && row.status === "Gap observed")) return false;
+    return null;
+  };
+  const labelsFor = (id: string) => {
+    const row = controlRows.find((candidate) => candidate.id === id);
+    return (row?.evidenceRefs ?? [])
+      .filter((ref) => ref.startsWith("Visible choice:"))
+      .map((ref) => ref.slice("Visible choice:".length).trim())
+      .filter(Boolean);
+  };
+
+  return {
+    acceptControlObserved: stateFor("accept_consent_control"),
+    actionableControlInventoryRetained: controlRows.some((row) => row.evidenceRefs?.length),
+    capturedBeforeInteraction: true,
+    controlInventoryComplete: controlRows.every((row) => row.assessmentStatus === "checked"),
+    controls: [],
+    layerInspected: "first_layer",
+    managePreferencesControlObserved: stateFor("options_settings_preferences_control"),
+    rejectControlObserved: stateFor("reject_all_path_availability"),
+    visibleChoiceLabels: [
+      ...labelsFor("accept_consent_control"),
+      ...labelsFor("options_settings_preferences_control"),
+      ...labelsFor("reject_all_path_availability")
+    ]
+  };
+}
+
 function buildEvidenceArtifact(input: {
   allFindings: CertScoreFinding[];
   base: Record<string, unknown>;
@@ -1545,10 +1625,26 @@ function buildEvidenceArtifact(input: {
   const baseLinks = asRecord(input.base.links) ?? {};
   const runtimeArtifacts = asRecord(scanRecord.runtimeArtifacts);
   const hybrid = getHybridRuntimeEvidence(scanRecord.runtimeArtifacts);
-  const firstLayerConsentChoices =
+  const retainedFirstLayerConsentChoices =
     asRecord(recordValue(runtimeArtifacts, "firstLayerConsentChoices")) ??
     asRecord(recordValue(hybrid, "firstLayerConsentChoices")) ??
     asRecord(recordValue(hybrid, "first_layer_consent_choices"));
+  const retainedControlRows = retainedFirstLayerConsentChoices && Array.isArray(retainedFirstLayerConsentChoices.controls)
+    ? retainedFirstLayerConsentChoices.controls
+    : [];
+  const retainedVisibleLabels = retainedFirstLayerConsentChoices && Array.isArray(retainedFirstLayerConsentChoices.visibleChoiceLabels)
+    ? retainedFirstLayerConsentChoices.visibleChoiceLabels
+    : [];
+  const hasRetainedConsentChoices = Boolean(
+    retainedFirstLayerConsentChoices &&
+    (retainedControlRows.length > 0 || retainedVisibleLabels.length > 0 || (
+      retainedFirstLayerConsentChoices.layerInspected === "first_layer" &&
+      retainedFirstLayerConsentChoices.actionableControlInventoryRetained === true
+    ))
+  );
+  const firstLayerConsentChoices = hasRetainedConsentChoices
+    ? retainedFirstLayerConsentChoices
+    : consentChoicesFromProjectedChecklistRows(input.reportSurface.reportableGdprRows);
   const consentSummary = asRecord(recordValue(runtimeArtifacts, "consentSummary")) ?? asRecord(recordValue(runtimeArtifacts, "consent_summary")) ?? asRecord(recordValue(hybrid, "consentSummary")) ?? asRecord(recordValue(hybrid, "consent_summary"));
   const networkSummary = asRecord(recordValue(runtimeArtifacts, "networkSummary")) ?? asRecord(recordValue(runtimeArtifacts, "network_summary")) ?? asRecord(recordValue(hybrid, "networkSummary")) ?? asRecord(recordValue(hybrid, "network_summary"));
   const storageSummary = asRecord(recordValue(runtimeArtifacts, "storageSummary")) ?? asRecord(recordValue(runtimeArtifacts, "storage_summary")) ?? asRecord(recordValue(hybrid, "storageSummary")) ?? asRecord(recordValue(hybrid, "storage_summary"));
@@ -1878,20 +1974,27 @@ function buildConfidence(findings: CertScoreFinding[], coverageStatus: string) {
 }
 
 export function buildPulseProjection(input: PulseProjectionInput) {
+  const hydratedScanRecord = {
+    ...input.scanRecord,
+    runtimeArtifacts: withPersistedFirstLayerConsentEvidence(
+      asRecord(input.scanRecord.runtimeArtifacts),
+      asRecord(input.scanRecord.snapshot)
+    ) as ScanDetailResponse["runtimeArtifacts"]
+  } as ScanDetailResponse;
   const generated = generatedAt();
-  const scan = input.scanRecord.scan;
+  const scan = hydratedScanRecord.scan;
   const domain = scan.domainHostname ?? safeHostname(input.requestedUrl) ?? "unknown";
-  const pulseNoGoState = buildPulseNoGoState(input.scanRecord.runtimeArtifacts);
+  const pulseNoGoState = buildPulseNoGoState(hydratedScanRecord.runtimeArtifacts);
   const noGoProjection = pulseNoGoState
     ? { resultDisposition: pulseNoGoState.resultDisposition, noGo: pulseNoGoState.noGo }
     : null;
   const effectiveScanStatus = pulseNoGoState?.scanStatus ?? scan.status;
-  const coverage = deriveCoverage(input.scanRecord);
-  const quality = assessPulseScanRecordQuality(input.scanRecord);
-  const packets = buildScanReportUnifiedFindings(input.scanRecord);
+  const coverage = deriveCoverage(hydratedScanRecord);
+  const quality = assessPulseScanRecordQuality(hydratedScanRecord);
+  const packets = buildScanReportUnifiedFindings(hydratedScanRecord);
   const reportSurface = buildPulseReportSurface({
     coverageLimited: coverage.status !== "complete",
-    scanRecord: input.scanRecord,
+    scanRecord: hydratedScanRecord,
     unifiedFindingPackets: packets
   });
   const executive = reportSurface.executive;
@@ -1902,10 +2005,10 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     coverageLimitedByNoGo,
     noGo: noGoProjection?.noGo,
     runtimeCookieRows: reportSurface.runtimeCookieRows,
-    scannedPageUrl: input.scanRecord.accessPostureSummary?.finalEffectiveUrl ?? `https://${scan.domainHostname}/`
+    scannedPageUrl: hydratedScanRecord.accessPostureSummary?.finalEffectiveUrl ?? `https://${scan.domainHostname}/`
   }));
-  const benchmark = input.scanRecord.domainBenchmark
-    ? `${input.scanRecord.domainBenchmark.industry} / ${input.scanRecord.domainBenchmark.estimatedRankLabel}`
+  const benchmark = hydratedScanRecord.domainBenchmark
+    ? `${hydratedScanRecord.domainBenchmark.industry} / ${hydratedScanRecord.domainBenchmark.estimatedRankLabel}`
     : null;
   const summary = buildSummary({
     benchmark,
@@ -1922,43 +2025,25 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     summary.riskLevel = "unknown";
   }
   const topFindingCount = topFindings.length;
-  const evidenceHighlights = buildEvidenceHighlights(input.scanRecord, reportSurface.trackerInventoryRows);
+  const evidenceHighlights = buildEvidenceHighlights(hydratedScanRecord, reportSurface.trackerInventoryRows);
   const counts = buildPulseCounts({
     allFindingCount: allFindings.length,
     evidenceHighlights,
     executiveIssueCount: topFindings.length,
     topFindings
   });
-  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.scanRecord.runtimeArtifacts);
-  const storageSummary = asRecord(recordValue(hybridRuntimeEvidence, "storageSummary"));
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(hydratedScanRecord.runtimeArtifacts);
   const networkSummary = asRecord(recordValue(hybridRuntimeEvidence, "networkSummary"));
-  const hasClassifiedRuntimeStorageRows = reportSurface.runtimeCookieRows.length > 0;
-  const observedNonEssentialPreConsentStorageCount = hasClassifiedRuntimeStorageRows
-    ? countEligibleNonEssentialPreconsentStorageMetricRows(reportSurface.runtimeCookieRows)
-    : null;
-  const nonEssentialPreConsentStorageCount = observedNonEssentialPreConsentStorageCount;
-  const unclassifiedPreConsentStorageCount = hasClassifiedRuntimeStorageRows
-    ? countUnclassifiedNonEssentialPreconsentStorageRows(reportSurface.runtimeCookieRows)
-    : 0;
-  const storedPreConsentCookieCount = finiteNumber(recordValue(storageSummary, "distinctPreConsentCookieCount")) ??
-    finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
-    finiteNumber(recordValue(input.scanRecord.snapshot, "initialCookieCount"));
-  const storageMetricStatus = hasClassifiedRuntimeStorageRows
-    ? unclassifiedPreConsentStorageCount > 0
-      ? "partially_classified"
-      : (nonEssentialPreConsentStorageCount ?? 0) > 0
-        ? "measured_positive"
-        : "measured_zero"
-    : storedPreConsentCookieCount === null
-      ? "unavailable"
-      : storedPreConsentCookieCount > 0
-        ? "measured_positive"
-        : "measured_zero";
-  const cookiesBeforeConsentCount = hasClassifiedRuntimeStorageRows
-    ? nonEssentialPreConsentStorageCount
-    : storedPreConsentCookieCount ??
-      0;
-  const policySurfaces = projectedPolicySurfaceRows(input.scanRecord).map(({ type, url }) => ({
+  const preConsentStorageAssessment = buildPreConsentStorageAssessment({
+    hybridRuntimeEvidence,
+    runtimeArtifacts: hydratedScanRecord.runtimeArtifacts,
+    runtimeCookieRows: reportSurface.runtimeCookieRows
+  });
+  const storageMetric = projectPreConsentStorageMetric(preConsentStorageAssessment);
+  const nonEssentialPreConsentStorageCount = storageMetric.value;
+  const unclassifiedPreConsentStorageCount = preConsentStorageAssessment.unclassifiedCount;
+  const cookiesBeforeConsentCount = nonEssentialPreConsentStorageCount;
+  const policySurfaces = projectedPolicySurfaceRows(hydratedScanRecord).map(({ type, url }) => ({
     type,
     title: meaningfulPolicySurfaceTitle(type, url),
     url
@@ -1966,16 +2051,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const allThirdPartyRequestCount = finiteNumber(recordValue(networkSummary, "thirdPartyRequestCount")) ??
     reportSurface.presentationSummary.thirdPartyRequestCount;
   const trackerFootprintBreakdown = buildTrackerFootprintBreakdown(reportSurface);
-  const selectedScoreStatus = "scoreStatus" in reportSurface.customerScoreAssessment
-    ? reportSurface.customerScoreAssessment.scoreStatus
-    : score === null
-      ? "withheld"
-      : "scored";
-  const selectedWithholdingReason = "withholdingReason" in reportSurface.customerScoreAssessment
-    ? reportSurface.customerScoreAssessment.withholdingReason
-    : score === null
-      ? "evidence_score_withheld"
-      : null;
+  const selectedScoreStatus = reportSurface.customerScoreAssessment.scoreStatus;
+  const selectedWithholdingReason = reportSurface.customerScoreAssessment.withholdingReason;
   const executiveSummary = {
     completionSummary: summary.completionSummary,
     domain,
@@ -1985,9 +2062,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       coverageConfidence: reportSurface.customerScoreAssessment.coverageConfidence,
       coverageRatio: reportSurface.customerScoreAssessment.coverageRatio,
       kind: reportSurface.customerScoreAssessment.scoreKind,
-      metricLabel: reportSurface.customerScoreAssessment.scoreKind === "gdpr_eprivacy_posture"
-        ? "GDPR/ePrivacy posture"
-        : "GDPR/ePrivacy evidence",
+      metricLabel: "Overall score",
       source: reportSurface.customerScoreAssessment.scoreSource,
       status: selectedScoreStatus,
       version: reportSurface.customerScoreAssessment.scoreVersion,
@@ -2002,18 +2077,14 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     cookiesPreConsent: cookiesBeforeConsentCount,
     nonEssentialPreConsentStorage: nonEssentialPreConsentStorageCount,
     unclassifiedPreConsentStorageCount,
-    storageMetricLabel: hasClassifiedRuntimeStorageRows ? "Non-essential storage" : "Pre-consent storage",
-    storageMetricScope: hasClassifiedRuntimeStorageRows ? "nonessential_only" : "all_observed",
-    storageMetricStatus,
-    storageMetricExplanation: storageMetricStatus === "unavailable"
-      ? "Storage was not measured or retained for this scan."
-      : storageMetricStatus === "partially_classified"
-        ? "Storage was observed, but some retained rows could not be classified as essential or non-essential."
-        : storageMetricStatus === "measured_zero"
-          ? "Storage was scanned and none was detected in the reported scope."
-          : "Storage was observed in the reported scope.",
-    totalStorageRecordsPresentBeforeRecordedConsent: reportSurface.runtimeCookieRows.length,
-    consentPlatform: deriveConsentPlatform(input.scanRecord, reportSurface.presentationSummary),
+    preConsentStorageAssessment,
+    storageMetricLabel: storageMetric.label,
+    storageMetricScope: storageMetric.scope,
+    storageMetricStatus: storageMetric.status,
+    storageMetricExplanation: storageMetric.explanation,
+    totalStorageRecordsPresentBeforeRecordedConsent:
+      preConsentStorageAssessment.attributedPreConsentRecordCount,
+    consentPlatform: deriveConsentPlatform(hydratedScanRecord, reportSurface.presentationSummary),
     trackerFootprint: {
       vendors: trackerFootprintBreakdown.providerFamilies,
       domains: trackerFootprintBreakdown.domains,
@@ -2095,6 +2166,14 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       schemaVersion: PULSE_SCHEMA_VERSION,
       pulseVersion: PULSE_VERSION,
       projectionVersion: PULSE_PROJECTION_VERSION,
+      reportProjectionVersion:
+        typeof hydratedScanRecord.snapshot?.report_projection_version === "string"
+          ? hydratedScanRecord.snapshot.report_projection_version
+          : null,
+      reportProjectionSourceHash:
+        typeof hydratedScanRecord.snapshot?.report_projection_source_hash === "string"
+          ? hydratedScanRecord.snapshot.report_projection_source_hash
+          : null,
       canonicalResolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
       generatedAt: generated,
       source: PULSE_SOURCE,

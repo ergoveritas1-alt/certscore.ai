@@ -59,7 +59,7 @@ export function ScanFindingsPane({
         <button
           type="button"
           onClick={handleCopy}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-slate-400 hover:text-slate-950"
+          className="scan-report-button inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-700 hover:text-slate-950"
           aria-label="Copy surfaced findings"
           title={copied ? "Copied" : "Copy findings"}
         >

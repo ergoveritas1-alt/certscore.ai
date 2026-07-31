@@ -1,12 +1,91 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
+import {
+  brotliCompressSync,
+  deflateSync,
+  gzipSync,
+} from "node:zlib";
 import test from "node:test";
 import {
   awaitAbortablePolicyOperation,
+  canonicalPolicyUrlIdentity,
+  decodeBoundedPolicyResponseBody,
   readBoundedResponseBody,
   requestBoundedPolicyResponse,
 } from "./scanners/policy-surface-scanner.js";
+
+test("policy response decoding supports bounded gzip, Brotli, and deflate bodies", () => {
+  const policy = new TextEncoder().encode(
+    "Privacy notice. We process personal data for defined purposes and explain retention, recipients, rights, legal bases, and international transfers.",
+  );
+  for (const [encoding, body] of [
+    ["gzip", gzipSync(policy)],
+    ["br", brotliCompressSync(policy)],
+    ["deflate", deflateSync(policy)],
+  ] as const) {
+    const decoded = decodeBoundedPolicyResponseBody(body, encoding);
+    assert.equal(decoded.ok, true, encoding);
+    assert.equal(new TextDecoder().decode(decoded.body), new TextDecoder().decode(policy));
+    assert.equal(decoded.outcome, encoding);
+  }
+});
+
+test("policy response decoding recognizes gzip bytes without a reliable encoding header", () => {
+  const policy = new TextEncoder().encode("Datenschutzhinweis für personenbezogene Daten.");
+  const decoded = decodeBoundedPolicyResponseBody(gzipSync(policy), "identity");
+
+  assert.equal(decoded.ok, true);
+  assert.equal(decoded.outcome, "gzip");
+  assert.equal(new TextDecoder().decode(decoded.body), new TextDecoder().decode(policy));
+});
+
+test("policy response decoding ignores an incorrect compression header for plain text", () => {
+  const policy = new TextEncoder().encode(
+    "<html><body><h1>Privacy Notice</h1><p>We process personal data.</p></body></html>",
+  );
+  const decoded = decodeBoundedPolicyResponseBody(policy, "gzip");
+
+  assert.equal(decoded.ok, true);
+  assert.equal(decoded.outcome, "identity");
+  assert.equal(new TextDecoder().decode(decoded.body), new TextDecoder().decode(policy));
+});
+
+test("policy response decoding fails closed for malformed and oversized compressed bodies", () => {
+  const malformed = decodeBoundedPolicyResponseBody(
+    Uint8Array.from([0x1f, 0x8b, 0x08, 0x00, 0x01]),
+    "gzip",
+  );
+  assert.deepEqual(malformed, { ok: false, outcome: "failed" });
+
+  const oversized = decodeBoundedPolicyResponseBody(
+    gzipSync(Buffer.alloc(2_600_000, 0x61)),
+    "gzip",
+  );
+  assert.deepEqual(oversized, { ok: false, outcome: "too_large" });
+});
+
+test("policy URL identity preserves content parameters and removes tracking parameters", () => {
+  assert.equal(
+    canonicalPolicyUrlIdentity(
+      "https://www.example.test/help/policy?nodeId=201909010&ref_=footer_privacy&utm_source=test",
+    ),
+    "https://www.example.test/help/policy?nodeId=201909010",
+  );
+  assert.notEqual(
+    canonicalPolicyUrlIdentity("https://www.example.test/help/policy?nodeId=one"),
+    canonicalPolicyUrlIdentity("https://www.example.test/help/policy?nodeId=two"),
+  );
+});
+
+test("policy URL identity removes sensitive query names and values", () => {
+  assert.equal(
+    canonicalPolicyUrlIdentity(
+      "https://www.example.test/help/policy?nodeId=201909010&secret-token=must-not-be-retained",
+    ),
+    "https://www.example.test/help/policy?nodeId=201909010",
+  );
+});
 
 test("policy operations stop when transport work ignores abort before response headers", async () => {
   const controller = new AbortController();
