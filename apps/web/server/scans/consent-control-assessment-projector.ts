@@ -37,6 +37,19 @@ function unique<T>(values: T[]) {
   return [...new Set(values)];
 }
 
+function retainedActionType(
+  actionType: ConsentControlAssessmentCandidate["actionType"],
+  classifierReasonCodes: string[] | undefined,
+): ConsentControlAssessmentCandidate["actionType"] {
+  if (
+    actionType === "reject_all" &&
+    classifierReasonCodes?.includes("variant_reject_with_subscription")
+  ) {
+    return "other";
+  }
+  return actionType;
+}
+
 function inspectionChannel(value: string | undefined): ConsentControlAssessmentChannel | null {
   if (value === "page_script_inventory") return "dom_inventory";
   if (value === "viewport_screenshot") return "screenshot";
@@ -62,9 +75,15 @@ function geometryInput(
         if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
         const row = candidate as Record<string, unknown>;
         const actionType = typeof row.actionType === "string" ? row.actionType : "other";
-        const supportedActionType = ["accept_all", "reject_all", "manage_preferences", "save_preferences", "do_not_sell_share", "other"].includes(actionType)
+        const classifierReasonCodes = Array.isArray(row.classifierReasonCodes)
+          ? row.classifierReasonCodes.filter((value): value is string => typeof value === "string")
+          : [];
+        const supportedActionType = retainedActionType(
+          ["accept_all", "reject_all", "manage_preferences", "save_preferences", "do_not_sell_share", "other"].includes(actionType)
           ? actionType as ConsentControlAssessmentCandidate["actionType"]
-          : "other";
+          : "other",
+          classifierReasonCodes,
+        );
         const presentationType =
           row.presentationType === "dedicated_button" ||
           row.presentationType === "inline_link" ||
@@ -81,9 +100,7 @@ function geometryInput(
           matchedTerm: typeof row.matchedTerm === "string" ? row.matchedTerm : null,
           locale: typeof row.matchedLocale === "string" ? row.matchedLocale as ConsentControlAssessmentCandidate["locale"] : null,
           matchStrength: typeof row.matchStrength === "string" ? row.matchStrength as ConsentControlAssessmentCandidate["matchStrength"] : null,
-          classifierReasonCodes: Array.isArray(row.classifierReasonCodes)
-            ? row.classifierReasonCodes.filter((value): value is string => typeof value === "string")
-            : [],
+          classifierReasonCodes,
           layer: row.layer === "first_layer"
             ? "first_layer"
             : row.layer === "footer" || row.layer === "preference_center" || row.layer === "page_body" || row.layer === "deeper_layer"
@@ -216,9 +233,10 @@ export function deriveMaterializedConsentControlAssessment(input: {
       controls: (observation.controls ?? []).flatMap((control) => {
         const evidenceId = control.artifactRef ?? `${observation.observationId}:${control.label}`;
         const layer = control.layer ?? observation.layerInspected;
+        const actionType = retainedActionType(control.actionType, control.classifierReasonCodes);
         const candidate: ConsentControlAssessmentCandidate = {
           evidenceId,
-          actionType: control.actionType,
+          actionType,
           semanticRole: control.semanticRole,
           label: control.label,
           locale: control.matchedLocale,
@@ -228,7 +246,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           presentationType: control.presentationType,
           layer,
           visible: control.visible,
-          actionable: control.visible === true && control.actionType !== "other",
+          actionable: control.visible === true && actionType !== "other",
           observedAtMs: observationTimestamp(observation),
           documentId: observationDocumentId,
           channels: observation.captureDiagnostics?.completedChannels,
@@ -237,7 +255,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
         const savesAllOptionalDefaultsOff =
           layer === "first_layer" &&
           control.visible === true &&
-          control.actionType === "save_preferences" &&
+          actionType === "save_preferences" &&
           observation.defaultToggleStatesObserved === true &&
           observation.nonEssentialDefaultsOff === true &&
           (observation.precheckedOptionalPurposeCount ?? 0) === 0;

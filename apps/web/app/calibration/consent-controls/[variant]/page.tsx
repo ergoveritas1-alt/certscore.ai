@@ -2,8 +2,17 @@ import { notFound } from "next/navigation";
 import {
   CONSENT_CONTROL_CANARY_EXPECTATIONS,
   CONSENT_CONTROL_CANARY_LABELS,
+  CONSENT_CONTROL_CANARY_VARIANTS,
   isConsentControlCanaryVariant,
 } from "../content";
+
+export const dynamic = "force-static";
+export const dynamicParams = false;
+export const revalidate = false;
+
+export function generateStaticParams() {
+  return CONSENT_CONTROL_CANARY_VARIANTS.map((variant) => ({ variant }));
+}
 
 function codePoints(value: string): number[] {
   return [...value].map((character) => character.codePointAt(0) ?? 0);

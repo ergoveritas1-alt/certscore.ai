@@ -2060,10 +2060,10 @@ export async function preConsentRuntimeScanner(
     }
 
     const initialNoGoCandidateText = domText.replace(/\s+/g, " ").trim();
-    if (
-      initialNoGoCandidateText.length <= 60 ||
-      /^(?:loading(?:\.{0,3})?|please wait|establishing (?:a )?secure connection(?:\.{0,3})?|initializing(?:\.{0,3})?)$/i.test(initialNoGoCandidateText)
-    ) {
+    if (shouldConfirmSparsePageCandidate({
+      bodyText: initialNoGoCandidateText,
+      hasSufficientFirstLayerControls: hasSufficientFirstLayerConsentControls(consentObservation),
+    })) {
       const confirmationWaitMs = fastWait ? 750 : 1_250;
       await measureRecovery("sparse_page_confirmation", () => recordTiming(
         timingBreakdown,
@@ -6532,6 +6532,20 @@ function hasSufficientFirstLayerConsentControls(observation: ConsentUiObservatio
     control.actionType === "manage_preferences" || control.actionType === "save_preferences"
   );
   return hasReject && (hasAccept || hasManage);
+}
+
+export function shouldConfirmSparsePageCandidate(input: {
+  bodyText: string;
+  hasSufficientFirstLayerControls: boolean;
+}): boolean {
+  const normalizedText = input.bodyText.replace(/\s+/g, " ").trim();
+  const explicitLoadingState =
+    /^(?:loading(?:\.{0,3})?|please wait|establishing (?:a )?secure connection(?:\.{0,3})?|initializing(?:\.{0,3})?)$/i
+      .test(normalizedText);
+  if (explicitLoadingState) {
+    return true;
+  }
+  return normalizedText.length <= 60 && !input.hasSufficientFirstLayerControls;
 }
 
 function hasRetainedSettingsPreferencesControl(observation: ConsentUiObservation): boolean {
