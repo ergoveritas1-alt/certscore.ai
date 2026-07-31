@@ -16,12 +16,10 @@ test("pending scan pages return a minimal projection before full report construc
       .map((call) => source.indexOf(call, componentStart))
       .filter((index) => index >= 0);
     const fullRecordLoad = Math.min(...fullRecordLoadCandidates);
-    const materializeReport = source.indexOf("materializeLocalV2DagScanDetail(", componentStart);
     const deriveFindings = source.indexOf("buildScanReportUnifiedFindings(", componentStart);
 
     assert.ok(pendingBranch > componentStart, `${page} must branch on lightweight status`);
     assert.ok(fullRecordLoad > pendingBranch, `${page} must not load the full scan record before the pending branch`);
-    assert.ok(materializeReport > pendingBranch, `${page} must not materialize v2 artifacts before the pending branch`);
     assert.ok(deriveFindings > pendingBranch, `${page} must not derive findings before the pending branch`);
   }
 });
@@ -35,6 +33,16 @@ test("lightweight status API resolves public shared-link access before selecting
   assert.ok(publicFindingsLoad > lightweightBranch);
   assert.match(source, /getPublicScanStatusProjection/);
   assert.doesNotMatch(source, /bootstrapAppUserSession/);
+});
+
+test("report projection repair uses the canonical publisher and supports an auditable dry run", async () => {
+  const source = await readFile("apps/web/app/api/internal/scan-report-projection-backfill/route.ts", "utf8");
+  assert.match(source, /publishCanonicalScanReportProjection/);
+  assert.match(source, /body\.dryRun === true/);
+  assert.match(source, /oldSourceHash/);
+  assert.match(source, /newSourceHash/);
+  assert.doesNotMatch(source, /materializeLocalV2DagScanDetail/);
+  assert.doesNotMatch(source, /persistScanReportProjection/);
 });
 
 test("completed dashboard reports stream an honest report shell before detailed evidence", async () => {
@@ -51,17 +59,18 @@ test("completed dashboard reports stream an honest report shell before detailed 
   assert.doesNotMatch(loadingState, /summary\.overallScore|summary\.topFindingCount/);
   assert.match(source, /COMPLETED_SCAN_DETAIL_CACHE_TTL_MS = 15_000/);
   assert.doesNotMatch(source, /unstable_cache/);
-  assert.match(source, /statusProjection\\.reportReady \\|\\| completedLongEnoughForShortCache/);
-  assert.match(source, /hasReportProjectionGraceElapsed\(statusProjection\)/);
+  assert.doesNotMatch(source, /completedLongEnoughForShortCache/);
+  assert.doesNotMatch(source, /hasReportProjectionGraceElapsed/);
 });
 
-test("completed v2 reports use a verified persisted display projection before materializing retained evidence", async () => {
+test("completed v2 report routes fail closed to the verified persisted projection", async () => {
   for (const page of pages) {
     const source = await readFile(page, "utf8");
 
     assert.match(source, /loadPersistedScanReportProjection/);
-    assert.match(source, /getPersistedScanReportProjection\(scanRecord\)/);
-    assert.match(source, /persistedReportProjection \?\?[\s\S]{0,160}materializeLocalV2DagScanDetail\(scanRecord\)/);
+    assert.match(source, /reportProjectionRequired && !localPersistedReportProjection/);
+    assert.doesNotMatch(source, /materializeLocalV2DagScanDetail/);
+    assert.doesNotMatch(source, /persistScanReportProjection/);
   }
 });
 

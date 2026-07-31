@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   createScanStatusPoller,
+  claimTerminalNavigation,
   getNavigablePolledScanStatus,
   getPolledScanStatus,
   getPolledReadiness,
@@ -70,10 +71,11 @@ test("getPolledScanStatus accepts current and legacy scan status response shapes
 test("getPolledReadiness keeps post-completion polling lightweight until report work is ready", () => {
   assert.deepEqual(getPolledReadiness({
     browserExtensionNormalizationReady: true,
-    reportReadiness: { status: "ready" }
-  }), { browserReady: true, reportReady: true });
+    reportReadiness: { generation: "projection-1", status: "ready" }
+  }), { browserReady: true, reportGeneration: "projection-1", reportReady: true });
   assert.deepEqual(getPolledReadiness({ reportReadiness: { status: "finalizing" } }), {
     browserReady: false,
+    reportGeneration: null,
     reportReady: false
   });
 });
@@ -89,11 +91,23 @@ test("completed scans remain non-terminal while report projection is finalizing"
   }), "processing");
 });
 
-test("completed scans become navigable when report projection or its grace fallback is ready", () => {
+test("completed scans become navigable only when the report projection is ready", () => {
   assert.equal(getNavigablePolledScanStatus({
     scan: { status: "completed" },
     reportReadiness: { status: "ready" },
   }), "completed");
+});
+
+test("terminal navigation remains bounded across hard reloads", () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); }
+  };
+  assert.equal(claimTerminalNavigation({ ...storage, nowMs: 1_000, scanId: "scan-1" }), true);
+  assert.equal(claimTerminalNavigation({ ...storage, nowMs: 2_000, scanId: "scan-1" }), false);
+  assert.equal(claimTerminalNavigation({ ...storage, generation: "projection-2", nowMs: 2_000, scanId: "scan-1" }), true);
+  assert.equal(claimTerminalNavigation({ ...storage, nowMs: 302_000, scanId: "scan-1" }), true);
 });
 
 test("failed and canceled scans bypass report readiness", () => {
@@ -112,6 +126,7 @@ test("ScanStatusAutoRefresh uses lightweight recursive polling without router re
   assert.doesNotMatch(source, /setInterval/);
   assert.doesNotMatch(source, /HARD_RELOAD_AFTER_MS/);
   assert.match(source, /includeFindings=0/);
+  assert.match(source, /sessionStorage\.getItem/);
   assert.match(source, /window\.location\.reload\(\)/);
 });
 

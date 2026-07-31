@@ -11,7 +11,6 @@ import {
 } from "../../../../components/scans/shared-scan-detail-view";
 import { AgentSummaryActions, ShareReportActions } from "../../../../components/scans/share-report-actions";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
-import { LocalV2DagScanProgressCard } from "../../../../components/scans/scan-submit-progress";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
 import {
@@ -21,19 +20,11 @@ import {
 import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
 import { absoluteUrl } from "../../../../lib/seo";
 import { getPublicScanById } from "../../../../server/scans/get-scan-by-id";
-import {
-  getLocalV2DagReportInput,
-  materializeLocalV2DagScanDetail
-} from "../../../../server/scans/local-v2-dag-report";
-import {
-  getPersistedScanReportProjection,
-  loadPersistedScanReportProjection,
-  persistScanReportProjection
-} from "../../../../server/scans/scan-report-projection";
+import { loadPersistedScanReportProjection } from "../../../../server/scans/scan-report-projection";
+import { publishCanonicalScanReportProjection } from "../../../../server/scans/canonical-scan-report-publisher";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import {
   getPublicScanStatusProjection,
-  hasReportProjectionGraceElapsed,
   isPendingScanStatus
 } from "../../../../server/scans/scan-status-projection";
 
@@ -113,9 +104,9 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     notFound();
   }
   const waitingForReportProjection =
-    statusProjection.status === "completed" &&
-    !statusProjection.reportReady &&
-    !hasReportProjectionGraceElapsed(statusProjection);
+    (statusProjection.status === "completed" || statusProjection.status === "completed_limited") &&
+    statusProjection.reportProjectionRequired &&
+    !statusProjection.reportReady;
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
       <main className="min-h-screen bg-white">
@@ -138,30 +129,40 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const localPersistedReportProjection = statusProjection.reportReady
     ? await loadPersistedScanReportProjection({ scanId })
     : null;
+  if (statusProjection.reportProjectionRequired && !localPersistedReportProjection) {
+    after(async () => {
+      await publishCanonicalScanReportProjection({
+        organizationId: statusProjection.organizationId,
+        scanId
+      }).catch((error) => {
+        console.error("Failed to recover canonical scan report projection", error);
+      });
+    });
+    return (
+      <main className="min-h-screen bg-white">
+        <SiteHeader />
+        <section className="mx-auto max-w-6xl px-6 py-16">
+          <PendingScanDetailView
+            createdAt={statusProjection.createdAt}
+            domainHostname={statusProjection.domainHostname}
+            pendingPostCompletionWork
+            profile={statusProjection.profile}
+            scanId={statusProjection.id}
+            startedAt={statusProjection.startedAt}
+            status="processing"
+          />
+        </section>
+        <SiteFooter />
+      </main>
+    );
+  }
   const scanRecord = localPersistedReportProjection ?? await getPublicScanById(scanId);
 
   if (!scanRecord) {
     notFound();
   }
 
-  const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
-  const persistedReportProjection =
-    localPersistedReportProjection ?? getPersistedScanReportProjection(scanRecord);
-  const persistedReportProjectionReady = Boolean(persistedReportProjection);
-  const displayScanRecord =
-    localV2DagReportInput && scanRecord.scan.status === "completed"
-      ? persistedReportProjection ?? await materializeLocalV2DagScanDetail(scanRecord)
-      : scanRecord;
-  if (!persistedReportProjectionReady && displayScanRecord.scan.status === "completed") {
-    after(async () => {
-      await persistScanReportProjection(displayScanRecord, {
-        snapshot: displayScanRecord.snapshot,
-        runtimeArtifacts: displayScanRecord.runtimeArtifacts
-      }).catch((error) => {
-        console.error("Failed to refresh completed scan report projection", error);
-      });
-    });
-  }
+  const displayScanRecord = scanRecord;
   const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
     events: scanRecord.events,
     scanType: scanRecord.scan.scanType,
@@ -202,7 +203,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
               pendingBrowserExtensionNormalization={pendingBrowserExtensionNormalization}
               pendingPostCompletionWork={pendingPostCompletionWork}
               scanId={displayScanRecord.scan.id}
-              silent={Boolean(localV2DagReportInput)}
+              silent={statusProjection.reportProjectionRequired}
               status={displayScanRecord.scan.status}
             />
           }
@@ -229,15 +230,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
             ) : null
           }
           headerActionsPlacement="belowTitle"
-          localV2DagInFlightProgress={
-            localV2DagReportInput && (scanRecord.scan.status === "queued" || scanRecord.scan.status === "running" || scanRecord.scan.status === "processing") ? (
-              <LocalV2DagScanProgressCard
-                createdAt={scanRecord.scan.createdAt}
-                profileValue={localV2DagReportInput.profile}
-                startedAt={scanRecord.scan.startedAt}
-              />
-            ) : null
-          }
+          localV2DagInFlightProgress={null}
           scanRecord={displayScanRecord}
           showBrowserExtensionRecovery
           viewerAccessRole="user"

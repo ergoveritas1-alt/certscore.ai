@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   getPublicOpsScanStatus
 } from "../../../../server/scans/ops-status";
@@ -6,6 +6,7 @@ import {
   buildLightweightScanStatusResponse,
   getPublicScanStatusProjection
 } from "../../../../server/scans/scan-status-projection";
+import { publishCanonicalScanReportProjection } from "../../../../server/scans/canonical-scan-report-publisher";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -47,6 +48,32 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
       scanId,
       status: projection.status
     }));
+    if (
+      projection.reportProjectionRequired &&
+      projection.reportInputsReady &&
+      !projection.reportReady &&
+      (projection.status === "completed" || projection.status === "completed_limited")
+    ) {
+      after(async () => {
+        await publishCanonicalScanReportProjection({
+          organizationId: projection.organizationId,
+          scanId
+        }).then((publication) => {
+          console.info(JSON.stringify({
+            event: "scan.report_projection.status_recovery",
+            reason: publication.reason,
+            scanId,
+            status: publication.status
+          }));
+        }).catch((error) => {
+          console.error(JSON.stringify({
+            error: error instanceof Error ? error.message : String(error),
+            event: "scan.report_projection.status_recovery_failed",
+            scanId
+          }));
+        });
+      });
+    }
     return NextResponse.json(buildLightweightScanStatusResponse(projection), {
       headers: { "Cache-Control": "no-store" }
     });

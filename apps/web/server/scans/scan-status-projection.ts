@@ -1,6 +1,7 @@
 import "server-only";
 
 import { queryOne } from "@website-signal-risk-scanner/db";
+import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 import { SCAN_REPORT_PROJECTION_VERSION } from "./scan-report-projection-contract";
 
 export type ScanStatusProjection = {
@@ -11,27 +12,14 @@ export type ScanStatusProjection = {
   id: string;
   organizationId: string | null;
   profile: string;
+  reportGeneration: string | null;
+  reportInputsReady: boolean;
+  reportProjectionRequired: boolean;
   reportReady: boolean;
   browserExtensionNormalizationReady: boolean;
   startedAt: string | null;
   status: string;
 };
-
-export const REPORT_PROJECTION_GRACE_MS = 60_000;
-
-/** Allow the async projection a short handoff window, then use retained-data fallback. */
-export function hasReportProjectionGraceElapsed(
-  projection: Pick<ScanStatusProjection, "completedAt" | "reportReady" | "status">,
-  nowMs = Date.now(),
-) {
-  if (
-    (projection.status !== "completed" && projection.status !== "completed_limited") ||
-    projection.reportReady ||
-    !projection.completedAt
-  ) return false;
-  const completedAtMs = Date.parse(projection.completedAt);
-  return Number.isFinite(completedAtMs) && nowMs - completedAtMs >= REPORT_PROJECTION_GRACE_MS;
-}
 
 type ScanStatusProjectionRow = {
   completed_at: string | Date | null;
@@ -41,6 +29,9 @@ type ScanStatusProjectionRow = {
   id: string;
   organization_id: string | null;
   profile: string | null;
+  report_generation: string | null;
+  report_inputs_ready: boolean;
+  report_projection_required: boolean;
   report_ready: boolean;
   browser_extension_normalization_ready: boolean;
   started_at: string | Date | null;
@@ -62,6 +53,9 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
     id: row.id,
     organizationId: row.organization_id,
     profile: row.profile === "tiny" ? "tiny" : "standard",
+    reportGeneration: row.report_generation,
+    reportInputsReady: row.report_inputs_ready,
+    reportProjectionRequired: row.report_projection_required,
     reportReady: row.report_ready,
     browserExtensionNormalizationReady: row.browser_extension_normalization_ready,
     startedAt: iso(row.started_at),
@@ -82,13 +76,31 @@ const PROJECTION_SQL = `select s.id,
          nullif(s.scan_config_json ->> 'profile', ''),
          'standard'
        ) as profile
+       , coalesce(s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}', false) as report_projection_required
        , case
-           when s.scan_config_json ->> 'processor' = 'local-certscore-v2-dag-parallel-v1' then exists (
+           when s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}' then
+             exists (
+               select 1 from scan_events merged
+                where merged.scan_id = s.id
+                  and merged.event_type = 'signals.merge_completed'
+             ) and exists (
+               select 1 from scan_events findings
+                where findings.scan_id = s.id
+                  and findings.event_type = 'findings.unified_derivation_completed'
+             )
+           else true
+         end as report_inputs_ready
+       , case
+           when s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}' then exists (
              select 1 from scan_snapshots projection
               where projection.scan_id = s.id
                 and projection.report_projection_status = 'ready'
                 and projection.report_projection_version = '${SCAN_REPORT_PROJECTION_VERSION}'
                 and projection.report_projection_computed_at is not null
+                and projection.report_projection_source_hash ~ '^[0-9a-f]{64}$'
+                and projection.report_projection_payload is not null
+                and projection.report_projection_payload_sha256 ~ '^[0-9a-f]{64}$'
+                and projection.report_projection_payload_size_bytes between 1 and 6291456
            )
            else exists (
              select 1 from scan_events ready
@@ -96,6 +108,12 @@ const PROJECTION_SQL = `select s.id,
                 and ready.event_type in ('signals.merge_completed', 'findings.unified_derivation_completed')
            )
          end as report_ready
+       , (select projection.report_projection_source_hash
+            from scan_snapshots projection
+           where projection.scan_id = s.id
+             and projection.report_projection_status = 'ready'
+             and projection.report_projection_version = '${SCAN_REPORT_PROJECTION_VERSION}'
+           limit 1) as report_generation
        , exists (
            select 1 from scan_events normalized
             where normalized.scan_id = s.id
@@ -190,15 +208,13 @@ export function isPendingScanStatus(status: string) {
 }
 
 export function buildLightweightScanStatusResponse(projection: ScanStatusProjection) {
-  // The detail page has a bounded materialization fallback for completed
-  // reports. Expose the same viewability contract to the client poller so it
-  // can reload into that fallback instead of waiting forever for persistence.
-  const reportViewable =
-    projection.reportReady || hasReportProjectionGraceElapsed(projection);
   return {
     domain: projection.domainHostname,
     browserExtensionNormalizationReady: projection.browserExtensionNormalizationReady,
-    reportReadiness: { status: reportViewable ? "ready" : "finalizing" },
+    reportReadiness: {
+      generation: projection.reportGeneration,
+      status: projection.reportReady ? "ready" : "finalizing"
+    },
     scan: {
       completedAt: projection.completedAt,
       createdAt: projection.createdAt,

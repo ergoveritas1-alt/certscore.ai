@@ -730,24 +730,16 @@ export async function recordLocalV2DagLambdaResultEvent(
     }
   }
   if (parsedMessage.status === "completed") {
-    // Build the persisted report read model before the status endpoint reports
-    // the scan as viewable. Otherwise the browser can navigate into the
-    // expensive request-time materialization path while this handoff is still
-    // finishing, which can surface as a transient origin/Cloudflare 502.
+    // Attempt publication through the canonical report boundary. If validation
+    // has not completed merge and unified findings yet, publication fails
+    // closed and the lightweight status recovery path retries after those
+    // canonical completion markers are present.
     try {
-      const { getAnonymousScanById, getScanById } = await import("./get-scan-by-id");
-      const { materializeLocalV2DagScanDetail } = await import("./local-v2-dag-report");
-      const { persistScanReportProjection } = await import("./scan-report-projection");
-      const completedScan = context.organizationId
-        ? await getScanById({ organizationId: context.organizationId, scanId: parsedMessage.scanId })
-        : await getAnonymousScanById(parsedMessage.scanId);
-      if (completedScan) {
-        const materializedScan = await materializeLocalV2DagScanDetail(completedScan);
-        await persistScanReportProjection(materializedScan, {
-          snapshot: materializedScan.snapshot,
-          runtimeArtifacts: materializedScan.runtimeArtifacts
-        });
-      }
+      const { publishCanonicalScanReportProjection } = await import("./canonical-scan-report-publisher");
+      await publishCanonicalScanReportProjection({
+        organizationId: context.organizationId,
+        scanId: parsedMessage.scanId
+      });
     } catch (error) {
       console.error(JSON.stringify({
         event: "scan.report_projection.completion_persistence_failed",

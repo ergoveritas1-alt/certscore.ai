@@ -55,6 +55,7 @@ import {
   shouldUseLocalV2DagScanTool,
   type LocalV2DagScanProfile
 } from "./local-v2-dag-scan-config";
+import { getScanReportProjectionGeneration } from "./scan-report-projection-generation";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -5175,12 +5176,15 @@ export async function materializeLocalV2DagScanDetail(
     return materializeLocalV2DagScanDetailUncached(scanRecord, options);
   }
 
+  const reportGeneration = getScanReportProjectionGeneration(scanRecord);
   const cacheKey = [
     LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION,
     scanRecord.scan.id,
     input.scanArtifactSha256,
     input.manifestArtifactSha256 ?? "no-manifest",
     getProductionPolicyModelReviewRevision(scanRecord.runtimeArtifacts),
+    reportGeneration.eventCount,
+    reportGeneration.latestEventId ?? "no-events",
     options.requireBundle === true ? "required" : "optional"
   ].join(":");
   return localV2DagReportMaterializationCache.getOrCreate(

@@ -25,6 +25,7 @@ import {
   REPORT_PROJECTION_READY_WARNING_MS,
   SCAN_REPORT_PROJECTION_VERSION
 } from "./scan-report-projection-contract";
+import { getScanReportProjectionGeneration } from "./scan-report-projection-generation";
 
 /**
  * The scan detail record already includes the scan_snapshots row. Once that
@@ -250,12 +251,37 @@ type ScanReportProjectionSource = {
   runtimeArtifacts?: unknown;
 };
 
+export class ScanReportProjectionNotReadyError extends Error {
+  constructor(scanId: string, reason: string) {
+    super(`Scan ${scanId} canonical report projection is not ready: ${reason}.`);
+    this.name = "ScanReportProjectionNotReadyError";
+  }
+}
+
+export class StaleScanReportProjectionSourceError extends Error {
+  constructor(scanId: string) {
+    super(`Refusing to publish stale report projection source for scan ${scanId}.`);
+    this.name = "StaleScanReportProjectionSourceError";
+  }
+}
+
+function assertCanonicalReportProjectionReady(scanRecord: ScanDetailResponse) {
+  const scanConfig = record(scanRecord.scan.scanConfigJson);
+  if (scanConfig?.processor !== LOCAL_V2_DAG_SCAN_PROCESSOR) return;
+  if (!scanRecord.signalEnrichmentWorkflow.mergedSignalsReady) {
+    throw new ScanReportProjectionNotReadyError(scanRecord.scan.id, "signal merge is incomplete");
+  }
+  if (!scanRecord.signalEnrichmentWorkflow.findingsReady) {
+    throw new ScanReportProjectionNotReadyError(scanRecord.scan.id, "unified findings are incomplete");
+  }
+}
+
 function sourceHash(scanRecord: ScanDetailResponse, value: ProjectionValue, source: ScanReportProjectionSource = {}) {
   const snapshot = record(scanRecord.snapshot);
   const hashableSnapshot = snapshot
     ? Object.fromEntries(
         Object.entries(snapshot).filter(([key]) =>
-          !key.startsWith("report_projection_payload")
+          !key.startsWith("report_projection_")
         )
       )
     : null;
@@ -419,6 +445,7 @@ export async function persistScanReportProjection(
   scanRecord: ScanDetailResponse,
   source: ScanReportProjectionSource = {}
 ) {
+  assertCanonicalReportProjectionReady(scanRecord);
   const value = await deriveScanReportProjectionValue(scanRecord, source);
   const snapshot = record(scanRecord.snapshot);
   const sourceSnapshot = record(source.snapshot) ?? snapshot;
@@ -433,8 +460,9 @@ export async function persistScanReportProjection(
   const visualAccessReview = record(sourceRuntimeArtifacts?.visual_access_review) ?? record(sourceRuntimeArtifacts?.visualAccessReview) ?? record(sourceSnapshot?.visual_access_review);
   const hash = sourceHash(scanRecord, value, source);
   const persistedProjection = buildPersistedScanReportProjection(scanRecord);
+  const generation = getScanReportProjectionGeneration(scanRecord);
 
-  await query(
+  const persistence = await query(
     `insert into public.scan_snapshots (
        scan_id, organization_id, domain_id, pages_requested, pages_scanned,
        certscore_overall, admin_industry_label, top_finding_count,
@@ -468,6 +496,14 @@ export async function persistScanReportProjection(
        from public.scans s
       where s.id = $1::uuid
         and s.domain_id is not null
+        and (select count(*) from public.scan_events source_events where source_events.scan_id = s.id) = $41::bigint
+        and coalesce((
+              select source_events.id::text
+                from public.scan_events source_events
+               where source_events.scan_id = s.id
+               order by source_events.created_at desc, source_events.id desc
+               limit 1
+            ), '') = coalesce($42::text, '')
      on conflict (scan_id) do update
        set certscore_overall = excluded.certscore_overall,
            admin_industry_label = excluded.admin_industry_label,
@@ -551,9 +587,15 @@ export async function persistScanReportProjection(
       assessment?.surface.status ?? null,
       JSON.stringify(persistedProjection.payload),
       persistedProjection.sha256,
-      persistedProjection.sizeBytes
+      persistedProjection.sizeBytes,
+      generation.eventCount,
+      generation.latestEventId
     ]
   );
+
+  if (persistence.rowCount !== 1) {
+    throw new StaleScanReportProjectionSourceError(scanRecord.scan.id);
+  }
 
   if (!projectionWasAlreadyReady) {
     const completionToProjectionMs = completionToReportProjectionMs(scanRecord.scan.completedAt);

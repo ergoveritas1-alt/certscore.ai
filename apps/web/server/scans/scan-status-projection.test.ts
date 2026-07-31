@@ -32,6 +32,9 @@ function projection(overrides: Partial<ScanStatusProjection> = {}): ScanStatusPr
     id: "e77dfaed-f1b0-4993-bd1f-5d913e595c4a",
     organizationId: null,
     profile: "standard",
+    reportGeneration: null,
+    reportInputsReady: false,
+    reportProjectionRequired: true,
     reportReady: false,
     browserExtensionNormalizationReady: false,
     startedAt: "2026-07-29T18:44:17.000Z",
@@ -40,17 +43,17 @@ function projection(overrides: Partial<ScanStatusProjection> = {}): ScanStatusPr
   };
 }
 
-test("lightweight status exposes completed fallback reports after the grace window", async () => {
+test("lightweight status keeps completed scans finalizing without a canonical projection", async () => {
   const build = await getBuildLightweightScanStatusResponse();
   const response = build(projection());
-  assert.equal(response.reportReadiness.status, "ready");
+  assert.equal(response.reportReadiness.status, "finalizing");
   assert.equal(response.scan.status, "completed");
 });
 
-test("lightweight status exposes completed-limited fallback reports after the grace window", async () => {
+test("lightweight status keeps completed-limited scans finalizing without a canonical projection", async () => {
   const build = await getBuildLightweightScanStatusResponse();
   const response = build(projection({ status: "completed_limited" }));
-  assert.equal(response.reportReadiness.status, "ready");
+  assert.equal(response.reportReadiness.status, "finalizing");
   assert.equal(response.scan.status, "completed_limited");
 });
 
@@ -67,10 +70,12 @@ test("lightweight status exposes a recent completed scan as soon as its current 
   const response = build(
     projection({
       completedAt: new Date().toISOString(),
+      reportGeneration: "generation-1",
       reportReady: true
     })
   );
   assert.equal(response.reportReadiness.status, "ready");
+  assert.equal(response.reportReadiness.generation, "generation-1");
   assert.equal(response.scan.status, "completed");
 });
 

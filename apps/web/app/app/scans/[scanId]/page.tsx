@@ -6,7 +6,6 @@ import { DomainScanForm } from "../../../../components/marketing/domain-scan-for
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
-import { LocalV2DagScanProgressCard } from "../../../../components/scans/scan-submit-progress";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
 import { ScanReportLoadingCard } from "../../../../components/scans/scan-report-loading-card";
@@ -22,20 +21,12 @@ import { getDashboardContext } from "../../../../server/auth";
 import { BoundedPromiseCache } from "../../../../server/performance/bounded-promise-cache";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { getPublicScanById, getScanById } from "../../../../server/scans/get-scan-by-id";
-import {
-  getLocalV2DagReportInput,
-  materializeLocalV2DagScanDetail
-} from "../../../../server/scans/local-v2-dag-report";
-import {
-  getPersistedScanReportProjection,
-  loadPersistedScanReportProjection,
-  persistScanReportProjection
-} from "../../../../server/scans/scan-report-projection";
+import { loadPersistedScanReportProjection } from "../../../../server/scans/scan-report-projection";
+import { publishCanonicalScanReportProjection } from "../../../../server/scans/canonical-scan-report-publisher";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import {
   getPublicScanStatusProjection,
   getOrganizationScanStatusProjection,
-  hasReportProjectionGraceElapsed,
   isPendingScanStatus
 } from "../../../../server/scans/scan-status-projection";
 import type { ScanStatusProjection } from "../../../../server/scans/scan-status-projection";
@@ -136,9 +127,9 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     notFound();
   }
   const waitingForReportProjection =
-    statusProjection.status === "completed" &&
-    !statusProjection.reportReady &&
-    !hasReportProjectionGraceElapsed(statusProjection);
+    (statusProjection.status === "completed" || statusProjection.status === "completed_limited") &&
+    statusProjection.reportProjectionRequired &&
+    !statusProjection.reportReady;
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
       <>
@@ -190,12 +181,9 @@ async function ScanDetailReportContent({
   statusProjection: ScanStatusProjection;
   user: Awaited<ReturnType<typeof getDashboardContext>>["user"];
 }) {
-  const completedAtMs = statusProjection.completedAt ? Date.parse(statusProjection.completedAt) : Number.NaN;
-  const completedLongEnoughForShortCache =
-    Number.isFinite(completedAtMs) && Date.now() - completedAtMs >= 60_000;
   const canUseShortCompletedRecordCache =
     statusProjection.status === "completed" &&
-    (statusProjection.reportReady || completedLongEnoughForShortCache);
+    !statusProjection.reportProjectionRequired;
   const [localPersistedReportProjection, organizationSettings] = await Promise.all([
     statusProjection.reportReady
       ? withServerTiming("app.scan_detail.persisted_projection", () =>
@@ -207,6 +195,27 @@ async function ScanDetailReportContent({
       : Promise.resolve(null),
     getOrganizationSettings(organization.id)
   ]);
+  if (statusProjection.reportProjectionRequired && !localPersistedReportProjection) {
+    after(async () => {
+      await publishCanonicalScanReportProjection({
+        organizationId: statusProjection.organizationId,
+        scanId
+      }).catch((error) => {
+        console.error("Failed to recover canonical scan report projection", error);
+      });
+    });
+    return (
+      <PendingScanDetailView
+        createdAt={statusProjection.createdAt}
+        domainHostname={statusProjection.domainHostname}
+        pendingPostCompletionWork
+        profile={statusProjection.profile}
+        scanId={statusProjection.id}
+        startedAt={statusProjection.startedAt}
+        status="processing"
+      />
+    );
+  }
   const scanRecord = localPersistedReportProjection ??
     await withServerTiming("app.scan_detail.record", () =>
       // The lightweight status lookup above has already established viewer
@@ -222,28 +231,7 @@ async function ScanDetailReportContent({
     notFound();
   }
 
-  const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
-  const persistedReportProjection =
-    localPersistedReportProjection ?? getPersistedScanReportProjection(scanRecord);
-  const persistedReportProjectionReady = Boolean(persistedReportProjection);
-  const displayScanRecord =
-    localV2DagReportInput && scanRecord.scan.status === "completed"
-      ? persistedReportProjection ??
-        await withServerTiming("app.scan_detail.local_v2_report", () => materializeLocalV2DagScanDetail(scanRecord))
-      : scanRecord;
-
-  // Invalid, stale, oversized, or missing projections fail closed to canonical
-  // retained-evidence materialization and are repaired after this response.
-  if (!persistedReportProjectionReady && displayScanRecord.scan.status === "completed") {
-    after(async () => {
-      await persistScanReportProjection(displayScanRecord, {
-        snapshot: displayScanRecord.snapshot,
-        runtimeArtifacts: displayScanRecord.runtimeArtifacts
-      }).catch((error) => {
-        console.error("Failed to refresh completed scan report projection", error);
-      });
-    });
-  }
+  const displayScanRecord = scanRecord;
   const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
     events: scanRecord.events,
     scanType: scanRecord.scan.scanType,
@@ -302,7 +290,7 @@ async function ScanDetailReportContent({
             pendingPostCompletionWork={pendingPostCompletionWork}
             reloadOnTerminal={false}
             scanId={displayScanRecord.scan.id}
-            silent={Boolean(localV2DagReportInput)}
+            silent={statusProjection.reportProjectionRequired}
             status={displayScanRecord.scan.status}
           />
         }
@@ -334,15 +322,7 @@ async function ScanDetailReportContent({
           ) : null
         }
         headerActionsPlacement="belowTitle"
-        localV2DagInFlightProgress={
-          localV2DagReportInput && (scanRecord.scan.status === "queued" || scanRecord.scan.status === "running" || scanRecord.scan.status === "processing") ? (
-            <LocalV2DagScanProgressCard
-              createdAt={scanRecord.scan.createdAt}
-              profileValue={localV2DagReportInput.profile}
-              startedAt={scanRecord.scan.startedAt}
-            />
-          ) : null
-        }
+        localV2DagInFlightProgress={null}
         scanRecord={displayScanRecord}
         canViewReviewLenses={isPlatformAdmin || membership.role === "admin"}
         signalSnapshotVisibility={{

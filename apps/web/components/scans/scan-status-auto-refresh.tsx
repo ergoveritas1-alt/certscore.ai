@@ -14,6 +14,7 @@ type ScanStatusAutoRefreshProps = {
 export const SCAN_STATUS_POLL_INITIAL_MS = 2_000;
 export const SCAN_STATUS_POLL_MAX_MS = 10_000;
 export const SCAN_STATUS_POLL_JITTER_MS = 250;
+export const SCAN_TERMINAL_NAVIGATION_GUARD_MS = 5 * 60_000;
 
 type PollTimer = ReturnType<typeof setTimeout>;
 
@@ -53,13 +54,14 @@ export function getPolledScanStatus(payload: unknown) {
 }
 
 export function getPolledReadiness(payload: unknown) {
-  if (!payload || typeof payload !== "object") return { browserReady: false, reportReady: false };
+  if (!payload || typeof payload !== "object") return { browserReady: false, reportGeneration: null, reportReady: false };
   const record = payload as Record<string, unknown>;
   const reportReadiness = record.reportReadiness && typeof record.reportReadiness === "object"
     ? record.reportReadiness as Record<string, unknown>
     : null;
   return {
     browserReady: record.browserExtensionNormalizationReady === true,
+    reportGeneration: typeof reportReadiness?.generation === "string" ? reportReadiness.generation : null,
     reportReady: reportReadiness?.status === "ready",
   };
 }
@@ -212,9 +214,26 @@ const activeScanPollers = new Map<string, {
 }>();
 const terminalNavigations = new Set<string>();
 
+export function claimTerminalNavigation(input: {
+  generation?: string | null;
+  getItem: (key: string) => string | null;
+  nowMs?: number;
+  scanId: string;
+  setItem: (key: string, value: string) => void;
+}) {
+  const nowMs = input.nowMs ?? Date.now();
+  const key = `certscore.scanTerminalDetectedAt.${input.scanId}.${input.generation ?? "terminal"}`;
+  const previousValue = input.getItem(key);
+  const previousMs = previousValue === null ? Number.NaN : Number(previousValue);
+  if (Number.isFinite(previousMs) && nowMs >= previousMs && nowMs - previousMs < SCAN_TERMINAL_NAVIGATION_GUARD_MS) {
+    return false;
+  }
+  input.setItem(key, String(nowMs));
+  return true;
+}
+
 function recordTerminalDetection(scanId: string, state: ReturnType<ReturnType<typeof createScanStatusPoller>["getState"]>) {
   try {
-    window.sessionStorage.setItem(`certscore.scanTerminalDetectedAt.${scanId}`, String(Date.now()));
     const body = JSON.stringify({
       duplicatePollsPrevented: state.duplicatePollsPrevented,
       event: "terminal_detected",
@@ -259,7 +278,10 @@ export function ScanStatusAutoRefresh({
       };
     }
 
+    let terminalReportGeneration: string | null = null;
     const poller = createScanStatusPoller({
+      // The generation is captured from the same authoritative status response
+      // that allows terminal navigation.
       fetchStatus: async (signal) => {
         const response = await fetch(`/api/scan-status/${encodeURIComponent(scanId)}?includeFindings=0`, {
           cache: "no-store",
@@ -267,6 +289,7 @@ export function ScanStatusAutoRefresh({
         });
         if (!response.ok) return null;
         const payload = await response.json() as unknown;
+        terminalReportGeneration = getPolledReadiness(payload).reportGeneration;
         return getNavigablePolledScanStatus(payload, {
           pendingBrowserExtensionNormalization,
         });
@@ -276,6 +299,12 @@ export function ScanStatusAutoRefresh({
       onTerminal: () => {
         if (!reloadOnTerminal) return;
         if (terminalNavigations.has(scanId)) return;
+        if (!claimTerminalNavigation({
+          generation: terminalReportGeneration,
+          getItem: (key) => window.sessionStorage.getItem(key),
+          scanId,
+          setItem: (key, value) => window.sessionStorage.setItem(key, value)
+        })) return;
         terminalNavigations.add(scanId);
         recordTerminalDetection(scanId, poller.getState());
         window.location.reload();
