@@ -223,6 +223,23 @@ test("retained rendered links recover obvious policy surfaces when the separate 
   assert.deepEqual(privacy?.observedTopics, []);
 });
 
+test("retained consent-banner cookie notice links remain typed availability evidence", () => {
+  const observations = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "body",
+      href: "https://example.com/legal/cookie-notice.pdf",
+      linkText: "Cookie Notice",
+      pageUrl: "https://example.com/",
+    }],
+  });
+
+  const cookieNotice = observations.find((observation) => observation.surfaceType === "cookie_policy");
+  assert.equal(cookieNotice?.status, "observed");
+  assert.equal(cookieNotice?.linkObservationState, "observed");
+  assert.equal(cookieNotice?.documentFetchState, "not_attempted");
+  assert.equal(cookieNotice?.normalizedUrl, "https://example.com/legal/cookie-notice.pdf");
+});
+
 test("retained rendered links recover Russian personal-data fragment disclosures", () => {
   const observations = policySurfaceObservationsFromRetainedRenderedLinks({
     links: [{
@@ -3173,6 +3190,94 @@ test("policySurfaceScanner follows OneTrust index JSON to the final privacy noti
       signal.status === "observed"
     ), true);
   }, { enableNanoPolicyAssist: true });
+});
+
+test("policySurfaceScanner uses bounded Mini review to select one clearly labeled privacy-index child without requiring a date", async () => {
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    ...createDefaultMockNanoPolicyAssistProvider(),
+    async selectPrivacyDocumentLink(input) {
+      const selected = input.candidates.find((candidate) =>
+        candidate.url.endsWith("/policies/privacy-notice-current")
+      );
+      return {
+        assistId: input.assistId,
+        selectedCandidateId: selected?.candidateId ?? null,
+        shouldFetch: Boolean(selected),
+        confidence: 0.94,
+        reason: "The link clearly identifies the service privacy policy; a date is not required.",
+        uncertaintyNotes: [],
+      };
+    },
+  };
+
+  await withPolicyScan("policy-privacy-document-index", async ({ result, baseUrl }) => {
+    const selected = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/policies/privacy-notice-current`
+    );
+    const unselected = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/policies/privacy-notice-legacy`
+    );
+
+    assert.equal(selected?.status, "fetched");
+    assert.equal(selected?.traversalDepth, 1);
+    assert.equal(selected?.parentSurfaceUrl, `${baseUrl}/policies/privacy-index`);
+    assert.match(selected?.parentObservationId ?? "", /^policy_surface_/);
+    assert.equal(
+      selected?.selectionReasonCodes.includes("mini_semantic_privacy_document_selection"),
+      true,
+    );
+    assert.equal(
+      selected?.assistMetadata.some((metadata) =>
+        metadata.modelAssistRole === "review" &&
+        metadata.modelAssistProvider === "mini"
+      ),
+      true,
+    );
+    assert.equal(unselected?.status, "observed");
+    assert.equal(unselected?.documentFetchState, "not_attempted");
+    assert.equal(unselected?.documentEvaluationState, "not_attempted");
+    assert.equal(unselected?.traversalDepth, 1);
+    assert.equal(unselected?.parentSurfaceUrl, `${baseUrl}/policies/privacy-index`);
+    assert.equal(
+      unselected?.selectionReasonCodes.includes("not_selected_for_bounded_fetch"),
+      true,
+    );
+  }, { nanoAssistProvider });
+});
+
+test("policySurfaceScanner does not follow links from the selected privacy-index child", async () => {
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    ...createDefaultMockNanoPolicyAssistProvider(),
+    async selectPrivacyDocumentLink(input) {
+      const selected = input.candidates.find((candidate) =>
+        candidate.url.endsWith("/policies/privacy-notice-legacy")
+      );
+      return {
+        assistId: input.assistId,
+        selectedCandidateId: selected?.candidateId ?? null,
+        shouldFetch: Boolean(selected),
+        confidence: 0.9,
+        reason: "Fixture selection for one-hop failure coverage.",
+        uncertaintyNotes: [],
+      };
+    },
+  };
+
+  await withPolicyScan("policy-privacy-document-index", async ({ result, baseUrl }) => {
+    const selected = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/policies/privacy-notice-legacy`
+    );
+    const deeper = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/policies/privacy-notice-current`
+    );
+
+    assert.equal(selected?.status, "fetched");
+    assert.equal(selected?.traversalDepth, 1);
+    assert.equal(deeper?.status, "observed");
+    assert.equal(deeper?.documentFetchState, "not_attempted");
+    assert.equal(deeper?.parentSurfaceUrl, `${baseUrl}/policies/privacy-index`);
+    assert.equal(deeper?.traversalDepth, 1);
+  }, { nanoAssistProvider });
 });
 
 test("policySurfaceScanner extracts rendered policy body instead of nav and footer noise", async () => {

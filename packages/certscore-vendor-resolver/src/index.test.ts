@@ -2296,6 +2296,24 @@ test("resolves the aggressive Wave 13 runtime and infrastructure batch", () => {
   }
 });
 
+test("resolves amazon.de and its ubid cookie to the Amazon retail entity", () => {
+  const pageObservation = resolveVendorObservations([
+    request("https://www.amazon.de/", "www.amazon.de")
+  ])[0];
+  const cookieObservation = resolveVendorObservations([{
+      type: "cookie",
+      hostname: "amazon.de",
+      cookieName: "ubid-acbde",
+      matchSource: "cookie_name"
+  }])[0];
+
+  for (const observation of [pageObservation, cookieObservation]) {
+    assert.equal(observation?.entity, "Amazon.com, Inc.");
+    assert.equal(observation?.vendor, "Amazon");
+    assert.equal(observation?.product, "Amazon Retail");
+  }
+});
+
 test("keeps aggressive Wave 13 rules bounded to product paths", () => {
   const observations = resolveVendorObservations([
     request("https://m.media-amazon.com/images/G/01/csm/logo.svg", "m.media-amazon.com"),

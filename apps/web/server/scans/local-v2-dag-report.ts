@@ -2425,6 +2425,24 @@ export function summarizePolicySurfaces(
   const policyLastUpdatedTexts = uniqueStrings(policySurfaces
     .map((row) => firstString(row.surface.lastUpdatedText))
     .filter(Boolean));
+  const selectedPrivacyPolicyDocument = article13Surfaces
+    .filter((row) =>
+      row.surface.traversalDepth === 1 &&
+      row.surface.documentEvaluationState === "usable"
+    )
+    .sort((left, right) => right.surface.confidence - left.surface.confidence)[0] ?? null;
+  const privacyPolicyEvidencePaths = article13Surfaces
+    .filter((row) => row.surface.traversalDepth === 1)
+    .map((row) => ({
+      childObservationId: row.surface.observationId,
+      documentEvaluationState: row.surface.documentEvaluationState ?? "not_attempted",
+      documentFetchState: row.surface.documentFetchState ?? "not_attempted",
+      documentUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
+      parentObservationId: row.surface.parentObservationId ?? null,
+      parentSurfaceUrl: row.surface.parentSurfaceUrl ?? null,
+      selectionReasonCodes: row.surface.selectionReasonCodes ?? [],
+      traversalDepth: row.surface.traversalDepth,
+    }));
   const expectedPolicySectionHeadings = [
     "Your privacy controls",
     "Exporting and deleting your information",
@@ -2474,6 +2492,18 @@ export function summarizePolicySurfaces(
     privacyPolicyPresent: article13Surfaces.length > 0,
     privacyPolicyDiscovered: targetRelevantDiscoveredPrivacySurfaces.length > 0 || article13Surfaces.length > 0,
     privacyPolicyEvaluationState,
+    privacyPolicyEvidencePaths,
+    selectedPrivacyPolicyDocument: selectedPrivacyPolicyDocument ? {
+      documentUrl:
+        selectedPrivacyPolicyDocument.pageUrl ??
+        selectedPrivacyPolicyDocument.surface.normalizedUrl ??
+        selectedPrivacyPolicyDocument.surface.url,
+      observationId: selectedPrivacyPolicyDocument.surface.observationId,
+      parentObservationId: selectedPrivacyPolicyDocument.surface.parentObservationId ?? null,
+      parentSurfaceUrl: selectedPrivacyPolicyDocument.surface.parentSurfaceUrl ?? null,
+      selectionReasonCodes: selectedPrivacyPolicyDocument.surface.selectionReasonCodes ?? [],
+      traversalDepth: selectedPrivacyPolicyDocument.surface.traversalDepth,
+    } : null,
     discoveredPrivacyPolicyStatuses,
     discoveredPrivacyPolicyDetails,
     discoveredPrivacyPolicyUrls,
@@ -4880,6 +4910,14 @@ function buildMaterializedLocalV2Detail(
     page_url: pageUrl ?? surface.normalizedUrl ?? surface.url,
     policyAliasUrls: aliasUrls,
     policy_alias_urls: aliasUrls,
+    parentObservationId: surface.parentObservationId ?? null,
+    parent_observation_id: surface.parentObservationId ?? null,
+    parentSurfaceUrl: surface.parentSurfaceUrl ?? null,
+    parent_surface_url: surface.parentSurfaceUrl ?? null,
+    traversalDepth: surface.traversalDepth,
+    traversal_depth: surface.traversalDepth,
+    selectionReasonCodes: surface.selectionReasonCodes ?? [],
+    selection_reason_codes: surface.selectionReasonCodes ?? [],
     lastUpdatedText: surface.lastUpdatedText ?? null,
     policy_last_updated_text: surface.lastUpdatedText ?? null,
     policyActionableFlags: surface.mentionedControls ?? [],

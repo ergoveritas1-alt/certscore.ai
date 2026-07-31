@@ -978,6 +978,58 @@ test("observed rendered privacy links remain reportable when document fetch fail
   assert.deepEqual(summary.discoveredPrivacyPolicyUrls, ["https://example.test/privacy"]);
 });
 
+test("policy summary preserves the typed one-hop privacy-index evidence path", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const childSurface = {
+    observationId: "privacy-document-child",
+    parentObservationId: "privacy-policy-index",
+    parentSurfaceUrl: "https://example.test/privacy",
+    traversalDepth: 1,
+    selectionReasonCodes: [
+      "linked_from_retained_privacy_policy_index",
+      "mini_semantic_privacy_document_selection",
+    ],
+    surfaceType: "privacy_policy",
+    normalizedUrl: "https://example.test/policies/privacy-notice",
+    url: "https://example.test/policies/privacy-notice",
+    linkText: "Privacy Policy for this service",
+    status: "fetched",
+    documentFetchState: "fetched",
+    documentEvaluationState: "usable",
+    confidence: 0.95,
+    textExcerpt: "Example Privacy Policy. We process personal data to provide the service.",
+  } as CanonicalEvidenceBundle["policySurfaceObservations"][number];
+  const surfaces = dedupePolicySurfaces([childSurface], "https://example.test/");
+  const summary = summarizePolicySurfaces(surfaces, "example.test", {
+    discoveredPolicySurfaces: [childSurface],
+  });
+
+  assert.deepEqual(summary.selectedPrivacyPolicyDocument, {
+    documentUrl: "https://example.test/policies/privacy-notice",
+    observationId: "privacy-document-child",
+    parentObservationId: "privacy-policy-index",
+    parentSurfaceUrl: "https://example.test/privacy",
+    selectionReasonCodes: [
+      "linked_from_retained_privacy_policy_index",
+      "mini_semantic_privacy_document_selection",
+    ],
+    traversalDepth: 1,
+  });
+  assert.deepEqual(summary.privacyPolicyEvidencePaths, [{
+    childObservationId: "privacy-document-child",
+    documentEvaluationState: "usable",
+    documentFetchState: "fetched",
+    documentUrl: "https://example.test/policies/privacy-notice",
+    parentObservationId: "privacy-policy-index",
+    parentSurfaceUrl: "https://example.test/privacy",
+    selectionReasonCodes: [
+      "linked_from_retained_privacy_policy_index",
+      "mini_semantic_privacy_document_selection",
+    ],
+    traversalDepth: 1,
+  }]);
+});
+
 test("policy summary materializes structured named-cookie disclosures from cookie surfaces", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const sourceUrl = "https://www.oxfam.org/en/cookies";

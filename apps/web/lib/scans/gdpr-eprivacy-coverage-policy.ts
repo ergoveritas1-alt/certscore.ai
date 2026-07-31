@@ -2240,7 +2240,9 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
     preConsentStorageAssessmentStatus: assessment.status,
     preConsentStorageClassificationLimitation:
       assessment.status === "partially_classified" ||
-      assessment.status === "snapshot_presence_only",
+      assessment.status === "snapshot_presence_only" ||
+      assessment.unclassifiedCount > 0 ||
+      assessment.reconciliationStatus !== "reconciled",
     preconsentCookieOrStorageExactTimingRetained: assessment.provenWriteCount > 0,
     rowLevelEssentialityEvidenceRetained: assessment.attributedPreConsentRecordCount > 0,
     snapshotOnlyNonEssentialCookieNames:
@@ -6052,7 +6054,7 @@ const INTERNATIONAL_TRANSFERS_DISCLOSURE_PATTERN =
   /data transfers?|international transfer|cross-border transfer|transfer.{0,120}(?:personal data|personal information|information|data).{0,160}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies))|(?:personal data|personal information|information|data).{0,120}(?:transfer|transferred|stored|processed|accessed|shared|protected).{0,180}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|usa|eea|european economic area|uk|united kingdom)|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,240}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries)|agreements?.{0,240}(?:personal data|personal information|information|data).{0,240}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|(?:stored|processed|accessed|shared).{0,120}(?:in|from).{0,80}(?:united states|usa|other countries|countries outside|third countries|foreign countries)|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|standard contractual|contractual clauses|sccs?|adequacy|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|transfer mechanisms?|data transfer framework|data privacy framework|dpf|privacy shield/i;
 
 const SUPERVISORY_AUTHORITY_COMPLAINT_RIGHT_PATTERN =
-  /right to (?:contact|lodge|make|file|submit|complain to) (?:your )?(?:local )?(?:supervisory|data protection) authority|lodge a complaint|present(?:ing)? a complaint|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority|(?:if you believe|complaints?).{0,220}(?:may|can) contact (?:the )?(?:relevant |competent |local )*(?:supervisory|data protection) authority/i;
+  /right to (?:contact|lodge|make|file|submit|complain to) (?:your )?(?:local )?(?:supervisory|data protection) authority|(?:lodge|make|file|submit|present(?:ing)?) a complaint (?:with|to) (?:our |the |your )?(?:principal |relevant |competent |local )*(?:supervisory|data protection) authority|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority|(?:if you believe|complaints?).{0,220}(?:may|can) contact (?:the )?(?:relevant |competent |local )*(?:supervisory|data protection) authority/i;
 
 const AUTOMATED_DECISION_PROFILING_DISCLOSURE_PATTERN =
   /automated decision(?:-making| making)?|solely automated (?:processing|decision)|automated systems?|meaningful information about the logic involved|legal or similarly significant effects|similarly significant effects|\bprofiling\b|personalized ads|personalized advertising|customized search results|tailored search results|tailored|algorithms?|recognize patterns/i;

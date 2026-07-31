@@ -227,6 +227,37 @@ function policyObservationRank(observation: PolicySurfaceObservation): number {
 export interface PolicyNanoAssistProvider {
   classifyLinks?(input: NanoLinkClassificationInput): Promise<NanoLinkClassificationResult>;
   extractTopics?(input: NanoTopicExtractionInput): Promise<NanoTopicExtractionResult>;
+  selectPrivacyDocumentLink?(
+    input: PrivacyDocumentLinkSelectionInput,
+  ): Promise<PrivacyDocumentLinkSelectionResult>;
+}
+
+export interface PrivacyDocumentLinkCandidate {
+  candidateId: string;
+  url: string;
+  linkText: string;
+  surroundingTextExcerpt?: string;
+  deterministicScore: number;
+  deterministicMatchStrength?: PrivacySurfaceMatchStrength;
+  classifierReasonCodes: string[];
+}
+
+export interface PrivacyDocumentLinkSelectionInput {
+  assistId: string;
+  indexUrl: string;
+  indexTitle?: string;
+  indexTextExcerpt: string;
+  candidates: PrivacyDocumentLinkCandidate[];
+  signal?: AbortSignal;
+}
+
+export interface PrivacyDocumentLinkSelectionResult {
+  assistId: string;
+  selectedCandidateId: string | null;
+  shouldFetch: boolean;
+  confidence: number;
+  reason: string;
+  uncertaintyNotes?: string[];
 }
 
 export interface NanoLinkClassificationInput {
@@ -297,6 +328,11 @@ interface PolicySurfaceCandidate {
   rankedFromCommonPath?: boolean;
   seedSource?: "prior_scan_hint" | "canonical_legal_surface_hint";
   assisted?: NanoLinkClassificationResult["rankedCandidates"][number];
+  parentObservationId?: string;
+  parentSurfaceUrl?: string;
+  traversalDepth?: 0 | 1;
+  selectionReasonCodes?: string[];
+  reviewSelection?: PrivacyDocumentLinkSelectionResult;
 }
 
 interface PolicyFacts {
@@ -1295,6 +1331,7 @@ interface ProcessPolicyCandidateResult {
   observation: PolicySurfaceObservation;
   artifactRefs: ArtifactRef[];
   secondaryCandidates: PolicySurfaceCandidate[];
+  secondaryCandidateObservations?: PolicySurfaceObservation[];
 }
 
 async function fetchRankedPolicyCandidates(input: {
@@ -1367,7 +1404,10 @@ async function fetchPolicyCandidateGroup(input: {
   );
   return {
     artifactRefs: policyResults.flatMap((result) => result.artifactRefs),
-    observations: policyResults.map((result) => result.observation),
+    observations: [
+      ...policyResults.map((result) => result.observation),
+      ...policyResults.flatMap((result) => result.secondaryCandidateObservations ?? []),
+    ],
     secondaryCandidates: policyResults.flatMap((result) => result.secondaryCandidates),
   };
 }
@@ -1764,6 +1804,17 @@ async function processPolicyCandidate({
     text: visibleText,
     title,
   })) {
+    const childSelection = await selectOneHopPolicyIndexChildren({
+      input,
+      indexCandidate: effectiveCandidate,
+      indexTitle: title,
+      indexText: visibleText,
+      candidates: highValueSecondaryCandidatesFromPolicyPage(
+        effectiveCandidate.normalizedUrl,
+        uniqueStrings(secondaryCandidateHtmlInputs).join("\n"),
+        visibleText,
+      ),
+    });
     return {
       observation: observationFromCandidate(effectiveCandidate, {
         status: "failed",
@@ -1776,10 +1827,9 @@ async function processPolicyCandidate({
         confidence: Math.max(0.35, Math.min(0.55, candidate.assisted?.confidence ?? candidate.deterministicScore)),
       }),
       artifactRefs: [],
-      secondaryCandidates: highValueSecondaryCandidatesFromPolicyPage(
-        effectiveCandidate.normalizedUrl,
-        uniqueStrings(secondaryCandidateHtmlInputs).join("\n"),
-        visibleText,
+      secondaryCandidates: childSelection.fetchCandidates,
+      secondaryCandidateObservations: observationsForUnselectedPrivacyIndexChildren(
+        childSelection.observedChildCandidates,
       ),
     };
   }
@@ -1892,6 +1942,20 @@ async function processPolicyCandidate({
     : undefined;
   const merged = mergePolicyFacts(deterministic, topicAssist);
 
+  const childSelection = await selectOneHopPolicyIndexChildren({
+    input,
+    indexCandidate: effectiveCandidate,
+    indexTitle: title,
+    indexText: visibleText,
+    candidates: highValueSecondaryCandidatesFromPolicyPage(
+      effectiveCandidate.normalizedUrl,
+      uniqueStrings(secondaryCandidateHtmlInputs.flatMap((html) => [
+        html,
+        decodeEmbeddedHtml(html),
+      ])).join("\n"),
+      visibleText,
+    ),
+  });
   return {
     observation: observationFromCandidate(effectiveCandidate, {
       status: "fetched",
@@ -1927,13 +1991,9 @@ async function processPolicyCandidate({
       confidence: Math.max(candidate.assisted?.confidence ?? 0, deterministic.confidence),
     }),
     artifactRefs,
-    secondaryCandidates: highValueSecondaryCandidatesFromPolicyPage(
-      effectiveCandidate.normalizedUrl,
-      uniqueStrings(secondaryCandidateHtmlInputs.flatMap((html) => [
-        html,
-        decodeEmbeddedHtml(html),
-      ])).join("\n"),
-      visibleText,
+    secondaryCandidates: childSelection.fetchCandidates,
+    secondaryCandidateObservations: observationsForUnselectedPrivacyIndexChildren(
+      childSelection.observedChildCandidates,
     ),
   };
 }
@@ -3644,6 +3704,155 @@ function highValueSecondaryCandidatesFromPolicyPage(
   );
 }
 
+async function selectOneHopPolicyIndexChildren(input: {
+  input: PolicySurfaceScannerInput;
+  indexCandidate: PolicySurfaceCandidate;
+  indexTitle?: string;
+  indexText: string;
+  candidates: PolicySurfaceCandidate[];
+}): Promise<{
+  fetchCandidates: PolicySurfaceCandidate[];
+  observedChildCandidates: PolicySurfaceCandidate[];
+}> {
+  if (
+    input.indexCandidate.deterministicSurfaceType !== "privacy_policy" ||
+    (input.indexCandidate.traversalDepth ?? 0) >= 1
+  ) {
+    return { fetchCandidates: [], observedChildCandidates: [] };
+  }
+
+  const parentObservationId = `policy_surface_${stableHash(input.indexCandidate.normalizedUrl)}`;
+  const childCandidates = input.candidates.map((candidate) => ({
+    ...candidate,
+    parentObservationId,
+    parentSurfaceUrl: input.indexCandidate.normalizedUrl,
+    traversalDepth: 1 as const,
+    selectionReasonCodes: uniqueStrings([
+      ...(candidate.selectionReasonCodes ?? []),
+      "linked_from_retained_privacy_policy_index",
+      "one_hop_policy_document_candidate",
+    ]),
+  }));
+  const privacyCandidates = childCandidates.filter((candidate) =>
+    candidate.deterministicSurfaceType === "privacy_policy" &&
+    candidate.fetchable &&
+    candidate.sameOrigin &&
+    candidate.deterministicScore >= 0.5
+  );
+  const nonPrivacyCandidates = childCandidates.filter((candidate) =>
+    candidate.deterministicSurfaceType !== "privacy_policy"
+  );
+
+  if (privacyCandidates.length === 0) {
+    return {
+      fetchCandidates: nonPrivacyCandidates,
+      observedChildCandidates: [],
+    };
+  }
+
+  const selectPrivacyDocumentLink = input.input.nanoAssistProvider?.selectPrivacyDocumentLink;
+  if (!selectPrivacyDocumentLink) {
+    if (privacyCandidates.length === 1) {
+      return {
+        fetchCandidates: [{
+          ...privacyCandidates[0]!,
+          selectionReasonCodes: uniqueStrings([
+            ...(privacyCandidates[0]!.selectionReasonCodes ?? []),
+            "single_clearly_labeled_privacy_document_link",
+            "deterministic_one_hop_selection",
+          ]),
+        }],
+        observedChildCandidates: [],
+      };
+    }
+    return {
+      fetchCandidates: [],
+      observedChildCandidates: privacyCandidates.map(markUnselectedPrivacyIndexChild),
+    };
+  }
+
+  try {
+    const assistId = `mini_privacy_index_child_${stableHash(input.indexCandidate.normalizedUrl)}`;
+    const result = await selectPrivacyDocumentLink({
+      assistId,
+      indexUrl: input.indexCandidate.normalizedUrl,
+      indexTitle: input.indexTitle,
+      indexTextExcerpt: normalizeWhitespace(input.indexText).slice(0, 2_000),
+      candidates: privacyCandidates.slice(0, 12).map((candidate) => ({
+        candidateId: candidate.candidateId,
+        url: candidate.normalizedUrl,
+        linkText: candidate.linkText.slice(0, 220),
+        surroundingTextExcerpt: candidate.surroundingTextExcerpt?.slice(0, 500),
+        deterministicScore: candidate.deterministicScore,
+        deterministicMatchStrength: candidate.deterministicMatchStrength,
+        classifierReasonCodes: candidate.deterministicClassifierReasonCodes.slice(0, 12),
+      })),
+      signal: input.input.signal,
+    });
+    if (
+      !result.shouldFetch ||
+      !result.selectedCandidateId ||
+      result.confidence < 0.72
+    ) {
+      return {
+        fetchCandidates: [],
+        observedChildCandidates: privacyCandidates.map(markUnselectedPrivacyIndexChild),
+      };
+    }
+    const selected = privacyCandidates.find((candidate) =>
+      candidate.candidateId === result.selectedCandidateId
+    );
+    if (!selected) {
+      return {
+        fetchCandidates: [],
+        observedChildCandidates: privacyCandidates.map(markUnselectedPrivacyIndexChild),
+      };
+    }
+    return {
+      fetchCandidates: [{
+        ...selected,
+        reviewSelection: result,
+        selectionReasonCodes: uniqueStrings([
+          ...(selected.selectionReasonCodes ?? []),
+          "mini_semantic_privacy_document_selection",
+          "bounded_single_second_hop",
+        ]),
+      }],
+      observedChildCandidates: privacyCandidates
+        .filter((candidate) => candidate.candidateId !== selected.candidateId)
+        .map(markUnselectedPrivacyIndexChild),
+    };
+  } catch {
+    return {
+      fetchCandidates: [],
+      observedChildCandidates: privacyCandidates.map(markUnselectedPrivacyIndexChild),
+    };
+  }
+}
+
+function markUnselectedPrivacyIndexChild(
+  candidate: PolicySurfaceCandidate,
+): PolicySurfaceCandidate {
+  return {
+    ...candidate,
+    selectionReasonCodes: uniqueStrings([
+      ...(candidate.selectionReasonCodes ?? []),
+      "not_selected_for_bounded_fetch",
+    ]),
+  };
+}
+
+function observationsForUnselectedPrivacyIndexChildren(
+  candidates: PolicySurfaceCandidate[],
+): PolicySurfaceObservation[] {
+  return candidates.map((candidate) =>
+    observationFromCandidate(candidate, {
+      status: "observed",
+      confidence: Math.max(0.35, candidate.deterministicScore),
+    })
+  );
+}
+
 export function isGdprNoticeSupplementLink(linkText: string, normalizedUrl: string, surroundingTextExcerpt: string): boolean {
   const evidence = `${linkText} ${normalizedUrl} ${surroundingTextExcerpt}`;
   const explicitNotice = /\b(?:gdpr|eu|eea|european\s+economic\s+area)\b.{0,80}\b(?:privacy|notice|rights|protections?)\b|\b(?:privacy|notice|rights|protections?)\b.{0,80}\b(?:gdpr|eu|eea|european\s+economic\s+area)\b/i.test(evidence);
@@ -3827,6 +4036,21 @@ function observationFromCandidate(
       usedForFinalFinding: false,
     }]
     : [];
+  const reviewSelectionMetadata: PolicySurfaceObservation["assistMetadata"] = candidate.reviewSelection
+    ? [{
+      assistId: candidate.reviewSelection.assistId,
+      modelAssistProvider: "mini",
+      modelAssistRole: "review",
+      assistType: "link_classification",
+      inputEvidenceRefs: [],
+      inputExcerptIds: [],
+      outputSchemaVersion: "privacy-index-child-selection.v1",
+      confidence: candidate.reviewSelection.confidence,
+      uncertaintyNotes: candidate.reviewSelection.uncertaintyNotes ?? [],
+      evidenceRefs: [],
+      usedForFinalFinding: false,
+    }]
+    : [];
   const linkObservationState = candidate.observationOnly || candidate.clickable
     ? "observed" as const
     : "candidate" as const;
@@ -3853,6 +4077,10 @@ function observationFromCandidate(
     url: candidate.url,
     normalizedUrl: candidate.normalizedUrl,
     linkText: candidate.linkText,
+    parentObservationId: candidate.parentObservationId,
+    parentSurfaceUrl: candidate.parentSurfaceUrl,
+    traversalDepth: candidate.traversalDepth ?? 0,
+    selectionReasonCodes: candidate.selectionReasonCodes ?? [],
     selector: candidate.selector,
     surroundingTextExcerpt: candidate.surroundingTextExcerpt,
     discoveryMethod: candidate.discoveryMethod,
@@ -3891,10 +4119,10 @@ function observationFromCandidate(
     mentionedControls: input.mentionedControls ?? [],
     lastUpdatedText: input.lastUpdatedText,
     confidence: input.confidence,
-    directVsInferred: candidate.assisted ? "mixed" : "direct",
+    directVsInferred: candidate.assisted || candidate.reviewSelection ? "mixed" : "direct",
     evidenceRefs: input.evidenceRefs ?? [],
     artifactRefs: input.artifactRefs ?? [],
-    assistMetadata: [...nanoMetadata, ...(input.assistMetadata ?? [])],
+    assistMetadata: [...nanoMetadata, ...reviewSelectionMetadata, ...(input.assistMetadata ?? [])],
   };
 }
 

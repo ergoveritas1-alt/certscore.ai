@@ -16,7 +16,7 @@ export {
   type TransferMechanism,
 } from "./cookie-knowledge-base";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-20-wave19-ifit-attribution";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-30-wave20-amazon-ownership";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -135,6 +135,8 @@ export type CanonicalVendorLabelResolution = {
   regulatoryRelevance: string[];
   vendor: string;
 };
+
+export type CanonicalEntityOwnerResolution = CanonicalVendorLabelResolution;
 
 interface VendorRule {
   entity: string;
@@ -400,6 +402,19 @@ const rules: VendorRule[] = [
     urlPatterns: [/\/b\/ss\//i, /[?&]AQB=1\b/i],
     cookiePatterns: [/^s_ecid$/i, /^AMCV_/i, /^s_vi$/i],
     basisLabel: "adobe_analytics_or_experience_cloud_endpoint",
+  },
+  {
+    entity: "Amazon.com, Inc.",
+    vendor: "Amazon",
+    product: "Amazon Retail",
+    aliases: ["Amazon.de"],
+    purpose: "infrastructure",
+    regulatoryRelevance: ["service_delivery", "first_party_runtime", "retail_platform"],
+    confidence: 0.99,
+    hostPatterns: [/^(?:www\.)?amazon\.de$/i],
+    cookiePatterns: [/^ubid(?:-[a-z0-9]+)?$/i],
+    requireHostPatternForCookieMatch: true,
+    basisLabel: "amazon_de_retail_site_or_ubid_cookie",
   },
   {
     entity: "Amazon.com, Inc.",
@@ -4371,6 +4386,38 @@ export function resolveEndpointGeography(
   return {
     basis: ["host_only_endpoint_geography", "no_explicit_region_in_hostname"],
     status: "unknown",
+  };
+}
+
+/**
+ * Resolves legal-entity ownership from a canonical registry hostname match.
+ * Product attribution remains path-bounded in resolveVendorObservations; this
+ * owner-only projection is used for party and entity consolidation.
+ */
+export function resolveCanonicalEntityOwner(
+  value: string | null | undefined
+): CanonicalEntityOwnerResolution | null {
+  const hostname = normalizeHostname(value?.trim().replace(/^\.+/, ""));
+  if (!hostname) {
+    return null;
+  }
+  const candidates = rules.filter((rule) => (
+    matchesAny(hostname, rule.hostPatterns) &&
+    !matchesAny(hostname, rule.excludeHostPatterns)
+  ));
+  if (candidates.length === 0 || new Set(candidates.map((rule) => rule.entity)).size !== 1) {
+    return null;
+  }
+  const primaryRule = candidates.reduce((best, rule) => rule.confidence > best.confidence ? rule : best);
+  return {
+    basis: `${primaryRule.basisLabel}:canonical_entity_owner`,
+    confidence: primaryRule.confidence,
+    displayCategory: resolveVendorDisplayCategory(primaryRule),
+    entity: primaryRule.entity,
+    product: primaryRule.product,
+    purpose: primaryRule.purpose,
+    regulatoryRelevance: unique(candidates.flatMap((rule) => rule.regulatoryRelevance)),
+    vendor: primaryRule.vendor
   };
 }
 

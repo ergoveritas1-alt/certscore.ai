@@ -39,6 +39,19 @@ test("canonical NBCNews cookie knowledge separates non-essential categories from
   });
 });
 
+test("canonical Amazon cookie knowledge classifies ubid locale variants as non-essential persistent identifiers", () => {
+  assert.deepEqual(resolveCanonicalCookieKnowledge("ubid-acbde"), {
+    category: "analytics",
+    dataTypes: ["persistent browser identifier", "anonymous user identifier"],
+    description: "Amazon persistent browser identifier used to distinguish devices and anonymous users in event and engagement measurement.",
+    essentiality: "non_essential",
+    name: "ubid-acbde",
+    vendor: "Amazon",
+  });
+  assert.equal(resolveCanonicalCookieKnowledge("ubid-main").essentiality, "non_essential");
+  assert.equal(resolveCanonicalCookieKnowledge("not-ubid-acbde").essentiality, "unknown");
+});
+
 test("canonical ID-sync and legal context registry does not infer data location from server IP", () => {
   for (const host of [
     "cm.g.doubleclick.net",

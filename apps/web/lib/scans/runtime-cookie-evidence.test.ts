@@ -399,6 +399,42 @@ test("canonical pre-consent storage assessment counts a classified non-essential
   assert.equal(metric.value, 1);
 });
 
+test("canonical pre-consent storage assessment preserves an observed Amazon ubid signal alongside unclassified rows", () => {
+  const assessment = buildPreConsentStorageAssessment({
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [
+          {
+            beforeConsent: true,
+            cookieName: "ubid-acbde",
+            domain: "amazon.de",
+            setAtMs: 500
+          },
+          {
+            beforeConsent: true,
+            cookieName: "mystery-amazon-cookie",
+            domain: "amazon.de",
+            setAtMs: 520
+          }
+        ],
+        storageSummary: {
+          cookiesBeforeConsentCount: 2
+        }
+      }
+    }
+  });
+  const metric = projectPreConsentStorageMetric(assessment);
+
+  assert.equal(assessment.status, "classified_nonessential_observed");
+  assert.equal(assessment.classifiedNonEssentialCount, 1);
+  assert.equal(assessment.unclassifiedCount, 1);
+  assert.equal(assessment.reconciliationStatus, "reconciled");
+  assert.equal(assessment.evidenceRows.find((row) => row.name === "ubid-acbde")?.essentiality, "non_essential");
+  assert.equal(metric.status, "measured_positive");
+  assert.equal(metric.value, 1);
+  assert.match(metric.explanation, /1 additional pre-consent record remains unclassified/i);
+});
+
 test("canonical pre-consent storage assessment keeps snapshot candidates timing-unconfirmed", () => {
   const assessment = buildPreConsentStorageAssessment({
     runtimeArtifacts: {

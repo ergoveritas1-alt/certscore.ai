@@ -1,4 +1,5 @@
 import {
+  resolveCanonicalEntityOwner,
   resolveCanonicalCookieKnowledge,
   resolveCanonicalVendorLabel,
   resolveVendorDisplayCategory,
@@ -54,6 +55,12 @@ export function findRuntimeEntityOwner(value: string | null | undefined) {
       matchedValue: hostname
     }
   };
+}
+
+export function findRuntimeCanonicalEntityOwner(value: string | null | undefined) {
+  const hostname = normalizeRuntimeInventoryHost(value);
+  if (!hostname) return null;
+  return resolveCanonicalEntityOwner(hostname);
 }
 
 export function findRuntimeVendorLabelOwner(value: string | null | undefined) {
@@ -165,8 +172,8 @@ export function findRuntimeRequestOwner(url: string | null | undefined) {
 }
 
 export function hostsShareRuntimeEntity(left: string | null | undefined, right: string | null | undefined) {
-  const leftOwner = findRuntimeEntityOwner(left);
-  const rightOwner = findRuntimeEntityOwner(right);
+  const leftOwner = findRuntimeCanonicalEntityOwner(left);
+  const rightOwner = findRuntimeCanonicalEntityOwner(right);
   if (leftOwner && rightOwner && leftOwner.entity === rightOwner.entity) return true;
   const leftDomain = runtimeRegistrableDomain(left);
   const rightDomain = runtimeRegistrableDomain(right);

@@ -1340,6 +1340,10 @@ export const policySurfaceObservationSchema = z.object({
   url: z.string(),
   normalizedUrl: z.string().optional(),
   linkText: z.string().optional(),
+  parentObservationId: z.string().optional(),
+  parentSurfaceUrl: z.string().max(500).optional(),
+  traversalDepth: z.number().int().min(0).max(1).optional(),
+  selectionReasonCodes: z.array(z.string().max(120)).max(12).optional(),
   selector: z.string().optional(),
   surroundingTextExcerpt: z.string().optional(),
   discoveryMethod: z.enum([
