@@ -2314,6 +2314,25 @@ function getConsentOptionsControlChecklistEligibility(input: {
   return "none";
 }
 
+function getConsentPaidDeclinePathChecklistEligibility(input: {
+  originKey: string;
+  rawEvidence: Record<string, unknown> | null | undefined;
+}): NormalizedConcernRegulatoryChecklistEligibility | null {
+  if (
+    input.originKey !== "consent.paid_decline_path.reject_with_subscription" ||
+    input.rawEvidence?.consentPaidDeclinePathEvidence !== true
+  ) {
+    return null;
+  }
+
+  return getFirstString(input.rawEvidence, [
+    "consentPaidDeclinePathState",
+    "consent_paid_decline_path_state"
+  ]) === "reject_with_subscription"
+    ? "review_signal"
+    : "none";
+}
+
 function getPreConsentStorageAssessmentChecklistEligibility(input: {
   originKey: string;
   rawEvidence: Record<string, unknown> | null | undefined;
@@ -2438,6 +2457,19 @@ export function deriveConcernPolicy(input: {
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
 
   const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  const consentPaidDeclinePathChecklistEligibility = getConsentPaidDeclinePathChecklistEligibility({
+    originKey: input.concern.originKey,
+    rawEvidence: input.rawEvidence
+  });
+  if (consentPaidDeclinePathChecklistEligibility !== null) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility: consentPaidDeclinePathChecklistEligibility
+    };
+  }
   const consentOptionsChecklistEligibility = getConsentOptionsControlChecklistEligibility({
     originKey: input.concern.originKey,
     rawEvidence: input.rawEvidence

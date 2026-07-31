@@ -20,6 +20,7 @@ const GENERIC_URL = "https://site-under-test.example/";
 
 type FixtureControl = {
   actionType: "accept_all" | "reject_all" | "manage_preferences";
+  classifierReasonCodes?: string[];
   label: string;
   presentationType?: "dedicated_button" | "inline_link";
 };
@@ -63,7 +64,7 @@ function retainedEvidencePacket(input: ConsentFlowFixture): CanonicalEvidenceBun
       controls: input.firstLayerControls.map((control, index) => ({
         ...control,
         artifactRef: `CanonicalEvidenceBundle.json#control-${index}`,
-        classifierReasonCodes: [`matched_${control.actionType}`],
+        classifierReasonCodes: control.classifierReasonCodes ?? [`matched_${control.actionType}`],
         layer: "first_layer",
         matchStrength: "direct",
         matchedLocale: "en",
@@ -176,6 +177,8 @@ function projectConsentStory(input: ConsentFlowFixture) {
   });
   const row = checklist.find((item) => item.id === "options_settings_preferences_control");
   assert.ok(row);
+  const rejectRow = checklist.find((item) => item.id === "reject_all_path_availability");
+  assert.ok(rejectRow);
   const gapFindings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {
       id: "gdpr_eprivacy",
@@ -187,6 +190,10 @@ function projectConsentStory(input: ConsentFlowFixture) {
     framework: "gdpr_eprivacy",
     rows: [row]
   });
+  const rejectScore = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [rejectRow]
+  });
 
   return {
     assessment,
@@ -195,6 +202,9 @@ function projectConsentStory(input: ConsentFlowFixture) {
       finding.id === "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control"
     ),
     row,
+    rejectRow,
+    rejectScore,
+    normalizedConcerns,
     score
   };
 }
@@ -349,6 +359,46 @@ test("canonical consent-control flow preserves site-agnostic prominence and abse
       assert.notEqual(story.score.score, 0, fixtureCase.name);
     }
   }
+});
+
+test("canonical consent-control flow projects reject-and-subscribe as a partial concern", () => {
+  const story = projectConsentStory({
+    firstLayerControls: [
+      { actionType: "accept_all", label: "Accept all" },
+      {
+        actionType: "reject_all",
+        classifierReasonCodes: [
+          "matched_reject",
+          "variant_reject_with_subscription"
+        ],
+        label: "Reject and subscribe"
+      },
+      {
+        actionType: "manage_preferences",
+        label: "Manage choices",
+        presentationType: "dedicated_button"
+      }
+    ]
+  });
+  const paidDeclineConcern = story.normalizedConcerns.find((concern) =>
+    concern.originKey === "consent.paid_decline_path.reject_with_subscription"
+  );
+
+  assert.equal(story.assessment.controls.reject.state, "not_observed");
+  assert.equal(
+    story.assessment.evidence.some((evidence) =>
+      evidence.controlVariant === "reject_with_subscription" && evidence.intent === "other"
+    ),
+    true
+  );
+  assert.ok(paidDeclineConcern);
+  assert.equal(paidDeclineConcern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(story.rejectRow.status, "Review signal");
+  assert.equal(story.rejectRow.assessmentStatus, "review_signal");
+  assert.match(story.rejectRow.limitation ?? "", /consent or pay/i);
+  assert.match(story.rejectRow.limitation ?? "", /cannot be determined from the consent interface alone/i);
+  assert.equal(story.rejectScore.score, 45);
+  assert.equal(story.gapFindingObserved, false);
 });
 
 function projectStorageStory(runtimeArtifacts: Record<string, unknown>) {

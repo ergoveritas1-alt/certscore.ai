@@ -496,10 +496,13 @@ test("retained reject-with-subscription evidence cannot project as a free reject
   assert.equal(assessment.controls.accept.state, "observed");
   assert.equal(assessment.controls.options.state, "observed");
   assert.equal(assessment.controls.reject.state, "not_observed");
-  assert.equal(
-    assessment.evidence.some((evidence) => evidence.label === "Rifiuta e abbonati"),
-    false,
+  const paidDeclineEvidence = assessment.evidence.find(
+    (evidence) => evidence.label === "Rifiuta e abbonati",
   );
+  assert.ok(paidDeclineEvidence);
+  assert.equal(paidDeclineEvidence.intent, "other");
+  assert.equal(paidDeclineEvidence.controlVariant, "reject_with_subscription");
+  assert.equal(paidDeclineEvidence.actionable, true);
 });
 
 test("no-go evidence cannot create missing-control negatives", () => {
