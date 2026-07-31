@@ -1340,6 +1340,20 @@ function getConsentOptionsControlProminenceConcern(
   }) ?? null;
 }
 
+function getConsentPaidDeclinePathConcern(
+  input: GdprEprivacyCoveragePolicyInput
+) {
+  return (input.normalizedConcerns ?? []).find((concern) => {
+    const rawEvidence = concern.evidenceBundle.rawEvidence;
+    return concern.originKey === "consent.paid_decline_path.reject_with_subscription" &&
+      concern.originType === "runtime_artifact" &&
+      concern.promotionEligibility === "internal_only" &&
+      concern.externalSurfacingEligibility === "audit_only" &&
+      concern.regulatoryChecklistEligibility === "review_signal" &&
+      rawEvidence?.consentPaidDeclinePathEvidence === true;
+  }) ?? null;
+}
+
 function getFirstLayerNoticeGateEvidence(input: GdprEprivacyCoveragePolicyInput) {
   const evidence = getFirstLayerConsentChoiceEvidence(input);
   const visibleChoiceLabels = evidence.visibleChoiceLabels;
@@ -3797,6 +3811,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     getBoolean(rejectPath, ["rejectInteractionSucceeded", "reject_interaction_succeeded"]) === true ||
     getBoolean(input.runtimeArtifacts, ["consent_reject_interaction_succeeded"]) === true;
   const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  const paidDeclinePathConcern = getConsentPaidDeclinePathConcern(input);
   const rejectPathAvailable = consentControlAssessment
     ? consentControlAssessment.controls.reject.state === "observed"
     : rejectInteractionSucceeded ||
@@ -3822,6 +3837,38 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
       firstLayerChoiceEvidence.cookieNoticeTextObserved &&
       firstLayerChoiceEvidence.acceptControlObserved &&
       !firstLayerChoiceEvidence.rejectControlObserved;
+
+  if (paidDeclinePathConcern) {
+    const rawEvidence = paidDeclinePathConcern.evidenceBundle.rawEvidence ?? {};
+    const retainedControls = getObjectArray(rawEvidence, [
+      "retainedConsentPaidDeclineControls",
+      "retained_consent_paid_decline_controls"
+    ]);
+    const retainedLabels = retainedControls
+      .map((control) => getString(control, ["label"]))
+      .filter((label): label is string => Boolean(label));
+    return makeOutcome(
+      "reject_all_path_availability",
+      "Review signal",
+      "A decline control was observed, but it presented a paid subscription path rather than continued free access without non-essential tracking. This is commonly described as a “consent or pay” model. Whether consent is freely given depends on the surrounding circumstances and cannot be determined from the consent interface alone.",
+      uniqueStrings([
+        ...paidDeclinePathConcern.evidenceBundle.runtimeArtifacts,
+        ...retainedLabels.map((label) => `Observed control: ${label}`)
+      ]).slice(0, 12),
+      {
+        retainedEvidence: {
+          consentPaidDeclinePathConcern: {
+            canonicalConcernKey: paidDeclinePathConcern.canonicalConcernKey,
+            originKey: paidDeclinePathConcern.originKey,
+            regulatoryChecklistEligibility: paidDeclinePathConcern.regulatoryChecklistEligibility
+          },
+          freeRejectControlObserved: false,
+          paidSubscriptionDeclinePathObserved: true,
+          retainedConsentPaidDeclineControls: retainedControls
+        }
+      }
+    );
+  }
 
   if (!rejectPathAvailable) {
     const incompleteInspectionOutcome = makeIncompleteConsentSurfaceInspectionOutcome(

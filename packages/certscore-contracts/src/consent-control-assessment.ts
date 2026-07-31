@@ -39,6 +39,7 @@ export const consentControlAssessmentControlResultSchema = z.object({
 export const consentControlAssessmentEvidenceSchema = z.object({
   evidenceId: z.string().max(240),
   intent: z.enum(["accept", "reject", "options", "privacy_opt_out", "save_preferences", "dismiss", "other"]),
+  controlVariant: z.enum(["reject_with_subscription"]).nullable().default(null),
   label: z.string().max(120).nullable(),
   locale: z.string().max(16).nullable(),
   layer: consentControlAssessmentLayerSchema,
@@ -140,6 +141,7 @@ export type ConsentControlAssessmentCandidate = {
   intent?: ConsentControlIntent;
   semanticRole?: "explicit_accept" | "ambiguous_acknowledgment" | "reject" | "necessary_only" | "preferences" | "dismiss" | "unknown";
   actionType?: "accept_all" | "reject_all" | "manage_preferences" | "save_preferences" | "do_not_sell_share" | "other";
+  controlVariant?: "reject_with_subscription" | null;
   label?: string | null;
   locale?: ConsentControlLocale | null;
   matchedTerm?: string | null;
@@ -245,7 +247,8 @@ function fnv1a(value: string) {
   return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-function candidateIntent(candidate: ConsentControlAssessmentCandidate): Exclude<ConsentControlIntent, "unknown"> | null {
+function candidateIntent(candidate: ConsentControlAssessmentCandidate): ConsentControlAssessmentEvidence["intent"] | null {
+  if (candidate.controlVariant === "reject_with_subscription") return "other";
   if (candidate.intent && candidate.intent !== "unknown") return candidate.intent;
   if (candidate.actionType === "accept_all" || candidate.semanticRole === "explicit_accept") return "accept";
   if (candidate.actionType === "reject_all" || candidate.semanticRole === "reject" || candidate.semanticRole === "necessary_only") return "reject";
@@ -288,6 +291,7 @@ function eligibleCandidate(candidate: ConsentControlAssessmentCandidate, fallbac
   return {
     evidenceId,
     intent,
+    controlVariant: candidate.controlVariant ?? null,
     label: boundedText(candidate.label, 120),
     locale: candidate.locale ?? null,
     layer,

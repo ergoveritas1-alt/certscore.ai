@@ -444,6 +444,67 @@ test("first-layer save with every observed optional default off is both options 
   );
 });
 
+test("retained reject-with-subscription evidence cannot project as a free reject control", () => {
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([
+      {
+        actionType: "accept_all",
+        label: "Accetta e continua",
+        visible: true,
+        layer: "first_layer",
+      },
+      {
+        actionType: "reject_all",
+        label: "Rifiuta e abbonati",
+        visible: true,
+        layer: "first_layer",
+        classifierReasonCodes: [
+          "matched_reject",
+          "variant_reject_with_subscription",
+        ],
+      },
+      {
+        actionType: "manage_preferences",
+        label: "Preferenze",
+        visible: true,
+        layer: "first_layer",
+      },
+    ]),
+    consentControlGeometryEvidence: geometry([
+      {
+        candidateId: "paid-reject",
+        actionType: "reject_all",
+        label: "Rifiuta e abbonati",
+        layer: "first_layer",
+        decisionStatus: "confirmed_visible",
+        classifierReasonCodes: [
+          "matched_reject",
+          "variant_reject_with_subscription",
+        ],
+      },
+    ], {
+      firstLayerAccept: true,
+      firstLayerReject: true,
+      firstLayerOptions: true,
+    }),
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: "https://oxfam.org/en",
+    noGo: false,
+    requestedUrl: "https://oxfam.org/en",
+  });
+
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  const paidDeclineEvidence = assessment.evidence.find(
+    (evidence) => evidence.label === "Rifiuta e abbonati",
+  );
+  assert.ok(paidDeclineEvidence);
+  assert.equal(paidDeclineEvidence.intent, "other");
+  assert.equal(paidDeclineEvidence.controlVariant, "reject_with_subscription");
+  assert.equal(paidDeclineEvidence.actionable, true);
+});
+
 test("no-go evidence cannot create missing-control negatives", () => {
   const assessment = deriveMaterializedConsentControlAssessment({
     bundle: bundle([], { captureStatus: "incomplete", likelyPresent: false }),

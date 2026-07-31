@@ -237,6 +237,75 @@ test("normalizes consent options prominence before concern policy assigns checkl
   }
 });
 
+test("normalizes a retained paid decline variant as a checklist-only review signal", () => {
+  const assessment = deriveConsentControlAssessment({
+    scan: {
+      scanId: "scan-paid-decline",
+      requestedUrl: "https://example.com/",
+      finalUrl: "https://example.com/",
+      scanStatus: "completed",
+      noGo: false
+    },
+    document: {
+      canonicalDocumentId: "https://example.com/",
+      observedDocumentIds: ["https://example.com/"],
+      identityStatus: "matched"
+    },
+    observations: [{
+      observationId: "first-layer",
+      observedAtMs: 100,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      documentId: "https://example.com/",
+      captureStatus: "observed",
+      completedChannels: ["dom_inventory"],
+      controls: [{
+        actionType: "other",
+        controlVariant: "reject_with_subscription",
+        evidenceId: "paid-decline",
+        label: "Reject and subscribe",
+        layer: "first_layer",
+        visible: true,
+        actionable: true,
+        artifactRefs: ["CanonicalEvidenceBundle.json"]
+      }]
+    }],
+    geometry: {
+      assessmentStatus: "complete",
+      documentId: "https://example.com/",
+      completedChannels: ["geometry"],
+      incompleteChannels: [],
+      candidates: []
+    },
+    surface: {
+      status: "observed_actionable",
+      evidenceRefs: ["CanonicalEvidenceBundle.json"]
+    },
+    coverage: {
+      status: "complete",
+      requiredChannels: ["dom_inventory", "geometry"],
+      completedChannels: ["dom_inventory", "geometry"],
+      incompleteChannels: []
+    }
+  });
+
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: { consentControlAssessment: assessment },
+    validationFindings: []
+  });
+  const concern = concerns.find((candidate) =>
+    candidate.originKey === "consent.paid_decline_path.reject_with_subscription"
+  );
+
+  assert.ok(concern);
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(concern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  assert.equal(concern.evidenceBundle.rawEvidence?.consentPaidDeclinePathEvidence, true);
+});
+
 test("normalizes snapshot signal candidates into eligible concerns", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [

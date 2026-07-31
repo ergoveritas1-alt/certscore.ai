@@ -897,6 +897,66 @@ test("prioritizes visible consent buttons over hidden navigation controls before
   assert.equal(findCandidate(artifact, "Accept")?.decisionStatus, "confirmed_visible");
 });
 
+test("retains consent controls when an unrelated modal is visible at the same time", async () => {
+  const artifact = await captureFixture(`
+    <style>
+      .account-modal {
+        position: fixed;
+        left: 420px;
+        top: 80px;
+        width: 520px;
+        padding: 24px;
+        background: white;
+        z-index: 20;
+      }
+      .cookie-banner {
+        position: fixed;
+        left: 24px;
+        right: 24px;
+        bottom: 24px;
+        padding: 20px;
+        background: #f8f8f8;
+        z-index: 30;
+      }
+      .cookie-banner button { margin-right: 12px; }
+    </style>
+    <section class="account-modal" role="dialog" aria-label="Sign in">
+      <h2>Member sign in</h2>
+      <button>Continue with email</button>
+    </section>
+    <section class="cookie-banner" role="dialog" aria-label="Cookie consent">
+      <p>We use cookies for analytics and advertising. Choose your cookie preferences.</p>
+      <button>Manage preferences</button>
+      <button>Reject all non-required</button>
+      <button>Accept all</button>
+    </section>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Continue with email")?.actionType, "other");
+});
+
+test("captures Show Purposes as contextual first-layer options", async () => {
+  const artifact = await captureFixture(`
+    <section
+      role="dialog"
+      aria-label="Cookie consent"
+      style="position: fixed; left: 180px; top: 120px; width: 720px; padding: 24px; background: white;"
+    >
+      <p>We and our partners use cookies and personal data for advertising purposes.</p>
+      <button>Agree</button>
+      <button>Show Purposes</button>
+    </section>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Show Purposes")?.actionType, "manage_preferences");
+});
+
 async function captureFixture(html: string) {
   assert.ok(browser, "browser not initialized");
   const page = await newPage(browser);

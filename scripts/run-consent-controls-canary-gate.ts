@@ -29,6 +29,7 @@ export type ConsentCanaryRow = {
   noGo: boolean;
   status: "completed" | "failed";
   durationMs: number | null;
+  timingBreakdown: Array<{ label: string; detail?: string; durationMs: number }>;
   evidenceChannels: Array<{ channel: string; status: string }>;
   artifactDir: string;
   error?: string;
@@ -126,6 +127,11 @@ async function runTarget(target: ManifestTarget, artifactDir: string): Promise<C
       noGo: result.moduleRun.status === "failed",
       status: result.moduleRun.status === "failed" ? "failed" : "completed",
       durationMs,
+      timingBreakdown: (result.moduleRun.timingBreakdown ?? []).map((timing) => ({
+        label: timing.label,
+        ...(timing.detail ? { detail: timing.detail } : {}),
+        durationMs: timing.durationMs,
+      })),
       evidenceChannels: result.consentSurfaceInspection?.evidenceChannels?.map((channel) => ({
         channel: channel.channel,
         status: channel.status,
@@ -144,6 +150,7 @@ async function runTarget(target: ManifestTarget, artifactDir: string): Promise<C
       noGo: true,
       status: "failed",
       durationMs: Date.now() - startedAtMs,
+      timingBreakdown: [],
       evidenceChannels: [],
       artifactDir,
       error: error instanceof Error ? error.message : String(error),

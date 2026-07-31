@@ -3101,6 +3101,68 @@ function buildConsentOptionsControlProminenceConcerns(
   ];
 }
 
+function buildConsentPaidDeclinePathConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  if (!assessment) {
+    return [];
+  }
+
+  const retainedControls = assessment.evidence
+    .filter((evidence) =>
+      evidence.controlVariant === "reject_with_subscription" &&
+      evidence.layer === "first_layer" &&
+      evidence.visible === true &&
+      evidence.actionable === true
+    )
+    .slice(0, 8)
+    .map((evidence) => ({
+      artifactRefs: evidence.artifactRefs.slice(0, 8),
+      evidenceId: evidence.evidenceId,
+      label: evidence.label,
+      layer: evidence.layer,
+      controlVariant: evidence.controlVariant
+    }));
+  if (retainedControls.length === 0) {
+    return [];
+  }
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "A typed first-layer decline control was retained as a paid subscription variant rather than a free reject-all control.",
+      domainContext,
+      evidence: retainedControls
+        .map((control) => control.label)
+        .filter((label): label is string => Boolean(label)),
+      observedValue: "reject_with_subscription",
+      originKey: "consent.paid_decline_path.reject_with_subscription",
+      originType: "runtime_artifact",
+      rawEvidence: {
+        consentControlAssessmentStatus: assessment.assessmentStatus,
+        consentControlCoverageStatus: assessment.coverage.status,
+        consentPaidDeclinePathEvidence: true,
+        consentPaidDeclinePathState: "reject_with_subscription",
+        freeRejectControlState: assessment.controls.reject.state,
+        retainedConsentPaidDeclineControls: retainedControls,
+        runtimeEvidenceArtifacts: uniqueStrings([
+          ...retainedControls.flatMap((control) => control.artifactRefs),
+          "scan_runtime_artifacts.consent_control_assessment"
+        ])
+      },
+      severity: "low",
+      signalKey: "privacy.consent_paid_decline_path",
+      signalLabel: "Paid decline path",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Paid decline path observed"
+    })
+  ];
+}
+
 function buildPreConsentStorageAssessmentConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
@@ -3167,6 +3229,7 @@ export function buildNormalizedConcerns(input: {
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPreConsentStorageAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCmpLoadOrderConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRtbCookieSyncConcerns(input.runtimeArtifacts, input.domainContext),
