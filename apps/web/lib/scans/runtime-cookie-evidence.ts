@@ -998,12 +998,12 @@ export function buildPreConsentStorageAssessment(input: {
   const status: PreConsentStorageAssessmentStatus =
     !captureRetained
       ? "insufficient_evidence"
-      : unclassifiedRows.length > 0 ||
-          reconciliationStatus === "aggregate_exceeds_attributed_rows" ||
-          reconciliationStatus === "row_count_exceeds_aggregate"
-        ? "partially_classified"
-        : classifiedNonEssentialRows.length > 0
-          ? "classified_nonessential_observed"
+      : classifiedNonEssentialRows.length > 0
+        ? "classified_nonessential_observed"
+        : unclassifiedRows.length > 0 ||
+            reconciliationStatus === "aggregate_exceeds_attributed_rows" ||
+            reconciliationStatus === "row_count_exceeds_aggregate"
+          ? "partially_classified"
           : snapshotNonEssentialCandidates.length > 0
             ? "snapshot_presence_only"
             : "classified_zero";
@@ -1059,9 +1059,14 @@ export function projectPreConsentStorageMetric(
   assessment: PreConsentStorageAssessment
 ): PreConsentStorageMetricProjection {
   if (assessment.status === "classified_nonessential_observed") {
+    const limitation = assessment.unclassifiedCount > 0
+      ? ` ${assessment.unclassifiedCount} additional pre-consent record${assessment.unclassifiedCount === 1 ? " remains" : "s remain"} unclassified.`
+      : assessment.reconciliationStatus !== "reconciled"
+        ? " Additional retained storage could not be fully reconciled to attributed rows."
+        : "";
     return {
       available: true,
-      explanation: "Classified non-essential storage was observed before a recorded consent action.",
+      explanation: `Classified non-essential storage was observed before a recorded consent action.${limitation}`,
       label: "Non-essential storage",
       scope: "nonessential_only",
       status: "measured_positive",

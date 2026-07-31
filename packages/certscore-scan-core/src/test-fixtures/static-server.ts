@@ -130,6 +130,7 @@ export type StaticFixturePage =
   | "policy-secondary-third-party-links"
   | "policy-onetrust-index-json"
   | "policy-onetrust-notice-json"
+  | "policy-privacy-document-index"
   | "policy-privacy-center-link"
   | "policy-rendered-article13-better"
   | "policy-rendered-incomplete-substantive"
@@ -312,6 +313,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-secondary-third-party-links": "policy-secondary-third-party-links",
   "policy-onetrust-index-json": "policy-onetrust-index-json",
   "policy-onetrust-notice-json": "policy-onetrust-notice-json",
+  "policy-privacy-document-index": "policy-privacy-document-index",
   "policy-privacy-center-link": "policy-privacy-center",
   "policy-rendered-article13-better": "policy-rendered-article13-better",
   "policy-rendered-incomplete-substantive": "policy-rendered-incomplete-substantive",
@@ -2087,6 +2089,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-noisy-policy-body": `<a href="/policies/noisy-privacy">Privacy Policy</a>`,
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,
+    "policy-privacy-document-index": `<a href="/policies/privacy-index">Privacy Policy</a>`,
     "policy-onetrust-notice-json": `<a href="/policies/onetrust-shell">Privacy Policy</a>`,
     "policy-rendered-article13-better": `<a href="/rendered-article13-better/privacy">Politique de confidentialité</a>`,
     "policy-rendered-incomplete-substantive": `<a href="/rendered-incomplete-substantive/privacy">Privacy Policy</a>`,
@@ -2762,6 +2765,29 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "en-us | WBD Privacy Center",
       body: "Processing Error. Close Privacy Center. Nested OneTrust NoticeApi LoadNotices shell.",
     },
+    "/policies/privacy-index": {
+      title: "Privacy Policy",
+      body: "Select the privacy notice that applies to this service.",
+    },
+    "/policies/privacy-notice-current": {
+      title: "Privacy Policy",
+      body: [
+        "Privacy Policy. This notice explains how Example Test collects and processes personal data.",
+        "We process account, contact, device, and usage information to provide the service, secure accounts, communicate with users, and improve our products.",
+        "Depending on the activity, our legal bases include contract, consent, legal obligations, and legitimate interests.",
+        "Recipients may include hosting providers, payment processors, analytics providers, professional advisers, and public authorities where required.",
+        "We retain personal data only for as long as needed for the purposes described in this notice and applicable legal requirements.",
+        "Individuals may request access, correction, deletion, restriction, portability, or object to certain processing by contacting privacy@example.test.",
+        "International transfers may use adequacy decisions or standard contractual clauses.",
+        "You may contact our data protection officer and lodge a complaint with a supervisory authority.",
+        "Additional policy context describes controller identity, contact routes, data categories, sources, service purposes, recipients, retention criteria, security practices, transfers, individual rights, complaint channels, and policy updates.",
+        "Further explanatory text repeats the target-owned privacy notice context so the retained document is long enough for deterministic bounded policy extraction and review.",
+      ].join(" ").repeat(3),
+    },
+    "/policies/privacy-notice-legacy": {
+      title: "Archived Privacy Policy",
+      body: "Archived privacy policy retained for historical reference only.",
+    },
     "/accessibility": {
       title: "Accessibility Statement",
       body: "Accessibility statement. Contact us if you experience barriers accessing our public website.",
@@ -2774,6 +2800,34 @@ function policyDocumentHtml(pathname: string): string | undefined {
   const doc = docs[pathname];
   if (!doc) {
     return undefined;
+  }
+  if (pathname === "/policies/privacy-index") {
+    return `<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>${escapeHtml(doc.title)}</title></head>
+  <body>
+    <main>
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+      <a href="/policies/privacy-notice-legacy">Previous Privacy Policy</a>
+      <a href="/policies/privacy-notice-current">Privacy Policy for this service</a>
+      <a href="/support/privacy-faq">Privacy FAQ</a>
+    </main>
+  </body>
+</html>`;
+  }
+  if (pathname === "/policies/privacy-notice-legacy") {
+    return `<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>${escapeHtml(doc.title)}</title></head>
+  <body>
+    <main>
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+      <a href="/policies/privacy-notice-current">Open the current Privacy Policy</a>
+    </main>
+  </body>
+</html>`;
   }
   if (pathname === "/policies/privacy-with-third-party-links") {
     return `<!doctype html>

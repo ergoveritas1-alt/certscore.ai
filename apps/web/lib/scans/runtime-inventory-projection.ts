@@ -19,6 +19,7 @@ import {
 } from "./runtime-cookie-priority";
 import {
   findRuntimeEntityOwner,
+  findRuntimeCanonicalEntityOwner,
   findRuntimeCookieOwner,
   findRuntimeRequestOwner,
   findRuntimeVendorLabelOwner,
@@ -277,12 +278,51 @@ function isFunctionalButNotCmpVendorLabel(value: string | null | undefined) {
   return isCmpOrFunctionalVendorLabel(value) && !isCmpVendorLabel(value);
 }
 
+function canonicalExecVendorOwner(value: string) {
+  return findRuntimeVendorLabelOwner(value) ??
+    findRuntimeEntityOwner(value) ??
+    findRuntimeCanonicalEntityOwner(value);
+}
+
+function canonicalizeExecTopObservedEntities(
+  entities: ReportVendorSurfaceProjectionInput["topObservedEntities"]
+) {
+  const grouped = new Map<string, ReportVendorSurfaceProjectionInput["topObservedEntities"][number]>();
+  for (const entity of entities) {
+    const owner = canonicalExecVendorOwner(entity.label);
+    const label = owner?.vendor ?? entity.label;
+    const existing = grouped.get(label.toLowerCase());
+    if (!existing) {
+      grouped.set(label.toLowerCase(), {
+        ...entity,
+        label
+      });
+      continue;
+    }
+    grouped.set(label.toLowerCase(), {
+      ...existing,
+      requestCount: existing.requestCount + entity.requestCount
+    });
+  }
+  return [...grouped.values()];
+}
+
 export function buildReportSurfaceVendorProjection(input: ReportVendorSurfaceProjectionInput) {
-  const execSummaryResolvedVendorNames = input.resolvedVendorNames.filter((name) => !isFunctionalButNotCmpVendorLabel(name));
+  const execSummaryResolvedVendorNames = uniqueStrings(
+    input.resolvedVendorNames
+      .filter((name) => !isFunctionalButNotCmpVendorLabel(name))
+      .map((name) => canonicalExecVendorOwner(name)?.vendor ?? name)
+  );
   const execSummaryThirdPartyDomains = uniqueStrings(input.rawThirdPartyDomains).filter((domain) => !isCmpOrFunctionalVendorDomain(domain));
-  const execSummaryTopObservedEntities = input.topObservedEntities.filter((entity) => (
-    !isFunctionalButNotCmpVendorLabel(entity.label) &&
-    !isFunctionalButNotCmpVendorDomain(entity.label)
+  const execSummaryTopObservedEntities = canonicalizeExecTopObservedEntities(
+    input.topObservedEntities.filter((entity) => (
+      !isFunctionalButNotCmpVendorLabel(entity.label) &&
+      !isFunctionalButNotCmpVendorDomain(entity.label)
+    ))
+  );
+  const execSummaryUnresolvedVendorHosts = uniqueStrings(input.unresolvedVendorHosts).filter((host) => (
+    !isCmpOrFunctionalVendorDomain(host) &&
+    !canonicalExecVendorOwner(host)
   ));
   const execSummaryCmpCategoryCount = uniqueStrings([
     ...execSummaryResolvedVendorNames.filter(isCmpVendorLabel),
@@ -296,7 +336,7 @@ export function buildReportSurfaceVendorProjection(input: ReportVendorSurfacePro
       resolvedVendorNames: execSummaryResolvedVendorNames,
       thirdPartyDomains: execSummaryThirdPartyDomains,
       topObservedEntities: execSummaryTopObservedEntities,
-      unresolvedVendorHosts: uniqueStrings(input.unresolvedVendorHosts).filter((host) => !isCmpOrFunctionalVendorDomain(host)),
+      unresolvedVendorHosts: execSummaryUnresolvedVendorHosts,
       vendorCategoryCounts: execSummaryCmpCategoryCount > 0
         ? {
             ...input.vendorCategoryCounts,
@@ -668,6 +708,14 @@ export function buildTrackerInventoryRows(input: {
       vendorName: vendor
     });
     const vendorOwner = findRuntimeVendorLabelOwner(vendor);
+    const hasOwnedFirstPartyEntityObservation = Boolean(vendorOwner && input.topObservedEntities.some((entity) => {
+      const hostname = normalizeInventoryHostname(entity.label);
+      return Boolean(
+        hostname &&
+        isFirstPartyHost(hostname) &&
+        findRuntimeCanonicalEntityOwner(hostname)?.entity === vendorOwner.entity
+      );
+    }));
     const hasConcreteObservedRow = [...rows.values()].some((row) =>
       (
         row.label.toLowerCase() === vendor.toLowerCase() ||
@@ -678,7 +726,7 @@ export function buildTrackerInventoryRows(input: {
         row.domains.length > 0 ||
         row.observedVia.some((value) => !/^(resolver|vendor resolver)$/i.test(value))
       )
-    );
+    ) || hasOwnedFirstPartyEntityObservation;
     if (hasConcreteObservedRow) {
       continue;
     }

@@ -787,6 +787,43 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats supervisory contact email 
   assert.notEqual(emailOnlyOutcomes.supervisory_authority_complaint_disclosure?.status, "Observed");
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes credits Amazon file-a-complaint supervisory-authority language", () => {
+  const amazonExcerpt = [
+    "How Can I Make a Complaint to a Supervisory Authority?",
+    "You can file a complaint with our principal supervisory authority,",
+    "the Commission Nationale pour la Protection des Données in Luxembourg, or with a local authority.",
+  ].join(" ");
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [{
+          confidence: 0.9,
+          disclosureType: "supervisory_authority",
+          evidenceText: amazonExcerpt,
+          selectedEvidenceStrength: "strong",
+          selectedPolicySectionExcerpt: amazonExcerpt,
+          selectedPolicySectionHeading: "How Can I Make a Complaint to a Supervisory Authority?",
+          source: "deterministic",
+          status: "observed",
+        }],
+        policyTextCoverageMode: "section_targeted",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4_000,
+        privacyPolicyUrls: ["https://www.amazon.de/privacy"],
+        retainedPrivacyPolicyTextExcerpt: amazonExcerpt,
+      },
+    },
+    snapshot: {
+      privacy_policy_present: true,
+    },
+  });
+
+  const outcome = outcomes.supervisory_authority_complaint_disclosure;
+  assert.equal(outcome?.status, "Observed");
+  assert.match(outcome?.evidenceRefs.join(" ") ?? "", /file a complaint with our principal supervisory authority/i);
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes sanitizes and prefers Ireland-relevant policy disclosure snippets", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

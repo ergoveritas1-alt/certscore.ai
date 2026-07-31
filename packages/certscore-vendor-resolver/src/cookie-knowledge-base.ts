@@ -22,6 +22,14 @@ type CookieKnowledgeRule = Omit<CanonicalCookieKnowledge, "name"> & {
 
 const COOKIE_KNOWLEDGE_RULES: readonly CookieKnowledgeRule[] = [
   {
+    pattern: /^ubid(?:-[a-z0-9]+)?$/i,
+    category: "analytics",
+    dataTypes: ["persistent browser identifier", "anonymous user identifier"],
+    description: "Amazon persistent browser identifier used to distinguish devices and anonymous users in event and engagement measurement.",
+    essentiality: "non_essential",
+    vendor: "Amazon",
+  },
+  {
     pattern: /^_gcl_au$/i,
     category: "advertising",
     dataTypes: ["conversion identifier", "browser identifier"],

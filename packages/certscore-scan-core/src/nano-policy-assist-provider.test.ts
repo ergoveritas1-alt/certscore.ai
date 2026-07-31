@@ -136,6 +136,59 @@ test("OpenAI Nano policy provider ranks only observed candidate IDs", async () =
   assert.equal(result?.rankedCandidates[0]?.likelySurfaceType, "your_privacy_choices");
 });
 
+test("OpenAI policy provider uses Mini for bounded one-hop privacy document selection", async () => {
+  let requestBody: Record<string, unknown> | undefined;
+  const provider = createOpenAiNanoPolicyAssistProvider({
+    apiKey: "test-key",
+    model: "test-nano",
+    reviewModel: "test-mini",
+    fetchImpl: async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return jsonResponse({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              selectedCandidateId: "privacy_current",
+              shouldFetch: true,
+              confidence: 0.91,
+              reason: "Clearly labeled service privacy policy.",
+              uncertaintyNotes: [],
+            }),
+          },
+        }],
+      });
+    },
+  });
+
+  const result = await provider.selectPrivacyDocumentLink?.({
+    assistId: "assist_privacy_index",
+    indexUrl: "https://example.com/privacy",
+    indexTitle: "Privacy Policy",
+    indexTextExcerpt: "Choose the privacy policy that applies.",
+    candidates: [
+      {
+        candidateId: "privacy_archive",
+        url: "https://example.com/privacy/archive",
+        linkText: "Previous Privacy Policy",
+        deterministicScore: 0.9,
+        classifierReasonCodes: ["matched_privacy_policy"],
+      },
+      {
+        candidateId: "privacy_current",
+        url: "https://example.com/privacy/current",
+        linkText: "Privacy Policy for this service",
+        deterministicScore: 0.9,
+        classifierReasonCodes: ["matched_privacy_policy"],
+      },
+    ],
+  });
+
+  assert.equal(requestBody?.model, "test-mini");
+  assert.equal(result?.selectedCandidateId, "privacy_current");
+  assert.equal(result?.shouldFetch, true);
+  assert.equal(result?.confidence, 0.91);
+});
+
 test("OpenAI Nano policy provider normalizes topic extraction to allowed bounded fields", async () => {
   const provider = createOpenAiNanoPolicyAssistProvider({
     apiKey: "test-key",

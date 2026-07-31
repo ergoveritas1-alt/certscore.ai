@@ -57,7 +57,6 @@ function retainedControlVariant(
     ? "reject_with_subscription"
     : null;
 }
-
 function inspectionChannel(value: string | undefined): ConsentControlAssessmentChannel | null {
   if (value === "page_script_inventory") return "dom_inventory";
   if (value === "viewport_screenshot") return "screenshot";

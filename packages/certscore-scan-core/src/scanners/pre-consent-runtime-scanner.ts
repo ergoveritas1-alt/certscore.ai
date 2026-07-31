@@ -3230,7 +3230,19 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
     };
 
     function boundedRenderedAnchorRows() {
-      const elements = [...document.querySelectorAll("a[href]")];
+      const elements: HTMLAnchorElement[] = [];
+      const seenRoots = new Set<Document | ShadowRoot>();
+      const visit = (root: Document | ShadowRoot) => {
+        if (seenRoots.has(root)) return;
+        seenRoots.add(root);
+        for (const element of root.querySelectorAll("a[href]")) {
+          elements.push(element as HTMLAnchorElement);
+        }
+        for (const element of root.querySelectorAll("*")) {
+          if (element.shadowRoot) visit(element.shadowRoot);
+        }
+      };
+      visit(document);
       const selected = elements.length > 1_000
         ? [...elements.slice(0, 500), ...elements.slice(-500)]
         : elements;
@@ -3325,7 +3337,19 @@ function retainedRenderedPolicyLinks(
 
 async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRenderedPolicyLink[]> {
   const snapshot = await page.evaluate(() => {
-    const elements = [...document.querySelectorAll("a[href]")];
+    const elements: HTMLAnchorElement[] = [];
+    const seenRoots = new Set<Document | ShadowRoot>();
+    const visit = (root: Document | ShadowRoot) => {
+      if (seenRoots.has(root)) return;
+      seenRoots.add(root);
+      for (const element of root.querySelectorAll("a[href]")) {
+        elements.push(element as HTMLAnchorElement);
+      }
+      for (const element of root.querySelectorAll("*")) {
+        if (element.shadowRoot) visit(element.shadowRoot);
+      }
+    };
+    visit(document);
     const selected = elements.length > 1_000
       ? [...elements.slice(0, 500), ...elements.slice(-500)]
       : elements;

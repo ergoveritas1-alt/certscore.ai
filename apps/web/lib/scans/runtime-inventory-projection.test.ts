@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildBrowserExtensionRequestInventoryRows,
+  buildReportSurfaceVendorProjection,
   buildRuntimeInventoryGroupRows,
   buildTrackerInventoryGroupRows,
   suppressUnsupportedCmpAliasRows,
@@ -728,6 +729,58 @@ test("treats publisher-owned related domains as first-party infrastructure", () 
     trackerVendors: [], topObservedEntities: [{ category: "unknown", label: "a.bildstatic.de", requestCount: 12 }], unresolvedHosts: ["a.bildstatic.de"]
   });
   assert.deepEqual(rows, []);
+});
+
+test("attributes Amazon-owned advertising and media hosts to the amazon.de entity", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: ["aax-eu.amazon-adsystem.com", "m.media-amazon.com"],
+    firstPartyDomain: "amazon.de",
+    preConsentVendors: ["Amazon Ads"],
+    resolvedVendors: ["Amazon Ads", "Amazon Media CDN"],
+    sessionReplayVendors: [],
+    trackerVendors: [{
+      beforeConsent: true,
+      confidence: 0.94,
+      detectionSource: "canonical_vendor_resolver",
+      matchedHostnames: ["aax-eu.amazon-adsystem.com"],
+      scriptHost: "aax-eu.amazon-adsystem.com",
+      vendorCategory: "advertising",
+      vendorName: "Amazon Ads"
+    } as never],
+    topObservedEntities: [{
+      category: "infrastructure",
+      label: "m.media-amazon.com",
+      requestCount: 4
+    }],
+    unresolvedHosts: []
+  });
+
+  const amazonAds = rows.find((row) => row.domains.includes("aax-eu.amazon-adsystem.com"));
+  assert.equal(amazonAds?.label, "Amazon");
+  assert.equal(amazonAds?.party, "first_party");
+  assert.equal(rows.some((row) => row.label === "Amazon Media CDN"), false);
+});
+
+test("canonical report vendor projection consolidates Amazon products and owned hosts to one vendor", () => {
+  const projection = buildReportSurfaceVendorProjection({
+    rawThirdPartyDomains: ["aax-eu.amazon-adsystem.com"],
+    resolvedVendorNames: ["Amazon Ads", "Amazon Media CDN"],
+    topObservedEntities: [
+      { category: "advertising", label: "Amazon Ads", requestCount: 1 },
+      { category: "infrastructure", label: "m.media-amazon.com", requestCount: 4 }
+    ],
+    unresolvedVendorHosts: ["aax-eu.amazon-adsystem.com"],
+    vendorCategoryCounts: { advertising: 1, infrastructure: 1 }
+  });
+
+  assert.deepEqual(projection.execSummary.resolvedVendorNames, ["Amazon"]);
+  assert.deepEqual(projection.execSummary.topObservedEntities, [{
+    category: "advertising",
+    label: "Amazon",
+    requestCount: 5
+  }]);
+  assert.deepEqual(projection.execSummary.unresolvedVendorHosts, []);
+  assert.deepEqual(projection.evidenceInventory.resolvedVendorNames, ["Amazon Ads", "Amazon Media CDN"]);
 });
 
 test("preserves literal Daily raw hosts and applies multi-label PSL party classification", () => {
