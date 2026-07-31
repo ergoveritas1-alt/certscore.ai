@@ -64,7 +64,7 @@ test("completed contact enters cooldown and becomes eligible after it expires", 
     now: new Date("2026-07-17T00:00:00.000Z"),
     summary: {
       generatedAt: "2026-07-17T00:00:00.000Z",
-      results: [{ status: "completed", url: "https://shop.example" }],
+      results: [{ scannerRuntimeStarted: true, status: "completed", url: "https://shop.example" }],
     },
     targetUrls: new Set(targets.map((target) => target.url)),
   });
@@ -102,6 +102,7 @@ test("no-go outcomes block once and retire after a reviewed second attempt", () 
       results: [
         {
           runtime: { noGoCandidate: true, noGoReasons: ["captcha"] },
+          scannerRuntimeStarted: true,
           status: "completed",
           url: "https://saas.example",
         },
@@ -121,6 +122,7 @@ test("no-go outcomes block once and retire after a reviewed second attempt", () 
       results: [
         {
           runtime: { noGoCandidate: true, noGoReasons: ["rate_limited"] },
+          scannerRuntimeStarted: true,
           status: "completed",
           url: "https://saas.example",
         },
