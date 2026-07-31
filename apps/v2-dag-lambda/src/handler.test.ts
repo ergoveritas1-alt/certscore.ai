@@ -252,7 +252,7 @@ test("handler bundle imports without browser-only PDF globals", async () => {
   await build({
     bundle: true,
     entryPoints: [path.join(repoRoot, "apps/v2-dag-lambda/src/handler.ts")],
-    external: ["playwright"],
+    external: ["playwright", "pdf-parse"],
     format: "cjs",
     minify: true,
     outfile,
@@ -264,6 +264,9 @@ test("handler bundle imports without browser-only PDF globals", async () => {
   const requireFromTest = createRequire(import.meta.url);
   const bundledHandler = requireFromTest(outfile) as { handler?: unknown };
   assert.equal(typeof bundledHandler.handler, "function");
+  const bundledSource = await readFile(outfile, "utf8");
+  assert.match(bundledSource, /import\(["']pdf-parse["']\)/);
+  assert.doesNotMatch(bundledSource, /Cannot polyfill `DOMMatrix`/);
 });
 
 test("handler rejects wrong contract, processor, unsupported region, network mode, or production-integration flags", () => {

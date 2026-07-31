@@ -21,7 +21,11 @@ pnpm --filter @website-signal-risk-scanner/v2-dag-lambda --prod deploy --legacy 
 
 mkdir -p "${deploy_dir}/src"
 mkdir -p "${deploy_dir}/node_modules"
+mkdir -p "${deploy_dir}/node_modules/@napi-rs"
 cp "${repo_root}/apps/v2-dag-lambda/dist-bundle/src/handler.js" "${deploy_dir}/src/handler.js"
+cp -R "${deps_dir}/node_modules/pdf-parse" "${deploy_dir}/node_modules/pdf-parse"
+cp -R "${deps_dir}/node_modules/pdfjs-dist" "${deploy_dir}/node_modules/pdfjs-dist"
+cp -R "${deps_dir}/node_modules/@napi-rs/canvas" "${deploy_dir}/node_modules/@napi-rs/canvas"
 cp -R "${deps_dir}/node_modules/playwright" "${deploy_dir}/node_modules/playwright"
 cp -R "${deps_dir}/node_modules/playwright-core" "${deploy_dir}/node_modules/playwright-core"
 

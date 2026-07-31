@@ -74,6 +74,9 @@ importers:
       '@certscore/scan-core':
         specifier: workspace:*
         version: link:../../packages/certscore-scan-core
+      pdf-parse:
+        specifier: ^2.4.5
+        version: 2.4.5
     devDependencies:
       '@types/node':
         specifier: ^24.0.0

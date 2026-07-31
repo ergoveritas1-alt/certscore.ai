@@ -37,8 +37,12 @@ RUN pnpm --filter @website-signal-risk-scanner/v2-dag-lambda bundle
 RUN --mount=type=cache,id=wc01-v2-dag-lambda-pnpm-store,target=/pnpm/store \
   pnpm --filter @website-signal-risk-scanner/v2-dag-lambda --prod deploy --legacy /lambda-deps
 RUN mkdir -p /lambda/node_modules \
+  && mkdir -p /lambda/node_modules/@napi-rs \
   && mkdir -p /lambda/src \
   && cp /workspace/apps/v2-dag-lambda/dist-bundle/src/handler.js /lambda/src/handler.js \
+  && cp -R /lambda-deps/node_modules/pdf-parse /lambda/node_modules/pdf-parse \
+  && cp -R /lambda-deps/node_modules/pdfjs-dist /lambda/node_modules/pdfjs-dist \
+  && cp -R /lambda-deps/node_modules/@napi-rs/canvas /lambda/node_modules/@napi-rs/canvas \
   && cp -R /lambda-deps/node_modules/playwright /lambda/node_modules/playwright \
   && cp -R /lambda-deps/node_modules/playwright-core /lambda/node_modules/playwright-core
 
