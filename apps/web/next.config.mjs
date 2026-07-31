@@ -6,6 +6,7 @@ const __dirname = path.dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  deploymentId: process.env.BUILD_GIT_SHA || undefined,
   devIndicators: false,
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
