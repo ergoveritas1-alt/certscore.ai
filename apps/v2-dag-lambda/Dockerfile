@@ -43,6 +43,7 @@ RUN mkdir -p /lambda/node_modules \
   && cp -R /lambda-deps/node_modules/pdf-parse /lambda/node_modules/pdf-parse \
   && cp -R /lambda-deps/node_modules/pdfjs-dist /lambda/node_modules/pdfjs-dist \
   && cp -R /lambda-deps/node_modules/@napi-rs/canvas /lambda/node_modules/@napi-rs/canvas \
+  && cp -R /lambda-deps/node_modules/@napi-rs/canvas-linux-x64-gnu /lambda/node_modules/@napi-rs/canvas-linux-x64-gnu \
   && cp -R /lambda-deps/node_modules/playwright /lambda/node_modules/playwright \
   && cp -R /lambda-deps/node_modules/playwright-core /lambda/node_modules/playwright-core
 

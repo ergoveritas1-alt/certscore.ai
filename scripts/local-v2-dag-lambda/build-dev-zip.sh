@@ -26,6 +26,7 @@ cp "${repo_root}/apps/v2-dag-lambda/dist-bundle/src/handler.js" "${deploy_dir}/s
 cp -R "${deps_dir}/node_modules/pdf-parse" "${deploy_dir}/node_modules/pdf-parse"
 cp -R "${deps_dir}/node_modules/pdfjs-dist" "${deploy_dir}/node_modules/pdfjs-dist"
 cp -R "${deps_dir}/node_modules/@napi-rs/canvas" "${deploy_dir}/node_modules/@napi-rs/canvas"
+cp -R "${deps_dir}/node_modules/@napi-rs/canvas-linux-x64-gnu" "${deploy_dir}/node_modules/@napi-rs/canvas-linux-x64-gnu"
 cp -R "${deps_dir}/node_modules/playwright" "${deploy_dir}/node_modules/playwright"
 cp -R "${deps_dir}/node_modules/playwright-core" "${deploy_dir}/node_modules/playwright-core"
 

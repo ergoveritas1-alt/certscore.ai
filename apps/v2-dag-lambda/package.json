@@ -20,6 +20,9 @@
     "@certscore/scan-core": "workspace:*",
     "pdf-parse": "^2.4.5"
   },
+  "optionalDependencies": {
+    "@napi-rs/canvas-linux-x64-gnu": "0.1.80"
+  },
   "devDependencies": {
     "esbuild": "^0.27.3",
     "@types/node": "^24.0.0"

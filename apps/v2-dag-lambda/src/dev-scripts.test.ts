@@ -195,6 +195,7 @@ test("local Lambda packages the bundled handler with Playwright and PDF runtime 
 
   assert.match(packageJson, /--external:playwright --external:pdf-parse/);
   assert.match(packageJson, /"pdf-parse": "\^2\.4\.5"/);
+  assert.match(packageJson, /"@napi-rs\/canvas-linux-x64-gnu": "0\.1\.80"/);
   assert.match(packageJson, /"esbuild": "\^0\.27\.3"/);
   assert.match(packageJson, /"clean": "rm -rf dist dist-bundle"/);
   assert.match(zipScript, /deps_dir="\$\{work_dir\}\/deps"/);
@@ -203,7 +204,7 @@ test("local Lambda packages the bundled handler with Playwright and PDF runtime 
   assert.match(zipScript, /dist-bundle\/src\/handler\.js/);
   assert.match(zipScript, /node_modules\/playwright"/);
   assert.match(zipScript, /node_modules\/playwright-core"/);
-  for (const dependency of ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas"]) {
+  for (const dependency of ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas", "@napi-rs/canvas-linux-x64-gnu"]) {
     const dependencyPattern = new RegExp(dependency.replace("/", "\\/"));
     assert.match(dockerfile, dependencyPattern);
     assert.match(zipScript, dependencyPattern);

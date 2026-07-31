@@ -77,6 +77,10 @@ importers:
       pdf-parse:
         specifier: ^2.4.5
         version: 2.4.5
+    optionalDependencies:
+      '@napi-rs/canvas-linux-x64-gnu':
+        specifier: 0.1.80
+        version: 0.1.80
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
