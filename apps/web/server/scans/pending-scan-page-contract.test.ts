@@ -32,6 +32,9 @@ test("lightweight status API resolves public shared-link access before selecting
   assert.ok(lightweightBranch >= 0);
   assert.ok(publicFindingsLoad > lightweightBranch);
   assert.match(source, /getPublicScanStatusProjection/);
+  assert.match(source, /await publishCanonicalScanReportProjection/);
+  assert.match(source, /projection = await getPublicScanStatusProjection\(scanId\) \?\? projection/);
+  assert.doesNotMatch(source, /after\(async \(\) => \{\s*await publishCanonicalScanReportProjection/);
   assert.doesNotMatch(source, /bootstrapAppUserSession/);
 });
 

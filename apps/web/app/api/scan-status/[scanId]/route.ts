@@ -1,4 +1,4 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import {
   getPublicOpsScanStatus
 } from "../../../../server/scans/ops-status";
@@ -34,7 +34,7 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
     );
   }
 
-  const projection = await getPublicScanStatusProjection(scanId);
+  let projection = await getPublicScanStatusProjection(scanId);
   if (!projection) {
     return NextResponse.json(
       { code: "scan_not_found", error: "Scan not found." },
@@ -54,24 +54,25 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
       !projection.reportReady &&
       (projection.status === "completed" || projection.status === "completed_limited")
     ) {
-      after(async () => {
-        await publishCanonicalScanReportProjection({
-          organizationId: projection.organizationId,
+      await publishCanonicalScanReportProjection({
+        organizationId: projection.organizationId,
+        scanId
+      }).then(async (publication) => {
+        console.info(JSON.stringify({
+          event: "scan.report_projection.status_recovery",
+          reason: publication.reason,
+          scanId,
+          status: publication.status
+        }));
+        if (publication.status === "ready") {
+          projection = await getPublicScanStatusProjection(scanId) ?? projection;
+        }
+      }).catch((error) => {
+        console.error(JSON.stringify({
+          error: error instanceof Error ? error.message : String(error),
+          event: "scan.report_projection.status_recovery_failed",
           scanId
-        }).then((publication) => {
-          console.info(JSON.stringify({
-            event: "scan.report_projection.status_recovery",
-            reason: publication.reason,
-            scanId,
-            status: publication.status
-          }));
-        }).catch((error) => {
-          console.error(JSON.stringify({
-            error: error instanceof Error ? error.message : String(error),
-            event: "scan.report_projection.status_recovery_failed",
-            scanId
-          }));
-        });
+        }));
       });
     }
     return NextResponse.json(buildLightweightScanStatusResponse(projection), {
