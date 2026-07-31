@@ -49,8 +49,8 @@ test("report projection writer and readiness query share one version contract", 
     readFile(statusProjectionPath, "utf8")
   ]);
 
-  assert.equal(SCAN_REPORT_PROJECTION_VERSION, "scan-report-projection-v9");
-  assert.match(contractSource, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v9"/);
+  assert.equal(SCAN_REPORT_PROJECTION_VERSION, "scan-report-projection-v10");
+  assert.match(contractSource, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v10"/);
   assert.match(projectionSource, /from "\.\/scan-report-projection-contract"/);
   assert.match(statusSource, /from "\.\/scan-report-projection-contract"/);
   assert.match(
@@ -64,6 +64,10 @@ test("report projection writer and readiness query share one version contract", 
 test("persisted display projection is bounded, checksum-verified, and scan-bound", () => {
   const scanRecord = {
     events: [],
+    runtimeArtifacts: {
+      omittedAtTransport: undefined,
+      observedAt: new Date("2026-07-30T19:22:38.000Z")
+    },
     scan: {
       completedAt: "2026-07-30T19:22:39.000Z",
       id: "5eb8e37d-7eac-4c45-bb4b-3c31c239a2df",
@@ -80,12 +84,17 @@ test("persisted display projection is bounded, checksum-verified, and scan-bound
     (persisted.payload.snapshot as Record<string, unknown>).report_projection_payload,
     undefined
   );
+  assert.deepEqual(persisted.payload.runtimeArtifacts, {
+    observedAt: "2026-07-30T19:22:38.000Z"
+  });
+
+  const transportedPayload = JSON.parse(JSON.stringify(persisted.payload)) as Record<string, unknown>;
 
   const hydrated = readPersistedScanReportProjection({
     scan: scanRecord.scan,
     snapshot: {
       report_projection_computed_at: "2026-07-30T19:22:47.000Z",
-      report_projection_payload: persisted.payload,
+      report_projection_payload: transportedPayload,
       report_projection_payload_sha256: persisted.sha256,
       report_projection_payload_size_bytes: persisted.sizeBytes,
       report_projection_status: "ready",
@@ -98,7 +107,7 @@ test("persisted display projection is bounded, checksum-verified, and scan-bound
     scan: scanRecord.scan,
     snapshot: {
       report_projection_computed_at: "2026-07-30T19:22:47.000Z",
-      report_projection_payload: persisted.payload,
+      report_projection_payload: transportedPayload,
       report_projection_payload_sha256: "0".repeat(64),
       report_projection_payload_size_bytes: persisted.sizeBytes,
       report_projection_status: "ready",

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 
-export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v9";
+export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v10";
 export const REPORT_PROJECTION_READY_WARNING_MS = 15_000;
 export const MAX_SCAN_REPORT_PROJECTION_BYTES = 6 * 1024 * 1024;
 
@@ -57,8 +57,16 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
+function normalizeProjectionJson(value: unknown) {
+  const transported = JSON.stringify(value);
+  if (transported === undefined) {
+    throw new Error("Scan report projection is not JSON serializable.");
+  }
+  return canonicalize(JSON.parse(transported) as unknown);
+}
+
 function serializeProjection(value: unknown) {
-  return JSON.stringify(canonicalize(value));
+  return JSON.stringify(normalizeProjectionJson(value));
 }
 
 export function buildPersistedScanReportProjection(scanRecord: ScanDetailResponse) {
@@ -73,7 +81,8 @@ export function buildPersistedScanReportProjection(scanRecord: ScanDetailRespons
     ...scanRecord,
     snapshot
   } satisfies ScanDetailResponse;
-  const serialized = serializeProjection(payload);
+  const normalizedPayload = normalizeProjectionJson(payload) as ScanDetailResponse;
+  const serialized = JSON.stringify(normalizedPayload);
   const sizeBytes = Buffer.byteLength(serialized);
   if (sizeBytes > MAX_SCAN_REPORT_PROJECTION_BYTES) {
     throw new Error(
@@ -81,7 +90,7 @@ export function buildPersistedScanReportProjection(scanRecord: ScanDetailRespons
     );
   }
   return {
-    payload,
+    payload: normalizedPayload,
     sha256: createHash("sha256").update(serialized).digest("hex"),
     sizeBytes
   };
