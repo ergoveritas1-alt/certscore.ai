@@ -153,7 +153,8 @@ jobs:
             apps/web/components/scans/scan-from-select.test.tsx \
             apps/web/server/scans/recent-scan-reuse.test.ts \
             apps/web/server/scans/restricted-scan-options.test.ts \
-            scripts/assert-forward-web-deploy.test.ts
+            scripts/assert-forward-web-deploy.test.ts \
+            scripts/web-deployment-skew-protection.test.ts
 
       - name: Typecheck web
         run: pnpm --filter @website-signal-risk-scanner/web typecheck
