@@ -1271,6 +1271,7 @@ export const visualCaptureStatusSchema = z.enum(["available", "unavailable", "fa
 export const visualCaptureFailureReasonSchema = z.enum([
   "page_closed",
   "screenshot_timeout",
+  "renderer_crash",
   "browser_crash",
   "placeholder_used",
   "skipped_by_mode",

@@ -110,6 +110,34 @@ test("a placeholder-only visual capture remains eligible for independent screens
   assert.equal(shouldAttemptScreenshotOnlyFallback(placeholderResult as never, "never"), false);
 });
 
+test("a 1x1 placeholder cannot corroborate sparse-page or visual no-go evidence", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-placeholder-"));
+  try {
+    const screenshotPath = path.join(directory, "placeholder.png");
+    const bytes = Buffer.alloc(68, 0);
+    Buffer.from("89504e470d0a1a0a", "hex").copy(bytes, 0);
+    bytes.writeUInt32BE(1, 16);
+    bytes.writeUInt32BE(1, 20);
+    await writeFile(screenshotPath, bytes);
+    const assessment = buildScanNoGoAssessment(scanEvidence({
+      firstPartySuccesses: 8,
+      screenshots: [{
+        artifactId: "screenshot_pre_consent_no_go_confirmation",
+        capturedAtMs: 2_000,
+        captureMethod: "primary_placeholder",
+        path: screenshotPath,
+        url: "https://example.test/",
+        pagePhase: "network_idle",
+        consentStateAtTime: "pre_consent",
+      }],
+    }));
+
+    assert.equal(assessment, null);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("consent controls prevent a sparse privacy gateway from becoming no-go", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-consent-gateway-"));
   try {

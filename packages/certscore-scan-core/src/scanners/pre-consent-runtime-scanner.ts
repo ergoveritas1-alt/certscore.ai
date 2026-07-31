@@ -332,6 +332,7 @@ export async function preConsentRuntimeScanner(
   const mixedContentConsoleMessages: string[] = [];
   const vendorResolverInputs: VendorResolverInput[] = [];
   const runtimeErrors: string[] = [];
+  const screenshotErrors: string[] = [];
   const navigationNotes: string[] = [];
   const requestIds = new WeakMap<Request, string>();
   const requestEvents = new WeakMap<Request, NetworkEvent>();
@@ -362,6 +363,13 @@ export async function preConsentRuntimeScanner(
   });
   const page = context.newPage;
   const browserContext = context.newContext;
+  let pageCrashObserved = false;
+  const recordPageCrash = () => {
+    if (pageCrashObserved) return;
+    pageCrashObserved = true;
+    runtimeErrors.push("Chromium renderer crash event observed for the pre-consent page.");
+  };
+  page.on("crash", recordPageCrash);
   networkMetadataSession = await installCdpNetworkMetadataCapture(page, {
     destinationsByUrl: cdpDestinationsByUrl,
     initiatorsByUrl: cdpInitiatorsByUrl,
@@ -569,7 +577,6 @@ export async function preConsentRuntimeScanner(
   });
 
   const screenshots: ScreenshotArtifact[] = [];
-  const screenshotErrors: string[] = [];
   const navigationAttempts: NonNullable<NonNullable<ScanModuleRun["recoveryDiagnostics"]>["attempts"]> = [];
   let recoveryAttemptCount = 0;
   let recoveryDurationMs = 0;
@@ -2342,6 +2349,7 @@ export async function preConsentRuntimeScanner(
     };
   } finally {
     input.signal?.removeEventListener("abort", abortRuntime);
+    page.off("crash", recordPageCrash);
     if (networkMetadataSession) {
       await boundedCleanup(networkMetadataSession.detach(), 250);
     }
@@ -8535,7 +8543,18 @@ async function capturePreConsentScreenshot(
         artifactRefs: [],
         notes: ["Viewport pre-consent screenshot retained through the low-latency browser capture path."],
       };
-    } catch {
+    } catch (error) {
+      const errorMessage = errorMessageFromUnknown(error);
+      options.screenshotErrors.push(`CDP viewport screenshot failed: ${errorMessage}`);
+      if (isTerminalScreenshotTargetFailure(errorMessage)) {
+        return retainScreenshotPlaceholder({
+          failureReason: classifyVisualCaptureFailureReason(errorMessage),
+          notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during CDP capture."],
+          options,
+          screenshotPath,
+          captureMethod: captureMethods.placeholder,
+        });
+      }
       // Playwright's bounded viewport capture remains the compatibility fallback.
     }
     try {
@@ -8549,6 +8568,15 @@ async function capturePreConsentScreenshot(
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       options.screenshotErrors.push(`Viewport screenshot failed: ${errorMessage}`);
+      if (isTerminalScreenshotTargetFailure(errorMessage)) {
+        return retainScreenshotPlaceholder({
+          failureReason: classifyVisualCaptureFailureReason(errorMessage),
+          notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during viewport capture."],
+          options,
+          screenshotPath,
+          captureMethod: captureMethods.placeholder,
+        });
+      }
     }
   }
   try {
@@ -8562,6 +8590,15 @@ async function capturePreConsentScreenshot(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     options.screenshotErrors.push(`Full-page screenshot failed: ${errorMessage}`);
+    if (isTerminalScreenshotTargetFailure(errorMessage)) {
+      return retainScreenshotPlaceholder({
+        failureReason: classifyVisualCaptureFailureReason(errorMessage),
+        notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during full-page capture."],
+        options,
+        screenshotPath,
+        captureMethod: captureMethods.placeholder,
+      });
+    }
   }
   try {
     await page.screenshot({ path: screenshotPath, fullPage: false, timeout: viewportTimeoutMs });
@@ -8576,15 +8613,40 @@ async function capturePreConsentScreenshot(
     const errorMessage = error instanceof Error ? error.message : String(error);
     options.screenshotErrors.push(`Viewport screenshot fallback failed: ${errorMessage}`);
   }
-  await writeFile(screenshotPath, ONE_PIXEL_TRANSPARENT_PNG);
-  options.screenshotErrors.push("1x1 screenshot placeholder used after screenshot capture failures.");
+  return retainScreenshotPlaceholder({
+    failureReason: "placeholder_used",
+    notes: ["A 1x1 screenshot placeholder was retained after full-page and viewport screenshot capture failed."],
+    options,
+    screenshotPath,
+    captureMethod: captureMethods.placeholder,
+  });
+}
+
+async function retainScreenshotPlaceholder(input: {
+  captureMethod: NonNullable<VisualCaptureSummary["captureMethod"]>;
+  failureReason: NonNullable<VisualCaptureSummary["failureReason"]>;
+  notes: string[];
+  options: { screenshotErrors: string[] };
+  screenshotPath: string;
+}): Promise<VisualCaptureSummary> {
+  await writeFile(input.screenshotPath, ONE_PIXEL_TRANSPARENT_PNG);
+  input.options.screenshotErrors.push(
+    `1x1 screenshot placeholder used after ${input.failureReason === "renderer_crash" ? "a renderer crash" : "screenshot capture failures"}.`,
+  );
   return {
     status: "placeholder",
-    failureReason: "placeholder_used",
-    captureMethod: captureMethods.placeholder,
+    failureReason: input.failureReason,
+    captureMethod: input.captureMethod,
     artifactRefs: [],
-    notes: ["A 1x1 screenshot placeholder was retained after full-page and viewport screenshot capture failed."],
+    notes: input.notes,
   };
+}
+
+function isTerminalScreenshotTargetFailure(message: string): boolean {
+  const failureReason = classifyVisualCaptureFailureReason(message);
+  return failureReason === "renderer_crash" ||
+    failureReason === "browser_crash" ||
+    failureReason === "page_closed";
 }
 
 async function captureViewportScreenshotWithCdp(
@@ -9250,15 +9312,23 @@ async function retryPreConsentScreenshotInFreshContext(input: {
   );
 }
 
-function classifyVisualCaptureFailureReason(message: string): VisualCaptureSummary["failureReason"] {
+export function classifyVisualCaptureFailureReason(
+  message: string,
+): NonNullable<VisualCaptureSummary["failureReason"]> {
   const normalized = message.toLowerCase();
-  if (/target page, context or browser has been closed|page\/context closed/.test(normalized)) {
+  if (/target crashed|renderer(?: process)? (?:has )?crashed|page crashed/.test(normalized)) {
+    return "renderer_crash";
+  }
+  if (/browser has disconnected|browser process (?:has )?(?:crashed|closed)|browser closed/.test(normalized)) {
+    return "browser_crash";
+  }
+  if (/target page, context or browser has been closed|page\/context closed|target closed|session closed/.test(normalized)) {
     return "page_closed";
   }
   if (/timeout|timed out/.test(normalized)) {
     return "screenshot_timeout";
   }
-  if (/crash|browser has disconnected|browser closed/.test(normalized)) {
+  if (/crash/.test(normalized)) {
     return "browser_crash";
   }
   return "unknown";

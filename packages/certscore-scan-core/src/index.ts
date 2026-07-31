@@ -1615,6 +1615,7 @@ export function buildScanNoGoAssessment(input: {
   scanNoGoAssessment: ScanNoGoAssessment;
   visualAccessReview: VisualAccessReview;
 } | null {
+  const representativeScreenshots = input.screenshots.filter(isRepresentativeScreenshotArtifact);
   const navigationFailureText = input.modulesRun
     .find((moduleRun) =>
       moduleRun.moduleName === "preConsentRuntimeScanner" &&
@@ -1623,7 +1624,7 @@ export function buildScanNoGoAssessment(input: {
     ?.errors.find((error) => SCAN_NO_GO_NAVIGATION_FAILURE_PATTERN.test(error));
   if (
     navigationFailureText &&
-    input.screenshots.length === 0 &&
+    representativeScreenshots.length === 0 &&
     input.domSnapshots.length === 0
   ) {
     const primaryReasonCode = classifyNavigationFailure(
@@ -1710,7 +1711,7 @@ export function buildScanNoGoAssessment(input: {
   const substantiveRetainedDomVolumeObserved =
     longestDomText.length >= 180 &&
     substantiveDomWordCount >= 24;
-  const screenshotStructure = inspectRetainedScreenshotStructure(input.screenshots);
+  const screenshotStructure = inspectRetainedScreenshotStructure(representativeScreenshots);
   const visuallySubstantiveScreenshotObserved = screenshotStructure?.visuallySubstantive === true;
   const visuallyBlankScreenshotObserved = screenshotStructure?.visuallyBlank === true;
   // Settled DOM text is the closest textual representation of the page the
@@ -1802,10 +1803,10 @@ export function buildScanNoGoAssessment(input: {
     : null;
   const settledPageState = pageState ?? visualBlankPageState;
   const nearlyEmptyPage = longestDomText.length <= 40 && substantiveDomWordCount <= 6;
-  const sparseSecondLookRetained = input.screenshots.some((artifact) =>
+  const sparseSecondLookRetained = representativeScreenshots.some((artifact) =>
     artifact.artifactId === "screenshot_pre_consent_no_go_confirmation"
   );
-  const committedVisualPageRetained = input.screenshots.some((artifact) =>
+  const committedVisualPageRetained = representativeScreenshots.some((artifact) =>
     /^https?:\/\//i.test(artifact.url)
   );
   const temporallyConfirmedSparsePage =
@@ -1827,7 +1828,7 @@ export function buildScanNoGoAssessment(input: {
       moduleRun.status === "partial" &&
       moduleRun.errors.some((error) => /(?:module budget|bounded partial evidence|runtime.*partial)/i.test(error))
     ) &&
-    input.screenshots.length === 0 &&
+    representativeScreenshots.length === 0 &&
     longestDomText.length <= 60 &&
     substantiveDomWordCount <= 10 &&
     input.policySurfaceObservations.length === 0 &&
@@ -1846,7 +1847,7 @@ export function buildScanNoGoAssessment(input: {
     networkChallengeEvidence?.evidenceText ??
     "Potential security challenge evidence observed.";
   const securityChallengeRequestObserved = Boolean(networkChallengeEvidence);
-  const screenshot = screenshotStructure?.screenshot ?? input.screenshots
+  const screenshot = screenshotStructure?.screenshot ?? representativeScreenshots
     .filter((artifact) => artifact.consentStateAtTime === "pre_consent")
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs)[0] ?? null;
   const primaryReasonCode = settledPageState?.reasonCode ??
@@ -2095,6 +2096,7 @@ function inspectRetainedScreenshotStructure(
   );
   let strongest: RetainedScreenshotStructure | null = null;
   for (const screenshot of ranked) {
+    if (!isRepresentativeScreenshotArtifact(screenshot)) continue;
     let descriptor: number | null = null;
     try {
       descriptor = openSync(screenshot.path, "r");
@@ -2103,7 +2105,7 @@ function inspectRetainedScreenshotStructure(
       const dimensions = inspectScreenshotDimensions(header.subarray(0, bytesRead));
       if (!dimensions) continue;
       const { format, height, width } = dimensions;
-      if (width <= 0 || height <= 0) continue;
+      if (width < 64 || height < 64) continue;
       const byteLength = statSync(screenshot.path).size;
       const encodedBytesPerPixel = byteLength / (width * height);
       const candidate = {
@@ -2131,6 +2133,11 @@ function inspectRetainedScreenshotStructure(
     }
   }
   return strongest;
+}
+
+function isRepresentativeScreenshotArtifact(screenshot: ScreenshotArtifact): boolean {
+  return screenshot.captureMethod !== "primary_placeholder" &&
+    screenshot.captureMethod !== "fresh_context_placeholder";
 }
 
 function inspectScreenshotDimensions(
@@ -2509,6 +2516,12 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
         await page.waitForLoadState("networkidle", { timeout: networkIdleTimeoutMs }).catch(() => undefined);
       }
       const captureMode = input.captureMode ?? "viewport";
+      const viewportSettleTimeoutMs = captureMode === "viewport"
+        ? optionalTimeoutForStep(350, 100)
+        : null;
+      if (viewportSettleTimeoutMs !== null) {
+        await page.waitForTimeout(viewportSettleTimeoutMs).catch(() => undefined);
+      }
       if (captureMode === "full_page") {
         const passiveSettleTimeoutMs = optionalTimeoutForStep(3_000, 250);
         if (passiveSettleTimeoutMs !== null) {

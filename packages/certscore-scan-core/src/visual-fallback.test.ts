@@ -5,7 +5,23 @@ import path from "node:path";
 import test from "node:test";
 import { createArtifactWriter } from "./artifact-writer.js";
 import { capturePreConsentScreenshotOnlyFallback } from "./index.js";
+import { classifyVisualCaptureFailureReason } from "./scanners/pre-consent-runtime-scanner.js";
 import { startStaticFixtureServer } from "./test-fixtures/static-server.js";
+
+test("visual capture distinguishes renderer crashes from browser and page closure", () => {
+  assert.equal(
+    classifyVisualCaptureFailureReason("page.screenshot: Target crashed while capturing"),
+    "renderer_crash",
+  );
+  assert.equal(
+    classifyVisualCaptureFailureReason("browser has disconnected"),
+    "browser_crash",
+  );
+  assert.equal(
+    classifyVisualCaptureFailureReason("Target page, context or browser has been closed"),
+    "page_closed",
+  );
+});
 
 test("visual fallback retains bounded consent-surface evidence with the screenshot", async () => {
   const server = await startStaticFixtureServer();
