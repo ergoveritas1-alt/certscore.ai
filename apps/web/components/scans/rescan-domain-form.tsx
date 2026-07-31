@@ -6,9 +6,8 @@ import { rescanDomainAction } from "../../server/scans/rescan-domain";
 import type { CreateFullScanActionState } from "../../server/scans/create-full-scan";
 import { ScanFromSelect, type ServerScanFrom } from "./scan-from-select";
 import {
-  ScanSubmitProgressBar,
+  ScanSubmissionPendingIndicator,
   normalizeLocalV2ScanProfile,
-  useScanProgressClock,
   type LocalV2ScanProfile
 } from "./scan-submit-progress";
 
@@ -29,7 +28,6 @@ type RescanDomainFormProps = {
 export function RescanDomainForm({ allowRestrictedScanOptions = false, cooldownMessage = null, compact = false, defaultScanFrom = "eu_ie", disabled = false, domainId, showLabel = false }: RescanDomainFormProps) {
   const [state, action, isPending] = useActionState(rescanDomainAction, initialState);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
-  const scanProgress = useScanProgressClock(isPending);
   const errorMessage = state.error;
   const isDisabled = disabled || isPending;
   const tooltipMessage = disabled ? cooldownMessage : null;
@@ -91,13 +89,7 @@ export function RescanDomainForm({ allowRestrictedScanOptions = false, cooldownM
         ) : null}
       </div>
       {isPending ? (
-        <ScanSubmitProgressBar
-          active
-          compact={compact}
-          nowMs={scanProgress.nowMs}
-          profileValue={localV2ScanProfile}
-          startedAtMs={scanProgress.startedAtMs}
-        />
+        <ScanSubmissionPendingIndicator compact={compact} />
       ) : null}
     </form>
   );

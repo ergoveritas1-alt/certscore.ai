@@ -364,6 +364,7 @@ async function mirrorAuxiliaryArtifactsFromLambdaManifest(input: {
 function isSupportedAuxiliaryFileName(fileName: string) {
   return path.basename(fileName) === fileName && (
     fileName.endsWith(".json") ||
+    fileName.endsWith(".txt") ||
     fileName.endsWith(".png") ||
     fileName.endsWith(".jpg") ||
     fileName.endsWith(".jpeg")

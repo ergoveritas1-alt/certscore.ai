@@ -37,6 +37,7 @@ export function PendingScanDetailView({
         <LocalV2DagScanProgressCard
           createdAt={createdAt}
           profileValue={profile}
+          scanStatus={status}
           startedAt={startedAt}
         />
       )}

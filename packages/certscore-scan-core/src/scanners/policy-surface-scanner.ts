@@ -54,6 +54,7 @@ const POLICY_PROTECTED_RESERVE_MS = 4_500;
 // already-fetched evidence is not replaced by `skipped_budget` immediately
 // before its observation is assembled.
 const POLICY_CANDIDATE_PROCESSING_TIMEOUT_MS = 12_000;
+const POLICY_CANDIDATE_PUBLICATION_GRACE_MS = 1_500;
 const POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS = 10_000;
 const MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS = 1_000;
 const MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS = 500_000;
@@ -1324,7 +1325,13 @@ interface ProcessPolicyCandidateInput {
   candidateIndex: number;
   policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
   fetchCaches: PolicyDocumentFetchCaches;
+  processingProgress?: PolicyCandidateProcessingProgress;
   prefetchedOnly?: boolean;
+}
+
+interface PolicyCandidateProcessingProgress {
+  documentFetched: boolean;
+  retentionStarted: boolean;
 }
 
 interface ProcessPolicyCandidateResult {
@@ -1417,9 +1424,11 @@ function prioritizePolicyCandidateEvaluation(
 ): PolicySurfaceCandidate[] {
   const seen = new Set<string>();
   return rankedCandidates
+    .filter((candidate) => !isObviousCommercePolicyFalsePositive(candidate))
     .map((candidate, originalIndex) => ({ candidate, originalIndex }))
     .sort((left, right) =>
       surfacePriority(left.candidate.deterministicSurfaceType) - surfacePriority(right.candidate.deterministicSurfaceType) ||
+      policyCandidateProtectionPriority(left.candidate) - policyCandidateProtectionPriority(right.candidate) ||
       policyCandidateDiscoveryPriority(left.candidate) - policyCandidateDiscoveryPriority(right.candidate) ||
       policyCandidateQualityScore(right.candidate) - policyCandidateQualityScore(left.candidate) ||
       right.candidate.deterministicScore - left.candidate.deterministicScore ||
@@ -1459,38 +1468,103 @@ async function processPolicyCandidateBeforeDeadline(
   }
   const candidateController = new AbortController();
   const candidateSignal = combineAbortSignals(input.input.signal, candidateController.signal);
+  const processingProgress: PolicyCandidateProcessingProgress = {
+    documentFetched: false,
+    retentionStarted: false,
+  };
   const candidateInput: ProcessPolicyCandidateInput = {
     ...input,
     input: { ...input.input, signal: candidateSignal },
+    processingProgress,
   };
   let processingSettled = false;
   const processingPromise = processPolicyCandidate(candidateInput).finally(() => {
     processingSettled = true;
   });
   void processingPromise.catch(() => undefined);
-  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-  let abortListener: (() => void) | undefined;
-  const deadlinePromise = new Promise<ProcessPolicyCandidateResult>((resolve) => {
-    const finishAsSkipped = () => {
-      candidateController.abort(new Error("Policy candidate processing budget exhausted."));
-      resolve(skippedBudgetCandidateResult(input.candidate));
-    };
-    deadlineTimer = setTimeout(() => {
-      finishAsSkipped();
-    }, Math.max(1, Math.min(POLICY_CANDIDATE_PROCESSING_TIMEOUT_MS, absoluteRemainingMs)));
-    abortListener = finishAsSkipped;
-    input.input.signal?.addEventListener("abort", abortListener, { once: true });
-  });
-
   try {
-    return await Promise.race([processingPromise, deadlinePromise]);
+    const settled = await settlePolicyCandidateProcessingBeforeDeadline({
+      processingPromise,
+      shouldAwaitPublication: () => processingProgress.documentFetched || processingProgress.retentionStarted,
+      signal: input.input.signal,
+      absoluteDeadlineAtMs: input.input.absoluteDeadlineAtMs,
+    });
+    if (settled.status === "completed") {
+      return settled.value;
+    }
+    candidateController.abort(new Error("Policy candidate processing budget exhausted."));
+    return skippedBudgetCandidateResult(input.candidate);
   } finally {
-    if (deadlineTimer) clearTimeout(deadlineTimer);
-    if (abortListener) input.input.signal?.removeEventListener("abort", abortListener);
     candidateController.abort(new Error("Policy candidate processing settled."));
     if (!processingSettled) {
       await boundedCleanup(processingPromise, 250);
     }
+  }
+}
+
+export async function settlePolicyCandidateProcessingBeforeDeadline<T>(input: {
+  processingPromise: Promise<T>;
+  shouldAwaitPublication: () => boolean;
+  signal?: AbortSignal;
+  absoluteDeadlineAtMs?: number;
+  processingTimeoutMs?: number;
+  publicationGraceMs?: number;
+}): Promise<{ status: "completed"; value: T } | { status: "timed_out" | "aborted" }> {
+  const processingTimeoutMs = input.processingTimeoutMs ?? POLICY_CANDIDATE_PROCESSING_TIMEOUT_MS;
+  const publicationGraceMs = input.publicationGraceMs ?? POLICY_CANDIDATE_PUBLICATION_GRACE_MS;
+  const initialRemainingMs = deadlineRemainingMs(input.absoluteDeadlineAtMs);
+  const initialWaitMs = Math.max(
+    1,
+    Math.min(
+      processingTimeoutMs,
+      Math.max(1, initialRemainingMs - publicationGraceMs),
+    ),
+  );
+  const timedOut = Symbol("policy_candidate_timed_out");
+  const aborted = Symbol("policy_candidate_aborted");
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  let abortListener: (() => void) | undefined;
+  const timeoutPromise = new Promise<typeof timedOut>((resolve) => {
+    timeoutHandle = setTimeout(() => resolve(timedOut), initialWaitMs);
+  });
+  const abortPromise = new Promise<typeof aborted>((resolve) => {
+    if (input.signal?.aborted) {
+      resolve(aborted);
+      return;
+    }
+    abortListener = () => resolve(aborted);
+    input.signal?.addEventListener("abort", abortListener, { once: true });
+  });
+
+  try {
+    const initialResult = await Promise.race([
+      input.processingPromise.then((value) => ({ status: "completed" as const, value })),
+      timeoutPromise,
+      abortPromise,
+    ]);
+    if (initialResult === aborted) return { status: "aborted" };
+    if (initialResult !== timedOut) return initialResult;
+    if (!input.shouldAwaitPublication()) return { status: "timed_out" };
+
+    const graceRemainingMs = Math.max(
+      0,
+      Math.min(publicationGraceMs, deadlineRemainingMs(input.absoluteDeadlineAtMs)),
+    );
+    if (graceRemainingMs <= 0) return { status: "timed_out" };
+    const graceTimedOut = Symbol("policy_candidate_publication_grace_timed_out");
+    const graceResult = await Promise.race([
+      input.processingPromise.then((value) => ({ status: "completed" as const, value })),
+      new Promise<typeof graceTimedOut>((resolve) => {
+        timeoutHandle = setTimeout(() => resolve(graceTimedOut), graceRemainingMs);
+      }),
+      abortPromise,
+    ]);
+    if (graceResult === aborted) return { status: "aborted" };
+    if (graceResult === graceTimedOut) return { status: "timed_out" };
+    return graceResult;
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    if (abortListener) input.signal?.removeEventListener("abort", abortListener);
   }
 }
 
@@ -1514,6 +1588,7 @@ async function processPolicyCandidate({
   candidateIndex,
   policySurfaceTextArtifactBudget,
   fetchCaches,
+  processingProgress,
   prefetchedOnly,
 }: ProcessPolicyCandidateInput): Promise<ProcessPolicyCandidateResult> {
   if (candidate.observationOnly) {
@@ -1607,6 +1682,10 @@ async function processPolicyCandidate({
       if (variantFetched.ok) fetched = variantFetched;
     }
   }
+
+  if (processingProgress) {
+    processingProgress.documentFetched = true;
+  }
   if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch({
     candidate,
     candidateIndex,
@@ -1666,7 +1745,7 @@ async function processPolicyCandidate({
         sameOrigin: sameOrigin(input.normalizedUrl, fetchedFinalUrl),
         fetchable: true,
       };
-  let fetchedHtml = fetched.text;
+  let fetchedHtml = fetched.html ?? fetched.text;
   const secondaryCandidateHtmlInputs = [fetchedHtml];
   let title = titleFromHtml(fetchedHtml);
   let visibleText = boundedAfterSoftBudget
@@ -1774,7 +1853,7 @@ async function processPolicyCandidate({
           sameOrigin: sameOrigin(input.normalizedUrl, fetchedFinalUrl),
           fetchable: true,
         };
-        fetchedHtml = renderedFetched.text;
+        fetchedHtml = renderedFetched.html ?? renderedFetched.text;
         secondaryCandidateHtmlInputs.push(fetchedHtml);
         title = titleFromHtml(fetchedHtml) ?? title;
         visibleText = renderedVisibleText;
@@ -1818,6 +1897,7 @@ async function processPolicyCandidate({
     return {
       observation: observationFromCandidate(effectiveCandidate, {
         status: "failed",
+        documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection, visibleText),
         httpStatus: fetched.status,
         finalUrl: fetchedFinalUrl,
         redirectChain: policyFetchRedirectChain(fetched),
@@ -1894,6 +1974,10 @@ async function processPolicyCandidate({
   const excerpt = boundedExcerpt(visibleText, prioritizedExcerptKeywords(deterministic));
   const nanoAnalysisExcerpt = textQuality.usable ? boundedPolicyAnalysisExcerpt(visibleText) : "";
   const excerptId = `policy_excerpt_${stableHash(effectiveCandidate.normalizedUrl)}`;
+  throwIfAborted(input.signal);
+  if (processingProgress) {
+    processingProgress.retentionStarted = true;
+  }
   const artifactPath = await recordPolicyTiming(
     timingBreakdown,
     `policy artifact ${candidateIndex + 1}`,
@@ -1912,7 +1996,8 @@ async function processPolicyCandidate({
     relatedEventIds: [],
     label: `${effectiveCandidate.deterministicSurfaceType} excerpt`,
   };
-  const policySurfaceTextArtifactRef = await recordPolicyTiming(
+  throwIfAborted(input.signal);
+  const policySurfaceTextArtifact = await recordPolicyTiming(
     timingBreakdown,
     `policy surface text artifact ${candidateIndex + 1}`,
     `Write normalized text-only ${effectiveCandidate.deterministicSurfaceType} policy surface artifact when budget allows.`,
@@ -1924,6 +2009,7 @@ async function processPolicyCandidate({
       policySurfaceTextArtifactBudget,
     }),
   );
+  const policySurfaceTextArtifactRef = policySurfaceTextArtifact.artifactRef;
   const artifactRefs = [
     artifactRef,
     ...(policySurfaceTextArtifactRef ? [policySurfaceTextArtifactRef] : []),
@@ -1959,9 +2045,12 @@ async function processPolicyCandidate({
   return {
     observation: observationFromCandidate(effectiveCandidate, {
       status: "fetched",
+      documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection, visibleText),
       httpStatus: fetched.status,
       finalUrl: fetchedFinalUrl,
       redirectChain: policyFetchRedirectChain(fetched),
+      documentFormat: fetched.documentFormat === "pdf" ? "pdf" : "text",
+      contentType: successfulPolicyFetchContentType(fetched),
       title,
       textExcerpt: excerpt,
       boundedTextExcerptIds: [excerptId],
@@ -1974,6 +2063,7 @@ async function processPolicyCandidate({
       retainedArticle13SectionEvidence: sectionEvidence,
       ...ownership,
       contentCoverage,
+      documentTextCoverage: policySurfaceTextArtifact.documentTextCoverage,
       mentionedVendors: merged.mentionedVendors,
       mentionedPurposes: merged.mentionedPurposes,
       mentionedRights: merged.mentionedRights,
@@ -2193,6 +2283,7 @@ async function fetchRenderedPolicyDocumentText(input: {
       }],
       ok,
       status,
+      html: html.slice(0, MAX_POLICY_TEXT_RESPONSE_BYTES),
       text: text.slice(0, 500_000),
     };
   } catch (error) {
@@ -2391,14 +2482,36 @@ async function writePolicySurfaceTextArtifact(input: {
   visibleText: string;
   scanStartedAtMs: number;
   policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
-}): Promise<ArtifactRef | undefined> {
+}): Promise<{
+  artifactRef?: ArtifactRef;
+  documentTextCoverage: {
+    status: "complete" | "truncated" | "unavailable";
+    sourceTextChars: number;
+    retainedTextChars: number;
+    limitationKeys: string[];
+  };
+}> {
+  const normalizedText = normalizeWhitespace(input.visibleText);
   if (input.policySurfaceTextArtifactBudget.remainingChars <= 0) {
-    return undefined;
+    return {
+      documentTextCoverage: {
+        status: "unavailable",
+        sourceTextChars: normalizedText.length,
+        retainedTextChars: 0,
+        limitationKeys: ["policy_surface_text_total_budget_exhausted"],
+      },
+    };
   }
 
-  const normalizedText = normalizeWhitespace(input.visibleText);
   if (!normalizedText) {
-    return undefined;
+    return {
+      documentTextCoverage: {
+        status: "unavailable",
+        sourceTextChars: 0,
+        retainedTextChars: 0,
+        limitationKeys: ["policy_surface_text_empty"],
+      },
+    };
   }
 
   const maxChars = Math.min(
@@ -2406,7 +2519,14 @@ async function writePolicySurfaceTextArtifact(input: {
     input.policySurfaceTextArtifactBudget.remainingChars,
   );
   if (maxChars < 512) {
-    return undefined;
+    return {
+      documentTextCoverage: {
+        status: "unavailable",
+        sourceTextChars: normalizedText.length,
+        retainedTextChars: 0,
+        limitationKeys: ["policy_surface_text_remaining_budget_too_small"],
+      },
+    };
   }
   const truncated = normalizedText.length > maxChars;
   const retainedText = truncated
@@ -2420,16 +2540,24 @@ async function writePolicySurfaceTextArtifact(input: {
   const artifactId = `policy_surface_text_${stableHash(input.candidate.normalizedUrl)}`;
   const path = await input.artifactWriter.writeTextArtifact(`${artifactId}.txt`, retainedText);
   return {
-    artifactId,
-    artifactType: "other",
-    path,
-    observedAtMs: elapsed(input.scanStartedAtMs),
-    sourceScanner: SOURCE_SCANNER,
-    scenario: SCENARIO,
-    sensitivity: "redacted",
-    redactionStatus: "redacted",
-    relatedEventIds: [],
-    label: `${input.candidate.deterministicSurfaceType} normalized text`,
+    artifactRef: {
+      artifactId,
+      artifactType: "other",
+      path,
+      observedAtMs: elapsed(input.scanStartedAtMs),
+      sourceScanner: SOURCE_SCANNER,
+      scenario: SCENARIO,
+      sensitivity: "redacted",
+      redactionStatus: "redacted",
+      relatedEventIds: [],
+      label: `${input.candidate.deterministicSurfaceType} normalized text`,
+    },
+    documentTextCoverage: {
+      status: truncated ? "truncated" : "complete",
+      sourceTextChars: normalizedText.length,
+      retainedTextChars: retainedText.length,
+      limitationKeys: truncated ? ["policy_surface_text_artifact_truncated"] : [],
+    },
   };
 }
 
@@ -3315,11 +3443,13 @@ function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): Polic
   return candidates
     .filter((candidate) =>
       (candidate.fetchable || candidate.observationOnly) &&
+      !isObviousCommercePolicyFalsePositive(candidate) &&
       candidate.deterministicSurfaceType !== "unknown" &&
       candidate.deterministicScore >= 0.5,
     )
     .sort((left, right) =>
       surfacePriority(left.deterministicSurfaceType) - surfacePriority(right.deterministicSurfaceType) ||
+      policyCandidateProtectionPriority(left) - policyCandidateProtectionPriority(right) ||
       policyCandidateDiscoveryPriority(left) - policyCandidateDiscoveryPriority(right) ||
       policyCandidateQualityScore(right) - policyCandidateQualityScore(left) ||
       right.deterministicScore - left.deterministicScore ||
@@ -3448,6 +3578,13 @@ function policyCandidateQualityScore(candidate: PolicySurfaceCandidate): number 
   const value = `${candidate.linkText} ${candidate.normalizedUrl}`.toLowerCase();
   let score = 0;
 
+  if (isExactPolicyDocumentCandidate(candidate)) {
+    score += 12;
+  }
+  if (candidate.seedSource === "prior_scan_hint") {
+    score += 8;
+  }
+
   if (candidate.deterministicClassifierReasonCodes.includes("variant_general_scope")) {
     score += 6;
   }
@@ -3472,6 +3609,44 @@ function policyCandidateQualityScore(candidate: PolicySurfaceCandidate): number 
   }
 
   return score;
+}
+
+function policyCandidateProtectionPriority(candidate: PolicySurfaceCandidate): number {
+  if (isExactPolicyDocumentCandidate(candidate)) return 0;
+  if (
+    candidate.seedSource === "prior_scan_hint" &&
+    candidate.deterministicSurfaceType === "privacy_policy"
+  ) {
+    return 1;
+  }
+  return 2;
+}
+
+function isExactPolicyDocumentCandidate(candidate: PolicySurfaceCandidate): boolean {
+  if (
+    candidate.deterministicSurfaceType !== "privacy_policy" ||
+    !candidate.fetchable ||
+    candidate.observationOnly
+  ) {
+    return false;
+  }
+  const linkText = candidate.linkText.replace(/\s+/g, " ").trim();
+  if (!linkText || linkText.length > 100 || /^https?:\/\//i.test(linkText)) {
+    return false;
+  }
+  const direct = classifyPrivacySurface({
+    linkText,
+    url: candidate.normalizedUrl,
+  });
+  return direct.surfaceType === "privacy_policy" &&
+    direct.matchStrength === "direct" &&
+    direct.confidence >= 0.72;
+}
+
+function isObviousCommercePolicyFalsePositive(candidate: PolicySurfaceCandidate): boolean {
+  if (isExactPolicyDocumentCandidate(candidate)) return false;
+  const path = safeUrlPath(candidate.normalizedUrl).toLowerCase();
+  return /\/(?:dp|gp\/product|product|products|shop|store|item)(?:\/|$)/.test(path);
 }
 
 function policyCandidateDiscoveryPriority(candidate: PolicySurfaceCandidate): number {
@@ -3750,6 +3925,26 @@ async function selectOneHopPolicyIndexChildren(input: {
     };
   }
 
+  const latestDatedPrivacyDocument = selectLatestDatedPrivacyDocument(
+    privacyCandidates,
+    input.input.scanStartedAtMs,
+  );
+  if (latestDatedPrivacyDocument) {
+    return {
+      fetchCandidates: [{
+        ...latestDatedPrivacyDocument,
+        selectionReasonCodes: uniqueStrings([
+          ...(latestDatedPrivacyDocument.selectionReasonCodes ?? []),
+          "latest_dated_privacy_document_link",
+          "deterministic_one_hop_selection",
+        ]),
+      }],
+      observedChildCandidates: privacyCandidates
+        .filter((candidate) => candidate.candidateId !== latestDatedPrivacyDocument.candidateId)
+        .map(markUnselectedPrivacyIndexChild),
+    };
+  }
+
   const selectPrivacyDocumentLink = input.input.nanoAssistProvider?.selectPrivacyDocumentLink;
   if (!selectPrivacyDocumentLink) {
     if (privacyCandidates.length === 1) {
@@ -3830,6 +4025,28 @@ async function selectOneHopPolicyIndexChildren(input: {
   }
 }
 
+function selectLatestDatedPrivacyDocument(
+  candidates: PolicySurfaceCandidate[],
+  scanStartedAtMs: number,
+): PolicySurfaceCandidate | undefined {
+  const dated = candidates.flatMap((candidate) => {
+    const value = `${candidate.linkText} ${candidate.surroundingTextExcerpt ?? ""} ${candidate.normalizedUrl}`;
+    const dayFirst = /\b(\d{1,2})[.\/-](\d{1,2})[.\/-](20\d{2})\b/.exec(value);
+    const yearFirst = /\b(20\d{2})[.\/-](\d{1,2})[.\/-](\d{1,2})\b/.exec(value);
+    const year = Number(dayFirst?.[3] ?? yearFirst?.[1]);
+    const month = Number(dayFirst?.[2] ?? yearFirst?.[2]);
+    const day = Number(dayFirst?.[1] ?? yearFirst?.[3]);
+    const timestamp = Date.UTC(year, month - 1, day);
+    return Number.isFinite(timestamp) && month >= 1 && month <= 12 && day >= 1 && day <= 31
+      ? [{ candidate, timestamp }]
+      : [];
+  }).filter((row) => row.timestamp <= scanStartedAtMs);
+  if (dated.length < 2) return undefined;
+  dated.sort((left, right) => right.timestamp - left.timestamp);
+  if (dated[0]?.timestamp === dated[1]?.timestamp) return undefined;
+  return dated[0]?.candidate;
+}
+
 function markUnselectedPrivacyIndexChild(
   candidate: PolicySurfaceCandidate,
 ): PolicySurfaceCandidate {
@@ -3851,6 +4068,18 @@ function observationsForUnselectedPrivacyIndexChildren(
       confidence: Math.max(0.35, candidate.deterministicScore),
     })
   );
+}
+
+function policyDocumentRoleForChildSelection(
+  candidate: PolicySurfaceCandidate,
+  selection: { fetchCandidates: PolicySurfaceCandidate[]; observedChildCandidates: PolicySurfaceCandidate[] },
+  documentText: string,
+): "policy_document" | "policy_index" | "unknown" {
+  if (candidate.deterministicSurfaceType !== "privacy_policy") return "unknown";
+  if (shouldUseDirectPolicyDocumentText(documentText)) return "policy_document";
+  const privacyChildCount = [...selection.fetchCandidates, ...selection.observedChildCandidates]
+    .filter((child) => child.deterministicSurfaceType === "privacy_policy").length;
+  return privacyChildCount >= 2 ? "policy_index" : "policy_document";
 }
 
 export function isGdprNoticeSupplementLink(linkText: string, normalizedUrl: string, surroundingTextExcerpt: string): boolean {
@@ -3939,11 +4168,25 @@ async function rankCandidatesWithRequiredNano(
       candidate.discoveryMethod = "nano_assisted_link_classification";
     }
   }
+  const protectedDeterministicIds = new Set(
+    [...byId.values()]
+      .filter((candidate) =>
+        !isObviousCommercePolicyFalsePositive(candidate) &&
+        (isExactPolicyDocumentCandidate(candidate) ||
+          (candidate.seedSource === "prior_scan_hint" &&
+            candidate.deterministicSurfaceType === "privacy_policy" &&
+            candidate.fetchable &&
+            !candidate.observationOnly)),
+      )
+      .map((candidate) => candidate.candidateId),
+  );
   return [...byId.values()]
     .filter((candidate) =>
-      rankedIds.has(candidate.candidateId) &&
-      candidate.assisted?.shouldFetch !== false &&
-      candidate.assisted?.likelySurfaceType !== "unknown",
+      !isObviousCommercePolicyFalsePositive(candidate) &&
+      (protectedDeterministicIds.has(candidate.candidateId) ||
+        (rankedIds.has(candidate.candidateId) &&
+          candidate.assisted?.shouldFetch !== false &&
+          candidate.assisted?.likelySurfaceType !== "unknown")),
     )
     .sort((left, right) =>
       (left.assisted?.priorityRank ?? 999) - (right.assisted?.priorityRank ?? 999) ||
@@ -4093,9 +4336,13 @@ function observationFromCandidate(
     ownershipConfidence: input.ownershipConfidence,
     ownershipReasonCodes: input.ownershipReasonCodes ?? [],
     contentCoverage: input.contentCoverage,
+    documentTextCoverage: input.documentTextCoverage,
+    documentRole: input.documentRole,
     httpStatus: input.httpStatus,
     finalUrl: input.finalUrl,
     redirectChain: input.redirectChain ?? [],
+    documentFormat: input.documentFormat,
+    contentType: input.contentType,
     fetchFailureReason: input.fetchFailureReason,
     matchedLocale: candidate.deterministicMatchedLocale,
     classifierProvenance: candidate.deterministicClassifierProvenance,
@@ -4132,6 +4379,9 @@ function normalizedEntityToken(value: string | undefined): string | undefined {
     .replace(/[|–—-].*$/, " ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+  if (/^[a-z]{2}(?:\s+[a-z]{2})?$/i.test(normalized)) {
+    return undefined;
+  }
   return normalized.length >= 2 ? normalized.slice(0, 240) : undefined;
 }
 
@@ -4177,7 +4427,7 @@ export function classifyPolicyDocumentOwnership(input: {
     ? new RegExp(`\\b${escapeRegExp(documentBrand)}\\b`, "i").test(ownershipExcerpt)
     : false;
   const controllerLanguage =
-    /\b(?:data controller|controller of (?:your|the) (?:personal )?data|responsible for (?:processing|this (?:policy|notice))|this (?:privacy )?(?:policy|notice) applies to)\b/i
+    /\b(?:data controller|controller of (?:your|the) (?:personal )?data|responsible for (?:processing|this (?:policy|notice))|this (?:privacy )?(?:policy|notice) applies to|(?:members?|companies|entities)\b.{0,120}\bcontrol(?:s|led|ling)?\b.{0,80}\b(?:information|personal data)|which\b.{0,80}\b(?:entity|member|company)\b.{0,80}\bcontrol(?:s|led|ling)?\b)\b/i
       .test(ownershipExcerpt);
 
   if (targetNamed && controllerLanguage) {
@@ -4953,6 +5203,14 @@ async function extractOneTrustNoticeTextFromUrl(
     }
     const policyPayload = parseJsonObject(policy.text);
     if (policyPayload) {
+      // The payload selected by the page's OneTrust pointer is authoritative
+      // when it already contains a substantive policy. Links inside that
+      // policy often lead to audience-specific or jurisdictional supplements
+      // and must not replace the selected governing document.
+      const policyText = extractOneTrustNoticePayloadText(policyPayload);
+      if (policyText && shouldUseDirectPolicyDocumentText(policyText)) {
+        return policyText;
+      }
       const nestedPolicyUrls = extractOneTrustPolicyUrls(policyPayload, policyUrl)
         .filter((nestedUrl) => nestedUrl !== policyUrl)
         .slice(0, 2);
@@ -4988,7 +5246,6 @@ async function extractOneTrustNoticeTextFromUrl(
         }
       }
 
-      const policyText = extractOneTrustNoticePayloadText(policyPayload);
       if (policyText && policyText.length > 500) {
         return policyText;
       }
@@ -5155,6 +5412,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 type FetchTextResult = {
   attempts?: PolicyFetchAttemptDiagnostic[];
   documentFormat?: "pdf" | "text";
+  html?: string;
   ok: boolean;
   status?: number;
   text: string;
@@ -5173,6 +5431,13 @@ function successfulPolicyFetchFinalUrl(result: FetchTextResult, fallbackUrl: str
     .find((attempt) => attempt.outcome === "fetched")
     ?.finalUrl;
   return finalUrl && /^https?:\/\//i.test(finalUrl) ? finalUrl : fallbackUrl;
+}
+
+function successfulPolicyFetchContentType(result: FetchTextResult): string | undefined {
+  return [...(result.attempts ?? [])]
+    .reverse()
+    .find((attempt) => attempt.outcome === "fetched")
+    ?.contentType;
 }
 
 type PdfParseConstructor = new (input: { data: Uint8Array }) => {

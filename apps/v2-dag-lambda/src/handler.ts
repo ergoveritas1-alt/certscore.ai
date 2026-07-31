@@ -1623,6 +1623,7 @@ function safeAuxiliaryFileName(fileName: string) {
 function isSupportedAuxiliaryFileName(fileName: string) {
   return path.basename(fileName) === fileName && (
     fileName.endsWith(".json") ||
+    fileName.endsWith(".txt") ||
     fileName.endsWith(".png") ||
     fileName.endsWith(".jpg") ||
     fileName.endsWith(".jpeg")
@@ -2201,6 +2202,9 @@ export async function uploadAuxiliaryArtifactFiles(input: {
 }
 
 function auxiliaryContentType(fileName: string) {
+  if (fileName.endsWith(".txt")) {
+    return "text/plain; charset=utf-8";
+  }
   if (fileName.endsWith(".png")) {
     return "image/png";
   }

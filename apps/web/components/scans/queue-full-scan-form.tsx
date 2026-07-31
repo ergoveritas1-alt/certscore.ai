@@ -6,9 +6,8 @@ import { clearPendingScanStarted, markPendingScanStarted } from "../analytics/da
 import { createFullScanAction, type CreateFullScanActionState } from "../../server/scans/create-full-scan";
 import { ScanFromSelect } from "./scan-from-select";
 import {
-  ScanSubmitProgressBar,
+  ScanSubmissionPendingIndicator,
   normalizeLocalV2ScanProfile,
-  useScanProgressClock,
   type LocalV2ScanProfile
 } from "./scan-submit-progress";
 
@@ -32,7 +31,6 @@ export function QueueFullScanForm({
   const [state, action, isPending] = useActionState(createFullScanAction, initialState);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
-  const scanProgress = useScanProgressClock(isPending);
   const isDisabled = disabled || isPending;
   const errorMessage = state.error ?? unavailableReason;
 
@@ -56,12 +54,7 @@ export function QueueFullScanForm({
       />
       {errorMessage ? <p className="max-w-sm text-sm text-red-600">{errorMessage}</p> : null}
       {isPending ? (
-        <ScanSubmitProgressBar
-          active
-          nowMs={scanProgress.nowMs}
-          profileValue={localV2ScanProfile}
-          startedAtMs={scanProgress.startedAtMs}
-        />
+        <ScanSubmissionPendingIndicator />
       ) : null}
       <Button
         className="scan-report-button scan-report-button-primary border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"

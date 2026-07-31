@@ -17,6 +17,7 @@ import {
 test("validation worker mirrors completed local Lambda artifacts and auxiliary screenshots", async () => {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-worker-v2-mirror-"));
   const auxiliaryBody = Buffer.from(JSON.stringify({ policy: "bounded" }));
+  const policyTextBody = Buffer.from("bounded retained privacy policy text");
   const screenshotBody = Buffer.from("png-body");
   const fullPageScreenshotBody = Buffer.from("jpeg-body");
   const objects = new Map([
@@ -27,6 +28,12 @@ test("validation worker mirrors completed local Lambda artifacts and auxiliary s
           sha256: createHash("sha256").update(auxiliaryBody).digest("hex"),
           sizeBytes: auxiliaryBody.byteLength,
           uri: "s3://certscore-v2-dag-local-artifacts-eu-west-1-199536052647/v2/scan-1/auxiliary/policy-summary.json"
+        },
+        {
+          fileName: "policy_surface_text_fixture.txt",
+          sha256: createHash("sha256").update(policyTextBody).digest("hex"),
+          sizeBytes: policyTextBody.byteLength,
+          uri: "s3://certscore-v2-dag-local-artifacts-eu-west-1-199536052647/v2/scan-1/auxiliary/policy_surface_text_fixture.txt"
         },
         {
           fileName: "screenshot-pre-consent.png",
@@ -47,6 +54,7 @@ test("validation worker mirrors completed local Lambda artifacts and auxiliary s
       screenshots: []
     }))],
     ["v2/scan-1/auxiliary/policy-summary.json", auxiliaryBody],
+    ["v2/scan-1/auxiliary/policy_surface_text_fixture.txt", policyTextBody],
     ["v2/scan-1/auxiliary/screenshot-pre-consent.png", screenshotBody],
     ["v2/scan-1/auxiliary/screenshot-pre-consent-full-page.jpg", fullPageScreenshotBody]
   ]);
@@ -76,7 +84,7 @@ test("validation worker mirrors completed local Lambda artifacts and auxiliary s
   });
 
   assert.ok(mirror);
-  assert.equal(mirror.mirroredArtifacts.length, 5);
+  assert.equal(mirror.mirroredArtifacts.length, 6);
   assert.equal(
     await readFile(path.join(workspaceRoot, "artifacts/local-v2-dag-scans/scan-1/screenshot-pre-consent.png"), "utf8"),
     "png-body"
@@ -88,6 +96,10 @@ test("validation worker mirrors completed local Lambda artifacts and auxiliary s
   assert.equal(
     await readFile(path.join(workspaceRoot, "artifacts/local-v2-dag-scans/scan-1/policy-summary.json"), "utf8"),
     JSON.stringify({ policy: "bounded" })
+  );
+  assert.equal(
+    await readFile(path.join(workspaceRoot, "artifacts/local-v2-dag-scans/scan-1/policy_surface_text_fixture.txt"), "utf8"),
+    "bounded retained privacy policy text"
   );
 });
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -26,7 +27,100 @@ const serverOnlyPath = require.resolve("server-only");
 };
 
 async function loadLocalV2DagReport() {
-  return import("./local-v2-dag-report");
+  const report = await import("./local-v2-dag-report");
+  return {
+    ...report,
+    summarizePolicySurfaces(
+      surfaces: Parameters<typeof report.summarizePolicySurfaces>[0],
+      rootDomain: Parameters<typeof report.summarizePolicySurfaces>[1],
+      options: Parameters<typeof report.summarizePolicySurfaces>[2] = {},
+    ) {
+      const artifacts = new Map<string, Record<string, unknown>>();
+      const canonicalSurfaces = surfaces.map((row, index) => {
+        const existingPolicyTextRef = row.surface.artifactRefs?.find((ref) =>
+          /policy_surface_text/i.test(`${ref.artifactId} ${ref.label ?? ""} ${ref.path ?? ""}`)
+        );
+        let retainedText = "";
+        if (existingPolicyTextRef?.path) {
+          try {
+            if (statSync(existingPolicyTextRef.path).isFile()) {
+              retainedText = readFileSync(existingPolicyTextRef.path, "utf8");
+            }
+          } catch {
+            // Missing artifact references intentionally remain unavailable.
+          }
+        } else {
+          retainedText = row.surface.textExcerpt ?? "";
+        }
+        if (!retainedText) {
+          return row;
+        }
+        const artifactId = existingPolicyTextRef?.artifactId ?? `policy_surface_text_test_${index}`;
+        const fileName = existingPolicyTextRef?.path
+          ? path.basename(existingPolicyTextRef.path)
+          : `${artifactId}.txt`;
+        artifacts.set(artifactId, {
+          artifactId,
+          fileName,
+          text: retainedText,
+          sha256: createHash("sha256").update(retainedText).digest("hex"),
+          sizeBytes: Buffer.byteLength(retainedText),
+          uri: `s3://test-policy-artifacts/${fileName}`,
+          verificationStatus: "verified",
+        });
+        return {
+          ...row,
+          surface: {
+            ...row.surface,
+            artifactRefs: existingPolicyTextRef
+              ? row.surface.artifactRefs
+              : [{
+                  artifactId,
+                  artifactType: "other" as const,
+                  path: `/tmp/${fileName}`,
+                  label: "privacy_policy normalized policy_surface_text",
+                  redactionStatus: "redacted" as const,
+                  relatedEventIds: [],
+                  sensitivity: "redacted" as const,
+                }],
+            contentCoverage: row.surface.contentCoverage ?? {
+              status: "complete" as const,
+              sourceTextChars: retainedText.length,
+              extractedSectionCount: 1,
+              retainedSectionCount: 1,
+              retainedTableRowCount: 0,
+              limitationKeys: [],
+            },
+            documentTextCoverage: row.surface.documentTextCoverage ?? {
+              status: "complete" as const,
+              sourceTextChars: retainedText.length,
+              retainedTextChars: retainedText.length,
+              limitationKeys: [],
+            },
+            documentEvaluationState: row.surface.documentEvaluationState ?? "usable" as const,
+            documentFetchState: row.surface.documentFetchState ?? "fetched" as const,
+            documentFormat: row.surface.documentFormat ?? "text" as const,
+            targetRelationship: row.surface.targetRelationship ?? "target_controller" as const,
+          },
+        };
+      });
+      return report.summarizePolicySurfaces(canonicalSurfaces, rootDomain, {
+        ...options,
+        policyTextEvidenceContext: {
+          artifactsById: artifacts,
+          generatedAt: "2026-07-31T12:00:00.000Z",
+          scanId: "test-policy-summary",
+          sourceBundle: {
+            schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+            sha256: "a".repeat(64),
+            sizeBytes: 1,
+            uri: "s3://test-policy-artifacts/CanonicalEvidenceBundle.json",
+            verificationStatus: "verified",
+          },
+        },
+      } as never);
+    },
+  };
 }
 
 test("remote report artifacts start geometry as soon as the manifest resolves", async () => {
@@ -2529,6 +2623,42 @@ test("summarizePolicySurfaces retains CNN's general WBD policy when its text men
   assert.deepEqual(summary.privacyPolicyUrls, ["https://wbdprivacy.com/policycenter/b2c"]);
 });
 
+test("persisted policy projection accepts a verified cross-site first-party brand document", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const retainedPolicyText = [
+    "Warner Example Discovery Privacy Policy. Our services include ExampleNews.",
+    "Different members of our family of companies control information depending on the service used.",
+    "We explain processing purposes, legal bases, recipients, retention, international transfers, privacy rights, and controller contact details.",
+  ].join(" ").repeat(16);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "cross-site-first-party-policy",
+    surfaceType: "privacy_policy",
+    url: "https://privacy.example-parent.test/policycenter/consumer/en-us/",
+    normalizedUrl: "https://privacy.example-parent.test/policycenter/consumer/en-us/",
+    finalUrl: "https://privacy.example-parent.test/policycenter/consumer/en-us/",
+    status: "fetched",
+    documentRole: "policy_document",
+    documentFetchState: "fetched",
+    documentEvaluationState: "usable",
+    documentOwnerEntity: "privacy.example-parent.test",
+    targetRelationship: "first_party_brand",
+    ownershipConfidence: 0.78,
+    ownershipReasonCodes: [
+      "cross_site_document",
+      "target_brand_named_in_controller_context",
+    ],
+    textExcerpt: retainedPolicyText,
+  }] as never, "examplenews.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "examplenews.test", { primaryLanguage: "en" });
+
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.equal(summary.policyTextEvidenceProjection.projectionStatus, "verified_complete");
+  assert.equal(summary.policyTextEvidenceProjection.documents[0]?.targetRelationship, "first_party_brand");
+  assert.equal(summary.policyTextEvidenceProjection.documents[0]?.extractionStatus, "complete");
+});
+
 test("summarizePolicySurfaces prefers general privacy notices over cookie-specific surfaces for Article 13", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const surfaces = dedupePolicySurfaces([
@@ -2926,7 +3056,7 @@ test("summarizePolicySurfaces dedupes overlapping Article 13 evidence candidates
 
   assert.deepEqual(
     summary.article13DisclosureSignals.map((signal) => signal.evidenceText),
-    [completeRightsText, distinctRightsText]
+    [completeRightsText]
   );
   assert.deepEqual(
     summary.retainedArticle13SectionEvidence.map((evidence) => evidence.selectedPolicySectionExcerpt),
@@ -3062,7 +3192,7 @@ test("summarizePolicySurfaces carries row-targeted retained policy section evide
     evidence.signalObserved === "not_confirmed" &&
     evidence.extractionLimitation === "section_retained_without_row_specific_disclosure"
   ), true);
-  assert.equal(summary.article13DisclosureSignals[0]?.selectedPolicySectionHeading, "Retaining your information");
+  assert.equal(summary.article13DisclosureSignals[0]?.selectedPolicySectionHeading, "Policy text context");
   assert.match(summary.article13DisclosureSignals[0]?.selectedPolicySectionExcerpt ?? "", /retained as long as necessary/i);
 });
 
@@ -3094,7 +3224,7 @@ test("summarizePolicySurfaces rejects script/config text as Article 13 policy ev
 
   assert.equal(summary.privacyPolicyPresent, true);
   assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "low_quality_extracted_code_or_config");
-  assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_text_low_quality_or_non_policy_content");
+  assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_text_extracted_code_or_config");
   assert.deepEqual(summary.article13DisclosureSignals, []);
   assert.deepEqual(summary.article13DisclosureTypesObserved, []);
   assert.equal(summary.discardedArticle13DisclosureSignals.some((signal) =>
@@ -3103,7 +3233,7 @@ test("summarizePolicySurfaces rejects script/config text as Article 13 policy ev
   ), true);
 });
 
-test("summarizePolicySurfaces uses retained Lambda policy excerpts when local artifact paths are unavailable", async () => {
+test("summarizePolicySurfaces fails closed when the retained Lambda policy-text artifact is unavailable", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const retainedPolicyExcerpt = [
     "Warner Bros. Discovery Privacy Policy explains how we process personal information and how you can exercise your rights.",
@@ -3138,9 +3268,157 @@ test("summarizePolicySurfaces uses retained Lambda policy excerpts when local ar
 
   const summary = summarizePolicySurfaces(surfaces, "cnn.com");
 
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "artifact_unavailable");
+  assert.equal(summary.article13DisclosureTypesObserved.includes("legal_basis"), false);
+  assert.equal(summary.privacyPolicyTextCharacterCount, 0);
+});
+
+test("summarizePolicySurfaces does not promote joined retained sections to whole-document coverage", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const retainedPolicySections = Array.from({ length: 4 }, (_, index) => ({
+    sourceUrl: "https://example.test/privacy",
+    heading: `Privacy section ${index + 1}`,
+    textExcerpt: [
+      `This is retained privacy policy section ${index + 1}.`,
+      "This privacy policy explains how we collect and use personal information to provide services and protect accounts.",
+      "We identify the processing purposes, legal basis, recipients, retention criteria, international transfers, and privacy rights available to you.",
+      "You may contact our privacy team or data protection officer and lodge a complaint with a supervisory authority.",
+    ].join(" ").repeat(3),
+    quality: "strong" as const,
+  }));
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "retained-sections-privacy",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    normalizedUrl: "https://example.test/privacy",
+    confidence: 0.95,
+    status: "fetched",
+    artifactRefs: [{
+      artifactId: "policy_surface_text_sections",
+      path: "/tmp/certscore-v2-dag-lambda/missing/policy_surface_text_sections.txt",
+      label: "privacy_policy normalized text",
+    }],
+    retainedPolicySections,
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "artifact_unavailable");
+  assert.equal(summary.privacyPolicyTextCharacterCount, 0);
+});
+
+test("summarizePolicySurfaces distinguishes bounded section inventory from complete document text", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const policyText = [
+    "Privacy Notice. We collect and use personal information for specified processing purposes.",
+    "We describe legal bases, recipients, retention criteria, international transfers, privacy rights, and controller contact details.",
+  ].join(" ").repeat(12);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "complete-document-bounded-sections",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    textExcerpt: policyText,
+    contentCoverage: {
+      status: "truncated",
+      sourceTextChars: policyText.length,
+      extractedSectionCount: 14,
+      retainedSectionCount: 13,
+      retainedTableRowCount: 0,
+      limitationKeys: ["policy_section_inventory_bounded"],
+    },
+    documentTextCoverage: {
+      status: "complete",
+      sourceTextChars: policyText.length,
+      retainedTextChars: policyText.length,
+      limitationKeys: [],
+    },
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+
   assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
-  assert.equal(summary.article13DisclosureTypesObserved.includes("legal_basis"), true);
-  assert.equal(summary.privacyPolicyTextCharacterCount >= retainedPolicyExcerpt.length, true);
+  assert.equal(summary.policyTextEvidenceProjection.documents[0]?.contentCoverage?.status, "truncated");
+  assert.equal(summary.policyTextEvidenceProjection.documents[0]?.documentTextCoverage.status, "complete");
+});
+
+test("summarizePolicySurfaces uses a fetched child document instead of its privacy index", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const childText = "Privacy Notice. We process personal information for specified purposes, identify the controller, and explain privacy rights. ".repeat(14);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "privacy-index",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    documentRole: "policy_index",
+    textExcerpt: "Privacy documents PDF file. Legal basis marketing shell. ".repeat(24),
+    article13DisclosureSignals: [{
+      disclosureType: "legal_basis",
+      status: "observed",
+      evidenceText: "Legal basis marketing shell.",
+      confidence: 0.9,
+      source: "deterministic",
+    }],
+  }, {
+    observationId: "privacy-child-pdf",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/docs/privacy-current.pdf",
+    status: "fetched",
+    documentRole: "policy_document",
+    documentFormat: "pdf",
+    traversalDepth: 1,
+    parentObservationId: "privacy-index",
+    parentSurfaceUrl: "https://example.test/privacy",
+    textExcerpt: childText,
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+
+  assert.deepEqual(summary.privacyPolicyUrls, ["https://example.test/docs/privacy-current.pdf"]);
+  assert.equal(summary.article13DisclosureTypesObserved.includes("legal_basis"), false);
+  assert.equal(summary.policyTextEvidenceProjection.documents[0]?.documentRole, "policy_document");
+});
+
+test("summarizePolicySurfaces preserves an empty retained policy-text failure", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "empty-retained-privacy",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    normalizedUrl: "https://example.test/privacy",
+    confidence: 0.95,
+    status: "observed",
+    artifactRefs: [{
+      artifactId: "policy_surface_text_empty",
+      path: "/tmp/certscore-v2-dag-lambda/missing/policy_surface_text_empty.txt",
+      label: "privacy_policy normalized text",
+    }],
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "artifact_unavailable");
+  assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_verified_text_artifact_unavailable");
+});
+
+test("summarizePolicySurfaces preserves access-challenge text as a distinct failure", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const accessChallengeText = "Client challenge. A required part of this site couldn't load. Please check your connection and disable any ad blockers. Captcha required.";
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "challenged-privacy",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    normalizedUrl: "https://example.test/privacy",
+    confidence: 0.95,
+    status: "fetched",
+    textExcerpt: accessChallengeText,
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "low_quality_access_challenge");
+  assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_access_challenge_retained");
 });
 
 test("summarizePolicySurfaces accepts substantive Portuguese policy text and production-credit topic evidence", async () => {
@@ -3516,7 +3794,7 @@ test("summarizePolicySurfaces accepts GDPR Transparency candidates by default", 
   assert.deepEqual(summary.observedTopics, ["legal_basis"]);
   assert.deepEqual(
     summary.article13DisclosureSignals.map((signal) => signal.evidenceText),
-    [legacySignalText, candidateText]
+    [legacySignalText]
   );
   assert.deepEqual(summary.article13DisclosureTypesObserved, ["legal_basis"]);
   assert.deepEqual(summary.gdprTransparencyProductionEvidenceDiagnostics, {
@@ -3899,9 +4177,7 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
     assert.equal(defaultSummary?.gdprTransparencyProductionEvidenceEnabled, true);
     assert.equal(defaultDetail.runtimeArtifacts?.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
     assert.equal(defaultDetail.runtimeArtifacts?.gdprTransparencyProductionEvidenceEnabled, true);
-    assert.equal(defaultSignals?.length, 1);
-    assert.equal(defaultSignals?.[0]?.productionCredit, true);
-    assert.equal(defaultSignals?.[0]?.matchedLocale, "es");
+    assert.equal(defaultSignals?.length, 0);
 
     const legacyDetail = await materializeLocalV2DagScanDetail(makeScanRecord({
       scan: {
@@ -3947,9 +4223,7 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
     assert.equal(optInSummary?.gdprTransparencyProductionEvidenceEnabled, true);
     assert.equal(optInDetail.runtimeArtifacts?.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
     assert.equal(optInDetail.runtimeArtifacts?.gdprTransparencyProductionEvidenceEnabled, true);
-    assert.equal(optInSignals?.length, 1);
-    assert.equal(optInSignals?.[0]?.productionCredit, true);
-    assert.equal(optInSignals?.[0]?.matchedLocale, "es");
+    assert.equal(optInSignals?.length, 0);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

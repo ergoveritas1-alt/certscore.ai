@@ -895,6 +895,7 @@ test("auxiliary uploader returns durable metadata for bounded internal JSON arti
   await writeFile(path.join(tmp, "ConsentControlGeometryEvidence.json"), JSON.stringify({ artifactOnly: true }), "utf8");
   await writeFile(path.join(tmp, "consent_scenario_plan.json"), JSON.stringify({ plan: true }), "utf8");
   await writeFile(path.join(tmp, "consent_scenario_execution.json"), JSON.stringify({ execution: true }), "utf8");
+  await writeFile(path.join(tmp, "policy_surface_text_fixture.txt"), "bounded retained privacy policy text", "utf8");
   await writeFile(path.join(tmp, "screenshot-pre-consent.png"), "not-json", "utf8");
   await writeFile(path.join(tmp, "screenshot-pre-consent-geometry-proof.png"), "not-json", "utf8");
   await writeFile(path.join(tmp, "screenshot-pre-consent-full-page.jpg"), "not-a-real-jpeg", "utf8");
@@ -919,11 +920,12 @@ test("auxiliary uploader returns durable metadata for bounded internal JSON arti
       }
     });
 
-    assert.equal(artifacts.length, 6);
+    assert.equal(artifacts.length, 7);
     assert.deepEqual(artifacts.map((artifact) => artifact.fileName), [
       "ConsentControlGeometryEvidence.json",
       "consent_scenario_execution.json",
       "consent_scenario_plan.json",
+      "policy_surface_text_fixture.txt",
       "screenshot-pre-consent-full-page.jpg",
       "screenshot-pre-consent-geometry-proof.png",
       "screenshot-pre-consent.png"
@@ -937,6 +939,10 @@ test("auxiliary uploader returns durable metadata for bounded internal JSON arti
     assert.equal(
       puts.find((put) => put.key?.endsWith("/screenshot-pre-consent-geometry-proof.png"))?.contentType,
       "image/png"
+    );
+    assert.equal(
+      puts.find((put) => put.key?.endsWith("/policy_surface_text_fixture.txt"))?.contentType,
+      "text/plain; charset=utf-8"
     );
     assert.ok(artifacts.every((artifact) => artifact.uri.startsWith("s3://certscore-v2-local-artifacts/")));
   } finally {

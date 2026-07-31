@@ -20,12 +20,14 @@ test("active scans retain the four-step progress view", () => {
 
   assert.match(html, /Scan in progress/);
   assert.match(html, /role="progressbar"/);
+  assert.match(html, /Scanning website/);
   assert.match(html, />Prepare</);
   assert.match(html, />Scan</);
   assert.match(html, />Review</);
   assert.match(html, />Report</);
   assert.doesNotMatch(html, /The scan is complete/);
   assert.doesNotMatch(html, /Finishing your report/);
+  assert.doesNotMatch(html, /Building your report/);
 });
 
 test("completed scans awaiting report projection show the finalization view", () => {

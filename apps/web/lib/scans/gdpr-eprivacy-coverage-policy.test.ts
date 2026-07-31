@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyGdprTransparencyTopics, deriveConsentControlAssessment } from "@certscore/contracts";
-import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
+import { deriveGdprEprivacyCoveragePolicyOutcomes as deriveGdprEprivacyCoveragePolicyOutcomesRaw } from "./gdpr-eprivacy-coverage-policy";
 import { GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE } from "./gdpr-transparency-production-profile";
 import { adaptGdprTransparencyTopicCandidatesForProduction } from "./gdpr-transparency-topic-evidence-adapter";
 import { buildNormalizedConcerns } from "./normalized-concerns";
@@ -22,6 +22,62 @@ const completedInputBase = {
   coverageLimited: true,
   scanCompleted: true
 };
+
+function deriveGdprEprivacyCoveragePolicyOutcomes(
+  input: Parameters<typeof deriveGdprEprivacyCoveragePolicyOutcomesRaw>[0],
+) {
+  const runtimeArtifacts = input.runtimeArtifacts ?? {};
+  const summaryValue = runtimeArtifacts.policyDisclosureSummary;
+  if (!summaryValue || typeof summaryValue !== "object" || Array.isArray(summaryValue)) {
+    return deriveGdprEprivacyCoveragePolicyOutcomesRaw(input);
+  }
+  const summary = summaryValue as Record<string, unknown>;
+  const existingHealth = summary.policyTextExtractionHealth && typeof summary.policyTextExtractionHealth === "object"
+    ? summary.policyTextExtractionHealth as Record<string, unknown>
+    : {};
+  const textLength = typeof summary.privacyPolicyTextCharacterCount === "number"
+    ? summary.privacyPolicyTextCharacterCount
+    : typeof summary.retainedPrivacyPolicyTextExcerpt === "string"
+      ? summary.retainedPrivacyPolicyTextExcerpt.length
+      : 0;
+  const inferredStatus = summary.privacyPolicyPresent === true
+    ? textLength >= 2_500 ? "ok" : textLength > 0 ? "thin" : "empty_policy_text"
+    : "not_attempted";
+  return deriveGdprEprivacyCoveragePolicyOutcomesRaw({
+    ...input,
+    runtimeArtifacts: {
+      ...runtimeArtifacts,
+      policyDisclosureSummary: {
+        ...summary,
+        policyTextExtractionHealth: {
+          contractVersion: "certscore.policy-text-extraction-health.v2",
+          extractedTextLength: textLength,
+          minimumTextLengthRequired: 2_500,
+          policySurfaceObserved: summary.privacyPolicyPresent === true,
+          policyTextEvidenceProjectionContractVersion: "certscore.policy-text-evidence-projection.v1",
+          policyTextEvidenceProjectionStatus: "verified_complete",
+          policyTextExtractionStatus: inferredStatus,
+          ...existingHealth,
+        },
+        policyTextEvidenceProjection: {
+          contractVersion: "certscore.policy-text-evidence-projection.v1",
+          generatedAt: "2026-07-31T12:00:00.000Z",
+          scanId: "test-policy-projection",
+          sourceBundle: {
+            schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+            sha256: "a".repeat(64),
+            sizeBytes: 1,
+            uri: "s3://test-policy-artifacts/CanonicalEvidenceBundle.json",
+            verificationStatus: "verified",
+          },
+          projectionStatus: "verified_complete",
+          documents: [],
+          limitationKeys: [],
+        },
+      },
+    },
+  });
+}
 
 function makeCanonicalConsentAssessment(input: {
   controls?: Array<{
@@ -631,6 +687,35 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes structured Article 13 di
     "The controller can be contacted at privacy@example.test."
   );
   assert.equal(outcomes.international_transfers_disclosure?.status, "Review signal");
+});
+
+test("policy disclosure rows fail closed when the versioned persisted policy projection is absent", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomesRaw({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [{
+          confidence: 0.99,
+          disclosureType: "controller_contact",
+          evidenceText: "Example Test is the controller and can be contacted at privacy@example.test.",
+          source: "deterministic",
+          status: "observed",
+        }],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 8_000,
+        retainedPrivacyPolicyTextExcerpt: "Example Test is the controller.",
+      },
+    },
+    snapshot: { privacy_policy_present: true },
+  });
+
+  assert.notEqual(outcomes.controller_contact_disclosure?.status, "Observed");
+  assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
+  assert.equal(
+    (outcomes.policy_text_extraction?.criticalEvidence.retainedEvidence.policyTextExtractionHealth as Record<string, unknown>)
+      .policyTextExtractionStatus,
+    "projection_unavailable",
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes credits high-confidence direct Article 13 signals when section extraction is limited", () => {
@@ -2015,9 +2100,54 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats thin policy extraction as 
   assert.equal(outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved, "not_confirmed_extraction_limited");
   assert.equal(
     (outcomes.policy_text_extraction?.criticalEvidence.retainedEvidence.policyTextExtractionHealth as Record<string, unknown>)?.policyTextExtractionStatus,
-    "errored"
+    "thin"
   );
   assert.match(outcomes.legal_basis_disclosure_observed?.limitation ?? "", /did not extract enough usable policy text/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes explains an empty retained policy separately", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 0,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        policyTextExtractionHealth: {
+          extractedTextLength: 0,
+          extractionFailureReason: "privacy_policy_text_not_retained",
+          policyTextExtractionStatus: "empty_policy_text"
+        }
+      }
+    },
+    snapshot: { privacy_policy_present: true }
+  });
+
+  assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
+  assert.match(outcomes.legal_basis_disclosure_observed?.limitation ?? "", /no substantive policy text was retained/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes explains retained access challenges separately", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 132,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "Client challenge. A required part of this site could not load. Captcha required.",
+        policyTextExtractionHealth: {
+          extractedTextLength: 132,
+          extractionFailureReason: "privacy_policy_access_challenge_retained",
+          policyTextExtractionStatus: "low_quality_access_challenge"
+        }
+      }
+    },
+    snapshot: { privacy_policy_present: true }
+  });
+
+  assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
+  assert.match(outcomes.legal_basis_disclosure_observed?.limitation ?? "", /access challenge rather than the governing privacy notice/i);
 });
 
 test("a dedicated privacy email in a thin policy shell remains not confirmed without a row witness", () => {
@@ -2515,7 +2645,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes rejects code/config excerpts as G
     outcomes.data_subject_rights_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
     "not_confirmed_extraction_limited"
   );
-  assert.match(outcomes.data_subject_rights_disclosure?.limitation ?? "", /low-quality or non-policy content/i);
+  assert.match(outcomes.data_subject_rights_disclosure?.limitation ?? "", /extracted code or configuration rather than policy text/i);
 });
 
 test("mature policy text still requires row-specific evidence witnesses", () => {

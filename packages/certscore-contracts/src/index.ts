@@ -1318,6 +1318,13 @@ export const policyCookieDisclosureObservationSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
+export const policyDocumentTextCoverageSchema = z.object({
+  status: z.enum(["complete", "truncated", "unavailable"]),
+  sourceTextChars: z.number().int().nonnegative(),
+  retainedTextChars: z.number().int().nonnegative(),
+  limitationKeys: z.array(z.string().max(120)).max(12).default([]),
+});
+
 export const policySurfaceObservationSchema = z.object({
   observationId: z.string(),
   sourceScanner: z.string().default("policy_surface"),
@@ -1368,6 +1375,9 @@ export const policySurfaceObservationSchema = z.object({
   linkObservationState: z.enum(["observed", "candidate", "not_observed"]).optional(),
   documentFetchState: z.enum(["not_attempted", "fetched", "failed", "skipped_budget"]).optional(),
   documentEvaluationState: z.enum(["not_attempted", "usable", "insufficient", "blocked"]).optional(),
+  documentRole: z.enum(["policy_document", "policy_index", "unknown"]).optional(),
+  documentFormat: z.enum(["html", "pdf", "text", "unknown"]).optional(),
+  contentType: z.string().max(160).optional(),
   documentOwnerEntity: z.string().max(240).optional(),
   targetRelationship: z.enum([
     "target_controller",
@@ -1386,6 +1396,7 @@ export const policySurfaceObservationSchema = z.object({
     retainedTableRowCount: z.number().int().nonnegative(),
     limitationKeys: z.array(z.string().max(120)).max(16).default([]),
   }).optional(),
+  documentTextCoverage: policyDocumentTextCoverageSchema.optional(),
   httpStatus: z.number().int().optional(),
   finalUrl: z.string().optional(),
   redirectChain: z.array(z.string().max(500)).max(8).optional(),
@@ -1581,6 +1592,72 @@ export const policySurfaceObservationSchema = z.object({
   })).default([]),
   confidence: confidenceSchema,
   directVsInferred: directVsInferredSchema.default("direct"),
+});
+
+export const policyTextEvidenceProjectionSchema = z.object({
+  contractVersion: z.literal("certscore.policy-text-evidence-projection.v1"),
+  generatedAt: z.string(),
+  scanId: z.string(),
+  sourceBundle: z.object({
+    schemaVersion: z.string(),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    sizeBytes: z.number().int().nonnegative().optional(),
+    uri: z.string().optional(),
+    verificationStatus: z.enum(["verified", "local_unverified", "unavailable"]),
+  }),
+  projectionStatus: z.enum(["verified_complete", "verified_partial", "local_unverified", "unavailable"]),
+  documents: z.array(z.object({
+    observationId: z.string(),
+    artifactId: z.string().optional(),
+    artifactFileName: z.string().max(255).optional(),
+    artifactSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    artifactSizeBytes: z.number().int().nonnegative().optional(),
+    artifactUri: z.string().optional(),
+    artifactVerificationStatus: z.enum([
+      "verified",
+      "local_unverified",
+      "missing_reference",
+      "missing_manifest_entry",
+      "unavailable",
+      "verification_failed",
+    ]),
+    failureReason: z.string().max(160).optional(),
+    requestedUrl: z.string(),
+    finalUrl: z.string().optional(),
+    redirectChain: z.array(z.string().max(500)).max(8).default([]),
+    documentFormat: z.enum(["html", "pdf", "text", "unknown"]),
+    contentType: z.string().max(160).optional(),
+    documentFetchState: z.enum(["not_attempted", "fetched", "failed", "skipped_budget"]),
+    documentEvaluationState: z.enum(["not_attempted", "usable", "insufficient", "blocked"]),
+    documentRole: z.enum(["policy_document", "policy_index", "unknown"]),
+    documentOwnerEntity: z.string().max(240).optional(),
+    targetRelationship: z.enum([
+      "target_controller",
+      "first_party_brand",
+      "service_provider",
+      "unrelated",
+      "unknown",
+    ]),
+    ownershipConfidence: z.number().min(0).max(1).optional(),
+    contentCoverage: policySurfaceObservationSchema.shape.contentCoverage,
+    documentTextCoverage: policyDocumentTextCoverageSchema,
+    retainedTextChars: z.number().int().nonnegative(),
+    retainedTextSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    extractionStatus: z.enum([
+      "complete",
+      "partial",
+      "thin",
+      "truncated",
+      "malformed",
+      "blocked",
+      "unsupported_language",
+      "language_unknown",
+      "low_quality",
+      "unavailable",
+    ]),
+    limitationKeys: z.array(z.string().max(160)).max(24).default([]),
+  })).max(16),
+  limitationKeys: z.array(z.string().max(160)).max(32).default([]),
 });
 
 export const normalizedVendorObservationSchema = z.object({
@@ -2441,6 +2518,7 @@ export type ScreenshotArtifact = z.infer<typeof screenshotArtifactSchema>;
 export type VisualCaptureSummary = z.infer<typeof visualCaptureSummarySchema>;
 export type DomSnapshotArtifact = z.infer<typeof domSnapshotArtifactSchema>;
 export type PolicySurfaceObservation = z.infer<typeof policySurfaceObservationSchema>;
+export type PolicyTextEvidenceProjection = z.infer<typeof policyTextEvidenceProjectionSchema>;
 export type PolicyCookieDisclosureObservation = z.infer<typeof policyCookieDisclosureObservationSchema>;
 export type NormalizedVendorObservation = z.infer<
   typeof normalizedVendorObservationSchema

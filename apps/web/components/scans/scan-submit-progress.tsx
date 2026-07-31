@@ -58,6 +58,34 @@ export function ScanActivityIndicator({ className = "text-white" }: { className?
   );
 }
 
+export function ScanSubmissionPendingIndicator({ compact = false }: { compact?: boolean }) {
+  return (
+    <div
+      aria-live="polite"
+      className={compact
+        ? "rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
+        : "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"}
+      role="status"
+    >
+      <div className={compact
+        ? "flex items-center gap-2 text-xs font-medium text-slate-600"
+        : "flex items-center gap-2 text-sm font-medium text-slate-700"}
+      >
+        <ScanActivityIndicator className="text-sky-500" />
+        <span>Starting scan…</span>
+      </div>
+      {!compact ? (
+        <p className="mt-1 text-xs text-slate-500">
+          Creating the scan request and waiting for its current status.
+        </p>
+      ) : null}
+      <div aria-hidden="true" className={compact ? "mt-2 h-2 overflow-hidden rounded-full bg-slate-200" : "mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200"}>
+        <div className="h-full w-1/3 animate-pulse rounded-full bg-sky-400 motion-reduce:animate-none" />
+      </div>
+    </div>
+  );
+}
+
 export function ScanSubmitProgressBar({
   active,
   compact = false,
@@ -216,6 +244,7 @@ function getScanProgressDisplay(input: {
 }) {
   const status = input.scanStatus;
   const hasServerProgress = typeof status === "string";
+  const estimatedDelay = input.delayed && !hasServerProgress;
   const serverPhaseIndex = status === "queued"
     ? 0
     : status === "running"
@@ -233,17 +262,17 @@ function getScanProgressDisplay(input: {
         ? 2
         : 3);
   const isComplete = input.reportReady;
-  const value = isComplete ? 100 : input.delayed ? 92 : SCAN_PROGRESS_STEPS[phaseIndex].value;
+  const value = isComplete ? 100 : estimatedDelay ? 92 : SCAN_PROGRESS_STEPS[phaseIndex].value;
   const label = isComplete
     ? "Completing scan…"
-    : input.delayed
+    : estimatedDelay
       ? "Taking longer than usual"
       : hasServerProgress
         ? ["Queued for scan", "Scanning website", "Reviewing scan signals", "Preparing your report"][phaseIndex]
         : ["Getting things ready", "Capturing page evidence", "Checking policies and trackers", "Building your report"][phaseIndex];
   const detail = isComplete
     ? "Opening your report…"
-    : input.delayed
+    : estimatedDelay
       ? "The scan is still working through the site."
       : hasServerProgress
         ? ["Waiting for a scanner to start.", "Capturing page evidence and website signals.", "Processing the retained scan evidence.", "Preparing the report for review."][phaseIndex]
@@ -253,7 +282,7 @@ function getScanProgressDisplay(input: {
   return {
     ariaLabel: isComplete
       ? "Scan complete, opening report"
-      : input.delayed
+      : estimatedDelay
         ? "Scan is taking longer than usual"
         : `Scan progress: step ${currentStep + 1} of ${SCAN_PROGRESS_STEPS.length}`,
     ariaValueText: `${detail}`,
@@ -300,10 +329,12 @@ export function useScanProgressClock(active: boolean) {
 export function LocalV2DagScanProgressCard({
   createdAt,
   profileValue = "standard",
+  scanStatus,
   startedAt,
 }: {
   createdAt?: string | null;
   profileValue?: string;
+  scanStatus?: string | null;
   startedAt?: string | null;
 }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -340,6 +371,7 @@ export function LocalV2DagScanProgressCard({
         active
         nowMs={nowMs}
         profileValue={profileValue}
+        scanStatus={scanStatus}
         startedAtMs={startedAtMs}
       />
     </section>

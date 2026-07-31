@@ -968,7 +968,28 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
     return;
   }
 
-  if (url.pathname === "/policies/privacy-reglement-nl.pdf") {
+  if (url.pathname === "/policies/privacy-index-pdf-nl") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><html lang="nl"><body>
+      <main><h1>Privacy Policy</h1><div id="documents">Privacy documents loading</div></main>
+      <script>
+        setTimeout(() => {
+          document.getElementById("documents").innerHTML = [
+            '<a href="/policies/privacy-reglement-nl.pdf">PDF file Privacy Policy (Date: 28.02.2025)</a>',
+            '<a href="/policies/privacy-reglement-nl-2024.pdf">PDF file Privacy Policy (Date: 29.11.2024)</a>',
+            '<a href="/policies/privacy-reglement-nl-2022.pdf">PDF file Privacy Policy (Date: 07.12.2022)</a>'
+          ].join(" ");
+        }, 50);
+      </script>
+    </body></html>`);
+    return;
+  }
+
+  if ([
+    "/policies/privacy-reglement-nl.pdf",
+    "/policies/privacy-reglement-nl-2024.pdf",
+    "/policies/privacy-reglement-nl-2022.pdf",
+  ].includes(url.pathname)) {
     response.writeHead(200, {
       "Content-Type": "application/pdf",
       "Content-Length": String(fixturePrivacyPdfNl.length),
@@ -1970,7 +1991,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-gdpr-transparency-encoded-it": `<a href="/policies/article13-encoded-it">Informativa sulla privacy</a>`,
     "policy-gdpr-transparency-compact-nl": `<a href="/policies/privacy-compact-nl">Privacy reglement</a>`,
     "policy-gdpr-transparency-latin1-es": `<a href="/policies/article13-latin1-es">Política de privacidad</a>`,
-    "policy-gdpr-transparency-pdf-nl": `<a href="/policies/privacy-reglement-nl.pdf">Privacy reglement PDF</a>`,
+    "policy-gdpr-transparency-pdf-nl": `<a href="/policies/privacy-index-pdf-nl">Privacy Policy</a>`,
     "policy-gpc-disclosure-late": `<a href="/policies/gpc-late">Privacy Policy</a>`,
     "policy-gpc-disclosure": `<a href="/policies/gpc">Privacy Notice</a>`,
     "policy-generic-links": `<a href="/products">Products</a><a href="/about">About us</a>`,

@@ -16,9 +16,11 @@ import {
   derivePolicySurfaceInspectionOutcome,
   evaluateLegalFrameworkValidity,
   hasStaleLegalFrameworkReference,
+  policyTextEvidenceProjectionSchema,
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type CanonicalEvidenceBundle,
   type NormalizedVendorObservation,
+  type PolicyTextEvidenceProjection,
   type PolicySurfaceInspectionOutcome
 } from "@certscore/contracts";
 import {
@@ -631,6 +633,30 @@ function normalizePolicyPageType(surfaceType: string) {
 type LocalV2PolicySurface = NonNullable<CanonicalEvidenceBundle["policySurfaceObservations"]>[number];
 const MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13 = 2_500;
 
+type RetainedPolicyTextArtifactEvidence = {
+  artifactId: string;
+  fileName: string;
+  text?: string;
+  sha256?: string;
+  sizeBytes?: number;
+  uri?: string;
+  verificationStatus:
+    | "verified"
+    | "local_unverified"
+    | "missing_manifest_entry"
+    | "unavailable"
+    | "verification_failed";
+  failureReason?: string;
+};
+
+type PolicyTextEvidenceContext = {
+  artifactsById?: ReadonlyMap<string, RetainedPolicyTextArtifactEvidence>;
+  generatedAt: string;
+  localOutDir?: string | null;
+  scanId: string;
+  sourceBundle: PolicyTextEvidenceProjection["sourceBundle"];
+};
+
 function isCookiePreferenceSurfaceUrl(value: string | null | undefined) {
   return Boolean(value && /\/(?:privacy|cookie)[-_]?(?:prefs?|preferences?|settings?)(?:\/|$)/i.test(value));
 }
@@ -1004,28 +1030,31 @@ function resolveLocalV2OutDir(outDir: string) {
   return resolved;
 }
 
-function resolvePolicyTextArtifactPath(rawPath: string) {
-  const resolved = path.resolve(rawPath);
+function resolvePolicyTextArtifactPath(rawPath: string, localOutDir?: string | null) {
+  const candidates = uniqueStrings([
+    path.resolve(rawPath),
+    localOutDir ? path.join(resolveLocalV2OutDir(localOutDir), path.basename(rawPath)) : null,
+  ]);
   const roots = v2PolicyTextArtifactRoots();
-  const inAllowedRoot = roots.some((root) => resolved === root || resolved.startsWith(`${root}${path.sep}`));
-  if (!inAllowedRoot) {
-    return null;
-  }
-
-  try {
-    const stats = statSync(resolved);
-    if (!stats.isFile() || stats.size <= 0 || stats.size > 1_000_000 || path.extname(resolved).toLowerCase() !== ".txt") {
-      return null;
+  for (const resolved of candidates) {
+    const inAllowedRoot = roots.some((root) => resolved === root || resolved.startsWith(`${root}${path.sep}`));
+    if (!inAllowedRoot) {
+      continue;
     }
-    return resolved;
-  } catch {
-    return null;
+    try {
+      const stats = statSync(resolved);
+      if (stats.isFile() && stats.size > 0 && stats.size <= 1_000_000 && path.extname(resolved).toLowerCase() === ".txt") {
+        return resolved;
+      }
+    } catch {
+      // Try the next verified local candidate.
+    }
   }
+  return null;
 }
 
-function readPolicySurfaceTextArtifact(surface: LocalV2PolicySurface) {
+function policySurfaceTextArtifactReference(surface: LocalV2PolicySurface) {
   const artifactRefs = Array.isArray(surface.artifactRefs) ? surface.artifactRefs : [];
-  let hasPolicyTextArtifactReference = false;
   for (const ref of artifactRefs) {
     if (!isRecord(ref)) {
       continue;
@@ -1034,35 +1063,61 @@ function readPolicySurfaceTextArtifact(surface: LocalV2PolicySurface) {
     const artifactId = firstString(looseRef.artifactId, looseRef.id);
     const label = firstString(looseRef.label, looseRef.kind, looseRef.type);
     const artifactPath = firstString(looseRef.path, looseRef.filePath);
-    if (!artifactPath || !/policy_surface_text/i.test(`${artifactId ?? ""} ${label ?? ""} ${path.basename(artifactPath)}`)) {
+    if (!artifactId || !artifactPath || !/policy_surface_text/i.test(`${artifactId} ${label ?? ""} ${path.basename(artifactPath)}`)) {
       continue;
     }
-    hasPolicyTextArtifactReference = true;
-    const resolved = resolvePolicyTextArtifactPath(artifactPath);
-    if (!resolved) {
-      continue;
-    }
-    try {
-      return readFileSync(resolved, "utf8").replace(/\s+/g, " ").trim();
-    } catch {
-      return null;
-    }
+    return { artifactId, artifactPath, fileName: path.basename(artifactPath) };
   }
-  // Lambda bundles retain bounded policy excerpts inline while their local
-  // artifact paths point at the scanner filesystem. On production web,
-  // prefer that retained typed evidence when the local path is unavailable.
-  if (!hasPolicyTextArtifactReference) {
+  return null;
+}
+
+function resolvePolicySurfaceTextEvidence(
+  surface: LocalV2PolicySurface,
+  context?: PolicyTextEvidenceContext,
+): RetainedPolicyTextArtifactEvidence | null {
+  const reference = policySurfaceTextArtifactReference(surface);
+  if (!reference) {
     return null;
   }
-  const inlineCandidates = [
-    ...(Array.isArray(surface.evidenceRefs) ? surface.evidenceRefs : [])
-      .map((reference) => firstString(reference.excerpt)),
-    ...(Array.isArray(surface.retainedPolicySections) ? surface.retainedPolicySections : [])
-      .map((section) => firstString(section.textExcerpt)),
-    ...(Array.isArray(surface.article13DisclosureSignals) ? surface.article13DisclosureSignals : [])
-      .map((signal) => firstString(signal.evidenceText)),
-  ].filter((value): value is string => Boolean(value));
-  return inlineCandidates.sort((left, right) => right.length - left.length)[0]?.slice(0, MAX_RETAINED_POLICY_DISCLOSURE_TEXT_CHARS) ?? null;
+  const retained = context?.artifactsById?.get(reference.artifactId);
+  if (retained) {
+    return retained;
+  }
+  const resolved = resolvePolicyTextArtifactPath(reference.artifactPath, context?.localOutDir);
+  if (resolved) {
+    try {
+      const text = readFileSync(resolved, "utf8").replace(/\s+/g, " ").trim();
+      return {
+        artifactId: reference.artifactId,
+        fileName: reference.fileName,
+        text,
+        sha256: createHash("sha256").update(text).digest("hex"),
+        sizeBytes: Buffer.byteLength(text),
+        verificationStatus: "local_unverified",
+      };
+    } catch {
+      return {
+        artifactId: reference.artifactId,
+        fileName: reference.fileName,
+        verificationStatus: "unavailable",
+        failureReason: "policy_text_local_artifact_unreadable",
+      };
+    }
+  }
+  return {
+    artifactId: reference.artifactId,
+    fileName: reference.fileName,
+    verificationStatus: context?.sourceBundle.verificationStatus === "verified"
+      ? "missing_manifest_entry"
+      : "unavailable",
+    failureReason: context?.sourceBundle.verificationStatus === "verified"
+      ? "policy_text_artifact_missing_from_verified_manifest"
+      : "policy_text_artifact_unavailable",
+  };
+}
+
+function readPolicySurfaceTextArtifact(surface: LocalV2PolicySurface, context?: PolicyTextEvidenceContext) {
+  return resolvePolicySurfaceTextEvidence(surface, context)?.text ?? null;
 }
 
 function findCaseInsensitiveTextIndex(source: string, needle: string) {
@@ -1501,6 +1556,75 @@ function getLocalV2DagAuxiliaryArtifact(
     };
   }
   return null;
+}
+
+async function readLocalV2DagPolicyTextArtifactFromS3(
+  pointer: LocalV2DagLambdaArtifactPointer,
+): Promise<{ text: string; sha256: string; sizeBytes: number }> {
+  if (pointer.sizeBytes === null || pointer.sizeBytes <= 0 || pointer.sizeBytes > 1_000_000 || !pointer.sha256) {
+    throw new Error("Policy text artifact metadata is missing or outside the retained size bound.");
+  }
+  const { bucket, key } = parseS3Uri(pointer.uri);
+  const response = await getLocalV2DagS3Client(inferS3ArtifactRegion(bucket)).send(
+    new GetObjectCommand({ Bucket: bucket, Key: key })
+  );
+  const body = verifyLocalV2DagLambdaArtifactBody({
+    body: await streamToBuffer(response.Body),
+    expectedSha256: pointer.sha256,
+    expectedSizeBytes: pointer.sizeBytes,
+  });
+  if (body.includes(0)) {
+    throw new Error("Policy text artifact is not valid bounded UTF-8 text.");
+  }
+  return {
+    text: body.toString("utf8").replace(/\s+/g, " ").trim(),
+    sha256: pointer.sha256,
+    sizeBytes: body.byteLength,
+  };
+}
+
+async function loadVerifiedPolicyTextArtifacts(input: {
+  bundle: CanonicalEvidenceBundle;
+  manifest: Record<string, unknown> | null;
+}) {
+  const references = [...new Map(input.bundle.policySurfaceObservations.flatMap((surface) => {
+    const reference = policySurfaceTextArtifactReference(surface);
+    return reference ? [[reference.artifactId, reference] as const] : [];
+  })).values()].slice(0, 16);
+  const entries = await Promise.all(references.map(async (reference) => {
+    const pointer = getLocalV2DagAuxiliaryArtifact(input.manifest, reference.fileName);
+    if (!pointer) {
+      return [reference.artifactId, {
+        artifactId: reference.artifactId,
+        fileName: reference.fileName,
+        verificationStatus: "missing_manifest_entry",
+        failureReason: "policy_text_artifact_missing_from_verified_manifest",
+      } satisfies RetainedPolicyTextArtifactEvidence] as const;
+    }
+    try {
+      const retained = await readLocalV2DagPolicyTextArtifactFromS3(pointer);
+      return [reference.artifactId, {
+        artifactId: reference.artifactId,
+        fileName: reference.fileName,
+        text: retained.text,
+        sha256: retained.sha256,
+        sizeBytes: retained.sizeBytes,
+        uri: pointer.uri,
+        verificationStatus: "verified",
+      } satisfies RetainedPolicyTextArtifactEvidence] as const;
+    } catch {
+      return [reference.artifactId, {
+        artifactId: reference.artifactId,
+        fileName: reference.fileName,
+        sha256: pointer.sha256 ?? undefined,
+        sizeBytes: pointer.sizeBytes ?? undefined,
+        uri: pointer.uri,
+        verificationStatus: "verification_failed",
+        failureReason: "policy_text_artifact_verification_failed",
+      } satisfies RetainedPolicyTextArtifactEvidence] as const;
+    }
+  }));
+  return new Map<string, RetainedPolicyTextArtifactEvidence>(entries);
 }
 
 const LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES = {
@@ -2134,6 +2258,7 @@ export function summarizePolicySurfaces(
     discoveredPolicySurfaces?: readonly LocalV2PolicySurface[];
     gdprTransparencyEvidenceProfile?: GdprTransparencyProductionEvidenceProfile | string | null;
     homepageNoGo?: boolean;
+    policyTextEvidenceContext?: PolicyTextEvidenceContext;
     primaryLanguage?: string | null;
     scanStartedAt?: string | null;
   } = {}
@@ -2200,7 +2325,7 @@ export function summarizePolicySurfaces(
     )
   );
   const text = article13Surfaces
-    .map((row) => readPolicySurfaceTextArtifact(row.surface) ?? firstString(row.surface.textExcerpt))
+    .map((row) => readPolicySurfaceTextArtifact(row.surface, options.policyTextEvidenceContext))
     .filter(Boolean)
     .join("\n");
   const policyPrimaryLanguage = guessPrimaryLanguage({
@@ -2225,7 +2350,7 @@ export function summarizePolicySurfaces(
     : policyTextQuality;
   const observedPolicyTopicHints = uniqueStrings(article13Surfaces.flatMap((row) => row.surface.observedTopics ?? []));
   const article13SignalCandidates = article13Surfaces.flatMap((row) => {
-    const fullPolicyText = readPolicySurfaceTextArtifact(row.surface);
+    const fullPolicyText = readPolicySurfaceTextArtifact(row.surface, options.policyTextEvidenceContext);
     return (row.surface.article13DisclosureSignals ?? []).map((signal) => {
       const evidenceText = firstString(signal.evidenceText);
       const retainedPolicyContext = evidenceText && fullPolicyText
@@ -2325,12 +2450,17 @@ export function summarizePolicySurfaces(
   ].slice(0, 40);
   const mentionedControls = uniqueStrings(policySurfaces.flatMap((row) => row.surface.mentionedControls ?? []));
   const processingErrorObserved = /processing error|privacy center.*error/i.test(text);
+  const policyTextEvidenceProjection = buildPolicyTextEvidenceProjection(
+    article13Surfaces,
+    options.policyTextEvidenceContext,
+  );
   const policyTextExtractionHealth = buildPolicyTextExtractionHealth(
     article13Surfaces,
     text,
     processingErrorObserved,
     policyPrimaryLanguage,
     options.primaryLanguage,
+    policyTextEvidenceProjection,
   );
   const discoveredPrivacyPolicyUrls = uniqueStrings(targetRelevantDiscoveredPrivacySurfaces
     .map((surface) => firstString(surface.normalizedUrl, surface.url))
@@ -2379,7 +2509,7 @@ export function summarizePolicySurfaces(
         const sourceUrl =
           row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url;
         const policyTexts = uniqueStrings([
-          readPolicySurfaceTextArtifact(row.surface),
+          readPolicySurfaceTextArtifact(row.surface, options.policyTextEvidenceContext),
           firstString(row.surface.textExcerpt),
           ...(row.surface.retainedPolicySections ?? []).map((section) =>
             firstString(section.textExcerpt)
@@ -2490,6 +2620,8 @@ export function summarizePolicySurfaces(
     evaluatedPrivacyPolicySurfaceCount: evaluatedPrivacySurfaces.length,
     policyTextExtractionHealth,
     policy_text_extraction_health: policyTextExtractionHealth,
+    policyTextEvidenceProjection,
+    policy_text_evidence_projection: policyTextEvidenceProjection,
     privacyPolicyPresent: article13Surfaces.length > 0,
     privacyPolicyDiscovered: targetRelevantDiscoveredPrivacySurfaces.length > 0 || article13Surfaces.length > 0,
     privacyPolicyEvaluationState,
@@ -2552,25 +2684,158 @@ function buildRetainedPolicyDisclosureText(text: string) {
   return normalized.slice(0, MAX_RETAINED_POLICY_DISCLOSURE_TEXT_CHARS).trimEnd();
 }
 
+function buildPolicyTextEvidenceProjection(
+  article13Surfaces: ReturnType<typeof dedupePolicySurfaces>,
+  context?: PolicyTextEvidenceContext,
+): PolicyTextEvidenceProjection {
+  const sourceBundle = context?.sourceBundle ?? {
+    schemaVersion: "unknown",
+    verificationStatus: "local_unverified" as const,
+  };
+  const documents: PolicyTextEvidenceProjection["documents"] = article13Surfaces.slice(0, 16).map((row) => {
+    const surface = row.surface;
+    const reference = policySurfaceTextArtifactReference(surface);
+    const retained = resolvePolicySurfaceTextEvidence(surface, context);
+    const text = retained?.text ?? "";
+    const textQuality = assessRetainedPolicyTextQuality(text, { multilingual: true });
+    const relationship = surface.targetRelationship ?? "unknown";
+    const documentFetchState = surface.documentFetchState ?? (
+      surface.status === "fetched" ? "fetched" :
+      surface.status === "failed" ? "failed" :
+      surface.status === "skipped_budget" ? "skipped_budget" : "not_attempted"
+    );
+    const documentEvaluationState = surface.documentEvaluationState ?? (
+      surface.status === "fetched" ? "usable" :
+      surface.fetchFailureReason === "low_quality_access_challenge" ? "blocked" :
+      surface.fetchFailureReason === "insufficient_policy_text" ? "insufficient" : "not_attempted"
+    );
+    const documentTextCoverage = surface.documentTextCoverage ?? {
+      status: text && surface.contentCoverage?.sourceTextChars === text.length
+        ? "complete" as const
+        : text && (surface.contentCoverage?.sourceTextChars ?? 0) > text.length
+          ? "truncated" as const
+          : "unavailable" as const,
+      sourceTextChars: surface.contentCoverage?.sourceTextChars ?? 0,
+      retainedTextChars: text.length,
+      limitationKeys: ["policy_document_text_coverage_derived_for_legacy_observation"],
+    };
+    const limitationKeys = uniqueStrings([
+      !reference ? "policy_text_artifact_reference_missing" : null,
+      retained?.failureReason,
+      !text ? "policy_text_artifact_text_unavailable" : null,
+      documentFetchState !== "fetched" ? `policy_document_fetch_${documentFetchState}` : null,
+      documentEvaluationState !== "usable" ? `policy_document_evaluation_${documentEvaluationState}` : null,
+      !["target_controller", "first_party_brand"].includes(relationship)
+        ? "policy_document_target_ownership_unverified"
+        : null,
+      !surface.contentCoverage ? "policy_content_coverage_missing" : null,
+      ...documentTextCoverage.limitationKeys,
+      !firstString(surface.url, row.pageUrl) ? "policy_document_requested_url_missing" : null,
+      ...(surface.contentCoverage?.limitationKeys ?? []),
+      text.length > 0 && text.length < MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
+        ? "policy_text_below_minimum_length"
+        : null,
+      !textQuality.usable ? textQuality.reason : null,
+    ]);
+    const extractionStatus: PolicyTextEvidenceProjection["documents"][number]["extractionStatus"] =
+      documentEvaluationState === "blocked"
+        ? "blocked"
+        : !text || retained?.verificationStatus === "verification_failed"
+          ? "unavailable"
+          : !textQuality.usable
+            ? "low_quality"
+            : documentTextCoverage.status === "truncated"
+                ? "truncated"
+              : documentTextCoverage.status === "unavailable"
+                ? "unavailable"
+                : text.length < MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
+                  ? "thin"
+                : documentTextCoverage.status === "complete" &&
+                    documentFetchState === "fetched" &&
+                    documentEvaluationState === "usable" &&
+                    ["target_controller", "first_party_brand"].includes(relationship) &&
+                    text.length >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
+                    ? "complete"
+                    : "unavailable";
+    return {
+      observationId: surface.observationId,
+      artifactId: reference?.artifactId,
+      artifactFileName: retained?.fileName ?? reference?.fileName,
+      artifactSha256: retained?.sha256,
+      artifactSizeBytes: retained?.sizeBytes,
+      artifactUri: retained?.uri,
+      artifactVerificationStatus: retained?.verificationStatus ?? "missing_reference",
+      failureReason: retained?.failureReason,
+      requestedUrl: firstString(surface.url, row.pageUrl) ?? "about:blank",
+      finalUrl: surface.finalUrl,
+      redirectChain: surface.redirectChain ?? [],
+      documentFormat: surface.documentFormat ?? (/\.pdf(?:$|[?#])/i.test(surface.finalUrl ?? surface.url) ? "pdf" : "unknown"),
+      contentType: surface.contentType,
+      documentFetchState,
+      documentEvaluationState,
+      documentRole: surface.documentRole ?? "unknown",
+      documentOwnerEntity: surface.documentOwnerEntity,
+      targetRelationship: relationship,
+      ownershipConfidence: surface.ownershipConfidence,
+      contentCoverage: surface.contentCoverage,
+      documentTextCoverage,
+      retainedTextChars: text.length,
+      retainedTextSha256: text ? createHash("sha256").update(text).digest("hex") : undefined,
+      extractionStatus,
+      limitationKeys,
+    };
+  });
+  const verifiedDocuments = documents.filter((document) => document.artifactVerificationStatus === "verified");
+  const completeDocuments = documents.filter((document) => document.extractionStatus === "complete");
+  const projectionStatus: PolicyTextEvidenceProjection["projectionStatus"] =
+    sourceBundle.verificationStatus === "verified"
+      ? completeDocuments.length > 0 && verifiedDocuments.length === documents.length
+        ? "verified_complete"
+        : "verified_partial"
+      : sourceBundle.verificationStatus === "local_unverified"
+        ? "local_unverified"
+        : "unavailable";
+  return policyTextEvidenceProjectionSchema.parse({
+    contractVersion: "certscore.policy-text-evidence-projection.v1",
+    generatedAt: context?.generatedAt ?? "1970-01-01T00:00:00.000Z",
+    scanId: context?.scanId ?? "unbound-policy-summary",
+    sourceBundle,
+    projectionStatus,
+    documents,
+    limitationKeys: uniqueStrings(documents.flatMap((document) => document.limitationKeys)),
+  });
+}
+
 function buildPolicyTextExtractionHealth(
   article13Surfaces: ReturnType<typeof dedupePolicySurfaces>,
   text: string,
   processingErrorObserved: boolean,
   policyPrimaryLanguage?: string | null,
   sitePrimaryLanguage?: string | null,
+  projection?: PolicyTextEvidenceProjection,
 ) {
   const policySurfaceObserved = article13Surfaces.length > 0;
   const policyUrls = uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url));
   const extractedTextLength = text.length;
-  const statusValues = article13Surfaces.map((row) => row.surface.status);
   const nanoInvoked = article13Surfaces.some((row) =>
     (row.surface.assistMetadata ?? []).some((metadata) => metadata.modelAssistProvider === "nano")
   );
-  const hasFailedSurface = statusValues.some((status) => status === "failed");
-  const hasBlockedSurface = article13Surfaces.some((row) =>
-    row.surface.fetchable === false || row.surface.httpStatus === 401 || row.surface.httpStatus === 403 || row.surface.httpStatus === 429
-  );
+  const projectedDocuments = projection?.documents ?? [];
+  const hasCompleteDocument = projectedDocuments.some((document) => document.extractionStatus === "complete");
+  const hasRetainedDocumentText = projectedDocuments.some((document) => document.retainedTextChars > 0);
+  const hasBlockedSurface = projectedDocuments.some((document) => document.extractionStatus === "blocked");
+  const hasTruncatedDocument = projectedDocuments.some((document) => document.extractionStatus === "truncated");
+  const hasPartialDocument = projectedDocuments.some((document) => document.extractionStatus === "partial");
+  const hasThinDocument = projectedDocuments.some((document) => document.extractionStatus === "thin");
+  const hasMalformedDocument = projectedDocuments.some((document) => document.extractionStatus === "malformed");
   const textQuality = assessRetainedPolicyTextQuality(text, { multilingual: true });
+  const retainedTextQualityStatus = textQuality.reason === "empty_policy_text"
+    ? "empty_policy_text"
+    : textQuality.reason === "low_quality_access_challenge"
+      ? "low_quality_access_challenge"
+      : textQuality.reason === "low_quality_non_policy_text"
+        ? "low_quality_non_policy_text"
+        : "low_quality_extracted_code_or_config";
   const normalizedPolicyLanguage = policyPrimaryLanguage?.trim().toLowerCase().split(/[-_]/)[0] ?? null;
   const normalizedSiteLanguage = sitePrimaryLanguage?.trim().toLowerCase().split(/[-_]/)[0] ?? null;
   const detectedPolicyLanguage = normalizedPolicyLanguage ?? normalizedSiteLanguage;
@@ -2587,19 +2852,29 @@ function buildPolicyTextExtractionHealth(
   const policyTextExtractionStatus =
     !policySurfaceObserved
       ? "not_attempted"
-      : processingErrorObserved || hasFailedSurface
+      : processingErrorObserved
         ? "errored"
         : hasBlockedSurface
           ? "blocked"
+        : !hasRetainedDocumentText
+          ? "artifact_unavailable"
           : transparencyLanguageSupported === false
             ? "unsupported_language"
           : !textQuality.usable
-            ? "low_quality_extracted_code_or_config"
+            ? retainedTextQualityStatus
           : transparencyLanguageSupported === null
             ? "language_unknown"
-          : extractedTextLength >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
+          : hasCompleteDocument
             ? "ok"
-            : "thin";
+          : hasMalformedDocument
+            ? "malformed"
+          : hasTruncatedDocument
+            ? "truncated"
+          : hasPartialDocument
+            ? "partial"
+          : hasThinDocument
+            ? "thin"
+            : "artifact_unavailable";
   const extractionFailureReason =
     policyTextExtractionStatus === "ok"
       ? undefined
@@ -2613,11 +2888,26 @@ function buildPolicyTextExtractionHealth(
             ? "privacy_policy_language_unsupported"
           : policyTextExtractionStatus === "language_unknown"
             ? "privacy_policy_language_unknown"
+          : policyTextExtractionStatus === "empty_policy_text"
+            ? "privacy_policy_text_not_retained"
+          : policyTextExtractionStatus === "low_quality_access_challenge"
+            ? "privacy_policy_access_challenge_retained"
           : policyTextExtractionStatus === "low_quality_extracted_code_or_config"
-              ? "privacy_policy_text_low_quality_or_non_policy_content"
-              : "privacy_policy_text_below_minimum_length";
+            ? "privacy_policy_text_extracted_code_or_config"
+          : policyTextExtractionStatus === "low_quality_non_policy_text"
+            ? "privacy_policy_text_non_policy_content"
+          : policyTextExtractionStatus === "malformed"
+            ? "privacy_policy_content_malformed"
+          : policyTextExtractionStatus === "truncated"
+            ? "privacy_policy_content_truncated"
+          : policyTextExtractionStatus === "partial"
+            ? "privacy_policy_content_partial"
+          : policyTextExtractionStatus === "thin"
+            ? "privacy_policy_text_below_minimum_length"
+              : "privacy_policy_verified_text_artifact_unavailable";
 
   return {
+    contractVersion: "certscore.policy-text-extraction-health.v2",
     extractedTextLength,
     extractionFailureReason,
     minimumTextLengthRequired: MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13,
@@ -2630,6 +2920,9 @@ function buildPolicyTextExtractionHealth(
     supportedGdprTransparencyLocales: [...SUPPORTED_GDPR_TRANSPARENCY_LOCALES],
     policyTextQuality: textQuality,
     policyTextExtractionStatus,
+    policyTextEvidenceProjectionContractVersion: projection?.contractVersion ?? null,
+    policyTextEvidenceProjectionStatus: projection?.projectionStatus ?? "unavailable",
+    verifiedPolicyDocumentCount: projectedDocuments.filter((document) => document.artifactVerificationStatus === "verified").length,
     policyUrlRetained: policyUrls.length > 0,
     policyUrls
   };
@@ -2679,18 +2972,30 @@ function assessRetainedPolicyTextQuality(value: string, options: { multilingual?
     : 0;
   const escapedUrlCount = (text.match(/\\x2f|\\u003c|\\u003e|https?:\\\/\\\//gi) ?? []).length;
   const minifiedTokenCount = (text.match(/[A-Za-z_$][\w$]{0,8}\s*[=:]\s*\S{40,}/g) ?? []).length;
+  const accessChallengeSignalCount = [
+    /\bclient challenge\b/i,
+    /\ba required part of this site couldn[’']t load\b/i,
+    /\bdisable any ad blockers\b/i,
+    /\bplease check your connection\b/i,
+    /\bentrez les caract[èe]res affich[ée]s\b/i,
+    /\bt[ée]l[ée]charger le captcha audio\b/i,
+    /\bcaptcha\b/i,
+  ].filter((pattern) => pattern.test(text)).length;
   const reason =
-    /\bthis\.gbar_|\bCONFIG:\s*\[\[\[|Copyright The Closure Library|SPDX-License-Identifier/i.test(text) ||
+    accessChallengeSignalCount >= 2
+      ? "low_quality_access_challenge"
+      : /\bthis\.gbar_|\bCONFIG:\s*\[\[\[|Copyright The Closure Library|SPDX-License-Identifier/i.test(text) ||
     (codeSignals >= 2 && naturalLanguageSentenceCount < 3) ||
     (codeSymbolRatio > 0.12 && naturalLanguageSentenceCount < 4) ||
     (escapedUrlCount >= 8 && naturalLanguageSentenceCount < 3) ||
     (minifiedTokenCount >= 2 && naturalLanguageSentenceCount < 4) ||
     (text.length >= 500 && alphabeticWordRatio < 0.42)
-      ? "low_quality_extracted_code_or_config"
+        ? "low_quality_extracted_code_or_config"
       : text.length >= 500 && policyTermCount < 2 && gdprTransparencyTopicMatchCount < 1 && naturalLanguageSentenceCount < 2
         ? "low_quality_non_policy_text"
         : undefined;
   return {
+    accessChallengeSignalCount,
     alphabeticWordRatio,
     codeSignalCount: codeSignals,
     codeSymbolRatio,
@@ -2751,7 +3056,9 @@ function selectArticle13PrivacySurfaces(
   privacySurfaces: ReturnType<typeof dedupePolicySurfaces>
 ) {
   const generalPrivacySurfaces = privacySurfaces.filter((row) => !isCookieSpecificPrivacySurface(row));
-  const canonicalPrivacyNotices = generalPrivacySurfaces.filter(isCanonicalPrivacyNoticeSurface);
+  const policyDocuments = generalPrivacySurfaces.filter((row) => row.surface.documentRole !== "policy_index");
+  const scopedPrivacySurfaces = policyDocuments.length > 0 ? policyDocuments : generalPrivacySurfaces;
+  const canonicalPrivacyNotices = scopedPrivacySurfaces.filter(isCanonicalPrivacyNoticeSurface);
   const prioritizeGeneralScope = (rows: typeof generalPrivacySurfaces) => rows
     .map((row, index) => ({ index, row }))
     .sort((left, right) =>
@@ -2760,12 +3067,12 @@ function selectArticle13PrivacySurfaces(
     )
     .map(({ row }) => row);
   if (canonicalPrivacyNotices.length > 0) {
-    return prioritizeGeneralScope(generalPrivacySurfaces.filter((row) =>
+    return prioritizeGeneralScope(scopedPrivacySurfaces.filter((row) =>
       !isPrivacyServiceMarketingSurface(row) &&
       !isNonPolicyEditorialSurface(row)
     ));
   }
-  return prioritizeGeneralScope(generalPrivacySurfaces.length > 0 ? generalPrivacySurfaces : privacySurfaces);
+  return prioritizeGeneralScope(scopedPrivacySurfaces.length > 0 ? scopedPrivacySurfaces : privacySurfaces);
 }
 
 function isExplicitGeneralPrivacyNotice(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
@@ -4034,6 +4341,7 @@ function buildMaterializedLocalV2Detail(
     consentControlGeometryEvidence?: Record<string, unknown> | null;
     gdprTransparencyEvidenceProfile?: GdprTransparencyProductionEvidenceProfile | string | null;
     localOutDir?: string | null;
+    policyTextEvidenceContext?: PolicyTextEvidenceContext;
     scanArtifactUri?: string | null;
   } = {}
 ): ScanDetailResponse {
@@ -4273,9 +4581,35 @@ function buildMaterializedLocalV2Detail(
     discoveredPolicySurfaces: bundle.policySurfaceObservations ?? [],
     gdprTransparencyEvidenceProfile,
     homepageNoGo: Boolean(localV2NoGo),
+    policyTextEvidenceContext: options.policyTextEvidenceContext,
     primaryLanguage: getLocalV2PrimaryLanguage(bundle),
     scanStartedAt: bundle.startedAt,
   });
+  const policyTextProjection = policySurfaceSummary.policyTextEvidenceProjection;
+  const policyTextProjectionDocuments = policyTextProjection.documents;
+  console.warn(JSON.stringify({
+    event: "app.scan_detail.policy_text_projection",
+    scanId: scanRecord.scan.id,
+    sourceBundleVerificationStatus: policyTextProjection.sourceBundle.verificationStatus,
+    projectionStatus: policyTextProjection.projectionStatus,
+    policyDocumentCount: policyTextProjectionDocuments.length,
+    verifiedPolicyDocumentCount: policyTextProjectionDocuments.filter((document) =>
+      document.artifactVerificationStatus === "verified"
+    ).length,
+    completePolicyDocumentCount: policyTextProjectionDocuments.filter((document) =>
+      document.extractionStatus === "complete"
+    ).length,
+    unavailablePolicyDocumentCount: policyTextProjectionDocuments.filter((document) =>
+      document.extractionStatus === "unavailable"
+    ).length,
+    pdfPolicyDocumentCount: policyTextProjectionDocuments.filter((document) =>
+      document.documentFormat === "pdf"
+    ).length,
+    failedPdfPolicyDocumentCount: policyTextProjectionDocuments.filter((document) =>
+      document.documentFormat === "pdf" && document.extractionStatus !== "complete"
+    ).length,
+    limitationKeys: policyTextProjection.limitationKeys,
+  }));
   const verifiedPolicySurfaces = policySurfaces.filter((row) =>
     row.surface.surfaceType !== "privacy_policy" || isEvaluatedPrivacyPolicySurface(row.surface)
   );
@@ -5035,7 +5369,7 @@ function buildMaterializedLocalV2Detail(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v6";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v7";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({
@@ -5085,6 +5419,8 @@ async function materializeLocalV2DagScanDetailUncached(
   const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
   let bundle: CanonicalEvidenceBundle | null;
   let consentControlGeometryEvidence: Record<string, unknown> | null;
+  let remoteManifest: Record<string, unknown> | null = null;
+  let policyTextArtifactsById: ReadonlyMap<string, RetainedPolicyTextArtifactEvidence> | undefined;
   if (shouldReadLocalOutDir && input.outDir) {
     [bundle, consentControlGeometryEvidence] = await withServerTiming(
       "app.scan_detail.local_v2_artifacts.local",
@@ -5133,6 +5469,13 @@ async function materializeLocalV2DagScanDetailUncached(
     );
     bundle = remoteArtifacts.bundle;
     consentControlGeometryEvidence = remoteArtifacts.consentControlGeometryEvidence;
+    remoteManifest = remoteArtifacts.manifest;
+    if (bundle) {
+      policyTextArtifactsById = await withServerTiming(
+        "app.scan_detail.local_v2_artifact.policy_text",
+        () => loadVerifiedPolicyTextArtifacts({ bundle: bundle!, manifest: remoteManifest })
+      );
+    }
   }
   if (
     !bundle &&
@@ -5149,6 +5492,29 @@ async function materializeLocalV2DagScanDetailUncached(
           consentControlGeometryEvidence,
           gdprTransparencyEvidenceProfile: input.gdprTransparencyEvidenceProfile,
           localOutDir: shouldReadLocalOutDir ? input.outDir : null,
+          policyTextEvidenceContext: {
+            artifactsById: policyTextArtifactsById,
+            generatedAt: bundle.completedAt,
+            localOutDir: shouldReadLocalOutDir ? input.outDir : null,
+            scanId: bundle.scanId,
+            sourceBundle: shouldReadLocalOutDir
+              ? {
+                  schemaVersion: bundle.schemaVersion,
+                  verificationStatus: "local_unverified",
+                }
+              : input.scanArtifactSha256 && input.scanArtifactSizeBytes !== null && input.scanArtifactUri
+                ? {
+                    schemaVersion: bundle.schemaVersion,
+                    sha256: input.scanArtifactSha256,
+                    sizeBytes: input.scanArtifactSizeBytes,
+                    uri: input.scanArtifactUri,
+                    verificationStatus: "verified",
+                  }
+                : {
+                    schemaVersion: bundle.schemaVersion,
+                    verificationStatus: "unavailable",
+                  },
+          },
           scanArtifactUri: input.scanArtifactUri
         })
       )

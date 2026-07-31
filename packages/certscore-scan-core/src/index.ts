@@ -2065,6 +2065,10 @@ function isIndependentlyUsablePolicySurface(
   const text = observation.textExcerpt?.replace(/\s+/g, " ").trim() ?? "";
   const wordCount = text.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
   if (text.length < 240 || wordCount < 35 || observation.evidenceRefs.length === 0) return false;
+  const verifiedTargetRelationship =
+    ["target_controller", "first_party_brand"].includes(observation.targetRelationship ?? "") &&
+    (observation.ownershipConfidence ?? 0) >= 0.75;
+  if (verifiedTargetRelationship) return true;
   try {
     const requested = new URL(requestedUrl).hostname.toLowerCase().replace(/^www\./, "");
     const observed = new URL(observation.normalizedUrl ?? observation.url).hostname.toLowerCase().replace(/^www\./, "");

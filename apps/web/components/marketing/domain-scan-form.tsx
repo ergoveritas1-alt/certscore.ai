@@ -16,9 +16,8 @@ import {
 } from "../../lib/scans/active-scan-session";
 import { ScanFromSelect, type ScanFrom, type ServerScanFrom } from "../scans/scan-from-select";
 import {
-  ScanSubmitProgressBar,
+  ScanSubmissionPendingIndicator,
   normalizeLocalV2ScanProfile,
-  useScanProgressClock,
   type LocalV2ScanProfile
 } from "../scans/scan-submit-progress";
 
@@ -389,7 +388,6 @@ export function DomainScanForm({
   const [recentScanReusedFromUrl, setRecentScanReusedFromUrl] = useState(false);
   const staticPlaceholder = inputPlaceholder ?? HERO_IDLE_PLACEHOLDER;
   const isSubmittingRef = useRef(false);
-  const scanProgress = useScanProgressClock(isSubmitting);
   const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
   const scanButtonArmed = isValidScanTarget(effectiveSubmitDomain);
   const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
@@ -940,13 +938,7 @@ export function DomainScanForm({
         <p className="text-sm font-medium text-slate-600" role="status">Opening the recent completed report…</p>
       ) : null}
       {isSubmitting && scanFrom !== "local_extension" && !expectsRecentScanReuse ? (
-        <ScanSubmitProgressBar
-          active
-          compact={compact}
-          nowMs={scanProgress.nowMs}
-          profileValue={localV2ScanProfile}
-          startedAtMs={scanProgress.startedAtMs}
-        />
+        <ScanSubmissionPendingIndicator compact={compact} />
       ) : null}
       {sampleDomains.length > 0 ? (
         <div className="relative z-0 overflow-hidden rounded-[1.25rem] border border-slate-800 bg-slate-950 shadow-[0_24px_60px_rgba(2,6,23,0.22)]">

@@ -33,6 +33,29 @@ test("verified first-party policy evidence produces a partial outcome when homep
   assert.equal(assessment.lanes.cookiesTrackers, "not_testable");
 });
 
+test("verified cross-site first-party brand policy keeps the policy lane usable", () => {
+  const policy = usablePolicySurface();
+  policy.url = "https://privacy.example-parent.test/policycenter/consumer/en-us/";
+  policy.normalizedUrl = policy.url;
+  policy.targetRelationship = "first_party_brand";
+  policy.ownershipConfidence = 0.78;
+  policy.ownershipReasonCodes = [
+    "cross_site_document",
+    "target_brand_named_in_controller_context",
+  ];
+  const assessment = buildScanEvidenceLaneAssessment({
+    normalizedUrl: "https://examplenews.test/",
+    policySurfaceObservations: [policy],
+    runtimeCoverage: unavailableRuntimeCoverage(),
+    scanNoGoAssessment: terminalNoGoAssessment(),
+    transportSecurityObservationCount: 0,
+  });
+
+  assert.equal(assessment.outcome, "partial_with_diagnostics");
+  assert.equal(assessment.lanes.policyGdpr, "usable");
+  assert.deepEqual(assessment.usablePolicySurfaceUrls, [policy.url]);
+});
+
 test("a discovered link or weak policy excerpt cannot upgrade a terminal no-go", () => {
   const weak = usablePolicySurface();
   weak.status = "observed";

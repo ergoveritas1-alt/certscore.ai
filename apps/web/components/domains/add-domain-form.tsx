@@ -7,10 +7,9 @@ import { buildRecentScanAvailabilityUrl } from "../marketing/domain-scan-form";
 import { createDomainAction, type CreateDomainActionState } from "../../server/domains/create-domain";
 import { ScanFromSelect, type ScanFrom, type ServerScanFrom } from "../scans/scan-from-select";
 import {
-  ScanSubmitProgressBar,
   ScanActivityIndicator,
+  ScanSubmissionPendingIndicator,
   normalizeLocalV2ScanProfile,
-  useScanProgressClock,
   type LocalV2ScanProfile
 } from "../scans/scan-submit-progress";
 
@@ -57,7 +56,6 @@ export function AddDomainForm({
   const [apiHasRecentReusableScan, setApiHasRecentReusableScan] = useState(false);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [scanFrom, setScanFrom] = useState<ScanFrom>(defaultScanFrom);
-  const scanProgress = useScanProgressClock(isPending);
   const effectiveSubmitDomain = domain.trim();
   const normalizedDomain = normalizeDomainHint(effectiveSubmitDomain);
   const hasRecentReusableScanHint = recentReusableScans.some(
@@ -169,12 +167,7 @@ export function AddDomainForm({
       </div>
 
       {isPending ? (
-        <ScanSubmitProgressBar
-          active
-          nowMs={scanProgress.nowMs}
-          profileValue={localV2ScanProfile}
-          startedAtMs={scanProgress.startedAtMs}
-        />
+        <ScanSubmissionPendingIndicator />
       ) : null}
 
       {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}

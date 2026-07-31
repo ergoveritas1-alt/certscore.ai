@@ -11,6 +11,7 @@ import { classifyPrivacySurface } from "@certscore/contracts";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
   canonicalWwwPolicyUrlVariant,
+  classifyPolicyDocumentOwnership,
   countRecoveredPolicySurfaceObservations,
   extractPolicyCookieDisclosures,
   extractPolicySections,
@@ -25,6 +26,7 @@ import {
   retainedArticle13SectionEvidenceFromSections,
   recoverPolicyDocumentsFromRetainedRenderedLinks,
   resolvePolicyVisibleText,
+  settlePolicyCandidateProcessingBeforeDeadline,
   shouldUseDirectPolicyDocumentText,
   stripConsentSurfacePreambleFromPolicyText,
   type PolicyNanoAssistProvider,
@@ -185,6 +187,81 @@ test("substantive direct policy text avoids supplemental policy resolution", asy
   } finally {
     await server.close();
   }
+});
+
+test("OneTrust retains the selected substantive notice before linked audience supplements", async () => {
+  const adultPolicyText = Array.from({ length: 14 }, () => [
+    "Warner Example Discovery Privacy Policy.",
+    "Our services include Example News, and different members of our family of companies control information depending on the service used.",
+    "We collect and use personal information for service delivery, security, analytics, and advertising.",
+    "We explain legal bases, recipients, retention, international transfers, and rights of access, erasure, restriction, portability, and objection.",
+    '<a href="/children-policy">Children\'s Privacy Policy</a>',
+  ].join(" ")).join(" ");
+  const childrenPolicyText = Array.from({ length: 14 }, () =>
+    "Children's Privacy Policy. This supplement applies only to child-directed services and explains information collected from children and parents."
+  ).join(" ");
+  const server = createServer((request, response) => {
+    response.setHeader("content-type", request.url?.endsWith(".json")
+      ? "application/json; charset=utf-8"
+      : "text/html; charset=utf-8");
+    if (request.url === "/notice-index.json") {
+      response.end(JSON.stringify({ languages: { "en-us": { policyUrl: "/notice-en-us.json" } } }));
+      return;
+    }
+    if (request.url === "/notice-en-us.json") {
+      response.end(JSON.stringify({ notices: [{ content: adultPolicyText }] }));
+      return;
+    }
+    if (request.url === "/children-policy") {
+      response.end(`<main>${childrenPolicyText}</main>`);
+      return;
+    }
+    response.end("not found");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const resolved = await resolvePolicyVisibleText({
+      html: `<main>Processing Error</main><script>OneTrust.NoticeApi.LoadNotices(["${baseUrl}/notice-index.json"])</script>`,
+      baseUrl: `${baseUrl}/privacy-policy`,
+      surfaceType: "privacy_policy",
+      timeoutMs: 2_000,
+    });
+
+    assert.match(resolved, /Our services include Example News/i);
+    assert.match(resolved, /legal bases, recipients, retention/i);
+    assert.doesNotMatch(resolved, /^Children's Privacy Policy/i);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve())
+    );
+  }
+});
+
+test("cross-site corporate policy ownership recognizes a target brand in controller context", () => {
+  const ownership = classifyPolicyDocumentOwnership({
+    documentTitle: "en-us | Example Privacy Center",
+    documentUrl: "https://privacy.example-parent.test/policycenter/consumer/en-us/",
+    targetUrl: "https://examplenews.test/",
+    text: [
+      "Example Parent is a global family of companies whose services include ExampleNews.",
+      "Different members of our family of companies control information depending on the services you use.",
+      "Please consult the controller list to identify the relevant company.",
+    ].join(" "),
+  });
+
+  assert.equal(ownership.targetRelationship, "first_party_brand");
+  assert.equal(ownership.ownershipConfidence, 0.78);
+  assert.deepEqual(ownership.ownershipReasonCodes, [
+    "cross_site_document",
+    "target_brand_named_in_controller_context",
+  ]);
+  assert.equal(ownership.documentOwnerEntity, "privacy.example-parent.test");
 });
 
 test("retained rendered links recover obvious policy surfaces when the separate policy browser is blocked", () => {
@@ -360,6 +437,166 @@ test("policySurfaceScanner protects one strong observed privacy link after the s
     internalBudgetMs: 5_000,
     nanoAssistProvider: delayedNanoProvider,
   });
+});
+
+test("policy candidate publication preserves fetched evidence that completes inside the bounded grace window", async () => {
+  let documentFetched = false;
+  const processingPromise = new Promise<string>((resolve) => {
+    setTimeout(() => {
+      documentFetched = true;
+    }, 10);
+    setTimeout(() => resolve("retained-evidence-published"), 40);
+  });
+
+  const result = await settlePolicyCandidateProcessingBeforeDeadline({
+    processingPromise,
+    shouldAwaitPublication: () => documentFetched,
+    processingTimeoutMs: 25,
+    publicationGraceMs: 100,
+  });
+
+  assert.deepEqual(result, {
+    status: "completed",
+    value: "retained-evidence-published",
+  });
+});
+
+test("policy candidate publication still fails closed when no document was fetched before timeout", async () => {
+  const result = await settlePolicyCandidateProcessingBeforeDeadline({
+    processingPromise: new Promise<string>((resolve) => setTimeout(() => resolve("late"), 100)),
+    shouldAwaitPublication: () => false,
+    processingTimeoutMs: 10,
+    publicationGraceMs: 100,
+  });
+
+  assert.deepEqual(result, { status: "timed_out" });
+});
+
+test("policySurfaceScanner preserves an exact privacy notice when Nano ranks commerce URL noise", async () => {
+  const requestCounts = new Map<string, number>();
+  const policyText = Array.from({ length: 28 }, () =>
+    "This Privacy Notice explains how Example Company processes personal data for service delivery, analytics, and fraud prevention. " +
+    "We rely on contract, consent, legal obligations, and legitimate interests. We share information with named service providers and recipient categories. " +
+    "We retain personal data only as long as necessary, use standard contractual clauses for international transfers, and provide rights of access, correction, deletion, restriction, portability, and objection."
+  ).join(" ");
+  const server = createServer((request, response) => {
+    const pathname = new URL(request.url ?? "/", "http://fixture.test").pathname;
+    requestCounts.set(pathname, (requestCounts.get(pathname) ?? 0) + 1);
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    if (pathname === "/policies/privacy-notice") {
+      response.end(`<!doctype html><html><body><h1>Privacy Notice</h1><main>${policyText}</main></body></html>`);
+      return;
+    }
+    if (pathname === "/gp/product/Ultra-Thin-Protect-Privacy/dp/B0TEST") {
+      response.end("<!doctype html><html><body><h1>Privacy screen protector</h1></body></html>");
+      return;
+    }
+    response.end(`<!doctype html><html><body><main>Products</main><footer>
+      <a href="/gp/product/Ultra-Thin-Protect-Privacy/dp/B0TEST">Ultra-Thin Protect Privacy Filter</a>
+      <a href="/policies/privacy-notice">Privacy Notice</a>
+    </footer></body></html>`);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-commerce-noise-"));
+
+  try {
+    const result = await policySurfaceScanner({
+      url: baseUrl,
+      normalizedUrl: baseUrl,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 5_000,
+      artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: {
+        async classifyLinks(input) {
+          const commerceNoise = input.candidates.find((candidate) =>
+            candidate.normalizedUrl.includes("/gp/product/"),
+          );
+          assert.ok(commerceNoise);
+          return {
+            assistId: input.assistId,
+            rankedCandidates: [{
+              candidateId: commerceNoise.candidateId,
+              likelySurfaceType: "privacy_policy",
+              shouldFetch: true,
+              priorityRank: 1,
+              confidence: 0.91,
+              reason: "Fixture intentionally ranks a product whose URL contains privacy.",
+            }],
+          };
+        },
+      },
+    });
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/policies/privacy-notice`,
+    );
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.documentEvaluationState, "usable");
+    assert.equal(requestCounts.get("/gp/product/Ultra-Thin-Protect-Privacy/dp/B0TEST") ?? 0, 0);
+    assert.ok(privacy?.artifactRefs.some((ref) => ref.artifactId.startsWith("policy_surface_text_")));
+  } finally {
+    server.close();
+    await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("a substantive governing policy remains a policy document when it links to privacy supplements", async () => {
+  const substantivePolicyText = Array.from({ length: 20 }, () => [
+    "Example University Privacy Notice.",
+    "We collect and use personal data for education, research, service delivery, security, and legal compliance.",
+    "The notice identifies the controller, processing purposes, legal bases, recipients, retention criteria, international transfers, and privacy rights.",
+  ].join(" ")).join(" ");
+  const server = createServer((request, response) => {
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    if (request.url === "/privacy") {
+      response.end(`<main><h1>Privacy Notice</h1><p>${substantivePolicyText}</p>
+        <a href="/gdpr-notice">GDPR Privacy Notice</a>
+        <a href="/state-privacy-notice">State Privacy Notice</a>
+      </main>`);
+      return;
+    }
+    if (request.url === "/gdpr-notice" || request.url === "/state-privacy-notice") {
+      response.end("<main><h1>Supplemental Privacy Notice</h1><p>Additional jurisdiction-specific privacy information.</p></main>");
+      return;
+    }
+    response.end('<footer><a href="/privacy">Privacy Notice</a></footer>');
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-substantive-parent-"));
+
+  try {
+    const result = await policySurfaceScanner({
+      url: baseUrl,
+      normalizedUrl: baseUrl,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 5_000,
+      artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const policy = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/privacy`
+    );
+
+    assert.equal(policy?.status, "fetched");
+    assert.equal(policy?.documentRole, "policy_document");
+    assert.equal(policy?.documentEvaluationState, "usable");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve())
+    );
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("policySurfaceScanner strips script/config noise before retaining Article 13 policy evidence", async () => {
@@ -1352,8 +1589,9 @@ test("policySurfaceScanner samples late GDPR sections beyond the opening classif
   });
 });
 
-test("policySurfaceScanner extracts bounded Dutch GDPR Transparency evidence from privacy PDF surfaces", async () => {
+test("policySurfaceScanner follows a rendered dated privacy index and extracts the latest PDF", async () => {
   await withPolicyScan("policy-gdpr-transparency-pdf-nl", async ({ result, baseUrl }) => {
+    assert.equal(result.moduleRun.status, "completed", JSON.stringify(result.moduleRun.errors));
     const privacy = result.policySurfaceObservations.find((observation) =>
       observation.status === "fetched" &&
       observation.surfaceType === "privacy_policy" &&
@@ -1362,8 +1600,20 @@ test("policySurfaceScanner extracts bounded Dutch GDPR Transparency evidence fro
     const retainedPolicySurfaceTextRef = privacy?.artifactRefs.find((ref) =>
       ref.artifactId.startsWith("policy_surface_text_")
     );
+    const privacyIndex = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/policies/privacy-index-pdf-nl`
+    );
 
     assert.ok(privacy, "Dutch privacy PDF should be fetched");
+    assert.equal(privacyIndex?.documentRole, "policy_index");
+    assert.equal(privacy.documentRole, "policy_document");
+    assert.equal(privacy.documentFormat, "pdf");
+    assert.match(privacy.contentType ?? "", /application\/pdf/i);
+    assert.equal(privacy.documentTextCoverage?.status, "complete");
+    assert.equal(
+      privacy.documentTextCoverage?.retainedTextChars,
+      privacy.documentTextCoverage?.sourceTextChars,
+    );
     assert.match(privacy.textExcerpt ?? "", /Privacy Reglement/i);
     assert.match(privacy.textExcerpt ?? "", /persoonsgegevens/i);
     assert.ok(retainedPolicySurfaceTextRef?.path);
@@ -1386,6 +1636,8 @@ test("policySurfaceScanner extracts bounded Dutch GDPR Transparency evidence fro
 
     assert.deepEqual(privacy.article13DisclosureSignals, [], "PDF classifier evidence must not create default Article 13 signals");
     assert.deepEqual(privacy.observedTopics, [], "PDF classifier evidence must not create default observed topics");
+    assert.equal(privacy.traversalDepth, 1);
+    assert.equal(privacy.selectionReasonCodes?.includes("latest_dated_privacy_document_link"), true);
   });
 });
 

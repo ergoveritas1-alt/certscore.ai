@@ -7,6 +7,7 @@ import {
   hasStaleLegalFrameworkReference,
   hasSubstantiveLegalBasisEvidence,
   hasSubstantiveProcessingPurposesEvidence,
+  policyTextEvidenceProjectionSchema,
 } from "@certscore/contracts";
 import type {
   ConsentOptionsControlProminenceState,
@@ -6399,41 +6400,29 @@ function getPolicyDisclosureText(summary: Record<string, unknown> | null | undef
 
 function getPolicyTextExtractionHealth(summary: Record<string, unknown> | null | undefined) {
   const explicit = getObject(summary, ["policyTextExtractionHealth", "policy_text_extraction_health"]);
-  if (explicit) {
+  const projection = getObject(summary, ["policyTextEvidenceProjection", "policy_text_evidence_projection"]);
+  const parsedProjection = policyTextEvidenceProjectionSchema.safeParse(projection);
+  if (
+    explicit &&
+    getString(explicit, ["contractVersion", "contract_version"]) === "certscore.policy-text-extraction-health.v2" &&
+    parsedProjection.success
+  ) {
     return explicit;
   }
-
-  const privacyPolicyPresent = getBoolean(summary, ["privacyPolicyPresent", "privacy_policy_present"]) === true;
-  const extractedTextLength = getNumber(summary, ["privacyPolicyTextCharacterCount", "privacy_policy_text_character_count"]) ?? 0;
-  const processingErrorObserved = getBoolean(summary, ["processingErrorObserved", "processing_error_observed"]) === true;
-  const retainedText = getPolicyDisclosureText(summary);
-  const policyTextExtractionStatus =
-    !privacyPolicyPresent
-      ? "not_attempted"
-      : processingErrorObserved
-        ? "errored"
-        : looksLikeCodeOrConfigText(retainedText)
-          ? "low_quality_extracted_code_or_config"
-        : extractedTextLength >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
-          ? "ok"
-          : "thin";
   return {
-    extractedTextLength,
-    extractionFailureReason: policyTextExtractionStatus === "ok"
-      ? undefined
-      : policyTextExtractionStatus === "not_attempted"
-        ? "privacy_policy_surface_not_observed"
-        : policyTextExtractionStatus === "errored"
-          ? "privacy_policy_text_processing_error"
-          : policyTextExtractionStatus === "low_quality_extracted_code_or_config"
-            ? "privacy_policy_text_low_quality_or_non_policy_content"
-            : "privacy_policy_text_below_minimum_length",
+    contractVersion: "certscore.policy-text-extraction-health.v2",
+    extractedTextLength: 0,
+    extractionFailureReason: explicit
+      ? "policy_text_projection_contract_missing_or_mismatched"
+      : "policy_text_projection_unavailable",
     minimumTextLengthRequired: MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13,
     nanoInvoked: false,
-    nanoSkipReason: policyTextExtractionStatus === "ok" ? undefined : "policy_text_input_limited",
-    policySurfaceObserved: privacyPolicyPresent,
-    policyTextExtractionStatus,
-    policyUrlRetained: getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).length > 0,
+    nanoSkipReason: "policy_text_projection_unavailable",
+    policySurfaceObserved: false,
+    policyTextEvidenceProjectionContractVersion: null,
+    policyTextEvidenceProjectionStatus: "unavailable",
+    policyTextExtractionStatus: "projection_unavailable",
+    policyUrlRetained: false,
   };
 }
 
@@ -7581,17 +7570,17 @@ function getPolicyReviewScanDate(
 }
 
 function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, config: PolicyDisclosureRowConfig) {
+  const summary = getPolicyDisclosureSummary(input.runtimeArtifacts);
+  const extractionHealth = getPolicyTextExtractionHealth(summary);
+  const extractionOk = policyTextExtractionIsOk(summary);
   const gdprTransparencyConcernOutcome = buildGdprTransparencyArticle13ConcernOutcome(input, config);
   if (gdprTransparencyConcernOutcome) {
     return gdprTransparencyConcernOutcome;
   }
 
-  const summary = getPolicyDisclosureSummary(input.runtimeArtifacts);
   const privacyPolicyPresent =
     getBoolean(summary, ["privacyPolicyPresent", "privacy_policy_present"]) === true ||
     getBoolean(input.snapshot, ["privacy_policy_present", "privacyPolicyPresent"]) === true;
-  const extractionHealth = getPolicyTextExtractionHealth(summary);
-  const extractionOk = policyTextExtractionIsOk(summary);
   const text = getPolicyDisclosureText(summary);
   const directSignal = getBoolean(summary, config.signalKeys);
   const article13Signal = getPolicyArticle13DisclosureSignal(summary, config.disclosureType);
@@ -8446,8 +8435,29 @@ function policyTextExtractionLimitationMessage(summary: Record<string, unknown> 
   if (status === "language_unknown") {
     return "A privacy-policy surface was found, but the retained evidence did not support a reliable policy-language decision for row-specific GDPR Transparency extraction.";
   }
+  if (status === "empty_policy_text") {
+    return "A privacy-policy surface was found, but no substantive policy text was retained, so row-specific disclosure extraction could not be completed.";
+  }
+  if (status === "low_quality_access_challenge") {
+    return "A privacy-policy surface was found, but the retained content was an access challenge rather than the governing privacy notice, so row-specific disclosure extraction could not be completed.";
+  }
+  if (status === "low_quality_non_policy_text") {
+    return "A privacy-policy surface was found, but the retained content was not a governing privacy notice, so row-specific disclosure extraction could not be completed.";
+  }
   if (status === "low_quality_extracted_code_or_config" || looksLikeCodeOrConfigText(getPolicyDisclosureText(summary))) {
-    return "A privacy-policy surface was found, but the retained text was low-quality or non-policy content, so row-specific disclosure extraction could not be completed.";
+    return "A privacy-policy surface was found, but the retained content was extracted code or configuration rather than policy text, so row-specific disclosure extraction could not be completed.";
+  }
+  if (status === "projection_unavailable" || status === "artifact_unavailable") {
+    return "A privacy-policy surface may have been found, but the versioned, checksum-verified policy-text projection was unavailable, so disclosure findings fail closed.";
+  }
+  if (status === "truncated") {
+    return "A privacy-policy surface was found, but the retained document was truncated, so absence and completeness conclusions are not testable.";
+  }
+  if (status === "partial") {
+    return "A privacy-policy surface was found, but typed document coverage was partial, so absence and completeness conclusions are not testable.";
+  }
+  if (status === "malformed") {
+    return "A privacy-policy surface was found, but the retained document was malformed, so row-specific disclosure extraction could not be completed.";
   }
   return "A privacy-policy surface was found, but CertScore.ai did not extract enough usable policy text to confirm this disclosure from retained evidence.";
 }

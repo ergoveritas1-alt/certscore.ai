@@ -2,7 +2,37 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ScanSubmitProgressBar, describeScanProgressPhase } from "./scan-submit-progress";
+import {
+  ScanSubmissionPendingIndicator,
+  ScanSubmitProgressBar,
+  describeScanProgressPhase
+} from "./scan-submit-progress";
+
+test("scan submission remains neutral until the server returns a scan status", () => {
+  const html = renderToStaticMarkup(<ScanSubmissionPendingIndicator />);
+
+  assert.match(html, /Starting scan/);
+  assert.match(html, /waiting for its current status/i);
+  assert.doesNotMatch(html, /Building your report/);
+  assert.doesNotMatch(html, /Finishing your report/);
+  assert.doesNotMatch(html, /Checking policies/);
+});
+
+test("server scan status determines the active progress phase", () => {
+  const html = renderToStaticMarkup(
+    <ScanSubmitProgressBar
+      active
+      nowMs={120_000}
+      scanStatus="running"
+      startedAtMs={0}
+    />
+  );
+
+  assert.match(html, /Scanning website/);
+  assert.match(html, /Capturing page evidence and website signals/);
+  assert.doesNotMatch(html, /Taking longer than usual/);
+  assert.doesNotMatch(html, /Building your report/);
+});
 
 test("scan progress communicates a conservative milestone estimate", () => {
   const html = renderToStaticMarkup(
