@@ -23,6 +23,7 @@ import {
 } from "../../lib/scans/public-report-finding-display";
 import { rankFindings } from "../../lib/scans/rank-findings";
 import { evaluateTopFindingEligibility } from "../../lib/scans/top-finding-eligibility";
+import { filterVisibleExecutiveTopFindings } from "../../lib/scans/executive-top-finding-visibility";
 import type { ScanProof } from "../../lib/scans/scan-proof";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 import { buildPromotionGradePreconsentRequests } from "../../lib/scans/preconsent-public-evidence";
@@ -4286,13 +4287,7 @@ export function ExecutiveSummaryCard(input: {
     value: number | string | null;
   }> | null;
 }) {
-  const suppressedTopFindingIds = new Set([
-    "multi_vendor_tracking_detected",
-    "large_third_party_footprint",
-    "collection_endpoints_detected",
-    "high_request_density"
-  ]);
-  const availableTopFindings = input.topFindings.filter((finding) => !suppressedTopFindingIds.has(finding.id));
+  const availableTopFindings = filterVisibleExecutiveTopFindings(input.topFindings);
   const nonRepresentativeScanFinding = availableTopFindings.find((finding) => finding.id === "scan_quality_visual_no_go");
   const noReliableFindingsAccessLimitation = availableTopFindings.find((finding) => finding.id === "access_limited_no_reliable_findings");
   const hardAccessLimitationWithheld =

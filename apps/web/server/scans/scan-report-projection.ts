@@ -14,6 +14,7 @@ import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score"
 import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "./scan-detail-checklist";
 import { buildRuntimeCookieInventory } from "../../lib/scans/runtime-cookie-evidence";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
+import { filterVisibleExecutiveTopFindings } from "../../lib/scans/executive-top-finding-visibility";
 import {
   buildPersistedFirstLayerConsentEvidence,
   projectFirstLayerConsentChoices
@@ -408,7 +409,7 @@ export async function deriveScanReportProjectionValue(
 
   return {
     score,
-    topFindingCount: executiveFindingsProjection.topFindings.length,
+    topFindingCount: filterVisibleExecutiveTopFindings(executiveFindingsProjection.topFindings).length,
     findingCount: reportState.globalUnifiedFindings.length || numberValue(snapshot?.report_finding_count),
     cmpVendorName: stringValue(snapshot?.cmp_vendor_name),
     privacyPolicyPresent: booleanValue(sourceSnapshot?.privacy_policy_present) ?? booleanValue(snapshot?.privacy_policy_present),
