@@ -2713,18 +2713,25 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         },
         onPolicySurfaceComplete: (result) => {
           if (policyEvidenceHandoff) return;
-          const packet = buildVerifiedPolicyEvidencePacket({ payload: payload!, result });
-          policyEvidenceHandoff = publishVerifiedPolicyEvidence({
-            packet,
-            payload: payload!,
-            s3Client: options.s3Client,
-            sqsClient: options.sqsClient,
-          }).catch((error) => {
+          try {
+            const packet = buildVerifiedPolicyEvidencePacket({ payload: payload!, result });
+            policyEvidenceHandoff = publishVerifiedPolicyEvidence({
+              packet,
+              payload: payload!,
+              s3Client: options.s3Client,
+              sqsClient: options.sqsClient,
+            }).catch((error) => {
+              console.warn("[v2-lambda-policy] early verified evidence handoff failed closed", {
+                error: error instanceof Error ? error.message : String(error),
+                scanId: payload?.scanId,
+              });
+            });
+          } catch (error) {
             console.warn("[v2-lambda-policy] early verified evidence handoff failed closed", {
               error: error instanceof Error ? error.message : String(error),
               scanId: payload?.scanId,
             });
-          });
+          }
         },
         policySurfaceDeadlineAtMs:
           handlerStartedAtMs + scannerWorkTimeoutMs - LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
