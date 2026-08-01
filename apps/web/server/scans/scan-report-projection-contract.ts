@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 
-export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v11";
+export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v12";
 export const REPORT_PROJECTION_READY_WARNING_MS = 15_000;
 export const MAX_SCAN_REPORT_PROJECTION_BYTES = 6 * 1024 * 1024;
 

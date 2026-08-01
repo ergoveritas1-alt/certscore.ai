@@ -17,6 +17,7 @@ import { getAssessmentDirection, getEvidenceLabel } from "../../lib/scans/gdpr-e
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
+import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import {
   buildPersistedFirstLayerConsentEvidence,
   projectFirstLayerConsentChoices
@@ -372,6 +373,9 @@ export async function deriveScanReportProjectionValue(
   const sourceSnapshot = record(source.snapshot) ?? snapshot;
   const runtimeArtifacts = record(scanRecord.runtimeArtifacts);
   const reportState = debugBuildScanReportUnifiedFindingStateForScan(scanRecord as unknown as Record<string, unknown>);
+  const executiveFindingsProjection = projectExecutiveFindingsFromUnifiedPackets(
+    reportState.globalUnifiedFindings
+  );
   const runtimeCookieRows = buildRuntimeCookieInventory({
     runtimeArtifacts: scanRecord.runtimeArtifacts
   }).rows;
@@ -380,6 +384,7 @@ export async function deriveScanReportProjectionValue(
     events: scanRecord.events,
     normalizedConcerns: reportState.normalizedConcerns,
     policyEnrichmentCount: scanRecord.policyEnrichment.length,
+    projectedFindings: executiveFindingsProjection.findings,
     runtimeArtifacts: scanRecord.runtimeArtifacts,
     runtimeCookieRows,
     scanCompleted: scanRecord.scan.status === "completed",
