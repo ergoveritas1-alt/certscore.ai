@@ -213,6 +213,24 @@ export function buildRetainedRenderedPolicyFallbackResult(input: {
   };
 }
 
+/**
+ * Normalize the dedicated policy lane before exposing its non-blocking early
+ * handoff. The terminal bundle applies the same canonical URL/type merge, so
+ * callers never see raw duplicate candidates that the retained bundle would
+ * later collapse.
+ */
+export function normalizePolicySurfaceResultForEarlyHandoff(
+  result: PolicySurfaceScannerResult,
+): PolicySurfaceScannerResult {
+  return {
+    ...result,
+    policySurfaceObservations: mergePolicySurfaceObservations(
+      result.policySurfaceObservations,
+      [],
+    ),
+  };
+}
+
 export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBundle> {
   throwIfAborted(input.signal);
   const startedAtMs = Date.now();
@@ -319,8 +337,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       signal: input.signal,
     }).then(
       (value) => {
-        input.onPolicySurfaceComplete?.(value);
-        return { status: "fulfilled" as const, value };
+        const normalizedValue = normalizePolicySurfaceResultForEarlyHandoff(value);
+        input.onPolicySurfaceComplete?.(normalizedValue);
+        return { status: "fulfilled" as const, value: normalizedValue };
       },
       (reason: unknown) => ({ status: "rejected" as const, reason }),
     )

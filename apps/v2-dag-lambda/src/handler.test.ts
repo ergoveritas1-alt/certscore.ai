@@ -16,6 +16,7 @@ import {
   LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   artifactPointersFromS3Keys,
+  buildLocalV2DagLambdaResultMessage,
   buildVerifiedPolicyEvidencePacket,
   buildLocalV2DagLambdaRuntimeDiagnostics,
   buildScannerRuntimeProvenance,
@@ -85,6 +86,33 @@ test("early policy handoff packet is typed, hash-bound, and non-projectable", ()
     sourceHash,
     createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
   );
+});
+
+test("terminal result retains the verified early-policy pointer as an ordering fallback", () => {
+  const payload = parseLocalV2DagLambdaDispatchPayload(validPayload());
+  const policyEvidence = {
+    artifactMetadata: { sha256: "a".repeat(64), sizeBytes: 123 },
+    artifactOnly: true as const,
+    artifactPointer: "s3://certscore-dev-artifacts/v2/scan-local-1/VerifiedPolicyEvidencePacket.json",
+    contractVersion: "certscore.v2.lambda-policy-evidence-ready.v1" as const,
+    generatedAt: "2026-07-31T20:00:03.000Z",
+    messageKind: "policy_evidence_ready" as const,
+    policyContentHash: "b".repeat(64),
+    processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    productionFindingIntegration: false as const,
+    scanId: payload.scanId,
+    sourceHash: "c".repeat(64),
+    targetEnvironment: payload.targetEnvironment,
+  };
+  const result = buildLocalV2DagLambdaResultMessage({
+    completedAt: new Date("2026-07-31T20:00:05.000Z"),
+    payload,
+    policyEvidence,
+    status: "completed",
+  });
+
+  assert.deepEqual(result.policyEvidence, policyEvidence);
+  assert.equal(result.policyEvidence?.productionFindingIntegration, false);
 });
 
 function validPayload(overrides: Record<string, unknown> = {}) {

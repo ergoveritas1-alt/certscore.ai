@@ -66,12 +66,28 @@ type LambdaResultMessage = {
   error?: { code?: string; message: string };
   handlerTiming?: LambdaHandlerTiming;
   phaseTimings?: unknown[];
+  policyEvidence?: LambdaPolicyEvidenceMessage;
   scanId: string;
   scannerGitSha?: string;
   scannerImageTag?: string;
   scannerRuntimeProvenance?: ScannerRuntimeProvenance;
   scannerRuntimeVersion?: string;
   status: LambdaResultStatus;
+  targetEnvironment: LambdaTargetEnvironment;
+};
+
+type LambdaPolicyEvidenceMessage = {
+  artifactMetadata: { sha256: string; sizeBytes: number };
+  artifactOnly: true;
+  artifactPointer: string;
+  contractVersion: typeof POLICY_EVIDENCE_MESSAGE_VERSION;
+  generatedAt: string;
+  messageKind: "policy_evidence_ready";
+  policyContentHash: string;
+  processor: typeof PROCESSOR;
+  productionFindingIntegration: false;
+  scanId: string;
+  sourceHash: string;
   targetEnvironment: LambdaTargetEnvironment;
 };
 
@@ -244,7 +260,7 @@ function isPolicyEvidenceReadyMessage(raw: string) {
   }
 }
 
-async function processPolicyEvidenceReadyMessage(input: {
+async function processPolicyEvidenceReadyMessageUncoalesced(input: {
   queueRegion: string;
   raw: string;
   s3Client?: S3GetClient;
@@ -348,6 +364,18 @@ async function processPolicyEvidenceReadyMessage(input: {
       scanId,
     );
   }
+  const existing = await queryOne<{ review_summary: unknown }>(
+    `select metadata_json->'reviewSummary' as review_summary from scan_events
+      where scan_id = $1::uuid
+        and event_type = $2
+        and metadata_json->>'sourceHash' = $3
+      limit 1`,
+    [scanId, POLICY_EVIDENCE_RECEIVED_EVENT_TYPE, packet.sourceHash],
+    { readOnly: true },
+  );
+  if (existing) {
+    return { packet, reviewSummary: asRecord(existing.review_summary) };
+  }
   const env = getWorkerEnv();
   let reviewSummary: Record<string, unknown> = {
     reviewStatus: "disabled",
@@ -369,36 +397,50 @@ async function processPolicyEvidenceReadyMessage(input: {
       reviewSummary = { reviewStatus: "skipped", skipReason: "no_usable_policy_documents" };
     }
   }
-  const existing = await queryOne<{ id: string }>(
-    `select id::text as id from scan_events
-      where scan_id = $1::uuid
-        and event_type = $2
-        and metadata_json->>'sourceHash' = $3
-      limit 1`,
-    [scanId, POLICY_EVIDENCE_RECEIVED_EVENT_TYPE, packet.sourceHash],
-    { readOnly: true },
+  await query(
+    `insert into scan_events (scan_id, event_type, message, metadata_json)
+     values ($1::uuid, $2, $3, $4::jsonb)`,
+    [
+      scanId,
+      POLICY_EVIDENCE_RECEIVED_EVENT_TYPE,
+      "Verified policy evidence was retained for non-projectable early semantic review.",
+      {
+        artifactOnly: true,
+        artifactPointer,
+        policyContentHash: packet.policyContentHash,
+        productionFindingIntegration: false,
+        queueRegion: input.queueRegion,
+        reviewSummary,
+        sourceHash: packet.sourceHash,
+      },
+    ],
   );
-  if (!existing) {
-    await query(
-      `insert into scan_events (scan_id, event_type, message, metadata_json)
-       values ($1::uuid, $2, $3, $4::jsonb)`,
-      [
-        scanId,
-        POLICY_EVIDENCE_RECEIVED_EVENT_TYPE,
-        "Verified policy evidence was retained for non-projectable early semantic review.",
-        {
-          artifactOnly: true,
-          artifactPointer,
-          policyContentHash: packet.policyContentHash,
-          productionFindingIntegration: false,
-          queueRegion: input.queueRegion,
-          reviewSummary,
-          sourceHash: packet.sourceHash,
-        },
-      ],
-    );
-  }
   return { packet, reviewSummary };
+}
+
+type PolicyEvidenceProcessingResult = Awaited<ReturnType<typeof processPolicyEvidenceReadyMessageUncoalesced>>;
+const policyEvidenceProcessingInFlight = new Map<string, Promise<PolicyEvidenceProcessingResult>>();
+
+async function processPolicyEvidenceReadyMessage(input: {
+  queueRegion: string;
+  raw: string;
+  s3Client?: S3GetClient;
+  targetEnvironment: LambdaTargetEnvironment;
+}) {
+  const message = asRecord(JSON.parse(input.raw));
+  const key = `${stringValue(message.scanId) ?? "unknown"}:${stringValue(message.sourceHash) ?? "unknown"}`;
+  const existing = policyEvidenceProcessingInFlight.get(key);
+  if (existing) return existing;
+
+  const processing = processPolicyEvidenceReadyMessageUncoalesced(input);
+  policyEvidenceProcessingInFlight.set(key, processing);
+  try {
+    return await processing;
+  } finally {
+    if (policyEvidenceProcessingInFlight.get(key) === processing) {
+      policyEvidenceProcessingInFlight.delete(key);
+    }
+  }
 }
 
 function isUuid(value: string | null): value is string {
@@ -549,6 +591,64 @@ export function productionArtifactChainRejectReason(input: {
   return null;
 }
 
+function parseEmbeddedPolicyEvidenceMessage(input: {
+  expectedScanId: string;
+  expectedTargetEnvironment: LambdaTargetEnvironment;
+  value: unknown;
+}): LambdaPolicyEvidenceMessage | undefined {
+  if (input.value === undefined || input.value === null) return undefined;
+  const record = asRecord(input.value);
+  const metadata = asRecord(record.artifactMetadata);
+  const scanId = stringValue(record.scanId);
+  const targetEnvironment = record.targetEnvironment === "production"
+    ? "production"
+    : record.targetEnvironment === "local"
+      ? "local"
+      : null;
+  const sha256 = stringValue(metadata.sha256);
+  const sizeBytes = typeof metadata.sizeBytes === "number" && Number.isSafeInteger(metadata.sizeBytes)
+    ? metadata.sizeBytes
+    : null;
+  const artifactPointer = stringValue(record.artifactPointer);
+  const generatedAt = stringValue(record.generatedAt);
+  const policyContentHash = stringValue(record.policyContentHash);
+  const sourceHash = stringValue(record.sourceHash);
+  if (
+    record.artifactOnly !== true ||
+    record.productionFindingIntegration !== false ||
+    record.contractVersion !== POLICY_EVIDENCE_MESSAGE_VERSION ||
+    record.messageKind !== "policy_evidence_ready" ||
+    record.processor !== PROCESSOR ||
+    scanId !== input.expectedScanId ||
+    targetEnvironment !== input.expectedTargetEnvironment ||
+    !artifactPointer?.startsWith("s3://") ||
+    !generatedAt ||
+    !policyContentHash ||
+    !sourceHash ||
+    !/^[a-f0-9]{64}$/i.test(sourceHash) ||
+    !sha256 ||
+    !/^[a-f0-9]{64}$/i.test(sha256) ||
+    sizeBytes === null ||
+    sizeBytes <= 0
+  ) {
+    throw new Error("Embedded early policy evidence pointer is invalid or does not match its terminal result.");
+  }
+  return {
+    artifactMetadata: { sha256, sizeBytes },
+    artifactOnly: true,
+    artifactPointer,
+    contractVersion: POLICY_EVIDENCE_MESSAGE_VERSION,
+    generatedAt,
+    messageKind: "policy_evidence_ready",
+    policyContentHash,
+    processor: PROCESSOR,
+    productionFindingIntegration: false,
+    scanId,
+    sourceHash,
+    targetEnvironment,
+  };
+}
+
 export function parseLambdaResultMessage(
   raw: string,
   expectedTargetEnvironment: LambdaTargetEnvironment
@@ -582,6 +682,11 @@ export function parseLambdaResultMessage(
   const artifactMetadata = asRecord(record.artifactMetadata);
   const artifactPointers = asRecord(record.artifactPointers);
   const scannerRuntimeProvenance = parseScannerRuntimeProvenance(record.scannerRuntimeProvenance);
+  const policyEvidence = parseEmbeddedPolicyEvidenceMessage({
+    expectedScanId: scanId,
+    expectedTargetEnvironment: targetEnvironment,
+    value: record.policyEvidence,
+  });
   if (targetEnvironment === "production" && status === "completed") {
     const artifactChainRejectReason = productionArtifactChainRejectReason({ artifactMetadata, artifactPointers });
     if (artifactChainRejectReason) {
@@ -598,6 +703,7 @@ export function parseLambdaResultMessage(
       : {}),
     ...(handlerTiming ? { handlerTiming } : {}),
     phaseTimings: Array.isArray(record.phaseTimings) ? record.phaseTimings : [],
+    ...(policyEvidence ? { policyEvidence } : {}),
     scanId,
     ...(stringValue(record.scannerGitSha) ? { scannerGitSha: (stringValue(record.scannerGitSha) as string).slice(0, 80) } : {}),
     ...(stringValue(record.scannerImageTag) ? { scannerImageTag: (stringValue(record.scannerImageTag) as string).slice(0, 160) } : {}),
@@ -1205,6 +1311,34 @@ function parseSqsInteger(value: string | undefined) {
   return Number.isInteger(parsed) ? parsed : null;
 }
 
+async function processEmbeddedPolicyEvidenceBeforeTerminalMaterialization(input: {
+  message: LambdaPolicyEvidenceMessage;
+  queueRegion: string;
+  targetEnvironment: LambdaTargetEnvironment;
+}) {
+  const raw = JSON.stringify(input.message);
+  try {
+    await processPolicyEvidenceReadyMessage({
+      queueRegion: input.queueRegion,
+      raw,
+      targetEnvironment: input.targetEnvironment,
+    });
+  } catch (error) {
+    if (error instanceof TerminalEarlyPolicyEvidenceError) {
+      await recordTerminalPolicyEvidenceRejection({
+        error,
+        queueRegion: input.queueRegion,
+        raw,
+      });
+    }
+    console.warn("[validation-worker] terminal policy-evidence fallback failed closed", {
+      error: error instanceof Error ? error.message : String(error),
+      queueRegion: input.queueRegion,
+      scanId: input.message.scanId,
+    });
+  }
+}
+
 async function pollOnce(input: {
   client: SQSClient;
   queueUrl: string;
@@ -1310,6 +1444,13 @@ async function pollOnce(input: {
     }
     try {
       const parsed = parseLambdaResultMessage(rawMessage, input.targetEnvironment);
+      if (parsed.policyEvidence) {
+        await processEmbeddedPolicyEvidenceBeforeTerminalMaterialization({
+          message: parsed.policyEvidence,
+          queueRegion: input.queueRegion,
+          targetEnvironment: input.targetEnvironment,
+        });
+      }
       await recordLocalV2DagLambdaResult(parsed, {
         consumer: {
           approximateReceiveCount: parseSqsInteger(message.Attributes?.ApproximateReceiveCount),

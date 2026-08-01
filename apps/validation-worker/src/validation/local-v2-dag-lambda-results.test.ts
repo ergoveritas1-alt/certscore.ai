@@ -182,6 +182,20 @@ test("validation worker retains bounded scanner runtime provenance from Lambda r
     contractVersion: "certscore.v2.lambda-dag-result.v1",
     processor: "local-certscore-v2-dag-parallel-v1",
     productionFindingIntegration: false,
+    policyEvidence: {
+      artifactMetadata: { sha256: "e".repeat(64), sizeBytes: 321 },
+      artifactOnly: true,
+      artifactPointer: "s3://certscore-artifacts/scan/VerifiedPolicyEvidencePacket.json",
+      contractVersion: "certscore.v2.lambda-policy-evidence-ready.v1",
+      generatedAt: "2026-07-23T15:48:40.000Z",
+      messageKind: "policy_evidence_ready",
+      policyContentHash: "f".repeat(64),
+      processor: "local-certscore-v2-dag-parallel-v1",
+      productionFindingIntegration: false,
+      scanId: "fca91cbb-cb56-4d8b-8056-a94d5472bf86",
+      sourceHash: "1".repeat(64),
+      targetEnvironment: "production"
+    },
     scanId: "fca91cbb-cb56-4d8b-8056-a94d5472bf86",
     scannerRuntimeProvenance: {
       awsRegion: "eu-west-1",
@@ -206,6 +220,20 @@ test("validation worker retains bounded scanner runtime provenance from Lambda r
     imageDigest: `sha256:${"c".repeat(64)}`,
     publicIpHash: `sha256:${"d".repeat(64)}`,
     runtimeVpcMode: "vpc"
+  });
+  assert.deepEqual(result.policyEvidence, {
+    artifactMetadata: { sha256: "e".repeat(64), sizeBytes: 321 },
+    artifactOnly: true,
+    artifactPointer: "s3://certscore-artifacts/scan/VerifiedPolicyEvidencePacket.json",
+    contractVersion: "certscore.v2.lambda-policy-evidence-ready.v1",
+    generatedAt: "2026-07-23T15:48:40.000Z",
+    messageKind: "policy_evidence_ready",
+    policyContentHash: "f".repeat(64),
+    processor: "local-certscore-v2-dag-parallel-v1",
+    productionFindingIntegration: false,
+    scanId: "fca91cbb-cb56-4d8b-8056-a94d5472bf86",
+    sourceHash: "1".repeat(64),
+    targetEnvironment: "production"
   });
 });
 
@@ -273,6 +301,18 @@ test("validation worker persists completion scores before acknowledging a Lambda
   assert.match(source, /completedScanScoresExist/);
   assert.match(source, /response\.status === 422 && failure\?\.retryable === false/);
   assert.match(source, /terminal score materialization failure acknowledged/);
+});
+
+test("validation worker consumes embedded policy evidence before terminal score materialization", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+  const fallbackIndex = source.indexOf("await processEmbeddedPolicyEvidenceBeforeTerminalMaterialization");
+  const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult", fallbackIndex);
+  const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted", resultIndex);
+
+  assert.ok(fallbackIndex >= 0, "expected terminal message policy-evidence fallback");
+  assert.ok(resultIndex > fallbackIndex, "verified policy evidence must be processed before terminal retention");
+  assert.ok(scoreIndex > resultIndex, "static review must be available before canonical score materialization");
+  assert.match(source, /policyEvidenceProcessingInFlight/);
 });
 
 test("validation worker synchronizes linked API activity before acknowledging a Lambda result", async () => {

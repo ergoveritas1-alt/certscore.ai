@@ -123,6 +123,12 @@ export type LocalV2DagLambdaResultMessage = {
   };
   handlerTiming?: LocalV2DagLambdaHandlerTiming;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
+  /**
+   * Verified pointer fallback for consumers that receive this terminal message
+   * before the separately published early-policy message. This remains
+   * artifact-only and non-projectable until matched to terminal evidence.
+   */
+  policyEvidence?: LocalV2DagLambdaPolicyEvidenceMessage;
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
   resultPurpose: V2DagLambdaResultPurpose;
@@ -2392,6 +2398,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
   handlerTiming?: LocalV2DagLambdaHandlerTiming;
   payload: LocalV2DagLambdaDispatchPayload;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
+  policyEvidence?: LocalV2DagLambdaPolicyEvidenceMessage;
   status: "completed" | "failed";
 }): LocalV2DagLambdaResultMessage {
   const scannerBuildProvenance = buildScannerBuildProvenance();
@@ -2405,6 +2412,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
     ...(input.error ? { error: sanitizeError(input.error) } : {}),
     ...(input.handlerTiming ? { handlerTiming: input.handlerTiming } : {}),
     ...(input.phaseTimings ? { phaseTimings: input.phaseTimings } : {}),
+    ...(input.policyEvidence ? { policyEvidence: input.policyEvidence } : {}),
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     resultPurpose: input.payload.resultPurpose,
@@ -2670,7 +2678,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   let scannerWorkTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS;
   let artifactChainTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS;
   let resultPublishTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS;
-  let policyEvidenceHandoff: Promise<unknown> | undefined;
+  let policyEvidenceHandoff: Promise<LocalV2DagLambdaPolicyEvidenceMessage | undefined> | undefined;
 
   const remainingResultPublishMs = () => Math.max(
     10,
@@ -2741,11 +2749,12 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
               payload: payload!,
               s3Client: options.s3Client,
               sqsClient: options.sqsClient,
-            }).catch((error) => {
+            }).catch((error): undefined => {
               console.warn("[v2-lambda-policy] early verified evidence handoff failed closed", {
                 error: error instanceof Error ? error.message : String(error),
                 scanId: payload?.scanId,
               });
+              return undefined;
             });
           } catch (error) {
             console.warn("[v2-lambda-policy] early verified evidence handoff failed closed", {
@@ -2780,7 +2789,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     clearTimeout(scannerDeadlineTimer);
     scannerDeadlineTimer = undefined;
     artifactChainCompletedAt = now();
-    await policyEvidenceHandoff;
+    const policyEvidence = await policyEvidenceHandoff;
     phaseTimings = artifactResult.phaseTimings;
     const completedAt = now();
     const result = buildLocalV2DagLambdaResultMessage({
@@ -2796,6 +2805,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       }),
       payload,
       phaseTimings,
+      ...(policyEvidence ? { policyEvidence } : {}),
       status: "completed"
     });
     await sendLocalV2DagLambdaResultMessage({
