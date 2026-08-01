@@ -8474,7 +8474,7 @@ async function captureSupplementalFullPagePreConsentScreenshot(
     };
   } catch (error) {
     const message = errorMessageFromUnknown(error);
-    if (/timeout/i.test(message)) {
+    if (classifyVisualCaptureFailureReason(message) === "screenshot_timeout") {
       return null;
     }
     return {

@@ -21,6 +21,10 @@ test("visual capture distinguishes renderer crashes from browser and page closur
     classifyVisualCaptureFailureReason("Target page, context or browser has been closed"),
     "page_closed",
   );
+  assert.equal(
+    classifyVisualCaptureFailureReason("Supplemental full-page screenshot timed out"),
+    "screenshot_timeout",
+  );
 });
 
 test("visual fallback retains bounded consent-surface evidence with the screenshot", async () => {
