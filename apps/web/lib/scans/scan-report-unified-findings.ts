@@ -678,7 +678,10 @@ function derivePreconsentViolationRows(input: {
   }
 
   const mergedRows = mergePreconsentViolationRows(persistedRows, runtimeRows);
-  return mergedRows;
+  // A vendor/category label without a retained request anchor is review context,
+  // not promotion-grade proof of pre-consent tracking. Runtime-derived rows can
+  // supply that anchor only after passing the canonical request evidence gate.
+  return mergedRows.filter((row) => row.evidenceUrls.some(isConcreteHttpEvidenceUrl));
 }
 
 function normalizePreconsentViolationRow(value: unknown): PreconsentViolationRow | null {
@@ -1710,32 +1713,23 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     ) ||
     rejectPath?.forcedActionRequired === true ||
     rejectPath?.forced_action_required === true;
-  const requestClassificationsWithDerivedTiming = requestClassifications.map((row) => {
-    const rowRecord = row as Record<string, unknown>;
-    const hasTiming = ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "tsMs", "ts_ms", "timestampMs", "timestamp_ms", "ms"]
-      .some((key) => typeof rowRecord[key] === "number" && Number.isFinite(rowRecord[key]));
-    if (hasTiming || firstNonEssentialRequestMs === null) {
-      return row;
-    }
-    return { ...row, tsMs: firstNonEssentialRequestMs };
-  });
+  // A scan-level milestone cannot establish when a particular request occurred.
+  // Keep untimed classifications untimed so they remain review evidence instead
+  // of inheriting the timestamp of an unrelated request.
+  const requestClassificationsWithDerivedTiming = requestClassifications;
   const nonEssentialRequestRows = requestClassificationsWithDerivedTiming.filter(isPromotionGradePreconsentRequestRow);
-  const retainedPreconsentEvidenceUrls = Array.isArray(preconsentEvidenceRecord?.preconsent_tracker_evidence_urls)
-    ? (preconsentEvidenceRecord.preconsent_tracker_evidence_urls as unknown[]).filter(
-        (value): value is string => typeof value === "string" && /^https?:\/\//i.test(value)
-      )
-    : [];
   const concretePreconsentRuntimeUrls = [
-    ...new Set([
-      ...nonEssentialRequestRows.map((row) => String(row.requestUrl)),
-      ...retainedPreconsentEvidenceUrls
-    ])
+    ...new Set(nonEssentialRequestRows.map((row) => String(row.requestUrl)))
   ];
-  const retainedState0RequestRows = Array.isArray(preconsentEvidenceRecord?.preconsent_state0_request_observations)
+  const unverifiedState0RequestRows = Array.isArray(preconsentEvidenceRecord?.preconsent_state0_request_observations)
     ? (preconsentEvidenceRecord.preconsent_state0_request_observations as unknown[]).filter(
         (value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value)
       )
     : [];
+  const retainedState0RequestRows = unverifiedState0RequestRows.filter(isPromotionGradePreconsentRequestRow);
+  const unverifiedState0RequestUrls = unverifiedState0RequestRows
+    .flatMap((row) => getRuntimeString(row, ["requestUrl", "request_url", "url"]))
+    .filter((value): value is string => Boolean(value && /^https?:\/\//i.test(value)));
   const retainedState0RequestUrls = retainedState0RequestRows
     .flatMap((row) => getRuntimeString(row, ["requestUrl", "request_url", "url"]))
     .filter((value): value is string => Boolean(value && /^https?:\/\//i.test(value)));
@@ -1772,9 +1766,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   if (
     (nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null) ||
     retainedState0RequestRows.length > 0 ||
+    unverifiedState0RequestRows.length > 0 ||
     preconsentCookieEvidenceRows.length > 0 ||
-    preconsentViolationEvidenceRows.length > 0 ||
-    retainedPreconsentEvidenceUrls.length > 0
+    preconsentViolationEvidenceRows.length > 0
   ) {
     const hasPromotionReadyRequestEvidence = nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null;
     candidates.push({
@@ -1795,8 +1789,13 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         consentActionableChoiceObserved,
         consentSurfaceObserved,
         requestPurposeClassificationConfidence: requestClassificationsWithDerivedTiming,
-        runtimeRequestUrls: uniqueStrings([...concretePreconsentRuntimeUrls, ...retainedState0RequestUrls]),
+        runtimeRequestUrls: uniqueStrings([
+          ...concretePreconsentRuntimeUrls,
+          ...retainedState0RequestUrls,
+          ...unverifiedState0RequestUrls
+        ]),
         preconsent_tracker_evidence_urls: concretePreconsentRuntimeUrls,
+        unverifiedState0RequestObservationCount: unverifiedState0RequestRows.length - retainedState0RequestRows.length,
         preconsent_tracker_vendors: nonEssentialRequestRows
           .map((row) => (typeof row.vendor === "string" ? row.vendor : null))
           .filter((value): value is string => Boolean(value))
@@ -1822,7 +1821,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
           ? `${preconsentViolationEvidenceRows.length} classified pre-consent request artifact(s)`
           : preconsentCookieEvidenceRows.length > 0
             ? `${preconsentCookieEvidenceRows.length} before-consent cookie timing artifact(s)`
-            : `${retainedState0RequestRows.length} state-0 pre-consent request artifact(s) with incomplete classification`,
+            : `${unverifiedState0RequestRows.length} state-0 pre-consent request artifact(s) with incomplete classification`,
       severity: hasPromotionReadyRequestEvidence && hasPreconsentSequence ? "high" : "medium",
       signalKey: "privacy.preconsent_tracking_detected",
       signalLabel: "Pre-consent tracking detected",

@@ -204,7 +204,7 @@ function gdprRows(): RowSeed[] {
       matchedStatus: "gap_observed",
       requiredModules: [PRE_CONSENT_MODULE],
     }),
-    row("pre_consent_third_party_tracking", "Pre-consent third-party tracking", "Whether analytics, advertising, cross-site measurement, or similar third-party requests were observed before recorded consent.", "currently_supported", {
+    row("pre_consent_third_party_tracking", "Pre-consent non-essential tracking", "Whether classified non-essential analytics, advertising, cross-site measurement, or similar requests were observed before recorded consent.", "currently_supported", {
       sourceFindingKeys: ["pre_consent_tracking_detected"],
       matchedStatus: "gap_observed",
       requiredModules: [PRE_CONSENT_MODULE],

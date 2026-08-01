@@ -9,6 +9,11 @@ import {
 export type RuntimeCookieEvidenceRow = {
   category: string;
   cookieName: string;
+  cookiePath?: string;
+  partitionContext?: string;
+  observationCount?: number;
+  classificationConflicts?: string[];
+  evidenceRefs?: string[];
   dataTypes?: string[];
   description?: string;
   domain: string | null;
@@ -646,7 +651,7 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     /^ld_anonymous_user_key$/i.test(cookieName) ||
     /^_sp_(?:id|ses)\./i.test(cookieName);
   const retainedCategoryIsUnsupportedEssentialClaim =
-    /^(?:security|necessary|functional|consent_management)$/i.test(explicitCategory ?? "");
+    /^(?:security|necessary|functional|consent_management|infrastructure|cdn|service)$/i.test(explicitCategory ?? "");
   const category = knowledge.category !== "unknown"
     ? knowledge.category
     : inferredSecurityOrNecessary || canonicalNamedCategory
@@ -721,6 +726,15 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   return {
     category,
     cookieName,
+    cookiePath: getString(row.cookiePath ?? row.cookie_path ?? row.path) ?? "/",
+    partitionContext: getString(row.partitionContext ?? row.partition_context ?? row.partitionKey ?? row.partition_key) ??
+      (getBoolean(row.partitioned) === true ? "partitioned_unspecified" : "unpartitioned_or_unknown"),
+    observationCount: 1,
+    classificationConflicts: [],
+    evidenceRefs: uniqueStrings([
+      ...getStringArray(row.evidenceRefs ?? row.evidence_refs),
+      getString(row.eventId ?? row.event_id ?? row.evidenceId ?? row.evidence_id)
+    ]),
     dataTypes: getStringArray(row.dataTypes ?? row.data_types).length > 0
       ? getStringArray(row.dataTypes ?? row.data_types)
       : knowledge.dataTypes,
@@ -774,6 +788,11 @@ function normalizeInitialCookieRow(cookieName: string, domain: string | null): R
   return {
     category,
     cookieName,
+    cookiePath: "/",
+    partitionContext: "unpartitioned_or_unknown",
+    observationCount: 1,
+    classificationConflicts: [],
+    evidenceRefs: [],
     dataTypes: knowledge.dataTypes,
     description: knowledge.description,
     domain: normalizedDomain,
@@ -810,6 +829,73 @@ function normalizeInitialCookieRow(cookieName: string, domain: string | null): R
   };
 }
 
+export function getRuntimeCookieEvidenceIdentity(row: RuntimeCookieEvidenceRow) {
+  return [
+    row.cookieName.trim().toLowerCase(),
+    row.domain?.replace(/^\.+/, "").toLowerCase() ?? "",
+    row.cookiePath?.trim() || "/",
+    row.partitionContext?.trim().toLowerCase() || "unpartitioned_or_unknown"
+  ].join("\u0000");
+}
+
+function essentialitySourceWeight(row: RuntimeCookieEvidenceRow) {
+  return {
+    canonical_registry: 4,
+    deterministic_classifier: 3,
+    retained_explicit_classification: 2,
+    unknown: 1,
+  }[row.essentialitySource ?? "unknown"];
+}
+
+function mergeRuntimeCookieObservations(
+  existing: RuntimeCookieEvidenceRow,
+  candidate: RuntimeCookieEvidenceRow
+) {
+  const existingWeight = essentialitySourceWeight(existing);
+  const candidateWeight = essentialitySourceWeight(candidate);
+  const preferCandidate = candidateWeight > existingWeight || (
+    candidateWeight === existingWeight &&
+    existing.timingEvidence !== "before_consent_cookie_write" &&
+    candidate.timingEvidence === "before_consent_cookie_write"
+  );
+  const preferred = preferCandidate ? candidate : existing;
+  const alternate = preferCandidate ? existing : candidate;
+  const categoryConflict = existing.category !== candidate.category;
+  const essentialityConflict = (existing.essentiality ?? "unknown") !== (candidate.essentiality ?? "unknown");
+  const equallyAuthoritativeConflict = existingWeight === candidateWeight && (categoryConflict || essentialityConflict);
+  const conflictLabels = uniqueStrings([
+    ...(existing.classificationConflicts ?? []),
+    ...(candidate.classificationConflicts ?? []),
+    categoryConflict ? `category:${existing.category}|${candidate.category}` : null,
+    essentialityConflict ? `essentiality:${existing.essentiality ?? "unknown"}|${candidate.essentiality ?? "unknown"}` : null,
+  ]);
+  const firstObservedAtMs = [existing.firstObservedAtMs, candidate.firstObservedAtMs]
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    .sort((left, right) => left - right)[0] ?? null;
+  const setAtMs = [existing.setAtMs, candidate.setAtMs]
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    .sort((left, right) => left - right)[0] ?? null;
+
+  return {
+    ...alternate,
+    ...preferred,
+    category: equallyAuthoritativeConflict ? "unknown" : preferred.category,
+    essentiality: equallyAuthoritativeConflict ? "unknown" as const : preferred.essentiality,
+    essentialitySource: equallyAuthoritativeConflict ? "unknown" as const : preferred.essentialitySource,
+    nonEssential: equallyAuthoritativeConflict ? false : preferred.nonEssential,
+    classificationConflicts: conflictLabels,
+    evidenceRefs: uniqueStrings([...(existing.evidenceRefs ?? []), ...(candidate.evidenceRefs ?? [])]),
+    firstObservedAtMs,
+    observationCount: (existing.observationCount ?? 1) + (candidate.observationCount ?? 1),
+    observedBeforeConsent: existing.observedBeforeConsent === true || candidate.observedBeforeConsent === true,
+    setAtMs,
+    timingEvidence:
+      existing.timingEvidence === "before_consent_cookie_write" || candidate.timingEvidence === "before_consent_cookie_write"
+        ? "before_consent_cookie_write" as const
+        : preferred.timingEvidence,
+  } satisfies RuntimeCookieEvidenceRow;
+}
+
 export function buildRuntimeCookieInventory(input: {
   hybridRuntimeEvidence?: Record<string, unknown> | null;
   runtimeArtifacts?: Record<string, unknown> | null;
@@ -833,18 +919,25 @@ export function buildRuntimeCookieInventory(input: {
   const rowsByKey = new Map<string, RuntimeCookieEvidenceRow>();
   for (const row of [...cookieWriteRows, ...explicitPreconsentRows, ...initialRows]) {
     if (!row.domain) {
-      const hasDomainBearingRow = [...rowsByKey.values()].some((existing) => existing.cookieName === row.cookieName && Boolean(existing.domain));
+      const hasDomainBearingRow = [...rowsByKey.values()].some((existing) =>
+        existing.cookieName.trim().toLowerCase() === row.cookieName.trim().toLowerCase() && Boolean(existing.domain)
+      );
       if (hasDomainBearingRow) {
         continue;
       }
     } else {
-      rowsByKey.delete(`${row.cookieName}\u0000`);
+      for (const [existingKey, existing] of rowsByKey) {
+        if (
+          existing.cookieName.trim().toLowerCase() === row.cookieName.trim().toLowerCase() &&
+          !existing.domain
+        ) {
+          rowsByKey.delete(existingKey);
+        }
+      }
     }
-    const key = `${row.cookieName}\u0000${row.domain ?? ""}`;
+    const key = getRuntimeCookieEvidenceIdentity(row);
     const existing = rowsByKey.get(key);
-    if (!existing || existing.timingEvidence !== "before_consent_cookie_write" && row.timingEvidence === "before_consent_cookie_write") {
-      rowsByKey.set(key, row);
-    }
+    rowsByKey.set(key, existing ? mergeRuntimeCookieObservations(existing, row) : row);
   }
   const rows = [...rowsByKey.values()];
   const beforeConsentRows = rows.filter((row) =>
@@ -873,8 +966,8 @@ export function buildRuntimeCookieInventory(input: {
     .map((row) => normalizeCookieWriteRow(row, hybrid))
     .filter((row): row is RuntimeCookieEvidenceRow => Boolean(row))
     .filter((row, index, allRows) => {
-      const key = `${row.cookieName}\u0000${row.domain ?? ""}`;
-      return allRows.findIndex((candidate) => `${candidate.cookieName}\u0000${candidate.domain ?? ""}` === key) === index;
+      const key = getRuntimeCookieEvidenceIdentity(row);
+      return allRows.findIndex((candidate) => getRuntimeCookieEvidenceIdentity(candidate) === key) === index;
     });
   const unmatchedCookieNames = uniqueStrings([
     ...getStringArray(hybrid?.unmatchedCookieNames ?? hybrid?.unmatched_cookie_names),

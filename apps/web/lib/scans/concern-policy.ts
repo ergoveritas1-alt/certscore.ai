@@ -2298,10 +2298,15 @@ function getConsentOptionsControlChecklistEligibility(input: {
     "consentOptionsControlProminenceState",
     "consent_options_control_prominence_state"
   ]);
-  if (state === "dedicated_button" || state === "first_layer_control") {
+  if (
+    state === "dedicated_button" ||
+    state === "first_layer_control" ||
+    state === "inline_link_action_cluster"
+  ) {
     return "observed";
   }
   if (
+    state === "inline_link_first_layer_body" ||
     state === "inline_link" ||
     state === "persistent_link" ||
     state === "balanced_accept_decline_no_first_layer_settings"

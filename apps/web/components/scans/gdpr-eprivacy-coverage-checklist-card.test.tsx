@@ -619,7 +619,7 @@ test("GdprEprivacyCoverageChecklistCard preserves first-seen timing in concise r
 
   assert.match(
     html,
-    /Pre-consent 3rd party tracking evidence was retained before consent: Google Ads \/ DoubleClick \(advertising measurement\) and Quantcast Measure \(tracking\); first seen 0.521s after scan start; no consent action was recorded first\./
+    /Pre-consent non-essential tracking evidence was retained before consent: Google Ads \/ DoubleClick \(advertising measurement\) and Quantcast Measure \(tracking\); first seen 0.521s after scan start; no consent action was recorded first\./
   );
   assert.match(html, /aria-label="Potential gap"/);
   assert.match(html, /border-rose-200 bg-rose-50 text-rose-700/);
@@ -684,7 +684,7 @@ test("GdprEprivacyCoverageChecklistCard summarizes the top two highest-priority 
 
   assert.match(
     html,
-    /Pre-consent 3rd party tracking evidence was retained before consent: Bombora Visitor Insights \(Advertising\) and ScorecardResearch \(Audience measurement\); 1 additional eligible tracker retained in expandable evidence; first seen 3.27s after scan start; no consent action was recorded first\./
+    /Pre-consent non-essential tracking evidence was retained before consent: Bombora Visitor Insights \(Advertising\) and ScorecardResearch \(Audience measurement\); 1 additional eligible tracker retained in expandable evidence; first seen 3.27s after scan start; no consent action was recorded first\./
   );
   assert.doesNotMatch(html, /Optimizely \(A\/B Testing\)/);
   assert.doesNotMatch(html, /Quantcast Measure \(Audience measurement\)/);
@@ -1561,7 +1561,7 @@ test("GdprEprivacyCoverageChecklistCard renders 3rd party service rows under a t
     })
   );
 
-  assert.match(html, /3rd Party Services/);
+  assert.match(html, /Tracking &amp; External Services/);
   assert.match(html, /Scan-context note/);
   assert.match(html, /3rd party iframes before consent/);
 });

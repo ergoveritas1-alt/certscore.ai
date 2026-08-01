@@ -154,6 +154,8 @@ export type NormalizedConcernRegulatoryChecklistEligibility =
 export type ConsentOptionsControlProminenceState =
   | "dedicated_button"
   | "first_layer_control"
+  | "inline_link_action_cluster"
+  | "inline_link_first_layer_body"
   | "inline_link"
   | "persistent_link"
   | "balanced_accept_decline_no_first_layer_settings"
@@ -3039,20 +3041,32 @@ function buildConsentOptionsControlProminenceConcerns(
   const state: ConsentOptionsControlProminenceState =
     firstLayerOptions.some((evidence) => evidence.presentationType === "dedicated_button")
       ? "dedicated_button"
-      : firstLayerOptions.some((evidence) => evidence.presentationType === "inline_link")
-        ? "inline_link"
-        : firstLayerOptions.length > 0
-          ? "first_layer_control"
-          : persistentOptions.length > 0
-            ? "persistent_link"
-            : assessment.assessmentStatus !== "complete" ||
-                assessment.coverage.status !== "complete" ||
-                assessment.surface.status !== "observed_actionable"
-              ? "insufficient_retained_evidence"
-              : assessment.controls.accept.state === "observed" &&
-                  assessment.controls.reject.state === "observed"
-                ? "balanced_accept_decline_no_first_layer_settings"
-                : "no_granular_controls_retained";
+      : firstLayerOptions.some(
+          (evidence) =>
+            evidence.presentationType === "inline_link" &&
+            evidence.placementType === "action_cluster"
+        )
+        ? "inline_link_action_cluster"
+        : firstLayerOptions.some(
+            (evidence) =>
+              evidence.presentationType === "inline_link" &&
+              evidence.placementType === "first_layer_body"
+          )
+          ? "inline_link_first_layer_body"
+          : firstLayerOptions.some((evidence) => evidence.presentationType === "inline_link")
+            ? "inline_link"
+            : firstLayerOptions.length > 0
+              ? "first_layer_control"
+              : persistentOptions.length > 0
+                ? "persistent_link"
+                : assessment.assessmentStatus !== "complete" ||
+                    assessment.coverage.status !== "complete" ||
+                    assessment.surface.status !== "observed_actionable"
+                  ? "insufficient_retained_evidence"
+                  : assessment.controls.accept.state === "observed" &&
+                      assessment.controls.reject.state === "observed"
+                    ? "balanced_accept_decline_no_first_layer_settings"
+                    : "no_granular_controls_retained";
   const retainedControls = [...firstLayerOptions, ...persistentOptions]
     .slice(0, 8)
     .map((evidence) => ({
@@ -3060,7 +3074,8 @@ function buildConsentOptionsControlProminenceConcerns(
       evidenceId: evidence.evidenceId,
       label: evidence.label,
       layer: evidence.layer,
-      presentationType: evidence.presentationType
+      presentationType: evidence.presentationType,
+      placementType: evidence.placementType
     }));
   const runtimeEvidenceArtifacts = uniqueStrings([
     ...retainedControls.flatMap((control) => control.artifactRefs),

@@ -127,6 +127,7 @@ test("inline consent preference links remain contextual through concern policy a
           label: "Cookie Consent Tool",
           layer: "first_layer",
           presentationType: "inline_link",
+          placementType: "first_layer_body",
           visible: true,
           actionable: true,
           artifactRefs: ["CanonicalEvidenceBundle.json"]
@@ -179,7 +180,7 @@ test("inline consent preference links remain contextual through concern policy a
 
   assert.equal(options.status, "Review signal");
   assert.equal(options.assessmentStatus, "review_signal");
-  assert.match(options.criticalEvidence.statusBasis, /inline text link, not a button/i);
+  assert.match(options.criticalEvidence.statusBasis, /outside the confirmed accept\/reject action cluster/i);
   assert.equal(
     gapFindings.some((finding) =>
       finding.id === "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control"
@@ -264,6 +265,36 @@ function makeCoverageOutcome(
     }
   };
 }
+
+test("checklist keeps automated policy retrieval limitations neutral", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      legal_basis_disclosure_observed: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: privacy policy retained"],
+        limitation: "Automated extraction did not retain a sufficiently direct legal-basis passage.",
+        retainedEvidence: {
+          policyEvidenceAssessment: {
+            contractVersion: "certscore.policy-topic-evidence-assessment.v1",
+            result: "not_located_automatically",
+            scoreEffect: "none"
+          }
+        },
+        rowId: "legal_basis_disclosure_observed",
+        status: "Not confirmed"
+      })
+    },
+    projectedFindings: [],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const legalBasis = byId(items, "legal_basis_disclosure_observed");
+  assert.equal(legalBasis.status, "Not confirmed");
+  assert.equal(legalBasis.assessmentStatus, "coverage_limitation");
+  assert.equal(legalBasis.evidenceState, "not_testable");
+  assert.equal(legalBasis.tone, "neutral");
+});
 
 test("checklist presents the privacy contact row and ignores retired formal DPO outcomes", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
@@ -906,7 +937,7 @@ test("deriveGdprEprivacyCoverageChecklist does not relabel a standalone GTM boot
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.equal(row.label, "Pre-consent 3rd party tracking");
+  assert.equal(row.label, "Pre-consent non-essential tracking");
   assert.equal(row.status, "Not observed");
   assert.equal(row.evidenceRefs.length, 0);
 });
@@ -939,7 +970,7 @@ test("deriveGdprEprivacyCoverageChecklist does not relabel library and config tr
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.equal(row.label, "Pre-consent 3rd party tracking");
+  assert.equal(row.label, "Pre-consent non-essential tracking");
   assert.equal(row.status, "Not observed");
   assert.equal(row.evidenceRefs.length, 0);
 });
@@ -2595,7 +2626,7 @@ test("deriveGdprEprivacyCoverageChecklist does not let generic advertising categ
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.equal(row.label, "Pre-consent 3rd party tracking");
+  assert.equal(row.label, "Pre-consent non-essential tracking");
   assert.equal(row.status, "Review signal");
   assert.match(row.explanation, /Security\/performance vendor activity was observed/i);
   assert.match(row.explanation, /Akamai Bot Manager \/ Edge/i);

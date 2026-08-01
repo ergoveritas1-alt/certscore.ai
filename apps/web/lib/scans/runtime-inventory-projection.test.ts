@@ -723,12 +723,14 @@ test("suppresses label-only ad-tech aliases attached to concrete Yandex evidence
   assert.equal(rows.some((row) => /Bombora|OpenX|Quantcast/.test(row.label)), false);
 });
 
-test("treats publisher-owned related domains as first-party infrastructure", () => {
+test("preserves publisher-owned cross-site infrastructure as cross-site same-entity context", () => {
   const rows = buildTrackerInventoryRows({
     domains: ["a.bildstatic.de"], firstPartyDomain: "bild.de", preConsentVendors: [], resolvedVendors: [], sessionReplayVendors: [],
     trackerVendors: [], topObservedEntities: [{ category: "unknown", label: "a.bildstatic.de", requestCount: 12 }], unresolvedHosts: ["a.bildstatic.de"]
   });
-  assert.deepEqual(rows, []);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.siteRelationship, "cross_site");
+  assert.equal(rows[0]?.entityRelationship, "same_entity");
 });
 
 test("attributes Amazon-owned advertising and media hosts to the amazon.de entity", () => {
@@ -757,8 +759,10 @@ test("attributes Amazon-owned advertising and media hosts to the amazon.de entit
 
   const amazonAds = rows.find((row) => row.domains.includes("aax-eu.amazon-adsystem.com"));
   assert.equal(amazonAds?.label, "Amazon");
-  assert.equal(amazonAds?.party, "first_party");
-  assert.equal(rows.some((row) => row.label === "Amazon Media CDN"), false);
+  assert.equal(amazonAds?.party, "third_party");
+  assert.equal(amazonAds?.siteRelationship, "cross_site");
+  assert.equal(amazonAds?.entityRelationship, "same_entity");
+  assert.equal(rows.some((row) => row.domains.includes("m.media-amazon.com")), true);
 });
 
 test("canonical report vendor projection consolidates Amazon products and owned hosts to one vendor", () => {

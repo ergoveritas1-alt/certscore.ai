@@ -198,6 +198,36 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
   );
 });
 
+test("buildRegulatoryGapTopFindings does not promote contextual browser capability evidence", () => {
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [{
+        assessmentDirection: "neutral_signal",
+        assessmentStatus: "checked",
+        criticalEvidence: {
+          retainedEvidence: {
+            browserDeviceEntropyEvidence: {
+              assessmentStrength: "contextual_only",
+              browserApiSignals: ["Navigator.plugins", "Navigator.mimeTypes"]
+            },
+            fingerprintingObserved: false,
+            promotionEligible: false
+          }
+        },
+        evidenceState: "not_observed",
+        id: "device_identification_fingerprinting_signal_observed",
+        label: "Device identification / fingerprinting signal",
+        note: "Low-specificity browser capability access was retained as context.",
+        status: "Not observed"
+      }]
+    }
+  });
+
+  assert.deepEqual(findings, []);
+});
+
 test("buildRegulatoryGapTopFindings does not name embedded services when no embedded row is grouped", () => {
   const findings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {

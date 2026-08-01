@@ -41,6 +41,9 @@ import {
 } from "../../lib/scans/gdpr-transparency-production-profile";
 import { getProductionPolicyModelReviewRevision } from "../../lib/scans/policy-model-review-revision";
 import {
+  findRuntimeCanonicalEntityOwner,
+} from "../../lib/scans/runtime-vendor-ownership";
+import {
   inferDirectEndpointVendorFromUrl,
   isPromotionGradePreconsentRequestRow
 } from "../../lib/scans/preconsent-public-evidence";
@@ -422,6 +425,22 @@ function sameSite(hostname: string | null | undefined, rootDomain: string | null
   const normalizedHost = hostname.replace(/^www\./i, "").toLowerCase();
   const normalizedRoot = rootDomain.replace(/^www\./i, "").toLowerCase();
   return normalizedHost === normalizedRoot || normalizedHost.endsWith(`.${normalizedRoot}`);
+}
+
+export function retainedRequestRelationships(hostname: string, rootDomain: string | null) {
+  const siteRelationship = sameSite(hostname, rootDomain) ? "same_site" as const : "cross_site" as const;
+  const destinationOwner = findRuntimeCanonicalEntityOwner(hostname);
+  const targetOwner = findRuntimeCanonicalEntityOwner(rootDomain);
+  const entityRelationship = destinationOwner && targetOwner
+    ? destinationOwner.entity === targetOwner.entity ? "same_entity" as const : "external_entity" as const
+    : "unknown" as const;
+  return {
+    entityRelationship,
+    relationshipBasis: destinationOwner && targetOwner
+      ? "canonical_entity_registry"
+      : "entity_registry_incomplete",
+    siteRelationship,
+  };
 }
 
 function firstNumber(...values: unknown[]) {
@@ -2192,18 +2211,36 @@ function browserApiProbeInstalled(bundle: CanonicalEvidenceBundle) {
 function summarizeFingerprintingEvidence(bundle: CanonicalEvidenceBundle) {
   const rows = browserApiAccessRows(bundle);
   const apiProbeRetained = browserApiProbeInstalled(bundle) || rows.length > 0;
+  const fingerprintAttributeCategories = uniqueStrings(
+    rows.flatMap((row) => row.fingerprintAttributeCategories)
+  ).map((category) => category.trim().toLowerCase().replace(/[\s-]+/g, "_"));
+  const coordinatedSignalClusterObserved = fingerprintAttributeCategories.filter((category) =>
+    ["audio", "canvas", "high_entropy_client_hints", "webgl"].includes(category)
+  ).length >= 2;
   // Browser API access is inventory. Promotion requires a separate typed
   // transmission, identifier-linkage, known-library, or device-payload signal.
   const strongCorroboratorObserved = false;
+  const assessmentStrength = strongCorroboratorObserved
+    ? "corroborated_collection"
+    : coordinatedSignalClusterObserved
+      ? "coordinated_cluster"
+      : rows.length > 0
+        ? "contextual_only"
+        : "none_observed";
   return {
+    assessmentContractVersion: "fingerprinting_evidence_assessment.v1",
+    assessmentStrength,
     apiProbeRetained,
     artifactCount: rows.length,
+    coordinatedSignalClusterObserved,
     coverageRetained: apiProbeRetained,
-    fingerprintAttributeCategories: uniqueStrings(rows.flatMap((row) => row.fingerprintAttributeCategories)),
+    distinctAttributeFamilyCount: fingerprintAttributeCategories.length,
+    fingerprintAttributeCategories,
     fingerprintingObserved: strongCorroboratorObserved,
     highEntropySignals: uniqueStrings(rows.flatMap((row) => row.highEntropySignals)).slice(0, 12),
     hosts: uniqueStrings(rows.map((row) => row.host)),
     preConsentObserved: strongCorroboratorObserved && rows.some((row) => row.preConsent),
+    promotionEligible: strongCorroboratorObserved,
     strongCorroboratorObserved
   };
 }
@@ -2561,6 +2598,39 @@ export function summarizePolicySurfaces(
   const policyLastUpdatedTexts = uniqueStrings(policySurfaces
     .map((row) => firstString(row.surface.lastUpdatedText))
     .filter(Boolean));
+  const policyDocumentProvenance = article13Surfaces.map((row) => {
+    const documentUrl = firstString(
+      row.pageUrl,
+      row.surface.finalUrl,
+      row.surface.normalizedUrl,
+      row.surface.url,
+    );
+    const directlyLinkedFromScannedPage =
+      row.surface.traversalDepth !== 1 &&
+      ["footer_link", "header_link", "page_text_link"].includes(row.surface.discoveryMethod) &&
+      row.surface.linkObservationState !== "candidate" &&
+      row.surface.linkObservationState !== "not_observed";
+    return {
+      artifactRefs: (row.surface.artifactRefs ?? []).map((ref) => ref.artifactId).slice(0, 8),
+      detectedLanguage: firstString(
+        row.surface.matchedLocale,
+        policyPrimaryLanguage,
+      ),
+      directlyLinkedFromScannedPage,
+      discoveryMethod: row.surface.discoveryMethod,
+      documentOwnerEntity: firstString(row.surface.documentOwnerEntity),
+      effectiveDate: null,
+      lastUpdatedText: firstString(row.surface.lastUpdatedText),
+      observationId: row.surface.observationId,
+      ownershipConfidence: row.surface.ownershipConfidence ?? null,
+      policyTitle: firstString(row.surface.title, row.surface.linkText),
+      retrievalTimestamp: options.scanStartedAt ?? null,
+      sourceUrl: documentUrl,
+      targetRelationship: row.surface.targetRelationship ?? "unknown",
+      translationApplied: false,
+      translationTargetLanguage: null,
+    };
+  }).slice(0, 12);
   const selectedPrivacyPolicyDocument = article13Surfaces
     .filter((row) =>
       row.surface.traversalDepth === 1 &&
@@ -2616,6 +2686,10 @@ export function summarizePolicySurfaces(
     retainedPolicySectionHeadings,
     policySurfaceCount: policySurfaces.length,
     policyLastUpdatedTexts,
+    policyDocumentProvenance,
+    policyEvidenceProvenanceContractVersion: "certscore.policy-evidence-provenance.v1",
+    policyPrimaryLanguage,
+    scannedPageLanguage: options.primaryLanguage ?? null,
     cookiePolicyPresent: cookieSurfaces.length > 0,
     cookiePolicyUrls: uniqueStrings(cookieSurfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
     cookieDisclosures: policyCookieDisclosures,
@@ -3591,6 +3665,7 @@ function summarizeGeometryFirstLayerConsentChoices(
             matchedTerm: classification.matchedTerm,
             matchStrength: classification.matchStrength,
             presentationType: getString(candidate.presentationType) ?? "unknown",
+            placementType: getString(candidate.placementType) ?? "unknown",
             role: getString(candidate.role) ?? undefined,
             selectorHint: getString(candidate.selectorHint) ?? undefined,
             tagName: getString(candidate.tagName) ?? undefined,
@@ -4657,6 +4732,7 @@ function buildMaterializedLocalV2Detail(
       const matchedVendor = findObservedVendor(event);
       const url = requestUrl(event);
       const hostname = event.hostname ?? hostnameFromUrl(url);
+      const relationships = hostname ? retainedRequestRelationships(hostname, rootDomain) : null;
       return matchedVendor && url && hostname
         ? {
             category: matchedVendor.vendorCategory,
@@ -4672,7 +4748,25 @@ function buildMaterializedLocalV2Detail(
             collectionEndpointType: matchedVendor.collectionEndpointType,
             confidence: matchedVendor.confidence,
             essentiality: "non_essential",
+            method: event.method,
+            pathSample: retainedRequestPathSample(url),
+            cookieHeaderPresent: event.cookieHeaderPresent === true || event.requestHeaders?.cookieHeaderPresent === true,
+            cookieNamesSent: uniqueStrings([
+              ...(event.cookieNamesSent ?? []),
+              ...(event.requestHeaders?.cookieNames ?? [])
+            ]).slice(0, 24),
+            identifierLikeParametersObserved: event.hasIdentifierLikeParameters === true,
+            identifierParameterNames: (event.identifierParamNames ?? []).slice(0, 24),
+            directVsInferred: event.directVsInferred,
+            evidenceRefs: uniqueStrings([
+              event.eventId,
+              ...(event.evidenceRefs ?? []).map((ref) => ref.artifactId),
+              ...(event.relatedEvidenceRefs ?? []).map((ref) => ref.artifactId)
+            ]).slice(0, 24),
             firstPartyOrThirdParty: sameSite(hostname, rootDomain) ? "first_party" : "third_party",
+            siteRelationship: relationships?.siteRelationship ?? "unknown",
+            entityRelationship: relationships?.entityRelationship ?? "unknown",
+            relationshipBasis: relationships?.relationshipBasis ?? "entity_registry_incomplete",
             hostname,
             initiatorType: event.initiatorType ?? event.resourceType,
             matchedSignatureId: matchedVendor.matchedSignatureId,
@@ -4680,7 +4774,7 @@ function buildMaterializedLocalV2Detail(
             pageUrlSharedViaReferrer: typeof event.requestHeaders?.referer === "string" &&
               Boolean(hostnameFromUrl(event.topLevelUrl) && event.requestHeaders.referer.includes(hostnameFromUrl(event.topLevelUrl) ?? "")),
             referrerSent: Boolean(event.requestHeaders?.referer),
-            requestUrl: url,
+            requestUrl: retainedRequestUrlSample(url) ?? url,
             regulatoryRelevance: matchedVendor.regulatoryRelevance,
             resourceType: event.resourceType,
             runtimePhase: "pre_consent",
@@ -4817,6 +4911,9 @@ function buildMaterializedLocalV2Detail(
       beforeConsent: event.consentStateAtTime === "pre_consent",
       category,
       cookieName: event.cookieName,
+      cookiePath: event.cookiePath ?? "/",
+      partitionContext: "unpartitioned_or_unknown",
+      evidenceRefs: [event.eventId],
       domain: (event.cookieDomain ?? event.hostname)?.replace(/^\.+/, ""),
       expiresAt: event.expires ?? null,
       firstObservedAtMs: event.timestampMs,

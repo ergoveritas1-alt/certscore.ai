@@ -123,6 +123,19 @@ async function loadLocalV2DagReport() {
   };
 }
 
+test("retained request relationships keep Amazon cross-site and same-entity dimensions separate", async () => {
+  const { retainedRequestRelationships } = await loadLocalV2DagReport();
+
+  assert.deepEqual(
+    retainedRequestRelationships("aax-eu.amazon-adsystem.com", "amazon.de"),
+    {
+      entityRelationship: "same_entity",
+      relationshipBasis: "canonical_entity_registry",
+      siteRelationship: "cross_site",
+    }
+  );
+});
+
 test("remote report artifacts start geometry as soon as the manifest resolves", async () => {
   const { localV2DagReportPerformanceTestHelpers } = await loadLocalV2DagReport();
   const events: string[] = [];
@@ -1127,11 +1140,18 @@ test("policy summary preserves the typed one-hop privacy-index evidence path", a
     documentFetchState: "fetched",
     documentEvaluationState: "usable",
     confidence: 0.95,
+    discoveryMethod: "footer_link",
+    linkObservationState: "observed",
+    matchedLocale: "en",
+    title: "Example Privacy Notice",
+    lastUpdatedText: "Last updated: June 2026",
     textExcerpt: "Example Privacy Policy. We process personal data to provide the service.",
   } as CanonicalEvidenceBundle["policySurfaceObservations"][number];
   const surfaces = dedupePolicySurfaces([childSurface], "https://example.test/");
   const summary = summarizePolicySurfaces(surfaces, "example.test", {
     discoveredPolicySurfaces: [childSurface],
+    primaryLanguage: "de",
+    scanStartedAt: "2026-08-01T18:00:00.000Z",
   });
 
   assert.deepEqual(summary.selectedPrivacyPolicyDocument, {
@@ -1158,6 +1178,14 @@ test("policy summary preserves the typed one-hop privacy-index evidence path", a
     ],
     traversalDepth: 1,
   }]);
+  assert.equal(summary.policyEvidenceProvenanceContractVersion, "certscore.policy-evidence-provenance.v1");
+  assert.equal(summary.policyDocumentProvenance[0]?.policyTitle, "Example Privacy Notice");
+  assert.equal(summary.policyDocumentProvenance[0]?.sourceUrl, "https://example.test/policies/privacy-notice");
+  assert.equal(summary.policyDocumentProvenance[0]?.detectedLanguage, "en");
+  assert.equal(summary.policyDocumentProvenance[0]?.directlyLinkedFromScannedPage, false);
+  assert.equal(summary.policyDocumentProvenance[0]?.retrievalTimestamp, "2026-08-01T18:00:00.000Z");
+  assert.equal(summary.policyDocumentProvenance[0]?.translationApplied, false);
+  assert.equal(summary.scannedPageLanguage, "de");
 });
 
 test("policy summary materializes structured named-cookie disclosures from cookie surfaces", async () => {
@@ -1384,6 +1412,7 @@ test("selectBoundedPreconsentRequestPurposeRows retains later promotion-grade ev
   const eligibleRow = {
     category: "advertising",
     classification: "tracking",
+    collectionEndpointObserved: true,
     confidence: 0.95,
     essentiality: "non_essential",
     hostname: "ads.example.test",
@@ -4452,6 +4481,10 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     assert.deepEqual(sessionReplaySummary.vendors, ["Microsoft Clarity"]);
     assert.equal(fingerprintingSummary.coverageRetained, true);
     assert.equal(fingerprintingSummary.fingerprintingObserved, false);
+    assert.equal(fingerprintingSummary.assessmentContractVersion, "fingerprinting_evidence_assessment.v1");
+    assert.equal(fingerprintingSummary.assessmentStrength, "contextual_only");
+    assert.equal(fingerprintingSummary.coordinatedSignalClusterObserved, false);
+    assert.equal(fingerprintingSummary.distinctAttributeFamilyCount, 1);
     assert.equal(fingerprintingSummary.strongCorroboratorObserved, false);
     assert.deepEqual(fingerprintingSummary.highEntropySignals, ["HTMLCanvasElement.toDataURL"]);
     assert.equal(firstLayerConsentChoices.rejectControlObserved, false);
@@ -4603,6 +4636,9 @@ test("materializeLocalV2DagScanDetail keeps unknown third-party requests and lon
     const fingerprintingSummary = detail.runtimeArtifacts?.fingerprintingEvidenceSummary as Record<string, unknown>;
     assert.equal(fingerprintingSummary.fingerprintingObserved, false);
     assert.equal(fingerprintingSummary.artifactCount, 1);
+    assert.equal(fingerprintingSummary.assessmentStrength, "contextual_only");
+    assert.equal(fingerprintingSummary.coordinatedSignalClusterObserved, false);
+    assert.equal(fingerprintingSummary.promotionEligible, false);
 
     const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
       coverageLimited: false,
@@ -4611,7 +4647,7 @@ test("materializeLocalV2DagScanDetail keeps unknown third-party requests and lon
       scanCompleted: true,
       snapshot: detail.snapshot
     });
-    assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Insufficient evidence");
+    assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Not observed");
     assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Not observed");
   } finally {
     process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
@@ -4663,6 +4699,7 @@ test("materializeLocalV2DagScanDetail promotes a canonical Umami gateway fetch i
           eventType: "network_request",
           evidenceRefs: [],
           hostname: "gateway.umami.is",
+          collectionEndpointObserved: true,
           requestUrl: "https://gateway.umami.is/api/send",
           resourceType: "fetch",
           sourceScanner: "pre_consent_runtime",

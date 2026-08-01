@@ -27,6 +27,7 @@ type FixtureControl = {
   matchedTerm?: string;
   matchStrength?: "direct" | "equivalent" | "contextual";
   presentationType?: "dedicated_button" | "inline_link";
+  placementType?: "action_cluster" | "first_layer_body";
 };
 
 type ConsentFlowFixture = {
@@ -236,7 +237,7 @@ test("canonical consent-control flow preserves site-agnostic prominence and abse
       expectedState: "dedicated_button"
     },
     {
-      name: "actionable inline preferences link",
+      name: "inline preferences link grouped with accept and decline",
       fixture: {
         firstLayerControls: [
           { actionType: "accept_all", label: "Accept all" },
@@ -244,7 +245,30 @@ test("canonical consent-control flow preserves site-agnostic prominence and abse
           {
             actionType: "manage_preferences",
             label: "Manage choices",
-            presentationType: "inline_link"
+            presentationType: "inline_link",
+            placementType: "action_cluster"
+          }
+        ]
+      },
+      expectedAssessmentOptions: "observed",
+      expectedAssessmentReject: "observed",
+      expectedChecklistEligibility: "observed",
+      expectedGapFinding: false,
+      expectedRowStatus: "Observed",
+      expectedScore: 100,
+      expectedState: "inline_link_action_cluster"
+    },
+    {
+      name: "inline preferences link retained in first-layer body copy",
+      fixture: {
+        firstLayerControls: [
+          { actionType: "accept_all", label: "Accept all" },
+          { actionType: "reject_all", label: "Decline" },
+          {
+            actionType: "manage_preferences",
+            label: "Manage choices",
+            presentationType: "inline_link",
+            placementType: "first_layer_body"
           }
         ]
       },
@@ -254,7 +278,7 @@ test("canonical consent-control flow preserves site-agnostic prominence and abse
       expectedGapFinding: false,
       expectedRowStatus: "Review signal",
       expectedScore: 100,
-      expectedState: "inline_link"
+      expectedState: "inline_link_first_layer_body"
     },
     {
       name: "typed controls retained despite independent accessibility timeout",

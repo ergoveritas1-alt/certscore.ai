@@ -85,6 +85,7 @@ function makeCanonicalConsentAssessment(input: {
     intent: "accept" | "reject" | "options";
     label: string;
     presentationType?: "dedicated_button" | "inline_link" | "persistent_link" | "unknown";
+    placementType?: "action_cluster" | "first_layer_body" | "persistent_surface" | "unknown";
   }>;
   coverage?: "complete" | "limited";
   noGo?: boolean;
@@ -2776,6 +2777,83 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats substantial retained polic
   );
 });
 
+test("irrelevant legal-basis extraction remains a neutral not-located result with policy provenance", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [{
+          disclosureType: "legal_basis",
+          evidenceText: "You can contact us by email, telephone, or through our customer service channels.",
+          source: "deterministic",
+          status: "partial"
+        }],
+        policyDocumentProvenance: [{
+          detectedLanguage: "en",
+          directlyLinkedFromScannedPage: true,
+          discoveryMethod: "footer_link",
+          lastUpdatedText: "Last updated: June 2026",
+          policyTitle: "Amazon Privacy Notice",
+          retrievalTimestamp: "2026-08-01T18:00:00.000Z",
+          sourceUrl: "https://www.amazon.de/privacy",
+          translationApplied: false
+        }],
+        policyEvidenceProvenanceContractVersion: "certscore.policy-evidence-provenance.v1",
+        policyPrimaryLanguage: "en",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4200,
+        privacyPolicyUrls: ["https://www.amazon.de/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "Amazon Privacy Notice. Contact and communication information. ".repeat(80),
+        scannedPageLanguage: "de"
+      }
+    },
+    snapshot: { privacy_policy_present: true }
+  });
+
+  const legalBasis = outcomes.legal_basis_disclosure_observed!;
+  const assessment = legalBasis.criticalEvidence.retainedEvidence.policyEvidenceAssessment as Record<string, unknown>;
+  const provenance = legalBasis.criticalEvidence.retainedEvidence.policyEvidenceProvenance as Record<string, unknown>;
+  assert.equal(legalBasis.status, "Not confirmed");
+  assert.equal(assessment.result, "not_located_automatically");
+  assert.equal(assessment.scoreEffect, "none");
+  assert.equal(provenance.policyTitle, "Amazon Privacy Notice");
+  assert.equal(provenance.detectedLanguage, "en");
+  assert.equal(provenance.bannerLanguage, "de");
+  assert.equal(provenance.directlyLinkedFromScannedPage, true);
+  assert.equal(provenance.translationApplied, false);
+});
+
+test("a short required-by-law retention excerpt does not establish substantive retention disclosure", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [{
+          disclosureType: "data_retention",
+          evidenceText: "We retain such information for as long as required by law.",
+          selectedPolicySectionExcerpt: "We retain such information for as long as required by law.",
+          selectedPolicySectionHeading: "Retention",
+          selectedPolicySectionUrl: "https://www.amazon.de/privacy",
+          source: "deterministic",
+          status: "observed"
+        }],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4200,
+        privacyPolicyUrls: ["https://www.amazon.de/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "Privacy notice and general information. ".repeat(110)
+      }
+    },
+    snapshot: { privacy_policy_present: true }
+  });
+
+  const retention = outcomes.retention_disclosure_observed!;
+  const assessment = retention.criticalEvidence.retainedEvidence.policyEvidenceAssessment as Record<string, unknown>;
+  assert.equal(retention.status, "Not confirmed");
+  assert.match(retention.limitation, /extraction limitation, not evidence/i);
+  assert.equal(assessment.result, "not_located_automatically");
+  assert.equal(assessment.scoreEffect, "none");
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes rejects controller/contact page chrome excerpts", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -4852,11 +4930,79 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat Akamai security or
     ["Akamai mPulse"]
   );
   assert.match(outcomes.analytics_vendor_observed?.limitation ?? "", /Performance\/RUM analytics evidence/i);
-  assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Insufficient evidence");
+  assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Not observed");
   assert.match(
     outcomes.device_identification_fingerprinting_signal_observed?.limitation ?? "",
-    /fingerprinting candidate.*contextual evidence/i
+    /low-specificity browser capability access.*contextual evidence/i
   );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps Navigator.plugins evidence contextual", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        fingerprintingRuntimeEvidence: [
+          {
+            fingerprintAttributeCategories: ["plugins"],
+            highEntropySignals: ["Navigator.plugins"],
+            timestampMs: 19_100
+          },
+          {
+            fingerprintAttributeCategories: ["plugins"],
+            highEntropySignals: ["Navigator.mimeTypes"],
+            timestampMs: 19_101
+          }
+        ],
+        fingerprintingEvidenceSummary: {
+          assessmentContractVersion: "fingerprinting_evidence_assessment.v1",
+          assessmentStrength: "contextual_only",
+          coordinatedSignalClusterObserved: false,
+          coverageRetained: true,
+          fingerprintAttributeCategories: ["plugins"],
+          strongCorroboratorObserved: false
+        }
+      }
+    }
+  });
+
+  const outcome = outcomes.device_identification_fingerprinting_signal_observed;
+  assert.equal(outcome?.status, "Not observed");
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.fingerprintingObserved, false);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.promotionEligible, false);
+  assert.equal(
+    (outcome?.criticalEvidence.retainedEvidence.browserDeviceEntropyEvidence as Record<string, unknown>)?.assessmentStrength,
+    "contextual_only"
+  );
+  assert.doesNotMatch(outcome?.limitation ?? "", /fingerprinting candidate/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes uses a coordinated multi-family review signal without promoting fingerprinting", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        fingerprintingRuntimeEvidence: [
+          { fingerprintAttributeCategories: ["canvas"], highEntropySignals: ["HTMLCanvasElement.toDataURL"], timestampMs: 6_000 },
+          { fingerprintAttributeCategories: ["webgl"], highEntropySignals: ["WebGLRenderingContext.getParameter"], timestampMs: 6_100 }
+        ],
+        fingerprintingEvidenceSummary: {
+          assessmentContractVersion: "fingerprinting_evidence_assessment.v1",
+          assessmentStrength: "coordinated_cluster",
+          coordinatedSignalClusterObserved: true,
+          coverageRetained: true,
+          fingerprintAttributeCategories: ["canvas", "webgl"],
+          strongCorroboratorObserved: false
+        }
+      }
+    }
+  });
+
+  const outcome = outcomes.device_identification_fingerprinting_signal_observed;
+  assert.equal(outcome?.status, "Review signal");
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.fingerprintingObserved, false);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.promotionEligible, false);
+  assert.match(outcome?.limitation ?? "", /coordinated browser\/device signal collection/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes retains concrete browser API names and timing for device-identification review", () => {
@@ -6268,6 +6414,10 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes separates weak browser entropy fr
   assert.match(outcome?.limitation ?? "", /evaluated separately in the device-identification row/i);
   assert.equal(outcome?.criticalEvidence.retainedEvidence.sessionReplayObserved, false);
   assert.deepEqual(outcome?.criticalEvidence.retainedEvidence.browserDeviceEntropyEvidence, {
+    assessmentContractVersion: "fingerprinting_evidence_assessment.v1",
+    assessmentStrength: "coordinated_cluster",
+    coordinatedSignalClusterObserved: true,
+    distinctAttributeFamilyCount: 5,
     entropyLinkedToIdentifier: false,
     entropyTransmissionObserved: false,
     fingerprintingRuntimeEvidenceCount: 1,
@@ -6275,6 +6425,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes separates weak browser entropy fr
     hosts: ["ca-times.brightspotcdn.com"],
     strongCorroboratorObserved: false
   });
+  assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Review signal");
+  assert.equal(
+    outcomes.device_identification_fingerprinting_signal_observed?.criticalEvidence.retainedEvidence.promotionEligible,
+    false
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 session replay summary request and timing evidence", () => {
@@ -7606,7 +7761,7 @@ test("Accept-only first-layer consent still evaluates an available settings path
   assert.equal(outcome?.criticalEvidence.retainedEvidence.optionsControlObserved, true);
 });
 
-test("first-layer inline preference link is contextual with reduced prominence", () => {
+test("first-layer inline preference link in body copy is contextual with reduced discoverability", () => {
   const assessment = makeCanonicalConsentAssessment({
     controls: [
       { actionType: "accept_all", intent: "accept", label: "Accept all" },
@@ -7616,6 +7771,7 @@ test("first-layer inline preference link is contextual with reduced prominence",
         intent: "options",
         label: "Cookie Consent Tool",
         presentationType: "inline_link",
+        placementType: "first_layer_body",
       },
     ],
   });
@@ -7628,10 +7784,37 @@ test("first-layer inline preference link is contextual with reduced prominence",
   const outcome = outcomes.options_settings_preferences_control;
   assert.equal(outcome?.status, "Review signal");
   assert.equal(outcome?.criticalEvidence.retainedEvidence.optionsControlObserved, true);
-  assert.equal(outcome?.criticalEvidence.retainedEvidence.optionsControlProminence, "inline_link");
-  assert.match(outcome?.limitation ?? "", /inline text link, not a button/i);
-  assert.match(outcome?.limitation ?? "", /reduced prominence/i);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.optionsControlProminence, "inline_link_first_layer_body");
+  assert.match(outcome?.limitation ?? "", /outside the confirmed accept\/reject action cluster/i);
+  assert.match(outcome?.limitation ?? "", /less discoverable within the banner copy/i);
   assert.doesNotMatch(outcome?.limitation ?? "", /did not show an options control/i);
+});
+
+test("first-layer inline preference link grouped with accept and reject is observed", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [
+      { actionType: "accept_all", intent: "accept", label: "Akzeptieren" },
+      { actionType: "reject_all", intent: "reject", label: "Ablehnen" },
+      {
+        actionType: "manage_preferences",
+        intent: "options",
+        label: "Personalisieren",
+        presentationType: "inline_link",
+        placementType: "action_cluster",
+      },
+    ],
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    ...makeCanonicalConsentPolicyInput(assessment),
+    snapshot: { cookie_banner_present: true },
+  });
+
+  const outcome = outcomes.options_settings_preferences_control;
+  assert.equal(outcome?.status, "Observed");
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.optionsControlObserved, true);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.optionsControlProminence, "inline_link_action_cluster");
+  assert.match(outcome?.limitation ?? "", /beside the directly available accept and reject controls/i);
 });
 
 test("persistent footer preference link is contextual without becoming first-layer evidence", () => {

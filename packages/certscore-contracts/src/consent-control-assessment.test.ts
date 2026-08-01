@@ -261,6 +261,7 @@ test("retains first-layer options presentation without changing control intent",
         intent: "options",
         label: "Cookie Consent Tool",
         presentationType: "inline_link",
+        placementType: "action_cluster",
       }),
     ],
   }];
@@ -269,6 +270,7 @@ test("retains first-layer options presentation without changing control intent",
 
   assert.equal(assessment.controls.options.state, "observed");
   assert.equal(assessment.evidence[0]?.presentationType, "inline_link");
+  assert.equal(assessment.evidence[0]?.placementType, "action_cluster");
 });
 
 test("retains persistent options links without promoting them to first-layer controls", () => {

@@ -23,35 +23,35 @@ const serverOnlyPath = require.resolve("server-only");
 test("pre-consent inventory keeps purpose and evidence separate, removes requests, and places category last", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
 
-  assert.match(source, /\["Type", "Vendor", "Purpose", "Evidence", "First seen", "Cookie name\(s\)", "Domain", "Destination", "Confidence", "Party", "Category", "Priority"\]/);
-  assert.match(source, /label="Purpose"[\s\S]*>Evidence<\/[a-z]+>[\s\S]*>Party<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
+  assert.match(source, /\["Type", "Vendor", "Purpose", "Evidence", "First seen", "Cookie name\(s\)", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"\]/);
+  assert.match(source, /label="Purpose"[\s\S]*>Evidence<\/[a-z]+>[\s\S]*>Relationship<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
   assert.doesNotMatch(source, />Req\.<\/[a-z]+>/);
   assert.doesNotMatch(source, /"Requests"/);
 });
 
-test("party attribution doughnut is derived directly from displayed Party values", async () => {
+test("site relationship doughnut is derived directly from canonical site relationships", async () => {
   const { buildInventoryPartyAttributionSegments } = await import("./shared-scan-detail-view");
   const segments = buildInventoryPartyAttributionSegments([
-    { party: "first_party" },
-    { party: "third_party" },
-    { party: "third_party" },
-    { party: "mixed" },
-    { party: "unknown" }
+    { siteRelationship: "same_site" },
+    { siteRelationship: "cross_site" },
+    { siteRelationship: "cross_site" },
+    { siteRelationship: "mixed" },
+    { siteRelationship: "unknown" }
   ]);
 
   assert.deepEqual(
     segments.map(({ count, filter, label }) => ({ count, filter, label })),
     [
-      { count: 1, filter: "first_party", label: "1st party" },
-      { count: 2, filter: "third_party", label: "3rd party" },
+      { count: 1, filter: "same_site", label: "Same-site" },
+      { count: 2, filter: "cross_site", label: "Cross-site" },
       { count: 1, filter: "mixed", label: "Mixed" },
       { count: 1, filter: "unknown", label: "Unknown" }
     ]
   );
 
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
-  assert.match(source, />Party attribution</);
-  assert.match(source, /aria-label="Party attribution distribution"/);
+  assert.match(source, />Site relationship</);
+  assert.match(source, /aria-label="Site relationship distribution"/);
   assert.doesNotMatch(source, />Priority mix</);
 });
 
@@ -132,7 +132,7 @@ test("buildExecutiveTimelineEvents never labels a generic first-party request as
   assert.equal(withThirdParty.find((event) => event.label === "3P request")?.atMs, 820);
 });
 
-test("buildExecutiveTimelineEvents labels bare browser API access as a fingerprinting candidate", async () => {
+test("buildExecutiveTimelineEvents does not infer fingerprinting from raw browser API access", async () => {
   const { buildExecutiveTimelineEvents } = await import("./shared-scan-detail-view");
   const events = buildExecutiveTimelineEvents({
     hybridRuntimeEvidence: {
@@ -143,8 +143,7 @@ test("buildExecutiveTimelineEvents labels bare browser API access as a fingerpri
       fingerprintingEvidenceSummary: { strongCorroboratorObserved: false }
     }
   });
-  assert.equal(events.some((event) => event.label === "Fingerprinting"), false);
-  assert.equal(events.find((event) => event.label === "Fingerprinting candidate")?.atMs, 21300);
+  assert.equal(events.some((event) => /fingerprint|device-signal/i.test(event.label)), false);
 });
 
 test("buildExecutiveTimelineEvents requires concrete corroboration for fingerprinting and retained embedded inventory", async () => {
@@ -160,17 +159,31 @@ test("buildExecutiveTimelineEvents requires concrete corroboration for fingerpri
   assert.equal(unsupported.some((event) => event.label === "Embedded content"), false);
   assert.equal(unsupported.some((event) => event.label === "Fingerprinting"), false);
 
-  const corroborated = buildExecutiveTimelineEvents({
-    hybridRuntimeEvidence: {
-      embeddedContentSummary: {
-        embeddedContentObserved: true,
-        observations: [{ requestUrl: "https://player.example/media", timestampMs: 4100, preConsent: true }]
+  const corroborated = buildExecutiveTimelineEvents(
+    {
+      hybridRuntimeEvidence: {
+        embeddedContentSummary: {
+          embeddedContentObserved: true,
+          observations: [{ requestUrl: "https://player.example/media", timestampMs: 4100, preConsent: true }]
+        },
+        fingerprintingRuntimeEvidence: [{ requestUrl: "https://scripts.example/fp.js", timestampMs: 3200 }],
+        fingerprintingEvidenceSummary: { strongCorroboratorObserved: true }
+      }
+    },
+    [{
+      criticalEvidence: {
+        retainedEvidence: {
+          browserDeviceEntropyEvidence: {
+            assessmentStrength: "corroborated_collection",
+            firstObservedMs: 3200
+          }
+        }
       },
-      fingerprintingRuntimeEvidence: [{ requestUrl: "https://scripts.example/fp.js", timestampMs: 3200 }],
-      fingerprintingEvidenceSummary: { strongCorroboratorObserved: true }
-    }
-  });
-  assert.equal(corroborated.find((event) => event.label === "Fingerprinting")?.atMs, 3200);
+      id: "device_identification_fingerprinting_signal_observed",
+      status: "Review signal"
+    }]
+  );
+  assert.equal(corroborated.find((event) => event.label === "Fingerprinting review signal")?.atMs, 3200);
   assert.equal(corroborated.find((event) => event.label === "Embedded content")?.atMs, 4100);
 });
 
@@ -193,8 +206,7 @@ test("buildExecutiveTimelineEvents retains a structured custom consent-surface m
 
   assert.equal(events.find((event) => event.label === "Consent banner")?.atMs, 1_420);
   assert.equal(events.some((event) => event.label === "Embedded content"), false);
-  assert.equal(events.some((event) => event.label === "Fingerprinting"), false);
-  assert.equal(events.find((event) => event.label === "Fingerprinting candidate")?.atMs, 19_100);
+  assert.equal(events.some((event) => /fingerprint|device-signal/i.test(event.label)), false);
 });
 
 async function loadBuildScanReportUnifiedFindings() {
@@ -1068,6 +1080,7 @@ test("review evidence export does not use runtime request URLs as scanned page U
         requestPurposeClassificationConfidence: [
           JSON.stringify({
             classification: "non_essential",
+            collectionEndpointObserved: true,
             confidence: 0.92,
             firstSeenMs: 2936,
             hostname: "dpm.demdex.net",

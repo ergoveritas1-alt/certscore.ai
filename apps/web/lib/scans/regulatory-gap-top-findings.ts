@@ -536,7 +536,14 @@ function getDeviceIdentificationDirection(row: RegulatoryGapTopFindingRow) {
   if (evidenceMentions(row, /\b(fraud|security|bot|abuse prevention|authentication)\b/i)) {
     return "neutral_signal";
   }
-  if (evidenceMentions(row, /\b(fingerprint|device id|device identification|cross[- ]site|identity graph|advertis(?:ing|er)|retarget|probabilistic)\b/i)) {
+  const evidence = retainedEvidence(row);
+  const browserDeviceEvidence = evidence.browserDeviceEntropyEvidence ?? evidence.browser_device_entropy_evidence;
+  const typedBrowserDeviceEvidence = browserDeviceEvidence && typeof browserDeviceEvidence === "object" && !Array.isArray(browserDeviceEvidence)
+    ? browserDeviceEvidence as Record<string, unknown>
+    : null;
+  const assessmentStrength = typedBrowserDeviceEvidence?.assessmentStrength ?? typedBrowserDeviceEvidence?.assessment_strength;
+  const promotionEligible = evidence.promotionEligible === true || evidence.promotion_eligible === true;
+  if (promotionEligible || assessmentStrength === "corroborated_collection") {
     return "potential_concern";
   }
   return "review_signal";

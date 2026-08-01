@@ -636,8 +636,8 @@ function regulatoryReviewFixture(): RegulatoryReviewOutput {
         rows: [
           {
             id: "pre_consent_third_party_tracking",
-            label: "Third-party tracking before consent",
-            note: "Pre-consent third-party tracking requires retained request timing evidence.",
+            label: "Non-essential tracking before consent",
+            note: "Pre-consent non-essential tracking requires retained request timing and identifier or collection-endpoint evidence.",
             status: "gap_observed",
             evidenceCapability: "currently_supported",
             evidenceRefs: ["net_ga_collect"],

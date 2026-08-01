@@ -435,6 +435,41 @@ test("canonical pre-consent storage assessment preserves an observed Amazon ubid
   assert.match(metric.explanation, /1 additional pre-consent record remains unclassified/i);
 });
 
+test("Amazon ubid observations reconcile by name domain path and partition context", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          beforeConsent: true,
+          category: "infrastructure",
+          cookieName: "ubid-acbde",
+          cookiePath: "/",
+          domain: ".amazon.de",
+          eventId: "cookie-write-1",
+          nonEssential: false,
+          setAtMs: 5_300,
+        },
+        {
+          beforeConsent: true,
+          category: "unknown",
+          cookieName: "UBID-ACBDE",
+          cookiePath: "/",
+          domain: "amazon.de",
+          eventId: "cookie-write-2",
+          setAtMs: 5_320,
+        }
+      ]
+    }
+  });
+
+  assert.equal(inventory.rows.length, 1);
+  assert.equal(inventory.rows[0]?.category, "analytics");
+  assert.equal(inventory.rows[0]?.essentiality, "non_essential");
+  assert.equal(inventory.rows[0]?.observationCount, 2);
+  assert.deepEqual(inventory.rows[0]?.evidenceRefs, ["cookie-write-1", "cookie-write-2"]);
+  assert.equal(inventory.rows[0]?.firstObservedAtMs, 5_300);
+});
+
 test("canonical pre-consent storage assessment keeps snapshot candidates timing-unconfirmed", () => {
   const assessment = buildPreConsentStorageAssessment({
     runtimeArtifacts: {

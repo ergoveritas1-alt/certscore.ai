@@ -1,5 +1,6 @@
 import {
   getRuntimeCookiePrimaryProvider,
+  getRuntimeCookieEvidenceIdentity,
   type RuntimeCookieEvidenceRow
 } from "./runtime-cookie-evidence";
 import {
@@ -299,7 +300,7 @@ export function buildRuntimeCookiePriorityGroups(
     const purpose = getRuntimeCookiePurposeLabel(row);
     const domain = sanitizeCookieDomain(row.domain);
     const cookieName = sanitizeCookieName(row.cookieName);
-    const key = `${vendor.toLowerCase()}\u0000${purpose.toLowerCase()}\u0000${domain ?? "no-domain"}`;
+    const key = `${vendor.toLowerCase()}\u0000${purpose.toLowerCase()}\u0000${row.essentiality ?? "unknown"}\u0000${domain ?? "no-domain"}`;
     const candidate: RuntimeCookiePriorityGroupRow = {
       attributionEvidence: attribution.attributionEvidence,
       confidence: getRuntimeCookieInventoryConfidence(row),
@@ -328,7 +329,7 @@ export function buildRuntimeCookiePriorityGroups(
           : existing.confidence,
       cookieNames: uniqueStrings([...existing.cookieNames, ...candidate.cookieNames]),
       cookieDetails: [...existing.cookieDetails, ...candidate.cookieDetails].filter((detail, index, all) =>
-        all.findIndex((item) => `${item.cookieName}\u0000${item.domain ?? ""}` === `${detail.cookieName}\u0000${detail.domain ?? ""}`) === index
+        all.findIndex((item) => getRuntimeCookieEvidenceIdentity(item) === getRuntimeCookieEvidenceIdentity(detail)) === index
       ),
       domains: uniqueStrings([...existing.domains, ...candidate.domains]),
       firstSeenMs:

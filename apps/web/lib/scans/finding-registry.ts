@@ -329,7 +329,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   third_party_tracking_pre_consent: {
     id: "third_party_tracking_pre_consent",
-    label: "Third-party tracking before consent",
+    label: "Non-essential tracking before consent",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 98,
     whyItMatters: "External vendors firing before consent increases privacy and compliance risk.",

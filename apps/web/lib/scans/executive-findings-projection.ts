@@ -1605,7 +1605,7 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
     const firstRequest = evidenceDetails.representativeRequests?.[0];
     return uniqueStrings([
       vendorNames.length > 0
-        ? `Before any consent choice was observed, third-party tracking requests were initiated to ${formatVendorList(vendorNames)}.`
+        ? `Before any consent choice was observed, classified non-essential tracking requests were initiated to ${formatVendorList(vendorNames)}.`
         : packet.summary,
       evidenceDetails.consentState
         ? evidenceDetails.consentState.userConsentActionObserved
@@ -1613,7 +1613,7 @@ function buildEvidencePreview(packet: UnifiedFindingDisplayPacket, findingId?: k
           : "No accept, reject, manage, or close interaction was recorded before the tracking evidence."
         : null,
       typeof evidenceDetails.timing?.firstThirdPartyTrackingRequestMs === "number"
-        ? `First classified third-party tracking request was observed at ${evidenceDetails.timing.firstThirdPartyTrackingRequestMs}ms.`
+        ? `First classified non-essential tracking request was observed at ${evidenceDetails.timing.firstThirdPartyTrackingRequestMs}ms.`
         : null,
       firstRequest ? `Representative pre-consent tracking request: ${firstRequest.url}` : null
     ]).slice(0, 4);
@@ -2279,20 +2279,20 @@ function buildPreConsentTimingAnalysis(input: {
   if (input.firstThirdPartyTrackingRequestMs === null) {
     return {
       trackingBeforeConsentWindow,
-      basis: "Third-party tracking request timing was not retained, but no consent interaction was recorded before the tracking evidence."
+      basis: "Classified tracking request timing was not retained, but no consent interaction was recorded before the tracking evidence."
     };
   }
 
   if (input.cmpVisibleMs === null) {
     return {
       trackingBeforeConsentWindow,
-      basis: `First third-party tracking request (${input.firstThirdPartyTrackingRequestMs}ms) occurred before any recorded consent interaction.`
+      basis: `First classified non-essential tracking request (${input.firstThirdPartyTrackingRequestMs}ms) occurred before any recorded consent interaction.`
     };
   }
 
   return {
     trackingBeforeConsentWindow,
-    basis: `First third-party tracking request (${input.firstThirdPartyTrackingRequestMs}ms) occurred after CMP became visible (${input.cmpVisibleMs}ms) and before any recorded consent interaction.`
+    basis: `First classified non-essential tracking request (${input.firstThirdPartyTrackingRequestMs}ms) occurred after CMP became visible (${input.cmpVisibleMs}ms) and before any recorded consent interaction.`
   };
 }
 

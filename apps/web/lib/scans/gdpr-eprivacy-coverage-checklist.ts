@@ -180,15 +180,15 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "pre_consent_third_party_tracking",
-    label: "Pre-consent 3rd party tracking",
-    explanation: "Whether analytics, advertising, cross-site measurement, or similar 3rd party requests were observed before recorded consent.",
+    label: "Pre-consent non-essential tracking",
+    explanation: "Whether classified non-essential analytics, advertising, measurement, replay, or similar requests were observed before recorded consent. Site relationship and entity ownership are reported separately.",
     findingIds: [
       "preconsent_tracking",
       "pre_consent_tracking_detected",
       "third_party_tracking_pre_consent"
     ],
     defaultFindingStatus: "Gap observed",
-    notObservedText: "No pre-consent 3rd party tracking finding was surfaced in this scan context.",
+    notObservedText: "No eligible pre-consent non-essential tracking finding was surfaced in this scan context.",
     requiresPublicWebCoverage: true
   },
   {
@@ -1333,16 +1333,16 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
         : serviceConnectionOnly
           ? `Pre-consent advertising/analytics service connections were retained for review without a concrete ad, analytics-event, identifier, or storage-write event: ${selectedEvidence || vendors.join(", ")}.`
           : selectedEvidence.length > 0
-          ? `${priorityLabel} priority pre-consent 3rd party tracking inventory was retained for review: ${selectedEvidence}.`
-          : `${priorityLabel} priority pre-consent 3rd party tracking inventory was retained for review.`,
+          ? `${priorityLabel} priority pre-consent non-essential tracking inventory was retained for review: ${selectedEvidence}.`
+          : `${priorityLabel} priority pre-consent non-essential tracking inventory was retained for review.`,
     } satisfies GdprEprivacyCoverageCriticalEvidence,
     evidenceRefs: selectedRows
       .map((row) => `${row.vendor} ${row.purpose} at ${row.domains?.join(", ") || "retained request host"}, first seen ${formatCookiePriorityFirstSeen(row.firstSeenMs)}${row.requestCount ? `, ${row.requestCount} request${row.requestCount === 1 ? "" : "s"}` : ""}`)
       .slice(0, 6),
     limitation:
       selectedEvidence.length > 0
-        ? `${priorityLabel} priority pre-consent 3rd party tracking evidence was retained for ${selectedEvidence}.`
-        : `${priorityLabel} priority pre-consent 3rd party tracking evidence was retained.`,
+        ? `${priorityLabel} priority pre-consent non-essential tracking evidence was retained for ${selectedEvidence}.`
+        : `${priorityLabel} priority pre-consent non-essential tracking evidence was retained.`,
     rowId: "pre_consent_third_party_tracking",
     status: contextualInfrastructureOnly ? "Not observed" as const : status
   } satisfies GdprEprivacyCoverageOutcome;
@@ -1357,9 +1357,15 @@ function buildChecklistItem(input: {
   limitation?: string;
   status: GdprEprivacyCoverageChecklistStatus;
 }): GdprEprivacyCoverageChecklistItem {
-  const assessmentStatus = input.id === "consent_choice_quality" && input.status === "Not confirmed"
+  const policyEvidenceAssessment = getRecordValue(input.criticalEvidence.retainedEvidence.policyEvidenceAssessment);
+  const neutralPolicyRetrievalLimitation =
+    input.status === "Not confirmed" &&
+    getStringValue(policyEvidenceAssessment?.scoreEffect ?? policyEvidenceAssessment?.score_effect) === "none";
+  const assessmentStatus = neutralPolicyRetrievalLimitation
     ? "coverage_limitation"
-    : getAssessmentStatus(input.status);
+    : input.id === "consent_choice_quality" && input.status === "Not confirmed"
+      ? "coverage_limitation"
+      : getAssessmentStatus(input.status);
   const evidenceState = getEvidenceState({
     assessmentStatus,
     id: input.id,
@@ -1381,7 +1387,7 @@ function buildChecklistItem(input: {
     limitation: input.limitation,
     note: input.explanation,
     status: input.status,
-    tone: getChecklistTone(input.status)
+    tone: neutralPolicyRetrievalLimitation ? "neutral" : getChecklistTone(input.status)
   };
 }
 
@@ -2289,7 +2295,7 @@ function specializeChecklistRow(input: {
       evidenceRefs: input.evidenceRefs,
       explanation:
         input.coverageOutcome?.limitation ??
-        "Fingerprinting candidate: browser/device entropy or identifier-like device collection evidence was retained for review; the retained record is not sufficient to confirm fingerprinting.",
+        "Coordinated browser/device signal evidence was retained across multiple attribute families; the retained record is not sufficient to confirm fingerprinting.",
       label: input.definition.label,
       status: "Review signal" as const
     };
@@ -2659,7 +2665,7 @@ function getUnifiedFindingStatusBasis(input: {
   if (input.rowId === "pre_consent_third_party_tracking" && input.status === "Gap observed") {
     return firstHighlight
       ? `${firstHighlight} Consent action was not recorded before these requests.`
-      : "3rd party tracking request timing evidence was retained before a recorded consent action.";
+      : "Classified non-essential tracking request timing evidence was retained before a recorded consent action.";
   }
 
   if (input.rowId === "session_replay_fingerprinting_review" && input.status === "Gap observed") {

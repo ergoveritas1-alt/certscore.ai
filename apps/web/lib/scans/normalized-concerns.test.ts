@@ -91,6 +91,7 @@ function makeConsentOptionsAssessment(input: {
     intent: "accept" | "reject" | "options";
     label: string;
     presentationType?: "dedicated_button" | "inline_link" | "unknown";
+    placementType?: "action_cluster" | "first_layer_body" | "unknown";
   }>;
   persistentOptions?: boolean;
 }) {
@@ -170,14 +171,28 @@ test("normalizes consent options prominence before concern policy assigns checkl
       })
     },
     {
+      expectedEligibility: "observed",
+      expectedState: "inline_link_action_cluster",
+      assessment: makeConsentOptionsAssessment({
+        firstLayer: [{
+          actionType: "manage_preferences",
+          intent: "options",
+          label: "Personalise",
+          presentationType: "inline_link",
+          placementType: "action_cluster"
+        }]
+      })
+    },
+    {
       expectedEligibility: "review_signal",
-      expectedState: "inline_link",
+      expectedState: "inline_link_first_layer_body",
       assessment: makeConsentOptionsAssessment({
         firstLayer: [{
           actionType: "manage_preferences",
           intent: "options",
           label: "Cookie Consent Tool",
-          presentationType: "inline_link"
+          presentationType: "inline_link",
+          placementType: "first_layer_body"
         }]
       })
     },
@@ -749,6 +764,7 @@ test("runtime CMP load-order evidence flows through normalized concerns and publ
       requestPurposeClassificationConfidence: [
         {
           confidence: 0.95,
+          collectionEndpointObserved: true,
           essentiality: "non_essential",
           firstSeenMs: 250,
           requestUrl: "https://analytics.example/collect",
@@ -810,6 +826,7 @@ test("iFIT CMP load order uses the earliest eligible Google event and actual One
         requestPurposeClassificationConfidence: [
           {
             confidence: 0.98,
+            collectionEndpointObserved: true,
             essentiality: "non_essential",
             firstSeenMs: 2_343,
             requestUrl: "https://www.google-analytics.com/analytics.js",

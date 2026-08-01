@@ -497,6 +497,35 @@ function getEvidenceSummaryRows(input: RegulatoryChecklistEvidenceDetailsProps) 
     .slice(0, 3);
 }
 
+function getPolicyProvenanceRows(jsonPayload: string) {
+  const retainedEvidence = getRetainedEvidence(jsonPayload);
+  const provenance = getRecord(retainedEvidence?.policyEvidenceProvenance);
+  if (!provenance) {
+    return [];
+  }
+  const policyTitle = getString(provenance.policyTitle) ?? "Policy source";
+  const sourceUrl = getString(provenance.sourceUrl);
+  const detectedLanguage = getString(provenance.detectedLanguage) ?? "Unknown";
+  const bannerLanguage = getString(provenance.bannerLanguage) ?? "Unknown";
+  const translationApplied = getBoolean(provenance.translationApplied);
+  const directlyLinked = getBoolean(provenance.directlyLinkedFromScannedPage);
+  const discoveryMethod = getString(provenance.discoveryMethod);
+  const retrievalTimestamp = getString(provenance.retrievalTimestamp);
+  const lastUpdatedText = getString(provenance.lastUpdatedText);
+  const effectiveDate = getString(provenance.effectiveDate);
+  const sectionHeading = getString(provenance.sectionHeading);
+  return [
+    `${policyTitle}${sourceUrl ? ` — ${sourceUrl}` : " — URL not retained"}`,
+    `Source policy language: ${detectedLanguage}; banner/page language: ${bannerLanguage}; translation applied: ${translationApplied === null ? "Unknown" : translationApplied ? "Yes" : "No"}.`,
+    `Policy reached through: ${discoveryMethod ? humanizeTraceToken(discoveryMethod) : "Unknown"}; directly linked from scanned page: ${directlyLinked === null ? "Unknown" : directlyLinked ? "Yes" : "No"}${retrievalTimestamp ? `; retrieved during scan: ${retrievalTimestamp}` : ""}.`,
+    [
+      sectionHeading ? `Section: ${sectionHeading}` : "Section: Not retained",
+      effectiveDate ? `effective date: ${effectiveDate}` : null,
+      lastUpdatedText ? `update text: ${lastUpdatedText}` : null,
+    ].filter((value): value is string => Boolean(value)).join("; ") + ".",
+  ];
+}
+
 function humanizeTraceToken(value: string) {
   return value
     .replace(/_/g, " ")
@@ -882,6 +911,8 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
   const evidenceState = getString(parsed.evidenceState);
   const status = getString(parsed.status) ?? getString(parsed.statusLabel);
   const retainedEvidence = getRetainedEvidence(jsonPayload);
+  const policyEvidenceAssessment = getRecord(retainedEvidence?.policyEvidenceAssessment);
+  const policyEvidenceResult = getString(policyEvidenceAssessment?.result);
   const traceSubjects = getTraceSubjects(retainedEvidence);
   const subjectList = formatSubjectList(traceSubjects, "the signals shown in the result trace");
   const isGapOrReview =
@@ -907,6 +938,14 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
 
   const verifyStep = "Rerun the v2 scan and confirm the row changes from a gap/review signal to observed, checked, not observed, or a documented coverage limitation.";
   const evidenceStep = "Keep a short internal record of the changed control, policy surface, or tag-setting rule so the next scan can be reviewed against the same evidence.";
+
+  if (policyEvidenceResult === "extraction_incomplete" || policyEvidenceResult === "not_located_automatically") {
+    return {
+      kind: "none",
+      message: "This row records an automated retrieval limitation, not a negative policy assessment. No site remediation is indicated from this row alone; review the source policy manually or improve the canonical policy extractor.",
+      steps: [],
+    };
+  }
 
   if (isPolicyDisclosureNotConfirmed(parsed, retainedEvidence)) {
     return {
@@ -1231,9 +1270,20 @@ export function RegulatoryChecklistActiveTrace({
 
 export function RegulatoryChecklistEvidenceDetails(input: RegulatoryChecklistEvidenceDetailsProps) {
   const evidenceSummaryRows = getEvidenceSummaryRows(input);
+  const policyProvenanceRows = getPolicyProvenanceRows(input.jsonPayload);
 
   return (
     <>
+      {policyProvenanceRows.length > 0 ? (
+        <div className="border-t border-slate-200 px-2.5 py-1.5">
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] leading-5 text-slate-800">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">Policy provenance</p>
+            {policyProvenanceRows.map((row, index) => (
+              <p key={`${index}:${row}`}>{row}</p>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {evidenceSummaryRows.length > 0 ? (
         <div className="border-t border-slate-200 px-2.5 py-1.5">
           <div className="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-[11px] leading-5 text-sky-950">

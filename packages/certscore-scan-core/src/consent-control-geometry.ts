@@ -37,6 +37,12 @@ export type ConsentControlPresentationType =
   | "persistent_link"
   | "unknown";
 
+export type ConsentControlPlacementType =
+  | "action_cluster"
+  | "first_layer_body"
+  | "persistent_surface"
+  | "unknown";
+
 export type ConsentControlDecisionStatus =
   | "confirmed_visible"
   | "dom_present_not_visible"
@@ -98,6 +104,7 @@ export interface ConsentControlCandidateEvidence {
   normalizedLabel: string;
   actionType: ConsentControlGeometryActionType;
   presentationType: ConsentControlPresentationType;
+  placementType: ConsentControlPlacementType;
   tagName: string;
   role?: string;
   ariaLabel?: string;
@@ -348,6 +355,7 @@ export async function captureConsentControlGeometry(
     buildCandidateEvidence(candidate, index, raw.pageUrl, options.screenshotArtifactRef, containers)
   );
   reconcileConfirmedConsentModalClusters(candidates, containers);
+  classifyConsentControlPlacements(candidates);
   const summary = summarizeConsentControlGeometry(candidates, cmp);
   const expectedPageUrl = page.url();
   const mainFrameUnavailable = !mainFrameCapture ||
@@ -374,6 +382,77 @@ export async function captureConsentControlGeometry(
     candidates,
     summary,
   };
+}
+
+function classifyConsentControlPlacements(
+  candidates: ConsentControlCandidateEvidence[],
+): void {
+  for (const candidate of candidates) {
+    if (candidate.presentationType === "persistent_link") {
+      candidate.placementType = "persistent_surface";
+      continue;
+    }
+    if (
+      candidate.actionType !== "manage_preferences" ||
+      candidate.presentationType !== "inline_link" ||
+      candidate.layer !== "first_layer" ||
+      !candidate.containerId ||
+      candidate.decisionStatus !== "confirmed_visible"
+    ) {
+      continue;
+    }
+
+    const companionControls = candidates.filter((companion) =>
+      companion.candidateId !== candidate.candidateId &&
+      companion.containerId === candidate.containerId &&
+      companion.frameContext.frameUrl === candidate.frameContext.frameUrl &&
+      companion.layer === "first_layer" &&
+      companion.decisionStatus === "confirmed_visible" &&
+      (companion.actionType === "accept_all" || companion.actionType === "reject_all")
+    );
+    const accept = companionControls.find((companion) => companion.actionType === "accept_all");
+    const reject = companionControls.find((companion) => companion.actionType === "reject_all");
+    candidate.placementType = accept && reject &&
+      controlsShareActionRow(candidate, accept) &&
+      controlsShareActionRow(candidate, reject) &&
+      controlsAreTightlyGrouped(candidate, [accept, reject])
+        ? "action_cluster"
+        : "first_layer_body";
+    candidate.reasons = [
+      ...candidate.reasons,
+      candidate.placementType === "action_cluster"
+        ? "inline_options_link_grouped_with_first_layer_accept_and_reject"
+        : "inline_options_link_outside_confirmed_accept_reject_action_cluster",
+    ];
+  }
+}
+
+function controlsShareActionRow(
+  left: ConsentControlCandidateEvidence,
+  right: ConsentControlCandidateEvidence,
+): boolean {
+  const overlap = Math.max(
+    0,
+    Math.min(left.boundingBox.bottom, right.boundingBox.bottom) -
+      Math.max(left.boundingBox.top, right.boundingBox.top),
+  );
+  const smallerHeight = Math.min(left.boundingBox.height, right.boundingBox.height);
+  return smallerHeight > 0 && overlap / smallerHeight >= 0.4;
+}
+
+function controlsAreTightlyGrouped(
+  options: ConsentControlCandidateEvidence,
+  companions: ConsentControlCandidateEvidence[],
+): boolean {
+  const row = [options, ...companions]
+    .sort((left, right) => left.boundingBox.left - right.boundingBox.left);
+  return row.slice(1).every((control, index) => {
+    const previous = row[index];
+    if (!previous) return false;
+    const horizontalGap = Math.max(0, control.boundingBox.left - previous.boundingBox.right);
+    const heightBasis = Math.max(previous.boundingBox.height, control.boundingBox.height);
+    return horizontalGap <= Math.max(48, heightBasis * 2);
+  });
 }
 
 function reconcileConfirmedConsentModalClusters(
@@ -608,6 +687,7 @@ function buildCandidateEvidence(
     normalizedLabel: normalizeLabel(candidate.label),
     actionType,
     presentationType: presentationTypeForCandidate(candidate),
+    placementType: "unknown",
     tagName: candidate.tagName,
     role: candidate.role,
     ariaLabel: candidate.ariaLabel,

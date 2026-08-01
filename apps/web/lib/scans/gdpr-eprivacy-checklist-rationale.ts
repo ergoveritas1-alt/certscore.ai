@@ -49,7 +49,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
       fallbackFirstSeenMs: firstSeenMs,
       item,
-      lead: "Pre-consent 3rd party tracking evidence was retained",
+      lead: "Pre-consent non-essential tracking evidence was retained",
       maxEntries: 2,
       rowKind: "tracking"
     });

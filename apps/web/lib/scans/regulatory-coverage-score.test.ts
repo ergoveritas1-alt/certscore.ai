@@ -53,7 +53,7 @@ test("balanced Accept and Decline without first-layer settings does not incur a 
 });
 
 test("contextual inline and persistent settings links do not incur a material score penalty", () => {
-  for (const optionsControlProminence of ["inline_link", "persistent_link"]) {
+  for (const optionsControlProminence of ["inline_link", "inline_link_first_layer_body", "persistent_link"]) {
     const result = deriveRegulatoryCoverageScore({
       framework: "gdpr_eprivacy",
       rows: [{
@@ -69,6 +69,30 @@ test("contextual inline and persistent settings links do not incur a material sc
 
     assert.equal(result.score, 100, optionsControlProminence);
   }
+});
+
+test("contextual browser capability access does not incur a fingerprinting score penalty", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [{
+      assessmentStatus: "checked",
+      criticalEvidence: {
+        retainedEvidence: {
+          browserDeviceEntropyEvidence: {
+            assessmentStrength: "contextual_only",
+            browserApiSignals: ["Navigator.plugins", "Navigator.mimeTypes"]
+          },
+          fingerprintingObserved: false,
+          promotionEligible: false
+        }
+      },
+      evidenceState: "not_observed",
+      id: "device_identification_fingerprinting_signal_observed",
+      status: "Not observed"
+    }]
+  });
+
+  assert.equal(result.score, 100);
 });
 
 test("storage classification limitations do not incur a substantive concern penalty", () => {
@@ -208,4 +232,28 @@ test("GDPR/ePrivacy score uses the same row-led scoring mechanics", () => {
   assert.equal(gapScore.score, 6);
   assert.equal(gapScore.coverageConfidence, "low");
   assert.equal(gapScore.ratingLabel, "Needs work");
+});
+
+test("technical policy extraction limitations do not affect the GDPR/ePrivacy score", () => {
+  const score = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [{
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          policyEvidenceAssessment: {
+            contractVersion: "certscore.policy-topic-evidence-assessment.v1",
+            result: "not_located_automatically",
+            scoreEffect: "none"
+          }
+        }
+      },
+      evidenceState: "not_observed",
+      id: "legal_basis_disclosure_observed",
+      status: "Not confirmed"
+    }]
+  });
+
+  assert.equal(score.score, null);
+  assert.equal(score.ratingLabel, "Not scored");
 });

@@ -2628,7 +2628,7 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
 function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const preconsentTimingEvidence = getPreconsentTimingRetainedEvidence(input.runtimeArtifacts);
   const firstObservedMsRef = formatPreconsentObservedMsRef(
-    "First pre-consent 3rd party tracking request observation",
+    "First pre-consent classified tracking request observation",
     preconsentTimingEvidence.firstPreconsentThirdPartyTrackingObservedMs,
     preconsentTimingEvidence.firstPreconsentThirdPartyTrackingObservationBasis
   );
@@ -2665,7 +2665,7 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
         ? highRiskPurposeRetained
           ? "Concrete pre-consent tracker vendor or request evidence was retained, but no eligible unified tracking finding was projected for this row. Manual review should confirm whether the retained request sequence supports a GDPR/ePrivacy tracking gap."
           : "Pre-consent 3rd party timing evidence was retained, but the retained purpose mix is limited to lower-risk or unresolved infrastructure categories. Manual review should confirm essentiality without treating the evidence as adtech or retargeting by itself."
-        : "Pre-consent 3rd party tracking evidence was retained, but no eligible unified tracking finding was projected for this row.",
+        : "Pre-consent non-essential tracking evidence was retained, but no eligible unified tracking finding was projected for this row.",
       [
         firstObservedMsRef,
         "Evidence: pre-consent tracking runtime signal",
@@ -2700,7 +2700,7 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
     return makeOutcome(
       "pre_consent_third_party_tracking",
       "Not observed",
-      "Runtime tracking checks completed for the tested context, and no eligible pre-consent 3rd party tracking finding was projected.",
+      "Runtime tracking checks completed for the tested context, and no eligible pre-consent non-essential tracking finding was projected.",
       [
         firstObservedMsRef,
         "Evidence: runtime capture completed"
@@ -4424,6 +4424,8 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
       optionsControlObserved:
         state === "dedicated_button" ||
         state === "first_layer_control" ||
+        state === "inline_link_action_cluster" ||
+        state === "inline_link_first_layer_body" ||
         state === "inline_link",
       optionsControlProminence: state,
       retainedConsentOptionsControls: retainedControls
@@ -4431,14 +4433,20 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
 
     if (
       prominenceConcern.regulatoryChecklistEligibility === "observed" &&
-      (state === "dedicated_button" || state === "first_layer_control")
+      (
+        state === "dedicated_button" ||
+        state === "first_layer_control" ||
+        state === "inline_link_action_cluster"
+      )
     ) {
       return makeOutcome(
         "options_settings_preferences_control",
         "Observed",
         state === "dedicated_button"
           ? "A dedicated options, settings, or preferences control was observed on the retained first-layer consent surface."
-          : "A structured options, settings, or preferences control was observed on the retained first-layer consent surface.",
+          : state === "inline_link_action_cluster"
+            ? "A clearly labelled preferences link was observed in the first-layer action cluster beside the directly available accept and reject controls."
+            : "A structured options, settings, or preferences control was observed on the retained first-layer consent surface.",
         concernEvidenceRefs,
         { retainedEvidence }
       );
@@ -4446,12 +4454,14 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
 
     if (
       prominenceConcern.regulatoryChecklistEligibility === "review_signal" &&
-      state === "inline_link"
+      (state === "inline_link_first_layer_body" || state === "inline_link")
     ) {
       return makeOutcome(
         "options_settings_preferences_control",
         "Review signal",
-        "Preferences control present as an inline text link, not a button — reduced prominence. Granular choices appear available; verify that the link is keyboard accessible, clearly labelled, and opens purpose-level choices.",
+        state === "inline_link_first_layer_body"
+          ? "A preferences control was retained as an inline text link outside the confirmed accept/reject action cluster. Granular choices appear available, but the control may be less discoverable within the banner copy; verify that it is prominent, keyboard accessible, clearly labelled, and opens purpose-level choices."
+          : "Preferences control present as an inline text link, not a button, but retained placement evidence did not establish whether it was grouped with the primary consent actions. Verify that the link is prominent, keyboard accessible, clearly labelled, and opens purpose-level choices.",
         concernEvidenceRefs,
         { retainedEvidence }
       );
@@ -7720,7 +7730,14 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
     );
   const article13SignalObserved = extractionOk && article13SignalStatus === "observed" && article13SignalEvidenceMatches;
   const article13SignalPartial =
-    extractionOk && article13SignalStatus === "partial";
+    extractionOk &&
+    article13SignalStatus === "partial" &&
+    (config.rowId !== "legal_basis_disclosure_observed" || article13SignalEvidenceMatches);
+  const article13SignalPartialUnmatched =
+    extractionOk &&
+    config.rowId === "legal_basis_disclosure_observed" &&
+    article13SignalStatus === "partial" &&
+    !article13SignalEvidenceMatches;
   const article13SignalUnmatched =
     extractionOk && article13SignalStatus === "observed" && !article13SignalEvidenceMatches;
   const topicObserved =
@@ -7986,6 +8003,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
 
   if (
     article13SignalUnmatched ||
+    article13SignalPartialUnmatched ||
     topicObserved ||
     (directSignal === true && requiresRowSpecificEvidence && !textMatchEvidence && !article13SignalObserved)
   ) {
@@ -8001,7 +8019,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
       "Not confirmed",
       missingReason,
       [
-        article13SignalUnmatched
+        article13SignalUnmatched || article13SignalPartialUnmatched
           ? `Evidence: extractor signaled ${config.label} without a row-specific excerpt`
           : directSignal === true
             ? `Evidence: extractor signaled ${config.label}`
@@ -8027,7 +8045,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
           policySurfaceSummary: summary,
           selectedEvidenceStrength: "limited",
           signalObserved: "not_confirmed_row_specific_extraction",
-          supportSource: article13SignalUnmatched
+          supportSource: article13SignalUnmatched || article13SignalPartialUnmatched
             ? "article13DisclosureSignals"
             : directSignal === true
               ? "extractorSignal"
@@ -8343,12 +8361,32 @@ function calibratePolicyDisclosureOutcome(outcome: GdprEprivacyCoverageOutcome) 
     return makeOutcome(
       outcome.rowId,
       "Not confirmed",
-      "Consent or legally required processing language was retained, but no Article 6-style legal-basis disclosure or purpose-to-basis mapping was confirmed.",
+      "Automated extraction did not retain a sufficiently direct legal-basis passage. Incidental consent or legally required processing language does not establish that the policy disclosure is deficient.",
       outcome.evidenceRefs,
       {
         retainedEvidence: {
           ...outcome.criticalEvidence.retainedEvidence,
-          signalObserved: "incidental_legal_language_without_basis_mapping"
+          signalObserved: "not_located_automatically_incidental_legal_language"
+        }
+      }
+    );
+  }
+
+  if (
+    outcome.rowId === "retention_disclosure_observed" &&
+    outcome.status === "Observed" &&
+    /\b(?:retain|keep|store)\b[\s\S]{0,80}\b(?:as long as|required by law|required under applicable law)\b/i.test(evidenceText) &&
+    !/\b(?:as long as necessary|for the purposes?|account remains active|delete|deletion|erase|anonymi[sz]e|limitation period|legal claims?|disputes?|contractual|fraud|security|tax|accounting|specific retention period|retention schedule)\b/i.test(evidenceText)
+  ) {
+    return makeOutcome(
+      outcome.rowId,
+      "Not confirmed",
+      "Automated extraction retained only a short legal-obligation retention statement, not a sufficiently direct passage describing a retention period or substantive retention criteria. This is an extraction limitation, not evidence that the policy disclosure is deficient.",
+      outcome.evidenceRefs,
+      {
+        retainedEvidence: {
+          ...outcome.criticalEvidence.retainedEvidence,
+          signalObserved: "not_located_automatically_short_retention_excerpt"
         }
       }
     );
@@ -8445,11 +8483,130 @@ function calibratePolicyDisclosureOutcome(outcome: GdprEprivacyCoverageOutcome) 
   return outcome;
 }
 
+function policyEvidenceAssessmentForOutcome(outcome: GdprEprivacyCoverageOutcome) {
+  const retained = outcome.criticalEvidence.retainedEvidence;
+  const extractionHealth = getObject(retained, ["policyTextExtractionHealth", "policy_text_extraction_health"])
+    ?? getObject(getObject(retained, ["policySurfaceSummary", "policy_surface_summary"]), [
+      "policyTextExtractionHealth",
+      "policy_text_extraction_health"
+    ]);
+  const extractionStatus = getString(extractionHealth, [
+    "policyTextExtractionStatus",
+    "policy_text_extraction_status"
+  ]);
+  const signalObserved = getString(retained, ["signalObserved", "signal_observed"]);
+  const extractionIncomplete =
+    Boolean(extractionStatus && extractionStatus !== "ok") ||
+    signalObserved === "not_confirmed_extraction_limited";
+  const notLocatedAutomatically =
+    outcome.status === "Not confirmed" &&
+    !extractionIncomplete;
+  const result = outcome.status === "Observed"
+    ? "disclosure_observed"
+    : outcome.status === "Gap observed"
+      ? "disclosure_incomplete"
+      : extractionIncomplete
+        ? "extraction_incomplete"
+        : notLocatedAutomatically
+          ? "not_located_automatically"
+          : outcome.status === "Review signal"
+            ? "ambiguous"
+            : "not_evaluated";
+  return {
+    contractVersion: "certscore.policy-topic-evidence-assessment.v1",
+    result,
+    scoreEffect: result === "extraction_incomplete" || result === "not_located_automatically"
+      ? "none"
+      : "canonical_policy",
+    topicRelevance: result === "disclosure_observed" || result === "disclosure_incomplete"
+      ? "direct"
+      : result === "ambiguous"
+        ? "ambiguous"
+        : "unknown",
+  };
+}
+
+function attachPolicyEvidenceProjection(
+  input: GdprEprivacyCoveragePolicyInput,
+  outcome: GdprEprivacyCoverageOutcome,
+) {
+  const summary = getPolicyDisclosureSummary(input.runtimeArtifacts);
+  const retained = outcome.criticalEvidence.retainedEvidence;
+  const article13Signal = getObject(retained, ["article13Signal", "article13_signal"]);
+  const rowSpecificSectionEvidence = getObject(retained, [
+    "rowSpecificSectionEvidence",
+    "row_specific_section_evidence"
+  ]);
+  const sectionHeading = [
+    getString(retained, ["selectedPolicySectionHeading", "selected_policy_section_heading"]),
+    getString(rowSpecificSectionEvidence, ["selectedPolicySectionHeading", "selected_policy_section_heading"]),
+    getString(article13Signal, ["selectedPolicySectionHeading", "selected_policy_section_heading"]),
+  ].find((value): value is string => Boolean(value)) ?? null;
+  const sectionUrl = [
+    getString(rowSpecificSectionEvidence, ["selectedPolicySectionUrl", "selected_policy_section_url", "sourceUrl"]),
+    getString(article13Signal, ["selectedPolicySectionUrl", "selected_policy_section_url", "surfaceUrl"]),
+  ].find((value): value is string => Boolean(value)) ?? null;
+  const documents = getObjectArray(summary, ["policyDocumentProvenance", "policy_document_provenance"]);
+  const document = documents.find((candidate) => {
+    const url = getString(candidate, ["sourceUrl", "source_url"]);
+    return Boolean(sectionUrl && url && url === sectionUrl);
+  }) ?? documents[0] ?? null;
+  const sourceUrl = sectionUrl
+    ?? getString(document, ["sourceUrl", "source_url"])
+    ?? getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"])[0]
+    ?? null;
+  const provenance = compactRecord({
+    artifactRefs: document ? getStringArray(document, ["artifactRefs", "artifact_refs"]) : [],
+    bannerLanguage: getString(summary, ["scannedPageLanguage", "scanned_page_language"]),
+    contractVersion: getString(summary, [
+      "policyEvidenceProvenanceContractVersion",
+      "policy_evidence_provenance_contract_version"
+    ]) ?? "certscore.policy-evidence-provenance.v1",
+    detectedLanguage: getString(document, ["detectedLanguage", "detected_language"])
+      ?? getString(summary, ["policyPrimaryLanguage", "policy_primary_language"]),
+    directlyLinkedFromScannedPage: document
+      ? getBoolean(document, ["directlyLinkedFromScannedPage", "directly_linked_from_scanned_page"])
+      : null,
+    discoveryMethod: getString(document, ["discoveryMethod", "discovery_method"]),
+    documentOwnerEntity: getString(document, ["documentOwnerEntity", "document_owner_entity"]),
+    effectiveDate: getString(document, ["effectiveDate", "effective_date"]),
+    lastUpdatedText: getString(document, ["lastUpdatedText", "last_updated_text"])
+      ?? getStringArray(summary, ["policyLastUpdatedTexts", "policy_last_updated_texts"])[0]
+      ?? null,
+    ownershipConfidence: getNumber(document, ["ownershipConfidence", "ownership_confidence"]),
+    policyTitle: getString(document, ["policyTitle", "policy_title"]),
+    retrievalTimestamp: getString(document, ["retrievalTimestamp", "retrieval_timestamp"])
+      ?? getString(summary, ["scanStartedAt", "scan_started_at"]),
+    sectionHeading,
+    sourceUrl,
+    targetRelationship: getString(document, ["targetRelationship", "target_relationship"]),
+    translationApplied: document
+      ? getBoolean(document, ["translationApplied", "translation_applied"])
+      : false,
+    translationTargetLanguage: getString(document, ["translationTargetLanguage", "translation_target_language"]),
+  });
+  return makeOutcome(
+    outcome.rowId,
+    outcome.status,
+    outcome.limitation,
+    outcome.evidenceRefs,
+    {
+      missingOrIncompleteSourceSignals: outcome.criticalEvidence.missingOrIncompleteSourceSignals,
+      retainedEvidence: {
+        ...retained,
+        policyEvidenceAssessment: policyEvidenceAssessmentForOutcome(outcome),
+        policyEvidenceProvenance: provenance,
+      }
+    }
+  );
+}
+
 function derivePolicyDisclosureOutcomes(input: GdprEprivacyCoveragePolicyInput) {
   return [
     ...POLICY_DISCLOSURE_ROWS
       .map((config) => derivePolicyDisclosureOutcome(input, config))
-      .map(calibratePolicyDisclosureOutcome),
+      .map(calibratePolicyDisclosureOutcome)
+      .map((outcome) => attachPolicyEvidenceProjection(input, outcome)),
     derivePolicyTextExtractionOutcome(input),
   ].filter((outcome): outcome is GdprEprivacyCoverageOutcome => Boolean(outcome));
 }
@@ -9279,6 +9436,23 @@ function buildBrowserDeviceEntropyReviewEvidence(input: GdprEprivacyCoveragePoli
     entropyTransmissionObserved === true ||
     entropyLinkedToIdentifier === true ||
     (deviceDataLikeRequestCount ?? 0) > 0;
+  const normalizedEntropyCategories = entropyCategories.map((category) =>
+    category.trim().toLowerCase().replace(/[\s-]+/g, "_")
+  );
+  const persistedAssessmentStrength = getString(summary, ["assessmentStrength", "assessment_strength"]);
+  const coordinatedSignalClusterObserved =
+    persistedAssessmentStrength === "coordinated_cluster" ||
+    getBoolean(summary, ["coordinatedSignalClusterObserved", "coordinated_signal_cluster_observed"]) === true ||
+    new Set(
+      normalizedEntropyCategories.filter((category) =>
+        ["audio", "canvas", "high_entropy_client_hints", "webgl"].includes(category)
+      )
+    ).size >= 2;
+  const assessmentStrength = strongCorroboratorObserved
+    ? "corroborated_collection"
+    : coordinatedSignalClusterObserved
+      ? "coordinated_cluster"
+      : "contextual_only";
 
   if (rows.length === 0 && signals.length === 0 && hosts.length === 0 && !strongCorroboratorObserved) {
     return null;
@@ -9289,7 +9463,13 @@ function buildBrowserDeviceEntropyReviewEvidence(input: GdprEprivacyCoveragePoli
     hosts.every((host) => classifyRuntimePurposeRisk({ host }) === "securityBotMitigation");
 
   return compactRecord({
+    assessmentContractVersion:
+      getString(summary, ["assessmentContractVersion", "assessment_contract_version"]) ??
+      "fingerprinting_evidence_assessment.v1",
+    assessmentStrength,
+    coordinatedSignalClusterObserved,
     deviceDataLikeRequestCount,
+    distinctAttributeFamilyCount: new Set(normalizedEntropyCategories).size,
     entropyLinkedToIdentifier,
     entropyTransmissionObserved,
     firstObservedMs: observedMs[0] ?? null,
@@ -9476,6 +9656,7 @@ function deriveDeviceFingerprintingSignalOutcome(input: GdprEprivacyCoveragePoli
   const fingerprintingObserved =
     getBoolean(input.snapshot, ["fingerprinting_or_identity_vendor_detected"]) === true ||
     strongFingerprintingCorroboratorObserved;
+  const assessmentStrength = getString(browserDeviceEntropyEvidence, ["assessmentStrength", "assessment_strength"]);
 
   if (fingerprintingObserved) {
     const securityBotTelemetryObserved = getBoolean(browserDeviceEntropyEvidence, ["securityBotTelemetryObserved", "security_bot_telemetry_observed"]) === true;
@@ -9507,7 +9688,29 @@ function deriveDeviceFingerprintingSignalOutcome(input: GdprEprivacyCoveragePoli
         retainedEvidence: {
           browserDeviceEntropyEvidence,
           fingerprintingObserved: true,
+          promotionEligible: true,
           securityBotTelemetryObserved
+        }
+      }
+    );
+  }
+
+  if (browserDeviceEntropyEvidence && assessmentStrength === "coordinated_cluster") {
+    return makeOutcome(
+      "device_identification_fingerprinting_signal_observed",
+      "Review signal",
+      "Coordinated browser/device signal collection was retained across multiple attribute families. No transmission, identifier linkage, known fingerprinting library, or device-data-like request corroborated fingerprinting behavior.",
+      [
+        "Review context: coordinated browser/device signal families retained",
+        ...getStringArray(browserDeviceEntropyEvidence, ["browserApiSignals", "browser_api_signals", "highEntropySignals", "high_entropy_signals"])
+          .map((signal) => `Browser API access: ${signal}`)
+          .slice(0, 4)
+      ],
+      {
+        retainedEvidence: {
+          browserDeviceEntropyEvidence,
+          fingerprintingObserved: false,
+          promotionEligible: false
         }
       }
     );
@@ -9516,10 +9719,10 @@ function deriveDeviceFingerprintingSignalOutcome(input: GdprEprivacyCoveragePoli
   if (browserDeviceEntropyEvidence) {
     return makeOutcome(
       "device_identification_fingerprinting_signal_observed",
-      "Insufficient evidence",
-      "Fingerprinting candidate: browser API access was retained as contextual evidence, but no transmission, identifier linkage, known fingerprinting library, or device-data-like request corroborated a fingerprinting signal.",
+      "Not observed",
+      "No eligible device-identification or fingerprinting signal was observed. Low-specificity browser capability access was retained as contextual evidence.",
       [
-        "Context: browser API access retained",
+        "Context only: browser capability access retained",
         ...getStringArray(browserDeviceEntropyEvidence, ["browserApiSignals", "browser_api_signals", "highEntropySignals", "high_entropy_signals"])
           .map((signal) => `Browser API access: ${signal}`)
           .slice(0, 4)

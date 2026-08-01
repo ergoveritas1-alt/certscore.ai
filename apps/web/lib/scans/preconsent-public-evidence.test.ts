@@ -28,6 +28,7 @@ function row(input: {
     essentiality: "non_essential",
     runtimePhase: "pre_consent",
     confidence: 0.95,
+    collectionEndpointObserved: true,
     firstSeenMs: input.firstSeenMs ?? 10,
     firstPartyOrThirdParty: "third_party",
     ...(input.frameUrl ? { frameUrl: input.frameUrl } : {}),
@@ -64,11 +65,75 @@ test("preserves scanned page URL and tsMs while excluding library-only loads", (
   assert.equal(requests[0]?.firstSeenMs, 4321);
 });
 
+test("Amazon CDN timing cannot become Amazon Ads tracking timing", () => {
+  const requests = buildPromotionGradePreconsentRequests({
+    scannedPageUrl: "https://www.amazon.de/",
+    rows: [
+      {
+        category: "infrastructure",
+        classification: "service",
+        confidence: 0.99,
+        entityRelationship: "same_entity",
+        essentiality: "essential",
+        hostname: "m.media-amazon.com",
+        relationshipBasis: "canonical_entity_registry",
+        requestUrl: "https://m.media-amazon.com/images/example.jpg",
+        runtimePhase: "pre_consent",
+        siteRelationship: "cross_site",
+        tsMs: 4_780,
+        vendorName: "Amazon Media CDN",
+      },
+      {
+        category: "advertising",
+        classification: "tracking",
+        classificationBasis: "tracker_signature",
+        collectionEndpointObserved: true,
+        confidence: 0.94,
+        entityRelationship: "same_entity",
+        essentiality: "non_essential",
+        hostname: "aax-eu.amazon-adsystem.com",
+        relationshipBasis: "canonical_entity_registry",
+        requestUrl: "https://aax-eu.amazon-adsystem.com/x/px/example",
+        runtimePhase: "pre_consent",
+        siteRelationship: "cross_site",
+        tsMs: 6_430,
+        vendorName: "Amazon Ads",
+      }
+    ]
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.vendorName, "Amazon Ads");
+  assert.equal(requests[0]?.firstSeenMs, 6_430);
+  assert.equal(requests[0]?.siteRelationship, "cross_site");
+  assert.equal(requests[0]?.entityRelationship, "same_entity");
+});
+
+test("advertising-domain classification alone remains review evidence rather than promotion-grade tracking", () => {
+  const requests = buildPromotionGradePreconsentRequests({
+    scannedPageUrl: "https://www.amazon.de/",
+    rows: [{
+      category: "advertising",
+      classification: "tracking",
+      confidence: 0.94,
+      essentiality: "non_essential",
+      hostname: "aax-eu.amazon-adsystem.com",
+      requestUrl: "https://aax-eu.amazon-adsystem.com/x/px/example",
+      runtimePhase: "pre_consent",
+      tsMs: 6_430,
+      vendorName: "Amazon Ads"
+    }]
+  });
+
+  assert.deepEqual(requests, []);
+});
+
 test("does not let a tracker URL replace the scanned page URL", () => {
   const requests = buildPromotionGradePreconsentRequests({
     scannedPageUrl: "https://www.ifit.com/en-gb",
     rows: [{
       category: "session_replay",
+      collectionEndpointObserved: true,
       confidence: 0.98,
       essentiality: "non_essential",
       firstSeenMs: 4484,
@@ -156,6 +221,7 @@ test("does not let a Teads URL replace the scanned Daily page URL", () => {
     scannedPageUrl: "https://www.daily.co.jp/",
     rows: [{
       confidence: 0.99,
+      collectionEndpointObserved: true,
       essentiality: "non_essential",
       firstSeenMs: 3465,
       hostname: "at.teads.tv",

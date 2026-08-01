@@ -117,7 +117,7 @@ const REPORT_ROW_GROUPS = [
     ]
   },
   {
-    title: "3rd Party Services",
+    title: "Tracking & External Services",
     rowIds: [
       "pre_consent_third_party_tracking",
       "advertising_retargeting_vendor_signal_observed",
@@ -1200,7 +1200,7 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
   if (item.id === "pre_consent_third_party_tracking") {
     return item.status === "Observed" || item.status === "Review signal" || item.status === "Gap observed"
       ? "3rd party runtime activity was retained before recorded consent; purpose classification determines whether it is a review signal or a stronger concern."
-      : "No eligible 3rd party tracking requests were observed before recorded consent.";
+      : "No eligible classified non-essential tracking requests were observed before recorded consent.";
   }
 
   if (item.id === "advertising_retargeting_vendor_signal_observed") {
@@ -1425,7 +1425,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
       fallbackFirstSeenMs: firstSeenMs,
       item,
-      lead: "Pre-consent 3rd party tracking evidence was retained",
+      lead: "Pre-consent non-essential tracking evidence was retained",
       maxEntries: 2,
       rowKind: "tracking"
     });

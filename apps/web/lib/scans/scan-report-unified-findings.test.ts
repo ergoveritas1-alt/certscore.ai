@@ -1262,7 +1262,7 @@ test("initial cookie inventory routes to audit-only preconsent packet instead of
   assert.equal(packet?.evidence?.entities?.preconsent_cookie_names?.includes("kndctr_16AD4362526701720A490D45_AdobeOrg_identity"), true);
 });
 
-test("observed baseline tracker URL fallback creates canonical preconsent packet", () => {
+test("untimed baseline tracker URL fallback remains audit-only", () => {
   const state = buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],
     accessibilityRuleExamples: [],
@@ -1301,11 +1301,7 @@ test("observed baseline tracker URL fallback creates canonical preconsent packet
   });
   const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
 
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.concernContext?.externalSurfacingEligibilities.includes("eligible"), true);
-  assert.deepEqual(packet?.evidence?.entities?.runtimeRequestUrls, [
-    "https://www.googletagmanager.com/gtm.js?id=GTM-EXAMPLE"
-  ]);
+  assert.equal(packet, undefined);
 });
 
 test("WS01 scan-level no-go assessment enters canonical concern pipeline", () => {
@@ -1761,6 +1757,7 @@ test("generic consent-surface timing projects preconsent tracking without CMP id
       requestPurposeClassificationConfidence: [
         {
           category: "analytics",
+          collectionEndpointObserved: true,
           confidence: 0.95,
           essentiality: "non_essential",
           hostname: "analytics.example.test",
@@ -1797,6 +1794,7 @@ test("complete no-surface inspection projects initial-load tracking without CMP 
     hybrid_runtime_evidence: {
       requestPurposeClassificationConfidence: [{
         category: "analytics",
+        collectionEndpointObserved: true,
         confidence: 0.95,
         essentiality: "non_essential",
         hostname: "analytics.example.test",
@@ -1927,7 +1925,7 @@ test("first-party analytics preconsent cookie evidence projects analytics cookie
   assert.ok(!projection.findings.some((finding) => finding.id === "third_party_cookie_pre_consent"));
 });
 
-test("preconsent request-purpose anchors surface when retained signature rows omit numeric confidence", () => {
+test("untimed request-purpose anchors fail closed even when a scan-level milestone exists", () => {
   const state = buildPreconsentRuntimeState({
     consent_actionable_choice_observed: true,
     consent_surface_observed: true,
@@ -1954,10 +1952,10 @@ test("preconsent request-purpose anchors surface when retained signature rows om
   const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
   const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
 
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
-  assert.ok(projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
-  assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.notEqual(packet?.presentationDecision.status, "surface");
+  assert.notEqual(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.ok(!projection.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.ok(!projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
 });
 
 test("validation preconsent packet absorbs runtime timing and classification evidence before projection", () => {
@@ -1979,6 +1977,7 @@ test("validation preconsent packet absorbs runtime timing and classification evi
         requestPurposeClassificationConfidence: [
           {
             category: "analytics",
+            collectionEndpointObserved: true,
             confidence: 0.9,
             essentiality: "non_essential",
             hostname: "analytics.example.com",
@@ -2036,7 +2035,7 @@ test("validation preconsent packet absorbs runtime timing and classification evi
   assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
 });
 
-test("persisted preconsent rows absorb retained runtime evidence URLs before projection", () => {
+test("persisted preconsent rows do not promote a library URL without identifier or collection evidence", () => {
   const state = debugBuildScanReportUnifiedFindingStateForScan({
     accessibilityRuleCounts: [],
     accessibilityRuleExamples: [],
@@ -2100,12 +2099,9 @@ test("persisted preconsent rows absorb retained runtime evidence URLs before pro
   const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
   const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
 
-  assert.deepEqual(state.derivedContext.preconsentViolationRows[0]?.evidenceUrls, [
-    "https://securepubads.g.doubleclick.net/tag/js/gpt.js"
-  ]);
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
-  assert.ok(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"));
+  assert.equal(state.derivedContext.preconsentViolationRows[0], undefined);
+  assert.notEqual(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.equal(projection.topFindings.some((finding) => finding.id === "pre_consent_tracking_detected"), false);
 });
 
 test("prod-shaped preconsent rows merge with runtime URLs and derived consent timing", () => {
@@ -2149,6 +2145,7 @@ test("prod-shaped preconsent rows merge with runtime URLs and derived consent ti
           {
             category: "advertising",
             classification_basis: "tracker_signature",
+            collection_endpoint_observed: true,
             confidence: 0.9,
             essentiality: "non_essential",
             hostname: "googleads.g.doubleclick.net",

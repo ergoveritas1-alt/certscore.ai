@@ -21,8 +21,20 @@ export type PromotionGradePreconsentRequest = {
   initiatorUrl: string | null;
   redirectChain: string[];
   resourceType: string | null;
+  method: string | null;
+  pathSample: string | null;
+  cookieHeaderPresent: boolean | null;
+  cookieNamesSent: string[];
+  identifierLikeParametersObserved: boolean | null;
+  identifierParameterNames: string[];
+  directVsInferred: string | null;
+  evidenceRefs: string[];
   classificationBasis: string | null;
+  collectionEndpointObserved: boolean;
   collectionEndpointType: string | null;
+  siteRelationship: "same_site" | "cross_site" | "unknown";
+  entityRelationship: "same_entity" | "affiliated_entity" | "external_entity" | "unknown";
+  relationshipBasis: string | null;
   firstPartyOrThirdParty: string | null;
   matchedSignatureId: string | null;
   firstSeenMs: number | null;
@@ -374,6 +386,22 @@ function sameScannedSite(left: string | null | undefined, right: string | null |
   return getUrlRegistrableDomain(left) === getUrlRegistrableDomain(right);
 }
 
+function getSiteRelationship(row: Record<string, unknown>) {
+  const explicit = normalizeToken(getString(row, ["siteRelationship", "site_relationship"]));
+  if (explicit === "same_site" || explicit === "cross_site" || explicit === "unknown") {
+    return explicit;
+  }
+  const legacy = normalizeToken(getString(row, ["firstPartyOrThirdParty", "first_party_or_third_party", "party"]));
+  return legacy === "first_party" ? "same_site" : legacy === "third_party" ? "cross_site" : "unknown";
+}
+
+function getEntityRelationship(row: Record<string, unknown>) {
+  const explicit = normalizeToken(getString(row, ["entityRelationship", "entity_relationship"]));
+  return explicit === "same_entity" || explicit === "affiliated_entity" || explicit === "external_entity" || explicit === "unknown"
+    ? explicit
+    : "unknown";
+}
+
 export function isPromotionGradePreconsentRequestRow(value: unknown) {
   if (!isRecord(value)) {
     return false;
@@ -394,6 +422,11 @@ export function isPromotionGradePreconsentRequestRow(value: unknown) {
     (phase === "pre_consent" || phase === "before_consent" || phase === "before_consent_request") &&
     PROMOTION_TRACKING_CATEGORIES.has(category ?? "") &&
     (classificationBasis === "tracker_signature" || classificationBasis === "consent_audit_tracker_evidence_url");
+  const identifierBearingEvidence =
+    getBoolean(value, ["cookieHeaderPresent", "cookie_header_present"]) === true ||
+    getBoolean(value, ["identifierLikeParametersObserved", "identifier_like_parameters_observed", "hasIdentifierLikeParameters"]) === true;
+  const directCollectionEvidence =
+    getBoolean(value, ["collectionEndpointObserved", "collection_endpoint_observed"]) === true;
 
   return Boolean(
     requestUrl &&
@@ -406,6 +439,7 @@ export function isPromotionGradePreconsentRequestRow(value: unknown) {
       isPreconsent(value) &&
       firstSeenMs !== null &&
       isHighEnoughConfidence(confidenceValue(value)) &&
+      (identifierBearingEvidence || directCollectionEvidence) &&
       (!isLibraryOrConfigurationConnection(requestUrl) || explicitPreconsentTrackingClassification) &&
       !SERVICE_CLASSIFICATIONS.has(classification ?? "") &&
       !SERVICE_HOST_PATTERN.test(hostname)
@@ -513,8 +547,20 @@ export function buildPromotionGradePreconsentRequests(input: {
       initiatorUrl: getString(row, ["initiatorUrl", "initiator_url"]) ? safeEvidenceUrl(getString(row, ["initiatorUrl", "initiator_url"]) ?? "") : null,
       redirectChain: getStringArray(row, ["redirectChain", "redirect_chain"]).slice(0, 8).map(safeEvidenceUrl),
       resourceType: getString(row, ["resourceType", "resource_type"]),
+      method: getString(row, ["method", "requestMethod", "request_method"]),
+      pathSample: getString(row, ["pathSample", "path_sample", "path"]),
+      cookieHeaderPresent: getBoolean(row, ["cookieHeaderPresent", "cookie_header_present"]),
+      cookieNamesSent: getStringArray(row, ["cookieNamesSent", "cookie_names_sent"]).slice(0, 24),
+      identifierLikeParametersObserved: getBoolean(row, ["identifierLikeParametersObserved", "identifier_like_parameters_observed", "hasIdentifierLikeParameters"]),
+      identifierParameterNames: getStringArray(row, ["identifierParameterNames", "identifier_parameter_names", "identifierParamNames"]).slice(0, 24),
+      directVsInferred: getString(row, ["directVsInferred", "direct_vs_inferred"]),
+      evidenceRefs: getStringArray(row, ["evidenceRefs", "evidence_refs"]).slice(0, 24),
       classificationBasis: getString(row, ["classificationBasis", "classification_basis", "evidenceSource", "evidence_source"]),
+      collectionEndpointObserved: getBoolean(row, ["collectionEndpointObserved", "collection_endpoint_observed"]) === true,
       collectionEndpointType: getString(row, ["collectionEndpointType", "collection_endpoint_type"]),
+      siteRelationship: getSiteRelationship(row),
+      entityRelationship: getEntityRelationship(row),
+      relationshipBasis: getString(row, ["relationshipBasis", "relationship_basis"]),
       firstPartyOrThirdParty: getString(row, ["firstPartyOrThirdParty", "first_party_or_third_party", "party"]),
       matchedSignatureId: getString(row, ["matchedSignatureId", "matched_signature_id"]),
       firstSeenMs: getRuntimeElapsedMs(row, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "tsMs", "ts_ms", "ms"]) ??

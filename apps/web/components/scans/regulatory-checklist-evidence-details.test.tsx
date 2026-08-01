@@ -405,3 +405,36 @@ test("RegulatoryChecklistEvidenceDetails renders concise runtime vendor disclosu
   assert.match(summaryHtml, /CertScore\.unifiedFinding\.presentationDecision\.status/);
   assert.doesNotMatch(summaryHtml, /Required to treat a matched canonical finding/);
 });
+
+test("RegulatoryChecklistEvidenceDetails exposes canonical policy provenance", () => {
+  const html = renderToStaticMarkup(
+    createElement(RegulatoryChecklistEvidenceDetails, {
+      evidenceRefs: ["Evidence: retained privacy policy"],
+      jsonPayload: JSON.stringify({
+        coverageArea: "Processing legal-basis language",
+        retainedEvidence: {
+          policyEvidenceProvenance: {
+            bannerLanguage: "de",
+            detectedLanguage: "en",
+            directlyLinkedFromScannedPage: true,
+            discoveryMethod: "footer_link",
+            lastUpdatedText: "Last updated: June 2026",
+            policyTitle: "Amazon Privacy Notice",
+            retrievalTimestamp: "2026-08-01T18:00:00.000Z",
+            sectionHeading: "Legal bases",
+            sourceUrl: "https://www.amazon.de/privacy",
+            translationApplied: false
+          }
+        },
+        status: "Not confirmed"
+      })
+    })
+  );
+
+  assert.match(html, /Policy provenance/);
+  assert.match(html, /Amazon Privacy Notice/);
+  assert.match(html, /Source policy language: en; banner\/page language: de/);
+  assert.match(html, /translation applied: No/);
+  assert.match(html, /directly linked from scanned page: Yes/);
+  assert.match(html, /Section: Legal bases/);
+});

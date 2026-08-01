@@ -66,8 +66,28 @@ test("captures inline Cookie Consent Tool anchors with reduced prominence", asyn
   assert.equal(options?.actionType, "manage_preferences");
   assert.equal(options?.decisionStatus, "confirmed_visible");
   assert.equal(options?.presentationType, "inline_link");
+  assert.equal(options?.placementType, "first_layer_body");
   assert.equal(options?.layer, "first_layer");
   assert.equal(artifact.summary.firstLayerOptions, true);
+});
+
+test("classifies an inline preferences link beside accept and reject as part of the action cluster", async () => {
+  const artifact = await captureFixture(`
+    <section id="cookie-banner" role="dialog" aria-label="Cookies und Werbeoptionen" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: white;">
+      <p>Wir verwenden Cookies, um Dienste bereitzustellen und Werbung zu personalisieren.</p>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <button type="button">Akzeptieren</button>
+        <button type="button">Ablehnen</button>
+        <a href="#personalisieren">Personalisieren</a>
+      </div>
+    </section>
+  `);
+
+  const options = findCandidate(artifact, "Personalisieren");
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.presentationType, "inline_link");
+  assert.equal(options?.placementType, "action_cluster");
+  assert.ok(options?.reasons.includes("inline_options_link_grouped_with_first_layer_accept_and_reject"));
 });
 
 test("does not promote non-actionable inline preference text into control evidence", async () => {
@@ -94,6 +114,7 @@ test("retains footer cookie settings anchors as persistent links, not first-laye
   const options = findCandidate(artifact, "Cookie Settings");
   assert.equal(options?.actionType, "manage_preferences");
   assert.equal(options?.presentationType, "persistent_link");
+  assert.equal(options?.placementType, "persistent_surface");
   assert.equal(options?.layer, "footer");
   assert.equal(artifact.summary.firstLayerOptions, false);
 });

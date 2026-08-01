@@ -105,6 +105,12 @@ function geometryInput(
           row.presentationType === "persistent_link"
             ? row.presentationType
             : "unknown";
+        const placementType =
+          row.placementType === "action_cluster" ||
+          row.placementType === "first_layer_body" ||
+          row.placementType === "persistent_surface"
+            ? row.placementType
+            : "unknown";
         const visible =
           row.decisionStatus === "confirmed_visible" ||
           (presentationType === "persistent_link" && row.decisionStatus === "footer_or_policy_link");
@@ -123,6 +129,7 @@ function geometryInput(
               ? "deeper_layer"
               : "unknown",
           presentationType,
+          placementType,
           visible,
           actionable: visible && row.enabled !== false,
           observedAtMs: typeof raw.observedAtMs === "number" ? raw.observedAtMs : 0,
@@ -262,6 +269,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           matchStrength: control.matchStrength,
           classifierReasonCodes: control.classifierReasonCodes,
           presentationType: control.presentationType,
+          placementType: control.placementType,
           layer,
           visible: control.visible,
           actionable:

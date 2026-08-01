@@ -185,7 +185,14 @@ function hasWeakNegativeCoverage(row: RegulatoryCoverageRow) {
 }
 
 function isExcludedFromDenominator(row: RegulatoryCoverageRow) {
+  const retained = getRetainedEvidence(row);
+  const policyEvidenceAssessment = retained.policyEvidenceAssessment &&
+    typeof retained.policyEvidenceAssessment === "object" &&
+    !Array.isArray(retained.policyEvidenceAssessment)
+      ? retained.policyEvidenceAssessment as Record<string, unknown>
+      : null;
   return (
+    policyEvidenceAssessment?.scoreEffect === "none" ||
     row.assessmentStatus === "not_applicable" ||
     row.status === "not_applicable" ||
     row.status === "Out of scope"
@@ -226,6 +233,8 @@ function getRowFactor(row: RegulatoryCoverageRow) {
       (row.criticalEvidence?.retainedEvidence as Record<string, unknown> | undefined)?.balancedAcceptDeclineWithoutFirstLayerSettings === true ||
       [
         "balanced_accept_decline_no_first_layer_settings",
+        "inline_link_action_cluster",
+        "inline_link_first_layer_body",
         "inline_link",
         "persistent_link"
       ].includes(
@@ -242,6 +251,15 @@ function getRowFactor(row: RegulatoryCoverageRow) {
     row.id === "pre_consent_cookies_storage" &&
     (row.criticalEvidence?.retainedEvidence as Record<string, unknown> | undefined)
       ?.preConsentStorageAssessmentStatus === "classified_zero"
+  ) {
+    return 1;
+  }
+  if (
+    row.id === "device_identification_fingerprinting_signal_observed" &&
+    row.assessmentStatus === "checked" &&
+    row.evidenceState === "not_observed" &&
+    (row.criticalEvidence?.retainedEvidence as Record<string, unknown> | undefined)
+      ?.promotionEligible === false
   ) {
     return 1;
   }

@@ -146,7 +146,6 @@ import {
   buildTrackerInventoryRows,
   classifyInventoryEvidence,
   deriveInventoryMacroCategory,
-  formatGroupedParty,
   getInventoryGroupRowRenderKey,
   getTrackerConsentReviewPriority,
   isCmpOrFunctionalVendorDomain,
@@ -615,10 +614,12 @@ function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
               <p className="mt-1 text-slate-600">{cookie.description ?? "Purpose is not yet classified; manual review is recommended."}</p>
               <dl className="mt-1 grid grid-cols-[7rem_1fr] gap-x-2 text-slate-600">
                 <dt className="font-medium text-slate-500">Domain</dt><dd className="break-all">{cookie.domain ?? "Not retained"}</dd>
+                <dt className="font-medium text-slate-500">Path / partition</dt><dd className="break-all">{cookie.cookiePath ?? "/"} · {cookie.partitionContext ?? "unknown"}</dd>
                 <dt className="font-medium text-slate-500">Lifespan</dt><dd>{formatCookieLifespan(cookie.lifespanSeconds ?? null)}</dd>
                 <dt className="font-medium text-slate-500">Data types</dt><dd>{cookie.dataTypes?.join(", ") || "Review required"}</dd>
                 <dt className="font-medium text-slate-500">Initiator</dt><dd className="break-all">{cookie.setterScriptUrl ?? cookie.initiatorUrl ?? "Not retained"}</dd>
                 <dt className="font-medium text-slate-500">Initiator chain</dt><dd className="break-all">{cookie.initiatorChain?.join(" → ") || "Not retained"}</dd>
+                {cookie.classificationConflicts?.length ? <><dt className="font-medium text-amber-700">Classification</dt><dd className="text-amber-700">Conflicting retained classifications; review required.</dd></> : null}
               </dl>
             </div>
           ))}
@@ -635,30 +636,30 @@ function formatInventoryCellForCopy(value: string | number | null | undefined) {
 }
 
 export function buildInventoryPartyAttributionSegments(
-  rows: Array<Pick<InventoryGroupRow, "party">>
+  rows: Array<Pick<InventoryGroupRow, "siteRelationship">>
 ) {
   return [
     {
       color: "#3b82f6",
-      count: rows.filter((row) => row.party === "first_party").length,
-      filter: "first_party",
-      label: "1st party"
+      count: rows.filter((row) => row.siteRelationship === "same_site").length,
+      filter: "same_site",
+      label: "Same-site"
     },
     {
       color: "#8b5cf6",
-      count: rows.filter((row) => row.party === "third_party").length,
-      filter: "third_party",
-      label: "3rd party"
+      count: rows.filter((row) => row.siteRelationship === "cross_site").length,
+      filter: "cross_site",
+      label: "Cross-site"
     },
     {
       color: "#f59e0b",
-      count: rows.filter((row) => row.party === "mixed").length,
+      count: rows.filter((row) => row.siteRelationship === "mixed").length,
       filter: "mixed",
       label: "Mixed"
     },
     {
       color: "#94a3b8",
-      count: rows.filter((row) => row.party === "unknown").length,
+      count: rows.filter((row) => row.siteRelationship === "unknown").length,
       filter: "unknown",
       label: "Unknown"
     }
@@ -680,7 +681,7 @@ function InventoryPartyAttributionDonut({ rows }: { rows: InventoryGroupRow[] })
   return (
     <div className="mt-3 flex items-start gap-3">
       <div
-        aria-label="Party attribution distribution"
+        aria-label="Site relationship distribution"
         className="grid h-20 w-20 shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50"
         style={{ background: gradient }}
       >
@@ -693,13 +694,30 @@ function InventoryPartyAttributionDonut({ rows }: { rows: InventoryGroupRow[] })
           <div key={segment.filter} className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter={segment.filter} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
             <span className="truncate text-[11px] font-medium text-slate-500">{segment.label}</span>
-            <InfoTip align="end" placement="top" text={`Inventory rows whose Party value is ${segment.label.toLowerCase()}.`} />
+            <InfoTip align="end" placement="top" text={`Inventory rows whose site relationship is ${segment.label.toLowerCase()}.`} />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{segment.count}</span>
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+function formatInventoryRelationship(row: Pick<InventoryGroupRow, "siteRelationship" | "entityRelationship">) {
+  const site = {
+    same_site: "Same-site",
+    cross_site: "Cross-site",
+    mixed: "Mixed-site",
+    unknown: "Site unknown",
+  }[row.siteRelationship];
+  const entity = {
+    same_entity: "same entity",
+    affiliated_entity: "affiliated entity",
+    external_entity: "external entity",
+    mixed: "mixed entities",
+    unknown: "entity unknown",
+  }[row.entityRelationship];
+  return `${site} · ${entity}`;
 }
 
 function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
@@ -793,7 +811,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
 
 function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   const copyRows = [
-    ["Type", "Vendor", "Purpose", "Evidence", "First seen", "Cookie name(s)", "Domain", "Destination", "Confidence", "Party", "Category", "Priority"],
+    ["Type", "Vendor", "Purpose", "Evidence", "First seen", "Cookie name(s)", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"],
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
@@ -808,7 +826,7 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
         flow.idSync ? "ID sync" : null
       ].filter(Boolean).join(" / ")).join(", ") || "—",
       INVENTORY_CONFIDENCE_LABELS[row.confidence],
-      formatGroupedParty(row.party),
+      formatInventoryRelationship(row),
       getRuntimeInventoryMacroCategory(row),
       CONSENT_REVIEW_PRIORITY_LABELS[row.priority]
     ])
@@ -1010,7 +1028,7 @@ function RuntimeInventoryTable({
             <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
             <InventoryPurposeCard rows={groupedInventoryRows} />
             <div className="min-h-0 overflow-visible rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Party attribution</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site relationship</p>
               <InventoryPartyAttributionDonut rows={groupedInventoryRows} />
             </div>
           </div>
@@ -1029,7 +1047,7 @@ function RuntimeInventoryTable({
                   <span className="text-right"><InventoryEvidenceCell row={row} /></span>
                   <span className="text-right">{formatInventoryTiming(row)}</span>
                   <span className="truncate">{row.domains.join(", ") || "Domain not retained"}</span>
-                  <span className="text-right">{formatGroupedParty(row.party)}</span>
+                  <span className="text-right">{formatInventoryRelationship(row)}</span>
                 </div>
               </article>
             ))}
@@ -1055,7 +1073,7 @@ function RuntimeInventoryTable({
                   <th className="sticky top-0 z-20 w-[150px] max-w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Domain</th>
                   <th className="sticky top-0 z-20 w-[120px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Server location</th>
                   <th className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Confidence</th>
-                  <th className="sticky top-0 z-20 w-[50px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Party</th>
+                  <th className="sticky top-0 z-20 w-[130px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Relationship</th>
                   <th className="sticky top-0 z-20 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Category</th>
                   <th title="Review priority based on retained evidence" className="sticky top-0 z-20 w-[100px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="priority" label="Priority" /></th>
                 </tr>
@@ -1090,7 +1108,7 @@ function RuntimeInventoryTable({
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
                       <InventoryConfidenceCell confidence={row.confidence} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">{formatGroupedParty(row.party)}</td>
+                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={formatInventoryRelationship(row)}>{formatInventoryRelationship(row)}</td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">{getRuntimeInventoryMacroCategory(row)}</td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
                       <InventoryPriorityCell
@@ -1401,13 +1419,6 @@ function firstTimelineMsFromRows(
   );
 }
 
-function firstConcreteFingerprintingTimelineMs(rows: Record<string, unknown>[]) {
-  return firstTimelineMsFromRows(rows, (row) =>
-    ["scriptHost", "script_host", "scriptUrl", "script_url", "requestUrl", "request_url", "responsibleScriptUrl"]
-      .some((key) => typeof row[key] === "string" && (row[key] as string).trim().length > 0)
-  );
-}
-
 function getTimelineVendorLabel(row: Record<string, unknown> | null | undefined) {
   if (!row) return null;
   for (const key of ["vendorName", "vendor_name", "vendor", "productName", "product_name", "ownerName", "owner_name", "host", "domain"]) {
@@ -1435,7 +1446,12 @@ function isTypedThirdPartyTimelineRow(row: Record<string, unknown>) {
 }
 
 export function buildExecutiveTimelineEvents(
-  runtimeArtifacts: Record<string, unknown> | null | undefined
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  gdprEprivacyChecklist: Array<{
+    criticalEvidence?: { retainedEvidence?: Record<string, unknown> };
+    id: string;
+    status?: string;
+  }> = []
 ): ExecutiveTimelineEvent[] {
   const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
   if (!hybrid) {
@@ -1470,21 +1486,30 @@ export function buildExecutiveTimelineEvents(
   const firstEmbeddedRow = firstTimelineRow(embeddedRows, (row) => row.preConsent !== false && row.pre_consent !== false);
   const sessionReplaySummary =
     getRecord(hybrid.sessionReplayEvidenceSummary) ?? getRecord(hybrid.session_replay_evidence_summary);
-  const fingerprintRows = [
-    ...getRecordObjectArray(hybrid, "fingerprintingRuntimeEvidence"),
-    ...getRecordObjectArray(hybrid, "fingerprinting_runtime_evidence")
-  ];
-  const fingerprintSummary =
-    getRecord(hybrid.fingerprintingEvidenceSummary) ?? getRecord(hybrid.fingerprinting_evidence_summary);
+  const fingerprintingChecklistRow = gdprEprivacyChecklist.find(
+    (row) => row.id === "device_identification_fingerprinting_signal_observed"
+  );
+  const fingerprintingRetainedEvidence = fingerprintingChecklistRow?.criticalEvidence?.retainedEvidence;
+  const browserDeviceEntropyEvidence = getRecord(
+    fingerprintingRetainedEvidence?.browserDeviceEntropyEvidence ??
+    fingerprintingRetainedEvidence?.browser_device_entropy_evidence
+  );
+  const fingerprintingAssessmentStrength =
+    browserDeviceEntropyEvidence?.assessmentStrength ?? browserDeviceEntropyEvidence?.assessment_strength;
+  const canonicalFingerprintingReviewObserved =
+    fingerprintingChecklistRow?.status === "Review signal" &&
+    (fingerprintingAssessmentStrength === "coordinated_cluster" ||
+      fingerprintingAssessmentStrength === "corroborated_collection");
+  const canonicalFingerprintingReviewMs = canonicalFingerprintingReviewObserved
+    ? firstTimelineMs(
+        browserDeviceEntropyEvidence?.firstObservedMs,
+        browserDeviceEntropyEvidence?.first_observed_ms,
+        browserDeviceEntropyEvidence?.firstSeenMs,
+        browserDeviceEntropyEvidence?.first_seen_ms
+      )
+    : null;
   const embeddedEvidenceObserved = embeddedSummary?.embeddedContentObserved === true ||
     embeddedSummary?.embedded_content_observed === true;
-  const concreteFingerprintMs = fingerprintSummary?.strongCorroboratorObserved === true ||
-    fingerprintSummary?.strong_corroborator_observed === true
-    ? firstConcreteFingerprintingTimelineMs(fingerprintRows)
-    : null;
-  const fingerprintCandidateMs = concreteFingerprintMs === null
-    ? firstTimelineMsFromRows(fingerprintRows, () => true)
-    : null;
   const events: ExecutiveTimelineEvent[] = [];
   const pushEvent = (event: ExecutiveTimelineEvent) => {
     if (!Number.isFinite(event.atMs) || event.atMs < 0) {
@@ -1568,8 +1593,10 @@ export function buildExecutiveTimelineEvents(
     tone: "rose"
   });
   pushEvent({
-    atMs: concreteFingerprintMs ?? fingerprintCandidateMs ?? -1,
-    label: concreteFingerprintMs === null ? "Fingerprinting candidate" : "Fingerprinting",
+    atMs: canonicalFingerprintingReviewMs ?? -1,
+    label: fingerprintingAssessmentStrength === "corroborated_collection"
+      ? "Fingerprinting review signal"
+      : "Device-signal review",
     tone: "rose"
   });
   pushEvent({
@@ -7196,7 +7223,7 @@ function buildBetaRegulatoryChecklistAreas(
       rows: betaRows([
         ["notice_surface", "Cookie/tracking notice or consent surface", "Cookie or tracking notice evidence must be retained from the tested context.", "currently_supported", "not_observed"],
         ["storage_before_consent", "Cookies or storage before consent", "Before-consent storage is eligible when retained and normalized through the GDPR/ePrivacy concern pipeline.", "currently_supported"],
-        ["tracking_before_consent", "Third-party tracking before consent", "Pre-consent third-party tracking requires retained request timing evidence.", "currently_supported"],
+        ["tracking_before_consent", "Non-essential tracking before consent", "Pre-consent non-essential tracking requires retained request timing and identifier or collection-endpoint evidence.", "currently_supported"],
         ["reject_refuse", "Reject/refuse option availability", "Reject/refuse availability requires retained consent UI path evidence.", "currently_supported"],
         ["tracking_after_refusal", "Tracking after refusal", "Tracking after refusal requires a confirmed refusal action and retained after-state request evidence.", "near_term_supported"],
         ["post_choice", "Post-choice consent controls", "Post-choice controls require retained lifecycle or preference-management evidence.", "near_term_supported"],
@@ -7669,7 +7696,10 @@ export async function SharedScanDetailView({
     runtimeArtifacts,
     runtimeMetricsReliable: executiveRuntimeMetricsReliable
   });
-  const executiveTimelineEvents = buildExecutiveTimelineEvents(scanRecord.runtimeArtifacts);
+  const executiveTimelineEvents = buildExecutiveTimelineEvents(
+    scanRecord.runtimeArtifacts,
+    reportableGdprEprivacyCoverageChecklist
+  );
   const scanTimeLabel = formatScanTimeLabel({
     completedAt: scanRecord.scan.completedAt,
     createdAt: scanRecord.scan.createdAt,

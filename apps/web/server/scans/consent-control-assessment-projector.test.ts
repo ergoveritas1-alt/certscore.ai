@@ -172,6 +172,7 @@ test("geometry projection retains inline and persistent options presentation", (
         label: "Cookie Consent Tool",
         layer: "first_layer",
         presentationType: "inline_link",
+        placementType: "action_cluster",
         enabled: true,
         decisionStatus: "confirmed_visible",
       },
@@ -195,6 +196,10 @@ test("geometry projection retains inline and persistent options presentation", (
   assert.equal(
     assessment.evidence.find((row) => row.evidenceId === "inline-options")?.presentationType,
     "inline_link",
+  );
+  assert.equal(
+    assessment.evidence.find((row) => row.evidenceId === "inline-options")?.placementType,
+    "action_cluster",
   );
   assert.equal(
     assessment.evidence.find((row) => row.evidenceId === "footer-options")?.presentationType,

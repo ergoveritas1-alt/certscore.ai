@@ -48,6 +48,7 @@ export const consentControlAssessmentEvidenceSchema = z.object({
   observedAtMs: z.number().int().nonnegative(),
   documentId: z.string().max(240).nullable(),
   presentationType: z.enum(["dedicated_button", "inline_link", "persistent_link", "unknown"]).default("unknown"),
+  placementType: z.enum(["action_cluster", "first_layer_body", "persistent_surface", "unknown"]).default("unknown"),
   channels: z.array(assessmentChannelSchema).max(8),
   artifactRefs: z.array(z.string().max(240)).max(24),
   classifier: z.object({
@@ -153,6 +154,7 @@ export type ConsentControlAssessmentCandidate = {
   observedAtMs?: number;
   documentId?: string | null;
   presentationType?: "dedicated_button" | "inline_link" | "persistent_link" | "unknown";
+  placementType?: "action_cluster" | "first_layer_body" | "persistent_surface" | "unknown";
   channels?: ConsentControlAssessmentChannel[];
   artifactRefs?: string[];
 };
@@ -304,6 +306,7 @@ function eligibleCandidate(candidate: ConsentControlAssessmentCandidate, fallbac
     observedAtMs,
     documentId: boundedIdentityText(candidate.documentId ?? fallbackDocumentId, 240),
     presentationType,
+    placementType: candidate.placementType ?? "unknown",
     channels: unique(candidate.channels ?? (source === "geometry" ? ["geometry"] : ["dom_inventory"])),
     artifactRefs: bounded(candidate.artifactRefs ?? []),
     classifier: {

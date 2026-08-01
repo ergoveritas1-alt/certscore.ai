@@ -9,7 +9,11 @@ import {
 } from "../../../../packages/shared/src/known-cmps";
 import { deriveCertScoreFindings } from "./derive-findings";
 import { getHybridRuntimeEvidence } from "./hybrid-runtime-evidence";
-import { buildRuntimeCookieInventory, type RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
+import {
+  buildRuntimeCookieInventory,
+  getRuntimeCookieEvidenceIdentity,
+  type RuntimeCookieEvidenceRow
+} from "./runtime-cookie-evidence";
 import {
   buildRuntimeCookiePriorityGroups,
   runtimeCookieConfidenceWeight,
@@ -23,7 +27,6 @@ import {
   findRuntimeCookieOwner,
   findRuntimeRequestOwner,
   findRuntimeVendorLabelOwner,
-  hostsShareRuntimeEntity,
   isLikelyCookieName,
   type RuntimeVendorAttributionEvidence
 } from "./runtime-vendor-ownership";
@@ -33,6 +36,8 @@ export type ConsentReviewPriority = RuntimeCookieReviewPriority;
 export type InventoryConfidence = RuntimeCookieInventoryConfidence;
 export type InventoryMacroCategory = "Advertising" | "Analytics" | "Essential" | "Functional" | "Review";
 export type InventoryEvidenceClassification = "Contextual" | "Essential" | "Non-essential" | "Review";
+export type InventorySiteRelationship = "same_site" | "cross_site" | "mixed" | "unknown";
+export type InventoryEntityRelationship = "same_entity" | "affiliated_entity" | "external_entity" | "mixed" | "unknown";
 
 export type PreConsentDataFlow = {
   controllingEntity: {
@@ -66,6 +71,8 @@ export type TrackerInventoryRow = {
   label: string;
   observedVia: string[];
   party: "first_party" | "third_party" | "unknown" | "mixed";
+  siteRelationship?: InventorySiteRelationship;
+  entityRelationship?: InventoryEntityRelationship;
   preConsent: boolean;
   requestCount: number | null;
   regulatoryRelevance?: string[] | null;
@@ -83,6 +90,8 @@ export type CookieInventoryGroupRow = {
   firstSeenMs: number | null;
   macroCategory: InventoryMacroCategory;
   party: "first_party" | "third_party" | "unknown" | "mixed";
+  siteRelationship: InventorySiteRelationship;
+  entityRelationship: InventoryEntityRelationship;
   priority: ConsentReviewPriority;
   purpose: string;
   setByThirdPartyScript: boolean;
@@ -99,6 +108,8 @@ export type TrackerInventoryGroupRow = {
   firstSeenMs: number | null;
   macroCategory: InventoryMacroCategory;
   party: "first_party" | "third_party" | "unknown" | "mixed";
+  siteRelationship: InventorySiteRelationship;
+  entityRelationship: InventoryEntityRelationship;
   preConsent: boolean;
   rawProducts: string[];
   regulatoryRelevance: string[];
@@ -122,6 +133,8 @@ export type InventoryGroupRow = {
   firstSeenMs: number | null;
   macroCategory: InventoryMacroCategory;
   party: "first_party" | "third_party" | "unknown" | "mixed";
+  siteRelationship: InventorySiteRelationship;
+  entityRelationship: InventoryEntityRelationship;
   preConsent: boolean;
   priority: ConsentReviewPriority;
   purpose: string;
@@ -526,6 +539,8 @@ export function buildBrowserExtensionRequestInventoryRows(
       label: vendor,
       observedVia: ["request"],
       party: "third_party" as const,
+      siteRelationship: "cross_site" as const,
+      entityRelationship: "unknown" as const,
       preConsent: row.preConsent === true,
       requestCount,
       regulatoryRelevance,
@@ -585,9 +600,9 @@ export function buildTrackerInventoryRows(input: {
   const resolvedTrackerHosts = new Set(
     input.trackerVendors.filter(trackerHasConcreteVendorAnchor).flatMap(trackerMatchedHosts)
   );
-  const isFirstPartyHost = (value: string) => {
+  const isSameSiteHost = (value: string) => {
     const hostDomain = inventoryRegistrableDomain(value);
-    return Boolean((firstPartyRegistrableDomain && hostDomain === firstPartyRegistrableDomain) || hostsShareRuntimeEntity(value, input.firstPartyDomain));
+    return Boolean(firstPartyRegistrableDomain && hostDomain === firstPartyRegistrableDomain);
   };
   const isCoveredByResolvedVendorHost = (value: string) => {
     const host = normalizeInventoryHostname(value);
@@ -597,7 +612,7 @@ export function buildTrackerInventoryRows(input: {
     if (domains.length === 0) {
       return "unknown";
     }
-    const firstPartyCount = domains.filter(isFirstPartyHost).length;
+    const firstPartyCount = domains.filter(isSameSiteHost).length;
     if (firstPartyCount === domains.length) {
       return "first_party";
     }
@@ -624,6 +639,8 @@ export function buildTrackerInventoryRows(input: {
           : existing.firstSeenMs ?? row.firstSeenMs,
       observedVia: uniqueStrings([...existing.observedVia, ...row.observedVia]),
       party: mergePartyValues(existing.party, row.party),
+      siteRelationship: mergePartyValues(existing.siteRelationship ?? "unknown", row.siteRelationship ?? "unknown"),
+      entityRelationship: mergePartyValues(existing.entityRelationship ?? "unknown", row.entityRelationship ?? "unknown"),
       preConsent: existing.preConsent || row.preConsent,
       regulatoryRelevance: uniqueStrings([...(existing.regulatoryRelevance ?? []), ...(row.regulatoryRelevance ?? [])]),
       requestCount: Math.max(existing.requestCount ?? 0, row.requestCount ?? 0) || existing.requestCount || row.requestCount,
@@ -634,7 +651,7 @@ export function buildTrackerInventoryRows(input: {
 
   for (const entity of input.topObservedEntities) {
     const entityHost = normalizeInventoryHostname(entity.label);
-    if (!entityHost || isFirstPartyHost(entityHost) || isCoveredByResolvedVendorHost(entityHost)) {
+    if (!entityHost || isSameSiteHost(entityHost) || isCoveredByResolvedVendorHost(entityHost)) {
       continue;
     }
     // A concrete hostname is evidence in its own right even when a summary-domain
@@ -652,6 +669,8 @@ export function buildTrackerInventoryRows(input: {
       label: identity.label,
       observedVia: ["request"],
       party: getTrackerParty(domains),
+      siteRelationship: siteRelationshipForDomains(domains, input.firstPartyDomain),
+      entityRelationship: entityRelationshipForDomains(domains, input.firstPartyDomain),
       preConsent: input.preConsentVendors.includes(entity.label),
       requestCount: entity.requestCount,
       regulatoryRelevance: identity.regulatoryRelevance,
@@ -689,6 +708,8 @@ export function buildTrackerInventoryRows(input: {
       label: identity.label,
       observedVia: observedVia.length > 0 ? observedVia : ["request"],
       party: getTrackerParty(matchedDomains),
+      siteRelationship: siteRelationshipForDomains(matchedDomains, input.firstPartyDomain),
+      entityRelationship: entityRelationshipForDomains(matchedDomains, input.firstPartyDomain),
       preConsent: tracker.beforeConsent === true || input.preConsentVendors.includes(tracker.vendorName) || input.preConsentVendors.includes(identity.label),
       regulatoryRelevance: uniqueStrings([
         ...(tracker.regulatoryRelevance ?? getStringArrayFromRecord(record, ["regulatoryRelevance", "regulatory_relevance"])),
@@ -712,7 +733,7 @@ export function buildTrackerInventoryRows(input: {
       const hostname = normalizeInventoryHostname(entity.label);
       return Boolean(
         hostname &&
-        isFirstPartyHost(hostname) &&
+        isSameSiteHost(hostname) &&
         findRuntimeCanonicalEntityOwner(hostname)?.entity === vendorOwner.entity
       );
     }));
@@ -740,6 +761,8 @@ export function buildTrackerInventoryRows(input: {
       label: identity.label,
       observedVia: ["resolver"],
       party: "unknown",
+      siteRelationship: "unknown",
+      entityRelationship: "unknown",
       preConsent: input.preConsentVendors.includes(vendor),
       requestCount: null,
       regulatoryRelevance: identity.regulatoryRelevance,
@@ -750,7 +773,7 @@ export function buildTrackerInventoryRows(input: {
   }
   for (const host of input.unresolvedHosts) {
     const unresolvedHost = normalizeInventoryHostname(host);
-    if (!unresolvedHost || isFirstPartyHost(unresolvedHost) || isCoveredByResolvedVendorHost(unresolvedHost)) {
+    if (!unresolvedHost || isSameSiteHost(unresolvedHost) || isCoveredByResolvedVendorHost(unresolvedHost)) {
       continue;
     }
     const domains = sanitizeInventoryDomains([unresolvedHost]);
@@ -765,6 +788,8 @@ export function buildTrackerInventoryRows(input: {
       label: identity.label,
       observedVia: ["host"],
       party: getTrackerParty(domains),
+      siteRelationship: siteRelationshipForDomains(domains, input.firstPartyDomain),
+      entityRelationship: entityRelationshipForDomains(domains, input.firstPartyDomain),
       preConsent: false,
       requestCount: null,
       regulatoryRelevance: identity.regulatoryRelevance,
@@ -1071,6 +1096,41 @@ export function compareInventoryPriorityRows(
   return left.vendor.localeCompare(right.vendor);
 }
 
+function siteRelationshipForDomains(
+  domains: string[],
+  firstPartyDomain: string | null | undefined
+): InventorySiteRelationship {
+  const targetSite = inventoryRegistrableDomain(firstPartyDomain);
+  if (!targetSite || domains.length === 0) return "unknown";
+  const relationships = domains.map((domain) =>
+    inventoryRegistrableDomain(domain) === targetSite ? "same_site" as const : "cross_site" as const
+  );
+  return relationships.every((value) => value === relationships[0]) ? relationships[0] ?? "unknown" : "mixed";
+}
+
+function entityRelationshipForDomains(
+  domains: string[],
+  firstPartyDomain: string | null | undefined
+): InventoryEntityRelationship {
+  const targetOwner = findRuntimeCanonicalEntityOwner(firstPartyDomain);
+  if (!targetOwner || domains.length === 0) return "unknown";
+  const relationships = domains.map((domain) => {
+    const owner = findRuntimeCanonicalEntityOwner(domain);
+    if (!owner) return "unknown" as const;
+    return owner.entity === targetOwner.entity ? "same_entity" as const : "external_entity" as const;
+  });
+  if (relationships.some((value) => value === "unknown")) return "unknown";
+  return relationships.every((value) => value === relationships[0]) ? relationships[0] ?? "unknown" : "mixed";
+}
+
+function legacyPartyFromSiteRelationship(
+  relationship: InventorySiteRelationship
+): TrackerInventoryRow["party"] {
+  if (relationship === "same_site") return "first_party";
+  if (relationship === "cross_site") return "third_party";
+  return relationship;
+}
+
 function mergePartyValues<T extends string>(left: T, right: T): T | "mixed" {
   return left === right ? left : "mixed";
 }
@@ -1089,14 +1149,20 @@ export function formatGroupedParty(value: CookieInventoryGroupRow["party"] | Tra
 }
 
 export function buildCookieInventoryGroupRows(rows: RuntimeCookieEvidenceRow[], options: { firstPartyDomain?: string | null } = {}) {
-  return buildRuntimeCookiePriorityGroups(rows, options).map((row) => ({
-    ...row,
-    macroCategory: deriveInventoryMacroCategory({
-      priority: row.priority,
-      purpose: row.purpose,
-      vendor: row.vendor
-    })
-  }));
+  return buildRuntimeCookiePriorityGroups(rows, options).map((row) => {
+    const siteRelationship = siteRelationshipForDomains(row.domains, options.firstPartyDomain);
+    return {
+      ...row,
+      entityRelationship: entityRelationshipForDomains(row.domains, options.firstPartyDomain),
+      macroCategory: deriveInventoryMacroCategory({
+        priority: row.priority,
+        purpose: row.purpose,
+        vendor: row.vendor
+      }),
+      party: legacyPartyFromSiteRelationship(siteRelationship),
+      siteRelationship,
+    };
+  });
 }
 
 export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
@@ -1117,7 +1183,11 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
         purpose,
         vendor: row.label
       }),
+      entityRelationship: row.entityRelationship ?? "unknown",
       party: formatTrackerParty(row),
+      siteRelationship: row.siteRelationship ?? (
+        row.party === "first_party" ? "same_site" : row.party === "third_party" ? "cross_site" : row.party
+      ),
       preConsent: row.preConsent,
       rawProducts: [row.label],
       regulatoryRelevance: row.regulatoryRelevance ?? [],
@@ -1143,6 +1213,8 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
           ? Math.min(existing.firstSeenMs, candidate.firstSeenMs)
           : existing.firstSeenMs ?? candidate.firstSeenMs,
       party: mergePartyValues(existing.party, candidate.party),
+      siteRelationship: mergePartyValues(existing.siteRelationship, candidate.siteRelationship),
+      entityRelationship: mergePartyValues(existing.entityRelationship, candidate.entityRelationship),
       preConsent: existing.preConsent || candidate.preConsent,
       rawProducts: uniqueStrings([...existing.rawProducts, ...candidate.rawProducts]),
       regulatoryRelevance: uniqueStrings([...existing.regulatoryRelevance, ...candidate.regulatoryRelevance]),
@@ -1191,6 +1263,9 @@ export function buildRuntimeInventoryGroupRows(input: {
 }) {
   const groupedCookieRows = buildCookieInventoryGroupRows(input.cookieRows, { firstPartyDomain: input.firstPartyDomain });
   const groupedTrackerRows = buildTrackerInventoryGroupRows(input.trackerRows);
+  const canonicalCookieNames = new Set(
+    input.cookieRows.map((row) => row.cookieName.trim().toLowerCase())
+  );
   const candidates: InventoryGroupRow[] = [
     ...groupedCookieRows.map((row): InventoryGroupRow => {
       const owner = row.cookieDetails
@@ -1221,6 +1296,7 @@ export function buildRuntimeInventoryGroupRows(input: {
         ...row,
         canonicalEntity: owner?.entity ?? null,
         cookieDetails: [],
+        cookieNames: row.cookieNames.filter((name) => !canonicalCookieNames.has(name.trim().toLowerCase())),
         dataFlows: (input.dataFlows ?? []).filter((flow) =>
           flow.controllingEntity.legalEntity && flow.controllingEntity.legalEntity === owner?.entity ||
           row.domains.includes(flow.endpoint)
@@ -1261,7 +1337,9 @@ export function buildRuntimeInventoryGroupRows(input: {
       confidence: confidenceWeight(candidate.confidence) > confidenceWeight(existing.confidence)
         ? candidate.confidence
         : existing.confidence,
-      cookieDetails: [...existing.cookieDetails, ...candidate.cookieDetails],
+      cookieDetails: [...existing.cookieDetails, ...candidate.cookieDetails].filter((detail, index, all) =>
+        all.findIndex((item) => getRuntimeCookieEvidenceIdentity(item) === getRuntimeCookieEvidenceIdentity(detail)) === index
+      ),
       dataFlows: [...existing.dataFlows, ...candidate.dataFlows].filter((flow, index, all) =>
         all.findIndex((item) => `${item.endpoint}\u0000${item.networkDestination.ip ?? ""}` === `${flow.endpoint}\u0000${flow.networkDestination.ip ?? ""}`) === index
       ),
@@ -1278,6 +1356,8 @@ export function buildRuntimeInventoryGroupRows(input: {
         vendor: existing.vendor,
       }),
       party: mergePartyValues(existing.party, candidate.party),
+      siteRelationship: mergePartyValues(existing.siteRelationship, candidate.siteRelationship),
+      entityRelationship: mergePartyValues(existing.entityRelationship, candidate.entityRelationship),
       preConsent: existing.preConsent || candidate.preConsent,
       priority,
       purpose: purposes.length === 1 ? purposes[0] ?? "Review" : "Multiple purposes",
