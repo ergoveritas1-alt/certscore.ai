@@ -15,6 +15,7 @@ import {
   VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
   classifyV2DagLambdaResultDisposition,
   verifiedPolicyEvidencePacketSchema,
+  type VerifiedPolicyEvidencePacket,
 } from "@certscore/contracts";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { createHash, randomBytes } from "node:crypto";
@@ -31,6 +32,7 @@ const PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 const RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 const POLICY_EVIDENCE_MESSAGE_VERSION = "certscore.v2.lambda-policy-evidence-ready.v1";
 const POLICY_EVIDENCE_RECEIVED_EVENT_TYPE = "v2_policy_evidence.received";
+const POLICY_EVIDENCE_REJECTED_EVENT_TYPE = "v2_policy_evidence.rejected";
 const RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
 const RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
 const RESULT_BATCH_CONCURRENCY = 3;
@@ -189,6 +191,18 @@ type LambdaResultConsumerMetadata = {
   sqsMessageId: string | null;
 };
 
+class TerminalEarlyPolicyEvidenceError extends Error {
+  readonly code: string;
+  readonly scanId: string | null;
+
+  constructor(code: string, message: string, scanId: string | null = null) {
+    super(message);
+    this.name = "TerminalEarlyPolicyEvidenceError";
+    this.code = code;
+    this.scanId = scanId;
+  }
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -237,13 +251,18 @@ async function processPolicyEvidenceReadyMessage(input: {
   targetEnvironment: LambdaTargetEnvironment;
 }) {
   const message = asRecord(JSON.parse(input.raw));
+  const messageScanId = stringValue(message.scanId);
   if (
     message.artifactOnly !== true ||
     message.productionFindingIntegration !== false ||
     message.processor !== PROCESSOR ||
     message.contractVersion !== POLICY_EVIDENCE_MESSAGE_VERSION
   ) {
-    throw new Error("Early policy evidence message identity is invalid.");
+    throw new TerminalEarlyPolicyEvidenceError(
+      "message_identity_invalid",
+      "Early policy evidence message identity is invalid.",
+      messageScanId,
+    );
   }
   const targetEnvironment = message.targetEnvironment === "production" ? "production" : "local";
   if (targetEnvironment !== input.targetEnvironment) {
@@ -256,8 +275,19 @@ async function processPolicyEvidenceReadyMessage(input: {
   const expectedSizeBytes = typeof metadata.sizeBytes === "number" && Number.isSafeInteger(metadata.sizeBytes)
     ? metadata.sizeBytes
     : null;
-  if (!scanId || !artifactPointer || !expectedSha256 || expectedSizeBytes === null) {
-    throw new Error("Early policy evidence message is missing its verified pointer metadata.");
+  if (
+    !isUuid(scanId) ||
+    !artifactPointer ||
+    !expectedSha256 ||
+    !/^[a-f0-9]{64}$/i.test(expectedSha256) ||
+    expectedSizeBytes === null ||
+    expectedSizeBytes <= 0
+  ) {
+    throw new TerminalEarlyPolicyEvidenceError(
+      "pointer_metadata_invalid",
+      "Early policy evidence message is missing its verified pointer metadata.",
+      scanId,
+    );
   }
   const existingScan = await queryOne<{ id: string }>(
     "select id::text as id from scans where id = $1::uuid limit 1",
@@ -267,7 +297,17 @@ async function processPolicyEvidenceReadyMessage(input: {
   if (!existingScan) {
     throw new Error(`Cannot retain early policy evidence for unknown scan ${scanId}.`);
   }
-  const { bucket, key } = parseS3Uri(artifactPointer);
+  let bucket: string;
+  let key: string;
+  try {
+    ({ bucket, key } = parseS3Uri(artifactPointer));
+  } catch {
+    throw new TerminalEarlyPolicyEvidenceError(
+      "artifact_pointer_invalid",
+      "Early policy evidence artifact pointer is invalid.",
+      scanId,
+    );
+  }
   const s3Client = input.s3Client ?? new S3Client({ region: inferS3ArtifactRegion(bucket) });
   const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const body = await streamToBuffer(response.Body);
@@ -275,21 +315,38 @@ async function processPolicyEvidenceReadyMessage(input: {
   if (bodySha256 !== expectedSha256 || body.byteLength !== expectedSizeBytes) {
     throw new Error("Early policy evidence artifact checksum or size did not verify.");
   }
-  const packet = verifiedPolicyEvidencePacketSchema.parse(JSON.parse(body.toString("utf8")));
+  let packet: VerifiedPolicyEvidencePacket;
+  try {
+    packet = verifiedPolicyEvidencePacketSchema.parse(JSON.parse(body.toString("utf8")));
+  } catch {
+    throw new TerminalEarlyPolicyEvidenceError(
+      "packet_contract_invalid",
+      "Early policy evidence packet does not satisfy the verified contract.",
+      scanId,
+    );
+  }
   if (
     packet.contractVersion !== VERIFIED_POLICY_EVIDENCE_PACKET_VERSION ||
     packet.scanId !== scanId ||
     packet.sourceHash !== stringValue(message.sourceHash) ||
     packet.policyContentHash !== stringValue(message.policyContentHash)
   ) {
-    throw new Error("Early policy evidence message does not match its retained packet.");
+    throw new TerminalEarlyPolicyEvidenceError(
+      "packet_identity_mismatch",
+      "Early policy evidence message does not match its retained packet.",
+      scanId,
+    );
   }
   const { sourceHash, ...unsignedPacket } = packet;
   const computedSourceHash = createHash("sha256")
     .update(JSON.stringify(unsignedPacket))
     .digest("hex");
   if (computedSourceHash !== sourceHash) {
-    throw new Error("Early policy evidence packet source hash did not verify.");
+    throw new TerminalEarlyPolicyEvidenceError(
+      "packet_source_hash_invalid",
+      "Early policy evidence packet source hash did not verify.",
+      scanId,
+    );
   }
   const env = getWorkerEnv();
   let reviewSummary: Record<string, unknown> = {
@@ -342,6 +399,54 @@ async function processPolicyEvidenceReadyMessage(input: {
     );
   }
   return { packet, reviewSummary };
+}
+
+function isUuid(value: string | null): value is string {
+  return value !== null && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+async function recordTerminalPolicyEvidenceRejection(input: {
+  error: TerminalEarlyPolicyEvidenceError;
+  queueRegion: string;
+  raw: string;
+}) {
+  if (!isUuid(input.error.scanId)) return;
+  const message = asRecord(JSON.parse(input.raw));
+  const candidateSourceHash = stringValue(message.sourceHash);
+  const sourceHash = candidateSourceHash && /^[a-f0-9]{64}$/i.test(candidateSourceHash)
+    ? candidateSourceHash
+    : null;
+  const existingScan = await queryOne<{ id: string }>(
+    "select id::text as id from scans where id = $1::uuid limit 1",
+    [input.error.scanId],
+    { readOnly: true },
+  );
+  if (!existingScan) return;
+  await query(
+    `insert into scan_events (scan_id, event_type, message, metadata_json)
+     select $1::uuid, $2, $3, $4::jsonb
+      where not exists (
+        select 1 from scan_events
+         where scan_id = $1::uuid
+           and event_type = $2
+           and metadata_json->>'reasonCode' = $5
+           and coalesce(metadata_json->>'sourceHash', '') = coalesce($6, '')
+      )`,
+    [
+      input.error.scanId,
+      POLICY_EVIDENCE_REJECTED_EVENT_TYPE,
+      "Early policy evidence failed closed before semantic review.",
+      {
+        artifactOnly: true,
+        productionFindingIntegration: false,
+        queueRegion: input.queueRegion,
+        reasonCode: input.error.code,
+        sourceHash,
+      },
+      input.error.code,
+      sourceHash,
+    ],
+  );
 }
 
 function stringValue(value: unknown) {
@@ -1141,6 +1246,35 @@ async function pollOnce(input: {
             VisibilityTimeout: 0,
           }));
           return { deleted: 0, failed: 0, handled: 0 };
+        }
+        if (error instanceof TerminalEarlyPolicyEvidenceError) {
+          try {
+            await recordTerminalPolicyEvidenceRejection({
+              error,
+              queueRegion: input.queueRegion,
+              raw: rawMessage,
+            });
+            await input.client.send(new DeleteMessageCommand({
+              QueueUrl: input.queueUrl,
+              ReceiptHandle: receiptHandle(message),
+            }));
+            console.warn("[validation-worker] acknowledged terminal early policy evidence rejection", {
+              messageId: message.MessageId ?? null,
+              queueRegion: input.queueRegion,
+              reasonCode: error.code,
+              scanId: error.scanId,
+            });
+            return { deleted: 1, failed: 0, handled: 0 };
+          } catch (recordError) {
+            console.error("[validation-worker] failed to retain terminal early policy evidence rejection", {
+              error: recordError instanceof Error ? recordError.message : String(recordError),
+              messageId: message.MessageId ?? null,
+              queueRegion: input.queueRegion,
+              reasonCode: error.code,
+              scanId: error.scanId,
+            });
+            return { deleted: 0, failed: 1, handled: 0 };
+          }
         }
         console.error("[validation-worker] early policy evidence message rejected", {
           error: error instanceof Error ? error.message : String(error),

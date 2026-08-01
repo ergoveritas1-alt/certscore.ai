@@ -98,12 +98,17 @@ ENV BUILD_RUNTIME_TARGET="${BUILD_RUNTIME_TARGET}"
 WORKDIR /app
 
 COPY --from=build /app/apps/validation-worker/dist ./apps/validation-worker/dist
+# Workspace packages in the prebuilt runtime base can lag the application SHA.
+# Always overlay runtime contracts consumed by the compiled worker so its
+# validators and contract constants are from the same build as the worker.
+COPY --from=build /app/packages/certscore-contracts/dist ./node_modules/@certscore/contracts/dist
 # The runtime base intentionally contains a resolver for standalone operation,
 # but its contents can lag a resolver-only release. Always copy the resolver
 # built with this application image so the canonical version tracks this SHA.
 COPY --from=build /app/packages/certscore-vendor-resolver/dist ./node_modules/@certscore/vendor-resolver/dist
 
-RUN node -e "const pw=require('playwright'); const pkg=require('playwright/package.json'); console.log(JSON.stringify({validationWorkerRuntime:{playwrightVersion:pkg.version,chromiumExecutablePath:pw.chromium.executablePath()}}));" \
+RUN node -e "const contracts=require('@certscore/contracts'); if (contracts.VERIFIED_POLICY_EVIDENCE_PACKET_VERSION !== 'certscore.verified-policy-evidence.v1' || typeof contracts.verifiedPolicyEvidencePacketSchema?.parse !== 'function') throw new Error('validation worker runtime is missing the current verified policy evidence contract');" \
+  && node -e "const pw=require('playwright'); const pkg=require('playwright/package.json'); console.log(JSON.stringify({validationWorkerRuntime:{playwrightVersion:pkg.version,chromiumExecutablePath:pw.chromium.executablePath()}}));" \
   && du -sh node_modules /ms-playwright apps/validation-worker/dist
 
 CMD ["node", "--enable-source-maps", "./apps/validation-worker/dist/apps/validation-worker/src/index.js"]

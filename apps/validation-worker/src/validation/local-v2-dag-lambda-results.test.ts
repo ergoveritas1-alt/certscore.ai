@@ -238,6 +238,27 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.doesNotMatch(source, /Promise\.all\(queueUrls\.map/);
 });
 
+test("validation worker runtime overlays the current policy evidence contract and terminates malformed packets", async () => {
+  const [dockerfile, source] = await Promise.all([
+    readFile("apps/validation-worker/Dockerfile", "utf8"),
+    readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8"),
+  ]);
+
+  assert.match(
+    dockerfile,
+    /COPY --from=build \/app\/packages\/certscore-contracts\/dist \.\/node_modules\/@certscore\/contracts\/dist/,
+  );
+  assert.match(dockerfile, /verifiedPolicyEvidencePacketSchema\?\.parse/);
+  assert.match(source, /packet_contract_invalid/);
+  assert.match(source, /v2_policy_evidence\.rejected/);
+  const terminalBranch = source.indexOf("error instanceof TerminalEarlyPolicyEvidenceError");
+  const terminalDelete = source.indexOf("new DeleteMessageCommand", terminalBranch);
+  const transientLog = source.indexOf("early policy evidence message rejected", terminalBranch);
+  assert.ok(terminalBranch >= 0, "expected terminal early-policy failure classification");
+  assert.ok(terminalDelete > terminalBranch, "terminal malformed packets must be acknowledged");
+  assert.ok(transientLog > terminalDelete, "transient failures must remain retryable");
+});
+
 test("validation worker persists completion scores before acknowledging a Lambda result", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
   const ensureIndex = source.indexOf("await ensureCompletedScanScoresPersisted");
