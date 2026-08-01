@@ -723,17 +723,57 @@ export function buildPolicyReviewPacketFromVerifiedPolicyEvidence(
   } as unknown as CanonicalEvidenceBundle, { scanId: packet.scanId });
 }
 
-export function buildPolicyStaticContentHash(packet: PolicyReviewPacket) {
-  return sha256(stableJson({
+function buildStaticPolicyReviewProjection(packet: PolicyReviewPacket) {
+  const inspection = packet.evidenceCoverage.policySurfaceInspection;
+  return {
     documents: packet.documents,
     evidenceCoverage: {
       coverageLimitations: packet.evidenceCoverage.coverageLimitations,
-      policySurfaceInspection: packet.evidenceCoverage.policySurfaceInspection,
+      policySurfaceInspection: {
+        outcome: getString(inspection.outcome),
+        coverageStatus: getString(inspection.coverageStatus),
+        linkDiscoveryCoverageStatus: getString(inspection.linkDiscoveryCoverageStatus),
+        documentRetrievalCoverageStatus: getString(inspection.documentRetrievalCoverageStatus),
+        inspectionCompleted: inspection.inspectionCompleted === true,
+        privacyPolicyObserved: inspection.privacyPolicyObserved === true,
+        limitationKeys: getStringArray(inspection.limitationKeys),
+      },
+      runtimeCoverage: {},
     },
     policyCandidates: packet.policyCandidates,
-    scanContext: packet.scanContext,
+    runtimeContext: {},
+    // The execution region is infrastructure provenance, not a static policy
+    // semantic input. The retained documents already encode the jurisdictional
+    // variant that was actually served. Runtime comparison remains region-aware
+    // in the terminal phase.
+    scanContext: {
+      region: null,
+      targetUrl: packet.scanContext.targetUrl,
+    },
+    // Framework validity is date-sensitive, but sub-day handoff timestamps are
+    // not. Both early and terminal packets therefore review against one scan day.
     scanDate: packet.scanDate?.slice(0, 10) ?? null,
-  }));
+  } satisfies Omit<PolicyReviewPacket, "contentHash" | "scanId">;
+}
+
+export function buildPolicyStaticContentHash(packet: PolicyReviewPacket) {
+  return sha256(stableJson(buildStaticPolicyReviewProjection(packet)));
+}
+
+/**
+ * Returns the exact bounded input used for the six policy-only semantic rows.
+ * Early and terminal consumers must use this projection for both transport and
+ * identity so non-semantic runtime/provenance differences cannot split a join.
+ */
+export function buildStaticPolicyReviewPacket(
+  packet: PolicyReviewPacket,
+): PolicyReviewPacket {
+  const staticProjection = buildStaticPolicyReviewProjection(packet);
+  return {
+    ...staticProjection,
+    contentHash: sha256(stableJson(staticProjection)),
+    scanId: packet.scanId,
+  };
 }
 
 export function buildPolicyReviewCacheKey(input: {

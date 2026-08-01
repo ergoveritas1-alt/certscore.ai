@@ -5,7 +5,10 @@ import {
   POLICY_REVIEW_TOPIC_DEFINITIONS
 } from "@certscore/contracts";
 import { summarizePolicyReviewArtifact } from "./model-policy-review";
-import { finalizeArtifactProjectionMode } from "./model-policy-review-runner";
+import {
+  finalizeArtifactProjectionMode,
+  waitForUsableStaticReview,
+} from "./model-policy-review-runner";
 
 function artifact() {
   return policyModelReviewArtifactSchema.parse({
@@ -75,4 +78,59 @@ test("shadow review remains non-production", () => {
   assert.equal(finalized.productionEligible, false);
   assert.equal(finalized.provenance.usedForProductionProjection, false);
   assert.equal(summarizePolicyReviewArtifact(finalized).productionEligible, false);
+});
+
+test("terminal join waits for a concurrently persisted usable static review", async () => {
+  let loads = 0;
+  const sleeps: number[] = [];
+  const result = await waitForUsableStaticReview({
+    isUsable: (candidate) => candidate === "ready",
+    load: async () => {
+      loads += 1;
+      return loads === 3 ? "ready" : null;
+    },
+    pollMs: 10,
+    sleepImpl: async (ms) => {
+      sleeps.push(ms);
+    },
+    waitMs: 30,
+  });
+
+  assert.equal(result, "ready");
+  assert.equal(loads, 3);
+  assert.deepEqual(sleeps, [10, 10]);
+});
+
+test("terminal join remains bounded and falls back when static review never becomes usable", async () => {
+  let loads = 0;
+  const result = await waitForUsableStaticReview({
+    isUsable: () => false,
+    load: async () => {
+      loads += 1;
+      return null;
+    },
+    pollMs: 10,
+    sleepImpl: async () => {},
+    waitMs: 20,
+  });
+
+  assert.equal(result, null);
+  assert.equal(loads, 3);
+});
+
+test("same-scan static review join uses the primary database connection", async () => {
+  const workerRoot = process.cwd().endsWith("apps/validation-worker")
+    ? process.cwd()
+    : `${process.cwd()}/apps/validation-worker`;
+  const [runnerSource, repositorySource] = await Promise.all([
+    import("node:fs/promises").then(({ readFile }) =>
+      readFile(`${workerRoot}/src/validation/model-policy-review-runner.ts`, "utf8")
+    ),
+    import("node:fs/promises").then(({ readFile }) =>
+      readFile(`${workerRoot}/src/validation/repository.ts`, "utf8")
+    ),
+  ]);
+
+  assert.match(runnerSource, /consistentRead:\s*true/);
+  assert.match(repositorySource, /readOnly:\s*input\.consistentRead !== true/);
 });

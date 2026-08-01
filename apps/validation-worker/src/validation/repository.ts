@@ -2801,6 +2801,7 @@ export async function loadReusableNanoDocumentExtractions(input: {
 
 export async function loadReusableModelReviewArtifact(input: {
   cacheKey: string;
+  consistentRead?: boolean;
   reviewKind: "policy_semantic" | "policy_semantic_static" | "policy_semantic_parallel_shadow" | "finding_validation" | "vendor_attribution";
 }) {
   try {
@@ -2815,7 +2816,7 @@ export async function loadReusableModelReviewArtifact(input: {
         limit 1
       `,
       [input.reviewKind, input.cacheKey],
-      { readOnly: true }
+      { readOnly: input.consistentRead !== true }
     );
   } catch (error) {
     const shaped = { message: getErrorMessage(error) };

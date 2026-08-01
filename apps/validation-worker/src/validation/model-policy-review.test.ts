@@ -6,6 +6,7 @@ import {
   buildPolicyReviewPacket,
   buildPolicyReviewPacketFromCanonicalBundle,
   buildPolicyStaticContentHash,
+  buildStaticPolicyReviewPacket,
   deriveDeterministicLegalFrameworkSignals,
   deriveDeterministicPolicyReviewSignals,
   reviewPolicyPacketWithMini,
@@ -464,6 +465,67 @@ test("static policy review hash joins same-day packets but changes across scan d
   assert.notEqual(
     buildPolicyStaticContentHash(packet),
     buildPolicyStaticContentHash(nextDayPacket),
+  );
+});
+
+test("static policy projection ignores non-semantic handoff drift without losing retained policy evidence", () => {
+  const earlyPacket = buildFixturePacket(
+    "We use personal data to provide requested services and retain it only as needed.",
+  );
+  earlyPacket.evidenceCoverage.policySurfaceInspection = {
+    outcome: "privacy_policy_observed",
+    coverageStatus: "complete",
+    linkDiscoveryCoverageStatus: "complete",
+    documentRetrievalCoverageStatus: "usable",
+    inspectionCompleted: true,
+    privacyPolicyObserved: true,
+    observedSurfaceTypes: ["privacy_policy", "cookie_policy"],
+    limitationKeys: [],
+  };
+  const terminalPacket = {
+    ...earlyPacket,
+    evidenceCoverage: {
+      ...earlyPacket.evidenceCoverage,
+      policySurfaceInspection: {
+        ...earlyPacket.evidenceCoverage.policySurfaceInspection,
+        observedSurfaceTypes: [
+          "privacy_policy",
+          "cookie_policy",
+          "accessibility_statement",
+        ],
+      },
+      runtimeCoverage: {
+        coverageStatus: "usable",
+        observationCounts: { cookies: 4, vendors: 2 },
+      },
+    },
+    runtimeContext: {
+      cookies: [{ cookieName: "runtime-only" }],
+    },
+    scanContext: {
+      ...earlyPacket.scanContext,
+      region: "local",
+    },
+    scanDate: "2026-07-25T10:00:00.141Z",
+  };
+
+  const earlyStatic = buildStaticPolicyReviewPacket(earlyPacket);
+  const terminalStatic = buildStaticPolicyReviewPacket(terminalPacket);
+
+  assert.deepEqual(earlyStatic, terminalStatic);
+  assert.equal(earlyStatic.documents, earlyPacket.documents);
+  assert.equal(earlyStatic.policyCandidates, earlyPacket.policyCandidates);
+  assert.equal(earlyStatic.scanContext.region, null);
+  assert.equal(earlyStatic.scanDate, "2026-07-25");
+  assert.deepEqual(earlyStatic.runtimeContext, {});
+  assert.deepEqual(earlyStatic.evidenceCoverage.runtimeCoverage, {});
+  assert.equal(
+    "observedSurfaceTypes" in earlyStatic.evidenceCoverage.policySurfaceInspection,
+    false,
+  );
+  assert.equal(
+    buildPolicyStaticContentHash(earlyPacket),
+    buildPolicyStaticContentHash(terminalPacket),
   );
 });
 

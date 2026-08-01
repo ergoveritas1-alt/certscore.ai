@@ -2,6 +2,7 @@ import { policyModelReviewArtifactSchema } from "@certscore/contracts";
 import {
   buildPolicyReviewCacheKey,
   buildPolicyStaticContentHash,
+  buildStaticPolicyReviewPacket,
   POLICY_MODEL_REVIEW_CONTRACT_VERSION,
   POLICY_MODEL_REVIEW_PROMPT_VERSION,
   RUNTIME_POLICY_REVIEW_TOPICS,
@@ -21,6 +22,29 @@ type PolicyReviewArtifactKind =
   | "policy_semantic"
   | "policy_semantic_static"
   | "policy_semantic_parallel_shadow";
+
+const STATIC_REVIEW_JOIN_WAIT_MS = 6_000;
+const STATIC_REVIEW_JOIN_POLL_MS = 500;
+
+export async function waitForUsableStaticReview<T>(input: {
+  isUsable: (candidate: T) => boolean;
+  load: () => Promise<T | null>;
+  pollMs?: number;
+  sleepImpl?: (ms: number) => Promise<void>;
+  waitMs?: number;
+}) {
+  const pollMs = Math.max(10, input.pollMs ?? STATIC_REVIEW_JOIN_POLL_MS);
+  const waitMs = Math.max(0, input.waitMs ?? STATIC_REVIEW_JOIN_WAIT_MS);
+  const attemptCount = Math.max(1, Math.ceil(waitMs / pollMs) + 1);
+  for (let attempt = 0; attempt < attemptCount; attempt += 1) {
+    const candidate = await input.load();
+    if (candidate && input.isUsable(candidate)) return candidate;
+    if (attempt + 1 < attemptCount) {
+      await (input.sleepImpl ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))))(pollMs);
+    }
+  }
+  return null;
+}
 
 function hasExactlyTopics(
   artifact: ReturnType<typeof policyModelReviewArtifactSchema.parse>,
@@ -66,15 +90,7 @@ export async function runStaticPolicyReviewPacket(input: {
   model: string;
   packet: PolicyReviewPacket;
 }) {
-  const staticPacket = {
-    ...input.packet,
-    contentHash: buildPolicyStaticContentHash(input.packet),
-    evidenceCoverage: {
-      ...input.packet.evidenceCoverage,
-      runtimeCoverage: {},
-    },
-    runtimeContext: {},
-  };
+  const staticPacket = buildStaticPolicyReviewPacket(input.packet);
   const cacheKey = buildPolicyReviewCacheKey({
     contentHash: staticPacket.contentHash,
     model: input.model,
@@ -170,16 +186,20 @@ async function loadMatchingStaticArtifact(input: {
     model: input.model,
     reviewPhase: "static",
   });
-  const early = await loadReusableModelReviewArtifact({
-    cacheKey: staticCacheKey,
-    reviewKind: "policy_semantic_static",
+  return waitForUsableStaticReview({
+    load: async () => {
+      const early = await loadReusableModelReviewArtifact({
+        cacheKey: staticCacheKey,
+        consistentRead: true,
+        reviewKind: "policy_semantic_static",
+      });
+      const parsed = early?.review_json
+        ? policyModelReviewArtifactSchema.safeParse(early.review_json)
+        : null;
+      return parsed?.success ? parsed.data : null;
+    },
+    isUsable: (artifact) => hasExactlyTopics(artifact, STATIC_POLICY_REVIEW_TOPICS),
   });
-  const parsed = early?.review_json
-    ? policyModelReviewArtifactSchema.safeParse(early.review_json)
-    : null;
-  return parsed?.success && hasExactlyTopics(parsed.data, STATIC_POLICY_REVIEW_TOPICS)
-    ? parsed.data
-    : null;
 }
 
 export async function runParallelPolicyReviewShadow(input: {
