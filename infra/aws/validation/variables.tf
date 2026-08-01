@@ -255,6 +255,18 @@ variable "certscore_model_review_mode" {
   default     = "enforced"
 }
 
+variable "certscore_parallel_policy_review_enabled" {
+  description = "Runs the early static policy review and terminal parallel shadow join."
+  type        = string
+  default     = "1"
+}
+
+variable "certscore_parallel_policy_projection_enabled" {
+  description = "Allows a verified parallel policy join to replace the canonical full review; keep disabled until parity gates pass."
+  type        = string
+  default     = "0"
+}
+
 variable "worker_concurrency" {
   description = "Validation worker rank-stage concurrency."
   type        = string

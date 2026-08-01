@@ -2801,7 +2801,7 @@ export async function loadReusableNanoDocumentExtractions(input: {
 
 export async function loadReusableModelReviewArtifact(input: {
   cacheKey: string;
-  reviewKind: "policy_semantic" | "finding_validation" | "vendor_attribution";
+  reviewKind: "policy_semantic" | "policy_semantic_static" | "policy_semantic_parallel_shadow" | "finding_validation" | "vendor_attribution";
 }) {
   try {
     return await queryOne<Record<string, unknown>>(
@@ -2836,7 +2836,7 @@ export async function upsertScanModelReviewArtifact(input: {
   requestedModel: string;
   resolvedModel: string;
   review: Record<string, unknown>;
-  reviewKind: "policy_semantic" | "finding_validation" | "vendor_attribution";
+  reviewKind: "policy_semantic" | "policy_semantic_static" | "policy_semantic_parallel_shadow" | "finding_validation" | "vendor_attribution";
   reviewMode: "shadow" | "enforced";
   reviewStatus: "completed" | "failed" | "skipped";
   scanId: string;

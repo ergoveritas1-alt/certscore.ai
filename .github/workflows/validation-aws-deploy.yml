@@ -81,6 +81,8 @@ jobs:
       CERTSCORE_REVIEW_MODEL: ${{ vars.CERTSCORE_REVIEW_MODEL || 'gpt-5.4-mini' }}
       CERTSCORE_MINI_REVIEW_ENABLED: "1"
       CERTSCORE_MODEL_REVIEW_MODE: "enforced"
+      CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED: "1"
+      CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED: "0"
 
     steps:
       - name: Checkout
@@ -287,6 +289,8 @@ jobs:
                             and .name != "CERTSCORE_REVIEW_MODEL"
                             and .name != "CERTSCORE_MINI_REVIEW_ENABLED"
                             and .name != "CERTSCORE_MODEL_REVIEW_MODE"
+                            and .name != "CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED"
+                            and .name != "CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED"
                           ))
                         + [
                             {
@@ -308,6 +312,14 @@ jobs:
                             {
                               "name": "CERTSCORE_MODEL_REVIEW_MODE",
                               "value": env.CERTSCORE_MODEL_REVIEW_MODE
+                            },
+                            {
+                              "name": "CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED",
+                              "value": env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED
+                            },
+                            {
+                              "name": "CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED",
+                              "value": env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED
                             }
                           ]
                       )

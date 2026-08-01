@@ -144,6 +144,12 @@ export interface RunScanInput {
   consentFlowForceAllowedScenarioPlanning?: boolean;
   postConsentFlowsEnabled?: boolean;
   browserReuseMode?: "per_module" | "single";
+  /**
+   * Non-blocking policy-lane handoff. Consumers may retain or review this
+   * evidence early, but must not project it until it matches the terminal
+   * CanonicalEvidenceBundle.
+   */
+  onPolicySurfaceComplete?: (result: PolicySurfaceScannerResult) => void;
 }
 
 export interface PolicySurfaceSeed {
@@ -312,7 +318,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       discoveryMode: input.scenarioPlanningMode === "planned_parallel" ? "fast" : "full",
       signal: input.signal,
     }).then(
-      (value) => ({ status: "fulfilled" as const, value }),
+      (value) => {
+        input.onPolicySurfaceComplete?.(value);
+        return { status: "fulfilled" as const, value };
+      },
       (reason: unknown) => ({ status: "rejected" as const, reason }),
     )
     : Promise.resolve(undefined);

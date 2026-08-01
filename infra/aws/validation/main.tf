@@ -72,6 +72,8 @@ locals {
       { name = "CERTSCORE_MINI_REVIEW_ENABLED", value = var.certscore_mini_review_enabled },
       { name = "CERTSCORE_ESCALATION_ENABLED", value = var.certscore_escalation_enabled },
       { name = "CERTSCORE_MODEL_REVIEW_MODE", value = var.certscore_model_review_mode },
+      { name = "CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED", value = var.certscore_parallel_policy_review_enabled },
+      { name = "CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED", value = var.certscore_parallel_policy_projection_enabled },
       { name = "VALIDATION_TRANCO_MIN_RANK", value = tostring(var.validation_tranco_min_rank) },
       { name = "VALIDATION_TRANCO_MAX_RANK", value = tostring(var.validation_tranco_max_rank) },
       { name = "WORKER_CONCURRENCY", value = var.worker_concurrency },

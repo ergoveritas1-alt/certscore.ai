@@ -9,11 +9,15 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { connect as tlsConnect } from "node:tls";
 import { chromium } from "playwright";
 import {
+  VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
   canonicalEvidenceBundleSchema,
   classifyV2DagLambdaResultDisposition,
+  derivePolicySurfaceInspectionOutcome,
+  verifiedPolicyEvidencePacketSchema,
   type CanonicalEvidenceBundle,
   type ConsentFlowScenario,
   type ScreenshotArtifact,
+  type VerifiedPolicyEvidencePacket,
   type V2DagLambdaResultPurpose,
 } from "@certscore/contracts";
 import {
@@ -22,7 +26,8 @@ import {
   chromiumLaunchOptions,
   isAwsLambdaRuntime,
   lambdaChromiumSingleProcessEnabled,
-  runScan
+  runScan,
+  type RunScanInput
 } from "@certscore/scan-core";
 
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us-west-2"] as const;
@@ -30,6 +35,8 @@ export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1" satisfies LocalV2DagLambdaAwsRegion;
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
 export const LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
+export const LOCAL_V2_DAG_LAMBDA_POLICY_EVIDENCE_MESSAGE_VERSION =
+  "certscore.v2.lambda-policy-evidence-ready.v1" as const;
 export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 export const LOCAL_V2_DAG_SCANNER_RUNTIME = "certscore-v2-dag-parallel-path";
 export const POST_CONSENT_FLOW_SCANNING_ENABLED = false;
@@ -134,6 +141,21 @@ export type LocalV2DagLambdaResultMessage = {
     runtimeVpcMode: "none" | "unknown" | "vpc";
   };
   status: "completed" | "failed";
+  targetEnvironment: "local" | "production";
+};
+
+export type LocalV2DagLambdaPolicyEvidenceMessage = {
+  artifactMetadata: { sha256: string; sizeBytes: number };
+  artifactOnly: true;
+  artifactPointer: string;
+  contractVersion: typeof LOCAL_V2_DAG_LAMBDA_POLICY_EVIDENCE_MESSAGE_VERSION;
+  generatedAt: string;
+  messageKind: "policy_evidence_ready";
+  policyContentHash: string;
+  processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
+  productionFindingIntegration: false;
+  scanId: string;
+  sourceHash: string;
   targetEnvironment: "local" | "production";
 };
 
@@ -257,6 +279,7 @@ type HandlerOptions = {
     artifactSignal?: AbortSignal;
     artifactRoot: string;
     onScanCoreComplete?: () => void;
+    onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
     policySurfaceDeadlineAtMs?: number;
     preConsentModuleDeadlineMs?: number;
     preConsentVisualFallbackDeadlineMs?: number;
@@ -693,6 +716,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     externalBaselinePlanning?: "enrich" | "reuse_only";
     forceAllowedScenarioPlanning?: boolean;
     onScanCoreComplete?: () => void;
+    onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
     phaseLabelPrefix?: string;
     preConsentScreenshotMode?: "always" | "selective" | "never";
     policySurfaceDeadlineAtMs?: number;
@@ -726,6 +750,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     preConsentModuleDeadlineMs: options.preConsentModuleDeadlineMs,
     preConsentVisualFallbackDeadlineMs: options.preConsentVisualFallbackDeadlineMs,
     onScanCoreComplete: options.onScanCoreComplete,
+    onPolicySurfaceComplete: options.onPolicySurfaceComplete,
     scanTuning,
     signal: options.signal,
     policySurfaceDeadlineAtMs: options.policySurfaceDeadlineAtMs,
@@ -755,6 +780,7 @@ async function runLocalV2DagLambdaScanBundle(
   options: {
     artifactRoot: string;
     onScanCoreComplete?: () => void;
+    onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
     phaseLabelPrefix?: string;
     phaseTimings: LocalV2DagLambdaPhaseTiming[];
     preConsentScreenshotMode?: "always" | "selective" | "never";
@@ -771,6 +797,7 @@ async function runLocalV2DagLambdaScanBundle(
       const bundle = await runScan({
         browserReuseMode: "per_module",
         outDir: options.artifactRoot,
+        onPolicySurfaceComplete: options.onPolicySurfaceComplete,
         policyOutputGraceMs: 1_000,
         policyPlanningDeadlineMs: 1_500,
         policySurfaceDeadlineAtMs: options.policySurfaceDeadlineAtMs,
@@ -2502,6 +2529,108 @@ export async function sendLocalV2DagLambdaResultMessage(input: {
   });
 }
 
+function policyEvidenceHash(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+export function buildVerifiedPolicyEvidencePacket(input: {
+  payload: LocalV2DagLambdaDispatchPayload;
+  result: Parameters<NonNullable<RunScanInput["onPolicySurfaceComplete"]>>[0];
+}): VerifiedPolicyEvidencePacket {
+  const policySurfaceObservations = input.result.policySurfaceObservations;
+  const policyContentHash = policyEvidenceHash(policySurfaceObservations);
+  const generatedAt = input.result.moduleRun.completedAt ?? new Date().toISOString();
+  const unsigned = {
+    artifactOnly: true as const,
+    contractVersion: VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
+    generatedAt,
+    moduleRun: input.result.moduleRun,
+    normalizedUrl: input.payload.targetUrl,
+    policyContentHash,
+    policySurfaceInspection: derivePolicySurfaceInspectionOutcome({
+      modulesRun: [input.result.moduleRun],
+      policySurfaceObservations,
+    }),
+    policySurfaceObservations,
+    productionFindingIntegration: false as const,
+    region: input.payload.awsRegion,
+    scanDate: generatedAt,
+    scanId: input.payload.scanId,
+    targetUrl: input.payload.targetUrl,
+  };
+  const normalized = verifiedPolicyEvidencePacketSchema.parse({
+    ...unsigned,
+    sourceHash: "0".repeat(64),
+  });
+  const { sourceHash: _placeholder, ...normalizedUnsigned } = normalized;
+  return verifiedPolicyEvidencePacketSchema.parse({
+    ...normalizedUnsigned,
+    sourceHash: policyEvidenceHash(normalizedUnsigned),
+  });
+}
+
+export async function publishVerifiedPolicyEvidence(input: {
+  packet: VerifiedPolicyEvidencePacket;
+  payload: LocalV2DagLambdaDispatchPayload;
+  s3Client?: S3PutClient;
+  sqsClient?: SqsSendClient;
+}) {
+  const body = Buffer.from(`${JSON.stringify(input.packet, null, 2)}\n`, "utf8");
+  const sha256 = createHash("sha256").update(body).digest("hex");
+  const bucket = requireArtifactBucket();
+  const key = `${artifactKeyPrefix(input.payload).replace(/^\/+|\/+$/g, "")}/VerifiedPolicyEvidencePacket.json`;
+  await sendWithBoundedRetries({
+    attemptTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS,
+    maxAttempts: input.s3Client ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS,
+    operation: (attemptSignal) => (
+      input.s3Client ?? new S3Client({ region: input.payload.awsRegion })
+    ).send(new PutObjectCommand({
+      Body: body,
+      Bucket: bucket,
+      ContentType: "application/json",
+      Key: key,
+      Metadata: {
+        "certscore-artifact-field": "verifiedPolicyEvidencePacket",
+        "certscore-artifact-sha256": sha256,
+        "certscore-artifact-size-bytes": String(body.byteLength),
+        "certscore-production-finding-integration": "false",
+        "certscore-v2-artifact-only": "true",
+      },
+    }), { abortSignal: attemptSignal }),
+    operationLabel: "S3 verified policy evidence upload",
+    totalTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS *
+      (input.s3Client ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS),
+  });
+  const message: LocalV2DagLambdaPolicyEvidenceMessage = {
+    artifactMetadata: { sha256, sizeBytes: body.byteLength },
+    artifactOnly: true,
+    artifactPointer: s3Uri(bucket, key),
+    contractVersion: LOCAL_V2_DAG_LAMBDA_POLICY_EVIDENCE_MESSAGE_VERSION,
+    generatedAt: input.packet.generatedAt,
+    messageKind: "policy_evidence_ready",
+    policyContentHash: input.packet.policyContentHash,
+    processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    productionFindingIntegration: false,
+    scanId: input.payload.scanId,
+    sourceHash: input.packet.sourceHash,
+    targetEnvironment: input.payload.targetEnvironment,
+  };
+  await sendWithBoundedRetries({
+    attemptTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS,
+    maxAttempts: input.sqsClient ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS,
+    operation: (attemptSignal) => (
+      input.sqsClient ?? new SQSClient({ region: parseQueueRegion(input.payload.resultQueueUrl) })
+    ).send(new SendMessageCommand({
+      MessageBody: JSON.stringify(message),
+      QueueUrl: input.payload.resultQueueUrl,
+    }), { abortSignal: attemptSignal }),
+    operationLabel: "Verified policy evidence SQS publication",
+    totalTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS *
+      (input.sqsClient ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS),
+  });
+  return message;
+}
+
 export async function handler(event: unknown, options: HandlerOptions = {}) {
   let payload: LocalV2DagLambdaDispatchPayload | null = null;
   const now = options.now ?? (() => new Date());
@@ -2520,6 +2649,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   let scannerWorkTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS;
   let artifactChainTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS;
   let resultPublishTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS;
+  let policyEvidenceHandoff: Promise<unknown> | undefined;
 
   const remainingResultPublishMs = () => Math.max(
     10,
@@ -2581,6 +2711,21 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
             scanId: payload?.scanId,
           });
         },
+        onPolicySurfaceComplete: (result) => {
+          if (policyEvidenceHandoff) return;
+          const packet = buildVerifiedPolicyEvidencePacket({ payload: payload!, result });
+          policyEvidenceHandoff = publishVerifiedPolicyEvidence({
+            packet,
+            payload: payload!,
+            s3Client: options.s3Client,
+            sqsClient: options.sqsClient,
+          }).catch((error) => {
+            console.warn("[v2-lambda-policy] early verified evidence handoff failed closed", {
+              error: error instanceof Error ? error.message : String(error),
+              scanId: payload?.scanId,
+            });
+          });
+        },
         policySurfaceDeadlineAtMs:
           handlerStartedAtMs + scannerWorkTimeoutMs - LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
         preConsentModuleDeadlineMs: Math.max(
@@ -2607,6 +2752,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     clearTimeout(scannerDeadlineTimer);
     scannerDeadlineTimer = undefined;
     artifactChainCompletedAt = now();
+    await policyEvidenceHandoff;
     phaseTimings = artifactResult.phaseTimings;
     const completedAt = now();
     const result = buildLocalV2DagLambdaResultMessage({

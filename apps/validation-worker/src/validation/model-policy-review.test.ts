@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildPolicyReviewCacheKey,
+  buildPolicyReviewInput,
   buildPolicyReviewPacket,
   buildPolicyReviewPacketFromCanonicalBundle,
+  buildPolicyStaticContentHash,
   deriveDeterministicLegalFrameworkSignals,
   deriveDeterministicPolicyReviewSignals,
   reviewPolicyPacketWithMini,
+  STATIC_POLICY_REVIEW_TOPICS,
   selectBoundedPolicyReviewText
 } from "./model-policy-review";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
@@ -190,6 +193,277 @@ test("canonical v2 policy surfaces become bounded review documents without raw r
   assert.deepEqual(
     deriveDeterministicLegalFrameworkSignals(packet).map((signal) => signal.frameworkId),
     ["eu_us_privacy_shield"]
+  );
+});
+
+test("canonical policy transport deduplicates identical retained content without mutating evidence", () => {
+  const duplicatePolicyText = [
+    "Privacy Notice",
+    "We use personal information to provide services and process orders.",
+    "You may request access, correction, or deletion of your information."
+  ].join("\n\n");
+  const bundle = {
+    scanId: "22222222-2222-4222-8222-222222222222",
+    completedAt: "2026-07-25T10:00:00.000Z",
+    url: "https://example.com",
+    policySurfaceObservations: [{
+      observationId: "policy_primary",
+      surfaceType: "privacy_policy",
+      status: "fetched",
+      url: "https://example.com/privacy?ref=footer",
+      textExcerpt: duplicatePolicyText,
+      observedTopics: ["processing_purposes", "data_subject_rights"],
+      policyCookieDisclosures: [],
+      mentionedRights: ["access", "deletion"],
+      confidence: 0.98
+    }, {
+      observationId: "policy_redirect_variant",
+      surfaceType: "privacy_policy",
+      status: "fetched",
+      url: "https://www.example.com/privacy",
+      textExcerpt: duplicatePolicyText,
+      observedTopics: ["processing_purposes", "data_subject_rights"],
+      policyCookieDisclosures: [],
+      mentionedRights: ["access", "deletion"],
+      confidence: 0.98
+    }, {
+      observationId: "cookie_policy",
+      surfaceType: "cookie_policy",
+      status: "fetched",
+      url: "https://example.com/cookies",
+      textExcerpt: "We use cookies named consent_preferences and session_id.",
+      observedTopics: ["cookies"],
+      policyCookieDisclosures: [],
+      mentionedRights: [],
+      confidence: 0.97
+    }],
+    cmpRuntimeObservations: [],
+    consentUiObservations: [],
+    cookieEvents: [],
+    normalizedVendorObservations: [],
+    storageSnapshots: [],
+    derivedRuntimeSignals: {}
+  } as unknown as CanonicalEvidenceBundle;
+
+  const packet = buildPolicyReviewPacketFromCanonicalBundle(bundle);
+
+  assert.ok(packet);
+  assert.equal(bundle.policySurfaceObservations.length, 3);
+  assert.equal(packet.documents.length, 2);
+  assert.equal(packet.policyCandidates.length, 2);
+  assert.deepEqual(
+    packet.documents.map((document) => document.documentId),
+    ["policy_primary", "cookie_policy"]
+  );
+});
+
+test("content deduplication keeps the strongest retained source metadata", () => {
+  const duplicatePolicyText = "We process account information to provide requested services.";
+  const packet = buildPolicyReviewPacketFromCanonicalBundle({
+    scanId: "22222222-2222-4222-8222-222222222222",
+    completedAt: "2026-07-25T10:00:00.000Z",
+    url: "https://example.com",
+    policySurfaceObservations: [{
+      observationId: "weaker_source",
+      surfaceType: "privacy_policy",
+      status: "fetched",
+      url: "https://example.com/privacy?source=footer",
+      textExcerpt: duplicatePolicyText,
+      observedTopics: ["processing_purposes"],
+      policyCookieDisclosures: [],
+      mentionedRights: [],
+      confidence: 0.72,
+      ownershipConfidence: 0.7
+    }, {
+      observationId: "verified_source",
+      surfaceType: "privacy_policy",
+      status: "fetched",
+      url: "https://www.example.com/privacy",
+      textExcerpt: duplicatePolicyText,
+      observedTopics: ["processing_purposes"],
+      policyCookieDisclosures: [],
+      mentionedRights: [],
+      confidence: 0.99,
+      documentEvaluationState: "usable",
+      documentFetchState: "fetched",
+      ownershipConfidence: 0.99
+    }],
+    cmpRuntimeObservations: [],
+    consentUiObservations: [],
+    cookieEvents: [],
+    normalizedVendorObservations: [],
+    storageSnapshots: [],
+    derivedRuntimeSignals: {}
+  } as unknown as CanonicalEvidenceBundle);
+
+  assert.ok(packet);
+  assert.equal(packet.documents.length, 1);
+  assert.equal(packet.documents[0]?.documentId, "verified_source");
+  assert.equal(packet.policyCandidates[0]?.canonical_url, "https://www.example.com/privacy");
+});
+
+test("Mini transport removes repeated prose while the canonical packet retains it", () => {
+  const packet = buildFixturePacket(
+    "We use personal data to provide services. You may request access or deletion."
+  );
+  packet.policyCandidates = [{
+    page_type: "privacy_policy",
+    retained_article13_section_evidence: [{
+      topic: "processing_purposes",
+      selectedPolicySectionExcerpt: "We use personal data to provide services."
+    }, {
+      topic: "international_transfers",
+      selectedPolicySectionExcerpt: "Data may be transferred to another jurisdiction."
+    }]
+  }];
+
+  const reviewInput = buildPolicyReviewInput(packet);
+  const transportedDocument = reviewInput.documents[0] as Record<string, unknown>;
+  const transportedCandidate = reviewInput
+    .deterministicAndExtractionCandidates[0] as Record<string, unknown>;
+  const transportedArticle13Evidence = transportedCandidate
+    .retained_article13_section_evidence as Array<Record<string, unknown>>;
+
+  assert.equal("extractedCandidates" in transportedDocument, false);
+  assert.equal(transportedCandidate.retained_article13_section_evidence_count, 2);
+  assert.equal(transportedArticle13Evidence[0]?.excerptRetainedInDocument, true);
+  assert.equal("selectedPolicySectionExcerpt" in transportedArticle13Evidence[0]!, false);
+  assert.equal(transportedArticle13Evidence[1]?.excerptRetainedInDocument, false);
+  assert.equal(
+    transportedArticle13Evidence[1]?.selectedPolicySectionExcerpt,
+    "Data may be transferred to another jurisdiction."
+  );
+  assert.equal(
+    Array.isArray(packet.policyCandidates[0]?.retained_article13_section_evidence),
+    true
+  );
+  assert.equal(
+    Array.isArray(packet.documents[0]?.extractedCandidates.policy_mentions),
+    true
+  );
+});
+
+test("Mini request uses bounded output limits and the compact transport view", async () => {
+  const packet = buildFixturePacket(
+    "We use personal data to provide services. You may request access or deletion."
+  );
+  packet.policyCandidates = [{
+    page_type: "privacy_policy",
+    retained_article13_section_evidence: [{
+      topic: "processing_purposes",
+      selectedPolicySectionExcerpt: "We use personal data to provide services."
+    }]
+  }];
+  let requestBody: Record<string, unknown> | undefined;
+
+  await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({
+        model: "gpt-5.4-mini",
+        choices: [{ message: { content: JSON.stringify({ rows: completeRows() }) } }]
+      }), { status: 200 });
+    },
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet
+  });
+
+  assert.equal(requestBody?.max_completion_tokens, 6_000);
+  const messages = requestBody?.messages as Array<{ content?: string }>;
+  const transportedInput = JSON.parse(messages[1]?.content ?? "{}") as {
+    documents?: Array<Record<string, unknown>>;
+    deterministicAndExtractionCandidates?: Array<Record<string, unknown>>;
+  };
+  assert.equal("extractedCandidates" in (transportedInput.documents?.[0] ?? {}), false);
+  const transportedCandidate = transportedInput
+    .deterministicAndExtractionCandidates?.[0] ?? {};
+  const transportedArticle13Evidence = transportedCandidate
+    .retained_article13_section_evidence as Array<Record<string, unknown>>;
+  assert.equal(
+    "selectedPolicySectionExcerpt" in transportedArticle13Evidence[0]!,
+    false
+  );
+  const responseFormat = requestBody?.response_format as {
+    json_schema?: {
+      schema?: {
+        properties?: {
+          rows?: {
+            properties?: {
+              processing_purposes?: {
+                properties?: {
+                  evidenceExcerpts?: { maxItems?: number };
+                  rationale?: { maxLength?: number };
+                };
+              };
+            };
+          };
+        };
+      };
+    };
+  };
+  const rowProperties = responseFormat.json_schema?.schema?.properties?.rows
+    ?.properties?.processing_purposes?.properties;
+  assert.equal(rowProperties?.evidenceExcerpts?.maxItems, 2);
+  assert.equal(rowProperties?.rationale?.maxLength, 320);
+});
+
+test("static policy review requests only policy-stable topics with a smaller output bound", async () => {
+  const packet = buildFixturePacket(
+    "We use personal data to provide services and retain it only as long as necessary."
+  );
+  let requestBody: Record<string, unknown> | undefined;
+  const staticRows = Object.fromEntries(
+    STATIC_POLICY_REVIEW_TOPICS.map((topic) => [topic, completeRows()[topic]])
+  );
+
+  const artifact = await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({
+        model: "gpt-5.4-mini",
+        choices: [{ message: { content: JSON.stringify({ rows: staticRows }) } }]
+      }), { status: 200 });
+    },
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet: { ...packet, contentHash: buildPolicyStaticContentHash(packet) },
+    reviewPhase: "static",
+    topics: STATIC_POLICY_REVIEW_TOPICS,
+  });
+  const responseFormat = requestBody?.response_format as {
+    json_schema?: { schema?: { properties?: { rows?: { required?: string[] } } } };
+  };
+
+  assert.equal(requestBody?.max_completion_tokens, 4_500);
+  assert.deepEqual(
+    responseFormat.json_schema?.schema?.properties?.rows?.required,
+    [...STATIC_POLICY_REVIEW_TOPICS],
+  );
+  assert.equal(artifact.rows.length, 6);
+  assert.equal(artifact.productionEligible, false);
+});
+
+test("static policy review hash joins same-day packets but changes across scan dates", () => {
+  const packet = buildFixturePacket("We use personal data to provide requested services.");
+  const sameDayPacket = {
+    ...packet,
+    scanDate: "2026-07-25T10:00:29.000Z",
+  };
+  const nextDayPacket = {
+    ...packet,
+    scanDate: "2026-07-26T00:00:01.000Z",
+  };
+
+  assert.equal(
+    buildPolicyStaticContentHash(packet),
+    buildPolicyStaticContentHash(sameDayPacket),
+  );
+  assert.notEqual(
+    buildPolicyStaticContentHash(packet),
+    buildPolicyStaticContentHash(nextDayPacket),
   );
 });
 

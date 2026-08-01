@@ -7,13 +7,14 @@ import {
   policyModelReviewRowSchema,
   type CanonicalEvidenceBundle,
   type PolicyModelReviewArtifact,
-  type PolicyModelReviewRow
+  type PolicyModelReviewRow,
+  type VerifiedPolicyEvidencePacket
 } from "@certscore/contracts";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const OPENAI_RESPONSES_API_URL = "https://api.openai.com/v1/responses";
 export const POLICY_MODEL_REVIEW_CONTRACT_VERSION = "policy_model_review.v2" as const;
-export const POLICY_MODEL_REVIEW_PROMPT_VERSION = "policy_semantic_review.v4";
+export const POLICY_MODEL_REVIEW_PROMPT_VERSION = "policy_semantic_review.v5";
 const POLICY_REVIEW_SCHEMA_VERSION = "policy_semantic_review_output.v2";
 const POLICY_REVIEW_INVARIANT_VERSION = "policy_review_invariants.v5";
 const MAX_DOCUMENTS = 6;
@@ -31,7 +32,7 @@ const POLICY_REVIEW_TEXT_ANCHORS = [
   /\b(?:supervisory authority|data protection authority|lodge a complaint)\b/i,
   /\b(?:cookie inventory|cookies? and other technologies|cookie names?)\b/i
 ] as const;
-const POLICY_REVIEW_TOPICS = [
+export const POLICY_REVIEW_TOPICS = [
   "processing_purposes",
   "legal_basis",
   "data_retention",
@@ -41,6 +42,19 @@ const POLICY_REVIEW_TOPICS = [
   "cookie_inventory",
   "policy_runtime_consistency"
 ] as const;
+export const STATIC_POLICY_REVIEW_TOPICS = [
+  "processing_purposes",
+  "legal_basis",
+  "data_retention",
+  "international_transfers",
+  "vendor_disclosures",
+  "data_subject_rights",
+] as const;
+export const RUNTIME_POLICY_REVIEW_TOPICS = [
+  "cookie_inventory",
+  "policy_runtime_consistency",
+] as const;
+export type PolicyReviewTopic = (typeof POLICY_REVIEW_TOPICS)[number];
 
 type FetchLike = typeof fetch;
 
@@ -119,34 +133,35 @@ const policyReviewRowOutputSchema = {
     confidence: { type: "number", minimum: 0, maximum: 1 },
     sourceDocumentIds: {
       type: "array",
-      maxItems: 20,
+      maxItems: 4,
       items: { type: "string", maxLength: 120 }
     },
     sourceUrls: {
       type: "array",
-      maxItems: 20,
+      maxItems: 4,
       items: { type: "string", maxLength: 2000 }
     },
     evidenceExcerpts: {
       type: "array",
-      maxItems: 8,
-      items: { type: "string", maxLength: 1200 }
+      maxItems: 2,
+      items: { type: "string", maxLength: 360 }
     },
     conflictingExcerpts: {
       type: "array",
-      maxItems: 8,
-      items: { type: "string", maxLength: 1200 }
+      maxItems: 1,
+      items: { type: "string", maxLength: 360 }
     },
     reasonCodes: {
       type: "array",
-      maxItems: 20,
+      maxItems: 12,
       items: { type: "string", maxLength: 120 }
     },
-    rationale: { type: "string", maxLength: 1000 }
+    rationale: { type: "string", maxLength: 320 }
   }
 } as const;
 
-const policyReviewJsonSchema = {
+function policyReviewJsonSchemaFor(topics: readonly PolicyReviewTopic[]) {
+  return {
   type: "object",
   additionalProperties: false,
   required: ["rows"],
@@ -154,13 +169,14 @@ const policyReviewJsonSchema = {
     rows: {
       type: "object",
       additionalProperties: false,
-      required: [...POLICY_REVIEW_TOPICS],
+      required: [...topics],
       properties: Object.fromEntries(
-        POLICY_REVIEW_TOPICS.map((topic) => [topic, policyReviewRowOutputSchema])
+        topics.map((topic) => [topic, policyReviewRowOutputSchema])
       )
     }
   }
-} as const;
+  } as const;
+}
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -541,7 +557,21 @@ export function buildPolicyReviewPacketFromCanonicalBundle(
       surface
     }))
     .filter(({ reviewText }) => getString(reviewText));
-  const documentSourcesByUrl = new Map<string, Record<string, unknown>>();
+  const sourcePreference = (row: Record<string, unknown>) => {
+    const extractedFields = getRecord(row.extracted_fields_json);
+    const contentCoverage = getRecord(extractedFields.content_coverage);
+    const targetRelationship = getString(extractedFields.target_relationship);
+    return (
+      (getString(extractedFields.document_evaluation_state) === "usable" ? 16 : 0) +
+      (getString(extractedFields.document_fetch_state) === "fetched" ? 8 : 0) +
+      (getString(contentCoverage.status) === "complete" ? 8 : 0) +
+      (targetRelationship === "target_controller" ? 8 : 0) +
+      (targetRelationship === "first_party_brand" ? 4 : 0) +
+      (getNumber(extractedFields.ownership_confidence) ?? 0) * 4 +
+      (getNumber(extractedFields.semantic_confidence) ?? 0) * 2
+    );
+  };
+  const documentSourcesByContent = new Map<string, Record<string, unknown>>();
   for (const { reviewText, surface } of policySurfaces) {
     const canonicalUrl = surface.normalizedUrl ?? surface.finalUrl ?? surface.url;
     const documentType = canonicalBundleDocumentType(surface.surfaceType);
@@ -590,58 +620,21 @@ export function buildPolicyReviewPacketFromCanonicalBundle(
         target_relationship: targetRelationship,
       }
     };
-    const existing = documentSourcesByUrl.get(canonicalUrl);
-    const existingType = getString(existing?.document_type);
-    const existingText = getString(existing?.document_text) ?? "";
-    if (
-      !existing ||
-      (documentType === "privacy_policy" && existingType !== "privacy_policy") ||
-      (documentType === existingType && reviewText.length > existingText.length)
-    ) {
-      documentSourcesByUrl.set(canonicalUrl, candidate);
+    // The retained bundle may contain the same policy through localized,
+    // redirected, or query-parameter URL variants. Preserve every retained
+    // surface in the bundle, but send only one copy of identical policy text
+    // to semantic review. This changes review transport, not evidence capture.
+    const contentKey = `${documentType}:${sha256(reviewText)}`;
+    const existing = documentSourcesByContent.get(contentKey);
+    if (!existing || sourcePreference(candidate) > sourcePreference(existing)) {
+      documentSourcesByContent.set(contentKey, candidate);
     }
   }
-  const documentSources = [...documentSourcesByUrl.values()];
-  const policyCandidates = policySurfaces.map(({ surface }) => ({
-    canonical_url: surface.normalizedUrl ?? surface.finalUrl ?? surface.url,
-    document_type: canonicalBundleDocumentType(surface.surfaceType),
-    page_type: canonicalBundleDocumentType(surface.surfaceType),
-    page_url: surface.normalizedUrl ?? surface.finalUrl ?? surface.url,
-    policy_mentions: surface.observedTopics.map((topic) => ({ topic })),
-    policy_cookie_disclosures: surface.policyCookieDisclosures,
-    policy_rights_signals: surface.mentionedRights,
-    content_coverage: surface.contentCoverage ?? null,
-    document_evaluation_state: surface.documentEvaluationState ?? null,
-    document_fetch_state: surface.documentFetchState ?? null,
-    document_owner_entity: surface.documentOwnerEntity ?? null,
-    ownership_confidence: surface.ownershipConfidence ?? null,
-    ownership_reason_codes: [
-      ...(surface.ownershipReasonCodes ?? []),
-      ...(
-        !surface.targetRelationship &&
-        sameCanonicalHostname(
-          surface.normalizedUrl ?? surface.finalUrl ?? surface.url,
-          bundle.normalizedUrl ?? bundle.url,
-        )
-          ? ["same_canonical_hostname_as_scan_target"]
-          : []
-      ),
-    ],
-    retained_article13_section_evidence: surface.retainedArticle13SectionEvidence ?? [],
-    retained_policy_section_quality: (surface.retainedPolicySections ?? []).map(
-      (section) => section.quality,
-    ),
-    policy_summary_short: surface.textExcerpt?.slice(0, 1_200) ?? null,
-    semantic_confidence: surface.confidence,
-    target_relationship:
-      surface.targetRelationship ??
-      (sameCanonicalHostname(
-        surface.normalizedUrl ?? surface.finalUrl ?? surface.url,
-        bundle.normalizedUrl ?? bundle.url,
-      )
-        ? "target_controller"
-        : "unknown"),
-    title: surface.title ?? surface.linkText ?? null
+  const documentSources = [...documentSourcesByContent.values()];
+  const policyCandidates = documentSources.map((source) => ({
+    canonical_url: source.canonical_url,
+    document_type: source.document_type,
+    ...getRecord(source.extracted_fields_json),
   }));
   const sessionReplayVendors = bundle.normalizedVendorObservations
     .filter((observation) => observation.purpose === "session_replay")
@@ -709,9 +702,44 @@ export function buildPolicyReviewPacketFromCanonicalBundle(
   });
 }
 
+export function buildPolicyReviewPacketFromVerifiedPolicyEvidence(
+  packet: VerifiedPolicyEvidencePacket,
+) {
+  return buildPolicyReviewPacketFromCanonicalBundle({
+    scanId: packet.scanId,
+    completedAt: packet.scanDate,
+    url: packet.targetUrl,
+    normalizedUrl: packet.normalizedUrl,
+    region: packet.region ?? undefined,
+    modulesRun: [packet.moduleRun],
+    policySurfaceObservations: packet.policySurfaceObservations,
+    policySurfaceInspection: packet.policySurfaceInspection,
+    cmpRuntimeObservations: [],
+    consentUiObservations: [],
+    cookieEvents: [],
+    storageSnapshots: [],
+    normalizedVendorObservations: [],
+    derivedRuntimeSignals: {},
+  } as unknown as CanonicalEvidenceBundle, { scanId: packet.scanId });
+}
+
+export function buildPolicyStaticContentHash(packet: PolicyReviewPacket) {
+  return sha256(stableJson({
+    documents: packet.documents,
+    evidenceCoverage: {
+      coverageLimitations: packet.evidenceCoverage.coverageLimitations,
+      policySurfaceInspection: packet.evidenceCoverage.policySurfaceInspection,
+    },
+    policyCandidates: packet.policyCandidates,
+    scanContext: packet.scanContext,
+    scanDate: packet.scanDate?.slice(0, 10) ?? null,
+  }));
+}
+
 export function buildPolicyReviewCacheKey(input: {
   contentHash: string;
   model: string;
+  reviewPhase?: "full" | "static" | "runtime_delta";
 }) {
   return sha256(stableJson({
     contentHash: input.contentHash,
@@ -719,7 +747,8 @@ export function buildPolicyReviewCacheKey(input: {
     model: input.model,
     promptVersion: POLICY_MODEL_REVIEW_PROMPT_VERSION,
     schemaVersion: POLICY_REVIEW_SCHEMA_VERSION,
-    invariantVersion: POLICY_REVIEW_INVARIANT_VERSION
+    invariantVersion: POLICY_REVIEW_INVARIANT_VERSION,
+    reviewPhase: input.reviewPhase ?? "full",
   }));
 }
 
@@ -769,11 +798,11 @@ export function deriveDeterministicPolicyReviewSignals(packet: PolicyReviewPacke
     }));
 }
 
-function buildSystemPrompt() {
+function buildSystemPrompt(topics: readonly PolicyReviewTopic[] = POLICY_REVIEW_TOPICS) {
   return [
     "You perform evidence-scoped privacy policy review for a website risk-signal product.",
     `Canonical review labels are: ${Object.values(POLICY_REVIEW_TOPIC_DEFINITIONS).map((definition) => definition.displayLabel).join("; ")}.`,
-    "Classify every listed topic exactly once using only retained packet evidence.",
+    `Classify exactly these topics once each: ${topics.join(", ")}.`,
     "Do not make a legal determination and do not invent facts.",
     "Observed requires a directly relevant substantive passage, not merely disclosure-shaped text.",
     "A retention passage is not processing-purposes evidence.",
@@ -790,6 +819,93 @@ function buildSystemPrompt() {
     "Keep each rationale under 320 characters, retain at most two evidence excerpts and one conflicting excerpt per topic, and keep each excerpt under 360 characters.",
     "Never promote or create a customer-facing finding."
   ].join(" ");
+}
+
+/**
+ * Builds the bounded transport view sent to Mini. The retained bundle remains
+ * unchanged and the typed packet remains available for deterministic invariant
+ * enforcement. Large extracted-candidate evidence is carried only once instead
+ * of being duplicated in every document.
+ */
+export function buildPolicyReviewInput(packet: PolicyReviewPacket) {
+  const normalizedDocumentTexts = packet.documents.map((document) =>
+    document.text.replace(/\s+/g, " ").trim().toLowerCase()
+  );
+  const isAlreadyRetainedInDocumentText = (value: unknown) => {
+    const text = getString(value)?.replace(/\s+/g, " ").trim().toLowerCase();
+    return Boolean(text && normalizedDocumentTexts.some((documentText) =>
+      documentText.includes(text)
+    ));
+  };
+  const deterministicAndExtractionCandidates = packet.policyCandidates.map((candidate) => {
+    const retainedArticle13Evidence = Array.isArray(
+      candidate.retained_article13_section_evidence,
+    )
+      ? candidate.retained_article13_section_evidence
+      : [];
+    const {
+      retained_article13_section_evidence: _duplicatedRetainedArticle13Evidence,
+      policy_summary_short: policySummaryShort,
+      ...boundedCandidate
+    } = candidate;
+    const compactRetainedArticle13Evidence = retainedArticle13Evidence
+      .slice(0, 24)
+      .map((entry) => {
+        const evidence = getRecord(entry);
+        const excerpt = getString(evidence.selectedPolicySectionExcerpt);
+        const excerptRetainedInDocument = isAlreadyRetainedInDocumentText(excerpt);
+        return {
+          coverageArea: getString(evidence.coverageArea),
+          selectedPolicySectionHeading: getString(evidence.selectedPolicySectionHeading),
+          selectedPolicySectionUrl: getString(evidence.selectedPolicySectionUrl),
+          evidenceSource: getString(evidence.evidenceSource),
+          selectedEvidenceStrength: getString(evidence.selectedEvidenceStrength),
+          signalObserved: getString(evidence.signalObserved),
+          extractionLimitation: getString(evidence.extractionLimitation),
+          excerptRetainedInDocument,
+          ...(
+            excerpt && !excerptRetainedInDocument
+              ? { selectedPolicySectionExcerpt: excerpt.slice(0, 500) }
+              : {}
+          ),
+        };
+      });
+    return {
+      ...boundedCandidate,
+      ...(
+        policySummaryShort && !isAlreadyRetainedInDocumentText(policySummaryShort)
+          ? { policy_summary_short: policySummaryShort }
+          : {}
+      ),
+      retained_article13_section_evidence: compactRetainedArticle13Evidence,
+      retained_article13_section_evidence_count: retainedArticle13Evidence.length,
+    };
+  });
+  return {
+    scanDate: packet.scanDate,
+    scanContext: packet.scanContext,
+    documents: packet.documents.map((document) => ({
+      canonicalUrl: document.canonicalUrl,
+      contentCoverage: document.contentCoverage,
+      documentEvaluationState: document.documentEvaluationState,
+      documentFetchState: document.documentFetchState,
+      documentId: document.documentId,
+      documentOwnerEntity: document.documentOwnerEntity,
+      documentType: document.documentType,
+      ownershipConfidence: document.ownershipConfidence,
+      ownershipReasonCodes: document.ownershipReasonCodes,
+      targetRelationship: document.targetRelationship,
+      text: document.text,
+    })),
+    evidenceCoverage: packet.evidenceCoverage,
+    // Canonical policy text usually includes the retained Article 13 passages.
+    // Keep the typed index, but omit repeated excerpts only when their exact
+    // normalized text is present in the transported document. Unmatched
+    // excerpts remain available to Mini and the complete packet is unchanged.
+    deterministicAndExtractionCandidates,
+    runtimeContext: packet.runtimeContext,
+    deterministicLegalFrameworkSignals: deriveDeterministicLegalFrameworkSignals(packet),
+  };
 }
 
 const POLICY_TOPIC_TO_COVERAGE_AREA = {
@@ -1263,13 +1379,17 @@ function enforcePolicyReviewInvariants(
   );
 }
 
-function parseRows(raw: string, packet: PolicyReviewPacket): PolicyModelReviewRow[] {
+function parseRows(
+  raw: string,
+  packet: PolicyReviewPacket,
+  topics: readonly PolicyReviewTopic[] = POLICY_REVIEW_TOPICS,
+): PolicyModelReviewRow[] {
   const parsed = JSON.parse(raw) as { rows?: unknown };
   if (typeof parsed.rows !== "object" || parsed.rows === null || Array.isArray(parsed.rows)) {
     throw new Error("Structured policy review output did not include the required topic map.");
   }
   const rowMap = parsed.rows as Record<string, unknown>;
-  const rows = POLICY_REVIEW_TOPICS.map((topic) =>
+  const rows = topics.map((topic) =>
     policyModelReviewRowSchema.parse({
       ...getRecord(rowMap[topic]),
       topic
@@ -1353,11 +1473,15 @@ export async function reviewPolicyPacketWithMini(input: {
   mode: "shadow" | "enforced";
   model: string;
   packet: PolicyReviewPacket;
+  reviewPhase?: "full" | "static" | "runtime_delta";
+  topics?: readonly PolicyReviewTopic[];
 }): Promise<PolicyModelReviewArtifact> {
   const startedAt = Date.now();
+  const topics = input.topics ?? POLICY_REVIEW_TOPICS;
   const cacheKey = buildPolicyReviewCacheKey({
     contentHash: input.packet.contentHash,
-    model: input.model
+    model: input.model,
+    reviewPhase: input.reviewPhase,
   });
   if (!input.apiKey) {
     return buildFailureArtifact({
@@ -1372,15 +1496,7 @@ export async function reviewPolicyPacketWithMini(input: {
 
   try {
     const useResponsesApi = /^gpt-5\.6(?:-|$)/.test(input.model);
-    const reviewInput = JSON.stringify({
-      scanDate: input.packet.scanDate,
-      scanContext: input.packet.scanContext,
-      documents: input.packet.documents,
-      evidenceCoverage: input.packet.evidenceCoverage,
-      deterministicAndExtractionCandidates: input.packet.policyCandidates,
-      runtimeContext: input.packet.runtimeContext,
-      deterministicLegalFrameworkSignals: deriveDeterministicLegalFrameworkSignals(input.packet)
-    });
+    const reviewInput = JSON.stringify(buildPolicyReviewInput(input.packet));
     const response = await (input.fetchImpl ?? fetch)(
       useResponsesApi ? OPENAI_RESPONSES_API_URL : OPENAI_API_URL,
       {
@@ -1393,33 +1509,33 @@ export async function reviewPolicyPacketWithMini(input: {
         useResponsesApi
           ? {
             model: input.model,
-            instructions: buildSystemPrompt(),
+            instructions: buildSystemPrompt(topics),
             input: reviewInput,
-            max_output_tokens: 16_000,
+            max_output_tokens: input.reviewPhase === "runtime_delta" ? 2_200 : input.reviewPhase === "static" ? 4_500 : 6_000,
             reasoning: { effort: "medium" },
             text: {
               format: {
                 type: "json_schema",
                 name: "policy_semantic_review",
                 strict: true,
-                schema: policyReviewJsonSchema
+                schema: policyReviewJsonSchemaFor(topics)
               }
             }
           }
           : {
             model: input.model,
-            max_completion_tokens: 16_000,
+            max_completion_tokens: input.reviewPhase === "runtime_delta" ? 2_200 : input.reviewPhase === "static" ? 4_500 : 6_000,
             temperature: 0,
             response_format: {
               type: "json_schema",
               json_schema: {
                 name: "policy_semantic_review",
                 strict: true,
-                schema: policyReviewJsonSchema
+                schema: policyReviewJsonSchemaFor(topics)
               }
             },
             messages: [
-              { role: "system", content: buildSystemPrompt() },
+              { role: "system", content: buildSystemPrompt(topics) },
               {
                 role: "user",
                 content: reviewInput
@@ -1461,7 +1577,7 @@ export async function reviewPolicyPacketWithMini(input: {
     const rawOutput = useResponsesApi
       ? responseOutputText(payload)
       : payload.choices?.[0]?.message?.content ?? "";
-    const rows = parseRows(rawOutput, input.packet);
+    const rows = parseRows(rawOutput, input.packet, topics);
     const usage: ReviewUsage = {
       completionTokens:
         payload.usage?.completion_tokens ??
@@ -1489,7 +1605,11 @@ export async function reviewPolicyPacketWithMini(input: {
         provider: "openai",
         requestedModel: input.model,
         resolvedModel: payload.model ?? input.model,
-        taskType: "policy_semantic_review",
+        taskType: input.reviewPhase === "static"
+          ? "policy_semantic_static_review"
+          : input.reviewPhase === "runtime_delta"
+            ? "policy_semantic_runtime_delta_review"
+            : "policy_semantic_review",
         promptVersion: POLICY_MODEL_REVIEW_PROMPT_VERSION,
         schemaVersion: POLICY_REVIEW_SCHEMA_VERSION,
         inputRefs: input.packet.documents.map((document) => document.documentId),
@@ -1500,6 +1620,7 @@ export async function reviewPolicyPacketWithMini(input: {
           : null,
         reasonCodes: [
           "shadow_review_only",
+          `policy_review_phase_${input.reviewPhase ?? "full"}`,
           ...(useResponsesApi
             ? ["responses_api", "reasoning_effort_medium"]
             : [])

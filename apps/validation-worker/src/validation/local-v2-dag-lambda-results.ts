@@ -11,15 +11,26 @@ import {
   type MessageSystemAttributeName,
   type Message
 } from "@aws-sdk/client-sqs";
-import { classifyV2DagLambdaResultDisposition } from "@certscore/contracts";
+import {
+  VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
+  classifyV2DagLambdaResultDisposition,
+  verifiedPolicyEvidencePacketSchema,
+} from "@certscore/contracts";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { getWorkerEnv } from "../env";
+import {
+  buildPolicyReviewPacketFromVerifiedPolicyEvidence,
+} from "./model-policy-review";
+import { runStaticPolicyReviewPacket } from "./model-policy-review-runner";
 
 const PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 const RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
+const POLICY_EVIDENCE_MESSAGE_VERSION = "certscore.v2.lambda-policy-evidence-ready.v1";
+const POLICY_EVIDENCE_RECEIVED_EVENT_TYPE = "v2_policy_evidence.received";
 const RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
 const RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
 const RESULT_BATCH_CONCURRENCY = 3;
@@ -207,6 +218,130 @@ function configuredQueueUrls(options: LocalV2DagLambdaResultPollerOptions) {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function isPolicyEvidenceReadyMessage(raw: string) {
+  try {
+    const record = asRecord(JSON.parse(raw));
+    return record.contractVersion === POLICY_EVIDENCE_MESSAGE_VERSION &&
+      record.messageKind === "policy_evidence_ready";
+  } catch {
+    return false;
+  }
+}
+
+async function processPolicyEvidenceReadyMessage(input: {
+  queueRegion: string;
+  raw: string;
+  s3Client?: S3GetClient;
+  targetEnvironment: LambdaTargetEnvironment;
+}) {
+  const message = asRecord(JSON.parse(input.raw));
+  if (
+    message.artifactOnly !== true ||
+    message.productionFindingIntegration !== false ||
+    message.processor !== PROCESSOR ||
+    message.contractVersion !== POLICY_EVIDENCE_MESSAGE_VERSION
+  ) {
+    throw new Error("Early policy evidence message identity is invalid.");
+  }
+  const targetEnvironment = message.targetEnvironment === "production" ? "production" : "local";
+  if (targetEnvironment !== input.targetEnvironment) {
+    throw new Error("Early policy evidence target environment does not match this worker.");
+  }
+  const scanId = stringValue(message.scanId);
+  const artifactPointer = stringValue(message.artifactPointer);
+  const metadata = asRecord(message.artifactMetadata);
+  const expectedSha256 = stringValue(metadata.sha256);
+  const expectedSizeBytes = typeof metadata.sizeBytes === "number" && Number.isSafeInteger(metadata.sizeBytes)
+    ? metadata.sizeBytes
+    : null;
+  if (!scanId || !artifactPointer || !expectedSha256 || expectedSizeBytes === null) {
+    throw new Error("Early policy evidence message is missing its verified pointer metadata.");
+  }
+  const existingScan = await queryOne<{ id: string }>(
+    "select id::text as id from scans where id = $1::uuid limit 1",
+    [scanId],
+    { readOnly: true },
+  );
+  if (!existingScan) {
+    throw new Error(`Cannot retain early policy evidence for unknown scan ${scanId}.`);
+  }
+  const { bucket, key } = parseS3Uri(artifactPointer);
+  const s3Client = input.s3Client ?? new S3Client({ region: inferS3ArtifactRegion(bucket) });
+  const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const body = await streamToBuffer(response.Body);
+  const bodySha256 = createHash("sha256").update(body).digest("hex");
+  if (bodySha256 !== expectedSha256 || body.byteLength !== expectedSizeBytes) {
+    throw new Error("Early policy evidence artifact checksum or size did not verify.");
+  }
+  const packet = verifiedPolicyEvidencePacketSchema.parse(JSON.parse(body.toString("utf8")));
+  if (
+    packet.contractVersion !== VERIFIED_POLICY_EVIDENCE_PACKET_VERSION ||
+    packet.scanId !== scanId ||
+    packet.sourceHash !== stringValue(message.sourceHash) ||
+    packet.policyContentHash !== stringValue(message.policyContentHash)
+  ) {
+    throw new Error("Early policy evidence message does not match its retained packet.");
+  }
+  const { sourceHash, ...unsignedPacket } = packet;
+  const computedSourceHash = createHash("sha256")
+    .update(JSON.stringify(unsignedPacket))
+    .digest("hex");
+  if (computedSourceHash !== sourceHash) {
+    throw new Error("Early policy evidence packet source hash did not verify.");
+  }
+  const env = getWorkerEnv();
+  let reviewSummary: Record<string, unknown> = {
+    reviewStatus: "disabled",
+  };
+  if (env.CERTSCORE_MINI_REVIEW_ENABLED && env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED) {
+    const reviewPacket = buildPolicyReviewPacketFromVerifiedPolicyEvidence(packet);
+    if (reviewPacket) {
+      const review = await runStaticPolicyReviewPacket({
+        apiKey: env.OPENAI_API_KEY,
+        model: env.CERTSCORE_REVIEW_MODEL,
+        packet: reviewPacket,
+      });
+      reviewSummary = {
+        ...review.summary,
+        policyContentHash: packet.policyContentHash,
+        staticContentHash: review.staticPacket.contentHash,
+      };
+    } else {
+      reviewSummary = { reviewStatus: "skipped", skipReason: "no_usable_policy_documents" };
+    }
+  }
+  const existing = await queryOne<{ id: string }>(
+    `select id::text as id from scan_events
+      where scan_id = $1::uuid
+        and event_type = $2
+        and metadata_json->>'sourceHash' = $3
+      limit 1`,
+    [scanId, POLICY_EVIDENCE_RECEIVED_EVENT_TYPE, packet.sourceHash],
+    { readOnly: true },
+  );
+  if (!existing) {
+    await query(
+      `insert into scan_events (scan_id, event_type, message, metadata_json)
+       values ($1::uuid, $2, $3, $4::jsonb)`,
+      [
+        scanId,
+        POLICY_EVIDENCE_RECEIVED_EVENT_TYPE,
+        "Verified policy evidence was retained for non-projectable early semantic review.",
+        {
+          artifactOnly: true,
+          artifactPointer,
+          policyContentHash: packet.policyContentHash,
+          productionFindingIntegration: false,
+          queueRegion: input.queueRegion,
+          reviewSummary,
+          sourceHash: packet.sourceHash,
+        },
+      ],
+    );
+  }
+  return { packet, reviewSummary };
 }
 
 function stringValue(value: unknown) {
@@ -985,6 +1120,36 @@ async function pollOnce(input: {
   const messages = response.Messages ?? [];
   const outcomes = await mapWithConcurrency(messages, RESULT_BATCH_CONCURRENCY, async (message) => {
     const rawMessage = messageBody(message);
+    if (isPolicyEvidenceReadyMessage(rawMessage)) {
+      try {
+        await processPolicyEvidenceReadyMessage({
+          queueRegion: input.queueRegion,
+          raw: rawMessage,
+          targetEnvironment: input.targetEnvironment,
+        });
+        await input.client.send(new DeleteMessageCommand({
+          QueueUrl: input.queueUrl,
+          ReceiptHandle: receiptHandle(message),
+        }));
+        return { deleted: 1, failed: 0, handled: 1 };
+      } catch (error) {
+        const resultTargetEnvironment = getLambdaResultTargetEnvironment(rawMessage);
+        if (resultTargetEnvironment && resultTargetEnvironment !== input.targetEnvironment) {
+          await input.client.send(new ChangeMessageVisibilityCommand({
+            QueueUrl: input.queueUrl,
+            ReceiptHandle: receiptHandle(message),
+            VisibilityTimeout: 0,
+          }));
+          return { deleted: 0, failed: 0, handled: 0 };
+        }
+        console.error("[validation-worker] early policy evidence message rejected", {
+          error: error instanceof Error ? error.message : String(error),
+          messageId: message.MessageId ?? null,
+          queueRegion: input.queueRegion,
+        });
+        return { deleted: 0, failed: 1, handled: 0 };
+      }
+    }
     const disposition = classifyV2DagLambdaResultDisposition(rawMessage);
     if (disposition.kind === "synthetic_verification") {
       await input.client.send(new DeleteMessageCommand({

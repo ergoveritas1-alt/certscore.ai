@@ -61,7 +61,10 @@ import {
   buildPolicyReviewPacket,
   buildPolicyReviewPacketFromCanonicalBundle
 } from "./model-policy-review";
-import { runPolicyReviewPacket } from "./model-policy-review-runner";
+import {
+  runParallelPolicyReviewShadow,
+  runPolicyReviewPacket,
+} from "./model-policy-review-runner";
 import {
   extractCanonicalPolicyReviewPointer,
   loadCanonicalBundleForPolicyReview
@@ -173,14 +176,55 @@ async function runPolicyModelReview(input: {
     };
   }
 
-  const result = await runPolicyReviewPacket({
+  const canonicalReview = runPolicyReviewPacket({
     apiKey: env.OPENAI_API_KEY,
     mode: env.CERTSCORE_MODEL_REVIEW_MODE,
     model: env.CERTSCORE_REVIEW_MODEL,
-    packet
+    packet,
+    reuseEarlyStatic:
+      env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED &&
+      env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED,
   });
+  const [result, parallelShadow] = await Promise.all([
+    canonicalReview,
+    env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED &&
+    !env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED
+      ? runParallelPolicyReviewShadow({
+          apiKey: env.OPENAI_API_KEY,
+          model: env.CERTSCORE_REVIEW_MODEL,
+          packet,
+        })
+      : Promise.resolve(null),
+  ]);
+  const parallelShadowSummary = (() => {
+    if (!parallelShadow || !("artifact" in parallelShadow) || !parallelShadow.artifact) {
+      return parallelShadow;
+    }
+    const shadowArtifact = parallelShadow.artifact;
+    const canonicalByTopic = new Map(
+      result.artifact.rows.map((row) => [row.topic, row.status]),
+    );
+    const comparisons = shadowArtifact.rows.map((row) => ({
+      exact: canonicalByTopic.get(row.topic) === row.status,
+      topic: row.topic,
+    }));
+    const exactCount = comparisons.filter((row) => row.exact).length;
+    return {
+      reviewStatus: parallelShadow.reviewStatus,
+      summary: parallelShadow.summary,
+      parity: {
+        exactStatusAgreementCount: exactCount,
+        exactStatusAgreementRate: comparisons.length > 0
+          ? exactCount / comparisons.length
+          : 0,
+        mismatchedTopics: comparisons.filter((row) => !row.exact).map((row) => row.topic),
+        topicCount: comparisons.length,
+      },
+    };
+  })();
   return {
     ...result.summary,
+    ...(parallelShadowSummary ? { parallelShadow: parallelShadowSummary } : {}),
     sourceMode: canonicalPacket
       ? "verified_canonical_evidence_bundle"
       : "legacy_document_sources"

@@ -16,6 +16,7 @@ import {
   LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   artifactPointersFromS3Keys,
+  buildVerifiedPolicyEvidencePacket,
   buildLocalV2DagLambdaRuntimeDiagnostics,
   buildScannerRuntimeProvenance,
   buildLocalV2DagLambdaScanTuning,
@@ -27,6 +28,58 @@ import {
   uploadAuxiliaryArtifactFiles,
   uploadArtifactFiles
 } from "./handler";
+
+test("early policy handoff packet is typed, hash-bound, and non-projectable", () => {
+  const packet = buildVerifiedPolicyEvidencePacket({
+    payload: parseLocalV2DagLambdaDispatchPayload(validPayload()),
+    result: {
+      artifactRefs: [],
+      moduleRun: {
+        moduleName: "policySurfaceScanner",
+        status: "completed",
+        startedAt: "2026-07-31T20:00:00.000Z",
+        completedAt: "2026-07-31T20:00:03.000Z",
+        durationMs: 3_000,
+      },
+      policySurfaceObservations: [{
+        observationId: "privacy-policy-1",
+        surfaceType: "privacy_policy",
+        url: "https://example.com/privacy",
+        normalizedUrl: "https://example.com/privacy",
+        status: "fetched",
+        documentFetchState: "fetched",
+        documentEvaluationState: "usable",
+        documentRole: "policy_document",
+        documentFormat: "html",
+        targetRelationship: "target_controller",
+        contentCoverage: {
+          status: "complete",
+          sourceTextChars: 72,
+          extractedSectionCount: 1,
+          retainedSectionCount: 1,
+          retainedStrongSectionCount: 1,
+          retainedTableRowCount: 0,
+          limitationKeys: [],
+        },
+        observedTopics: ["processing_purposes"],
+        policyCookieDisclosures: [],
+        mentionedRights: [],
+        textExcerpt: "We process personal information to provide the services you request.",
+        confidence: 0.98,
+        artifactRefs: [],
+      }],
+    },
+  });
+  const { sourceHash, ...unsigned } = packet;
+
+  assert.equal(packet.artifactOnly, true);
+  assert.equal(packet.productionFindingIntegration, false);
+  assert.equal(packet.policySurfaceInspection.privacyPolicyObserved, true);
+  assert.equal(
+    sourceHash,
+    createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
+  );
+});
 
 function validPayload(overrides: Record<string, unknown> = {}) {
   return {

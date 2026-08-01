@@ -1870,6 +1870,33 @@ export const policySurfaceInspectionOutcomeSchema = z.object({
   limitationKeys: z.array(z.string().max(120)).max(16).default([]),
 });
 
+export const VERIFIED_POLICY_EVIDENCE_PACKET_VERSION =
+  "certscore.verified-policy-evidence.v1" as const;
+
+/**
+ * Durable, policy-lane-only evidence emitted before the terminal scan bundle.
+ * This packet is deliberately non-projectable: it may start semantic review,
+ * but cannot create concerns, findings, checklist rows, scores, or display data.
+ * The terminal consumer must verify sourceHash and match policyContentHash
+ * against the final CanonicalEvidenceBundle before reusing any review output.
+ */
+export const verifiedPolicyEvidencePacketSchema = z.object({
+  artifactOnly: z.literal(true),
+  contractVersion: z.literal(VERIFIED_POLICY_EVIDENCE_PACKET_VERSION),
+  generatedAt: z.string(),
+  moduleRun: scanModuleRunSchema,
+  normalizedUrl: z.string(),
+  policyContentHash: z.string().regex(/^[a-f0-9]{64}$/i),
+  policySurfaceInspection: policySurfaceInspectionOutcomeSchema,
+  policySurfaceObservations: z.array(policySurfaceObservationSchema).max(32),
+  productionFindingIntegration: z.literal(false),
+  region: z.string().max(80).nullable(),
+  scanDate: z.string(),
+  scanId: z.string().min(1).max(128),
+  sourceHash: z.string().regex(/^[a-f0-9]{64}$/i),
+  targetUrl: z.string(),
+});
+
 export function derivePolicySurfaceInspectionOutcome(input: {
   modulesRun?: z.infer<typeof scanModuleRunSchema>[];
   policySurfaceObservations?: z.infer<typeof policySurfaceObservationSchema>[];
@@ -2531,6 +2558,7 @@ export type DerivedRuntimeSignals = z.infer<typeof derivedRuntimeSignalsSchema>;
 export type RuntimeCoverageSummary = z.infer<typeof runtimeCoverageSummarySchema>;
 export type ConsentSurfaceInspectionOutcome = z.infer<typeof consentSurfaceInspectionOutcomeSchema>;
 export type PolicySurfaceInspectionOutcome = z.infer<typeof policySurfaceInspectionOutcomeSchema>;
+export type VerifiedPolicyEvidencePacket = z.infer<typeof verifiedPolicyEvidencePacketSchema>;
 export type ScanNoGoAssessment = z.infer<typeof scanNoGoAssessmentSchema>;
 export type ScanEvidenceLaneAssessment = z.infer<typeof scanEvidenceLaneAssessmentSchema>;
 export type VisualAccessReview = z.infer<typeof visualAccessReviewSchema>;
