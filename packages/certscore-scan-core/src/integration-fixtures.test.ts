@@ -1864,7 +1864,7 @@ test("pre-consent runtime scanner returns retained partial evidence at its soft 
     ));
   }, 1_500);
   try {
-    const url = server.urlFor("consent-cmp-script-very-late-settings");
+    const url = server.urlFor("consent-generic-learn-more-page-context");
     const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
     const result = await preConsentRuntimeScanner({
       url,
@@ -1885,6 +1885,14 @@ test("pre-consent runtime scanner returns retained partial evidence at its soft 
     assert.ok(
       result.networkEvents.length > 0 || result.networkResponseEvents.length > 0 || result.screenshots.length > 0,
       "soft deadline should retain evidence observed before cancellation",
+    );
+    assert.equal(
+      result.renderedPolicyLinks.some((link) =>
+        link.linkText === "Privacy policy" &&
+        link.href === new URL("/policies/privacy", url).toString()
+      ),
+      true,
+      "the early canonical policy-link inventory should survive a later module deadline",
     );
   } finally {
     clearTimeout(deadlineTimer);

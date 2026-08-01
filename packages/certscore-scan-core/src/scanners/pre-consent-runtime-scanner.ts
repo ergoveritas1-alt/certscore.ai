@@ -615,6 +615,7 @@ export async function preConsentRuntimeScanner(
   let retainedCmpRuntimeObservations: CmpRuntimeObservation[] = [];
   let retainedTransportSecurityObservation: TransportSecurityObservation | undefined;
   let retainedTransportSecurityArtifactRef: ArtifactRef | undefined;
+  let retainedRenderedPolicyLinkEvidence: RetainedRenderedPolicyLink[] = [];
 
   const buildSoftDeadlineResult = (): PreConsentRuntimeScannerResult => {
     applyFinalDocumentPartyClassification({
@@ -641,7 +642,8 @@ export async function preConsentRuntimeScanner(
       screenshots.length > 0 ||
       retainedConsentUiObservations.length > 0 ||
       retainedCollectionSurfaceObservations.length > 0 ||
-      retainedCmpRuntimeObservations.length > 0;
+      retainedCmpRuntimeObservations.length > 0 ||
+      retainedRenderedPolicyLinkEvidence.length > 0;
     return {
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
@@ -675,7 +677,7 @@ export async function preConsentRuntimeScanner(
         ? [retainedTransportSecurityArtifactRef]
         : [],
       vendorResolverInputs: [...vendorResolverInputs],
-      renderedPolicyLinks: [],
+      renderedPolicyLinks: [...retainedRenderedPolicyLinkEvidence],
     };
   };
   const softDeadlineResultPromise = softDeadlineSignal
@@ -881,6 +883,14 @@ export async function preConsentRuntimeScanner(
     });
     firstPartyHostname = finalDocumentParty.firstPartyHostname ?? firstPartyHostname;
     firstPartyDomain = finalDocumentParty.firstPartyDomain ?? firstPartyDomain;
+    retainedRenderedPolicyLinkEvidence = await recordBoundedTiming(
+      timingBreakdown,
+      "page evidence: early rendered policy links",
+      "Capture canonical privacy, cookie, and privacy-choice links immediately after DOMContentLoaded, before visual and consent work can contend with the renderer.",
+      Math.min(1_000, remainingModuleBudgetMs()),
+      () => captureRenderedPolicyLinks(page),
+      () => [],
+    );
     const earlyTransportNetworkProbes = await transportNetworkProbesPromise;
     timingBreakdown.push({
       label: "transport security network probes",
@@ -1183,8 +1193,12 @@ export async function preConsentRuntimeScanner(
       frames,
       scripts,
       storageSnapshot,
-      renderedPolicyLinks,
+      renderedPolicyLinks: postSettleRenderedPolicyLinks,
     } = pageEvidence;
+    retainedRenderedPolicyLinkEvidence = mergeRetainedRenderedPolicyLinks(
+      retainedRenderedPolicyLinkEvidence,
+      postSettleRenderedPolicyLinks,
+    );
     retainedStorageSnapshot = storageSnapshot;
     retainedCollectionSurfaceObservations = collectionSurfaceObservations;
     let consentObservation = lateAccessibilityObservation &&
@@ -2231,7 +2245,7 @@ export async function preConsentRuntimeScanner(
       domSnapshots: [domSnapshot],
       artifactRefs: transportSecurityArtifactRef ? [transportSecurityArtifactRef] : [],
       vendorResolverInputs,
-      renderedPolicyLinks,
+      renderedPolicyLinks: retainedRenderedPolicyLinkEvidence,
     };
   } catch (error) {
     const parentCancellation = abortReason(parentSignal);
@@ -2301,7 +2315,8 @@ export async function preConsentRuntimeScanner(
       screenshots.length > 0 ||
       retainedConsentUiObservations.length > 0 ||
       retainedCollectionSurfaceObservations.length > 0 ||
-      retainedCmpRuntimeObservations.length > 0;
+      retainedCmpRuntimeObservations.length > 0 ||
+      retainedRenderedPolicyLinkEvidence.length > 0;
     applyFinalDocumentPartyClassification({
       finalDocumentUrl: safePageUrl(page, effectiveNavigationUrl),
       networkEvents,
@@ -2345,7 +2360,7 @@ export async function preConsentRuntimeScanner(
         ? [retainedTransportSecurityArtifactRef]
         : [],
       vendorResolverInputs,
-      renderedPolicyLinks: [],
+      renderedPolicyLinks: retainedRenderedPolicyLinkEvidence,
     };
   } finally {
     input.signal?.removeEventListener("abort", abortRuntime);
@@ -2557,6 +2572,7 @@ async function recordBoundedTiming<T>(
 ): Promise<T> {
   const startedAtMs = Date.now();
   let outcome = "completed";
+  let failureMessage: string | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     if (timeoutMs <= 0) {
@@ -2572,8 +2588,9 @@ async function recordBoundedTiming<T>(
         }, timeoutMs);
       }),
     ]);
-  } catch {
+  } catch (error) {
     outcome = "failed";
+    failureMessage = errorMessageFromUnknown(error).replace(/\s+/g, " ").slice(0, 300);
     return fallback();
   } finally {
     if (timer) {
@@ -2582,7 +2599,9 @@ async function recordBoundedTiming<T>(
     const outcomeDetail =
       outcome === "completed"
         ? detail
-        : `${detail} (${outcome === "timed_out" ? `timed out after ${timeoutMs}ms` : "failed; fallback evidence retained"}).`;
+        : `${detail} (${outcome === "timed_out"
+          ? `timed out after ${timeoutMs}ms`
+          : `failed; fallback evidence retained${failureMessage ? `: ${failureMessage}` : ""}`}).`;
     timingBreakdown.push({
       label,
       detail: outcomeDetail,
@@ -3178,30 +3197,6 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
         if (key) sessionStorageEntries[key] = "[redacted]";
       }
     } catch {}
-    const textFor = (element: Element) => {
-      const labels = new Set<string>();
-      for (const value of [
-        element.getAttribute("aria-label"),
-        element.getAttribute("placeholder"),
-        element.getAttribute("name"),
-        element.getAttribute("type"),
-        element.getAttribute("role"),
-      ]) {
-        if (value) labels.add(value);
-      }
-      const id = element.getAttribute("id");
-      if (id) {
-        try {
-          document.querySelectorAll(`label[for="${CSS.escape(id)}"]`).forEach((label) => {
-            const text = label.textContent?.trim();
-            if (text) labels.add(text);
-          });
-        } catch {}
-      }
-      const closestLabel = element.closest("label")?.textContent?.trim();
-      if (closestLabel) labels.add(closestLabel);
-      return [...labels].map((label) => label.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 6);
-    };
     const collectionRows = [...document.querySelectorAll("input, textarea, select")]
       .filter((element) => {
         const type = (element.getAttribute("type") || "").toLowerCase();
@@ -3209,12 +3204,77 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
       })
       .slice(0, 40)
       .map((element) => {
+        const labels = new Set<string>();
+        for (const value of [
+          element.getAttribute("aria-label"),
+          element.getAttribute("placeholder"),
+          element.getAttribute("name"),
+          element.getAttribute("type"),
+          element.getAttribute("role"),
+        ]) {
+          if (value) labels.add(value);
+        }
+        const id = element.getAttribute("id");
+        if (id) {
+          try {
+            document.querySelectorAll(`label[for="${CSS.escape(id)}"]`).forEach((label) => {
+              const text = label.textContent?.trim();
+              if (text) labels.add(text);
+            });
+          } catch {}
+        }
+        const closestLabel = element.closest("label")?.textContent?.trim();
+        if (closestLabel) labels.add(closestLabel);
         const formText = element.closest("form")?.textContent?.replace(/\s+/g, " ").trim().slice(0, 160);
+        const normalizedLabels = [...labels]
+          .map((label) => label.replace(/\s+/g, " ").trim())
+          .filter(Boolean)
+          .slice(0, 6);
         return {
           fieldType: (element.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase(),
-          labels: [...new Set([...textFor(element), ...(formText ? [formText] : [])])].slice(0, 8),
+          labels: [...new Set([...normalizedLabels, ...(formText ? [formText] : [])])].slice(0, 8),
         };
       });
+    const anchorElements: HTMLAnchorElement[] = [];
+    const pendingRoots: Array<Document | ShadowRoot> = [document];
+    const seenRoots = new Set<Document | ShadowRoot>();
+    while (pendingRoots.length > 0) {
+      const root = pendingRoots.shift();
+      if (!root || seenRoots.has(root)) continue;
+      seenRoots.add(root);
+      for (const element of root.querySelectorAll("a[href]")) {
+        anchorElements.push(element as HTMLAnchorElement);
+      }
+      for (const element of root.querySelectorAll("*")) {
+        if (element.shadowRoot) pendingRoots.push(element.shadowRoot);
+      }
+    }
+    const selectedAnchors = anchorElements.length > 1_000
+      ? [...anchorElements.slice(0, 500), ...anchorElements.slice(-500)]
+      : anchorElements;
+    const renderedLinks = selectedAnchors.flatMap((element) => {
+      const href = element.getAttribute("href")?.trim();
+      if (!href) return [];
+      const linkText = [
+        element.textContent,
+        element.getAttribute("aria-label"),
+        element.getAttribute("title"),
+      ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 220);
+      const domLocation = element.closest("footer")
+        ? "footer" as const
+        : element.closest("header")
+          ? "header" as const
+          : element.closest("nav")
+            ? "nav" as const
+            : "body" as const;
+      const id = element.getAttribute("id")?.trim();
+      return [{
+        domLocation,
+        href,
+        linkText,
+        ...(id ? { selector: `#${id.replace(/[^a-zA-Z0-9_-]/g, "")}` } : {}),
+      }];
+    });
     const apiScope = window as typeof window & {
       __certscoreBrowserApiAccesses?: Array<{ apiName: string; category: string; timestampMs: number }>;
     };
@@ -3228,7 +3288,7 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
       })),
       localStorageEntries,
       pageUrl: window.location.href,
-      links: boundedRenderedAnchorRows(),
+      links: renderedLinks,
       scripts: [...document.scripts].map((script) => ({
         src: script.src || undefined,
         async: script.async,
@@ -3236,48 +3296,6 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
       })),
       sessionStorageEntries,
     };
-
-    function boundedRenderedAnchorRows() {
-      const elements: HTMLAnchorElement[] = [];
-      const seenRoots = new Set<Document | ShadowRoot>();
-      const visit = (root: Document | ShadowRoot) => {
-        if (seenRoots.has(root)) return;
-        seenRoots.add(root);
-        for (const element of root.querySelectorAll("a[href]")) {
-          elements.push(element as HTMLAnchorElement);
-        }
-        for (const element of root.querySelectorAll("*")) {
-          if (element.shadowRoot) visit(element.shadowRoot);
-        }
-      };
-      visit(document);
-      const selected = elements.length > 1_000
-        ? [...elements.slice(0, 500), ...elements.slice(-500)]
-        : elements;
-      return selected.flatMap((element) => {
-        const href = element.getAttribute("href")?.trim();
-        if (!href) return [];
-        const linkText = [
-          element.textContent,
-          element.getAttribute("aria-label"),
-          element.getAttribute("title"),
-        ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 220);
-        const domLocation = element.closest("footer")
-          ? "footer" as const
-          : element.closest("header")
-            ? "header" as const
-            : element.closest("nav")
-              ? "nav" as const
-              : "body" as const;
-        const id = element.getAttribute("id")?.trim();
-        return [{
-          domLocation,
-          href,
-          linkText,
-          ...(id ? { selector: `#${id.replace(/[^a-zA-Z0-9_-]/g, "")}` } : {}),
-        }];
-      });
-    }
   });
 }
 
@@ -3343,21 +3361,37 @@ function retainedRenderedPolicyLinks(
   return retained;
 }
 
+function mergeRetainedRenderedPolicyLinks(
+  ...groups: RetainedRenderedPolicyLink[][]
+): RetainedRenderedPolicyLink[] {
+  const retained: RetainedRenderedPolicyLink[] = [];
+  const seen = new Set<string>();
+  for (const link of groups.flat()) {
+    const key = link.href;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    retained.push(link);
+    if (retained.length >= 40) break;
+  }
+  return retained;
+}
+
 async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRenderedPolicyLink[]> {
   const snapshot = await page.evaluate(() => {
     const elements: HTMLAnchorElement[] = [];
+    const pendingRoots: Array<Document | ShadowRoot> = [document];
     const seenRoots = new Set<Document | ShadowRoot>();
-    const visit = (root: Document | ShadowRoot) => {
-      if (seenRoots.has(root)) return;
+    while (pendingRoots.length > 0) {
+      const root = pendingRoots.shift();
+      if (!root || seenRoots.has(root)) continue;
       seenRoots.add(root);
       for (const element of root.querySelectorAll("a[href]")) {
         elements.push(element as HTMLAnchorElement);
       }
       for (const element of root.querySelectorAll("*")) {
-        if (element.shadowRoot) visit(element.shadowRoot);
+        if (element.shadowRoot) pendingRoots.push(element.shadowRoot);
       }
-    };
-    visit(document);
+    }
     const selected = elements.length > 1_000
       ? [...elements.slice(0, 500), ...elements.slice(-500)]
       : elements;

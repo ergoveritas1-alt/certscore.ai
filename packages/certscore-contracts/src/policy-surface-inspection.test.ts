@@ -124,3 +124,50 @@ test("an observed policy link does not claim usable document coverage", () => {
     "privacy_policy_link_observed_document_not_retained",
   ]);
 });
+
+test("a directly observed privacy link remains observed when document retrieval fails", () => {
+  const outcome = derivePolicySurfaceInspectionOutcome({
+    modulesRun: [moduleRun("completed")],
+    policySurfaceObservations: [{
+      observationId: "privacy-link-fetch-failed",
+      sourceScanner: "policy_surface",
+      scenario: "policy_surface_review",
+      consentStateAtTime: "not_applicable",
+      url: "https://example.test/privacy",
+      normalizedUrl: "https://example.test/privacy",
+      surfaceType: "privacy_policy",
+      discoveryMethod: "footer_link",
+      status: "failed",
+      linkObservationState: "observed",
+      documentFetchState: "failed",
+      documentEvaluationState: "not_attempted",
+      evidenceRefs: [],
+      artifactRefs: [],
+      boundedTextExcerptIds: [],
+      observedTopics: [],
+      article13DisclosureSignals: [],
+      discardedArticle13DisclosureSignals: [],
+      gdprTransparencyTopicCandidates: [],
+      retainedPolicySections: [],
+      policyCookieDisclosures: [],
+      retainedArticle13SectionEvidence: [],
+      mentionedVendors: [],
+      mentionedPurposes: [],
+      mentionedRights: [],
+      mentionedControls: [],
+      assistMetadata: [],
+      confidence: 0.9,
+      directVsInferred: "direct",
+    }],
+  });
+
+  assert.equal(outcome.outcome, "privacy_policy_observed");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.equal(outcome.linkDiscoveryCoverageStatus, "complete");
+  assert.equal(outcome.documentRetrievalCoverageStatus, "insufficient");
+  assert.equal(outcome.privacyPolicyObserved, true);
+  assert.deepEqual(outcome.observedSurfaceTypes, ["privacy_policy"]);
+  assert.deepEqual(outcome.limitationKeys, [
+    "privacy_policy_link_observed_document_not_retained",
+  ]);
+});

@@ -1906,7 +1906,9 @@ export function derivePolicySurfaceInspectionOutcome(input: {
     moduleRun.moduleName === "policySurfaceScanner"
   );
   const retainedObservations = observations.filter((observation) =>
-    observation.status === "fetched" || observation.status === "observed"
+    observation.status === "fetched" ||
+    observation.status === "observed" ||
+    observation.linkObservationState === "observed"
   );
   const privacyPolicyObserved = retainedObservations.some((observation) =>
     observation.surfaceType === "privacy_policy"
