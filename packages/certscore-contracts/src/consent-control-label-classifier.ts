@@ -67,6 +67,22 @@ export type ConsentControlLabelClassification = {
   contextSatisfied: boolean;
 };
 
+export type ConsentSurfaceTextMatch = {
+  kind: "context" | "control";
+  locale: ConsentControlLocale;
+  phrase: string;
+  intent?: Exclude<ConsentControlIntent, "unknown">;
+};
+
+export type ConsentSurfaceTextClassification = {
+  likelyPresent: boolean;
+  recoveryHintObserved: boolean;
+  confidence: number;
+  matches: ConsentSurfaceTextMatch[];
+  matchedLocales: ConsentControlLocale[];
+  reasonCodes: string[];
+};
+
 type TermInput = Omit<ConsentControlTerm, "locale">;
 
 const MULTILINGUAL_CONTEXT_HINT_PATTERN =
@@ -798,12 +814,112 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
         variant: "necessary_only",
         requiresConsentContext: true,
       })),
+      ...(entry.contextualConsentControls?.accept ?? []).map((phrase) => ({
+        locale: entry.locale,
+        phrase,
+        intent: "accept" as const,
+        strength: "contextual" as const,
+        requiresConsentContext: true,
+      })),
+      ...(entry.contextualConsentControls?.reject ?? []).map((phrase) => ({
+        locale: entry.locale,
+        phrase,
+        intent: "reject" as const,
+        strength: "contextual" as const,
+        requiresConsentContext: true,
+      })),
+      ...(entry.contextualConsentControls?.options ?? []).map((phrase) => ({
+        locale: entry.locale,
+        phrase,
+        intent: "options" as const,
+        strength: "contextual" as const,
+        requiresConsentContext: true,
+      })),
+      ...(entry.contextualConsentControls?.necessaryOnly ?? []).map((phrase) => ({
+        locale: entry.locale,
+        phrase,
+        intent: "reject" as const,
+        strength: "equivalent" as const,
+        variant: "necessary_only",
+        requiresConsentContext: true,
+      })),
     ]),
   { locale: "fi", phrase: "vain välttämättömät", intent: "reject", strength: "equivalent", variant: "necessary_only" },
   { locale: "fi", phrase: "muokkaa evästeasetuksia", intent: "options", strength: "direct" },
 ];
 
 export const consentControlTerms = CONSENT_CONTROL_PHRASE_REGISTRY;
+
+export function classifyConsentSurfaceText(input: {
+  text?: string | null;
+  localeHints?: ConsentControlLocale[];
+  classifierProfile?: ConsentControlClassifierProfile;
+}): ConsentSurfaceTextClassification {
+  const normalizedText = normalizeConsentControlText(input.text);
+  if (!normalizedText) {
+    return {
+      likelyPresent: false,
+      recoveryHintObserved: false,
+      confidence: 0.2,
+      matches: [],
+      matchedLocales: [],
+      reasonCodes: ["empty_surface_text"],
+    };
+  }
+
+  const profileLocales = activeLocalesForProfile(input.classifierProfile ?? "production_default");
+  const localeHints = new Set(input.localeHints ?? []);
+  const localeEligible = (locale: ConsentControlLocale) =>
+    profileLocales.has(locale) && (localeHints.size === 0 || localeHints.has(locale));
+  const contextMatches = PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry): ConsentSurfaceTextMatch[] => {
+    if (!localeEligible(entry.locale)) return [];
+    return uniqueStrings([
+      ...entry.contextHints,
+      ...entry.cookiePolicyLabels,
+      ...entry.cookieSettingsLabels,
+    ]).flatMap((phrase) =>
+      normalizedText.includes(normalizeConsentControlText(phrase))
+        ? [{ kind: "context", locale: entry.locale, phrase }]
+        : []
+    );
+  });
+  const controlMatches = CONSENT_CONTROL_PHRASE_REGISTRY.flatMap((term): ConsentSurfaceTextMatch[] => {
+    if (!localeEligible(term.locale) || term.strength === "weak") return [];
+    const phrase = normalizeConsentControlText(term.phrase);
+    return phrase && normalizedText.includes(phrase)
+      ? [{ kind: "control", locale: term.locale, phrase: term.phrase, intent: term.intent }]
+      : [];
+  });
+  const matches = uniqueSurfaceTextMatches([...contextMatches, ...controlMatches]).slice(0, 24);
+  const contextLocales = new Set(contextMatches.map((match) => match.locale));
+  const controlsByLocale = new Map<ConsentControlLocale, Set<Exclude<ConsentControlIntent, "unknown">>>();
+  for (const match of controlMatches) {
+    if (!match.intent) continue;
+    const intents = controlsByLocale.get(match.locale) ?? new Set<Exclude<ConsentControlIntent, "unknown">>();
+    intents.add(match.intent);
+    controlsByLocale.set(match.locale, intents);
+  }
+  const pairedLocales = [...contextLocales].filter((locale) => (controlsByLocale.get(locale)?.size ?? 0) > 0);
+  const strongLocales = pairedLocales.filter((locale) => (controlsByLocale.get(locale)?.size ?? 0) >= 2);
+  const recoveryHintObserved = contextMatches.length > 0;
+  const likelyPresent = strongLocales.length > 0;
+  const matchedLocales = uniqueStrings(matches.map((match) => match.locale)) as ConsentControlLocale[];
+
+  return {
+    likelyPresent,
+    recoveryHintObserved,
+    confidence: likelyPresent ? 0.82 : recoveryHintObserved ? 0.58 : 0.2,
+    matches,
+    matchedLocales,
+    reasonCodes: likelyPresent
+      ? ["canonical_locale_context_matched", "multiple_canonical_control_intents_matched"]
+      : recoveryHintObserved
+        ? pairedLocales.length > 0
+          ? ["canonical_locale_context_matched", "single_canonical_control_intent_matched"]
+          : ["canonical_locale_context_matched", "control_intent_not_yet_matched"]
+        : ["canonical_consent_surface_text_not_matched"],
+  };
+}
 
 export function classifyConsentControlLabel(
   input: ConsentControlLabelClassifierInput,
@@ -1089,6 +1205,21 @@ function strengthRank(strength: ConsentControlMatchStrength) {
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
+function uniqueSurfaceTextMatches(matches: ConsentSurfaceTextMatch[]) {
+  const seen = new Set<string>();
+  return matches.filter((match) => {
+    const key = [
+      match.kind,
+      match.locale,
+      match.intent ?? "context",
+      normalizeConsentControlText(match.phrase),
+    ].join(":");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function activeLocalesForProfile(profile: ConsentControlClassifierProfile) {

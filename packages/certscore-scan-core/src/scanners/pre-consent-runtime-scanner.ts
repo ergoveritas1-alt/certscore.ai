@@ -19,6 +19,7 @@ import {
   type ConsentUiObservation,
   type VisualCaptureSummary,
   classifyConsentControlLabel,
+  classifyConsentSurfaceText,
   classifyPrivacySurface,
   consentControlTerms,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
@@ -296,6 +297,7 @@ export interface PreConsentRuntimeScannerResult {
 }
 
 export type RetainedRenderedPolicyLink = {
+  documentLanguage?: string;
   domLocation: "footer" | "header" | "nav" | "body";
   href: string;
   linkText: string;
@@ -2993,6 +2995,7 @@ type ConsolidatedPageEvidenceSnapshot = {
   localStorageEntries: Record<string, string>;
   pageUrl: string;
   links: Array<{
+    documentLanguage?: string;
     domLocation: "footer" | "header" | "nav" | "body";
     href: string;
     linkText: string;
@@ -3269,6 +3272,7 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
             : "body" as const;
       const id = element.getAttribute("id")?.trim();
       return [{
+        documentLanguage: document.documentElement.lang || undefined,
         domLocation,
         href,
         linkText,
@@ -3409,7 +3413,12 @@ async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRenderedP
             : element.closest("nav")
               ? "nav" as const
               : "body" as const;
-        return [{ domLocation, href, linkText }];
+        return [{
+          documentLanguage: document.documentElement.lang || undefined,
+          domLocation,
+          href,
+          linkText,
+        }];
       }),
     };
   });
@@ -4346,17 +4355,13 @@ async function readCheapConsentTextObservation(
       timingMarkers: ["cheap_text_prefilter_completed"],
     },
   });
-  const normalizedText = text.toLowerCase();
-  const canonicalMultilingualHint = [
-    ...CANONICAL_CONSENT_INVENTORY_LABELS,
-    ...CANONICAL_CONSENT_CONTEXT_HINTS,
-  ].some((hint) => normalizedText.includes(hint));
-  return canonicalMultilingualHint && !observation.likelyPresent
+  const canonicalSurfaceText = classifyConsentSurfaceText({ text });
+  return canonicalSurfaceText.recoveryHintObserved && !observation.likelyPresent
     ? {
         ...observation,
         likelyPresent: true,
-        basis: [...observation.basis, "canonical_multilingual_consent_text_hint"],
-        confidence: Math.max(observation.confidence, 0.7),
+        basis: [...observation.basis, "canonical_multilingual_consent_recovery_hint"],
+        confidence: Math.max(observation.confidence, canonicalSurfaceText.confidence),
       }
     : observation;
 }
@@ -6400,20 +6405,7 @@ function buildConsentUiObservationFromEvidence(input: {
   text: string;
 }): ConsentUiObservation {
   const { controls, defaultToggleEvidence, fallbackBasis = [], inventoryDiagnostics, scanStartedAtMs, text } = input;
-  const normalized = text.toLowerCase();
-  const keywords = [
-    "cookie",
-    "cookies",
-    "cookie-einstellungen",
-    "consent",
-    "analytics preferences",
-    "privacy settings",
-    "privacy preferences",
-    "accept all",
-    "reject all",
-    "manage preferences",
-  ];
-  const matched = keywords.filter((keyword) => normalized.includes(keyword));
+  const canonicalSurfaceText = classifyConsentSurfaceText({ text });
   const visibleChoiceLabels = controls.map((control) => control.label);
   const acceptControlObserved = controls.some((control) => control.actionType === "accept_all");
   const rejectControlObserved = controls.some((control) => control.actionType === "reject_all");
@@ -6421,7 +6413,12 @@ function buildConsentUiObservationFromEvidence(input: {
     control.actionType === "manage_preferences" || control.actionType === "save_preferences"
   );
   const controlBasis = controls.map((control) => `control:${control.actionType}:${control.label}`);
-  const likelyPresent = matched.length >= 2 || controls.length > 0;
+  const surfaceTextBasis = canonicalSurfaceText.matches.map((match) =>
+    match.kind === "context"
+      ? `canonical_consent_context:${match.locale}:${match.phrase}`
+      : `canonical_consent_control:${match.locale}:${match.intent ?? "unknown"}:${match.phrase}`
+  );
+  const likelyPresent = canonicalSurfaceText.likelyPresent || controls.length > 0;
   const incomplete = fallbackBasis.some((basis) =>
     basis === "bounded_capture_timeout_or_failure" || basis === "inventory:probe_failed"
   );
@@ -6439,7 +6436,8 @@ function buildConsentUiObservationFromEvidence(input: {
     likelyPresent,
     basis: likelyPresent ? [
       ...fallbackBasis,
-      ...matched.map((keyword) => `keyword:${keyword}`),
+      ...canonicalSurfaceText.reasonCodes,
+      ...surfaceTextBasis,
       ...controlBasis,
     ] : [...fallbackBasis, "insufficient_banner_keywords"],
     textExcerpt: text.slice(0, 2_000),
@@ -6456,7 +6454,7 @@ function buildConsentUiObservationFromEvidence(input: {
     controls,
     inventoryDiagnostics,
     evidenceRefs: [],
-    confidence: controls.length > 0 ? 0.86 : matched.length >= 2 ? 0.72 : 0.5,
+    confidence: controls.length > 0 ? 0.86 : likelyPresent ? canonicalSurfaceText.confidence : 0.5,
   };
 }
 
@@ -6628,7 +6626,17 @@ function hasTextBackedConsentSurface(observation: ConsentUiObservation): boolean
     return false;
   }
   const keywordBasisCount = observation.basis.filter((basis) => basis.startsWith("keyword:")).length;
-  return keywordBasisCount >= 2 && (observation.textExcerpt ?? "").trim().length >= 80;
+  const canonicalContextObserved = observation.basis.some((basis) => basis.startsWith("canonical_consent_context:"));
+  const canonicalControlIntentCount = new Set(
+    observation.basis
+      .filter((basis) => basis.startsWith("canonical_consent_control:"))
+      .map((basis) => basis.split(":")[2])
+      .filter(Boolean),
+  ).size;
+  return (
+    keywordBasisCount >= 2 ||
+    canonicalContextObserved && canonicalControlIntentCount >= 2
+  ) && (observation.textExcerpt ?? "").trim().length >= 80;
 }
 
 function likelyFirstLayerConsentBannerHintText(text: string): boolean {

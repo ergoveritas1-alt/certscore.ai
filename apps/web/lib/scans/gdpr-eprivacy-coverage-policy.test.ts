@@ -4420,15 +4420,98 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes observes durable cookie policy su
   const gap = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
+      consentControlAssessment: makeCanonicalConsentAssessment({
+        surface: "not_observed"
+      }),
       hybridRuntimeEvidence: {
         storageSummary: {
           cookiesBeforeConsentCount: 3
         }
+      },
+      policySurfaceInspection: {
+        coverageStatus: "complete",
+        documentRetrievalCoverageStatus: "insufficient",
+        inspectionCompleted: true,
+        linkDiscoveryCoverageStatus: "complete",
+        limitationKeys: [],
+        observedSurfaceTypes: [],
+        outcome: "no_privacy_policy_observed_complete_coverage",
+        privacyPolicyObserved: false
       }
     }
   });
 
   assert.equal(gap.cookie_notice_policy_availability?.status, "Gap observed");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes fails closed when cookie-policy or consent-surface absence coverage is incomplete", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentControlAssessment: makeCanonicalConsentAssessment({
+        coverage: "limited",
+        surface: "not_observed"
+      }),
+      hybridRuntimeEvidence: {
+        storageSummary: {
+          cookiesBeforeConsentCount: 3
+        }
+      },
+      policySurfaceInspection: {
+        coverageStatus: "limited",
+        documentRetrievalCoverageStatus: "limited",
+        inspectionCompleted: false,
+        linkDiscoveryCoverageStatus: "limited",
+        limitationKeys: ["policy_surface_inspection_runtime_partial"],
+        observedSurfaceTypes: [],
+        outcome: "indeterminate_limited_coverage",
+        privacyPolicyObserved: false
+      }
+    }
+  });
+
+  assert.equal(outcomes.cookie_notice_policy_availability?.status, "Not testable");
+  assert.match(
+    outcomes.cookie_notice_policy_availability?.limitation ?? "",
+    /did not retain complete typed coverage/i
+  );
+  assert.equal(outcomes.privacy_notice_availability?.status, "Not testable");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes uses the persisted typed consent assessment as banner evidence", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentControlAssessment: makeCanonicalConsentAssessment({
+        controls: [
+          { actionType: "accept_all", intent: "accept", label: "Naloži vse" },
+          { actionType: "reject_all", intent: "reject", label: "Naloži samo nujne" },
+          { actionType: "manage_preferences", intent: "options", label: "Nastavitve" }
+        ]
+      }),
+      hybridRuntimeEvidence: {
+        storageSummary: {
+          cookiesBeforeConsentCount: 3
+        }
+      },
+      policySurfaceInspection: {
+        coverageStatus: "complete",
+        documentRetrievalCoverageStatus: "insufficient",
+        inspectionCompleted: true,
+        linkDiscoveryCoverageStatus: "complete",
+        limitationKeys: [],
+        observedSurfaceTypes: [],
+        outcome: "no_privacy_policy_observed_complete_coverage",
+        privacyPolicyObserved: false
+      }
+    }
+  });
+
+  assert.equal(outcomes.cookie_notice_policy_availability?.status, "Review signal");
+  assert.equal(
+    outcomes.cookie_notice_policy_availability?.criticalEvidence.retainedEvidence.bannerOnlyCookieNotice,
+    true
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained cookie topics in privacy policy as durable cookie disclosure", () => {

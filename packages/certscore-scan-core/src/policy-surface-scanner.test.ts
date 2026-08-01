@@ -7,7 +7,10 @@ import path from "node:path";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
 import type { Browser } from "playwright";
-import { classifyPrivacySurface } from "@certscore/contracts";
+import {
+  classifyPrivacySurface,
+  PRIVACY_EVIDENCE_LOCALE_REGISTRY,
+} from "@certscore/contracts";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
   canonicalWwwPolicyUrlVariant,
@@ -373,6 +376,67 @@ test("retained rendered links recover obvious policy surfaces when the separate 
   assert.equal(privacy?.documentEvaluationState, "not_attempted");
   assert.equal(cookie?.status, "observed");
   assert.deepEqual(privacy?.observedTopics, []);
+});
+
+test("retained rendered links produce typed privacy and cookie surfaces across all 40 registered locales", () => {
+  assert.equal(PRIVACY_EVIDENCE_LOCALE_REGISTRY.length, 40);
+
+  for (const entry of PRIVACY_EVIDENCE_LOCALE_REGISTRY) {
+    const privacyLabel = entry.privacyPolicyLabels[0];
+    const cookieLabel = entry.cookiePolicyLabels[0];
+    assert.ok(privacyLabel && cookieLabel, entry.locale);
+    const observations = policySurfaceObservationsFromRetainedRenderedLinks({
+      links: [
+        {
+          documentLanguage: entry.locale,
+          domLocation: "footer",
+          href: `https://example.test/${entry.locale}/privacy`,
+          linkText: privacyLabel,
+          pageUrl: "https://example.test/",
+        },
+        {
+          documentLanguage: entry.locale,
+          domLocation: "footer",
+          href: `https://example.test/${entry.locale}/cookies`,
+          linkText: cookieLabel,
+          pageUrl: "https://example.test/",
+        },
+      ],
+    });
+
+    assert.equal(
+      observations.some((observation) =>
+        observation.surfaceType === "privacy_policy" && observation.matchedLocale === entry.locale
+      ),
+      true,
+      `${entry.locale} privacy policy`,
+    );
+    assert.equal(
+      observations.some((observation) =>
+        observation.surfaceType === "cookie_policy" && observation.matchedLocale === entry.locale
+      ),
+      true,
+      `${entry.locale} cookie policy`,
+    );
+  }
+});
+
+test("retained Slovenian combined privacy-cookie links project both typed surfaces", () => {
+  const observations = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "footer",
+      href: "https://www.uni-lj.si/varstvo-zasebnosti",
+      linkText: "Varstvo zasebnosti in piškotkov",
+      pageUrl: "https://www.uni-lj.si/",
+    }],
+  });
+
+  assert.deepEqual(
+    observations.map((observation) => observation.surfaceType).sort(),
+    ["cookie_policy", "privacy_policy"],
+  );
+  assert.equal(observations.every((observation) => observation.matchedLocale === "sl"), true);
+  assert.equal(observations.every((observation) => observation.linkObservationState === "observed"), true);
 });
 
 test("retained consent-banner cookie notice links remain typed availability evidence", () => {
@@ -2378,6 +2442,45 @@ test("policySurfaceScanner uses common-path fallback when homepage fetch fails",
     );
   } finally {
     await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("policySurfaceScanner keeps failed guessed paths coverage-limited after homepage failure", async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+    response.end("<!doctype html><html><body><h1>Not found</h1></body></html>");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const targetUrl = `http://127.0.0.1:${address.port}/missing-homepage`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-failed-guesses-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await policySurfaceScanner({
+      url: targetUrl,
+      normalizedUrl: targetUrl,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 5_000,
+      artifactWriter,
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+
+    assert.equal(result.moduleRun.status, "partial");
+    assert.equal(
+      result.policySurfaceObservations.some((observation) =>
+        observation.status === "observed" ||
+        observation.status === "fetched" ||
+        observation.linkObservationState === "observed"
+      ),
+      false,
+    );
+    assert.match(result.moduleRun.errors.join(" "), /only failed or skipped candidates/i);
+  } finally {
+    server.close();
+    await once(server, "close");
     await rm(tempRoot, { recursive: true, force: true });
   }
 });

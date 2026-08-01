@@ -395,7 +395,49 @@ function getConsentSurfaceInspection(runtimeArtifacts: Record<string, unknown> |
   );
 }
 
+function getPolicySurfaceInspection(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  return (
+    getObject(runtimeArtifacts, ["policySurfaceInspection", "policy_surface_inspection"]) ??
+    getObject(getHybridRuntimeEvidence(runtimeArtifacts), ["policySurfaceInspection", "policy_surface_inspection"])
+  );
+}
+
+function hasCompletePolicySurfaceLinkDiscovery(input: GdprEprivacyCoveragePolicyInput) {
+  const inspection = getPolicySurfaceInspection(input.runtimeArtifacts);
+  return (
+    getBoolean(inspection, ["inspectionCompleted", "inspection_completed"]) === true &&
+    getString(inspection, ["linkDiscoveryCoverageStatus", "link_discovery_coverage_status"]) === "complete" &&
+    getString(inspection, ["coverageStatus", "coverage_status"]) === "complete" &&
+    getStringArray(inspection, ["limitationKeys", "limitation_keys"]).length === 0
+  );
+}
+
+function hasCompleteConsentSurfaceCoverage(input: GdprEprivacyCoveragePolicyInput) {
+  const assessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  if (assessment) {
+    return (
+      assessment.assessmentStatus === "complete" &&
+      assessment.coverage.status === "complete" &&
+      assessment.document.identityStatus === "matched" &&
+      assessment.scan.noGo === false
+    );
+  }
+  const inspection = getConsentSurfaceInspection(input.runtimeArtifacts);
+  return (
+    getBoolean(inspection, ["inspectionCompleted", "inspection_completed"]) === true &&
+    getBoolean(inspection, ["inspectedPreInteraction", "inspected_pre_interaction"]) === true &&
+    getString(inspection, ["coverageStatus", "coverage_status"]) === "complete"
+  );
+}
+
 function hasTypedConsentSurfaceObservation(input: GdprEprivacyCoveragePolicyInput) {
+  const assessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  if (assessment) {
+    return (
+      assessment.surface.status === "observed_actionable" ||
+      assessment.surface.status === "observed_non_actionable"
+    );
+  }
   const inspection = getConsentSurfaceInspection(input.runtimeArtifacts);
   return (
     getBoolean(inspection, ["consentSurfaceObserved", "consent_surface_observed"]) === true &&
@@ -2413,6 +2455,11 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
   ].filter(Boolean).join("\n");
   const policySurfaceTopics = getStringArray(policyDisclosureSummary, ["observedTopics", "observed_topics"]);
   const policySurfaceControls = getStringArray(policyDisclosureSummary, ["mentionedControls", "mentioned_controls"]);
+  const policySurfaceInspection = getPolicySurfaceInspection(input.runtimeArtifacts);
+  const observedPolicySurfaceTypes = getStringArray(policySurfaceInspection, [
+    "observedSurfaceTypes",
+    "observed_surface_types"
+  ]);
   const policyCookieDisclosures = getObjectArray(policyDisclosureSummary, [
     "cookieDisclosures",
     "cookie_disclosures",
@@ -2431,6 +2478,9 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
     policySurfaceControls.some((control) => /cookie|preferences?|settings|manage/i.test(control)) ||
     policySurfaceUrls.some((url) => /preference|settings|manage|privacy[-_ ]?center/i.test(url));
   const policySurfaceAvailable =
+    observedPolicySurfaceTypes.some((surfaceType) =>
+      ["cookie_policy", "cookie_settings", "consent_preferences"].includes(surfaceType)
+    ) ||
     getBoolean(input.snapshot, ["cookie_policy_present", "cookiePolicyPresent"]) === true ||
     getBoolean(input.runtimeArtifacts, ["cookiePolicyPresent", "cookie_policy_present"]) === true ||
     getBoolean(policyDisclosureSummary, ["cookiePolicyPresent", "cookie_policy_present"]) === true ||
@@ -2439,6 +2489,7 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
     policySurfaceUrls.some((url) => /cookie|preference|privacy[-_ ]?center|settings/i.test(url)) ||
     /cookie (policy|notice|declaration|table|settings)|privacy choices|manage cookies|cookie preference/i.test(policySurfaceText);
   const bannerOnlyCookieNotice =
+    hasTypedConsentSurfaceObservation(input) ||
     getBoolean(input.runtimeArtifacts, ["cookieNoticeObserved", "cookie_notice_observed"]) === true ||
     getBoolean(hybridRuntimeEvidence, ["cookieNoticeObserved", "cookie_notice_observed"]) === true ||
     getBoolean(consentSummary, ["cookieNoticeObserved", "cookie_notice_observed", "bannerPresent", "banner_present"]) === true ||
@@ -2504,6 +2555,51 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
           preConsentRuntimeEvidence
         }
       }
+    );
+  }
+
+  const policyLinkDiscoveryComplete = hasCompletePolicySurfaceLinkDiscovery(input);
+  const consentSurfaceCoverageComplete = hasCompleteConsentSurfaceCoverage(input);
+  if (!policyLinkDiscoveryComplete || !consentSurfaceCoverageComplete) {
+    const incompleteSources = [
+      !policyLinkDiscoveryComplete ? "policy-surface link discovery" : null,
+      !consentSurfaceCoverageComplete ? "pre-interaction consent-surface inspection" : null,
+    ].filter((value): value is string => value !== null);
+    return makeOutcome(
+      "cookie_notice_policy_availability",
+      "Not testable",
+      `Cookie notice/policy absence cannot be determined because ${incompleteSources.join(" and ")} did not retain complete typed coverage.`,
+      ["Evidence limitation: incomplete canonical cookie-notice/policy coverage"],
+      {
+        missingOrIncompleteSourceSignals: [
+          !policyLinkDiscoveryComplete
+            ? sourceGap(
+                "runtimeArtifacts.policySurfaceInspection.linkDiscoveryCoverageStatus",
+                "complete",
+                getString(policySurfaceInspection, ["linkDiscoveryCoverageStatus", "link_discovery_coverage_status"]) ?? "missing",
+                "Complete typed policy-surface discovery is required before projecting cookie-policy absence.",
+              )
+            : null,
+          !consentSurfaceCoverageComplete
+            ? sourceGap(
+                "runtimeArtifacts.consentControlAssessment.coverage.status",
+                "complete",
+                getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts)?.coverage.status ??
+                  getString(getConsentSurfaceInspection(input.runtimeArtifacts), ["coverageStatus", "coverage_status"]) ??
+                  "missing",
+                "Complete typed pre-interaction consent-surface coverage is required before projecting cookie-notice absence.",
+              )
+            : null,
+        ].filter((value): value is GdprEprivacyCoverageSourceSignalGap => value !== null),
+        retainedEvidence: {
+          consentSurfaceCoverageComplete,
+          cookieNoticeObserved: false,
+          cookiePolicyPresent: false,
+          policyLinkDiscoveryComplete,
+          policySurfaceInspection,
+          preConsentRuntimeEvidence,
+        },
+      },
     );
   }
 
@@ -7937,8 +8033,10 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
     const completeNoPrivacyPolicyObservation =
       getString(policySurfaceInspection, ["outcome"]) === "no_privacy_policy_observed_complete_coverage" &&
       getString(policySurfaceInspection, ["coverageStatus", "coverage_status"]) === "complete" &&
+      getString(policySurfaceInspection, ["linkDiscoveryCoverageStatus", "link_discovery_coverage_status"]) === "complete" &&
       getBoolean(policySurfaceInspection, ["inspectionCompleted", "inspection_completed"]) === true &&
-      getBoolean(policySurfaceInspection, ["privacyPolicyObserved", "privacy_policy_observed"]) === false;
+      getBoolean(policySurfaceInspection, ["privacyPolicyObserved", "privacy_policy_observed"]) === false &&
+      getStringArray(policySurfaceInspection, ["limitationKeys", "limitation_keys"]).length === 0;
     if (config.rowId === "privacy_notice_availability" && completeNoPrivacyPolicyObservation) {
       return makeOutcome(
         config.rowId,

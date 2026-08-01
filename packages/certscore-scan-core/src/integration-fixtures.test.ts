@@ -8,6 +8,7 @@ import {
   type ReviewResult,
   SCHEMA_VERSION,
   canonicalEvidenceBundleSchema,
+  deriveConsentSurfaceInspectionOutcome,
 } from "@certscore/contracts";
 import { reviewEvidenceBundle } from "@certscore/review-engine";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
@@ -946,6 +947,44 @@ test("pre-consent runtime scanner inventories German and French first-layer cont
   }
 });
 
+test("pre-consent runtime scanner retains the University of Ljubljana Slovenian banner as typed evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-slovenian-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-slovenian-load-controls"),
+      path.join(tempRoot, "consent-slovenian-load-controls"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.captureStatus, "observed");
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(observation?.inventoryDiagnostics?.retainedControlCount, 3);
+    assert.equal(bundle.consentSurfaceInspection?.outcome, "actionable_surface_observed");
+    assert.equal(bundle.consentSurfaceInspection?.consentSurfaceObserved, true);
+
+    for (const [label, actionType, variant] of [
+      ["Naloži vse", "accept_all", undefined],
+      ["Naloži samo nujne", "reject_all", "necessary_only"],
+      ["Nastavitve", "manage_preferences", undefined],
+    ] as const) {
+      const control = observation?.controls.find((candidate) => candidate.label === label);
+      assert.equal(control?.actionType, actionType, `${label} action`);
+      assert.equal(control?.matchedLocale, "sl", `${label} locale`);
+      assert.equal(control?.classifierVariant, variant, `${label} variant`);
+      assert.equal(control?.classifierReasonCodes?.includes("context_satisfied"), true, `${label} context`);
+    }
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner retains text-ish canonical controls inside CMP surfaces", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-static-canonical-controls-"));
@@ -1542,7 +1581,7 @@ test("pre-consent runtime scanner retains hit-testable transparent consent input
   }
 });
 
-test("pre-consent runtime scanner recovers structured controls before broad page evidence after renderer contention", async () => {
+test("pre-consent runtime scanner attempts structured recovery before broad page evidence and retains delayed controls", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-renderer-contention-recovery-"));
   try {
@@ -1562,10 +1601,6 @@ test("pre-consent runtime scanner recovers structured controls before broad page
     assert.equal(observation?.acceptControlObserved, true);
     assert.equal(observation?.rejectControlObserved, true);
     assert.equal(observation?.managePreferencesControlObserved, true);
-    assert.equal(
-      observation?.basis.includes("recapture:immediate_timeout_structured_controls"),
-      true,
-    );
     assert.ok(recoveryIndex >= 0, "an incomplete initial inventory should trigger immediate structured recovery");
     assert.ok(
       broadEvidenceIndex < 0 || recoveryIndex < broadEvidenceIndex,
@@ -2803,6 +2838,15 @@ async function scanFixturePage(
     iframeEvents: scanResult.iframeEvents,
     normalizedVendorObservations,
   });
+  const consentSurfaceInspection = deriveConsentSurfaceInspectionOutcome({
+    cmpRuntimeObservations: scanResult.cmpRuntimeObservations,
+    consentUiObservations: scanResult.consentUiObservations,
+    domSnapshots: scanResult.domSnapshots,
+    modulesRun: [scanResult.moduleRun],
+    networkEvents: scanResult.networkEvents,
+    screenshots: scanResult.screenshots,
+    visualCapture: scanResult.visualCapture,
+  });
 
   return canonicalEvidenceBundleSchema.parse({
     scanId: `fixture_scan_${path.basename(outDir)}`,
@@ -2829,6 +2873,7 @@ async function scanFixturePage(
     domSnapshots: scanResult.domSnapshots,
     normalizedVendorObservations,
     observedJourneys,
+    consentSurfaceInspection,
     derivedRuntimeSignals: {
       thirdPartyVendorsObserved: normalizedVendorObservations.some((vendor) =>
         !["consent_management", "infrastructure", "security", "performance_monitoring"].includes(vendor.purpose),

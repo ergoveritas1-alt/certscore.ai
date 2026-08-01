@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   classifyConsentLanguage,
   classifyConsentControlLabel,
+  classifyConsentSurfaceText,
   consentActionCandidateSchema,
   consentUiObservationSchema,
   isProductionCreditworthySupplementalConsentControlClassification,
@@ -57,6 +58,78 @@ test("classifies direct consent controls across English, German, and French", ()
   assert.equal(classifyConsentControlLabel({ label: "Cookie settings" }).intent, "options");
   assert.equal(classifyConsentControlLabel({ label: "Cookie-Einstellungen" }).intent, "options");
   assert.equal(classifyConsentControlLabel({ label: "Paramètres des cookies" }).intent, "options");
+});
+
+test("classifies the retained University of Ljubljana controls only in canonical Slovenian consent context", () => {
+  const contextText = "Spletna stran Univerze v Ljubljani uporablja piškotke v skladu z našo politiko varovanja zasebnosti. Nujne smo že naložili, analitične pa lahko dovolite.";
+  const accept = classifyConsentControlLabel({
+    label: "Naloži vse",
+    contextText,
+    localeHints: ["sl"],
+  });
+  const reject = classifyConsentControlLabel({
+    label: "Naloži samo nujne",
+    contextText,
+    localeHints: ["sl"],
+  });
+  const options = classifyConsentControlLabel({
+    label: "Nastavitve",
+    contextText,
+    localeHints: ["sl"],
+  });
+
+  assert.equal(accept.intent, "accept");
+  assert.equal(accept.matchedLocale, "sl");
+  assert.equal(accept.matchStrength, "contextual");
+  assert.equal(accept.contextSatisfied, true);
+  assert.equal(reject.intent, "reject");
+  assert.equal(reject.semanticRole, "necessary_only");
+  assert.equal(reject.matchedLocale, "sl");
+  assert.equal(options.intent, "options");
+  assert.equal(options.matchedLocale, "sl");
+
+  assert.equal(classifyConsentControlLabel({ label: "Naloži vse", localeHints: ["sl"] }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ label: "Nastavitve", localeHints: ["sl"] }).intent, "unknown");
+});
+
+test("classifies multilingual consent-surface text from every canonical locale registry entry", () => {
+  for (const entry of PRIVACY_EVIDENCE_LOCALE_REGISTRY) {
+    const classification = classifyConsentSurfaceText({
+      text: [
+        entry.contextHints[0],
+        entry.consentControls.accept[0],
+        entry.consentControls.necessaryOnly[0] ?? entry.consentControls.reject[0],
+        entry.consentControls.options[0],
+      ].filter(Boolean).join(" "),
+      localeHints: [entry.locale],
+    });
+    assert.equal(classification.likelyPresent, true, `${entry.locale} canonical consent surface`);
+    assert.equal(classification.matchedLocales.includes(entry.locale), true, `${entry.locale} locale provenance`);
+    assert.equal(
+      classification.reasonCodes.includes("multiple_canonical_control_intents_matched"),
+      true,
+      `${entry.locale} control-intent evidence`,
+    );
+  }
+});
+
+test("does not promote generic localized controls without same-locale consent context", () => {
+  const classification = classifyConsentSurfaceText({
+    text: "Naloži vse novice. Nastavitve uporabniškega profila.",
+    localeHints: ["sl"],
+  });
+  assert.equal(classification.likelyPresent, false);
+  assert.equal(classification.recoveryHintObserved, false);
+});
+
+test("uses canonical localized consent context for bounded early recovery without confirming a surface", () => {
+  const classification = classifyConsentSurfaceText({
+    text: "Spletna stran uporablja piškotke v skladu s politiko zasebnosti.",
+    localeHints: ["sl"],
+  });
+  assert.equal(classification.recoveryHintObserved, true);
+  assert.equal(classification.likelyPresent, false);
+  assert.equal(classification.reasonCodes.includes("control_intent_not_yet_matched"), true);
 });
 
 test("classifies explicit inline consent preference labels without broadening generic manage", () => {

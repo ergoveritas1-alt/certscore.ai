@@ -38,6 +38,7 @@ export type StaticFixturePage =
   | "consent-iframe-reject"
   | "consent-lean-guarded-image-cookie"
   | "consent-localized-controls"
+  | "consent-slovenian-load-controls"
   | "consent-navigation-timeout"
   | "consent-focused-privacy-opt-out"
   | "consent-manage-preferences"
@@ -221,6 +222,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-iframe-reject": "consent-iframe-reject",
   "consent-lean-guarded-image-cookie": "consent-lean-guarded-image-cookie",
   "consent-localized-controls": "consent-localized-controls",
+  "consent-slovenian-load-controls": "consent-slovenian-load-controls",
   "consent-navigation-timeout": "consent-navigation-timeout",
   "consent-focused-privacy-opt-out": "consent-focused-privacy-opt-out",
   "consent-manage-preferences": "consent-manage-preferences",
@@ -1085,7 +1087,7 @@ function pageHtml(caseName: StaticFixturePage): string {
     return "<!doctype html><html><head><title>Not Found</title></head><body>Not Found</body></html>";
   }
   return `<!doctype html>
-<html>
+<html lang="${caseName === "consent-slovenian-load-controls" ? "sl" : "en"}">
   <head>
     <meta charset="utf-8">
     <title>${escapeHtml(caseName)}</title>
@@ -1366,6 +1368,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     statefulClick: caseName === "consent-banner-stateful-click",
     iframeReject: caseName === "consent-iframe-reject",
     localizedControls: caseName === "consent-localized-controls",
+    slovenianLoadControls: caseName === "consent-slovenian-load-controls",
     privacyChoiceSurfaceRejectSuccess: caseName === "consent-privacy-choice-surface-reject-success",
     leanGuardedImageCookie: caseName === "consent-lean-guarded-image-cookie",
     navigationTimeout: caseName === "consent-navigation-timeout",
@@ -1460,6 +1463,22 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
         <button id="reject-all" type="button">Tout refuser</button>
         <button id="settings" type="button">Paramètres des cookies</button>
       </div>
+    `;
+  }
+  if (options.slovenianLoadControls) {
+    return `
+      <section>
+        <h1>Dobrodošli na Univerzi v Ljubljani</h1>
+        <p>Novice, študij in raziskovanje.</p>
+      </section>
+      <div id="cookie-banner" role="dialog" aria-label="Nastavitve piškotkov"
+        style="position: fixed; left: 10%; right: 10%; bottom: 20px; padding: 24px; background: #111; color: white; z-index: 1000;">
+        <p>Spletna stran Univerze v Ljubljani uporablja piškotke v skladu z našo <a id="sl-privacy-policy" href="/privacy">politiko varovanja zasebnosti</a>. Nujne, ki so potrebni za nemoteno delovanje spletne strani, smo že naložili. Veseli bomo, če nam dovolite, da naložimo tudi analitične.</p>
+        <button id="settings" type="button">Nastavitve</button>
+        <button id="necessary-only" type="button">Naloži samo nujne</button>
+        <button id="accept-all" type="button">Naloži vse</button>
+      </div>
+      <footer><a id="sl-combined-policy" href="/cookie-policy">Varstvo zasebnosti in piškotkov</a></footer>
     `;
   }
   if (options.cmpStaticCanonicalControls) {

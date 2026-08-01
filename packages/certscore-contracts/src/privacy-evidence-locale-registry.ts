@@ -5,6 +5,7 @@ export type PrivacyEvidenceLocaleRegistryEntry = {
   privacyPolicyLabels: readonly string[];
   privacyPolicyPathSlugs: readonly string[];
   cookiePolicyLabels: readonly string[];
+  combinedPrivacyCookieLabels?: readonly string[];
   cookiePolicyPathSlugs: readonly string[];
   cookieSettingsLabels: readonly string[];
   termsLabels: readonly string[];
@@ -16,6 +17,12 @@ export type PrivacyEvidenceLocaleRegistryEntry = {
     reject: readonly string[];
     options: readonly string[];
     necessaryOnly: readonly string[];
+  };
+  contextualConsentControls?: {
+    accept?: readonly string[];
+    reject?: readonly string[];
+    options?: readonly string[];
+    necessaryOnly?: readonly string[];
   };
 };
 
@@ -169,8 +176,13 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
     consentControls: { accept: ["priimti visus", "leisti visus"], reject: ["atmesti visus", "neleisti visų", "atsisakyti visų"], options: ["slapukų nustatymai", "rinktis", "tvarkyti nuostatas"], necessaryOnly: ["tik būtinieji", "tik būtinieji slapukai"] },
   }),
   locale("sl", {
-    privacyPolicyLabels: ["politika zasebnosti", "pravilnik o zasebnosti", "varstvo podatkov"], privacyPolicyPathSlugs: ["politika-zasebnosti", "varstvo-podatkov"], cookiePolicyLabels: ["politika piškotkov"], cookiePolicyPathSlugs: ["politika-piskotkov"], cookieSettingsLabels: ["nastavitve piškotkov"], termsLabels: ["pogoji uporabe"], termsPathSlugs: ["pogoji-uporabe"], contextHints: ["zasebnost", "osebni podatki", "piškotki", "soglasje"], tldHints: [".si"],
+    privacyPolicyLabels: ["politika zasebnosti", "pravilnik o zasebnosti", "politika varovanja zasebnosti", "politiko varovanja zasebnosti", "varstvo podatkov"], privacyPolicyPathSlugs: ["politika-zasebnosti", "varstvo-podatkov"], cookiePolicyLabels: ["politika piškotkov"], combinedPrivacyCookieLabels: ["varstvo zasebnosti in piškotkov"], cookiePolicyPathSlugs: ["politika-piskotkov"], cookieSettingsLabels: ["nastavitve piškotkov"], termsLabels: ["pogoji uporabe"], termsPathSlugs: ["pogoji-uporabe"], contextHints: ["zasebnost", "osebni podatki", "piškotki", "soglasje"], tldHints: [".si"],
     consentControls: { accept: ["sprejmi vse", "dovoli vse"], reject: ["zavrni vse", "onemogoči vse"], options: ["nastavitve piškotkov", "upravljaj nastavitve"], necessaryOnly: ["sprejmi samo obvezne piškotke", "samo nujni", "samo nujni piškotki"] },
+    contextualConsentControls: {
+      accept: ["naloži vse"],
+      options: ["nastavitve"],
+      necessaryOnly: ["naloži samo nujne", "naloži samo nujne piškotke"],
+    },
   }),
   locale("ca", {
     privacyPolicyLabels: ["política de privacitat", "avís de privacitat", "protecció de dades"], privacyPolicyPathSlugs: ["politica-de-privacitat", "privacitat", "proteccio-de-dades"], cookiePolicyLabels: ["política de cookies"], cookiePolicyPathSlugs: ["politica-de-cookies"], cookieSettingsLabels: ["configuració de cookies"], termsLabels: ["termes i condicions"], termsPathSlugs: ["termes-i-condicions"], contextHints: ["privacitat", "dades personals", "cookies", "consentiment"], tldHints: [".cat", ".ad"],

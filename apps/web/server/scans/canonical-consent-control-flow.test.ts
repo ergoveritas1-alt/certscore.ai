@@ -21,7 +21,11 @@ const GENERIC_URL = "https://site-under-test.example/";
 type FixtureControl = {
   actionType: "accept_all" | "reject_all" | "manage_preferences";
   classifierReasonCodes?: string[];
+  classifierVariant?: string;
   label: string;
+  matchedLocale?: "en" | "sl";
+  matchedTerm?: string;
+  matchStrength?: "direct" | "equivalent" | "contextual";
   presentationType?: "dedicated_button" | "inline_link";
 };
 
@@ -66,9 +70,9 @@ function retainedEvidencePacket(input: ConsentFlowFixture): CanonicalEvidenceBun
         artifactRef: `CanonicalEvidenceBundle.json#control-${index}`,
         classifierReasonCodes: control.classifierReasonCodes ?? [`matched_${control.actionType}`],
         layer: "first_layer",
-        matchStrength: "direct",
-        matchedLocale: "en",
-        matchedTerm: control.label.toLowerCase(),
+        matchStrength: control.matchStrength ?? "direct",
+        matchedLocale: control.matchedLocale ?? "en",
+        matchedTerm: control.matchedTerm ?? control.label.toLowerCase(),
         visible: true
       })),
       evidenceRefs: []
@@ -359,6 +363,55 @@ test("canonical consent-control flow preserves site-agnostic prominence and abse
       assert.notEqual(story.score.score, 0, fixtureCase.name);
     }
   }
+});
+
+test("canonical consent-control flow consumes Slovenian typed controls without downstream label inference", () => {
+  const story = projectConsentStory({
+    firstLayerControls: [
+      {
+        actionType: "accept_all",
+        classifierReasonCodes: ["matched_accept", "requires_consent_context", "context_satisfied"],
+        label: "Naloži vse",
+        matchedLocale: "sl",
+        matchedTerm: "naloži vse",
+        matchStrength: "contextual",
+      },
+      {
+        actionType: "reject_all",
+        classifierReasonCodes: ["matched_reject", "variant_necessary_only", "context_satisfied"],
+        classifierVariant: "necessary_only",
+        label: "Naloži samo nujne",
+        matchedLocale: "sl",
+        matchedTerm: "naloži samo nujne",
+        matchStrength: "equivalent",
+      },
+      {
+        actionType: "manage_preferences",
+        classifierReasonCodes: ["matched_options", "requires_consent_context", "context_satisfied"],
+        label: "Nastavitve",
+        matchedLocale: "sl",
+        matchedTerm: "nastavitve",
+        matchStrength: "contextual",
+        presentationType: "dedicated_button",
+      },
+    ],
+  });
+
+  assert.equal(story.assessment.controls.accept.state, "observed");
+  assert.equal(story.assessment.controls.reject.state, "observed");
+  assert.equal(story.assessment.controls.options.state, "observed");
+  assert.equal(story.row.status, "Observed");
+  assert.equal(story.rejectRow.status, "Observed");
+  assert.equal(story.gapFindingObserved, false);
+  assert.equal(story.score.score, 100);
+  assert.equal(
+    story.assessment.evidence.some((evidence) =>
+      evidence.label === "Naloži samo nujne" &&
+      evidence.intent === "reject" &&
+      evidence.classifier?.matchedTerm === "naloži samo nujne"
+    ),
+    true,
+  );
 });
 
 test("canonical consent-control flow projects reject-and-subscribe as a partial concern", () => {

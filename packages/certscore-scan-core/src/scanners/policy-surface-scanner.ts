@@ -6,6 +6,7 @@ import {
   hasSubstantiveProcessingPurposesEvidence,
   type DirectVsInferred,
   type EvidenceRef,
+  isSupportedPrivacyEvidenceLocale,
   type PolicyCookieDisclosureObservation,
   type PolicySurfaceObservation,
   type PrivacySurfaceClassification,
@@ -125,6 +126,7 @@ export interface PolicySurfaceScannerResult {
 }
 
 export type RetainedRenderedPolicyLink = {
+  documentLanguage?: string;
   domLocation: "footer" | "header" | "nav" | "body";
   href: string;
   linkText: string;
@@ -155,7 +157,11 @@ function policySurfaceCandidatesFromRetainedRenderedLinks(
   observationOnly = true,
 ): PolicySurfaceCandidate[] {
   return links.flatMap((link, index): PolicySurfaceCandidate[] => {
-    const deterministic = classifySurface({ linkText: link.linkText, url: link.href });
+    const deterministic = classifySurface({
+      linkText: link.linkText,
+      url: link.href,
+      localeHints: localeHintsFromDocumentLanguage(link.documentLanguage),
+    });
     if (deterministic.surfaceType === "unknown" || deterministic.score <= 0.2) return [];
     const candidate: PolicySurfaceCandidate = {
       candidateId: `policy_preconsent_rendered_candidate_${index}`,
@@ -634,7 +640,7 @@ export async function policySurfaceScanner(
       });
       observations.push(...fallbackResults.observations);
       artifactRefs.push(...fallbackResults.artifactRefs);
-      if (observations.length > 0) {
+      if (hasRetainedCorePolicyOrControlSurface(observations)) {
         artifactRefs.push(await writePolicyCaptureDiagnostics({
           input,
           moduleStartedAtMs,
@@ -671,8 +677,18 @@ export async function policySurfaceScanner(
         policyFetchDiagnostics,
       }));
       return {
-        moduleRun: moduleRun("failed", moduleStartedAt, moduleStartedAtMs, [`Homepage fetch failed with status ${homepage.status ?? "unknown"} and common-path fallback retained no policy surfaces.`], timingBreakdown),
-        policySurfaceObservations: [],
+        moduleRun: moduleRun(
+          observations.length > 0 ? "partial" : "failed",
+          moduleStartedAt,
+          moduleStartedAtMs,
+          [
+            observations.length > 0
+              ? `Homepage fetch failed with status ${homepage.status ?? "unknown"}; rendered discovery retained no observed core policy surface and common-path recovery retained only failed or skipped candidates.`
+              : `Homepage fetch failed with status ${homepage.status ?? "unknown"} and common-path fallback retained no policy surfaces.`,
+          ],
+          timingBreakdown,
+        ),
+        policySurfaceObservations: observations,
         artifactRefs,
       };
     }
@@ -1174,6 +1190,9 @@ function privacyAliasesForCombinedPrivacyCookieSurfaces(
 }
 
 function combinedPrivacyCookieSurfaceText(observation: PolicySurfaceObservation) {
+  if (observation.classifierReasonCodes?.includes("variant_combined_privacy_cookie_surface")) {
+    return true;
+  }
   const value = [
     observation.normalizedUrl,
     observation.url,
@@ -3828,7 +3847,9 @@ function capPolicyCandidatesWithSurfaceDiversity(
 
 function hasRetainedCorePolicyOrControlSurface(observations: PolicySurfaceObservation[]): boolean {
   return observations.some((observation) =>
-    (observation.status === "fetched" || observation.status === "observed") &&
+    (observation.status === "fetched" ||
+      observation.status === "observed" ||
+      observation.linkObservationState === "observed") &&
     isCorePolicyOrControlSurface(observation) &&
     !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
   );
@@ -4554,6 +4575,7 @@ function classifySurface(input: {
   url?: string | null;
   title?: string | null;
   surroundingText?: string | null;
+  localeHints?: SupportedPrivacyEvidenceLocale[];
 }): {
   surfaceType: PolicySurfaceObservation["surfaceType"];
   score: number;
@@ -4577,6 +4599,15 @@ function classifySurface(input: {
     classifierProvenance: "privacy_surface_classifier.v1",
     classifierVariant: classification.variant,
   };
+}
+
+function localeHintsFromDocumentLanguage(
+  documentLanguage: string | null | undefined,
+): SupportedPrivacyEvidenceLocale[] | undefined {
+  const normalized = documentLanguage?.trim().toLowerCase().replace(/_/g, "-");
+  if (!normalized) return undefined;
+  const baseLocale = normalized.split("-", 1)[0];
+  return baseLocale && isSupportedPrivacyEvidenceLocale(baseLocale) ? [baseLocale] : undefined;
 }
 
 function isPreferenceControlSurface(surfaceType: PolicySurfaceObservation["surfaceType"], value: string): boolean {

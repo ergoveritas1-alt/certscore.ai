@@ -52,7 +52,8 @@ test("classifies canonical policy labels and localized paths across all 40 local
     const cookieLabel = entry.cookiePolicyLabels[0];
     const settingsLabel = entry.cookieSettingsLabels[0];
     const privacySlug = entry.privacyPolicyPathSlugs[0];
-    assert.ok(privacyLabel && cookieLabel && settingsLabel && privacySlug, entry.locale);
+    const cookieSlug = entry.cookiePolicyPathSlugs[0];
+    assert.ok(privacyLabel && cookieLabel && settingsLabel && privacySlug && cookieSlug, entry.locale);
 
     for (const [linkText, surfaceType] of [
       [privacyLabel, "privacy_policy"],
@@ -73,7 +74,35 @@ test("classifies canonical policy labels and localized paths across all 40 local
       localeHints: [entry.locale],
     });
     assert.equal(pathClassification.surfaceType, "privacy_policy", `${entry.locale} ${privacySlug}`);
+
+    const cookiePathClassification = classifyPrivacySurface({
+      linkText: "Legal",
+      url: `https://example.test/${cookieSlug}`,
+      localeHints: [entry.locale],
+    });
+    assert.equal(cookiePathClassification.surfaceType, "cookie_policy", `${entry.locale} ${cookieSlug}`);
   }
+});
+
+test("classifies the retained Slovenian privacy and combined privacy-cookie labels", () => {
+  const privacy = classifyPrivacySurface({
+    linkText: "politiko varovanja zasebnosti",
+    localeHints: ["sl"],
+  });
+  assert.equal(privacy.surfaceType, "privacy_policy");
+  assert.equal(privacy.matchedLocale, "sl");
+
+  const combined = classifyPrivacySurface({
+    linkText: "Varstvo zasebnosti in piškotkov",
+    localeHints: ["sl"],
+  });
+  assert.equal(combined.surfaceType, "cookie_policy");
+  assert.equal(combined.matchedLocale, "sl");
+  assert.equal(combined.variant, "combined_privacy_cookie_surface");
+  assert.equal(
+    combined.reasonCodes.includes("variant_combined_privacy_cookie_surface"),
+    true,
+  );
 });
 
 test("classifies Dutch privacy-reglement document links without visible anchor text", () => {

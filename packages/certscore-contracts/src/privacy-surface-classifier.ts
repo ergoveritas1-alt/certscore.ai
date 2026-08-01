@@ -215,6 +215,15 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
       ...entry.cookieSettingsLabels.map((phrase) => ({ locale: entry.locale, phrase, strength: "direct" as const, surfaceType: "cookie_settings" as const })),
       ...entry.termsLabels.map((phrase) => ({ locale: entry.locale, phrase, strength: "direct" as const, surfaceType: "terms" as const })),
     ]),
+  ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry): PrivacySurfacePhrase[] =>
+    (entry.combinedPrivacyCookieLabels ?? []).map((phrase) => ({
+      locale: entry.locale,
+      phrase,
+      strength: "direct" as const,
+      surfaceType: "cookie_policy" as const,
+      variant: "combined_privacy_cookie_surface",
+    })),
+  ),
 ];
 
 const URL_SURFACE_PATTERNS: Array<{

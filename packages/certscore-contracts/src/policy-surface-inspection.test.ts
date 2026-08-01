@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { derivePolicySurfaceInspectionOutcome } from "./index";
 
-function moduleRun(status: "completed" | "failed" | "skipped_budget") {
+function moduleRun(status: "completed" | "partial" | "failed" | "skipped_budget") {
   return {
     moduleName: "policySurfaceScanner",
     status,
@@ -36,6 +36,16 @@ test("policy inspection distinguishes a completed negative search from limited c
   assert.equal(failed.documentRetrievalCoverageStatus, "limited");
   assert.equal(failed.inspectionCompleted, false);
   assert.deepEqual(failed.limitationKeys, ["policy_surface_inspection_runtime_failed"]);
+
+  const partial = derivePolicySurfaceInspectionOutcome({
+    modulesRun: [moduleRun("partial")],
+    policySurfaceObservations: [],
+  });
+  assert.equal(partial.outcome, "indeterminate_limited_coverage");
+  assert.equal(partial.coverageStatus, "limited");
+  assert.equal(partial.linkDiscoveryCoverageStatus, "limited");
+  assert.equal(partial.inspectionCompleted, false);
+  assert.deepEqual(partial.limitationKeys, ["policy_surface_inspection_runtime_partial"]);
 });
 
 test("retained privacy-policy evidence remains complete when later policy work is limited", () => {
