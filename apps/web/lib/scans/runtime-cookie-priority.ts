@@ -54,7 +54,12 @@ export function normalizeRuntimeCookiePurpose(value: string | null | undefined) 
 }
 
 export function getRuntimeCookieFirstSeenMs(row: RuntimeCookieEvidenceRow) {
-  return row.firstObservedAtMs ?? row.setAtMs;
+  // A retained write timestamp is the canonical event time for a proven cookie
+  // write. `firstObservedAtMs` may instead be an earlier inventory/snapshot time
+  // and must not be presented as though the write occurred then.
+  return row.timingEvidence === "before_consent_cookie_write"
+    ? row.setAtMs ?? row.firstObservedAtMs
+    : row.firstObservedAtMs ?? row.setAtMs;
 }
 
 export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {

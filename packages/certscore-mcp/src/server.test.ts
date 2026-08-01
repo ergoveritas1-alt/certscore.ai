@@ -136,6 +136,19 @@ function preConsentRow(id: string) {
     priority: "high",
     confidence: "high",
     party: "third_party",
+    requestDetails: [{
+      cookieNamesSent: ["analytics_id"],
+      essentiality: "unknown",
+      hostname: "analytics.example.test",
+      identifierParameterNames: ["client_id"],
+      initiatorUrl: "https://example.com/app.js",
+      method: "POST",
+      path: "/collect",
+      responseCookieNamesSet: [],
+      responseObserved: true,
+      responseStorageAttempted: false,
+      vendor: "Example Analytics"
+    }],
     requestCount: 1,
     phase: "pre_consent",
     observedBeforeConsent: true,
@@ -839,6 +852,10 @@ test("API v2 MCP tools return scan timing, findings, and latest domain resources
       });
       assert.equal(inventory.type, "certscore_pre_consent_cookies_trackers");
       assert.equal((inventory.rows as unknown[]).length, 2);
+      assert.equal(
+        (((inventory.rows as Array<Record<string, unknown>>)[0]?.requestDetails as Array<Record<string, unknown>>)[0]?.method),
+        "POST"
+      );
       assert.equal((inventory.summary as Record<string, unknown>).truncated, true);
       assert.equal((inventory.summary as Record<string, unknown>).totalRowCount, 3);
       assert.equal(latest.type, "certscore_domain_latest_scan");

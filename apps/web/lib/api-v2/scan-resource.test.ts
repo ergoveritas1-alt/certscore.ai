@@ -76,6 +76,7 @@ function retainedPreConsentInventoryFixture() {
         cookieWriteObservations: [
           {
             beforeConsent: true,
+            category: "advertising",
             cookieInitiatorDomain: "connect.facebook.net",
             cookieInitiatorUrl: "https://connect.facebook.net/fbevents.js?email=person@example.com",
             cookieInitiatorVendor: "Meta Pixel",
@@ -85,6 +86,9 @@ function retainedPreConsentInventoryFixture() {
             dataTypes: ["advertising identifier"],
             description: "Supports advertising delivery and measurement.",
             domain: ".example.com",
+            essentiality: "non_essential",
+            essentialityConfidence: 0.98,
+            essentialityReasonCodes: ["canonical_cookie_knowledge_match"],
             expiresAt: "2027-09-01T00:00:00.000Z",
             initiatorChain: [
               "https://connect.facebook.net/fbevents.js?email=person@example.com"
@@ -108,6 +112,19 @@ function retainedPreConsentInventoryFixture() {
             setAtMs: 260
           }
         ],
+        requestPurposeClassificationConfidence: [{
+          cookieNamesSent: ["_fbp"],
+          essentiality: "non_essential",
+          hostname: "connect.facebook.net",
+          identifierParameterNames: ["id"],
+          initiatorUrl: "https://example.com/app.js?secret=redacted",
+          method: "POST",
+          pathSample: "/tr",
+          responseCookieNamesSet: ["_fbp"],
+          responseObserved: true,
+          responseStorageAttempted: true,
+          vendor: "Meta"
+        }],
         timelineMarkers: {
           consentBannerDetectedMs: 400
         },
@@ -172,7 +189,7 @@ test("buildApiV2ScanResource projects a completed scan into public-safe v2 shape
   assert.equal(resource.type, "certscore_scan");
   assert.equal(resource.scanId, "00000000-0000-4000-8000-000000000123");
   assert.equal(resource.domain, "example.com");
-  assert.equal(resource.score, 35);
+  assert.equal(resource.score, 32);
   assert.equal(resource.riskLevel, "significant_review_recommended");
   assert.equal(resource.scanTimeSeconds, 9);
   assert.equal(resource.coverage?.status, "complete");
@@ -709,11 +726,28 @@ test("buildApiV2PreConsentCookiesTrackers matches the shared public report table
   assert.equal(metaCookie?.lifespanSeconds, 40000000);
   assert.equal(metaCookie?.lifespanSource, "max_age");
   assert.equal(metaCookie?.longLived, true);
+  assert.equal(metaCookie?.essentiality, "non_essential");
+  assert.equal(metaCookie?.essentialityConfidence, 0.98);
+  assert.deepEqual(metaCookie?.essentialityReasonCodes, ["canonical_cookie_knowledge_match"]);
+  assert.equal(metaCookie?.essentialitySource, "retained_explicit_classification");
   assert.deepEqual(metaCookie?.initiatorChain, ["https://connect.facebook.net/fbevents.js"]);
   assert.equal(metaRow?.dataFlows?.[0]?.networkDestination.label, "server location (may be CDN edge)");
   assert.equal(metaRow?.dataFlows?.[0]?.networkDestination.countryCode, "US");
   assert.ok(metaRow?.dataFlows?.[0]?.controllingEntity);
   assert.ok(metaRow?.dataFlows?.[0]?.transferMechanism.verifiedAsOf);
+  assert.deepEqual(metaRow?.requestDetails?.[0], {
+    cookieNamesSent: ["_fbp"],
+    essentiality: "non_essential",
+    hostname: "connect.facebook.net",
+    identifierParameterNames: ["id"],
+    initiatorUrl: "https://example.com/app.js",
+    method: "POST",
+    path: "/tr",
+    responseCookieNamesSet: ["_fbp"],
+    responseObserved: true,
+    responseStorageAttempted: true,
+    vendor: "Meta"
+  });
   const klaviyoRow = resource.rows.find((row) => row.kind === "tracker" && row.vendor === "Klaviyo");
   assert.ok(klaviyoRow?.purposes?.includes("Marketing automation"));
   assert.equal(klaviyoRow?.category, "Advertising");

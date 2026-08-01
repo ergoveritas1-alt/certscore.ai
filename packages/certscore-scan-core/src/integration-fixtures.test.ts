@@ -754,12 +754,17 @@ test("pre-consent runtime scanner retains Reject and Pay as typed paid-decline e
 });
 
 test("pre-consent runtime scanner can retain confirmed first-layer geometry controls without interaction", () => {
+  const optionsCandidate = {
+    ...geometryCandidate("Cookie settings", "manage_preferences", "confirmed_visible", "first_layer"),
+    placementType: "action_cluster" as const,
+    presentationType: "inline_link" as const,
+  };
   const observation = consentUiObservationFromConfirmedGeometryControls({
     artifactPath: "/tmp/ConsentControlGeometryEvidence.json",
     geometry: geometryFixture([
       geometryCandidate("Reject all", "reject_all", "confirmed_visible", "first_layer"),
       geometryCandidate("Accept all", "accept_all", "confirmed_visible", "first_layer"),
-      geometryCandidate("Cookie settings", "manage_preferences", "confirmed_visible", "first_layer"),
+      optionsCandidate,
       geometryCandidate("Privacy policy", "policy_link", "footer_or_policy_link", "footer"),
       geometryCandidate("Hidden reject", "reject_all", "hidden", "first_layer"),
     ]),
@@ -771,6 +776,14 @@ test("pre-consent runtime scanner can retain confirmed first-layer geometry cont
   assert.equal(observation?.acceptControlObserved, true);
   assert.equal(observation?.rejectControlObserved, true);
   assert.equal(observation?.managePreferencesControlObserved, true);
+  assert.equal(
+    observation?.controls.find((control) => control.label === "Cookie settings")?.placementType,
+    "action_cluster",
+  );
+  assert.equal(
+    observation?.controls.find((control) => control.label === "Cookie settings")?.presentationType,
+    "inline_link",
+  );
   assert.deepEqual(observation?.visibleChoiceLabels, ["Reject all", "Accept all", "Cookie settings"]);
   assert.equal(
     observation?.basis.includes("geometry:confirmed_first_layer_controls"),

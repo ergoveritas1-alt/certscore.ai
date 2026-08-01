@@ -249,6 +249,11 @@ export function applyFinalDocumentPartyClassification(input: {
     }
     event.description = knowledge.description;
     event.dataTypes = knowledge.dataTypes;
+    event.cookieEssentiality = knowledge.essentiality;
+    event.cookieEssentialityConfidence = knowledge.essentiality === "unknown" ? undefined : 0.98;
+    event.cookieEssentialityReasonCodes = knowledge.essentiality === "unknown"
+      ? ["canonical_cookie_knowledge_no_match"]
+      : [`canonical_cookie_kb:${knowledge.category}`];
     event.cookieClassificationBasis = unique([
       ...event.cookieClassificationBasis.filter((basis) =>
         basis !== "first_party" && basis !== "third_party" && basis !== "unknown"
@@ -1489,6 +1494,11 @@ export async function preConsentRuntimeScanner(
         cookieParty,
         vendorAssociated: false,
         cookiePurpose: classifyKnownCookiePurpose(cookie.name),
+        cookieEssentiality: knowledge.essentiality,
+        cookieEssentialityConfidence: knowledge.essentiality === "unknown" ? undefined : 0.98,
+        cookieEssentialityReasonCodes: knowledge.essentiality === "unknown"
+          ? ["canonical_cookie_knowledge_no_match"]
+          : [`canonical_cookie_kb:${knowledge.category}`],
         cookieClassificationBasis: [cookieParty, "browser_snapshot", `canonical_cookie_kb:${knowledge.category}`],
         operation: "browser_snapshot",
         valueRedacted: true,
@@ -2503,6 +2513,11 @@ export async function preConsentRuntimeScanner(
         cookieParty,
         vendorAssociated: false,
         cookiePurpose: classifyKnownCookiePurpose(cookieMetadata.name),
+        cookieEssentiality: knowledge.essentiality,
+        cookieEssentialityConfidence: knowledge.essentiality === "unknown" ? undefined : 0.98,
+        cookieEssentialityReasonCodes: knowledge.essentiality === "unknown"
+          ? ["canonical_cookie_knowledge_no_match"]
+          : [`canonical_cookie_kb:${knowledge.category}`],
         cookieClassificationBasis: ["set_cookie_header", `canonical_cookie_kb:${knowledge.category}`],
         operation: "set_cookie_header",
         valueRedacted: true,
@@ -8952,6 +8967,8 @@ export function consentUiObservationFromConfirmedGeometryControls(input: {
         matchStrength: candidate.matchStrength as ConsentUiObservation["controls"][number]["matchStrength"],
         matchedLocale: candidate.matchedLocale as ConsentUiObservation["controls"][number]["matchedLocale"],
         matchedTerm: candidate.matchedTerm,
+        placementType: candidate.placementType,
+        presentationType: candidate.presentationType,
         role: candidate.role,
         selectorHint: candidate.selectorHint,
         tagName: candidate.tagName.slice(0, 32),

@@ -48,6 +48,7 @@ test("lightweight status keeps completed scans finalizing without a canonical pr
   const response = build(projection());
   assert.equal(response.reportReadiness.status, "finalizing");
   assert.equal(response.scan.status, "completed");
+  assert.equal(response.progress.stage, "review");
 });
 
 test("lightweight status keeps completed-limited scans finalizing without a canonical projection", async () => {
@@ -77,6 +78,14 @@ test("lightweight status exposes a recent completed scan as soon as its current 
   assert.equal(response.reportReadiness.status, "ready");
   assert.equal(response.reportReadiness.generation, "generation-1");
   assert.equal(response.scan.status, "completed");
+  assert.equal(response.progress.stage, "complete");
+});
+
+test("lightweight status exposes canonical scan, review, and report milestones", async () => {
+  const build = await getBuildLightweightScanStatusResponse();
+  assert.equal(build(projection({ status: "running" })).progress.stage, "scan");
+  assert.equal(build(projection({ reportInputsReady: false, status: "completed" })).progress.stage, "review");
+  assert.equal(build(projection({ reportInputsReady: true, status: "completed" })).progress.stage, "report");
 });
 
 test("lightweight status does not apply the fallback to non-completed scans", async () => {

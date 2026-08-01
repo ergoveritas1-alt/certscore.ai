@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { test } from "node:test";
 import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
+import { pulseResponseSchema } from "@certscore/api-contracts";
 
 const require = createRequire(import.meta.url);
 const serverOnlyPath = require.resolve("server-only");
@@ -22,6 +23,7 @@ const {
   buildRawHostInventory,
   buildTrackerFootprintBreakdown,
   buildPulseNoGoState,
+  buildPulseProjection,
   deriveConsentPlatform,
   getPulseExecutiveActionLabel,
   hasMeaningfulPolicyAnchor,
@@ -29,6 +31,134 @@ const {
   projectedPolicySurfaceRows,
   selectPublicPulseFindingsFromUnifiedProjection
 } = require("./projection") as typeof import("./projection");
+
+test("Pulse evidence preserves canonical cookie, request, and policy provenance projections", () => {
+  const scanRecord = pulseScanRecord({
+    accessPostureSummary: {
+      finalEffectiveUrl: "https://example.fr/",
+      homepageFetchStatus: "ok",
+      interruptionLabel: null,
+      interruptionReason: null,
+      stopOutcomeTitle: null,
+      stopReason: null,
+      stopReviewTitle: null
+    },
+    policyEnrichment: [{
+      detectedLanguage: "en",
+      directlyLinkedFromScannedPage: true,
+      discoveryMethod: "footer_link",
+      policy_page_title: "Example Privacy Notice",
+      policy_page_type: "privacy_policy",
+      policy_page_url: "https://example.fr/privacy",
+      retrievedAt: "2026-08-01T20:00:00.000Z",
+      status: "fetched",
+      translationApplied: false
+    }],
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        cookieWriteObservations: [{
+          beforeConsent: true,
+          category: "unknown",
+          cookieName: "unclassified_cookie",
+          domain: "example.fr",
+          essentiality: "unknown",
+          essentialityConfidence: null,
+          essentialityReasonCodes: ["canonical_cookie_knowledge_no_match"],
+          setMethod: "browser_snapshot"
+        }],
+        requestPurposeClassificationConfidence: [{
+          cookieNamesSent: ["unclassified_cookie"],
+          essentiality: "unknown",
+          hostname: "metrics.example.net",
+          identifierParameterNames: ["client_id"],
+          initiatorUrl: "https://example.fr/app.js?secret=redacted",
+          method: "POST",
+          pathSample: "/collect",
+          responseCookieNamesSet: [],
+          responseObserved: true,
+          responseStorageAttempted: false,
+          vendor: "Example Metrics"
+        }]
+      },
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [{
+          disclosureType: "data_retention",
+          evidenceText: "We retain account records while the account remains active and for statutory limitation periods.",
+          selectedEvidenceStrength: "strong",
+          selectedPolicySectionExcerpt: "We retain account records while the account remains active and for statutory limitation periods.",
+          selectedPolicySectionHeading: "Retention",
+          selectedPolicySectionUrl: "https://example.fr/privacy",
+          source: "retained_policy_sections",
+          status: "observed"
+        }],
+        policyDocumentProvenance: [{
+          detectedLanguage: "en",
+          directlyLinkedFromScannedPage: true,
+          discoveryMethod: "footer_link",
+          lastUpdatedText: "Updated July 2026",
+          policyTitle: "Example Privacy Notice",
+          retrievalTimestamp: "2026-08-01T20:00:00.000Z",
+          sourceUrl: "https://example.fr/privacy",
+          translationApplied: false
+        }],
+        policyEvidenceProvenanceContractVersion: "certscore.policy-evidence-provenance.v1",
+        policyPrimaryLanguage: "en",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4200,
+        privacyPolicyUrls: ["https://example.fr/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "Privacy notice. ".repeat(400),
+        scannedPageLanguage: "fr"
+      }
+    },
+    scan: {
+      completedAt: "2026-08-01T20:00:20.000Z",
+      createdAt: "2026-08-01T20:00:00.000Z",
+      domainHostname: "example.fr",
+      id: "00000000-0000-4000-8000-000000000123",
+      pagesRequested: 1,
+      pagesScanned: 1,
+      startedAt: "2026-08-01T20:00:01.000Z",
+      status: "completed"
+    },
+    snapshot: {
+      certscore_overall: 72,
+      privacy_policy_present: true,
+      score_source: "canonical.gdpr_eprivacy"
+    }
+  });
+
+  const pulse = buildPulseProjection({
+    detail: "evidence",
+    format: "json",
+    freshnessMode: "latest",
+    pulseRequestId: "parity-fixture",
+    requestedUrl: "https://example.fr/",
+    resolutionMode: "test",
+    scanRecord,
+    waitSeconds: 0
+  }) as Record<string, unknown>;
+  pulseResponseSchema.parse(pulse);
+
+  const cookies = (pulse.cookieStorageInventory as { items: Array<Record<string, unknown>> }).items;
+  assert.equal(cookies[0]?.essentiality, "unknown");
+  assert.deepEqual(cookies[0]?.essentialityReasonCodes, ["canonical_cookie_knowledge_no_match"]);
+
+  const requests = (pulse.requestEvidenceInventory as { items: Array<Record<string, unknown>> }).items;
+  assert.equal(requests[0]?.method, "POST");
+  assert.equal(requests[0]?.path, "/collect");
+  assert.deepEqual(requests[0]?.identifierParameterNames, ["client_id"]);
+  assert.equal(requests[0]?.initiatorUrl, "https://example.fr/app.js");
+
+  const checklist = (pulse.gdprEprivacyChecklistRows as { items: Array<Record<string, unknown>> }).items;
+  const retention = checklist.find((row) => row.id === "retention_disclosure_observed");
+  const retainedEvidence = retention?.retainedEvidence as Record<string, unknown>;
+  const provenance = retainedEvidence?.policyEvidenceProvenance as Record<string, unknown>;
+  assert.equal(provenance?.policyTitle, "Example Privacy Notice");
+  assert.equal(provenance?.detectedLanguage, "en");
+  assert.equal(provenance?.bannerLanguage, "fr");
+  assert.equal(provenance?.directlyLinkedFromScannedPage, true);
+  assert.equal(provenance?.translationApplied, false);
+});
 
 test("Pulse executive action label follows the same posture as the rendered report", () => {
   assert.equal(getPulseExecutiveActionLabel("Action Needed"), "Action Needed");
@@ -46,15 +176,21 @@ function pulseScanRecord(overrides: Record<string, unknown> = {}) {
       stopReason: null,
       stopReviewTitle: null
     },
+    domainBenchmark: null,
+    events: [],
     policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
     regulatoryRisk: null,
     scan: {
       pagesRequested: 1,
       pagesScanned: 0,
       status: "completed"
     },
+    signals: [],
     snapshot: {},
     trackerVendors: [],
+    validationFindings: [],
     ...overrides
   } as never;
 }

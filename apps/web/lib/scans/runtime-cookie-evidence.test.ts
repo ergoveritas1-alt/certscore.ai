@@ -50,6 +50,31 @@ test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("AMP_abc123", ".medal.tv"), "analytics");
   assert.equal(classifyRuntimeCookieCategory("AMP_MKTG_abc123", ".medal.tv"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("ld_anonymous_user_key", ".medal.tv"), "personalization");
+  assert.equal(classifyRuntimeCookieCategory("fr", ".facebook.com"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("session-id", ".amazon.fr"), "necessary");
+  assert.equal(classifyRuntimeCookieCategory("i18n-prefs", ".amazon.fr"), "unknown");
+  assert.equal(classifyRuntimeCookieCategory("aws-waf-token", ".www.amazon.fr"), "unknown");
+});
+
+test("preserves typed unknown cookie classifications on French domains", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [{
+        beforeConsent: true,
+        category: "unknown",
+        cookieName: "session-id",
+        domain: "amazon.fr",
+        essentiality: "unknown",
+        nonEssential: false,
+        setMethod: "browser_snapshot"
+      }]
+    }
+  });
+
+  assert.equal(inventory.rows[0]?.category, "unknown");
+  assert.equal(inventory.rows[0]?.essentiality, "unknown");
+  assert.equal(inventory.rows[0]?.nonEssential, false);
+  assert.equal(inventory.rows[0]?.essentialitySource, "unknown");
 });
 
 test("Medal snapshot cookies keep presence-only timing and canonical providers", () => {

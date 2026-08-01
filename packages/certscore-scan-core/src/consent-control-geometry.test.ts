@@ -90,6 +90,71 @@ test("classifies an inline preferences link beside accept and reject as part of 
   assert.ok(options?.reasons.includes("inline_options_link_grouped_with_first_layer_accept_and_reject"));
 });
 
+test("classifies sibling-wrapped inline preferences as one retained consent action cluster", async () => {
+  const artifact = await captureFixture(`
+    <section id="cookie-banner" role="dialog" aria-label="Cookies and advertising choices" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: white;">
+      <p>We use cookies to provide services and personalize advertising.</p>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div id="accept-cookie-action"><button type="button">Accept</button></div>
+        <div id="decline-cookie-action"><button type="button">Decline</button></div>
+        <div id="customise-cookie-action"><a href="#customise">Customise</a></div>
+      </div>
+    </section>
+  `);
+
+  const accept = findCandidate(artifact, "Accept");
+  const reject = findCandidate(artifact, "Decline");
+  const options = findCandidate(artifact, "Customise");
+  assert.notEqual(options?.containerId, accept?.containerId);
+  assert.notEqual(options?.containerId, reject?.containerId);
+  assert.equal(options?.placementType, "action_cluster");
+  assert.ok(options?.reasons.includes("inline_options_link_grouped_with_first_layer_accept_and_reject"));
+});
+
+test("reconciles Amazon-style visual labels with transparent actionable inputs before clustering", async () => {
+  const artifact = await captureFixture(`
+    <style>
+      #cookie-banner { position: fixed; left: 0; bottom: 0; width: 1000px; padding: 24px; background: white; }
+      .action-row { display: flex; align-items: center; gap: 8px; }
+      .a-button { position: relative; display: inline-block; }
+      .a-button input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .01; z-index: 20; }
+      .a-button-text { display: block; padding: 8px 12px; }
+    </style>
+    <section id="cookie-banner" role="dialog" aria-label="Cookies and Advertising Choices">
+      <p>We use cookies to provide services and personalize advertising.</p>
+      <div class="action-row">
+        <span class="a-button">
+          <input id="accept-control" type="submit" value="Accept" aria-label="Accept">
+          <span id="accept-label" class="a-button-text">Accept</span>
+        </span>
+        <span class="a-button">
+          <input id="decline-control" type="submit" value="Decline" aria-label="Decline">
+          <span id="decline-label" class="a-button-text">Decline</span>
+        </span>
+        <a id="customise-control" href="#customise">Customise</a>
+      </div>
+    </section>
+  `);
+
+  const acceptLabel = artifact.candidates.find((candidate) => candidate.selectorHint === "#accept-label");
+  const declineLabel = artifact.candidates.find((candidate) => candidate.selectorHint === "#decline-label");
+  const options = artifact.candidates.find((candidate) => candidate.selectorHint === "#customise-control");
+  assert.equal(acceptLabel?.decisionStatus, "confirmed_visible");
+  assert.equal(acceptLabel?.effectiveVisibility, "visible_via_actionable_proxy");
+  assert.equal(declineLabel?.decisionStatus, "confirmed_visible");
+  assert.equal(declineLabel?.effectiveVisibility, "visible_via_actionable_proxy");
+  assert.equal(options?.placementType, "action_cluster");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(
+    artifact.summary.limitations.some((limitation) =>
+      limitation === "accept_all:Accept:hidden" || limitation === "reject_all:Decline:hidden"
+    ),
+    false,
+  );
+});
+
 test("does not promote non-actionable inline preference text into control evidence", async () => {
   const artifact = await captureFixture(`
     <section id="cookie-banner" role="dialog" aria-label="Cookie consent" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: white;">

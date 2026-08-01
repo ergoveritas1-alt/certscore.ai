@@ -36,6 +36,7 @@ import { requirePlatformAdminContext } from "./platform-admin";
 import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
 import { shouldUseLocalV2DagScanTool } from "../scans/local-v2-dag-scan-config";
 import { withServerTiming } from "../performance/log-server-timing";
+import { projectCanonicalSurfaceSummary } from "../../lib/scans/canonical-surface-summary";
 import {
   loadCachedAdminScanFilterOptions,
   loadCachedAdminScanOverviewCounts
@@ -396,9 +397,12 @@ export async function listAdminScansPage(
       scannerEvidenceMissing: runtimeArtifact?.scanner_evidence_missing ?? false
     });
     const scoreAssessment = noGo.isNoGo ? null : legacyScoreAssessmentMap.get(scan.id) ?? null;
-    const displayedScore = noGo.isNoGo
-      ? null
-      : overviewSnapshot?.certscore_overall ?? scoreAssessment?.scoreValue ?? null;
+    const canonicalSummary = projectCanonicalSurfaceSummary({
+      fallbackScoreAssessment: scoreAssessment,
+      noGo: noGo.isNoGo,
+      snapshot: overviewSnapshot as unknown as Record<string, unknown> | null
+    });
+    const displayedScore = canonicalSummary.score;
 
     return {
       activityAt: displayCreatedAt,
@@ -439,7 +443,7 @@ export async function listAdminScansPage(
         noGoFlag: noGo.isNoGo,
         status: scan.status
       }),
-      consentAro: consentAroFromSnapshot(overviewSnapshot),
+      consentAro: canonicalSummary.consentAro,
       scannerEgressId: scannerEgress.id,
       scannerEgressProvider: scannerEgress.provider,
       trancoRank: overviewSnapshot?.tranco_rank ?? null,
@@ -451,7 +455,7 @@ export async function listAdminScansPage(
       startedAt: scan.started_at,
       pagesScanned: scan.pages_scanned,
       totalSignals: noGo.isNoGo ? null : overviewSnapshot?.total_signals ?? null,
-      topFindingCount: displayedScore === null ? null : overviewSnapshot?.top_finding_count ?? null,
+      topFindingCount: canonicalSummary.topFindingCount,
       findingCount: noGo.isNoGo ? null : overviewSnapshot?.report_finding_count ?? null,
       freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? pulseAttribution?.request_context ?? null),
       certscoreOverall: displayedScore,
@@ -467,8 +471,8 @@ export async function listAdminScansPage(
       scoreScoredAt: overviewSnapshot?.score_scored_at ?? scoreAssessment?.scoredAt ?? null,
       scoreSource: overviewSnapshot?.score_source ?? scoreAssessment?.scoreSource ?? (displayedScore !== null ? "legacy.scan-snapshot" : null),
       scoreVersion: overviewSnapshot?.score_version ?? scoreAssessment?.scoreVersion ?? null,
-      cmpVendorName: noGo.isNoGo ? null : overviewSnapshot?.cmp_vendor_name ?? null,
-      privacyPolicyPresent: noGo.isNoGo ? null : overviewSnapshot?.privacy_policy_present ?? null,
+      cmpVendorName: canonicalSummary.cmpVendorName,
+      privacyPolicyPresent: canonicalSummary.privacyPolicyPresent,
       primaryLanguage: primaryLanguage?.locale ?? null,
       primaryLanguageConfidence: primaryLanguage?.confidence ?? null,
       primaryLanguageSource: primaryLanguage?.source ?? null,
@@ -611,17 +615,6 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     stopTier: linkedScan?.stopTier ?? null,
     totalSignals: linkedScan?.totalSignals ?? null,
     topFindingCount: linkedScan?.topFindingCount ?? null
-  };
-}
-
-function consentAroFromSnapshot(snapshot: AdminScanSnapshotRow | null): AdminConsentAro | null {
-  if (!snapshot || snapshot.consent_evidence_status === null || snapshot.consent_evidence_status === undefined) {
-    return null;
-  }
-  return {
-    accept: snapshot.consent_accept_observed ?? null,
-    reject: snapshot.consent_reject_observed ?? null,
-    options: snapshot.consent_options_observed ?? null
   };
 }
 

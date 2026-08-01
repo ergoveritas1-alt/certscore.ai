@@ -938,7 +938,7 @@ export function DomainScanForm({
         <p className="text-sm font-medium text-slate-600" role="status">Opening the recent completed report…</p>
       ) : null}
       {isSubmitting && scanFrom !== "local_extension" && !expectsRecentScanReuse ? (
-        <ScanSubmissionPendingIndicator compact={compact} />
+        <ScanSubmissionPendingIndicator compact={compact} profileValue={localV2ScanProfile} />
       ) : null}
       {sampleDomains.length > 0 ? (
         <div className="relative z-0 overflow-hidden rounded-[1.25rem] border border-slate-800 bg-slate-950 shadow-[0_24px_60px_rgba(2,6,23,0.22)]">

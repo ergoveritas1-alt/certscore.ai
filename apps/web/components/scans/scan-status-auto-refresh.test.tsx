@@ -7,6 +7,7 @@ import {
   claimTerminalNavigation,
   getNavigablePolledScanStatus,
   getPolledScanStatus,
+  getPolledScanProgress,
   getPolledReadiness,
   isTerminalScanStatus,
   SCAN_STATUS_POLL_INITIAL_MS,
@@ -78,6 +79,19 @@ test("getPolledReadiness keeps post-completion polling lightweight until report 
     reportGeneration: null,
     reportReady: false
   });
+});
+
+test("getPolledScanProgress retains canonical review and report milestones", () => {
+  assert.deepEqual(getPolledScanProgress({
+    progress: { stage: "review" },
+    reportReadiness: { status: "finalizing" },
+    scan: { status: "completed" }
+  }), { reportReady: false, stage: "review", status: "completed" });
+  assert.deepEqual(getPolledScanProgress({
+    progress: { stage: "report" },
+    reportReadiness: { status: "finalizing" },
+    scan: { status: "completed" }
+  }), { reportReady: false, stage: "report", status: "completed" });
 });
 
 test("completed scans remain non-terminal while report projection is finalizing", () => {

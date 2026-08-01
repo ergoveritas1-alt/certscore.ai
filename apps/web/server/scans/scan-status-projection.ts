@@ -21,6 +21,23 @@ export type ScanStatusProjection = {
   status: string;
 };
 
+export type CanonicalScanProgressStage = "prepare" | "scan" | "review" | "report" | "complete";
+
+export function deriveCanonicalScanProgressStage(
+  projection: Pick<ScanStatusProjection, "reportInputsReady" | "reportReady" | "status">
+): CanonicalScanProgressStage {
+  if (projection.reportReady && (projection.status === "completed" || projection.status === "completed_limited")) {
+    return "complete";
+  }
+  if (projection.reportInputsReady && (projection.status === "completed" || projection.status === "completed_limited")) {
+    return "report";
+  }
+  if (projection.status === "completed" || projection.status === "completed_limited" || projection.status === "processing") {
+    return "review";
+  }
+  return projection.status === "running" ? "scan" : "prepare";
+}
+
 type ScanStatusProjectionRow = {
   completed_at: string | Date | null;
   created_at: string | Date;
@@ -214,6 +231,9 @@ export function buildLightweightScanStatusResponse(projection: ScanStatusProject
     reportReadiness: {
       generation: projection.reportGeneration,
       status: projection.reportReady ? "ready" : "finalizing"
+    },
+    progress: {
+      stage: deriveCanonicalScanProgressStage(projection)
     },
     scan: {
       completedAt: projection.completedAt,

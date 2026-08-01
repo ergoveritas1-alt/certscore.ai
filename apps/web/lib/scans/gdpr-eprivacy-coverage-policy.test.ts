@@ -2823,6 +2823,55 @@ test("irrelevant legal-basis extraction remains a neutral not-located result wit
   assert.equal(provenance.translationApplied, false);
 });
 
+test("mixed communications, consent-purpose, and retention context remains neutral for legal basis", () => {
+  const mixedExcerpt = [
+    "Communications. We use your personal information to communicate with you by email, telephone, or customer-service channels.",
+    "Purposes for which we seek your consent include sending optional marketing messages.",
+    "Comply with legal obligations. We retain transaction records for as long as required by law."
+  ].join(" ");
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [{
+          confidence: 0.7,
+          disclosureType: "legal_basis",
+          evidenceText: mixedExcerpt,
+          selectedEvidenceStrength: "strong",
+          selectedPolicySectionExcerpt: mixedExcerpt,
+          selectedPolicySectionHeading: "Policy text context",
+          source: "deterministic",
+          status: "partial"
+        }],
+        policyDocumentProvenance: [{
+          detectedLanguage: "en",
+          directlyLinkedFromScannedPage: true,
+          discoveryMethod: "page_text_link",
+          policyTitle: "Amazon.de Privacy Notice",
+          retrievalTimestamp: "2026-08-01T20:05:00.000Z",
+          sourceUrl: "https://www.amazon.de/privacy",
+          translationApplied: false
+        }],
+        policyEvidenceProvenanceContractVersion: "certscore.policy-evidence-provenance.v1",
+        policyPrimaryLanguage: "en",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4200,
+        privacyPolicyUrls: ["https://www.amazon.de/privacy"],
+        retainedPrivacyPolicyTextExcerpt: `${mixedExcerpt} ${"Additional policy context. ".repeat(120)}`,
+        scannedPageLanguage: "en"
+      }
+    },
+    snapshot: { privacy_policy_present: true }
+  });
+
+  const legalBasis = outcomes.legal_basis_disclosure_observed!;
+  const assessment = legalBasis.criticalEvidence.retainedEvidence.policyEvidenceAssessment as Record<string, unknown>;
+  assert.equal(legalBasis.status, "Not confirmed");
+  assert.equal(assessment.result, "not_located_automatically");
+  assert.equal(assessment.scoreEffect, "none");
+  assert.notEqual(legalBasis.criticalEvidence.retainedEvidence.signalObserved, "partial");
+});
+
 test("a short required-by-law retention excerpt does not establish substantive retention disclosure", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -3074,7 +3123,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained consent and runti
   assert.match(outcomes.cross_border_endpoint_review?.limitation ?? "", /jurisdiction or transfer-region evidence/i);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes keeps concrete pre-consent tracker evidence at review when no finding projects", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps tracker inventory neutral when no unified finding projects", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -3087,12 +3136,12 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps concrete pre-consent tracke
     }
   });
 
-  assert.equal(outcomes.pre_consent_third_party_tracking?.status, "Review signal");
+  assert.equal(outcomes.pre_consent_third_party_tracking?.status, "Not confirmed");
   assert.equal(
     outcomes.pre_consent_third_party_tracking?.criticalEvidence.retainedEvidence.concreteTrackerEvidenceRetained,
     true
   );
-  assert.deepEqual(outcomes.pre_consent_third_party_tracking?.criticalEvidence.missingOrIncompleteSourceSignals, []);
+  assert.equal(outcomes.pre_consent_third_party_tracking?.criticalEvidence.missingOrIncompleteSourceSignals.length, 1);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes uses the earliest eligible non-essential storage timestamp", () => {
@@ -4899,7 +4948,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat Akamai security or
     }
   });
 
-  assert.equal(outcomes.pre_consent_third_party_tracking?.status, "Review signal");
+  assert.equal(outcomes.pre_consent_third_party_tracking?.status, "Not confirmed");
   assert.equal(outcomes.advertising_retargeting_vendor_signal_observed?.status, "Not observed");
   assert.equal(
     outcomes.advertising_retargeting_vendor_signal_observed?.criticalEvidence.retainedEvidence.advertisingRetargetingVendorCount,

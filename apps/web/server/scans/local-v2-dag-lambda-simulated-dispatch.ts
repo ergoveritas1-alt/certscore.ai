@@ -4,6 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
 import {
+  LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
   buildLocalV2DagLambdaDispatchPayload,
   type LocalV2DagLambdaDispatchResult
 } from "./local-v2-dag-lambda-dispatch";
@@ -15,6 +16,34 @@ type LocalLambdaParitySummary = {
   fakeS3Root?: string;
   sqsMessages?: unknown[];
 };
+
+function simulatedMessageRecord(message: unknown) {
+  if (typeof message === "string") {
+    try {
+      const parsed = JSON.parse(message) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  return message && typeof message === "object" && !Array.isArray(message)
+    ? message as Record<string, unknown>
+    : null;
+}
+
+export function selectSimulatedLambdaTerminalResultMessages(messages: unknown[]) {
+  const terminalResults = messages.filter((message) => (
+    simulatedMessageRecord(message)?.contractVersion === LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION
+  ));
+  if (terminalResults.length !== 1) {
+    throw new Error(
+      `Simulated v2 DAG Lambda must emit exactly one terminal result message; received ${terminalResults.length}.`
+    );
+  }
+  return terminalResults;
+}
 
 class LocalDiskS3ReadClient {
   constructor(private readonly fakeS3Root: string) {}
@@ -86,7 +115,7 @@ export async function dispatchLocalV2DagSimulatedLambdaScan(input: {
   }
 
   const s3Client = new LocalDiskS3ReadClient(summary.fakeS3Root);
-  for (const message of messages) {
+  for (const message of selectSimulatedLambdaTerminalResultMessages(messages)) {
     await handleLocalV2DagLambdaResultMessage(message, {
       expectedTargetEnvironment: payload.targetEnvironment,
       s3Client: s3Client as never,

@@ -2117,6 +2117,9 @@ async function processPolicyCandidate({
       mentionedRights: merged.mentionedRights,
       mentionedControls: merged.mentionedControls,
       lastUpdatedText: lastUpdatedText(visibleText),
+      retrievedAt: new Date().toISOString(),
+      effectiveDate: effectiveDateText(visibleText),
+      translationApplied: false,
       evidenceRefs: [{
         refId: `ref_${excerptId}`,
         artifactId: excerptId,
@@ -4473,6 +4476,10 @@ function observationFromCandidate(
           input.fetchFailureReason === "consent_settings_shell"
         ? "insufficient" as const
         : "not_attempted" as const;
+  const directlyLinkedFromScannedPage =
+    (candidate.traversalDepth ?? 0) === 0 &&
+    ["footer_link", "header_link", "page_text_link"].includes(candidate.discoveryMethod) &&
+    linkObservationState === "observed";
   return {
     observationId: `policy_surface_${stableHash(candidate.normalizedUrl)}`,
     sourceScanner: SOURCE_SCANNER,
@@ -4513,6 +4520,11 @@ function observationFromCandidate(
     clickable: candidate.clickable,
     mayLeadToConsentControls: candidate.mayLeadToConsentControls,
     title: input.title,
+    retrievedAt: input.retrievedAt,
+    effectiveDate: input.effectiveDate,
+    directlyLinkedFromScannedPage: input.directlyLinkedFromScannedPage ?? directlyLinkedFromScannedPage,
+    translationApplied: input.translationApplied ?? false,
+    translationTargetLanguage: input.translationTargetLanguage,
     textExcerpt: input.textExcerpt,
     boundedTextExcerptIds: input.boundedTextExcerptIds ?? [],
     observedTopics: input.observedTopics ?? [],
@@ -8022,6 +8034,12 @@ function surroundingText(visibleText: string, linkText: string): string | undefi
 
 function lastUpdatedText(text: string): string | undefined {
   return /(last updated|effective date|updated):?\s+([A-Za-z0-9, .-]{4,40})/i.exec(text)?.[0]?.slice(0, 80);
+}
+
+function effectiveDateText(text: string): string | undefined {
+  const tail = /effective date:?\s+([^\n]{4,80})/i.exec(text)?.[1];
+  if (!tail) return undefined;
+  return /(?:\d{4}-\d{2}-\d{2}|\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|(?:Jan(?:uary|uar)?|Feb(?:ruary|ruar)?|Mar(?:ch|z|zo)?|Apr(?:il|ile)?|May|Mai|Jun(?:e|i)?|Jul(?:y|i)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Okt(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Dez(?:ember)?)\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+(?:Jan(?:uary|uar)?|Feb(?:ruary|ruar)?|Mar(?:ch|z|zo)?|Apr(?:il|ile)?|May|Mai|Jun(?:e|i)?|Jul(?:y|i)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Okt(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Dez(?:ember)?)\s+\d{4})/i.exec(tail)?.[0]?.slice(0, 80);
 }
 
 function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySurfaceCandidate[] {

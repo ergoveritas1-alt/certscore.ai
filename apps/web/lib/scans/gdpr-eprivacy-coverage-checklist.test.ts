@@ -859,7 +859,7 @@ test("deriveGdprEprivacyCoverageChecklist lets medium cookie inventory override 
   assert.match(row.explanation, /Quantcast - Analytics \(1.19s\)/);
 });
 
-test("deriveGdprEprivacyCoverageChecklist keeps high-priority tracker inventory review-grade without unified eligibility", () => {
+test("deriveGdprEprivacyCoverageChecklist keeps high-priority tracker inventory neutral without unified eligibility", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     runtimeTrackerPriorityRows: [
@@ -883,8 +883,8 @@ test("deriveGdprEprivacyCoverageChecklist keeps high-priority tracker inventory 
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.equal(row.status, "Review signal");
-  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(row.status, "Not confirmed");
+  assert.equal(row.assessmentStatus, "coverage_limitation");
   assert.equal(row.criticalEvidence.retainedEvidence.trackerPriority, "high");
   assert.equal(row.criticalEvidence.missingOrIncompleteSourceSignals.length, 1);
   assert.equal(row.criticalEvidence.retainedEvidence.preconsentThirdPartyTrackerGroupCount, 2);
@@ -896,7 +896,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps high-priority tracker inventory 
   assert.match(row.criticalEvidence.statusBasis, /High priority.*Advertising/);
 });
 
-test("deriveGdprEprivacyCoverageChecklist keeps medium pre-consent tracking as partial-concern review evidence", () => {
+test("deriveGdprEprivacyCoverageChecklist keeps medium pre-consent tracking inventory neutral without unified eligibility", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     runtimeTrackerPriorityRows: [
@@ -913,8 +913,8 @@ test("deriveGdprEprivacyCoverageChecklist keeps medium pre-consent tracking as p
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.equal(row.status, "Review signal");
-  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(row.status, "Not confirmed");
+  assert.equal(row.assessmentStatus, "coverage_limitation");
   assert.equal(row.criticalEvidence.retainedEvidence.trackerPriority, "medium");
   assert.match(row.explanation, /Optimizely - A\/B Testing \(2.10s\)/);
   assert.match(row.criticalEvidence.statusBasis, /Medium priority.*A\/B Testing/);
@@ -997,7 +997,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps embedded media out of the tracki
   assert.equal(row.evidenceRefs.length, 0);
 });
 
-test("deriveGdprEprivacyCoverageChecklist retains canonical analytics in the tracking fallback", () => {
+test("deriveGdprEprivacyCoverageChecklist retains canonical analytics as neutral inventory in the tracking fallback", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     runtimeTrackerPriorityRows: [{
@@ -1015,7 +1015,7 @@ test("deriveGdprEprivacyCoverageChecklist retains canonical analytics in the tra
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.equal(row.status, "Review signal");
+  assert.equal(row.status, "Not confirmed");
   assert.match(row.explanation, /Example Analytics - Analytics/);
 });
 

@@ -142,6 +142,7 @@ import {
   buildReportSurfaceVendorProjection,
   buildPreConsentDataFlows,
   buildRuntimeInventoryGroupRows,
+  buildSanitizedRequestEvidenceRows,
   buildTrackerInventoryGroupRows,
   buildTrackerInventoryRows,
   classifyInventoryEvidence,
@@ -154,6 +155,7 @@ import {
   type InventoryConfidence,
   type InventoryGroupRow,
   type PreConsentDataFlow,
+  type SanitizedRequestEvidenceRow,
   type TrackerInventoryRow
 } from "../../lib/scans/runtime-inventory-projection";
 import {
@@ -578,7 +580,7 @@ function getInventoryTypeDisclosureClasses(row: InventoryGroupRow) {
 }
 
 function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
-  if (row.cookieDetails.length === 0 && row.domains.length === 0 && row.rawProducts.length === 0) {
+  if (row.cookieDetails.length === 0 && row.domains.length === 0 && row.rawProducts.length === 0 && (row.requestDetails?.length ?? 0) === 0) {
     return <InventoryTypeIcon type={row.type} />;
   }
   return (
@@ -602,8 +604,21 @@ function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
           <dt className="font-medium text-slate-500">Request endpoints</dt><dd className="break-all">{row.domains.join(", ") || "Not retained"}</dd>
           <dt className="font-medium text-slate-500">Requests</dt><dd>{row.requestCount ?? "Not retained"}</dd>
           <dt className="font-medium text-slate-500">Storage items</dt><dd>{row.cookieDetails.length}</dd>
+          <dt className="font-medium text-slate-500">Request evidence</dt><dd>{row.requestDetails?.length ?? 0}</dd>
         </dl>
         <div className="max-h-72 space-y-2 overflow-auto">
+          {(row.requestDetails ?? []).map((request, index) => (
+            <div key={`${request.hostname ?? "request"}:${request.path ?? ""}:${index}`} className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] leading-4">
+              <div className="font-semibold text-slate-900">{request.method ?? "Request"} {request.hostname ?? "Unknown endpoint"}{request.path ?? ""}</div>
+              <dl className="mt-1 grid grid-cols-[7rem_1fr] gap-x-2 text-slate-600">
+                <dt className="font-medium text-slate-500">Assessment</dt><dd>{request.essentiality === "non_essential" ? "Non-essential activity retained" : "Purpose requires review"}</dd>
+                <dt className="font-medium text-slate-500">Identifier fields</dt><dd>{request.identifierParameterNames.join(", ") || "None retained"}</dd>
+                <dt className="font-medium text-slate-500">Cookies sent</dt><dd>{request.cookieNamesSent.join(", ") || "None retained"}</dd>
+                <dt className="font-medium text-slate-500">Initiator</dt><dd className="break-all">{request.initiatorUrl ?? "Not retained"}</dd>
+                <dt className="font-medium text-slate-500">Response storage</dt><dd>{request.responseStorageAttempted ? `Set-Cookie names: ${request.responseCookieNamesSet.join(", ") || "retained"}` : request.responseObserved ? "No Set-Cookie name retained" : "Response not retained"}</dd>
+              </dl>
+            </div>
+          ))}
           {row.cookieDetails.map((cookie) => (
             <div key={`${cookie.cookieName}:${cookie.domain ?? ""}`} className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-[11px] leading-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -616,6 +631,9 @@ function InventoryTypeDisclosure({ row }: { row: InventoryGroupRow }) {
                 <dt className="font-medium text-slate-500">Domain</dt><dd className="break-all">{cookie.domain ?? "Not retained"}</dd>
                 <dt className="font-medium text-slate-500">Path / partition</dt><dd className="break-all">{cookie.cookiePath ?? "/"} · {cookie.partitionContext ?? "unknown"}</dd>
                 <dt className="font-medium text-slate-500">Lifespan</dt><dd>{formatCookieLifespan(cookie.lifespanSeconds ?? null)}</dd>
+                <dt className="font-medium text-slate-500">Purpose</dt><dd>{cookie.category || "Unknown"}</dd>
+                <dt className="font-medium text-slate-500">Necessity</dt><dd>{cookie.essentiality === "non_essential" ? "Non-essential" : cookie.essentiality === "essential" ? "Essential" : "Review required"}</dd>
+                <dt className="font-medium text-slate-500">Confidence</dt><dd>{typeof cookie.essentialityConfidence === "number" ? `${Math.round(cookie.essentialityConfidence * 100)}%` : cookie.essentialitySource === "unknown" ? "Not classified" : cookie.essentialitySource?.replaceAll("_", " ") ?? "Not retained"}</dd>
                 <dt className="font-medium text-slate-500">Data types</dt><dd>{cookie.dataTypes?.join(", ") || "Review required"}</dd>
                 <dt className="font-medium text-slate-500">Initiator</dt><dd className="break-all">{cookie.setterScriptUrl ?? cookie.initiatorUrl ?? "Not retained"}</dd>
                 <dt className="font-medium text-slate-500">Initiator chain</dt><dd className="break-all">{cookie.initiatorChain?.join(" → ") || "Not retained"}</dd>
@@ -994,14 +1012,16 @@ function RuntimeInventoryTable({
   cookieRows,
   dataFlows,
   firstPartyDomain,
+  requestRows,
   trackerRows
 }: {
   cookieRows: RuntimeCookieEvidenceRow[];
   dataFlows: PreConsentDataFlow[];
   firstPartyDomain?: string | null;
+  requestRows: SanitizedRequestEvidenceRow[];
   trackerRows: TrackerInventoryRow[];
 }) {
-  const groupedInventoryRows = buildRuntimeInventoryGroupRows({ cookieRows, dataFlows, firstPartyDomain, trackerRows });
+  const groupedInventoryRows = buildRuntimeInventoryGroupRows({ cookieRows, dataFlows, firstPartyDomain, requestRows, trackerRows });
   const copyPayload = buildRuntimeInventoryCopyPayload(groupedInventoryRows);
 
   return (
@@ -7364,6 +7384,7 @@ export async function SharedScanDetailView({
   });
   const cookieInventoryRows = runtimeCookieInventory.rows;
   const preConsentDataFlows = buildPreConsentDataFlows(hybridRuntimeEvidence);
+  const sanitizedRequestEvidenceRows = buildSanitizedRequestEvidenceRows(hybridRuntimeEvidence);
   const preConsentStorageAssessment = buildPreConsentStorageAssessment({
     hybridRuntimeEvidence,
     runtimeArtifacts,
@@ -7877,6 +7898,7 @@ export async function SharedScanDetailView({
               cookieRows={cookieInventoryRows}
               dataFlows={preConsentDataFlows}
               firstPartyDomain={scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost}
+              requestRows={sanitizedRequestEvidenceRows}
               trackerRows={trackerInventoryRows}
             />
           )}

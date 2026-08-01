@@ -8,6 +8,7 @@ import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homepage-reason";
 import { canonicalConsentSurfaceCompatibilityFromSnapshot } from "../../lib/scans/consent-assessment-compatibility";
+import { projectCanonicalSurfaceSummary } from "../../lib/scans/canonical-surface-summary";
 import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveDisplayCreatedAt } from "./display-state";
@@ -519,12 +520,12 @@ async function loadOrganizationScans(
       snapshotVisualAccessReview: overviewSnapshot?.visual_access_review ?? null
     });
     const effectiveScoreAssessment = noGo.isNoGo ? null : scoreAssessment;
-    const materializedScore = typeof overviewSnapshot?.certscore_overall === "number"
-      ? overviewSnapshot.certscore_overall
-      : null;
-    const displayedScore = noGo.isNoGo
-      ? null
-      : materializedScore ?? effectiveScoreAssessment?.scoreValue ?? null;
+    const canonicalSummary = projectCanonicalSurfaceSummary({
+      fallbackScoreAssessment: effectiveScoreAssessment,
+      noGo: noGo.isNoGo,
+      snapshot: overviewSnapshot as unknown as Record<string, unknown> | null
+    });
+    const displayedScore = canonicalSummary.score;
     return {
         id: scan.id,
         domainActiveScanExists: latestDomainScan?.status === "queued" || latestDomainScan?.status === "running",
@@ -548,16 +549,14 @@ async function loadOrganizationScans(
         accessibilityScore: noGo.isNoGo ? null : snapshot?.accessibility_score ?? null,
         totalSignals: noGo.isNoGo ? null : totalSignals,
         findingCount: noGo.isNoGo ? 0 : snapshot?.report_finding_count ?? 0,
-        topFindingCount: noGo.isNoGo
-          ? null
-          : overviewSnapshot?.top_finding_count ?? null,
-        privacyPolicyPresent: noGo.isNoGo ? null : overviewSnapshot?.privacy_policy_present ?? null,
+        topFindingCount: canonicalSummary.topFindingCount,
+        privacyPolicyPresent: canonicalSummary.privacyPolicyPresent,
         cookieBannerPresent: noGo.isNoGo
           ? null
           : canonicalConsentSurfaceCompatibilityFromSnapshot(
             overviewSnapshot as unknown as Record<string, unknown> | null
           ),
-        cmpVendorName: noGo.isNoGo ? null : overviewSnapshot?.cmp_vendor_name ?? null,
+        cmpVendorName: canonicalSummary.cmpVendorName,
         consentAuditCompleted:
           runtimeArtifactMap.get(scan.id)?.consent_audit_completed ??
           getHybridConsentAuditCompleted(runtimeArtifactMap.get(scan.id) as Record<string, unknown> | null),

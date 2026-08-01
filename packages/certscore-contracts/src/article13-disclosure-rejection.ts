@@ -75,18 +75,25 @@ export function hasSubstantiveLegalBasisEvidence(value: string) {
     return true;
   }
 
-  const processingContext =
-    /\b(?:process|processing|use|using|collect|collecting|hold|holding)\b.{0,100}\b(?:personal data|personal information|your data|your information|data|information)\b/i.test(text) ||
-    /\b(?:personal data|personal information|your data|your information)\b.{0,100}\b(?:process|processing|processed|use|used|collect|collected|hold|held)\b/i.test(text);
-  if (!processingContext) {
-    return false;
-  }
+  const segments = text
+    .split(/(?<=[.!?;])\s+|\s+[|•]\s+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  return segments.some((segment) => {
+    const processingContext =
+      /\b(?:process|processing|use|using|collect|collecting|hold|holding)\b.{0,100}\b(?:personal data|personal information|your data|your information|data|information)\b/i.test(segment) ||
+      /\b(?:personal data|personal information|your data|your information)\b.{0,100}\b(?:process|processing|processed|use|used|collect|collected|hold|held)\b/i.test(segment);
+    if (!processingContext) {
+      return false;
+    }
 
-  const basisRelationship =
-    /\b(?:rely|relies|based|basis|necessary|needed|required)\b.{0,100}\b(?:consent|contract|legal obligation|legitimate interest|public task|public interest|vital interest)\b/i.test(text) ||
-    /\b(?:consent|performance of (?:a )?contract|contractual necessity|legal obligation|legitimate interests?|public task|public interest|vital interests?)\b.{0,100}\b(?:basis|process|processing|use|collect|hold|necessary|required)\b/i.test(text) ||
-    /\b(?:we|the controller)\s+(?:process|use|collect|hold)\b.{0,160}\b(?:with your consent|to (?:perform|fulfil|fulfill) (?:a|our) contract|to comply with (?:a|our) legal obligation|for our legitimate interests?|in the public interest|to protect vital interests?)\b/i.test(text);
-  return basisRelationship;
+    return (
+      /\b(?:rely|relies|based|basis|necessary|needed|required)\b.{0,100}\b(?:consent|contract|legal obligation|legitimate interest|public task|public interest|vital interest)\b/i.test(segment) ||
+      /\b(?:performance of (?:a )?contract|contractual necessity|legal obligation|legitimate interests?|public task|public interest|vital interests?)\b.{0,100}\b(?:basis|process|processing|use|collect|hold|necessary|required)\b/i.test(segment) ||
+      /\b(?:we|the controller)\s+(?:process|use|collect|hold)\b.{0,160}\b(?:with your consent|to (?:perform|fulfil|fulfill) (?:a|our) contract|to comply with (?:a|our) legal obligation|for our legitimate interests?|in the public interest|to protect vital interests?)\b/i.test(segment) ||
+      /\bwith your consent\b.{0,100}\b(?:we|the controller)\s+(?:process|use|collect|hold)\b/i.test(segment)
+    );
+  });
 }
 
 export function article13DisclosureRejectReason(

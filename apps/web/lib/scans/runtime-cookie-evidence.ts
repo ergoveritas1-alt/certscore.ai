@@ -30,6 +30,8 @@ export type RuntimeCookieEvidenceRow = {
   observedBeforeConsent?: boolean;
   explicitPreconsentEvidence?: boolean;
   essentiality?: "essential" | "non_essential" | "unknown";
+  essentialityConfidence?: number | null;
+  essentialityReasonCodes?: string[];
   essentialitySource?:
     | "canonical_registry"
     | "deterministic_classifier"
@@ -218,6 +220,12 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
   if (/^ld_anonymous_user_key$/i.test(name)) {
     return "personalization";
   }
+  // Meta's `fr` cookie is advertising evidence, but `.fr` is also a country
+  // suffix. Match the cookie name only so every cookie on a French domain does
+  // not inherit an advertising classification.
+  if (/^fr$/i.test(name)) {
+    return "advertising";
+  }
   if (
     /(^_ga|^_gid|^_gat|^_ym_|^_ymab_param|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id|ajs_user_id|analytics_session_id|heap|mp_|intercom-id|hubspotutk|__hstc|__hssc|(^|\b)s_ecid(\b|$)|(^|\b)s_sess(\b|$)|(^|\b)s_cc(\b|$)|(^|\b)s_dslv(\b|$)|(^|\b)sat_ppv(\b|$)|^_ali_s_|(^|\b)cna(\b|$)|(^|\b)sca(\b|$)|^yandex|^yuid|aliyun\.com|mmstat\.com|yandex\.(?:ru|com))/i.test(
       normalized
@@ -229,7 +237,7 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
     return "dmp";
   }
   if (
-    /(^_fbp|^_fbc|gcl_|ttclid|ttp|_twpid|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|cto_bundle|media\.net|_mkto_trk|muid|fr\b|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check|optimizely|_vwo|_vis_opt|guest_id_ads|guest_id_marketing|personalization_id|pubmatic|krtbcookie|pugt|spugt|bidswitch|tuuid|id5|casalemedia|cmid|cmps|cmpro|gumgum|3lift|tluid|sync\b|tapad|adsrvr|tdid|tdcpm|rubiconproject|openx|adform|bidr\.io|scorecardresearch|quantserve|crwdcntrl|panoramaid|_pubcid|lijit|mathtag|rlcdn|rlas3|pxrc|pippio|deepintent|amazon-adsystem|stackadapt|onaudience|(^|\b)ide(\b|$)|(^|\b)dextp(\b|$)|(^|\b)tvid(\b|$)|(^|\b)tv_uicr(\b|$)|(^|\b)uid(\b|$)|(^|\b)mc(\b|$)|receive-cookie-deprecation|sailthru|^yabs|sync_cookie_csrf|(^|\b)ftid(\b|$)|(^|\b)bh(\b|$)|ad-privacy|mail\.ru|adriver\.ru)/i.test(
+    /(^_fbp|^_fbc|gcl_|ttclid|ttp|_twpid|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|infolinks|doubleclick|criteo|cto_bundle|media\.net|_mkto_trk|muid|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check|optimizely|_vwo|_vis_opt|guest_id_ads|guest_id_marketing|personalization_id|pubmatic|krtbcookie|pugt|spugt|bidswitch|tuuid|id5|casalemedia|cmid|cmps|cmpro|gumgum|3lift|tluid|sync\b|tapad|adsrvr|tdid|tdcpm|rubiconproject|openx|adform|bidr\.io|scorecardresearch|quantserve|crwdcntrl|panoramaid|_pubcid|lijit|mathtag|rlcdn|rlas3|pxrc|pippio|deepintent|amazon-adsystem|stackadapt|onaudience|(^|\b)ide(\b|$)|(^|\b)dextp(\b|$)|(^|\b)tvid(\b|$)|(^|\b)tv_uicr(\b|$)|(^|\b)uid(\b|$)|(^|\b)mc(\b|$)|receive-cookie-deprecation|sailthru|^yabs|sync_cookie_csrf|(^|\b)ftid(\b|$)|(^|\b)bh(\b|$)|ad-privacy|mail\.ru|adriver\.ru)/i.test(
       normalized
     )
   ) {
@@ -644,6 +652,12 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   const domain = getString(row.domain ?? row.cookieDomain ?? row.cookie_domain)?.replace(/^\.+/, "") ?? null;
   const knowledge = resolveCanonicalCookieKnowledge(cookieName);
   const explicitCategory = getString(row.category ?? row.cookieCategory ?? row.cookie_category);
+  const retainedEssentiality = getString(row.essentiality ?? row.cookieEssentiality ?? row.cookie_essentiality);
+  const typedRetainedEssentiality = retainedEssentiality === "essential" || retainedEssentiality === "non_essential"
+    ? retainedEssentiality
+    : retainedEssentiality === "unknown"
+      ? "unknown" as const
+      : null;
   const inferredCategory = classifyRuntimeCookieCategory(cookieName, domain);
   const inferredSecurityOrNecessary = /^(?:security|necessary|functional|consent_management)$/i.test(inferredCategory);
   const canonicalNamedCategory =
@@ -654,6 +668,8 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     /^(?:security|necessary|functional|consent_management|infrastructure|cdn|service)$/i.test(explicitCategory ?? "");
   const category = knowledge.category !== "unknown"
     ? knowledge.category
+    : /^unknown$/i.test(explicitCategory ?? "") && typedRetainedEssentiality === "unknown"
+      ? "unknown"
     : inferredSecurityOrNecessary || canonicalNamedCategory
       ? inferredCategory
       : explicitCategory && !/^unknown$/i.test(explicitCategory) && !retainedCategoryIsUnsupportedEssentialClaim
@@ -669,7 +685,7 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   const firstObservedAtMs = rawFirstObservedAtMs !== null && rawFirstObservedAtMs >= 0 ? rawFirstObservedAtMs : setAtMs;
   const retainedNonEssential = getBoolean(row.nonEssential ?? row.non_essential);
   const canonicalNonEssentialIdentifier = canonicalNamedCategory;
-  const nonEssential = knowledge.essentiality !== "unknown"
+  const inferredNonEssential = knowledge.essentiality !== "unknown"
     ? knowledge.essentiality === "non_essential"
     : inferredSecurityOrNecessary
       ? false
@@ -680,13 +696,20 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
       : isNonEssentialCookieCategory(category);
   const essentiality = knowledge.essentiality !== "unknown"
     ? knowledge.essentiality
+    : typedRetainedEssentiality !== null
+      ? typedRetainedEssentiality
     : inferredSecurityOrNecessary
       ? "essential" as const
-    : nonEssential
+    : inferredNonEssential
       ? "non_essential" as const
       : "unknown" as const;
+  const nonEssential = essentiality === "non_essential";
   const essentialitySource = knowledge.essentiality !== "unknown"
     ? "canonical_registry" as const
+    : typedRetainedEssentiality === "essential" || typedRetainedEssentiality === "non_essential"
+      ? "retained_explicit_classification" as const
+    : typedRetainedEssentiality === "unknown"
+      ? "unknown" as const
     : inferredSecurityOrNecessary || canonicalNonEssentialIdentifier || isNonEssentialCookieCategory(category)
       ? "deterministic_classifier" as const
       : retainedNonEssential !== null
@@ -758,6 +781,8 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
       row.before_consent === true ||
       getString(row.consentStateAtTime ?? row.consent_state_at_time) === "pre_consent",
     essentiality,
+    essentialityConfidence: getNumber(row.essentialityConfidence ?? row.cookieEssentialityConfidence ?? row.cookie_essentiality_confidence),
+    essentialityReasonCodes: getStringArray(row.essentialityReasonCodes ?? row.cookieEssentialityReasonCodes ?? row.cookie_essentiality_reason_codes),
     essentialitySource,
     explicitPreconsentEvidence: false,
     party: getCookiePartyType(row, domain, hybrid),

@@ -1272,7 +1272,7 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
     .slice(0, 4)
     .map((row) => `${row.vendor} - ${row.purpose} (${formatCookiePriorityFirstSeen(row.firstSeenMs)})`)
     .join(", ");
-  const status = "Review signal" as const;
+  const status = "Not confirmed" as const;
   const priorityLabel = formatCookiePriorityLabel(selectedPriority);
   const firstSeenMs = selectedRows
     .map((row) => row.firstSeenMs)
@@ -1322,6 +1322,10 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
         contextualInfrastructureOnly,
         serviceConnectionOnly,
         tagManagerOnly: serviceConnectionOnly && thirdPartyRows.every((row) => /tag management|tag_manager/i.test(row.purpose)),
+        trackingEvidenceAssessment: {
+          result: "not_confirmed_from_grouped_inventory",
+          scoreEffect: "none"
+        },
         trackerPriority: selectedPriority,
         trackerPriorityLabel: priorityLabel
       },
@@ -1333,16 +1337,16 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
         : serviceConnectionOnly
           ? `Pre-consent advertising/analytics service connections were retained for review without a concrete ad, analytics-event, identifier, or storage-write event: ${selectedEvidence || vendors.join(", ")}.`
           : selectedEvidence.length > 0
-          ? `${priorityLabel} priority pre-consent non-essential tracking inventory was retained for review: ${selectedEvidence}.`
-          : `${priorityLabel} priority pre-consent non-essential tracking inventory was retained for review.`,
+          ? `${priorityLabel} priority pre-consent tracker inventory was retained without a promotion-eligible normalized concern or unified finding: ${selectedEvidence}. Tracking is not confirmed from grouped inventory alone.`
+          : `${priorityLabel} priority pre-consent tracker inventory was retained without a promotion-eligible normalized concern or unified finding. Tracking is not confirmed from grouped inventory alone.`,
     } satisfies GdprEprivacyCoverageCriticalEvidence,
     evidenceRefs: selectedRows
       .map((row) => `${row.vendor} ${row.purpose} at ${row.domains?.join(", ") || "retained request host"}, first seen ${formatCookiePriorityFirstSeen(row.firstSeenMs)}${row.requestCount ? `, ${row.requestCount} request${row.requestCount === 1 ? "" : "s"}` : ""}`)
       .slice(0, 6),
     limitation:
       selectedEvidence.length > 0
-        ? `${priorityLabel} priority pre-consent non-essential tracking evidence was retained for ${selectedEvidence}.`
-        : `${priorityLabel} priority pre-consent non-essential tracking evidence was retained.`,
+        ? `${priorityLabel} priority pre-consent tracker inventory was retained for ${selectedEvidence}; promotion-grade tracking evidence was not confirmed.`
+        : `${priorityLabel} priority pre-consent tracker inventory was retained; promotion-grade tracking evidence was not confirmed.`,
     rowId: "pre_consent_third_party_tracking",
     status: contextualInfrastructureOnly ? "Not observed" as const : status
   } satisfies GdprEprivacyCoverageOutcome;
@@ -1361,7 +1365,13 @@ function buildChecklistItem(input: {
   const neutralPolicyRetrievalLimitation =
     input.status === "Not confirmed" &&
     getStringValue(policyEvidenceAssessment?.scoreEffect ?? policyEvidenceAssessment?.score_effect) === "none";
-  const assessmentStatus = neutralPolicyRetrievalLimitation
+  const trackingEvidenceAssessment = getRecordValue(input.criticalEvidence.retainedEvidence.trackingEvidenceAssessment);
+  const neutralTrackingInventoryLimitation =
+    input.id === "pre_consent_third_party_tracking" &&
+    input.status === "Not confirmed" &&
+    getStringValue(trackingEvidenceAssessment?.scoreEffect ?? trackingEvidenceAssessment?.score_effect) === "none";
+  const neutralEvidenceLimitation = neutralPolicyRetrievalLimitation || neutralTrackingInventoryLimitation;
+  const assessmentStatus = neutralEvidenceLimitation
     ? "coverage_limitation"
     : input.id === "consent_choice_quality" && input.status === "Not confirmed"
       ? "coverage_limitation"
@@ -1387,7 +1397,7 @@ function buildChecklistItem(input: {
     limitation: input.limitation,
     note: input.explanation,
     status: input.status,
-    tone: neutralPolicyRetrievalLimitation ? "neutral" : getChecklistTone(input.status)
+    tone: neutralEvidenceLimitation ? "neutral" : getChecklistTone(input.status)
   };
 }
 

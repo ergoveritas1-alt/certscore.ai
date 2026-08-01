@@ -1144,6 +1144,10 @@ test("policy summary preserves the typed one-hop privacy-index evidence path", a
     linkObservationState: "observed",
     matchedLocale: "en",
     title: "Example Privacy Notice",
+    retrievedAt: "2026-08-01T18:05:00.000Z",
+    effectiveDate: "1 July 2026",
+    directlyLinkedFromScannedPage: false,
+    translationApplied: false,
     lastUpdatedText: "Last updated: June 2026",
     textExcerpt: "Example Privacy Policy. We process personal data to provide the service.",
   } as CanonicalEvidenceBundle["policySurfaceObservations"][number];
@@ -1183,7 +1187,8 @@ test("policy summary preserves the typed one-hop privacy-index evidence path", a
   assert.equal(summary.policyDocumentProvenance[0]?.sourceUrl, "https://example.test/policies/privacy-notice");
   assert.equal(summary.policyDocumentProvenance[0]?.detectedLanguage, "en");
   assert.equal(summary.policyDocumentProvenance[0]?.directlyLinkedFromScannedPage, false);
-  assert.equal(summary.policyDocumentProvenance[0]?.retrievalTimestamp, "2026-08-01T18:00:00.000Z");
+  assert.equal(summary.policyDocumentProvenance[0]?.retrievalTimestamp, "2026-08-01T18:05:00.000Z");
+  assert.equal(summary.policyDocumentProvenance[0]?.effectiveDate, "1 July 2026");
   assert.equal(summary.policyDocumentProvenance[0]?.translationApplied, false);
   assert.equal(summary.scannedPageLanguage, "de");
 });
@@ -1559,7 +1564,7 @@ test("settled geometry with no controls resolves an earlier consent inventory ti
 });
 
 test("classifies script loading, ad collection, and identifier synchronization separately", async () => {
-  const { classifyRetainedRequestActivity } = await loadLocalV2DagReport();
+  const { classifyRetainedRequestActivity, retainedRequestEssentiality } = await loadLocalV2DagReport();
   assert.equal(classifyRetainedRequestActivity({
     category: "advertising",
     collectionEndpointObserved: false,
@@ -1602,6 +1607,8 @@ test("classifies script loading, ad collection, and identifier synchronization s
     resourceType: "fetch",
     url: "https://gateway.umami.is/api/send"
   }), "tracker_beacon", "a canonical vendor fetch endpoint is collection evidence");
+  assert.equal(retainedRequestEssentiality("library"), "unknown");
+  assert.equal(retainedRequestEssentiality("ad_request"), "non_essential");
 });
 
 test("segments auxiliary authorization and callback navigation from the primary page assessment", async () => {
@@ -4308,7 +4315,38 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     await mkdir(outDir, { recursive: true });
     await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
       completedAt: "2026-06-17T13:14:02.000Z",
-      cookieEvents: [],
+      cookieEvents: [
+        {
+          confidence: 0.9,
+          consentStateAtTime: "pre_consent",
+          cookieDomain: "c.clarity.ms",
+          cookieEssentiality: "unknown",
+          cookieEssentialityReasonCodes: ["canonical_cookie_knowledge_no_match"],
+          cookieName: "unclassified-session-cookie",
+          cookieParty: "third_party",
+          cookiePath: "/",
+          cookiePurpose: "unknown",
+          directVsInferred: "direct",
+          eventId: "cookie_unknown_1",
+          eventType: "cookie",
+          evidenceRefs: [],
+          firstParty: false,
+          hostname: "c.clarity.ms",
+          httpOnly: false,
+          initiatorChain: [],
+          operation: "browser_snapshot",
+          pagePhase: "network_idle",
+          registrableDomain: "clarity.ms",
+          scenario: "fresh_pre_consent",
+          secure: true,
+          setByThirdPartyScript: false,
+          sourceScanner: "pre_consent_runtime",
+          thirdParty: true,
+          timestampMs: 875,
+          topLevelUrl: "https://example.test/",
+          url: "https://c.clarity.ms/collect"
+        }
+      ],
       derivedRuntimeSignals: {
         consentBannerLikelyPresent: false,
         preConsentTrackingObserved: true
@@ -4354,6 +4392,14 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
           eventType: "network_request",
           evidenceRefs: [],
           hostname: "c.clarity.ms",
+          requestId: "request_1",
+          method: "POST",
+          identifierParamNames: ["client_id"],
+          hasIdentifierLikeParameters: true,
+          cookieHeaderPresent: true,
+          cookieNamesSent: ["session-id"],
+          responsibleScriptUrl: "https://www.clarity.ms/tag/example.js?secret=value",
+          resourceType: "fetch",
           requestUrl: "https://c.clarity.ms/collect",
           sourceScanner: "pre_consent_runtime",
           thirdParty: true,
@@ -4377,6 +4423,22 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
           timestampMs: 980,
           topLevelUrl: "https://example.test/",
           url: "https://connect.facebook.net/en_US/fbevents.js"
+        }
+      ],
+      networkResponseEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "response_1",
+          eventType: "network_response",
+          evidenceRefs: [],
+          hostname: "c.clarity.ms",
+          requestId: "request_1",
+          responseUrl: "https://c.clarity.ms/collect",
+          cookieNamesSet: ["clarity-id"],
+          status: 204,
+          sourceScanner: "pre_consent_runtime",
+          timestampMs: 825,
+          url: "https://c.clarity.ms/collect"
         }
       ],
       normalizedUrl: "https://example.test/",
@@ -4489,6 +4551,21 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     assert.deepEqual(fingerprintingSummary.highEntropySignals, ["HTMLCanvasElement.toDataURL"]);
     assert.equal(firstLayerConsentChoices.rejectControlObserved, false);
     const requestPurposeRows = hybrid.requestPurposeClassificationConfidence as unknown as Array<Record<string, unknown>>;
+    const clarityRequest = requestPurposeRows.find((row) => row.requestUrl === "https://c.clarity.ms/collect");
+    assert.equal(clarityRequest?.method, "POST");
+    assert.equal(clarityRequest?.essentiality, "non_essential");
+    assert.deepEqual(clarityRequest?.identifierParameterNames, ["client_id"]);
+    assert.deepEqual(clarityRequest?.cookieNamesSent, ["session-id"]);
+    assert.equal(clarityRequest?.initiatorUrl, "https://www.clarity.ms/tag/example.js?secret=[redacted]");
+    assert.equal(clarityRequest?.responseObserved, true);
+    assert.equal(clarityRequest?.responseStorageAttempted, true);
+    assert.deepEqual(clarityRequest?.responseCookieNamesSet, ["clarity-id"]);
+    const cookieWriteRows = hybrid.cookieWriteObservations as unknown as Array<Record<string, unknown>>;
+    const unknownCookie = cookieWriteRows.find((row) => row.cookieName === "unclassified-session-cookie");
+    assert.ok(unknownCookie, JSON.stringify(cookieWriteRows));
+    assert.equal(unknownCookie?.category, "unknown");
+    assert.equal(unknownCookie?.essentiality, "unknown");
+    assert.equal(unknownCookie?.nonEssential, false);
     assert.equal(
       requestPurposeRows.some((row) =>
         row.requestUrl === "https://connect.facebook.net/en_US/fbevents.js" && row.vendor === "Microsoft Clarity"

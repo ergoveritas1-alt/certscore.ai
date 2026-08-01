@@ -675,7 +675,7 @@ test("all customer and administrative surfaces consume persisted canonical proje
   assert.match(reportProjection, /buildScanReportUnifiedFindingStateForScan|debugBuildScanReportUnifiedFindingStateForScan/);
   assert.match(reportProjection, /certscore_overall/);
 
-  assert.match(overviewProjection, /overviewSnapshot\?\.certscore_overall/);
+  assert.match(overviewProjection, /projectCanonicalSurfaceSummary/);
   assert.match(overviewProjection, /legacyScoreAssessmentMap/);
   assert.match(overviewProjection, /canonicalConsentSurfaceCompatibilityFromSnapshot/);
   assert.doesNotMatch(overviewProjection, /cookie consent tool|manage choices|accept all|decline/i);
@@ -692,6 +692,7 @@ test("all customer and administrative surfaces consume persisted canonical proje
   assert.doesNotMatch(adminDetailProjection, /cookie consent tool|manage choices|accept all|decline/i);
 
   assert.match(apiActivityProjection, /loadLatestVersionedScoreAssessments/);
+  assert.match(apiActivityProjection, /projectCanonicalSurfaceSummary/);
   assert.match(apiActivityProjection, /scan_snapshots/);
   assert.match(apiActivityProjection, /consent_accept_observed/);
   assert.match(apiActivityProjection, /consent_reject_observed/);

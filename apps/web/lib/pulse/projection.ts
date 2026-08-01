@@ -27,6 +27,7 @@ import {
   projectPreConsentStorageMetric
 } from "../scans/runtime-cookie-evidence";
 import {
+  buildSanitizedRequestEvidenceRows,
   buildTrackerInventoryGroupRows,
   buildTrackerInventoryRows,
   isInventoryDisplayHostname,
@@ -1650,6 +1651,7 @@ function buildEvidenceArtifact(input: {
   const storageSummary = asRecord(recordValue(runtimeArtifacts, "storageSummary")) ?? asRecord(recordValue(runtimeArtifacts, "storage_summary")) ?? asRecord(recordValue(hybrid, "storageSummary")) ?? asRecord(recordValue(hybrid, "storage_summary"));
   const navigationSummary = asRecord(recordValue(runtimeArtifacts, "navigationSummary")) ?? asRecord(recordValue(runtimeArtifacts, "navigation_summary")) ?? asRecord(recordValue(hybrid, "navigationSummary")) ?? asRecord(recordValue(hybrid, "navigation_summary"));
   const policySurfaceRows = projectedPolicySurfaceRows(scanRecord);
+  const sanitizedRequestEvidenceRows = buildSanitizedRequestEvidenceRows(hybrid);
   const requestTimingRows = input.reportSurface.runtimeTrackerPriorityRows.map((row) => ({
     vendor: row.vendor,
     purpose: row.purpose,
@@ -1658,7 +1660,10 @@ function buildEvidenceArtifact(input: {
     firstSeenMs: row.firstSeenMs,
     requestCount: row.requestCount ?? null
   }));
-  const checklistRows = input.reportSurface.reportableGdprRows.map((row) => ({
+  const checklistRows = input.reportSurface.reportableGdprRows.map((row) => {
+    const retainedEvidence = asRecord(row.criticalEvidence?.retainedEvidence);
+    const policyEvidenceProvenance = asRecord(retainedEvidence?.policyEvidenceProvenance);
+    return {
     id: row.id,
     label: row.label,
     status: row.status,
@@ -1668,8 +1673,9 @@ function buildEvidenceArtifact(input: {
     explanation: row.explanation,
     note: row.note,
     evidenceRefs: row.evidenceRefs?.slice(0, 12) ?? [],
-    retainedEvidence: row.criticalEvidence?.retainedEvidence
-      ? safeRecordSubset(row.criticalEvidence.retainedEvidence as Record<string, unknown>, [
+    retainedEvidence: retainedEvidence
+      ? {
+        ...safeRecordSubset(retainedEvidence, [
           "basis",
           "statusBasis",
           "provider",
@@ -1683,9 +1689,31 @@ function buildEvidenceArtifact(input: {
           "defaultToggleStatesObserved",
           "nonEssentialDefaultsOff",
           "precheckedOptionalPurposeCount"
-        ])
+        ]),
+        policyEvidenceProvenance: policyEvidenceProvenance
+          ? safeRecordSubset(policyEvidenceProvenance, [
+              "bannerLanguage",
+              "contractVersion",
+              "detectedLanguage",
+              "directlyLinkedFromScannedPage",
+              "discoveryMethod",
+              "documentOwnerEntity",
+              "effectiveDate",
+              "lastUpdatedText",
+              "ownershipConfidence",
+              "policyTitle",
+              "retrievalTimestamp",
+              "sectionHeading",
+              "sourceUrl",
+              "targetRelationship",
+              "translationApplied",
+              "translationTargetLanguage"
+            ])
+          : null
+      }
       : null
-  }));
+    };
+  });
   const coverageLimitedByNoGo = input.allFindings.some((finding) => finding.id === "scan_quality_visual_no_go");
   const findings = input.allFindings.map((finding) => toPulseFinding(finding, scanRecord.scan.id, {
     coverageLimitedByNoGo,
@@ -1786,6 +1814,12 @@ function buildEvidenceArtifact(input: {
           party: row.party,
           category: row.category,
           nonEssential: row.nonEssential,
+          essentiality: row.essentiality ?? "unknown",
+          essentialityConfidence: row.essentialityConfidence ?? null,
+          essentialityReasonCodes: row.essentialityReasonCodes ?? [],
+          essentialitySource: row.essentialitySource ?? "unknown",
+          description: row.description ?? null,
+          dataTypes: row.dataTypes ?? [],
           firstObservedAtMs: row.firstObservedAtMs,
           setAtMs: row.setAtMs,
           primaryProvider,
@@ -1815,6 +1849,7 @@ function buildEvidenceArtifact(input: {
         "identifierLikeRequestCount"
       ])
     },
+    requestEvidenceInventory: capArray(sanitizedRequestEvidenceRows, 50),
     consentSurfaceEvidence: {
       firstLayerConsentChoices: safeRecordSubset(firstLayerConsentChoices, [
         "acceptControlObserved",
@@ -1881,6 +1916,34 @@ function buildEvidenceArtifact(input: {
         type,
         url,
         title: typeof row.policy_page_title === "string" ? row.policy_page_title.slice(0, 160) : null,
+        detectedLanguage:
+          typeof (row as unknown as Record<string, unknown>).detectedLanguage === "string"
+            ? ((row as unknown as Record<string, unknown>).detectedLanguage as string).slice(0, 40)
+            : typeof (row as unknown as Record<string, unknown>).detected_language === "string"
+              ? ((row as unknown as Record<string, unknown>).detected_language as string).slice(0, 40)
+              : null,
+        directlyLinkedFromScannedPage:
+          typeof (row as unknown as Record<string, unknown>).directlyLinkedFromScannedPage === "boolean"
+            ? (row as unknown as Record<string, unknown>).directlyLinkedFromScannedPage
+            : typeof (row as unknown as Record<string, unknown>).directly_linked_from_scanned_page === "boolean"
+              ? (row as unknown as Record<string, unknown>).directly_linked_from_scanned_page
+              : null,
+        discoveryMethod:
+          typeof (row as unknown as Record<string, unknown>).discoveryMethod === "string"
+            ? ((row as unknown as Record<string, unknown>).discoveryMethod as string).slice(0, 120)
+            : typeof (row as unknown as Record<string, unknown>).discovery_method === "string"
+              ? ((row as unknown as Record<string, unknown>).discovery_method as string).slice(0, 120)
+              : null,
+        retrievalTimestamp:
+          typeof (row as unknown as Record<string, unknown>).retrievedAt === "string"
+            ? ((row as unknown as Record<string, unknown>).retrievedAt as string).slice(0, 80)
+            : typeof (row as unknown as Record<string, unknown>).retrievalTimestamp === "string"
+              ? ((row as unknown as Record<string, unknown>).retrievalTimestamp as string).slice(0, 80)
+              : null,
+        translationApplied:
+          typeof (row as unknown as Record<string, unknown>).translationApplied === "boolean"
+            ? (row as unknown as Record<string, unknown>).translationApplied
+            : null,
         lastUpdatedText:
           typeof (row as unknown as Record<string, unknown>).lastUpdatedText === "string"
             ? ((row as unknown as Record<string, unknown>).lastUpdatedText as string).slice(0, 160)

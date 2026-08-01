@@ -26,6 +26,8 @@ export type ScanProgressEstimate = {
   modeLabel: string;
 };
 
+export type ScanProgressStage = "prepare" | "scan" | "review" | "report" | "complete";
+
 const MAIN_PROGRESS_COLORS = [
   [249, 115, 22],
   [250, 204, 21],
@@ -58,31 +60,23 @@ export function ScanActivityIndicator({ className = "text-white" }: { className?
   );
 }
 
-export function ScanSubmissionPendingIndicator({ compact = false }: { compact?: boolean }) {
+export function ScanSubmissionPendingIndicator({
+  compact = false,
+  profileValue = "standard"
+}: {
+  compact?: boolean;
+  profileValue?: string;
+}) {
+  const { nowMs, startedAtMs } = useScanProgressClock(true);
+
   return (
-    <div
-      aria-live="polite"
-      className={compact
-        ? "rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
-        : "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"}
-      role="status"
-    >
-      <div className={compact
-        ? "flex items-center gap-2 text-xs font-medium text-slate-600"
-        : "flex items-center gap-2 text-sm font-medium text-slate-700"}
-      >
-        <ScanActivityIndicator className="text-sky-500" />
-        <span>Starting scan…</span>
-      </div>
-      {!compact ? (
-        <p className="mt-1 text-xs text-slate-500">
-          Creating the scan request and waiting for its current status.
-        </p>
-      ) : null}
-      <div aria-hidden="true" className={compact ? "mt-2 h-2 overflow-hidden rounded-full bg-slate-200" : "mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200"}>
-        <div className="h-full w-1/3 animate-pulse rounded-full bg-sky-400 motion-reduce:animate-none" />
-      </div>
-    </div>
+    <ScanSubmitProgressBar
+      active
+      compact={compact}
+      nowMs={nowMs}
+      profileValue={profileValue}
+      startedAtMs={startedAtMs}
+    />
   );
 }
 
@@ -92,6 +86,7 @@ export function ScanSubmitProgressBar({
   nowMs,
   progressEstimate,
   profileValue = "standard",
+  progressStage,
   reportReady = false,
   scanStatus,
   startedAtMs,
@@ -101,6 +96,7 @@ export function ScanSubmitProgressBar({
   nowMs: number;
   progressEstimate?: ScanProgressEstimate;
   profileValue?: string;
+  progressStage?: ScanProgressStage;
   reportReady?: boolean;
   scanStatus?: string | null;
   startedAtMs: number | null;
@@ -120,13 +116,19 @@ export function ScanSubmitProgressBar({
   const progressDisplay = getScanProgressDisplay({
     delayed,
     phase: progressPhase,
+    progressStage,
     reportReady,
     scanStatus
   });
   const [displayedProgressValue, setDisplayedProgressValue] = useState(0);
   const displayedProgressValueRef = React.useRef(0);
-  const displayedStepRef = React.useRef(0);
   const wasActiveRef = React.useRef(false);
+  const targetProgressValue = getScanProgressTarget({
+    currentStep: progressDisplay.currentStep,
+    elapsedMs: elapsedSeconds * 1_000,
+    estimatedDurationMs: estimate.estimatedDurationMs,
+    reportReady
+  });
 
   useEffect(() => {
     if (!active) {
@@ -137,44 +139,16 @@ export function ScanSubmitProgressBar({
     const isNewScan = !wasActiveRef.current;
     wasActiveRef.current = true;
     if (isNewScan) {
-      displayedStepRef.current = progressDisplay.currentStep;
       const currentStepStart = getScanProgressStepStart(progressDisplay.currentStep);
       displayedProgressValueRef.current = currentStepStart;
       setDisplayedProgressValue(currentStepStart);
     }
-
-    if (!isNewScan && progressDisplay.currentStep > displayedStepRef.current) {
-      displayedStepRef.current = progressDisplay.currentStep;
-      const nextStepStart = getScanProgressStepStart(progressDisplay.currentStep);
-      displayedProgressValueRef.current = Math.max(displayedProgressValueRef.current, nextStepStart);
+    const frame = window.requestAnimationFrame(() => {
+      displayedProgressValueRef.current = Math.max(displayedProgressValueRef.current, targetProgressValue);
       setDisplayedProgressValue(displayedProgressValueRef.current);
-    }
-
-    const targetValue = getScanProgressStepEnd(Math.max(displayedStepRef.current, progressDisplay.currentStep));
-    let timer: number | undefined;
-    const advanceTowardTarget = () => {
-      const currentValue = displayedProgressValueRef.current;
-      const remainingDistance = targetValue - currentValue;
-      if (remainingDistance <= 0.5) {
-        displayedProgressValueRef.current = targetValue;
-        setDisplayedProgressValue(targetValue);
-        return;
-      }
-
-      const nextValue = currentValue + remainingDistance / 2;
-      displayedProgressValueRef.current = nextValue;
-      setDisplayedProgressValue(nextValue);
-      timer = window.setTimeout(advanceTowardTarget, 2_000);
-    };
-
-    timer = window.setTimeout(advanceTowardTarget, 2_000);
-
-    return () => {
-      if (timer !== undefined) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, [active, progressDisplay.currentStep]);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, progressDisplay.currentStep, targetProgressValue]);
 
   if (!active) {
     return null;
@@ -200,7 +174,7 @@ export function ScanSubmitProgressBar({
         role="progressbar"
       >
         <div
-          className="h-full rounded-full transition-[width,background-color] duration-[2000ms] ease-out"
+          className="h-full rounded-full transition-[width,background-color] duration-1000 ease-linear"
           style={{
             backgroundColor: getMainProgressColor(displayedProgressValue),
             width: `${displayedProgressValue}%`
@@ -232,20 +206,60 @@ function getScanProgressStepStart(stepIndex: number) {
   return SCAN_PROGRESS_STEP_BOUNDARIES[Math.min(Math.max(stepIndex, 0), SCAN_PROGRESS_STEPS.length)] ?? 0;
 }
 
-function getScanProgressStepEnd(stepIndex: number) {
-  return getScanProgressStepStart(stepIndex + 1);
+export function getScanProgressTarget(input: {
+  currentStep: number;
+  elapsedMs: number;
+  estimatedDurationMs: number;
+  reportReady: boolean;
+}) {
+  if (input.reportReady) return 100;
+  const elapsedRatio = Math.max(0, input.elapsedMs) / Math.max(6_000, input.estimatedDurationMs);
+  if (input.currentStep <= 0) {
+    return Math.min(24, (elapsedRatio / SCAN_PROGRESS_PHASE_BREAKPOINTS[0]) * 24);
+  }
+  if (input.currentStep === 1) {
+    const scanRatio = Math.min(
+      1,
+      Math.max(0, elapsedRatio - SCAN_PROGRESS_PHASE_BREAKPOINTS[0]) /
+        (SCAN_PROGRESS_PHASE_BREAKPOINTS[1] - SCAN_PROGRESS_PHASE_BREAKPOINTS[0])
+    );
+    return 25 + scanRatio * 24;
+  }
+  if (input.currentStep === 2) {
+    const reviewRatio = Math.min(
+      1,
+      Math.max(0, elapsedRatio - SCAN_PROGRESS_PHASE_BREAKPOINTS[1]) /
+        (SCAN_PROGRESS_PHASE_BREAKPOINTS[2] - SCAN_PROGRESS_PHASE_BREAKPOINTS[1])
+    );
+    return 50 + reviewRatio * 24;
+  }
+  const reportRatio = Math.min(
+    1,
+    Math.max(0, elapsedRatio - SCAN_PROGRESS_PHASE_BREAKPOINTS[2]) / 0.66
+  );
+  return 75 + reportRatio * 21;
 }
 
 function getScanProgressDisplay(input: {
   delayed: boolean;
   phase: string;
+  progressStage?: ScanProgressStage;
   reportReady: boolean;
   scanStatus?: string | null;
 }) {
   const status = input.scanStatus;
   const hasServerProgress = typeof status === "string";
   const estimatedDelay = input.delayed && !hasServerProgress;
-  const serverPhaseIndex = status === "queued"
+  const explicitPhaseIndex = input.progressStage === "prepare"
+    ? 0
+    : input.progressStage === "scan"
+      ? 1
+      : input.progressStage === "review"
+        ? 2
+        : input.progressStage === "report" || input.progressStage === "complete"
+          ? 3
+          : null;
+  const serverPhaseIndex = explicitPhaseIndex ?? (status === "queued"
     ? 0
     : status === "running"
       ? 1
@@ -253,7 +267,7 @@ function getScanProgressDisplay(input: {
         ? 2
         : input.reportReady
           ? 3
-          : null;
+          : null);
   const phaseIndex = serverPhaseIndex ?? (input.phase === "preparing scanner"
     ? 0
     : input.phase === "capturing page evidence"
@@ -291,7 +305,7 @@ function getScanProgressDisplay(input: {
     steps: SCAN_PROGRESS_STEPS.map((step, index) => ({
       complete: index <= currentStep,
       current: index === currentStep,
-      colorClass: step.colorClass,
+      colorClass: index < currentStep ? "bg-sky-400" : index === currentStep ? "bg-sky-500" : step.colorClass,
       label: step.label
     })),
     currentStep,
@@ -329,11 +343,15 @@ export function useScanProgressClock(active: boolean) {
 export function LocalV2DagScanProgressCard({
   createdAt,
   profileValue = "standard",
+  progressStage,
+  reportReady = false,
   scanStatus,
   startedAt,
 }: {
   createdAt?: string | null;
   profileValue?: string;
+  progressStage?: ScanProgressStage;
+  reportReady?: boolean;
   scanStatus?: string | null;
   startedAt?: string | null;
 }) {
@@ -357,6 +375,14 @@ export function LocalV2DagScanProgressCard({
     };
   }, []);
 
+  const badgeLabel = progressStage === "review"
+    ? "Reviewing..."
+    : progressStage === "report" || progressStage === "complete"
+      ? "Preparing report..."
+      : progressStage === "prepare"
+        ? "Preparing..."
+        : "Scanning...";
+
   return (
     <section aria-live="polite" className="rounded-3xl border border-sky-200 bg-white p-5 shadow-[0_18px_60px_-32px_rgba(14,165,233,0.45)]">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -364,13 +390,15 @@ export function LocalV2DagScanProgressCard({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-600">Scan in progress</p>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">
-          Scanning...
+          {badgeLabel}
         </span>
       </div>
       <ScanSubmitProgressBar
         active
         nowMs={nowMs}
         profileValue={profileValue}
+        progressStage={progressStage}
+        reportReady={reportReady}
         scanStatus={scanStatus}
         startedAtMs={startedAtMs}
       />

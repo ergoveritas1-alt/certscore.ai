@@ -2616,19 +2616,19 @@ export function summarizePolicySurfaces(
         row.surface.matchedLocale,
         policyPrimaryLanguage,
       ),
-      directlyLinkedFromScannedPage,
+      directlyLinkedFromScannedPage: row.surface.directlyLinkedFromScannedPage ?? directlyLinkedFromScannedPage,
       discoveryMethod: row.surface.discoveryMethod,
       documentOwnerEntity: firstString(row.surface.documentOwnerEntity),
-      effectiveDate: null,
+      effectiveDate: firstString(row.surface.effectiveDate),
       lastUpdatedText: firstString(row.surface.lastUpdatedText),
       observationId: row.surface.observationId,
       ownershipConfidence: row.surface.ownershipConfidence ?? null,
       policyTitle: firstString(row.surface.title, row.surface.linkText),
-      retrievalTimestamp: options.scanStartedAt ?? null,
+      retrievalTimestamp: firstString(row.surface.retrievedAt, options.scanStartedAt),
       sourceUrl: documentUrl,
       targetRelationship: row.surface.targetRelationship ?? "unknown",
-      translationApplied: false,
-      translationTargetLanguage: null,
+      translationApplied: row.surface.translationApplied ?? false,
+      translationTargetLanguage: firstString(row.surface.translationTargetLanguage),
     };
   }).slice(0, 12);
   const selectedPrivacyPolicyDocument = article13Surfaces
@@ -4152,6 +4152,12 @@ export function classifyRetainedRequestActivity(input: {
   return "library";
 }
 
+export function retainedRequestEssentiality(
+  classification: ReturnType<typeof classifyRetainedRequestActivity>
+) {
+  return classification === "library" ? "unknown" as const : "non_essential" as const;
+}
+
 function retainedRequestPathSample(value: string | null | undefined) {
   if (!value) return null;
   try {
@@ -4727,27 +4733,42 @@ function buildMaterializedLocalV2Detail(
     counts[vendor.vendorCategory] = (counts[vendor.vendorCategory] ?? 0) + 1;
     return counts;
   }, {});
+  const responseEventsByRequestId = new Map<string, typeof networkResponseEvents>();
+  for (const responseEvent of networkResponseEvents) {
+    if (!responseEvent.requestId) continue;
+    const existing = responseEventsByRequestId.get(responseEvent.requestId) ?? [];
+    existing.push(responseEvent);
+    responseEventsByRequestId.set(responseEvent.requestId, existing);
+  }
   const requestPurposeRows = (preconsentRequests
     .map((event) => {
       const matchedVendor = findObservedVendor(event);
       const url = requestUrl(event);
       const hostname = event.hostname ?? hostnameFromUrl(url);
       const relationships = hostname ? retainedRequestRelationships(hostname, rootDomain) : null;
+      const classification = matchedVendor && url
+        ? classifyRetainedRequestActivity({
+            category: matchedVendor.vendorCategory,
+            collectionEndpointObserved: event.collectionEndpointObserved === true,
+            regulatoryRelevance: matchedVendor.regulatoryRelevance,
+            resourceType: event.resourceType,
+            url
+          })
+        : "library";
+      const correlatedResponses = responseEventsByRequestId.get(event.requestId) ?? [];
+      const responseCookieNamesSet = uniqueStrings(correlatedResponses.flatMap((response) => response.cookieNamesSet ?? [])).slice(0, 24);
       return matchedVendor && url && hostname
         ? {
             category: matchedVendor.vendorCategory,
-            classification: classifyRetainedRequestActivity({
-              category: matchedVendor.vendorCategory,
-              collectionEndpointObserved: event.collectionEndpointObserved === true,
-              regulatoryRelevance: matchedVendor.regulatoryRelevance,
-              resourceType: event.resourceType,
-              url
-            }),
+            classification,
             classificationBasis: "local_v2_dag_runtime_vendor_observation",
             collectionEndpointObserved: event.collectionEndpointObserved === true,
             collectionEndpointType: matchedVendor.collectionEndpointType,
             confidence: matchedVendor.confidence,
-            essentiality: "non_essential",
+            essentiality: retainedRequestEssentiality(classification),
+            essentialityReasonCodes: classification === "library"
+              ? ["vendor_library_request_without_collection_proof"]
+              : [`retained_request_classification:${classification}`],
             method: event.method,
             pathSample: retainedRequestPathSample(url),
             cookieHeaderPresent: event.cookieHeaderPresent === true || event.requestHeaders?.cookieHeaderPresent === true,
@@ -4757,6 +4778,7 @@ function buildMaterializedLocalV2Detail(
             ]).slice(0, 24),
             identifierLikeParametersObserved: event.hasIdentifierLikeParameters === true,
             identifierParameterNames: (event.identifierParamNames ?? []).slice(0, 24),
+            initiatorUrl: retainedRequestUrlSample(event.responsibleScriptUrl ?? event.iframeAttributionUrl),
             directVsInferred: event.directVsInferred,
             evidenceRefs: uniqueStrings([
               event.eventId,
@@ -4777,6 +4799,13 @@ function buildMaterializedLocalV2Detail(
             requestUrl: retainedRequestUrlSample(url) ?? url,
             regulatoryRelevance: matchedVendor.regulatoryRelevance,
             resourceType: event.resourceType,
+            responseObserved: correlatedResponses.length > 0,
+            responseEventIds: correlatedResponses.map((response) => response.eventId).slice(0, 12),
+            responseStatusCodes: [...new Set(correlatedResponses
+              .map((response) => response.status)
+              .filter((status): status is number => typeof status === "number"))].slice(0, 8),
+            responseStorageAttempted: responseCookieNamesSet.length > 0,
+            responseCookieNamesSet,
             runtimePhase: "pre_consent",
             tsMs: event.timestampMs,
             vendor: matchedVendor.vendorName,
@@ -4902,9 +4931,14 @@ function buildMaterializedLocalV2Detail(
     const matchedVendorHostAligned = Boolean(matchedVendor && eventHost && matchedVendor.matchedHostnames.some((matchedHost) =>
       eventHost === matchedHost || eventHost.endsWith(`.${matchedHost}`) || matchedHost.endsWith(`.${eventHost}`)
     ));
+    // Cookie purpose is a property of the retained cookie observation. A vendor
+    // match can describe attribution, but it must not lend its broad category to
+    // an otherwise unclassified cookie (for example, a session or WAF cookie on
+    // an advertising-capable first-party domain).
     const category = event.cookiePurpose && event.cookiePurpose !== "unknown"
       ? event.cookiePurpose
-      : matchedVendor?.vendorCategory ?? "unknown";
+      : "unknown";
+    const essentiality = event.cookieEssentiality ?? "unknown";
     const initiatorUrl = event.setterScriptUrl ?? event.initiatorChain?.[0] ?? event.initiatorUrl ?? null;
     const initiatorDomain = hostnameFromUrl(initiatorUrl) ?? null;
     return {
@@ -4925,7 +4959,11 @@ function buildMaterializedLocalV2Detail(
       lifespanSource: event.lifespanSource ?? null,
       description: event.description ?? null,
       dataTypes: event.dataTypes ?? [],
-      nonEssential: /^(?:advertising|analytics|fingerprinting|marketing|measurement|personalization|session_replay)$/i.test(category),
+      essentiality,
+      essentialityConfidence: event.cookieEssentialityConfidence ?? null,
+      essentialityReasonCodes: event.cookieEssentialityReasonCodes ?? [],
+      essentialitySource: essentiality === "unknown" ? "unknown" : "canonical_registry",
+      nonEssential: essentiality === "non_essential",
       party: event.cookieParty ?? (event.thirdParty ? "third_party" : "first_party"),
       setByThirdPartyScript: event.setByThirdPartyScript === true,
       set_by_third_party_script: event.setByThirdPartyScript === true,

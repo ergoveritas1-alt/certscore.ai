@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PendingScanDetailView } from "./pending-scan-detail-view";
+import { getProgressTransitionStages, PendingScanDetailView } from "./pending-scan-detail-view";
 
 const baseProps = {
   createdAt: "2026-07-29T23:00:00.000Z",
@@ -12,6 +12,12 @@ const baseProps = {
   startedAt: "2026-07-29T23:00:01.000Z",
   status: "running"
 };
+
+test("canonical milestone jumps retain review and report as paced catch-up stages", () => {
+  assert.deepEqual(getProgressTransitionStages("scan", "complete"), ["review", "report", "complete"]);
+  assert.deepEqual(getProgressTransitionStages("review", "complete"), ["report", "complete"]);
+  assert.deepEqual(getProgressTransitionStages("report", "report"), []);
+});
 
 test("active scans retain the four-step progress view", () => {
   const html = renderToStaticMarkup(
@@ -30,7 +36,7 @@ test("active scans retain the four-step progress view", () => {
   assert.doesNotMatch(html, /Building your report/);
 });
 
-test("completed scans awaiting report projection show the finalization view", () => {
+test("completed scans awaiting report projection remain in the staged progress view", () => {
   const html = renderToStaticMarkup(
     <PendingScanDetailView
       {...baseProps}
@@ -39,8 +45,8 @@ test("completed scans awaiting report projection show the finalization view", ()
     />
   );
 
-  assert.match(html, /The scan is complete/);
-  assert.match(html, /Finishing your report/);
-  assert.doesNotMatch(html, /role="progressbar"/);
-  assert.doesNotMatch(html, /Scan in progress/);
+  assert.match(html, /Reviewing scan signals/);
+  assert.match(html, /Reviewing/);
+  assert.match(html, /role="progressbar"/);
+  assert.match(html, /Scan in progress/);
 });

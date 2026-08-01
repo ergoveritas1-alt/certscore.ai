@@ -86,6 +86,7 @@
     "restart:certscore": "bash ./scripts/restart-certscore.sh",
     "restart:localhost": "bash ./scripts/restart-localhost.sh",
     "test:scan-pipeline": "pnpm --filter @website-signal-risk-scanner/validation-worker test:scan-pipeline",
+    "test:canonical-projection-parity": "pnpm --filter @certscore/api-contracts build && pnpm exec tsx --test apps/web/lib/scans/canonical-surface-summary.test.ts apps/web/server/scans/canonical-consent-control-flow.test.ts apps/web/lib/scans/runtime-cookie-evidence.test.ts apps/web/lib/scans/runtime-inventory-projection.test.ts apps/web/lib/scans/gdpr-eprivacy-coverage-policy.test.ts apps/web/lib/pulse/projection.test.ts apps/web/lib/api-v2/scan-resource.test.ts packages/certscore-api-contracts/src/pulse-v1.test.ts packages/certscore-mcp/src/server.test.ts packages/certscore-scan-core/src/consent-control-geometry.test.ts",
     "v2:scan": "pnpm --filter @certscore/scan-core build && PLAYWRIGHT_BROWSERS_PATH= node --env-file=apps/web/.env.local --import tsx ./packages/certscore-scan-core/src/cli/scan.ts",
     "v2:consent-dag-shadow": "pnpm --filter @certscore/scan-core build && PLAYWRIGHT_BROWSERS_PATH= TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=apps/web/.env.local --import tsx ./packages/certscore-scan-core/src/cli/consent-dag-shadow.ts",
     "v2:demo": "pnpm --filter @certscore/scan-core build && PLAYWRIGHT_BROWSERS_PATH= node --env-file=apps/web/.env.local --import tsx ./packages/certscore-scan-core/src/cli/demo.ts",

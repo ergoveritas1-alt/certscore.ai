@@ -139,6 +139,9 @@ export interface ConsentControlCandidateEvidence {
   classifierReasonCodes: string[];
   classifierConfidence: number;
   diagnosticClassifications?: ConsentControlDiagnosticClassification[];
+  effectiveVisibility?: "direct" | "visible_via_actionable_proxy";
+  actionableControlCandidateId?: string;
+  visualProxyCandidateId?: string;
   decisionStatus: ConsentControlDecisionStatus;
   reasons: string[];
 }
@@ -354,8 +357,9 @@ export async function captureConsentControlGeometry(
   const candidates = raw.candidates.map((candidate, index) =>
     buildCandidateEvidence(candidate, index, raw.pageUrl, options.screenshotArtifactRef, containers)
   );
+  reconcileActionableVisualProxies(candidates);
   reconcileConfirmedConsentModalClusters(candidates, containers);
-  classifyConsentControlPlacements(candidates);
+  classifyConsentControlPlacements(candidates, containers);
   const summary = summarizeConsentControlGeometry(candidates, cmp);
   const expectedPageUrl = page.url();
   const mainFrameUnavailable = !mainFrameCapture ||
@@ -386,6 +390,7 @@ export async function captureConsentControlGeometry(
 
 function classifyConsentControlPlacements(
   candidates: ConsentControlCandidateEvidence[],
+  containers: ConsentControlContainerEvidence[],
 ): void {
   for (const candidate of candidates) {
     if (candidate.presentationType === "persistent_link") {
@@ -404,7 +409,6 @@ function classifyConsentControlPlacements(
 
     const companionControls = candidates.filter((companion) =>
       companion.candidateId !== candidate.candidateId &&
-      companion.containerId === candidate.containerId &&
       companion.frameContext.frameUrl === candidate.frameContext.frameUrl &&
       companion.layer === "first_layer" &&
       companion.decisionStatus === "confirmed_visible" &&
@@ -413,6 +417,7 @@ function classifyConsentControlPlacements(
     const accept = companionControls.find((companion) => companion.actionType === "accept_all");
     const reject = companionControls.find((companion) => companion.actionType === "reject_all");
     candidate.placementType = accept && reject &&
+      controlsShareRetainedConsentSurface(candidate, [accept, reject], containers) &&
       controlsShareActionRow(candidate, accept) &&
       controlsShareActionRow(candidate, reject) &&
       controlsAreTightlyGrouped(candidate, [accept, reject])
@@ -425,6 +430,91 @@ function classifyConsentControlPlacements(
         : "inline_options_link_outside_confirmed_accept_reject_action_cluster",
     ];
   }
+}
+
+function reconcileActionableVisualProxies(
+  candidates: ConsentControlCandidateEvidence[],
+): void {
+  for (const visualProxy of candidates) {
+    if (
+      visualProxy.decisionStatus !== "covered" ||
+      visualProxy.occlusion.hitSelectorHints.length === 0 ||
+      (
+        visualProxy.actionType !== "accept_all" &&
+        visualProxy.actionType !== "reject_all" &&
+        visualProxy.actionType !== "manage_preferences"
+      )
+    ) {
+      continue;
+    }
+
+    const actionableControl = candidates.find((candidate) =>
+      candidate.candidateId !== visualProxy.candidateId &&
+      candidate.actionType === visualProxy.actionType &&
+      candidate.frameContext.frameUrl === visualProxy.frameContext.frameUrl &&
+      candidate.containerId === visualProxy.containerId &&
+      candidate.presentationType === "dedicated_button" &&
+      (candidate.tagName === "input" || candidate.tagName === "button") &&
+      candidate.enabled &&
+      visualProxy.occlusion.hitSelectorHints.includes(candidate.selectorHint) &&
+      controlsHaveEquivalentBounds(visualProxy.boundingBox, candidate.boundingBox)
+    );
+    if (!actionableControl) {
+      continue;
+    }
+
+    visualProxy.decisionStatus = "confirmed_visible";
+    visualProxy.presentationType = "dedicated_button";
+    visualProxy.effectiveVisibility = "visible_via_actionable_proxy";
+    visualProxy.actionableControlCandidateId = actionableControl.candidateId;
+    visualProxy.reasons = [
+      ...visualProxy.reasons.filter((reason) => reason !== "covered_at_center_point"),
+      "visible_label_proxy_for_actionable_control",
+    ];
+    actionableControl.visualProxyCandidateId = visualProxy.candidateId;
+    actionableControl.reasons = [
+      ...actionableControl.reasons,
+      "actionable_control_visibility_confirmed_by_visual_proxy",
+    ];
+  }
+}
+
+function controlsHaveEquivalentBounds(
+  left: ConsentControlRect,
+  right: ConsentControlRect,
+): boolean {
+  const horizontalOverlap = Math.max(0, Math.min(left.right, right.right) - Math.max(left.left, right.left));
+  const verticalOverlap = Math.max(0, Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top));
+  const overlapArea = horizontalOverlap * verticalOverlap;
+  const smallerArea = Math.min(left.width * left.height, right.width * right.height);
+  return smallerArea > 0 && overlapArea / smallerArea >= 0.8;
+}
+
+function controlsShareRetainedConsentSurface(
+  options: ConsentControlCandidateEvidence,
+  companions: ConsentControlCandidateEvidence[],
+  containers: ConsentControlContainerEvidence[],
+): boolean {
+  const controls = [options, ...companions];
+  if (controls.every((control) => control.containerId === options.containerId)) {
+    return true;
+  }
+
+  return containers.some((container) =>
+    container.layer === "first_layer" &&
+    hasStrongConsentModalContainerEvidence(container) &&
+    controls.every((control) => rectContainsControlCenter(container.boundingBox, control.boundingBox))
+  );
+}
+
+function rectContainsControlCenter(
+  container: ConsentControlRect,
+  control: ConsentControlRect,
+): boolean {
+  const centerX = control.left + control.width / 2;
+  const centerY = control.top + control.height / 2;
+  return centerX >= container.left && centerX <= container.right &&
+    centerY >= container.top && centerY <= container.bottom;
 }
 
 function controlsShareActionRow(
@@ -716,6 +806,7 @@ function buildCandidateEvidence(
     classifierReasonCodes: classification.reasonCodes,
     classifierConfidence: classification.confidence,
     diagnosticClassifications,
+    effectiveVisibility: decisionStatus === "confirmed_visible" ? "direct" : undefined,
     decisionStatus,
     reasons,
   };
@@ -937,6 +1028,15 @@ function summarizeConsentControlGeometry(
       candidate.actionType === "manage_preferences"
     )
     .filter((candidate) => candidate.decisionStatus !== "confirmed_visible")
+    .filter((candidate) => {
+      if (!candidate.visualProxyCandidateId) {
+        return true;
+      }
+
+      const visualProxy = candidates.find((other) => other.candidateId === candidate.visualProxyCandidateId);
+      return visualProxy?.decisionStatus !== "confirmed_visible" ||
+        visualProxy.effectiveVisibility !== "visible_via_actionable_proxy";
+    })
     .map((candidate) => `${candidate.actionType}:${candidate.label}:${candidate.decisionStatus}`)
     .slice(0, 12);
   const observedCount = [firstLayerAccept, firstLayerReject, firstLayerOptions].filter(Boolean).length;

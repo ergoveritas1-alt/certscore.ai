@@ -5,17 +5,21 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   ScanSubmissionPendingIndicator,
   ScanSubmitProgressBar,
-  describeScanProgressPhase
+  describeScanProgressPhase,
+  getScanProgressTarget
 } from "./scan-submit-progress";
 
 test("scan submission remains neutral until the server returns a scan status", () => {
   const html = renderToStaticMarkup(<ScanSubmissionPendingIndicator />);
 
-  assert.match(html, /Starting scan/);
-  assert.match(html, /waiting for its current status/i);
+  assert.match(html, /Getting things ready/);
+  assert.match(html, /0s elapsed/);
+  assert.match(html, /role="progressbar"/);
+  assert.match(html, /aria-valuenow="0"/);
   assert.doesNotMatch(html, /Building your report/);
   assert.doesNotMatch(html, /Finishing your report/);
   assert.doesNotMatch(html, /Checking policies/);
+  assert.doesNotMatch(html, /w-1\/3/);
 });
 
 test("server scan status determines the active progress phase", () => {
@@ -32,6 +36,31 @@ test("server scan status determines the active progress phase", () => {
   assert.match(html, /Capturing page evidence and website signals/);
   assert.doesNotMatch(html, /Taking longer than usual/);
   assert.doesNotMatch(html, /Building your report/);
+});
+
+test("canonical progress milestones override coarse scan status", () => {
+  const reviewHtml = renderToStaticMarkup(
+    <ScanSubmitProgressBar active nowMs={40_000} progressStage="review" scanStatus="completed" startedAtMs={0} />
+  );
+  const reportHtml = renderToStaticMarkup(
+    <ScanSubmitProgressBar active nowMs={42_000} progressStage="report" scanStatus="completed" startedAtMs={0} />
+  );
+  assert.match(reviewHtml, /Reviewing scan signals/);
+  assert.match(reportHtml, /Preparing your report/);
+});
+
+test("scan-stage target advances linearly without asymptotically stalling", () => {
+  assert.equal(getScanProgressTarget({ currentStep: 0, elapsedMs: 0, estimatedDurationMs: 36_000, reportReady: false }), 0);
+  const preparing = getScanProgressTarget({ currentStep: 0, elapsedMs: 5_400, estimatedDurationMs: 36_000, reportReady: false });
+  const early = getScanProgressTarget({ currentStep: 1, elapsedMs: 13_000, estimatedDurationMs: 36_000, reportReady: false });
+  const late = getScanProgressTarget({ currentStep: 1, elapsedMs: 46_000, estimatedDurationMs: 36_000, reportReady: false });
+  assert.ok(preparing > 0 && preparing < 24);
+  assert.ok(early > 25 && early < late);
+  assert.equal(late, 49);
+  assert.equal(getScanProgressTarget({ currentStep: 2, elapsedMs: 46_000, estimatedDurationMs: 36_000, reportReady: false }), 74);
+  const reporting = getScanProgressTarget({ currentStep: 3, elapsedMs: 46_000, estimatedDurationMs: 36_000, reportReady: false });
+  assert.ok(reporting > 75 && reporting < 96);
+  assert.equal(getScanProgressTarget({ currentStep: 3, elapsedMs: 90_000, estimatedDurationMs: 36_000, reportReady: false }), 96);
 });
 
 test("scan progress communicates a conservative milestone estimate", () => {

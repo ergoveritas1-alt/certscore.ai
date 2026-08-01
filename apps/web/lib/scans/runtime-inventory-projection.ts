@@ -61,6 +61,20 @@ export type PreConsentDataFlow = {
   };
 };
 
+export type SanitizedRequestEvidenceRow = {
+  cookieNamesSent: string[];
+  essentiality: "non_essential" | "unknown";
+  hostname: string | null;
+  identifierParameterNames: string[];
+  initiatorUrl: string | null;
+  method: string | null;
+  path: string | null;
+  responseCookieNamesSet: string[];
+  responseObserved: boolean;
+  responseStorageAttempted: boolean;
+  vendor: string | null;
+};
+
 export type TrackerInventoryRow = {
   attributionEvidence?: RuntimeVendorAttributionEvidence | null;
   category: string;
@@ -112,6 +126,7 @@ export type TrackerInventoryGroupRow = {
   entityRelationship: InventoryEntityRelationship;
   preConsent: boolean;
   rawProducts: string[];
+  requestDetails?: SanitizedRequestEvidenceRow[];
   regulatoryRelevance: string[];
   attributionSignatures: string[];
   priority: ConsentReviewPriority;
@@ -140,6 +155,7 @@ export type InventoryGroupRow = {
   purpose: string;
   purposes: string[];
   rawProducts: string[];
+  requestDetails?: SanitizedRequestEvidenceRow[];
   regulatoryRelevance: string[];
   requestCount: number | null;
   setByThirdPartyScript: boolean;
@@ -207,6 +223,37 @@ function getOptionalString(record: Record<string, unknown>, key: string) {
 function getOptionalNumber(record: Record<string, unknown>, key: string) {
   const value = record[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function sanitizedEvidenceUrl(value: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return `${url.origin}${url.pathname}`.slice(0, 500);
+  } catch {
+    return null;
+  }
+}
+
+export function buildSanitizedRequestEvidenceRows(
+  hybridRuntimeEvidence: Record<string, unknown> | null | undefined
+): SanitizedRequestEvidenceRow[] {
+  return getObjectArray(
+    hybridRuntimeEvidence?.requestPurposeClassificationConfidence ??
+    hybridRuntimeEvidence?.request_purpose_classification_confidence
+  ).slice(0, 50).map((row) => ({
+    cookieNamesSent: getRecordStringArray(row, "cookieNamesSent").slice(0, 24),
+    essentiality: row.essentiality === "non_essential" ? "non_essential" : "unknown",
+    hostname: normalizeInventoryHostname(getOptionalString(row, "hostname") ?? getOptionalString(row, "requestUrl")),
+    identifierParameterNames: getRecordStringArray(row, "identifierParameterNames").slice(0, 24),
+    initiatorUrl: sanitizedEvidenceUrl(getOptionalString(row, "initiatorUrl")),
+    method: getOptionalString(row, "method"),
+    path: getOptionalString(row, "pathSample"),
+    responseCookieNamesSet: getRecordStringArray(row, "responseCookieNamesSet").slice(0, 24),
+    responseObserved: row.responseObserved === true,
+    responseStorageAttempted: row.responseStorageAttempted === true,
+    vendor: getOptionalString(row, "vendor") ?? getOptionalString(row, "vendorName"),
+  }));
 }
 
 export function buildPreConsentDataFlows(
@@ -1259,6 +1306,7 @@ export function buildRuntimeInventoryGroupRows(input: {
   cookieRows: RuntimeCookieEvidenceRow[];
   dataFlows?: PreConsentDataFlow[];
   firstPartyDomain?: string | null;
+  requestRows?: SanitizedRequestEvidenceRow[];
   trackerRows: TrackerInventoryRow[];
 }) {
   const groupedCookieRows = buildCookieInventoryGroupRows(input.cookieRows, { firstPartyDomain: input.firstPartyDomain });
@@ -1283,6 +1331,9 @@ export function buildRuntimeInventoryGroupRows(input: {
         preConsent: row.cookieDetails.some((detail) => detail.observedBeforeConsent === true),
         purposes: [row.purpose],
         rawProducts: [owner?.product ?? row.vendor],
+        requestDetails: (input.requestRows ?? []).filter((request) =>
+          request.vendor === row.vendor || Boolean(owner?.entity && findRuntimeVendorLabelOwner(request.vendor)?.entity === owner.entity)
+        ),
         regulatoryRelevance: owner?.regulatoryRelevance ?? [],
         requestCount: null,
         type: "cookie",
@@ -1303,6 +1354,11 @@ export function buildRuntimeInventoryGroupRows(input: {
         ),
         purposes: [row.purpose],
         rawProducts: [owner?.product ?? row.rawProducts[0] ?? row.vendor],
+        requestDetails: (input.requestRows ?? []).filter((request) =>
+          request.vendor === row.vendor ||
+          row.domains.includes(request.hostname ?? "") ||
+          Boolean(owner?.entity && findRuntimeVendorLabelOwner(request.vendor)?.entity === owner.entity)
+        ),
         setByThirdPartyScript: false,
         type: "tracker",
         vendor: owner?.vendor ?? row.vendor,
@@ -1363,6 +1419,9 @@ export function buildRuntimeInventoryGroupRows(input: {
       purpose: purposes.length === 1 ? purposes[0] ?? "Review" : "Multiple purposes",
       purposes,
       rawProducts: uniqueStrings([...existing.rawProducts, ...candidate.rawProducts]),
+      requestDetails: [...(existing.requestDetails ?? []), ...(candidate.requestDetails ?? [])].filter((detail, index, all) =>
+        all.findIndex((item) => JSON.stringify(item) === JSON.stringify(detail)) === index
+      ),
       regulatoryRelevance: uniqueStrings([...existing.regulatoryRelevance, ...candidate.regulatoryRelevance]),
       requestCount: (existing.requestCount ?? 0) + (candidate.requestCount ?? 0) || null,
       setByThirdPartyScript: existing.setByThirdPartyScript || candidate.setByThirdPartyScript,
@@ -1403,15 +1462,18 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
   const browserExtensionRequestRows = buildBrowserExtensionRequestInventoryRows(hybridRuntimeEvidence);
   const trackerRows = browserExtensionRequestRows.length > 0 ? browserExtensionRequestRows : canonicalTrackerRows;
   const dataFlows = buildPreConsentDataFlows(hybridRuntimeEvidence);
+  const requestRows = buildSanitizedRequestEvidenceRows(hybridRuntimeEvidence);
 
   return {
     cookieRows,
     dataFlows,
+    requestRows,
     trackerRows,
     groupedRows: buildRuntimeInventoryGroupRows({
       cookieRows,
       dataFlows,
       firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
+      requestRows,
       trackerRows
     })
   };

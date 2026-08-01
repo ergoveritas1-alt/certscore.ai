@@ -1,14 +1,22 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
+
+export type PolledScanProgress = {
+  reportReady: boolean;
+  stage: "prepare" | "scan" | "review" | "report" | "complete";
+  status: string | null;
+};
 
 type ScanStatusAutoRefreshProps = {
+  onProgress?: (progress: PolledScanProgress) => void;
   pendingBrowserExtensionNormalization?: boolean;
   pendingPostCompletionWork?: boolean;
   reloadOnTerminal?: boolean;
   scanId?: string;
   silent?: boolean;
   status: string;
+  terminalNavigationDelayMs?: number;
 };
 
 export const SCAN_STATUS_POLL_INITIAL_MS = 2_000;
@@ -64,6 +72,28 @@ export function getPolledReadiness(payload: unknown) {
     reportGeneration: typeof reportReadiness?.generation === "string" ? reportReadiness.generation : null,
     reportReady: reportReadiness?.status === "ready",
   };
+}
+
+export function getPolledScanProgress(payload: unknown): PolledScanProgress {
+  const status = getPolledScanStatus(payload);
+  const readiness = getPolledReadiness(payload);
+  const record = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
+  const progress = record?.progress && typeof record.progress === "object" && !Array.isArray(record.progress)
+    ? record.progress as Record<string, unknown>
+    : null;
+  const retainedStage = progress?.stage;
+  const stage = retainedStage === "prepare" || retainedStage === "scan" || retainedStage === "review" ||
+    retainedStage === "report" || retainedStage === "complete"
+    ? retainedStage
+    : readiness.reportReady
+      ? "complete"
+      : status === "completed" || status === "completed_limited" || status === "processing"
+        ? "review"
+        : status === "running"
+          ? "scan"
+          : "prepare";
+
+  return { reportReady: readiness.reportReady, stage, status };
 }
 
 export function getNavigablePolledScanStatus(
@@ -247,13 +277,19 @@ function recordTerminalDetection(scanId: string, state: ReturnType<ReturnType<ty
 }
 
 export function ScanStatusAutoRefresh({
+  onProgress,
   pendingBrowserExtensionNormalization = false,
   pendingPostCompletionWork = false,
   reloadOnTerminal = true,
   scanId,
   silent = false,
   status,
+  terminalNavigationDelayMs = 0,
 }: ScanStatusAutoRefreshProps) {
+  const onProgressRef = useRef(onProgress);
+  useEffect(() => {
+    onProgressRef.current = onProgress;
+  }, [onProgress]);
   const shouldRefresh = shouldAutoRefreshScanStatus({
     pendingBrowserExtensionNormalization,
     pendingPostCompletionWork,
@@ -289,6 +325,7 @@ export function ScanStatusAutoRefresh({
         });
         if (!response.ok) return null;
         const payload = await response.json() as unknown;
+        onProgressRef.current?.(getPolledScanProgress(payload));
         terminalReportGeneration = getPolledReadiness(payload).reportGeneration;
         return getNavigablePolledScanStatus(payload, {
           pendingBrowserExtensionNormalization,
@@ -307,7 +344,11 @@ export function ScanStatusAutoRefresh({
         })) return;
         terminalNavigations.add(scanId);
         recordTerminalDetection(scanId, poller.getState());
-        window.location.reload();
+        if (terminalNavigationDelayMs > 0) {
+          window.setTimeout(() => window.location.reload(), terminalNavigationDelayMs);
+        } else {
+          window.location.reload();
+        }
       },
     });
     const entry = { poller, references: 1 };
@@ -321,7 +362,7 @@ export function ScanStatusAutoRefresh({
         poller.stop();
       }
     };
-  }, [pendingBrowserExtensionNormalization, pendingPostCompletionWork, reloadOnTerminal, scanId, shouldRefresh, status]);
+  }, [pendingBrowserExtensionNormalization, pendingPostCompletionWork, reloadOnTerminal, scanId, shouldRefresh, status, terminalNavigationDelayMs]);
 
   if (!shouldRefresh || silent) return null;
   const statusLabel = pendingBrowserExtensionNormalization

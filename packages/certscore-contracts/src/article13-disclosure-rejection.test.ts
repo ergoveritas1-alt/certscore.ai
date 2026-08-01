@@ -88,6 +88,46 @@ test("processing-linked legal obligations qualify as legal-basis evidence", () =
   );
 });
 
+test("mixed broad policy context cannot combine unrelated paragraphs into legal-basis evidence", () => {
+  const broadContext = [
+    "Communications. We use your personal information to communicate with you by email, telephone, or customer-service channels.",
+    "Purposes for which we seek your consent include sending optional marketing messages.",
+    "Comply with legal obligations. We retain transaction records for as long as required by law."
+  ].join(" ");
+
+  assert.equal(hasSubstantiveLegalBasisEvidence(broadContext), false);
+  for (const mode of rejectionModes) {
+    assert.equal(
+      article13DisclosureRejectReason(broadContext, "legal_basis", { mode }),
+      "insufficient_row_specific_terms",
+    );
+  }
+});
+
+test("consent-request language does not substitute for a directly framed legal basis", () => {
+  const consentRequestText =
+    "We use your personal information to communicate with you in relation to our services via phone, email, or chat. Purposes for which we seek your consent. We may also ask for your consent to use your personal information for a specific purpose that we communicate to you.";
+
+  assert.equal(hasSubstantiveLegalBasisEvidence(consentRequestText), false);
+  for (const mode of rejectionModes) {
+    assert.equal(
+      article13DisclosureRejectReason(consentRequestText, "legal_basis", { mode }),
+      "insufficient_row_specific_terms",
+    );
+  }
+});
+
+test("explicit consent reliance remains usable legal-basis evidence", () => {
+  const directConsentBasis =
+    "We process your personal data with your consent when you request optional personalized services.";
+
+  assert.equal(hasSubstantiveLegalBasisEvidence(directConsentBasis), true);
+  assert.equal(
+    article13DisclosureRejectReason(directConsentBasis, "legal_basis", { mode: "retained_report" }),
+    null,
+  );
+});
+
 test("named-controller purpose statements qualify as processing-purposes evidence", () => {
   assert.equal(
     hasSubstantiveProcessingPurposesEvidence(

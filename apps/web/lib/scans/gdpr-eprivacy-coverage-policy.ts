@@ -2660,34 +2660,36 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
   if (preconsentTrackingDetected) {
     return makeOutcome(
       "pre_consent_third_party_tracking",
-      concreteTrackerEvidenceRetained ? "Review signal" : "Insufficient evidence",
+      concreteTrackerEvidenceRetained ? "Not confirmed" : "Insufficient evidence",
       concreteTrackerEvidenceRetained
         ? highRiskPurposeRetained
-          ? "Concrete pre-consent tracker vendor or request evidence was retained, but no eligible unified tracking finding was projected for this row. Manual review should confirm whether the retained request sequence supports a GDPR/ePrivacy tracking gap."
-          : "Pre-consent 3rd party timing evidence was retained, but the retained purpose mix is limited to lower-risk or unresolved infrastructure categories. Manual review should confirm essentiality without treating the evidence as adtech or retargeting by itself."
-        : "Pre-consent non-essential tracking evidence was retained, but no eligible unified tracking finding was projected for this row.",
+          ? "Pre-consent tracker inventory was retained, but no promotion-eligible normalized concern and unified tracking finding established a concrete tracking event and consent sequence. The inventory remains neutral review context."
+          : "Pre-consent request timing inventory was retained, but its purpose mix is limited to lower-risk or unresolved infrastructure categories. It does not establish adtech, retargeting, or a consent gap by itself."
+        : "A pre-consent tracking summary flag was retained without promotion-grade request, purpose, vendor, and consent-sequence evidence. Tracking was not confirmed.",
       [
         firstObservedMsRef,
         "Evidence: pre-consent tracking runtime signal",
         trackerVendorCount > 0 ? `Pre-consent tracker vendors: ${trackerVendorCount}` : null
       ].filter((value): value is string => Boolean(value)),
       {
-        missingOrIncompleteSourceSignals: concreteTrackerEvidenceRetained
-          ? []
-          : [
-              sourceGap(
-                "CertScore.unifiedFindings.preConsentTrackingFinding",
-                "eligible projected unified finding when retained pre-consent tracking evidence satisfies policy gates",
-                "missing",
-                "Required to classify retained pre-consent tracker observations as a canonical gap.",
-                "CertScore.ai"
-              )
-            ],
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "CertScore.unifiedFindings.preConsentTrackingFinding",
+            "eligible projected unified finding when retained pre-consent tracking evidence satisfies policy gates",
+            "missing",
+            "Required to classify retained pre-consent tracker observations as a canonical tracking finding.",
+            "CertScore.ai"
+          )
+        ],
         retainedEvidence: {
           concreteTrackerEvidenceRetained,
           ...preconsentTimingEvidence,
           preconsentTrackingDetected,
           preconsentPurposeRiskMix,
+          trackingEvidenceAssessment: {
+            result: "not_confirmed_without_promotion_grade_unified_finding",
+            scoreEffect: "none"
+          },
           trackerEvidenceUrls: compactArray(trackerEvidenceUrls, 3),
           trackerVendorCount,
           trackerVendors: compactArray(trackerVendors, 5)

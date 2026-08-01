@@ -17,6 +17,7 @@ import { requirePlatformAdminContext } from "./platform-admin";
 import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
 import { shouldUseLocalV2DagScanTool } from "../scans/local-v2-dag-scan-config";
 import { withServerTiming } from "../performance/log-server-timing";
+import { projectCanonicalSurfaceSummary } from "../../lib/scans/canonical-surface-summary";
 
 export type AdminPulseRequestStatus =
   | "queued"
@@ -347,7 +348,12 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     snapshotRuntimeAssessment: asRecord(row.scan_no_go_assessment),
     snapshotVisualAccessReview: asRecord(row.visual_access_review)
   });
-  const score = noGo.isNoGo ? null : retainedScore;
+  const canonicalSummary = projectCanonicalSurfaceSummary({
+    fallbackScoreAssessment: retainedScore === null ? null : { scoreValue: retainedScore },
+    noGo: noGo.isNoGo,
+    snapshot
+  });
+  const score = canonicalSummary.score;
   return {
     adminSummaryGeneratedAt: timestampString(row.admin_summary_generated_at),
     accessPostureClass: typeof row.access_posture_class === "string" ? row.access_posture_class : null,
@@ -361,14 +367,8 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     noGoFlag: noGo.isNoGo,
     noGoReason: noGo.reason,
     noGoSource: noGo.source,
-    cmpVendorName: noGo.isNoGo ? null : typeof snapshot?.cmp_vendor_name === "string" ? snapshot.cmp_vendor_name : typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null,
-    consentAro: !noGo.isNoGo && row.consent_evidence_status !== null && row.consent_evidence_status !== undefined
-      ? {
-          accept: typeof row.consent_accept_observed === "boolean" ? row.consent_accept_observed : null,
-          reject: typeof row.consent_reject_observed === "boolean" ? row.consent_reject_observed : null,
-          options: typeof row.consent_options_observed === "boolean" ? row.consent_options_observed : null
-        }
-      : null,
+    cmpVendorName: canonicalSummary.cmpVendorName,
+    consentAro: canonicalSummary.consentAro,
     createdAt: timestampString(row.created_at) ?? String(row.created_at),
     detail: getRequestContextString(requestContext, "detail"),
     elapsedSeconds:
@@ -395,9 +395,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     primaryLanguage: primaryLanguage?.locale ?? null,
     primaryLanguageConfidence: primaryLanguage?.confidence ?? null,
     primaryLanguageSource: primaryLanguage?.source ?? null,
-    privacyPolicyPresent: noGo.isNoGo
-      ? null
-      : typeof snapshot?.privacy_policy_present === "boolean" ? snapshot.privacy_policy_present : typeof row.privacy_policy_present === "boolean" ? row.privacy_policy_present : null,
+    privacyPolicyPresent: canonicalSummary.privacyPolicyPresent,
     resolutionMode: typeof row.resolution_mode === "string" ? row.resolution_mode : null,
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
@@ -427,16 +425,15 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     summaryJsonDownloads: typeof row.summary_json_downloads === "number" ? row.summary_json_downloads : 0,
     evidenceJsonDownloads: typeof row.evidence_json_downloads === "number" ? row.evidence_json_downloads : 0,
     topFindingIds: storedTopFindingIds,
-    topFindingCount:
+    topFindingCount: canonicalSummary.topFindingCount ?? (
       score === null
         ? null
-        : typeof snapshot?.top_finding_count === "number"
-        ? snapshot.top_finding_count
-        : (typeof row.top_finding_count === "number"
-        ? row.top_finding_count
-        : storedTopFindingIds.length > 0
-          ? storedTopFindingIds.length
-          : null)
+        : typeof row.top_finding_count === "number"
+          ? row.top_finding_count
+          : storedTopFindingIds.length > 0
+            ? storedTopFindingIds.length
+            : null
+    )
   };
 }
 
@@ -448,9 +445,6 @@ async function applyConfiguredScores(items: AdminPulseRequestListItem[]) {
     if (!item.scanId) return item;
     if (item.noGoFlag) {
       return { ...item, score: null, topFindingCount: null };
-    }
-    if (item.score !== null) {
-      return item;
     }
     const assessment = legacyScores.get(item.scanId) ?? null;
     if (!assessment) return item;

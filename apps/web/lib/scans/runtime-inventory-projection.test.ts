@@ -4,6 +4,7 @@ import {
   buildBrowserExtensionRequestInventoryRows,
   buildReportSurfaceVendorProjection,
   buildRuntimeInventoryGroupRows,
+  buildSanitizedRequestEvidenceRows,
   buildTrackerInventoryGroupRows,
   suppressUnsupportedCmpAliasRows,
   buildTrackerInventoryRows,
@@ -14,6 +15,38 @@ import {
   isInventoryDisplayHostname,
   isTimedPreConsentInventoryRow,
 } from "./runtime-inventory-projection";
+
+test("projects bounded request-level evidence without retaining parameter or cookie values", () => {
+  const rows = buildSanitizedRequestEvidenceRows({
+    requestPurposeClassificationConfidence: [{
+      cookieNamesSent: ["session-id"],
+      essentiality: "unknown",
+      hostname: "ads.example.test",
+      identifierParameterNames: ["client_id"],
+      initiatorUrl: "https://cdn.example.test/app.js?secret=value",
+      method: "POST",
+      pathSample: "/collect",
+      responseCookieNamesSet: ["ad-id"],
+      responseObserved: true,
+      responseStorageAttempted: true,
+      vendor: "Example Ads",
+    }],
+  });
+
+  assert.deepEqual(rows, [{
+    cookieNamesSent: ["session-id"],
+    essentiality: "unknown",
+    hostname: "ads.example.test",
+    identifierParameterNames: ["client_id"],
+    initiatorUrl: "https://cdn.example.test/app.js",
+    method: "POST",
+    path: "/collect",
+    responseCookieNamesSet: ["ad-id"],
+    responseObserved: true,
+    responseStorageAttempted: true,
+    vendor: "Example Ads",
+  }]);
+});
 
 test("projects bounded BX01 request inventory without treating unresolved hosts as violations", () => {
   const rows = buildBrowserExtensionRequestInventoryRows({

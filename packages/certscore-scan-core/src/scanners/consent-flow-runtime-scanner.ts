@@ -1977,6 +1977,8 @@ async function runScenario(
         cookieParty: party,
         vendorAssociated: /^_ga|_gid|_fbp|_clck/i.test(cookie.name),
         cookiePurpose: knownCookiePurpose(cookie.name),
+        cookieEssentiality: "unknown",
+        cookieEssentialityReasonCodes: ["historical_consent_flow_fixture_not_reclassified"],
         cookieClassificationBasis: ["browser_snapshot"],
         operation: "browser_snapshot",
         valueRedacted: true,
