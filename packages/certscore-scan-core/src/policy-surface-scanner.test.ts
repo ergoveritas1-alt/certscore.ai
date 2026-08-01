@@ -13,6 +13,7 @@ import {
 } from "@certscore/contracts";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
+  assessPolicyDocumentSubstance,
   canonicalWwwPolicyUrlVariant,
   classifyPolicyDocumentOwnership,
   countRecoveredPolicySurfaceObservations,
@@ -55,6 +56,140 @@ test("removes consent-banner preambles before policy topic extraction", () => {
     stripConsentSurfacePreambleFromPolicyText("Our Privacy Policy explains how we process personal data and your rights."),
     "Our Privacy Policy explains how we process personal data and your rights."
   );
+});
+
+test("localized consent settings shells are not accepted as substantive privacy notices", async () => {
+  const html = `<!doctype html>
+    <html lang="sl">
+      <head><title>Varstvo zasebnosti in piškotkov</title></head>
+      <body>
+        <section class="_iCD-banner js-CD-banner hidden" aria-label="Pasica za nastavitev piškotkov" data-controller="cookie-banner">
+          Spletna stran uporablja piškotke v skladu z našo politiko varovanja zasebnosti.
+          <button>Nastavitve</button><button>Naloži samo nujne</button><button>Naloži vse</button>
+        </section>
+        <main><h1>Varstvo zasebnosti in piškotkov</h1><button>Spremeni nastavitve</button></main>
+      </body>
+    </html>`;
+  const resolved = await resolvePolicyVisibleText({
+    html,
+    baseUrl: "https://university.example/politika-varstva-zasebnosti-in-piskotkov",
+    surfaceType: "privacy_policy",
+    timeoutMs: 500,
+  });
+  const assessment = assessPolicyDocumentSubstance({
+    surfaceType: "privacy_policy",
+    title: "Varstvo zasebnosti in piškotkov",
+    text: resolved,
+  });
+
+  assert.doesNotMatch(resolved, /Naloži vse|Naloži samo nujne/);
+  assert.equal(assessment.matchesExpectedSurface, false);
+  assert.equal(assessment.reasonCode, "consent_settings_shell");
+});
+
+test("substantive Slovenian policy text survives consent-shell exclusion", async () => {
+  const substantiveText = Array.from({ length: 18 }, () => [
+    "Upravljavec osebnih podatkov objavlja kontaktne podatke upravljavca in pooblaščene osebe za varstvo podatkov.",
+    "Osebne podatke obdelujemo za naslednje namene in opisujemo pravno podlago za obdelavo osebnih podatkov.",
+    "Navedeni so prejemniki osebnih podatkov, obdobje hrambe osebnih podatkov in pravice posameznika na katerega se nanašajo osebni podatki.",
+    "Opisujemo mednarodne prenose osebnih podatkov in pravico do vložitve pritožbe pri nadzornem organu.",
+  ].join(" ")).join(" ");
+  const html = `<!doctype html><html lang="sl"><body>
+    <section class="cookie-banner hidden"><button>Nastavitve</button><button>Naloži samo nujne</button><button>Naloži vse</button></section>
+    <main><h1>Politika zasebnosti</h1><p>${substantiveText}</p></main>
+  </body></html>`;
+  const resolved = await resolvePolicyVisibleText({
+    html,
+    baseUrl: "https://university.example/politika-zasebnosti",
+    surfaceType: "privacy_policy",
+    timeoutMs: 500,
+  });
+  const assessment = assessPolicyDocumentSubstance({
+    surfaceType: "privacy_policy",
+    title: "Politika zasebnosti",
+    text: resolved,
+  });
+
+  assert.ok(resolved.length >= 2_500);
+  assert.doesNotMatch(resolved, /Naloži vse|Naloži samo nujne/);
+  assert.equal(assessment.matchesExpectedSurface, true);
+  assert.equal(assessment.reasonCode, "substantive_topic_match");
+});
+
+test("hidden multilingual policy accordions are not discarded as consent chrome", async () => {
+  const accordionText = Array.from({ length: 12 }, () => [
+    "Upravljavec osebnih podatkov je univerza, kontakt za varstvo podatkov pa je naveden v tem obvestilu.",
+    "Opisujemo namene obdelave, pravno podlago, prejemnike, obdobje hrambe in pravice posameznika.",
+    "Opisujemo tudi mednarodne prenose in pravico do pritožbe pri nadzornem organu.",
+  ].join(" ")).join(" ");
+  const resolved = await resolvePolicyVisibleText({
+    html: `<!doctype html><html lang="sl"><body>
+      <main><h1>Politika zasebnosti</h1></main>
+      <section class="accordion-panel hidden" aria-hidden="true">
+        <h2>Podrobnosti politike zasebnosti</h2><p>${accordionText}</p>
+      </section>
+    </body></html>`,
+    baseUrl: "https://university.example/politika-zasebnosti",
+    surfaceType: "privacy_policy",
+    timeoutMs: 500,
+  });
+
+  assert.match(resolved, /Upravljavec osebnih podatkov/);
+  assert.ok(resolved.length >= 2_500);
+});
+
+test("scanner retains a localized settings shell as fetched but insufficient policy evidence", async () => {
+  const server = createServer((request, response) => {
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    if (request.url === "/politika-varstva-zasebnosti-in-piskotkov") {
+      response.end(`<!doctype html><html lang="sl">
+        <head><title>Varstvo zasebnosti in piškotkov</title></head><body>
+        <section class="_iCD-banner js-CD-banner hidden" aria-label="Pasica za nastavitev piškotkov" data-controller="cookie-banner">
+          Spletna stran uporablja piškotke v skladu z našo politiko varovanja zasebnosti.
+          <button>Nastavitve</button><button>Naloži samo nujne</button><button>Naloži vse</button>
+        </section>
+        <main><h1>Varstvo zasebnosti in piškotkov</h1><button>Spremeni nastavitve</button></main>
+        </body></html>`);
+      return;
+    }
+    response.end(`<!doctype html><html lang="sl"><body><footer>
+      <a href="/politika-varstva-zasebnosti-in-piskotkov">Politika zasebnosti</a>
+    </footer></body></html>`);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const url = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-slovenian-shell-"));
+  try {
+    const result = await policySurfaceScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 6_000,
+      artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl?.includes("politika-varstva-zasebnosti-in-piskotkov")
+    );
+
+    assert.equal(privacy?.linkObservationState, "observed");
+    assert.equal(privacy?.documentFetchState, "fetched");
+    assert.equal(privacy?.documentEvaluationState, "insufficient");
+    assert.equal(privacy?.status, "failed");
+    assert.equal(privacy?.fetchFailureReason, "consent_settings_shell");
+    assert.deepEqual(privacy?.gdprTransparencyTopicCandidates, []);
+    assert.deepEqual(privacy?.article13DisclosureSignals, []);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve())
+    );
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("policySurfaceScanner recognizes bounded GDPR notice links from EU/EEA context", () => {
@@ -2347,7 +2482,7 @@ test("policySurfaceScanner records privacy center links without clicking prefere
 test("policySurfaceScanner uses common-path fallback when no homepage policy links exist", async () => {
   await withPolicyScan("policy-no-links", async ({ result, baseUrl }) => {
     const fallback = result.policySurfaceObservations.find((observation) =>
-      observation.discoveryMethod === "nano_assisted_link_classification" &&
+      observation.discoveryMethod === "guessed_common_path" &&
       observation.status === "fetched" &&
       observation.normalizedUrl === `${baseUrl}/privacy`,
     );

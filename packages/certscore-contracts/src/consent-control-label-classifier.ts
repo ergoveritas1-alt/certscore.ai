@@ -184,6 +184,26 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "subscribe and decline", "reject_with_subscription"),
     equivalent("reject", "reject and subscribe", "reject_with_subscription"),
     equivalent("reject", "reject all and subscribe", "reject_with_subscription"),
+    contextual("reject", "reject and pay", {
+      requiresConsentContext: true,
+      variant: "reject_with_payment",
+    }),
+    contextual("reject", "reject all and pay", {
+      requiresConsentContext: true,
+      variant: "reject_with_payment",
+    }),
+    contextual("reject", "decline and pay", {
+      requiresConsentContext: true,
+      variant: "reject_with_payment",
+    }),
+    contextual("reject", "pay and reject", {
+      requiresConsentContext: true,
+      variant: "reject_with_payment",
+    }),
+    contextual("reject", "pay and decline", {
+      requiresConsentContext: true,
+      variant: "reject_with_payment",
+    }),
     equivalent("reject", "use necessary cookies only", "necessary_only"),
     equivalent("reject", "necessary cookies only", "necessary_only"),
     equivalent("reject", "essential cookies only", "necessary_only"),
@@ -1162,7 +1182,7 @@ function termScore(
   return (exact ? 1000 : 500) +
     phrase.length +
     strengthRank(term.strength) * 100 +
-    (term.variant === "reject_with_subscription" ? 200 : 0) +
+    (term.variant === "reject_with_subscription" || term.variant === "reject_with_payment" ? 200 : 0) +
     (contextSatisfied ? 50 : 0);
 }
 

@@ -2319,16 +2319,17 @@ function getConsentPaidDeclinePathChecklistEligibility(input: {
   rawEvidence: Record<string, unknown> | null | undefined;
 }): NormalizedConcernRegulatoryChecklistEligibility | null {
   if (
-    input.originKey !== "consent.paid_decline_path.reject_with_subscription" ||
+    !input.originKey.startsWith("consent.paid_decline_path.") ||
     input.rawEvidence?.consentPaidDeclinePathEvidence !== true
   ) {
     return null;
   }
 
-  return getFirstString(input.rawEvidence, [
+  const paidDeclineState = getFirstString(input.rawEvidence, [
     "consentPaidDeclinePathState",
     "consent_paid_decline_path_state"
-  ]) === "reject_with_subscription"
+  ]);
+  return paidDeclineState === "reject_with_subscription" || paidDeclineState === "reject_with_payment"
     ? "review_signal"
     : "none";
 }

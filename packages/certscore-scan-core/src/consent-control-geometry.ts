@@ -757,7 +757,10 @@ function actionTypeForClassification(
     return "accept_all";
   }
   if (classification.intent === "reject") {
-    if (classification.variant === "reject_with_subscription") {
+    if (
+      classification.variant === "reject_with_subscription" ||
+      classification.variant === "reject_with_payment"
+    ) {
       return "other";
     }
     return "reject_all";

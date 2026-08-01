@@ -1411,6 +1411,7 @@ export const policySurfaceObservationSchema = z.object({
     "navigation_no_response",
     "scan_budget_exhausted",
     "low_quality_access_challenge",
+    "consent_settings_shell",
     "insufficient_policy_text",
     "content_decoding_failed",
     "decompressed_body_too_large",

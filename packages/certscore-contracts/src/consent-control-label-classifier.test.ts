@@ -226,6 +226,19 @@ test("classifies observed English options labels", () => {
   assert.equal(guardianSubscribeReject.intent, "reject");
   assert.equal(guardianSubscribeReject.variant, "reject_with_subscription");
   assert.equal(guardianSubscribeReject.matchedTerm, "reject all and subscribe");
+  const rejectAndPay = classifyConsentControlLabel({
+    label: "Reject and Pay",
+    contextText: "We value your privacy. Accept personalised advertising or reject and pay for access.",
+  });
+  assert.equal(rejectAndPay.intent, "reject");
+  assert.equal(rejectAndPay.variant, "reject_with_payment");
+  assert.equal(rejectAndPay.matchedTerm, "reject and pay");
+  assert.ok(rejectAndPay.reasonCodes.includes("variant_reject_with_payment"));
+  assert.equal(
+    classifyConsentControlLabel({ label: "Reject and Pay" }).intent,
+    "unknown",
+    "payment language requires retained consent context",
+  );
   assert.equal(classifyConsentControlLabel({
     label: "Customise",
     contextText: "We use cookies and partners for personalised advertising.",

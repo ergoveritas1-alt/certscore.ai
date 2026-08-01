@@ -505,6 +505,22 @@ test("does not treat an Italian paid reject-and-subscribe alternative as free re
   assert.equal(artifact.summary.firstLayerReject, false);
 });
 
+test("retains Reject and Pay as a payment-conditioned decline rather than free reject", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-modal="true" aria-label="Privacy choices" style="position: fixed; inset: 60px; padding: 24px; background: white;">
+      <p>We use cookies and personal data for personalised advertising. You may accept, manage your choices, or reject and pay for access.</p>
+      <button>I Accept</button>
+      <button>More Options</button>
+      <button>Reject and Pay</button>
+    </section>
+  `);
+
+  const paidDecline = findCandidate(artifact, "Reject and Pay");
+  assert.equal(paidDecline?.actionType, "other");
+  assert.ok(paidDecline?.classifierReasonCodes.includes("variant_reject_with_payment"));
+  assert.equal(artifact.summary.firstLayerReject, false);
+});
+
 test("captures Spanish Didomi pay-or-consent controls rendered as styled elements", async () => {
   const artifact = await captureFixture(`
     <script src="https://sdk.privacy-center.org/loader.js"></script>

@@ -414,7 +414,8 @@ function classifyVisibleLabels(labels: string[]): {
       output.accept = true;
     } else if (
       classification.intent === "reject" &&
-      classification.variant !== "reject_with_subscription"
+      classification.variant !== "reject_with_subscription" &&
+      classification.variant !== "reject_with_payment"
     ) {
       output.reject = true;
     } else if (classification.intent === "options") {

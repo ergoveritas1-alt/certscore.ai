@@ -43,7 +43,10 @@ function retainedActionType(
 ): ConsentControlAssessmentCandidate["actionType"] {
   if (
     actionType === "reject_all" &&
-    classifierReasonCodes?.includes("variant_reject_with_subscription")
+    (
+      classifierReasonCodes?.includes("variant_reject_with_subscription") ||
+      classifierReasonCodes?.includes("variant_reject_with_payment")
+    )
   ) {
     return "other";
   }
@@ -53,9 +56,13 @@ function retainedActionType(
 function retainedControlVariant(
   classifierReasonCodes: string[] | undefined,
 ): ConsentControlAssessmentCandidate["controlVariant"] {
-  return classifierReasonCodes?.includes("variant_reject_with_subscription")
-    ? "reject_with_subscription"
-    : null;
+  if (classifierReasonCodes?.includes("variant_reject_with_subscription")) {
+    return "reject_with_subscription";
+  }
+  if (classifierReasonCodes?.includes("variant_reject_with_payment")) {
+    return "reject_with_payment";
+  }
+  return null;
 }
 function inspectionChannel(value: string | undefined): ConsentControlAssessmentChannel | null {
   if (value === "page_script_inventory") return "dom_inventory";
@@ -259,7 +266,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           visible: control.visible,
           actionable:
             control.visible === true &&
-            (actionType !== "other" || controlVariant === "reject_with_subscription"),
+            (actionType !== "other" || controlVariant !== null),
           observedAtMs: observationTimestamp(observation),
           documentId: observationDocumentId,
           channels: observation.captureDiagnostics?.completedChannels,

@@ -3112,7 +3112,10 @@ function buildConsentPaidDeclinePathConcerns(
 
   const retainedControls = assessment.evidence
     .filter((evidence) =>
-      evidence.controlVariant === "reject_with_subscription" &&
+      (
+        evidence.controlVariant === "reject_with_subscription" ||
+        evidence.controlVariant === "reject_with_payment"
+      ) &&
       evidence.layer === "first_layer" &&
       evidence.visible === true &&
       evidence.actionable === true
@@ -3129,23 +3132,29 @@ function buildConsentPaidDeclinePathConcerns(
     return [];
   }
 
+  const paidDeclineState = retainedControls.some((control) =>
+    control.controlVariant === "reject_with_subscription"
+  )
+    ? "reject_with_subscription"
+    : "reject_with_payment";
+
   return [
     buildConcernFromSharedInput({
       categoryId: "privacy",
       description:
-        "A typed first-layer decline control was retained as a paid subscription variant rather than a free reject-all control.",
+        "A typed first-layer decline control was retained as a payment-conditioned variant rather than a free reject-all control.",
       domainContext,
       evidence: retainedControls
         .map((control) => control.label)
         .filter((label): label is string => Boolean(label)),
-      observedValue: "reject_with_subscription",
-      originKey: "consent.paid_decline_path.reject_with_subscription",
+      observedValue: paidDeclineState,
+      originKey: `consent.paid_decline_path.${paidDeclineState}`,
       originType: "runtime_artifact",
       rawEvidence: {
         consentControlAssessmentStatus: assessment.assessmentStatus,
         consentControlCoverageStatus: assessment.coverage.status,
         consentPaidDeclinePathEvidence: true,
-        consentPaidDeclinePathState: "reject_with_subscription",
+        consentPaidDeclinePathState: paidDeclineState,
         freeRejectControlState: assessment.controls.reject.state,
         retainedConsentPaidDeclineControls: retainedControls,
         runtimeEvidenceArtifacts: uniqueStrings([

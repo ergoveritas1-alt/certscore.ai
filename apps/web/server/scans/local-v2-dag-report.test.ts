@@ -1072,6 +1072,42 @@ test("observed rendered privacy links remain reportable when document fetch fail
   assert.deepEqual(summary.discoveredPrivacyPolicyUrls, ["https://example.test/privacy"]);
 });
 
+test("localized consent settings shells remain discovered but project as fetched insufficient evidence", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const discoveredSurface = {
+    observationId: "privacy-consent-settings-shell",
+    surfaceType: "privacy_policy",
+    normalizedUrl: "https://example.test/politika-varstva-zasebnosti-in-piskotkov",
+    url: "https://example.test/politika-varstva-zasebnosti-in-piskotkov",
+    discoveryMethod: "footer_link",
+    status: "failed",
+    linkObservationState: "observed",
+    documentFetchState: "fetched",
+    documentEvaluationState: "insufficient",
+    fetchFailureReason: "consent_settings_shell",
+    confidence: 0.98,
+  } as CanonicalEvidenceBundle["policySurfaceObservations"][number];
+  const surfaces = dedupePolicySurfaces([discoveredSurface], "https://example.test/");
+  const summary = summarizePolicySurfaces(surfaces, "example.test", {
+    discoveredPolicySurfaces: [discoveredSurface],
+    primaryLanguage: "sl",
+  });
+
+  assert.equal(summary.privacyPolicyPresent, false);
+  assert.equal(summary.privacyPolicyDiscovered, true);
+  assert.equal(summary.privacyPolicyEvaluationState, "fetched_insufficient");
+  assert.deepEqual(summary.article13DisclosureTypesObserved, []);
+  assert.deepEqual(summary.observedTopics, []);
+  assert.deepEqual(summary.discoveredPrivacyPolicyDetails, [{
+    documentEvaluationState: "insufficient",
+    documentFetchState: "fetched",
+    fetchFailureReason: "consent_settings_shell",
+    linkObservationState: "observed",
+    status: "failed",
+    url: "https://example.test/politika-varstva-zasebnosti-in-piskotkov",
+  }]);
+});
+
 test("policy summary preserves the typed one-hop privacy-index evidence path", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const childSurface = {

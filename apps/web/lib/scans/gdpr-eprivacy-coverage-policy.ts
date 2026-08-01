@@ -1388,7 +1388,7 @@ function getConsentPaidDeclinePathConcern(
 ) {
   return (input.normalizedConcerns ?? []).find((concern) => {
     const rawEvidence = concern.evidenceBundle.rawEvidence;
-    return concern.originKey === "consent.paid_decline_path.reject_with_subscription" &&
+    return concern.originKey.startsWith("consent.paid_decline_path.") &&
       concern.originType === "runtime_artifact" &&
       concern.promotionEligibility === "internal_only" &&
       concern.externalSurfacingEligibility === "audit_only" &&
@@ -3946,10 +3946,15 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     const retainedLabels = retainedControls
       .map((control) => getString(control, ["label"]))
       .filter((label): label is string => Boolean(label));
+    const paymentRequired = retainedControls.some((control) =>
+      getString(control, ["controlVariant", "control_variant"]) === "reject_with_payment"
+    );
     return makeOutcome(
       "reject_all_path_availability",
       "Review signal",
-      "A decline control was observed, but it presented a paid subscription path rather than continued free access without non-essential tracking. This is commonly described as a “consent or pay” model. Whether consent is freely given depends on the surrounding circumstances and cannot be determined from the consent interface alone.",
+      paymentRequired
+        ? "A decline control was observed, but it required payment rather than continued free access without non-essential tracking. This is commonly described as a “consent or pay” model. Whether consent is freely given depends on the surrounding circumstances and cannot be determined from the consent interface alone."
+        : "A decline control was observed, but it presented a paid subscription path rather than continued free access without non-essential tracking. This is commonly described as a “consent or pay” model. Whether consent is freely given depends on the surrounding circumstances and cannot be determined from the consent interface alone.",
       uniqueStrings([
         ...paidDeclinePathConcern.evidenceBundle.runtimeArtifacts,
         ...retainedLabels.map((label) => `Observed control: ${label}`)
@@ -6543,6 +6548,13 @@ function privacyPolicyDiscoveryLimitation(
       explanation: `A privacy-policy surface was discovered, but the fetch failed, so ${disclosureLabel.toLowerCase()} could not be evaluated.`,
       evidence: "Evidence limitation: privacy policy discovered but fetch failed",
       observed: "discovered_fetch_failed",
+    };
+  }
+  if (state === "fetched_insufficient") {
+    return {
+      explanation: `A privacy-policy surface was discovered and fetched, but the retained content was insufficient to evaluate ${disclosureLabel.toLowerCase()}.`,
+      evidence: "Evidence limitation: privacy policy fetched but retained content was insufficient",
+      observed: "fetched_insufficient",
     };
   }
   if (state === "discovered_not_evaluated") {

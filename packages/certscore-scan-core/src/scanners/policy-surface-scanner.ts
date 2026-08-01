@@ -1,6 +1,7 @@
 import {
   type ArtifactRef,
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
+  classifyConsentSurfaceText,
   classifyGdprTransparencyTopics,
   classifyPrivacySurface,
   hasSubstantiveProcessingPurposesEvidence,
@@ -64,6 +65,7 @@ export const POLICY_HOMEPAGE_FETCH_TIMEOUT_MS = 5_000;
 const MAX_EXCERPT_CHARS = 6_000;
 const MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS = 40_000;
 const MIN_SUBSTANTIVE_POLICY_TEXT_CHARS = 2_500;
+const MAX_CONSENT_SETTINGS_SHELL_TEXT_CHARS = 120;
 const MAX_CANONICAL_POLICY_LINK_FETCHES = 2;
 const MAX_POLICY_SURFACE_TEXT_ARTIFACT_CHARS = 256_000;
 const MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS = 1_000_000;
@@ -1920,11 +1922,12 @@ async function processPolicyCandidate({
       secondaryCandidates: [],
     };
   }
-  if (!textQuality.usable || !policyDocumentMatchesExpectedSurface({
+  const documentSubstance = assessPolicyDocumentSubstance({
     surfaceType: effectiveCandidate.deterministicSurfaceType,
     text: visibleText,
     title,
-  })) {
+  });
+  if (!textQuality.usable || !documentSubstance.matchesExpectedSurface) {
     const childSelection = await selectOneHopPolicyIndexChildren({
       input,
       indexCandidate: effectiveCandidate,
@@ -1943,7 +1946,10 @@ async function processPolicyCandidate({
         httpStatus: fetched.status,
         finalUrl: fetchedFinalUrl,
         redirectChain: policyFetchRedirectChain(fetched),
-        fetchFailureReason: "insufficient_policy_text",
+        fetchFailureReason:
+          documentSubstance.reasonCode === "consent_settings_shell"
+            ? "consent_settings_shell"
+            : "insufficient_policy_text",
         title,
         textExcerpt: boundedExcerpt(visibleText, []),
         confidence: Math.max(0.35, Math.min(0.55, candidate.assisted?.confidence ?? candidate.deterministicScore)),
@@ -2135,6 +2141,31 @@ export function policyDocumentMatchesExpectedSurface(input: {
   text: string;
   title?: string;
 }) {
+  return assessPolicyDocumentSubstance(input).matchesExpectedSurface;
+}
+
+export type PolicyDocumentSubstanceAssessment = {
+  matchesExpectedSurface: boolean;
+  reasonCode:
+    | "consent_settings_shell"
+    | "multilingual_policy_reviewable"
+    | "obvious_navigation_shell"
+    | "substantive_privacy_signals"
+    | "substantive_topic_match"
+    | "surface_specific_signal"
+    | "unrestricted_surface";
+};
+
+/**
+ * Separates an observed privacy-looking link from the substance of the fetched
+ * document. This consumes canonical multilingual consent and GDPR topic
+ * classifiers and deliberately does not create findings or policy credit.
+ */
+export function assessPolicyDocumentSubstance(input: {
+  surfaceType: PolicySurfaceObservation["surfaceType"];
+  text: string;
+  title?: string;
+}): PolicyDocumentSubstanceAssessment {
   const normalized = normalizeWhitespace(`${input.title ?? ""}\n${input.text}`);
   const obviousNavigationShellSignals = [
     /\bexplore (?:our|the)\b/i,
@@ -2152,23 +2183,51 @@ export function policyDocumentMatchesExpectedSurface(input: {
       /\b(?:your privacy rights|right to access|right to delete|data controller|legal basis|retention period)\b/i,
       /\b(?:privacy policy|privacy notice|data protection notice)\b/i,
     ].filter((pattern) => pattern.test(normalized)).length;
-    if (topicMatches > 0 || substantivePrivacySignals >= 2) {
-      return true;
+    if (topicMatches > 0) {
+      return { matchesExpectedSurface: true, reasonCode: "substantive_topic_match" };
+    }
+    if (substantivePrivacySignals >= 2) {
+      return { matchesExpectedSurface: true, reasonCode: "substantive_privacy_signals" };
+    }
+    const consentSurface = classifyConsentSurfaceText({ text: normalized });
+    const consentControlIntentObserved = hasCanonicalConsentControlIntent(consentSurface);
+    if (
+      normalized.length < MAX_CONSENT_SETTINGS_SHELL_TEXT_CHARS &&
+      consentControlIntentObserved &&
+      (
+        consentSurface.likelyPresent ||
+        consentSurface.recoveryHintObserved
+      )
+    ) {
+      return { matchesExpectedSurface: false, reasonCode: "consent_settings_shell" };
     }
     // This is a mismatch guard, not a second policy classifier. Retained
     // multilingual or unusually-worded policy text should remain reviewable
     // unless the fetched document is clearly a commercial/navigation shell.
-    return obviousNavigationShellSignals < 2;
+    return obviousNavigationShellSignals < 2
+      ? { matchesExpectedSurface: true, reasonCode: "multilingual_policy_reviewable" }
+      : { matchesExpectedSurface: false, reasonCode: "obvious_navigation_shell" };
   }
   if (input.surfaceType === "cookie_policy") {
     const cookieSignal = /\b(?:cookie|browser storage|local storage|tracking technolog)\b/i.test(normalized);
-    return cookieSignal || obviousNavigationShellSignals < 2;
+    return cookieSignal || obviousNavigationShellSignals < 2
+      ? { matchesExpectedSurface: true, reasonCode: "surface_specific_signal" }
+      : { matchesExpectedSurface: false, reasonCode: "obvious_navigation_shell" };
   }
   if (input.surfaceType === "terms") {
     const termsSignal = /\b(?:terms of (?:use|service)|conditions of (?:use|service)|agreement)\b/i.test(normalized);
-    return termsSignal || obviousNavigationShellSignals < 2;
+    return termsSignal || obviousNavigationShellSignals < 2
+      ? { matchesExpectedSurface: true, reasonCode: "surface_specific_signal" }
+      : { matchesExpectedSurface: false, reasonCode: "obvious_navigation_shell" };
   }
-  return true;
+  return { matchesExpectedSurface: true, reasonCode: "unrestricted_surface" };
+}
+
+function hasCanonicalConsentControlIntent(input: { reasonCodes: readonly string[] }) {
+  return input.reasonCodes.some((reasonCode) =>
+    reasonCode === "single_canonical_control_intent_matched" ||
+    reasonCode === "multiple_canonical_control_intents_matched"
+  );
 }
 
 function shouldTryRenderedPolicyDocumentFetch(input: {
@@ -3277,10 +3336,15 @@ function commonPathCandidatesFor(
   localeHints: SupportedPrivacyEvidenceLocale[] = [],
 ): PolicySurfaceCandidate[] {
   const paths = commonPolicyPathsFor(baseUrl, localeHints);
+  const localeHintedPaths = new Set(localeHints.flatMap(privacySurfacePathsForLocale));
+  const primaryLocalePrivacyPaths = new Set(localeHints.flatMap((locale) =>
+    privacySurfacePathsForLocale(locale).slice(0, 1)
+  ));
   return paths.map((path, offset) => {
     const normalizedUrl = normalizeUrl(path, baseUrl) ?? baseUrl;
     const linkText = commonPolicyPathLabel(path);
     const deterministic = classifyCommonPathSurface(linkText, normalizedUrl);
+    const classifierFields = classifierCandidateFields(deterministic);
     return {
       candidateId: `policy_candidate_${startIndex + offset}`,
       url: path,
@@ -3295,7 +3359,12 @@ function commonPathCandidatesFor(
       deterministicSurfaceType: deterministic.surfaceType,
       deterministicScore: deterministic.score - 0.15,
       deterministicKeywordMatches: deterministic.keywords,
-      ...classifierCandidateFields(deterministic),
+      ...classifierFields,
+      deterministicClassifierReasonCodes: uniqueStrings([
+        ...classifierFields.deterministicClassifierReasonCodes,
+        ...(localeHintedPaths.has(path) ? ["common_path_locale_hint"] : []),
+        ...(primaryLocalePrivacyPaths.has(path) ? ["common_path_primary_locale_privacy"] : []),
+      ]),
       discoveryMethod: "guessed_common_path" as const,
     };
   }).filter((candidate) => candidate.deterministicScore > 0.2);
@@ -3599,13 +3668,13 @@ function commonPathCandidateKey(value: string): string {
 
 function commonPathPriority(candidate: PolicySurfaceCandidate): number {
   const path = safeUrlPath(candidate.normalizedUrl);
-  if (/\/global\/[^/]+\/legal\/privacy-cookie-statement\/?$/.test(path)) {
+  if (candidate.deterministicClassifierReasonCodes.includes("common_path_primary_locale_privacy")) {
     return 0;
   }
-  if (/\/legal\/privacy-cookie-statement\/?$/.test(path)) {
+  if (path === "/privacy" || path === "/privacy/") {
     return 1;
   }
-  if (path === "/privacy" || path === "/privacy/") {
+  if (path === "/datenschutz" || path === "/datenschutz/") {
     return 2;
   }
   if (path === "/privacy-policy" || path === "/privacy-policy/") {
@@ -3613,6 +3682,15 @@ function commonPathPriority(candidate: PolicySurfaceCandidate): number {
   }
   if (path === "/privacy-notice" || path === "/privacy-notice/") {
     return 4;
+  }
+  if (candidate.deterministicClassifierReasonCodes.includes("common_path_locale_hint")) {
+    return 5;
+  }
+  if (/\/global\/[^/]+\/legal\/privacy-cookie-statement\/?$/.test(path)) {
+    return 5;
+  }
+  if (/\/legal\/privacy-cookie-statement\/?$/.test(path)) {
+    return 5;
   }
   if (/\/help\/articles\/privacy-hub-home\/?$/.test(path) || /\/poufnosc\/?$/.test(path)) {
     return 4;
@@ -3677,7 +3755,16 @@ function policyCandidateQualityScore(candidate: PolicySurfaceCandidate): number 
 }
 
 function policyCandidateProtectionPriority(candidate: PolicySurfaceCandidate): number {
+  if (candidate.deterministicClassifierReasonCodes.includes("common_path_primary_locale_privacy")) {
+    return 0;
+  }
   if (isExactPolicyDocumentCandidate(candidate)) return 0;
+  if (
+    candidate.deterministicSurfaceType === "privacy_policy" &&
+    candidate.deterministicClassifierReasonCodes.includes("common_path_locale_hint")
+  ) {
+    return 1;
+  }
   if (
     candidate.seedSource === "prior_scan_hint" &&
     candidate.deterministicSurfaceType === "privacy_policy"
@@ -4232,7 +4319,9 @@ async function rankCandidatesWithRequiredNano(
       candidate.assisted = ranked;
       candidate.rankedFromCommonPath = candidate.discoveryMethod === "guessed_common_path";
       candidate.deterministicSurfaceType = ranked.likelySurfaceType;
-      candidate.discoveryMethod = "nano_assisted_link_classification";
+      if (!candidate.rankedFromCommonPath) {
+        candidate.discoveryMethod = "nano_assisted_link_classification";
+      }
     }
   }
   const protectedDeterministicIds = new Set(
@@ -4364,7 +4453,12 @@ function observationFromCandidate(
   const linkObservationState = candidate.observationOnly || candidate.clickable
     ? "observed" as const
     : "candidate" as const;
-  const documentFetchState = input.status === "fetched"
+  const fetchedButNotUsable = input.status === "failed" && [
+    "consent_settings_shell",
+    "insufficient_policy_text",
+    "low_quality_access_challenge",
+  ].includes(input.fetchFailureReason ?? "");
+  const documentFetchState = input.status === "fetched" || fetchedButNotUsable
     ? "fetched" as const
     : input.status === "failed"
       ? "failed" as const
@@ -4375,7 +4469,8 @@ function observationFromCandidate(
     ? "usable" as const
     : input.fetchFailureReason === "low_quality_access_challenge"
       ? "blocked" as const
-      : input.fetchFailureReason === "insufficient_policy_text"
+      : input.fetchFailureReason === "insufficient_policy_text" ||
+          input.fetchFailureReason === "consent_settings_shell"
         ? "insufficient" as const
         : "not_attempted" as const;
   return {
@@ -6358,11 +6453,15 @@ function boundedExcerptForPatterns(text: string, patterns: RegExp[]): string {
 }
 
 function bestPolicyDocumentText(html: string, fallbackVisibleText: string): string {
+  const policyHtml = stripCanonicalConsentSurfaceHtml(html);
+  const sanitizedFallbackVisibleText = policyHtml === html
+    ? fallbackVisibleText
+    : htmlToVisibleText(policyHtml);
   const candidates = [
-    ...extractStructuredPolicyMetadataTexts(html),
-    ...extractPolicyBodyCandidateTexts(html),
-    htmlToVisibleText(stripPageChromeHtml(html)),
-    fallbackVisibleText,
+    ...extractStructuredPolicyMetadataTexts(policyHtml),
+    ...extractPolicyBodyCandidateTexts(policyHtml),
+    htmlToVisibleText(stripPageChromeHtml(policyHtml)),
+    sanitizedFallbackVisibleText,
   ].map(stripConsentSurfacePreambleFromPolicyText).filter((text) => text.length > 0);
   return candidates.reduce((best, candidate) =>
     shouldAdoptPolicyDocumentText(candidate, best) ? candidate : best,
@@ -7102,15 +7201,74 @@ function dataSubjectRightsKeywordCount(value: string): number {
 }
 
 function extractPolicyBodyCandidateTexts(html: string): string[] {
+  const policyHtml = stripCanonicalConsentSurfaceHtml(html);
   const blocks = [
-    ...extractHtmlBlocks(html, "main"),
-    ...extractHtmlBlocks(html, "article"),
-    ...extractHtmlBlocks(html, "section")
-      .filter((block) => /privacy|policy|notice|legal|rights|data|personal|content|article|main/i.test(block)),
-    ...extractAttributedPolicyBlocks(html),
+    ...extractHtmlBlocks(policyHtml, "main"),
+    ...extractHtmlBlocks(policyHtml, "article"),
+    ...extractHtmlBlocks(policyHtml, "section")
+      .filter(isPolicyBodySemanticBlock),
+    ...extractAttributedPolicyBlocks(policyHtml),
   ];
   return uniqueStrings(blocks.map((block) => htmlToVisibleText(stripPageChromeHtml(block))))
     .filter((text) => text.length >= 120);
+}
+
+function isPolicyBodySemanticBlock(block: string) {
+  if (isCanonicalConsentSurfaceHtmlBlock(block)) {
+    return false;
+  }
+  const openingTag = block.match(/^<[^>]+>/i)?.[0] ?? "";
+  const semanticAttributeValues = Array.from(
+    openingTag.matchAll(/\b(?:id|class|role|aria-label|title|itemprop)=["']([^"']+)["']/gi),
+    (match) => match[1] ?? "",
+  ).join(" ");
+  const visibleText = htmlToVisibleText(stripPageChromeHtml(block));
+  const classified = classifyPrivacySurface({
+    title: semanticAttributeValues,
+    surroundingText: visibleText.slice(0, 8_000),
+  });
+  return classified.surfaceType !== "unknown" ||
+    gdprTransparencyTopicMatchCount(visibleText) > 0 ||
+    /privacy|policy|notice|legal|rights|personal|content|article|main/i.test(
+      `${semanticAttributeValues} ${visibleText}`,
+    );
+}
+
+function isCanonicalConsentSurfaceHtmlBlock(block: string) {
+  const openingTag = block.match(/^<[^>]+>/i)?.[0] ?? "";
+  const structurallyHidden = /\shidden(?:\s|=|>)/i.test(openingTag) ||
+    /\baria-hidden=["']?true\b/i.test(openingTag) ||
+    /\bclass=["'][^"']*(?:^|[\s_-])hidden(?:[\s_-]|$)[^"']*["']/i.test(openingTag);
+  const structuralConsentSurface = /\b(?:id|class|role)=["'][^"']*(?:consent|cmp|cookie[-_]?banner|preference[-_]?center|privacy[-_]?choices?|(?:^|[\s_-])banner(?:[\s_-]|$))[^"']*["']/i.test(openingTag);
+  if (structuralConsentSurface) {
+    return true;
+  }
+  if (!structurallyHidden && !/^<dialog\b/i.test(openingTag)) {
+    return false;
+  }
+  const classification = classifyConsentSurfaceText({ text: htmlToVisibleText(block) });
+  return hasCanonicalConsentControlIntent(classification) &&
+    (classification.likelyPresent || classification.recoveryHintObserved);
+}
+
+function stripCanonicalConsentSurfaceHtml(html: string) {
+  let sanitized = html;
+  for (const tagName of ["section", "dialog", "aside", "form"] as const) {
+    const pattern = new RegExp(`<${tagName}\\b[\\s\\S]*?<\\/${tagName}>`, "gi");
+    sanitized = sanitized.replace(pattern, (block) =>
+      isCanonicalConsentSurfaceHtmlBlock(block) ? " " : block
+    );
+  }
+  // Divs are frequently nested, so only remove them when their opening tag
+  // carries an explicit consent/banner structural marker. Document substance
+  // validation remains the fail-closed guard for non-structural shells.
+  sanitized = sanitized.replace(/<div\b[\s\S]*?<\/div>/gi, (block) => {
+    const openingTag = block.match(/^<div\b[^>]*>/i)?.[0] ?? "";
+    return /\b(?:id|class|role)=["'][^"']*(?:consent|cmp|cookie[-_]?banner|preference[-_]?center|privacy[-_]?choices?|(?:^|[\s_-])banner(?:[\s_-]|$))[^"']*["']/i.test(openingTag)
+      ? " "
+      : block;
+  });
+  return sanitized;
 }
 
 function extractStructuredPolicyMetadataTexts(html: string): string[] {
@@ -7265,7 +7423,7 @@ function extractAttributedPolicyBlocks(html: string): string[] {
 }
 
 function stripPageChromeHtml(html: string): string {
-  return html
+  return stripCanonicalConsentSurfaceHtml(html)
     .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
     .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
     .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, " ")

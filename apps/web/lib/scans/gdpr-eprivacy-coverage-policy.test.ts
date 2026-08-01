@@ -366,6 +366,52 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes reports discovered budget-skipped
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not promote a localized consent-settings shell into privacy or transparency findings", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        discoveredPrivacyPolicyStatuses: ["failed"],
+        discoveredPrivacyPolicyUrls: ["https://example.test/politika-varstva-zasebnosti-in-piskotkov"],
+        privacyPolicyDiscovered: true,
+        privacyPolicyEvaluationState: "fetched_insufficient",
+        privacyPolicyPresent: false,
+      },
+      policySurfaceInspection: {
+        coverageStatus: "limited",
+        documentRetrievalCoverageStatus: "insufficient",
+        inspectionCompleted: true,
+        linkDiscoveryCoverageStatus: "complete",
+        limitationKeys: ["privacy_policy_link_observed_document_not_retained"],
+        observedSurfaceTypes: ["privacy_policy"],
+        outcome: "privacy_policy_observed",
+        privacyPolicyObserved: true,
+      },
+    },
+    snapshot: {
+      privacy_policy_present: false,
+    },
+  });
+
+  assert.equal(outcomes.privacy_notice_availability?.status, "Not testable");
+  assert.match(
+    outcomes.privacy_notice_availability?.criticalEvidence.statusBasis ?? "",
+    /fetched, but the retained content was insufficient/i,
+  );
+  for (const rowId of [
+    "controller_contact_disclosure",
+    "processing_purposes_disclosure",
+    "legal_basis_disclosure_observed",
+    "recipients_vendor_categories_disclosure",
+    "retention_disclosure_observed",
+    "data_subject_rights_disclosure",
+    "international_transfers_disclosure",
+    "dpo_contact_point_disclosure",
+  ] as const) {
+    assert.equal(outcomes[rowId]?.status, "Not testable", rowId);
+  }
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps legacy_only GDPR Transparency concerns silent", () => {
   const baseline = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

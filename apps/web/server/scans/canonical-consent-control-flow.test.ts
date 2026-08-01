@@ -440,7 +440,7 @@ test("canonical consent-control flow projects reject-and-subscribe as a partial 
   assert.equal(story.assessment.controls.reject.state, "not_observed");
   assert.equal(
     story.assessment.evidence.some((evidence) =>
-      evidence.controlVariant === "reject_with_subscription" && evidence.intent === "other"
+      evidence.controlVariant === "reject_with_subscription" && evidence.intent === "reject"
     ),
     true
   );
@@ -451,6 +451,46 @@ test("canonical consent-control flow projects reject-and-subscribe as a partial 
   assert.match(story.rejectRow.limitation ?? "", /consent or pay/i);
   assert.match(story.rejectRow.limitation ?? "", /cannot be determined from the consent interface alone/i);
   assert.equal(story.rejectScore.score, 45);
+  assert.equal(story.gapFindingObserved, false);
+});
+
+test("canonical consent-control flow projects Reject and Pay as paid decline without free reject", () => {
+  const story = projectConsentStory({
+    firstLayerControls: [
+      { actionType: "accept_all", label: "I Accept" },
+      {
+        actionType: "reject_all",
+        classifierReasonCodes: [
+          "matched_reject",
+          "variant_reject_with_payment"
+        ],
+        label: "Reject and Pay"
+      },
+      {
+        actionType: "manage_preferences",
+        label: "More Options",
+        presentationType: "dedicated_button"
+      }
+    ]
+  });
+  const paidDeclineConcern = story.normalizedConcerns.find((concern) =>
+    concern.originKey === "consent.paid_decline_path.reject_with_payment"
+  );
+
+  assert.equal(story.assessment.controls.reject.state, "not_observed");
+  assert.equal(
+    story.assessment.evidence.some((evidence) =>
+      evidence.controlVariant === "reject_with_payment" &&
+      evidence.intent === "reject" &&
+      evidence.label === "Reject and Pay"
+    ),
+    true
+  );
+  assert.ok(paidDeclineConcern);
+  assert.equal(paidDeclineConcern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(story.rejectRow.status, "Review signal");
+  assert.match(story.rejectRow.limitation ?? "", /required payment/i);
+  assert.match(story.rejectRow.limitation ?? "", /consent or pay/i);
   assert.equal(story.gapFindingObserved, false);
 });
 

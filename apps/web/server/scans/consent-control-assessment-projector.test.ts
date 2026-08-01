@@ -500,7 +500,7 @@ test("retained reject-with-subscription evidence cannot project as a free reject
     (evidence) => evidence.label === "Rifiuta e abbonati",
   );
   assert.ok(paidDeclineEvidence);
-  assert.equal(paidDeclineEvidence.intent, "other");
+  assert.equal(paidDeclineEvidence.intent, "reject");
   assert.equal(paidDeclineEvidence.controlVariant, "reject_with_subscription");
   assert.equal(paidDeclineEvidence.actionable, true);
 });

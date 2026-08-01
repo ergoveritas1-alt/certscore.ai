@@ -6383,7 +6383,10 @@ function consentUiControlActionTypeFromClassification(
     case "accept":
       return "accept_all";
     case "reject":
-      if (classification.variant === "reject_with_subscription") {
+      if (
+        classification.variant === "reject_with_subscription" ||
+        classification.variant === "reject_with_payment"
+      ) {
         return "other";
       }
       return "reject_all";

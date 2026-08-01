@@ -2486,6 +2486,11 @@ export function summarizePolicySurfaces(
     ? policyTextExtractionHealth.policyTextExtractionStatus === "ok"
       ? "fetched_usable"
       : "fetched_insufficient"
+    : targetRelevantDiscoveredPrivacySurfaces.some((surface) =>
+        surface.documentFetchState === "fetched" &&
+        surface.documentEvaluationState === "insufficient"
+      )
+      ? "fetched_insufficient"
     : targetRelevantDiscoveredPrivacySurfaces.some((surface) => surface.status === "skipped_budget")
       ? "discovered_skipped_budget"
       : targetRelevantDiscoveredPrivacySurfaces.some((surface) => surface.status === "failed")
@@ -2707,7 +2712,8 @@ function buildPolicyTextEvidenceProjection(
     const documentEvaluationState = surface.documentEvaluationState ?? (
       surface.status === "fetched" ? "usable" :
       surface.fetchFailureReason === "low_quality_access_challenge" ? "blocked" :
-      surface.fetchFailureReason === "insufficient_policy_text" ? "insufficient" : "not_attempted"
+      surface.fetchFailureReason === "insufficient_policy_text" ||
+        surface.fetchFailureReason === "consent_settings_shell" ? "insufficient" : "not_attempted"
     );
     const documentTextCoverage = surface.documentTextCoverage ?? {
       status: text && surface.contentCoverage?.sourceTextChars === text.length
@@ -3391,7 +3397,9 @@ function actionTypeFromRetainedGeometryCandidate(candidate: Record<string, unkno
     classification.intent === "accept"
       ? "accept_all"
       : classification.intent === "reject"
-        ? classification.variant === "reject_with_subscription" ? "other" : "reject_all"
+        ? classification.variant === "reject_with_subscription" || classification.variant === "reject_with_payment"
+          ? "other"
+          : "reject_all"
         : classification.intent === "options"
           ? classification.variant === "save_preferences" ? "save_preferences" : "manage_preferences"
           : classification.intent === "privacy_opt_out"

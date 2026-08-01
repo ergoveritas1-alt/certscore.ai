@@ -39,7 +39,7 @@ export const consentControlAssessmentControlResultSchema = z.object({
 export const consentControlAssessmentEvidenceSchema = z.object({
   evidenceId: z.string().max(240),
   intent: z.enum(["accept", "reject", "options", "privacy_opt_out", "save_preferences", "dismiss", "other"]),
-  controlVariant: z.enum(["reject_with_subscription"]).nullable().default(null),
+  controlVariant: z.enum(["reject_with_subscription", "reject_with_payment"]).nullable().default(null),
   label: z.string().max(120).nullable(),
   locale: z.string().max(16).nullable(),
   layer: consentControlAssessmentLayerSchema,
@@ -141,7 +141,7 @@ export type ConsentControlAssessmentCandidate = {
   intent?: ConsentControlIntent;
   semanticRole?: "explicit_accept" | "ambiguous_acknowledgment" | "reject" | "necessary_only" | "preferences" | "dismiss" | "unknown";
   actionType?: "accept_all" | "reject_all" | "manage_preferences" | "save_preferences" | "do_not_sell_share" | "other";
-  controlVariant?: "reject_with_subscription" | null;
+  controlVariant?: "reject_with_subscription" | "reject_with_payment" | null;
   label?: string | null;
   locale?: ConsentControlLocale | null;
   matchedTerm?: string | null;
@@ -247,10 +247,14 @@ function fnv1a(value: string) {
   return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
+function isPaidDeclineVariant(value: ConsentControlAssessmentCandidate["controlVariant"]): boolean {
+  return value === "reject_with_subscription" || value === "reject_with_payment";
+}
+
 function candidateIntent(candidate: ConsentControlAssessmentCandidate): ConsentControlAssessmentEvidence["intent"] | null {
-  if (candidate.controlVariant === "reject_with_subscription") return "other";
   if (candidate.intent && candidate.intent !== "unknown") return candidate.intent;
   if (candidate.actionType === "accept_all" || candidate.semanticRole === "explicit_accept") return "accept";
+  if (isPaidDeclineVariant(candidate.controlVariant)) return "reject";
   if (candidate.actionType === "reject_all" || candidate.semanticRole === "reject" || candidate.semanticRole === "necessary_only") return "reject";
   if (candidate.actionType === "manage_preferences" || candidate.actionType === "save_preferences" || candidate.semanticRole === "preferences") return "options";
   if (candidate.actionType === "do_not_sell_share") return "privacy_opt_out";
@@ -312,7 +316,11 @@ function eligibleCandidate(candidate: ConsentControlAssessmentCandidate, fallbac
 }
 
 function resultFor(intent: ConsentControlIntent, evidence: ConsentControlAssessmentEvidence[], completeInventory: boolean, reasons: string[]): ConsentControlAssessmentControlResult {
-  const matching = evidence.filter((item) => item.intent === intent && item.layer === "first_layer");
+  const matching = evidence.filter((item) =>
+    item.intent === intent &&
+    item.layer === "first_layer" &&
+    !(intent === "reject" && isPaidDeclineVariant(item.controlVariant))
+  );
   const first = matching[0]?.observedAtMs ?? null;
   const last = matching.at(-1)?.observedAtMs ?? null;
   if (matching.length > 0) {
