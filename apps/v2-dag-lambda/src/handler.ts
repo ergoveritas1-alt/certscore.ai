@@ -2533,6 +2533,27 @@ function policyEvidenceHash(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+function boundPolicyModuleRun(
+  moduleRun: Parameters<NonNullable<RunScanInput["onPolicySurfaceComplete"]>>[0]["moduleRun"],
+) {
+  const timingBreakdown = moduleRun.timingBreakdown;
+  if (!timingBreakdown || timingBreakdown.length <= 40) {
+    return moduleRun;
+  }
+  const omitted = timingBreakdown.slice(39);
+  return {
+    ...moduleRun,
+    timingBreakdown: [
+      ...timingBreakdown.slice(0, 39),
+      {
+        label: "timing entries truncated",
+        durationMs: omitted.reduce((total, entry) => total + entry.durationMs, 0),
+        detail: `${omitted.length} timing breakdown entries omitted from the early policy packet; the terminal canonical bundle retains its bounded diagnostic projection.`,
+      },
+    ],
+  };
+}
+
 export function buildVerifiedPolicyEvidencePacket(input: {
   payload: LocalV2DagLambdaDispatchPayload;
   result: Parameters<NonNullable<RunScanInput["onPolicySurfaceComplete"]>>[0];
@@ -2544,7 +2565,7 @@ export function buildVerifiedPolicyEvidencePacket(input: {
     artifactOnly: true as const,
     contractVersion: VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
     generatedAt,
-    moduleRun: input.result.moduleRun,
+    moduleRun: boundPolicyModuleRun(input.result.moduleRun),
     normalizedUrl: input.payload.targetUrl,
     policyContentHash,
     policySurfaceInspection: derivePolicySurfaceInspectionOutcome({

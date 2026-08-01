@@ -40,6 +40,10 @@ test("early policy handoff packet is typed, hash-bound, and non-projectable", ()
         startedAt: "2026-07-31T20:00:00.000Z",
         completedAt: "2026-07-31T20:00:03.000Z",
         durationMs: 3_000,
+        timingBreakdown: Array.from({ length: 45 }, (_, index) => ({
+          label: `policy timing ${index + 1}`,
+          durationMs: index + 1,
+        })),
       },
       policySurfaceObservations: [{
         observationId: "privacy-policy-1",
@@ -75,6 +79,8 @@ test("early policy handoff packet is typed, hash-bound, and non-projectable", ()
   assert.equal(packet.artifactOnly, true);
   assert.equal(packet.productionFindingIntegration, false);
   assert.equal(packet.policySurfaceInspection.privacyPolicyObserved, true);
+  assert.equal(packet.moduleRun.timingBreakdown?.length, 40);
+  assert.equal(packet.moduleRun.timingBreakdown?.[39]?.label, "timing entries truncated");
   assert.equal(
     sourceHash,
     createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
