@@ -6367,8 +6367,16 @@ export function extractPolicySections(input: {
     input.visibleText,
     input.sourceUrl,
   );
+  const unstructuredBodySections = htmlSections.length < 3
+    ? extractBoundedUnstructuredPolicyBodySections(input.visibleText, input.sourceUrl)
+    : [];
   const baseSections = htmlSections.length >= 3 ? htmlSections : fallbackSections;
-  const sections = [...tableSections, ...baseSections, ...topicWindowSections].filter((section, index, all) =>
+  const sections = [
+    ...tableSections,
+    ...baseSections,
+    ...topicWindowSections,
+    ...unstructuredBodySections,
+  ].filter((section, index, all) =>
     all.findIndex((candidate) =>
       candidate.sourceUrl === section.sourceUrl &&
       normalizeWhitespace(candidate.heading) === normalizeWhitespace(section.heading) &&
@@ -6388,6 +6396,46 @@ export function extractPolicySections(input: {
     })
     .filter((section) => section.textExcerpt.length >= 80)
     .slice(0, 80);
+}
+
+function extractBoundedUnstructuredPolicyBodySections(
+  visibleText: string,
+  sourceUrl: string,
+): RetainedPolicySection[] {
+  const normalized = normalizeWhitespace(visibleText);
+  if (normalized.length <= 1_200) {
+    return [];
+  }
+
+  const sections: RetainedPolicySection[] = [];
+  let start = 0;
+  while (start < normalized.length && sections.length < 48) {
+    const maximumEnd = Math.min(normalized.length, start + 1_000);
+    const sentenceBoundaries = [
+      normalized.lastIndexOf(". ", maximumEnd),
+      normalized.lastIndexOf("? ", maximumEnd),
+      normalized.lastIndexOf("! ", maximumEnd),
+    ].filter((index) => index >= start + 600 && index < maximumEnd);
+    const end = sentenceBoundaries.length > 0
+      ? Math.max(...sentenceBoundaries) + 1
+      : maximumEnd;
+    const textExcerpt = normalizeWhitespace(normalized.slice(start, end));
+    if (textExcerpt.length >= 80) {
+      sections.push({
+        sourceUrl,
+        heading: `Policy body section ${sections.length + 1}`,
+        textExcerpt,
+        charStart: start,
+        charEnd: end,
+        quality: policySectionQuality(textExcerpt),
+      });
+    }
+    if (end >= normalized.length) {
+      break;
+    }
+    start = Math.max(start + 1, end - 160);
+  }
+  return sections;
 }
 
 function extractCanonicalTopicWindowSectionsFromVisibleText(

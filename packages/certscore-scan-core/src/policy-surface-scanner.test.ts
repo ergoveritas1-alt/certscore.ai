@@ -1265,6 +1265,10 @@ test("policy section extraction retains canonical topic windows from a long head
     ),
     true,
   );
+  assert.equal(
+    sections.filter((section) => section.heading.startsWith("Policy body section ")).length >= 2,
+    true,
+  );
 });
 
 test("cookie disclosure extraction retains Oxfam-style named-cookie tables", () => {
