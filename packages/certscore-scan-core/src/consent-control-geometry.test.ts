@@ -518,6 +518,7 @@ test("retains Reject and Pay as a payment-conditioned decline rather than free r
   const paidDecline = findCandidate(artifact, "Reject and Pay");
   assert.equal(paidDecline?.actionType, "other");
   assert.ok(paidDecline?.classifierReasonCodes.includes("variant_reject_with_payment"));
+  assert.equal(paidDecline?.decisionStatus, "confirmed_visible");
   assert.equal(artifact.summary.firstLayerReject, false);
 });
 

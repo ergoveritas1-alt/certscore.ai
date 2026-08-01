@@ -209,7 +209,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       observation.controls.length > 0 &&
       observation.controls.every((control) =>
         control.visible === true &&
-        control.actionType !== "other" &&
+        (control.actionType !== "other" || retainedControlVariant(control.classifierReasonCodes) !== null) &&
         (control.layer ?? observation.layerInspected) === "first_layer"
       );
   });

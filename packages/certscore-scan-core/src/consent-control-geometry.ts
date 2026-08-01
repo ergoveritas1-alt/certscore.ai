@@ -601,7 +601,7 @@ function buildCandidateEvidence(
   const actionType = actionTypeForClassification(classification, candidate);
   const diagnosticClassifications = diagnosticClassificationsForCandidate(candidate);
   const reasons: string[] = [];
-  const decisionStatus = decisionStatusForCandidate(candidate, actionType, reasons);
+  const decisionStatus = decisionStatusForCandidate(candidate, actionType, classification, reasons);
   return {
     candidateId: `candidate_${index}`,
     label: candidate.label,
@@ -790,6 +790,7 @@ function isStaticTextContextualOptionsCandidate(candidate: RawGeometryCandidate)
 function decisionStatusForCandidate(
   candidate: RawGeometryCandidate,
   actionType: ConsentControlGeometryActionType,
+  classification: ConsentControlLabelClassification,
   reasons: string[],
 ): ConsentControlDecisionStatus {
   const opacity = Number.parseFloat(candidate.computedStyle.opacity || "1");
@@ -827,7 +828,11 @@ function decisionStatusForCandidate(
     reasons.push("covered_at_center_point");
     return "covered";
   }
-  if (actionType === "other") {
+  if (
+    actionType === "other" &&
+    classification.variant !== "reject_with_subscription" &&
+    classification.variant !== "reject_with_payment"
+  ) {
     reasons.push("unclassified_control");
     return "ambiguous";
   }

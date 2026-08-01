@@ -678,7 +678,7 @@ test("pre-consent runtime scanner treats contextual Required Only as necessary-o
   }
 });
 
-test("pre-consent runtime scanner does not count subscription-only reject labels as first-layer reject proof", async () => {
+test("pre-consent runtime scanner retains subscription-only reject labels without counting them as free reject proof", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-reject-subscribe-"));
   try {
@@ -711,10 +711,42 @@ test("pre-consent runtime scanner does not count subscription-only reject labels
       "subscription-only reject labels should not satisfy first-layer reject availability",
     );
     assert.equal(
-      observation?.visibleChoiceLabels.some((label) => /subscribe/i.test(label)),
-      false,
-      "subscription-only reject labels should not be retained as creditworthy choice labels",
+      observation?.controls.some((control) =>
+        control.actionType === "other" &&
+        control.classifierVariant === "reject_with_subscription" &&
+        /subscribe/i.test(control.label)
+      ),
+      true,
+      "subscription-only reject labels should remain typed evidence for the paid-decline review signal",
     );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner retains Reject and Pay as typed paid-decline evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-reject-pay-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-reject-pay"),
+      path.join(tempRoot, "consent-reject-pay"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations.find((candidate) =>
+      candidate.controls.some((control) => control.classifierVariant === "reject_with_payment")
+    ) ?? bundle.consentUiObservations[0];
+    const paidDecline = observation?.controls.find((control) => control.label === "Reject and Pay");
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.equal(paidDecline?.actionType, "other");
+    assert.equal(paidDecline?.classifierVariant, "reject_with_payment");
+    assert.ok(paidDecline?.classifierReasonCodes.includes("variant_reject_with_payment"));
+    assert.equal(paidDecline?.visible, true);
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });

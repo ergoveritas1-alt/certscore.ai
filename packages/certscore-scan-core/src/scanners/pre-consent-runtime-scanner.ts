@@ -4451,7 +4451,7 @@ async function readDirectCmpSemanticConsentUiObservation(
       hasConsentContext: true,
     });
     const actionType = consentUiControlActionTypeFromClassification(classification);
-    if (!actionType || actionType === "other") return [];
+    if (!actionType || (actionType === "other" && !isPaidDeclineClassification(classification))) return [];
     return [{
       ...control,
       actionType,
@@ -4785,10 +4785,14 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   const controls = classifiedControls.flatMap(({ control, classification }) => {
     if (hasMultipleCanonicalConsentIntents(control.label)) return [];
     const actionType = consentUiControlActionTypeFromClassification(classification);
-    if (!actionType || actionType === "other") return [];
+    if (!actionType || (actionType === "other" && !isPaidDeclineClassification(classification))) return [];
     if (
       classification.matchStrength === "contextual" &&
       !control.cmpScoped &&
+      !(
+        isPaidDeclineClassification(classification) &&
+        hasCanonicalAcceptRejectCluster
+      ) &&
       !(
         hasCanonicalAcceptRejectCluster &&
         (actionType === "manage_preferences" || actionType === "save_preferences")
@@ -4931,7 +4935,10 @@ async function readConsentUiObservation(
   });
   const classifiedConsentSurfaceControlsByContainer = new Map<string, Set<string>>();
   for (const control of classifiedControls) {
-    if (control.inventorySource !== "full_document_consent_surface" || control.actionType === "other") {
+    if (
+      control.inventorySource !== "full_document_consent_surface" ||
+      (control.actionType === "other" && !isPaidDeclineVariant(control.classifierVariant))
+    ) {
       continue;
     }
     const key = control.inventoryContainerKey ?? "unknown";
@@ -4957,7 +4964,7 @@ async function readConsentUiObservation(
   );
   const retainedControlKeys = new Set<string>();
   const enrichedControls = classifiedControls.filter((control) => {
-    if (control.actionType === "other") {
+    if (control.actionType === "other" && !isPaidDeclineVariant(control.classifierVariant)) {
       rejectedReasons.add("classifier_other_unknown");
       return false;
     }
@@ -5616,7 +5623,7 @@ function consentUiObservationFromAccessibilityInventory(
       hasConsentContext: true,
     });
     const actionType = consentUiControlActionTypeFromClassification(classification);
-    if (!actionType || actionType === "other") return [];
+    if (!actionType || (actionType === "other" && !isPaidDeclineClassification(classification))) return [];
     const {
       frameUrl: _frameUrl,
       inventoryContainerKey: _inventoryContainerKey,
@@ -6397,6 +6404,16 @@ function consentUiControlActionTypeFromClassification(
     case "unknown":
       return null;
   }
+}
+
+function isPaidDeclineClassification(
+  classification: ReturnType<typeof classifyConsentControlLabel>,
+): boolean {
+  return classification.intent === "reject" && isPaidDeclineVariant(classification.variant);
+}
+
+function isPaidDeclineVariant(variant: string | null | undefined): boolean {
+  return variant === "reject_with_subscription" || variant === "reject_with_payment";
 }
 
 function buildConsentUiObservationFromEvidence(input: {

@@ -59,6 +59,7 @@ export type StaticFixturePage =
   | "consent-preference-center-reject-success"
   | "consent-preference-center-toggle-save"
   | "consent-reject-subscribe"
+  | "consent-reject-pay"
   | "consent-required-only"
   | "consent-simple-accept-reject"
   | "consent-sits-style-preferences"
@@ -243,6 +244,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-preference-center-reject-success": "consent-preference-center-reject-success",
   "consent-preference-center-toggle-save": "consent-preference-center-toggle-save",
   "consent-reject-subscribe": "consent-reject-subscribe",
+  "consent-reject-pay": "consent-reject-pay",
   "consent-required-only": "consent-required-only",
   "consent-simple-accept-reject": "consent-simple",
   "consent-sits-style-preferences": "consent-sits-style-preferences",
@@ -1357,6 +1359,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     preferenceSuccess: caseName === "consent-preference-center-reject-success",
     preferenceToggleSave: caseName === "consent-preference-center-toggle-save",
     rejectSubscribe: caseName === "consent-reject-subscribe",
+    rejectPay: caseName === "consent-reject-pay",
     requiredOnly: caseName === "consent-required-only",
     cmpCookie: caseName === "consent-cmp-cookie-persists",
     cmpNetworkLateControls: caseName === "consent-cmp-network-late-controls",
@@ -1850,6 +1853,8 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
   const preferenceOnly = options.preferenceAmbiguous || options.preferenceConfirmSave || options.preferenceSuccess || options.preferenceToggleSave;
   const rejectLabel = options.rejectSubscribe
     ? "Reject all and subscribe"
+    : options.rejectPay
+      ? "Reject and Pay"
     : options.requiredOnly
       ? "Required Only"
       : options.denyNonEssential ? "Deny Non-Essential" : "Reject All";
@@ -1864,7 +1869,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     : options.ambiguous
     ? `<button id="continue" type="button">Continue</button>`
     : `<button id="accept-all" type="button">Accept All</button>`;
-  const manageButton = options.manage || options.ambiguous || preferenceOnly || options.rejectSubscribe
+  const manageButton = options.manage || options.ambiguous || preferenceOnly || options.rejectSubscribe || options.rejectPay
     ? `<button id="settings" type="button">Settings</button>`
     : "";
   const postChoiceFooter = options.postChoiceReopen
