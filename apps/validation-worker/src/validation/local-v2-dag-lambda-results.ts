@@ -128,18 +128,18 @@ export type LocalV2DagLambdaResultPollerOptions = {
   webBaseUrl?: string;
 };
 
-async function completedScanScoresExist(scanId: string) {
-  const row = await queryOne<{ legacy_exists: boolean }>(
+async function completedScoreMaterializationExists(scanId: string) {
+  const row = await queryOne<{ materialization_complete: boolean }>(
     `select exists (
-              select 1 from public.scan_score_assessments
+              select 1
+                from public.scan_score_materialization_requests
                where scan_id = $1::uuid
-                 and score_kind = 'gdpr_eprivacy_evidence'
-                 and score_version = 'gdpr-eprivacy-evidence.legacy-v1'
-            ) as legacy_exists`,
+                 and status = 'completed'
+            ) as materialization_complete`,
     [scanId],
     { readOnly: true }
   );
-  return row?.legacy_exists === true;
+  return row?.materialization_complete === true;
 }
 
 export async function ensureCompletedScanScoresPersisted(input: {
@@ -148,7 +148,7 @@ export async function ensureCompletedScanScoresPersisted(input: {
   targetEnvironment: LambdaTargetEnvironment;
   webBaseUrl?: string;
 }) {
-  if (await completedScanScoresExist(input.scanId)) return { alreadyPersisted: true };
+  if (await completedScoreMaterializationExists(input.scanId)) return { alreadyPersisted: true };
   const token = randomBytes(32).toString("base64url");
   const tokenSha256 = createHash("sha256").update(token).digest("hex");
   await query(
@@ -165,7 +165,7 @@ export async function ensureCompletedScanScoresPersisted(input: {
        where public.scan_score_materialization_requests.status <> 'completed'`,
     [input.scanId, tokenSha256]
   );
-  if (await completedScanScoresExist(input.scanId)) return { alreadyPersisted: true };
+  if (await completedScoreMaterializationExists(input.scanId)) return { alreadyPersisted: true };
 
   const baseUrl = input.webBaseUrl?.trim() ||
     (input.targetEnvironment === "production" ? "https://certscore.ai" : "http://localhost:3000");
@@ -193,8 +193,8 @@ export async function ensureCompletedScanScoresPersisted(input: {
     throw new Error(`Score materialization endpoint returned HTTP ${response.status}.`);
   }
   const result = await response.json() as { complete?: unknown };
-  if (result.complete !== true || !(await completedScanScoresExist(input.scanId))) {
-    throw new Error("Score materialization endpoint did not confirm persisted legacy assessment.");
+  if (result.complete !== true || !(await completedScoreMaterializationExists(input.scanId))) {
+    throw new Error("Score materialization endpoint did not confirm canonical materialization completion.");
   }
   return { alreadyPersisted: false, terminalFailure: false as const };
 }

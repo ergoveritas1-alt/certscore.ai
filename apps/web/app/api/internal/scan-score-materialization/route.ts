@@ -68,6 +68,18 @@ export async function POST(request: Request) {
     const scanRecord = await timedMaterializationPhase(authorizedScanId, "scan_materialization", () =>
       materializeLocalV2DagScanDetail(rawRecord)
     );
+    // Publish the canonical typed assessment/evidence projection before any
+    // score is persisted. If normalized concerns or unified findings are not
+    // ready yet, the request remains pending and the worker retries the whole
+    // canonical boundary instead of mistaking a partial score write for
+    // materialization completion.
+    const adminSummary = await persistAdminScanSummaryForRecord(scanRecord, {
+      runtimeArtifacts: rawRecord.runtimeArtifacts,
+      snapshot: rawRecord.snapshot,
+    });
+    if (!adminSummary) {
+      throw new Error("Admin scan summary persistence was incomplete.");
+    }
     const result = await timedMaterializationPhase(authorizedScanId, "score_persistence", () =>
       persistCompletedLegacyGdprEprivacyAssessment({
         organizationId: authorization.organizationId,
@@ -77,13 +89,6 @@ export async function POST(request: Request) {
     );
     if (!complete(result)) {
       throw new Error(`Score persistence incomplete (legacy=${result.reason}).`);
-    }
-    const adminSummary = await persistAdminScanSummaryForRecord(scanRecord, {
-      runtimeArtifacts: rawRecord.runtimeArtifacts,
-      snapshot: rawRecord.snapshot,
-    });
-    if (!adminSummary) {
-      throw new Error("Admin scan summary persistence was incomplete.");
     }
     await completeScoreMaterializationRequest(authorizedScanId);
     return NextResponse.json({

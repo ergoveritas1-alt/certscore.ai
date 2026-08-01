@@ -81,15 +81,17 @@ test("API activity derives terminal state and score from canonical scan records"
   assert.match(source, /score: assessment\.scoreValue/);
 });
 
-test("completion materialization persists the admin summary before acknowledging success", async () => {
+test("completion materialization persists the canonical projection before score and acknowledgement", async () => {
   const source = await readFile("apps/web/app/api/internal/scan-score-materialization/route.ts", "utf8");
-  const scoreIndex = source.indexOf("persistCompletedLegacyGdprEprivacyAssessment");
-  const summaryIndex = source.indexOf("persistAdminScanSummaryForRecord", scoreIndex);
-  const completeIndex = source.indexOf("completeScoreMaterializationRequest", summaryIndex);
+  const routeStart = source.indexOf("export async function POST");
+  const summaryIndex = source.indexOf("await persistAdminScanSummaryForRecord", routeStart);
+  const scoreIndex = source.indexOf("await timedMaterializationPhase(authorizedScanId, \"score_persistence\"", summaryIndex);
+  const completeIndex = source.indexOf("await completeScoreMaterializationRequest", scoreIndex);
 
-  assert.ok(scoreIndex >= 0);
-  assert.ok(summaryIndex > scoreIndex);
+  assert.ok(summaryIndex >= 0);
+  assert.ok(scoreIndex > summaryIndex);
   assert.ok(completeIndex > summaryIndex);
+  assert.ok(completeIndex > scoreIndex);
   assert.match(source, /Admin scan summary persistence was incomplete/);
   assert.match(source, /scanRecord/);
   assert.match(source, /classifyScoreMaterializationFailure/);
