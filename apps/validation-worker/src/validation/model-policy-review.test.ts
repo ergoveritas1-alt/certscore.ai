@@ -680,6 +680,88 @@ test("a directly relevant purpose excerpt is not vetoed by unrelated policy text
   );
 });
 
+test("strong typed retained evidence confirms an observed topic when literal phrase matching is too narrow", async () => {
+  const retainedExcerpt =
+    "For What Purposes Does Example Use Your Personal Information? We use your personal information to operate, provide, develop, and improve the services we offer.";
+  const packet = buildFixturePacket(retainedExcerpt);
+  packet.documents[0]!.extractedCandidates = {
+    retained_article13_section_evidence: [{
+      coverageArea: "processing_purposes",
+      selectedPolicySectionExcerpt: retainedExcerpt,
+      selectedPolicySectionHeading: "For What Purposes Does Example Use Your Personal Information?",
+      selectedPolicySectionUrl: packet.documents[0]!.canonicalUrl,
+      selectedEvidenceStrength: "strong",
+      signalObserved: "observed"
+    }]
+  };
+  const rows = completeRows({
+    processing_purposes: {
+      status: "observed",
+      confidence: 0.94,
+      sourceDocumentIds: [packet.documents[0]!.documentId],
+      sourceUrls: [packet.documents[0]!.canonicalUrl],
+      evidenceExcerpts: [retainedExcerpt],
+      reasonCodes: ["processing_purpose_statement"],
+      rationale: "A directly relevant processing-purpose statement was retained."
+    }
+  });
+  const artifact = await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async () => new Response(JSON.stringify({
+      model: "gpt-5.4-mini",
+      choices: [{ message: { content: JSON.stringify({ rows }) } }]
+    }), { status: 200 }),
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet
+  });
+
+  const purposes = artifact.rows.find((row) => row.topic === "processing_purposes");
+  assert.equal(purposes?.status, "observed");
+  assert.ok(purposes?.reasonCodes.includes("verified_retained_topic_evidence"));
+  assert.equal(purposes?.evidenceExcerpts[0], retainedExcerpt);
+});
+
+test("typed retained topic evidence cannot rescue a model row without a matching document reference", async () => {
+  const retainedExcerpt =
+    "For What Purposes Does Example Use Your Personal Information? We use your personal information to improve our services.";
+  const packet = buildFixturePacket(retainedExcerpt);
+  packet.documents[0]!.extractedCandidates = {
+    retained_article13_section_evidence: [{
+      coverageArea: "processing_purposes",
+      selectedPolicySectionExcerpt: retainedExcerpt,
+      selectedPolicySectionUrl: packet.documents[0]!.canonicalUrl,
+      selectedEvidenceStrength: "strong",
+      signalObserved: "observed"
+    }]
+  };
+  const rows = completeRows({
+    processing_purposes: {
+      status: "observed",
+      confidence: 0.94,
+      sourceDocumentIds: [],
+      sourceUrls: [],
+      evidenceExcerpts: [retainedExcerpt],
+      reasonCodes: ["processing_purpose_statement"],
+      rationale: "A processing-purpose statement was retained."
+    }
+  });
+  const artifact = await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async () => new Response(JSON.stringify({
+      model: "gpt-5.4-mini",
+      choices: [{ message: { content: JSON.stringify({ rows }) } }]
+    }), { status: 200 }),
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet
+  });
+
+  const purposes = artifact.rows.find((row) => row.topic === "processing_purposes");
+  assert.equal(purposes?.status, "ambiguous");
+  assert.ok(!purposes?.reasonCodes.includes("verified_retained_topic_evidence"));
+});
+
 test("a retained numeric retention range receives credit", async () => {
   const packet = buildFixturePacket(
     "In Europe, the retention periods are generally between 6 and 10 years."

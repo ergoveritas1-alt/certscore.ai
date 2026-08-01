@@ -16,7 +16,7 @@ const OPENAI_RESPONSES_API_URL = "https://api.openai.com/v1/responses";
 export const POLICY_MODEL_REVIEW_CONTRACT_VERSION = "policy_model_review.v2" as const;
 export const POLICY_MODEL_REVIEW_PROMPT_VERSION = "policy_semantic_review.v5";
 const POLICY_REVIEW_SCHEMA_VERSION = "policy_semantic_review_output.v2";
-const POLICY_REVIEW_INVARIANT_VERSION = "policy_review_invariants.v5";
+const POLICY_REVIEW_INVARIANT_VERSION = "policy_review_invariants.v6";
 const MAX_DOCUMENTS = 6;
 const MAX_DOCUMENT_TEXT_CHARS = 18_000;
 const MAX_PACKET_TEXT_CHARS = 54_000;
@@ -1174,22 +1174,83 @@ function hasSubstantiveRetentionEvidence(packet: PolicyReviewPacket) {
   ].some((pattern) => pattern.test(policyText));
 }
 
-function hasCanonicalPolicyTopicEvidence(
+type CanonicalRetainedTopicEvidence = {
+  excerpt: string;
+  provenance: "review_excerpt" | "verified_retained_packet";
+  sourceDocumentId: string;
+  sourceUrl: string;
+};
+
+function canonicalRetainedTopicEvidence(
   row: PolicyModelReviewRow,
+  packet: PolicyReviewPacket,
   topic:
     | "processing_purposes"
     | "legal_basis"
     | "international_transfers"
     | "recipients_or_vendor_categories"
     | "data_subject_rights",
-) {
+): CanonicalRetainedTopicEvidence | null {
   const retainedEvidenceText = [
     ...row.evidenceExcerpts,
     ...row.conflictingExcerpts,
   ].join("\n");
-  return classifyGdprTransparencyTopics({ text: retainedEvidenceText }).matches.some(
-    (match) => match.topic === topic,
-  );
+  if (
+    classifyGdprTransparencyTopics({ text: retainedEvidenceText }).matches.some(
+      (match) => match.topic === topic,
+    )
+  ) {
+    return {
+      excerpt: row.evidenceExcerpts[0] ?? row.conflictingExcerpts[0] ?? "",
+      provenance: "review_excerpt",
+      sourceDocumentId: row.sourceDocumentIds[0] ?? "",
+      sourceUrl: row.sourceUrls[0] ?? "",
+    };
+  }
+
+  const coverageArea = Object.entries(POLICY_TOPIC_TO_COVERAGE_AREA)
+    .find(([, area]) => area === topic)?.[1];
+  if (!coverageArea) {
+    return null;
+  }
+
+  for (const sourceDocumentId of row.sourceDocumentIds) {
+    const document = packet.documents.find((candidate) =>
+      candidate.documentId === sourceDocumentId
+    );
+    if (
+      !document ||
+      !isTargetPolicyDocument(document) ||
+      document.documentFetchState !== "fetched" ||
+      document.documentEvaluationState !== "usable"
+    ) {
+      continue;
+    }
+    const retainedEvidence = document.extractedCandidates.retained_article13_section_evidence;
+    if (!Array.isArray(retainedEvidence)) {
+      continue;
+    }
+    for (const entry of retainedEvidence) {
+      const evidence = getRecord(entry);
+      const excerpt = getString(evidence.selectedPolicySectionExcerpt);
+      const sourceUrl = getString(evidence.selectedPolicySectionUrl) ?? document.canonicalUrl;
+      if (
+        getString(evidence.coverageArea) === coverageArea &&
+        getString(evidence.signalObserved) === "observed" &&
+        getString(evidence.selectedEvidenceStrength) === "strong" &&
+        excerpt &&
+        excerpt.length >= 30
+      ) {
+        return {
+          excerpt: excerpt.slice(0, 360),
+          provenance: "verified_retained_packet",
+          sourceDocumentId: document.documentId,
+          sourceUrl,
+        };
+      }
+    }
+  }
+  return null;
 }
 
 function hasSubstantiveDataSubjectRightsEvidence(packet: PolicyReviewPacket) {
@@ -1310,9 +1371,27 @@ function enforcePolicyReviewInvariants(
           : null;
     if (
       canonicalTopic &&
-      row.status === "observed" &&
-      !hasCanonicalPolicyTopicEvidence(row, canonicalTopic)
+      row.status === "observed"
     ) {
+      const canonicalEvidence = canonicalRetainedTopicEvidence(row, packet, canonicalTopic);
+      if (canonicalEvidence) {
+        return policyModelReviewRowSchema.parse({
+          ...row,
+          sourceDocumentIds: canonicalEvidence.sourceDocumentId
+            ? [canonicalEvidence.sourceDocumentId]
+            : row.sourceDocumentIds,
+          sourceUrls: canonicalEvidence.sourceUrl ? [canonicalEvidence.sourceUrl] : row.sourceUrls,
+          evidenceExcerpts: canonicalEvidence.excerpt ? [canonicalEvidence.excerpt] : row.evidenceExcerpts,
+          reasonCodes: [
+            ...new Set([
+              ...row.reasonCodes,
+              canonicalEvidence.provenance === "verified_retained_packet"
+                ? "verified_retained_topic_evidence"
+                : "review_excerpt_topic_evidence_verified",
+            ]),
+          ].slice(0, 20),
+        });
+      }
       return policyModelReviewRowSchema.parse({
         ...row,
         status: "ambiguous",
@@ -1330,7 +1409,7 @@ function enforcePolicyReviewInvariants(
       row.topic === "data_subject_rights" &&
       row.status === "observed" &&
       !hasSubstantiveDataSubjectRightsEvidence(packet) &&
-      !hasCanonicalPolicyTopicEvidence(row, "data_subject_rights")
+      !canonicalRetainedTopicEvidence(row, packet, "data_subject_rights")
     ) {
       if (!topicCoverageIsSufficient(packet, row.topic)) {
         return insufficientCoverageRow(
