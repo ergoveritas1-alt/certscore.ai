@@ -110,6 +110,81 @@ test("browser-recovered privacy links receive a bounded canonical document fetch
   }
 });
 
+test("browser recovery primes the observed same-origin session and prioritizes the general privacy notice", async () => {
+  const policyText = Array.from({ length: 12 }, () =>
+    "This Privacy Notice explains how we process personal data for specified purposes and legal bases. " +
+    "We disclose recipients, retention criteria, international transfers, controller contact details, and access, deletion, correction, portability, restriction, and objection rights."
+  ).join(" ");
+  const requests: string[] = [];
+  const server = createServer((request, response) => {
+    requests.push(request.url ?? "");
+    if (request.url === "/") {
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "set-cookie": "policy_session=ready; Path=/; SameSite=Lax",
+      });
+      response.end("<!doctype html><html><body><a href='/privacy'>Privacy Notice</a></body></html>");
+      return;
+    }
+    const hasSession = /(?:^|;\s*)policy_session=ready(?:;|$)/.test(request.headers.cookie ?? "");
+    if (request.url === "/privacy" && hasSession) {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><body><h1>Privacy Notice</h1><p>${policyText}</p></body></html>`);
+      return;
+    }
+    response.writeHead(403, { "content-type": "text/html; charset=utf-8" });
+    response.end("Access denied");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const homepageUrl = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-session-recovery-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const links = [
+      {
+        domLocation: "footer" as const,
+        href: `${homepageUrl}consumer-health`,
+        linkText: "Consumer Health Data Privacy Disclosure",
+        pageUrl: homepageUrl,
+      },
+      {
+        domLocation: "footer" as const,
+        href: `${homepageUrl}privacy?ref_=footer_privacy`,
+        linkText: "Privacy Notice",
+        pageUrl: homepageUrl,
+      },
+    ];
+    const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: homepageUrl,
+        normalizedUrl: homepageUrl,
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 6_000,
+        artifactWriter,
+        nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      },
+      links,
+      existingObservations: policySurfaceObservationsFromRetainedRenderedLinks({ links }),
+    });
+    const privacy = recovered.observations.find((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      canonicalWwwPolicyUrlVariant(observation.normalizedUrl ?? observation.url) === null &&
+      /\/privacy(?:\?|$)/.test(observation.normalizedUrl ?? observation.url)
+    );
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.documentEvaluationState, "usable");
+    assert.ok(requests.indexOf("/privacy") < requests.indexOf("/consumer-health"));
+  } finally {
+    server.close();
+    await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("policySurfaceScanner decodes compressed policy HTML before topic extraction", async () => {
   const policyText = Array.from({ length: 20 }, () =>
     "We process personal data for defined purposes under contract, consent, legal obligation, and legitimate interests. " +

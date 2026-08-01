@@ -47,7 +47,7 @@ const POLICY_FETCH_TIMEOUT_MS = 5_000;
 // that reached evaluation just after the soft budget; this does not extend
 // the module's outer deadline or broaden common-path guessing.
 const POLICY_PROTECTED_OBSERVED_FETCH_TIMEOUT_MS = 1_800;
-const POLICY_PROTECTED_RENDERED_FETCH_TIMEOUT_MS = 2_200;
+const POLICY_PROTECTED_RENDERED_FETCH_TIMEOUT_MS = 8_000;
 const POLICY_PROTECTED_RESERVE_MS = 4_500;
 // Text resolution for a warmed policy document can legitimately consume most
 // of eight seconds on a large notice. Preserve a bounded publication window so
@@ -109,6 +109,12 @@ export interface PolicySurfaceScannerInput {
     url: string;
   }>;
   discoveryMode?: "full" | "fast";
+  /**
+   * Ephemeral same-origin page used to establish the browser session before a
+   * retained rendered policy link is retried. This is runtime-only recovery
+   * context and is never projected as policy evidence.
+   */
+  renderedRecoverySessionPrimerUrl?: string;
   signal?: AbortSignal;
 }
 
@@ -1039,8 +1045,11 @@ export async function recoverPolicyDocumentsFromRetainedRenderedLinks(input: {
   const browserRuntime = createPolicyBrowserRuntime(input.scannerInput.browser);
   const recoveryInput: PolicySurfaceScannerInput = {
     ...input.scannerInput,
-    absoluteDeadlineAtMs: moduleStartedAtMs + 6_000,
-    internalBudgetMs: 6_000,
+    absoluteDeadlineAtMs: moduleStartedAtMs + 12_000,
+    internalBudgetMs: 12_000,
+    renderedRecoverySessionPrimerUrl: input.links.find((link) =>
+      sameOrigin(input.scannerInput.normalizedUrl, link.pageUrl)
+    )?.pageUrl ?? input.scannerInput.normalizedUrl,
   };
   const fetchCaches: PolicyDocumentFetchCaches = {
     browserRuntime,
@@ -1429,6 +1438,7 @@ function prioritizePolicyCandidateEvaluation(
     .sort((left, right) =>
       surfacePriority(left.candidate.deterministicSurfaceType) - surfacePriority(right.candidate.deterministicSurfaceType) ||
       policyCandidateProtectionPriority(left.candidate) - policyCandidateProtectionPriority(right.candidate) ||
+      policyDocumentScopePriority(left.candidate) - policyDocumentScopePriority(right.candidate) ||
       policyCandidateDiscoveryPriority(left.candidate) - policyCandidateDiscoveryPriority(right.candidate) ||
       policyCandidateQualityScore(right.candidate) - policyCandidateQualityScore(left.candidate) ||
       right.candidate.deterministicScore - left.candidate.deterministicScore ||
@@ -1441,6 +1451,18 @@ function prioritizePolicyCandidateEvaluation(
       seen.add(key);
       return true;
     });
+}
+
+function policyDocumentScopePriority(candidate: PolicySurfaceCandidate): number {
+  if (candidate.deterministicSurfaceType !== "privacy_policy") return 0;
+  const label = normalizeWhitespace(candidate.linkText).toLowerCase();
+  if (/^(?:privacy|data protection) (?:policy|notice)$/.test(label)) return 0;
+  if (
+    /\b(?:consumer health|children(?:'s)?|child privacy|state privacy|biometric|employee|applicant|job candidate)\b/.test(label)
+  ) {
+    return 2;
+  }
+  return 1;
 }
 
 function policyEvaluationCandidateKey(candidate: PolicySurfaceCandidate): string {
@@ -1701,6 +1723,7 @@ async function processPolicyCandidate({
       `Fetch ${candidate.deterministicSurfaceType} candidate document through bounded browser-rendered navigation after direct fetch failed.`,
       () => fetchRenderedPolicyDocumentSingleFlight(fetchCaches, {
         input,
+        primeSession: Boolean(input.renderedRecoverySessionPrimerUrl),
         url: candidate.normalizedUrl,
         timeoutMs: protectedObservedFetch
           ? Math.min(
@@ -2223,6 +2246,7 @@ function shouldTryRenderedPolicyDocumentTextFallback(input: {
 async function fetchRenderedPolicyDocumentText(input: {
   browserRuntime: PolicyBrowserRuntime;
   input: PolicySurfaceScannerInput;
+  primeSession?: boolean;
   url: string;
   timeoutMs: number;
 }): Promise<FetchTextResult> {
@@ -2233,9 +2257,31 @@ async function fetchRenderedPolicyDocumentText(input: {
     context = await browser.newContext(chromiumContextOptions());
     releaseAbortContext = bindAbortSignalToBrowserContext(context, input.input.signal);
     const page = await context.newPage();
+    const navigationDeadlineAtMs = Date.now() + Math.max(1_000, input.timeoutMs);
+    const sessionPrimerUrl = input.primeSession
+      ? input.input.renderedRecoverySessionPrimerUrl
+      : undefined;
+    if (
+      sessionPrimerUrl &&
+      sameOrigin(sessionPrimerUrl, input.url) &&
+      canonicalPolicyUrlIdentity(sessionPrimerUrl) !== canonicalPolicyUrlIdentity(input.url)
+    ) {
+      const primerTimeoutMs = Math.min(
+        3_500,
+        Math.max(1_000, Math.floor(input.timeoutMs * 0.45)),
+      );
+      await page.goto(sessionPrimerUrl, {
+        waitUntil: "commit",
+        timeout: primerTimeoutMs,
+      }).catch(() => null);
+      await page.waitForLoadState("domcontentloaded", {
+        timeout: Math.min(750, Math.max(250, navigationDeadlineAtMs - Date.now())),
+      }).catch(() => undefined);
+    }
+    const targetNavigationTimeoutMs = Math.max(1_000, navigationDeadlineAtMs - Date.now());
     const response = await page.goto(input.url, {
       waitUntil: "domcontentloaded",
-      timeout: Math.max(1_000, input.timeoutMs),
+      timeout: targetNavigationTimeoutMs,
     });
     await page.waitForLoadState("networkidle", {
       timeout: Math.min(1_000, Math.max(500, input.timeoutMs)),
@@ -5470,6 +5516,7 @@ function fetchRenderedPolicyDocumentSingleFlight(
   fetchCaches: PolicyDocumentFetchCaches,
   input: {
     input: PolicySurfaceScannerInput;
+    primeSession?: boolean;
     url: string;
     timeoutMs: number;
   },
@@ -5478,7 +5525,7 @@ function fetchRenderedPolicyDocumentSingleFlight(
   // the latter intentionally has a longer evidence wait and must never inherit
   // a shorter earlier attempt.
   const renderClass = input.timeoutMs >= 5_000 ? "quality" : "failure";
-  const key = `${policyDocumentFetchCacheKey(input.url)}|${renderClass}`;
+  const key = `${policyDocumentFetchCacheKey(input.url)}|${renderClass}|${input.primeSession ? "primed" : "unprimed"}`;
   const existing = fetchCaches.rendered.get(key);
   if (existing) {
     return existing;
