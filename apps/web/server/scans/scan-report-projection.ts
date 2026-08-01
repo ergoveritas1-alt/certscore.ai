@@ -13,10 +13,6 @@ import { debugBuildScanReportUnifiedFindingStateForScan } from "../../lib/scans/
 import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
 import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "./scan-detail-checklist";
 import { buildRuntimeCookieInventory } from "../../lib/scans/runtime-cookie-evidence";
-import { getAssessmentDirection, getEvidenceLabel } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
-import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
-import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
-import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import {
   buildPersistedFirstLayerConsentEvidence,
@@ -397,26 +393,6 @@ export async function deriveScanReportProjectionValue(
         unifiedFindings: reportState.globalUnifiedFindings
       })
     : null;
-  const reportableChecklistRows = getReportableGdprEprivacyCoverageItems(checklist).map((item) => {
-    const statusBasis = deriveGdprEprivacyCoverageChecklistRowRationale(item);
-    return {
-      ...item,
-      assessmentDirection: getAssessmentDirection(item),
-      criticalEvidence: {
-        ...item.criticalEvidence,
-        statusBasis
-      },
-      evidenceLabel: getEvidenceLabel(item),
-      note: statusBasis
-    };
-  });
-  const canonicalTopFindings = buildRegulatoryGapTopFindings({
-    gdprEprivacyArea: {
-      id: "gdpr_eprivacy",
-      rows: reportableChecklistRows,
-      title: "GDPR / ePrivacy"
-    }
-  });
   const choices = firstLayerConsentChoices(scanRecord);
   const assessment = canonicalConsentAssessment(scanRecord);
   assertCanonicalConsentProjectionInput(scanRecord, assessment);
@@ -432,7 +408,7 @@ export async function deriveScanReportProjectionValue(
 
   return {
     score,
-    topFindingCount: canonicalTopFindings.length,
+    topFindingCount: executiveFindingsProjection.topFindings.length,
     findingCount: reportState.globalUnifiedFindings.length || numberValue(snapshot?.report_finding_count),
     cmpVendorName: stringValue(snapshot?.cmp_vendor_name),
     privacyPolicyPresent: booleanValue(sourceSnapshot?.privacy_policy_present) ?? booleanValue(snapshot?.privacy_policy_present),
