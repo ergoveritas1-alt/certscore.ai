@@ -13,6 +13,10 @@ import { debugBuildScanReportUnifiedFindingStateForScan } from "../../lib/scans/
 import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
 import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "./scan-detail-checklist";
 import { buildRuntimeCookieInventory } from "../../lib/scans/runtime-cookie-evidence";
+import { getAssessmentDirection, getEvidenceLabel } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
+import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
+import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
+import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import {
   buildPersistedFirstLayerConsentEvidence,
   projectFirstLayerConsentChoices
@@ -388,6 +392,26 @@ export async function deriveScanReportProjectionValue(
         unifiedFindings: reportState.globalUnifiedFindings
       })
     : null;
+  const reportableChecklistRows = getReportableGdprEprivacyCoverageItems(checklist).map((item) => {
+    const statusBasis = deriveGdprEprivacyCoverageChecklistRowRationale(item);
+    return {
+      ...item,
+      assessmentDirection: getAssessmentDirection(item),
+      criticalEvidence: {
+        ...item.criticalEvidence,
+        statusBasis
+      },
+      evidenceLabel: getEvidenceLabel(item),
+      note: statusBasis
+    };
+  });
+  const canonicalTopFindings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      rows: reportableChecklistRows,
+      title: "GDPR / ePrivacy"
+    }
+  });
   const choices = firstLayerConsentChoices(scanRecord);
   const assessment = canonicalConsentAssessment(scanRecord);
   assertCanonicalConsentProjectionInput(scanRecord, assessment);
@@ -403,7 +427,7 @@ export async function deriveScanReportProjectionValue(
 
   return {
     score,
-    topFindingCount: reportState.globalUnifiedFindings.length || numberValue(snapshot?.top_finding_count),
+    topFindingCount: canonicalTopFindings.length,
     findingCount: reportState.globalUnifiedFindings.length || numberValue(snapshot?.report_finding_count),
     cmpVendorName: stringValue(snapshot?.cmp_vendor_name),
     privacyPolicyPresent: booleanValue(sourceSnapshot?.privacy_policy_present) ?? booleanValue(snapshot?.privacy_policy_present),
@@ -459,7 +483,25 @@ export async function persistScanReportProjection(
   const scanNoGoAssessment = record(sourceRuntimeArtifacts?.scan_no_go_assessment) ?? record(sourceRuntimeArtifacts?.scanNoGoAssessment) ?? record(sourceSnapshot?.scan_no_go_assessment);
   const visualAccessReview = record(sourceRuntimeArtifacts?.visual_access_review) ?? record(sourceRuntimeArtifacts?.visualAccessReview) ?? record(sourceSnapshot?.visual_access_review);
   const hash = sourceHash(scanRecord, value, source);
-  const persistedProjection = buildPersistedScanReportProjection(scanRecord);
+  const projectedSnapshot = {
+    ...(scanRecord.snapshot ?? {}),
+    certscore_overall: value.score,
+    cmp_vendor_name: value.cmpVendorName,
+    consent_accept_observed: value.consentAcceptObserved,
+    consent_evidence_status: value.consentEvidenceStatus,
+    consent_options_observed: value.consentOptionsObserved,
+    consent_reject_observed: value.consentRejectObserved,
+    privacy_policy_present: value.privacyPolicyPresent,
+    report_finding_count: value.findingCount,
+    score_scored_at: value.scoreScoredAt,
+    score_source: value.scoreSource,
+    score_version: value.scoreVersion,
+    top_finding_count: value.topFindingCount
+  };
+  const persistedProjection = buildPersistedScanReportProjection({
+    ...scanRecord,
+    snapshot: projectedSnapshot
+  });
   const generation = getScanReportProjectionGeneration(scanRecord);
 
   const persistence = await query(

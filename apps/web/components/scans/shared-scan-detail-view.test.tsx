@@ -55,13 +55,14 @@ test("site relationship doughnut is derived directly from canonical site relatio
   assert.doesNotMatch(source, />Priority mix</);
 });
 
-test("customer-facing scan detail calculates the current canonical model as its overall score", () => {
+test("customer-facing scan detail prefers the persisted canonical projection score", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
 
   assert.match(source, /deriveCanonicalOverallScoreForReport/);
   assert.doesNotMatch(source, /buildCanonicalShadowScoreInput|deriveCanonicalShadowScore|getCustomerFacingGdprEprivacyPostureAssessment/);
   assert.match(source, /scoreLabel="Overall score"/);
-  assert.doesNotMatch(source, /snapshot\?\.certscore_overall/);
+  assert.match(source, /persistedCanonicalOverallScore = getFiniteNumber\(snapshot\?\.certscore_overall\)/);
+  assert.match(source, /persistedCanonicalOverallScore \?\? canonicalOverallScore/);
 });
 
 test("pre-consent inventory exposes retained cookie metadata and all three data-flow layers", () => {

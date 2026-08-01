@@ -7622,8 +7622,9 @@ export async function SharedScanDetailView({
     checklistRows: gdprEprivacyCoverageChecklist,
     unifiedFindings: findingEvidenceDiagnostics
   });
+  const persistedCanonicalOverallScore = getFiniteNumber(snapshot?.certscore_overall);
   const executiveDisplayedScore = browserCoverageSufficient && criticalCoverageComplete !== false
-    ? canonicalOverallScore
+    ? persistedCanonicalOverallScore ?? canonicalOverallScore
     : null;
   const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {
