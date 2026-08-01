@@ -16,7 +16,7 @@ const OPENAI_RESPONSES_API_URL = "https://api.openai.com/v1/responses";
 export const POLICY_MODEL_REVIEW_CONTRACT_VERSION = "policy_model_review.v2" as const;
 export const POLICY_MODEL_REVIEW_PROMPT_VERSION = "policy_semantic_review.v5";
 const POLICY_REVIEW_SCHEMA_VERSION = "policy_semantic_review_output.v2";
-const POLICY_REVIEW_INVARIANT_VERSION = "policy_review_invariants.v6";
+const POLICY_REVIEW_INVARIANT_VERSION = "policy_review_invariants.v8";
 const MAX_DOCUMENTS = 6;
 const MAX_DOCUMENT_TEXT_CHARS = 18_000;
 const MAX_PACKET_TEXT_CHARS = 54_000;
@@ -781,6 +781,7 @@ export function buildPolicyReviewCacheKey(input: {
   model: string;
   reviewPhase?: "full" | "static" | "runtime_delta";
 }) {
+  const reasoningEffort = input.reviewPhase === "static" ? "low" : "model_default";
   return sha256(stableJson({
     contentHash: input.contentHash,
     contractVersion: POLICY_MODEL_REVIEW_CONTRACT_VERSION,
@@ -788,6 +789,7 @@ export function buildPolicyReviewCacheKey(input: {
     promptVersion: POLICY_MODEL_REVIEW_PROMPT_VERSION,
     schemaVersion: POLICY_REVIEW_SCHEMA_VERSION,
     invariantVersion: POLICY_REVIEW_INVARIANT_VERSION,
+    reasoningEffort,
     reviewPhase: input.reviewPhase ?? "full",
   }));
 }
@@ -1257,7 +1259,9 @@ function hasSubstantiveDataSubjectRightsEvidence(packet: PolicyReviewPacket) {
   const policyText = packet.documents.map((document) => document.text).join("\n");
   return [
     /\bright to (?:access|rectif|correct|erase|erasure|delete|object|restrict|restriction|portability|data portability)\b/i,
+    /\brights? to (?:request|obtain)\b.{0,100}\b(?:access|copy|correct|rectif|delete|erase|restrict|port)\b/i,
     /\bright of (?:access|rectification|erasure|objection|restriction|data portability)\b/i,
+    /\byou (?:can|may) (?:request |obtain )?access your (?:personal )?(?:information|data)\b/i,
     /\b(?:request|ask us to)\b.{0,100}\b(?:access|copy|correct|rectif|delete|erase|restrict|port)\b/i,
     /\blodge (?:a )?complaint\b/i,
     /\bcomplain to (?:a |the )?(?:supervisory authority|data protection authority|regulator)\b/i
@@ -1615,6 +1619,7 @@ export async function reviewPolicyPacketWithMini(input: {
 
   try {
     const useResponsesApi = /^gpt-5\.6(?:-|$)/.test(input.model);
+    const reasoningEffort = input.reviewPhase === "static" ? "low" : null;
     const reviewInput = JSON.stringify(buildPolicyReviewInput(input.packet));
     const response = await (input.fetchImpl ?? fetch)(
       useResponsesApi ? OPENAI_RESPONSES_API_URL : OPENAI_API_URL,
@@ -1630,8 +1635,8 @@ export async function reviewPolicyPacketWithMini(input: {
             model: input.model,
             instructions: buildSystemPrompt(topics),
             input: reviewInput,
-            max_output_tokens: input.reviewPhase === "runtime_delta" ? 2_200 : input.reviewPhase === "static" ? 4_500 : 6_000,
-            reasoning: { effort: "medium" },
+            max_output_tokens: input.reviewPhase === "runtime_delta" ? 2_200 : 6_000,
+            reasoning: { effort: reasoningEffort ?? "medium" },
             text: {
               format: {
                 type: "json_schema",
@@ -1643,8 +1648,10 @@ export async function reviewPolicyPacketWithMini(input: {
           }
           : {
             model: input.model,
-            max_completion_tokens: input.reviewPhase === "runtime_delta" ? 2_200 : input.reviewPhase === "static" ? 4_500 : 6_000,
-            temperature: 0,
+            max_completion_tokens: input.reviewPhase === "runtime_delta" ? 2_200 : 6_000,
+            ...(reasoningEffort
+              ? { reasoning_effort: reasoningEffort }
+              : { temperature: 0 }),
             response_format: {
               type: "json_schema",
               json_schema: {
@@ -1740,8 +1747,9 @@ export async function reviewPolicyPacketWithMini(input: {
         reasonCodes: [
           "shadow_review_only",
           `policy_review_phase_${input.reviewPhase ?? "full"}`,
+          `reasoning_effort_${reasoningEffort ?? "model_default"}`,
           ...(useResponsesApi
-            ? ["responses_api", "reasoning_effort_medium"]
+            ? ["responses_api"]
             : [])
         ],
         uncertaintyNotes: [],

@@ -262,9 +262,9 @@ variable "certscore_parallel_policy_review_enabled" {
 }
 
 variable "certscore_parallel_policy_projection_enabled" {
-  description = "Allows a verified parallel policy join to replace the canonical full review; keep disabled until parity gates pass."
+  description = "Allows a verified parallel policy join to replace the canonical full review after parity gates pass."
   type        = string
-  default     = "0"
+  default     = "1"
 }
 
 variable "worker_concurrency" {

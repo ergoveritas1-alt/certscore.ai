@@ -372,6 +372,8 @@ test("Mini request uses bounded output limits and the compact transport view", a
   });
 
   assert.equal(requestBody?.max_completion_tokens, 6_000);
+  assert.equal("reasoning_effort" in (requestBody ?? {}), false);
+  assert.equal(requestBody?.temperature, 0);
   const messages = requestBody?.messages as Array<{ content?: string }>;
   const transportedInput = JSON.parse(messages[1]?.content ?? "{}") as {
     documents?: Array<Record<string, unknown>>;
@@ -410,7 +412,7 @@ test("Mini request uses bounded output limits and the compact transport view", a
   assert.equal(rowProperties?.rationale?.maxLength, 320);
 });
 
-test("static policy review requests only policy-stable topics with a smaller output bound", async () => {
+test("static policy review requests only policy-stable topics with a bounded output limit", async () => {
   const packet = buildFixturePacket(
     "We use personal data to provide services and retain it only as long as necessary."
   );
@@ -438,7 +440,9 @@ test("static policy review requests only policy-stable topics with a smaller out
     json_schema?: { schema?: { properties?: { rows?: { required?: string[] } } } };
   };
 
-  assert.equal(requestBody?.max_completion_tokens, 4_500);
+  assert.equal(requestBody?.max_completion_tokens, 6_000);
+  assert.equal(requestBody?.reasoning_effort, "low");
+  assert.equal("temperature" in (requestBody ?? {}), false);
   assert.deepEqual(
     responseFormat.json_schema?.schema?.properties?.rows?.required,
     [...STATIC_POLICY_REVIEW_TOPICS],
@@ -1128,6 +1132,44 @@ test("generic retention and preference opt-outs cannot become substantive retent
     artifact.rows.find((row) => row.topic === "data_subject_rights")?.status,
     "ambiguous"
   );
+});
+
+test("a retained right to request access or deletion remains observed with incomplete document coverage", async () => {
+  const packet = buildFixturePacket(
+    "What Information Can I Access in My Account? You can access your information, including your profile and account history. Depending on your data choices, you may have the right to request access to or delete your personal information."
+  );
+  packet.documents[0]!.contentCoverage = {
+    ...packet.documents[0]!.contentCoverage,
+    status: "truncated",
+    limitationKeys: ["bounded_policy_text"],
+    packetTextTruncated: true
+  };
+  const rows = completeRows({
+    data_subject_rights: {
+      status: "observed",
+      confidence: 0.96,
+      sourceDocumentIds: [packet.documents[0]!.documentId],
+      sourceUrls: [packet.documents[0]!.canonicalUrl],
+      evidenceExcerpts: [
+        "You can access your information, including your profile and account history."
+      ],
+      reasonCodes: ["substantive_access_and_deletion_rights"],
+      rationale: "The retained text expressly provides access and deletion rights."
+    }
+  });
+  const artifact = await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async () => new Response(JSON.stringify({
+      model: "gpt-5.4-mini",
+      choices: [{ message: { content: JSON.stringify({ rows }) } }]
+    }), { status: 200 }),
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet
+  });
+  const rights = artifact.rows.find((row) => row.topic === "data_subject_rights");
+  assert.equal(rights?.status, "observed");
+  assert.deepEqual(rights?.sourceDocumentIds, [packet.documents[0]!.documentId]);
 });
 
 test("malformed Mini output fails closed with an explicit non-production artifact", async () => {
