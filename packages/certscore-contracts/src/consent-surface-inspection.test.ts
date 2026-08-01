@@ -159,6 +159,40 @@ test("completed recapture after an earlier timeout can retain a complete negativ
   assert.equal(outcome.coverageStatus, "complete");
 });
 
+test("independent typed DOM and geometry recovery completes consent inspection without upgrading general runtime coverage", () => {
+  const input = baseInput();
+  input.modulesRun![0]!.status = "partial";
+  input.runtimeCoverage = {
+    ...input.runtimeCoverage!,
+    coverageStatus: "limited_partial",
+    limitationKeys: ["pre_consent_runtime_partial", "consent_ui_capture_timed_out"],
+  };
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    captureStatus: "no_evidence",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    basis: [
+      "settled_control_inventory_completed",
+      "geometry:captured",
+      "recovery:independent_consent_capture_completed",
+    ],
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(input.runtimeCoverage.coverageStatus, "limited_partial");
+  assert.equal(outcome.outcome, "no_surface_observed_complete_coverage");
+  assert.equal(outcome.coverageStatus, "complete");
+  assert.equal(outcome.inspectionCompleted, true);
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "page_script_inventory")?.status, "observed");
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.status, "observed");
+  assert.equal(outcome.limitationKeys.includes("consent_surface_inspection_runtime_partial"), false);
+});
+
 test("missing settled inventory keeps a negative observation indeterminate", () => {
   const input = baseInput();
   input.consentUiObservations![0]!.basis = ["insufficient_banner_keywords"];

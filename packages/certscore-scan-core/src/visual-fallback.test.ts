@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createArtifactWriter } from "./artifact-writer.js";
-import { capturePreConsentScreenshotOnlyFallback } from "./index.js";
+import {
+  capturePreConsentScreenshotOnlyFallback,
+  consentInspectionNeedsRecovery,
+} from "./index.js";
 import { classifyVisualCaptureFailureReason } from "./scanners/pre-consent-runtime-scanner.js";
 import { startStaticFixtureServer } from "./test-fixtures/static-server.js";
 
@@ -25,6 +28,36 @@ test("visual capture distinguishes renderer crashes from browser and page closur
     classifyVisualCaptureFailureReason("Supplemental full-page screenshot timed out"),
     "screenshot_timeout",
   );
+});
+
+test("typed partial consent diagnostics trigger recovery without relying on error wording", () => {
+  assert.equal(consentInspectionNeedsRecovery({
+    moduleStatus: "partial",
+    observations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 1,
+      captureStatus: "incomplete",
+      captureDiagnostics: {
+        completedChannels: ["screenshot"],
+        timedOutChannels: ["dom_inventory"],
+        failedChannels: [],
+      },
+      likelyPresent: false,
+      basis: ["bounded module deadline reached"],
+      visibleChoiceLabels: [],
+      defaultTogglePurposeLabels: [],
+      precheckedOptionalPurposeCount: 0,
+      precheckedOptionalPurposeLabels: [],
+      acceptControlObserved: false,
+      rejectControlObserved: false,
+      managePreferencesControlObserved: false,
+      controls: [],
+      impliedConsentLanguageObserved: false,
+      impliedConsentLanguageEvidence: [],
+      evidenceRefs: [],
+      confidence: 0.4,
+    }],
+  }), true);
 });
 
 test("visual fallback retains bounded consent-surface evidence with the screenshot", async () => {
@@ -82,6 +115,62 @@ test("full-page visual fallback preserves late consent surfaces after incomplete
     assert.equal(result.consentUiObservation?.likelyPresent, true);
     assert.equal(result.consentUiObservation?.acceptControlObserved, true);
     assert.equal(result.consentUiObservation?.rejectControlObserved, true);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bounded consent recovery retains canonical DOM inventory and geometry evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-consent-recovery-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await capturePreConsentScreenshotOnlyFallback({
+      artifactWriter,
+      normalizedUrl: server.urlFor("consent-simple-accept-reject"),
+      scanStartedAtMs: Date.now(),
+      screenshotTimeoutMs: 5_000,
+      captureMode: "full_page",
+      recoverConsentEvidence: true,
+      fallbackDeadlineMs: 6_000,
+    });
+
+    assert.equal(result.consentRecoveryCompleted, true);
+    assert.equal(result.screenshot, undefined);
+    assert.equal(result.consentUiObservation?.captureStatus, "observed");
+    assert.ok(result.consentUiObservation?.captureDiagnostics?.completedChannels.includes("dom_inventory"));
+    assert.ok(result.consentUiObservation?.captureDiagnostics?.completedChannels.includes("geometry"));
+    assert.ok(result.consentUiObservation?.basis.includes("recovery:independent_consent_capture_completed"));
+    assert.equal(result.consentUiObservation?.rejectControlObserved, true);
+    await access(path.join(tempRoot, "ConsentControlGeometryEvidence.json"));
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bounded consent recovery can retain complete no-surface evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-consent-recovery-negative-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await capturePreConsentScreenshotOnlyFallback({
+      artifactWriter,
+      normalizedUrl: server.urlFor("policy-footer-privacy"),
+      scanStartedAtMs: Date.now(),
+      screenshotTimeoutMs: 5_000,
+      captureMode: "full_page",
+      recoverConsentEvidence: true,
+      fallbackDeadlineMs: 6_000,
+    });
+
+    assert.equal(result.consentRecoveryCompleted, true);
+    assert.equal(result.consentUiObservation?.captureStatus, "no_evidence");
+    assert.equal(result.consentUiObservation?.likelyPresent, false);
+    assert.equal(result.consentUiObservation?.controls.length, 0);
+    assert.ok(result.consentUiObservation?.basis.includes("settled_control_inventory_completed"));
+    assert.ok(result.consentUiObservation?.basis.includes("geometry:captured"));
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });

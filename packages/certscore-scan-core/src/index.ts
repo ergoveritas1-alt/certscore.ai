@@ -42,9 +42,12 @@ import { createOpenAiNanoPolicyAssistProviderFromEnv } from "./nano-policy-assis
 import { getScanProfile } from "./profiles.js";
 import { consentFlowRuntimeScannerPlaceholder, policySurfaceScannerPlaceholder } from "./scanners/placeholders.js";
 import {
+  consentUiObservationFromConfirmedGeometryControls,
   detectConsentUi,
   preConsentRuntimeScanner,
+  readRapidFirstLayerConsentUiObservation,
   readDeclaredDocumentLanguage,
+  reconcileConsentUiRecapture,
   type PreConsentRuntimeScannerResult,
 } from "./scanners/pre-consent-runtime-scanner.js";
 import {
@@ -56,6 +59,12 @@ import {
   type PolicySurfaceScannerResult,
 } from "./scanners/policy-surface-scanner.js";
 import { chromiumContextOptions, chromiumLaunchOptions, chromiumProxyOptions } from "./playwright-runtime.js";
+import { captureConsentControlGeometry } from "./consent-control-geometry.js";
+import {
+  buildConsentGeometryEgressDiagnostic,
+  collectConsentGeometryPageAccess,
+} from "./consent-geometry-access.js";
+import { maybeFulfillHeavyResource } from "./resource-stubbing.js";
 import { throwIfAborted } from "./abort.js";
 import {
   classifyNavigationFailure,
@@ -426,30 +435,56 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       fallbackDeadlineMs: input.preConsentVisualFallbackDeadlineMs,
       screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
       captureMode: shouldCaptureIncompleteConsentVisualFallback ? "full_page" : "viewport",
+      recoverConsentEvidence: shouldCaptureIncompleteConsentVisualFallback,
+      retainedScreenshotArtifactRef: preConsentResult.screenshots[0]?.path,
     }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       return {
         error: message,
       };
     });
-    if ("screenshot" in screenshotFallback) {
+    if (!("error" in screenshotFallback)) {
       const fallbackConsentUiObservations = screenshotFallback.consentUiObservation
         ? [screenshotFallback.consentUiObservation]
         : [];
       const fallbackDomSnapshots = screenshotFallback.domSnapshot ? [screenshotFallback.domSnapshot] : [];
+      const currentConsentObservation = preConsentResult.consentUiObservations.at(-1);
+      const recoveryResolution = currentConsentObservation && screenshotFallback.consentUiObservation
+        ? reconcileConsentUiRecapture({
+          current: currentConsentObservation,
+          candidate: screenshotFallback.consentUiObservation,
+          strongerBasis: "recovery:independent_consent_capture_stronger_controls",
+          completedWithoutControlsBasis: "recovery:independent_consent_capture_completed_without_first_layer_controls",
+        })
+        : null;
+      const typedCompletedNegativeRecovery =
+        currentConsentObservation?.captureStatus === "incomplete" &&
+        currentConsentObservation.controls.length === 0 &&
+        screenshotFallback.consentRecoveryCompleted &&
+        screenshotFallback.consentUiObservation?.captureStatus === "no_evidence";
+      const reconciledConsentObservation = typedCompletedNegativeRecovery
+        ? screenshotFallback.consentUiObservation
+        : recoveryResolution?.observation ?? screenshotFallback.consentUiObservation;
+      const retainedConsentUiObservations = reconciledConsentObservation
+        ? [
+          ...preConsentResult.consentUiObservations.slice(0, Math.max(0, preConsentResult.consentUiObservations.length - 1)),
+          reconciledConsentObservation,
+        ]
+        : preConsentResult.consentUiObservations;
       preConsentResult = {
         ...preConsentResult,
-        screenshots: [
-          screenshotFallback.screenshot,
-          ...preConsentResult.screenshots.filter((screenshot) =>
-            screenshot.artifactId !== screenshotFallback.screenshot.artifactId
-          ),
-        ],
-        visualCapture: screenshotFallback.visualCapture,
-        consentUiObservations: [
-          ...preConsentResult.consentUiObservations,
-          ...fallbackConsentUiObservations,
-        ],
+        screenshots: screenshotFallback.screenshot
+          ? [
+            screenshotFallback.screenshot,
+            ...preConsentResult.screenshots.filter((screenshot) =>
+              screenshot.artifactId !== screenshotFallback.screenshot?.artifactId
+            ),
+          ]
+          : preConsentResult.screenshots,
+        visualCapture: screenshotFallback.screenshot
+          ? screenshotFallback.visualCapture
+          : preConsentResult.visualCapture,
+        consentUiObservations: retainedConsentUiObservations,
         domSnapshots: [
           ...preConsentResult.domSnapshots,
           ...fallbackDomSnapshots,
@@ -458,8 +493,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
           ...preConsentResult.moduleRun,
           errors: [
             ...(preConsentResult.moduleRun.errors ?? []),
-            shouldCaptureIncompleteConsentVisualFallback
-              ? "Independent full-page visual fallback retained bounded consent-surface evidence after the primary consent inspection was incomplete."
+            screenshotFallback.consentRecoveryCompleted
+              ? "Independent bounded consent recovery retained typed DOM-inventory and geometry evidence after the primary consent inspection was incomplete."
+              : shouldCaptureIncompleteConsentVisualFallback
+                ? "Independent full-page visual fallback retained bounded consent-surface evidence after the primary consent inspection was incomplete."
               : fallbackConsentUiObservations.length > 0
                 ? "Visual fallback retained a pre-consent screenshot and bounded consent-surface evidence after the primary runtime page/context closed."
                 : "Screenshot-only visual fallback retained a pre-consent screenshot after the primary runtime page/context closed.",
@@ -467,7 +504,8 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         },
       };
       await phaseRecorder.record("pre_consent_screenshot_only_fallback", "completed", {
-        artifactId: screenshotFallback.screenshot.artifactId,
+        artifactId: screenshotFallback.screenshot?.artifactId,
+        consentRecoveryCompleted: screenshotFallback.consentRecoveryCompleted,
       });
     } else {
       preConsentResult = {
@@ -2454,6 +2492,13 @@ function shouldAttemptIncompleteConsentVisualFallback(
   result: Awaited<ReturnType<typeof preConsentRuntimeScanner>>,
   screenshotMode: RunScanInput["preConsentScreenshotMode"],
 ) {
+  const typedInspectionIncomplete = consentInspectionNeedsRecovery({
+    moduleStatus: result.moduleRun.status,
+    observations: result.consentUiObservations,
+  });
+  if (typedInspectionIncomplete) {
+    return true;
+  }
   if (screenshotMode === "never" || result.screenshots.length === 0) {
     return false;
   }
@@ -2471,6 +2516,17 @@ function shouldAttemptIncompleteConsentVisualFallback(
   return inspectionIncomplete;
 }
 
+export function consentInspectionNeedsRecovery(input: {
+  moduleStatus: CanonicalEvidenceBundle["modulesRun"][number]["status"];
+  observations: ConsentUiObservation[];
+}): boolean {
+  return input.moduleStatus === "partial" && input.observations.some((observation) =>
+    observation.captureStatus === "incomplete" ||
+    (observation.captureDiagnostics?.timedOutChannels.length ?? 0) > 0 ||
+    (observation.captureDiagnostics?.failedChannels.length ?? 0) > 0
+  );
+}
+
 export async function capturePreConsentScreenshotOnlyFallback(input: {
   artifactWriter: ArtifactWriter;
   fallbackDeadlineMs?: number;
@@ -2480,11 +2536,14 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
   scanStartedAtMs: number;
   screenshotTimeoutMs?: number;
   captureMode?: "viewport" | "full_page";
+  recoverConsentEvidence?: boolean;
+  retainedScreenshotArtifactRef?: string;
 }): Promise<{
-  screenshot: ScreenshotArtifact;
+  screenshot?: ScreenshotArtifact;
   visualCapture: VisualCaptureSummary;
   consentUiObservation?: ConsentUiObservation;
   domSnapshot?: DomSnapshotArtifact;
+  consentRecoveryCompleted: boolean;
 }> {
   const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
   const fallbackStartedAtMs = Date.now();
@@ -2514,18 +2573,26 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
   try {
     const context = await browser.newContext(chromiumContextOptions());
     try {
+      if (input.recoverConsentEvidence) {
+        await context.route("**/*", async (route) => {
+          if (await maybeFulfillHeavyResource(route)) return;
+          await route.continue();
+        });
+      }
       const page = await context.newPage();
       const navigationUrls = input.navigationUrls?.length
         ? input.navigationUrls
         : [input.navigationUrl ?? input.normalizedUrl];
       let navigationError: unknown;
       let navigationRecovered = false;
+      let navigationHttpStatus: number | undefined;
       for (const [index, navigationUrl] of navigationUrls.entries()) {
         try {
-          await page.goto(navigationUrl, {
+          const response = await page.goto(navigationUrl, {
             waitUntil: "commit",
             timeout: timeoutForStep(Math.max(2_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 15_000))),
           });
+          navigationHttpStatus = response?.status();
           navigationRecovered = index > 0;
           navigationError = undefined;
           break;
@@ -2539,7 +2606,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
       if (domContentLoadedTimeoutMs !== null) {
         await page.waitForLoadState("domcontentloaded", { timeout: domContentLoadedTimeoutMs }).catch(() => undefined);
       }
-      const networkIdleTimeoutMs = optionalTimeoutForStep(1_000);
+      const networkIdleTimeoutMs = optionalTimeoutForStep(input.recoverConsentEvidence ? 500 : 1_000);
       if (networkIdleTimeoutMs !== null) {
         await page.waitForLoadState("networkidle", { timeout: networkIdleTimeoutMs }).catch(() => undefined);
       }
@@ -2550,49 +2617,26 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
       if (viewportSettleTimeoutMs !== null) {
         await page.waitForTimeout(viewportSettleTimeoutMs).catch(() => undefined);
       }
-      if (captureMode === "full_page") {
+      if (captureMode === "full_page" && !input.recoverConsentEvidence) {
         const passiveSettleTimeoutMs = optionalTimeoutForStep(3_000, 250);
         if (passiveSettleTimeoutMs !== null) {
           await page.waitForTimeout(passiveSettleTimeoutMs).catch(() => undefined);
         }
       }
-      await page.screenshot({
-        fullPage: captureMode === "full_page",
-        path: screenshotPath,
-        timeout: timeoutForStep(Math.max(1_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 15_000))),
-      });
-      const domTextTimeoutMs = optionalTimeoutForStep(2_000);
-      const domText = domTextTimeoutMs === null
-        ? ""
-        : await page.locator("body").innerText({ timeout: domTextTimeoutMs }).catch(() => "");
-      const domPath = domText
-        ? await input.artifactWriter.writeTextArtifact(
-          "dom-text-pre-consent.txt",
-          domText.slice(0, 100_000),
-        )
-        : undefined;
-      const documentLanguage = await readDeclaredDocumentLanguage(page);
-      const consentUiTimeoutMs = optionalTimeoutForStep(1_500);
-      const consentUiObservation = consentUiTimeoutMs === null
-        ? undefined
-        : await detectConsentUi(
-          page,
-          input.scanStartedAtMs,
-          consentUiTimeoutMs,
-          captureMode === "full_page"
-            ? {
-              allowFullDocumentCmpControls: true,
-              waitForControlsOnTextOnlySurface: true,
-            }
-            : undefined,
-        ).catch(() => undefined);
-      if (consentUiObservation && domPath) {
-        consentUiObservation.evidenceRefs = [
-          { refId: "dom_text_pre_consent", artifactId: "dom_text_pre_consent", path: domPath },
-        ];
+      const recoverySettleTimeoutMs = input.recoverConsentEvidence
+        ? optionalTimeoutForStep(500, 100)
+        : null;
+      if (recoverySettleTimeoutMs !== null) {
+        await page.waitForTimeout(recoverySettleTimeoutMs).catch(() => undefined);
       }
-      return {
-        screenshot: {
+      let screenshot: ScreenshotArtifact | undefined;
+      if (!input.recoverConsentEvidence) {
+        await page.screenshot({
+          fullPage: captureMode === "full_page",
+          path: screenshotPath,
+          timeout: timeoutForStep(Math.max(1_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 15_000))),
+        });
+        screenshot = {
           artifactId: captureMode === "full_page" ? "screenshot_pre_consent_full_page" : "screenshot_pre_consent",
           capturedAtMs: Date.now() - input.scanStartedAtMs,
           captureMethod: captureMode === "full_page" ? "fresh_context_full_page" : "independent_visual_fallback_viewport",
@@ -2600,11 +2644,115 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
           url: page.url(),
           pagePhase: captureMode === "full_page" ? "network_idle" : "dom_content_loaded",
           consentStateAtTime: "pre_consent",
-        },
+        };
+      }
+      const domTextTimeoutMs = optionalTimeoutForStep(input.recoverConsentEvidence ? 600 : 2_000);
+      const domText = domTextTimeoutMs === null
+        ? ""
+        : await page.locator("body").innerText({ timeout: domTextTimeoutMs }).catch(() => "");
+      const domArtifactId = input.recoverConsentEvidence
+        ? "dom_text_pre_consent_recovery"
+        : "dom_text_pre_consent";
+      const domPath = domText
+        ? await input.artifactWriter.writeTextArtifact(
+          input.recoverConsentEvidence
+            ? "dom-text-pre-consent-recovery.txt"
+            : "dom-text-pre-consent.txt",
+          domText.slice(0, 100_000),
+        )
+        : undefined;
+      const documentLanguage = await readDeclaredDocumentLanguage(page);
+      const consentUiTimeoutMs = optionalTimeoutForStep(input.recoverConsentEvidence ? 1_250 : 1_500);
+      let consentUiObservation = consentUiTimeoutMs === null
+        ? undefined
+        : input.recoverConsentEvidence
+          ? await readRapidFirstLayerConsentUiObservation(
+            page,
+            input.scanStartedAtMs,
+            consentUiTimeoutMs,
+            "retry",
+          ).catch(() => undefined)
+          : await detectConsentUi(
+            page,
+            input.scanStartedAtMs,
+            consentUiTimeoutMs,
+            captureMode === "full_page"
+              ? {
+                allowFullDocumentCmpControls: true,
+                waitForControlsOnTextOnlySurface: true,
+              }
+              : undefined,
+          ).catch(() => undefined);
+      let consentRecoveryCompleted = false;
+      if (input.recoverConsentEvidence && consentUiObservation) {
+        const geometryTimeoutMs = optionalTimeoutForStep(1_250, 250);
+        if (geometryTimeoutMs !== null) {
+          const access = await collectConsentGeometryPageAccess(page, navigationHttpStatus, {
+            frameTextTimeoutMs: Math.min(250, geometryTimeoutMs),
+            supplementalBodyText: domText,
+          });
+          const geometry = await captureConsentControlGeometry(page, {
+            screenshotArtifactRef: input.retainedScreenshotArtifactRef,
+            timeoutMs: geometryTimeoutMs,
+          });
+          const geometryDocumentMatches = normalizedDocumentIdentity(geometry.pageUrl) === normalizedDocumentIdentity(page.url());
+          const geometryComplete =
+            access.status === "loaded" &&
+            geometryDocumentMatches &&
+            geometry.pageUrl !== "about:blank" &&
+            geometry.viewport.width > 0 &&
+            geometry.viewport.height > 0 &&
+            geometry.summary.confidence > 0;
+          const geometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
+            geometryComplete
+              ? "ConsentControlGeometryEvidence.json"
+              : "ConsentControlGeometryRecoveryDiagnostic.json",
+            {
+              ...geometry,
+              observedAtMs: Date.now() - input.scanStartedAtMs,
+              access,
+              egress: buildConsentGeometryEgressDiagnostic(),
+              artifactOnly: true,
+              productionFindingIntegration: false,
+            },
+          );
+          const geometryObservation = geometryComplete
+            ? consentUiObservationFromConfirmedGeometryControls({
+              artifactPath: geometryArtifactPath,
+              geometry,
+              scanStartedAtMs: input.scanStartedAtMs,
+              text: domText,
+            })
+            : null;
+          if (geometryObservation) {
+            consentUiObservation = reconcileConsentUiRecapture({
+              current: consentUiObservation,
+              candidate: geometryObservation,
+              strongerBasis: "geometry:confirmed_first_layer_controls",
+              completedWithoutControlsBasis: "geometry:no_visible_first_layer_controls",
+            }).observation;
+          }
+          const inventoryComplete = consentUiObservation.captureStatus !== "incomplete" &&
+            consentUiObservation.captureDiagnostics?.completedChannels.includes("dom_inventory") === true;
+          consentRecoveryCompleted = inventoryComplete && geometryComplete;
+          if (consentRecoveryCompleted) {
+            consentUiObservation = markConsentRecoveryCompleted(consentUiObservation, geometryArtifactPath);
+          }
+        }
+      }
+      if (consentUiObservation && domPath) {
+        consentUiObservation.evidenceRefs = [
+          ...consentUiObservation.evidenceRefs,
+          { refId: domArtifactId, artifactId: domArtifactId, path: domPath },
+        ];
+      }
+      return {
+        screenshot,
         visualCapture: {
-          status: "available",
+          status: screenshot ? "available" : "unavailable",
+          ...(screenshot ? {} : { failureReason: "skipped_by_mode" as const }),
           captureMethod: captureMode === "full_page" ? "fresh_context_full_page" : "independent_visual_fallback_viewport",
-          artifactRefs: [{
+          artifactRefs: screenshot ? [{
             artifactId: captureMode === "full_page" ? "screenshot_pre_consent_full_page" : "screenshot_pre_consent",
             artifactType: "screenshot",
             path: screenshotPath,
@@ -2612,12 +2760,16 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
             sensitivity: "safe",
             redactionStatus: "not_needed",
             relatedEventIds: [],
-          }],
+          }] : [],
           notes: [
             ...(navigationRecovered
               ? [`Independent visual fallback recovered through bounded navigation alternative ${page.url()}.`]
               : []),
-            captureMode === "full_page"
+            input.recoverConsentEvidence
+              ? consentRecoveryCompleted
+                ? "Typed DOM-inventory and geometry evidence retained by an independent bounded consent recovery after incomplete primary inspection."
+                : "Independent bounded consent recovery remained incomplete; retained diagnostics did not upgrade canonical consent coverage."
+              : captureMode === "full_page"
               ? "Full-page screenshot and bounded consent-surface evidence retained by an independent visual fallback after incomplete primary consent inspection."
               : consentUiObservation
                 ? "Screenshot and bounded consent-surface evidence retained by an independent visual fallback after the primary runtime page/context closed."
@@ -2627,7 +2779,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
         consentUiObservation,
         domSnapshot: domPath
           ? {
-            artifactId: "dom_text_pre_consent",
+            artifactId: domArtifactId,
             capturedAtMs: Date.now() - input.scanStartedAtMs,
             path: domPath,
             url: page.url(),
@@ -2637,6 +2789,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
             consentStateAtTime: "pre_consent",
           }
           : undefined,
+        consentRecoveryCompleted,
       };
     } finally {
       await context.close().catch(() => undefined);
@@ -2647,6 +2800,55 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
     }
     await browser.close().catch(() => undefined);
   }
+}
+
+function normalizedDocumentIdentity(value: string): string | null {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    if (url.pathname !== "/") url.pathname = url.pathname.replace(/\/+$/, "");
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function markConsentRecoveryCompleted(
+  observation: ConsentUiObservation,
+  geometryArtifactPath: string,
+): ConsentUiObservation {
+  const completedChannels = uniqueStrings([
+    ...(observation.captureDiagnostics?.completedChannels ?? []),
+    "dom_inventory",
+    "geometry",
+  ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["completedChannels"];
+  return {
+    ...observation,
+    captureStatus: observation.likelyPresent || observation.controls.length > 0 ? "observed" : "no_evidence",
+    captureDiagnostics: {
+      completedChannels,
+      timedOutChannels: (observation.captureDiagnostics?.timedOutChannels ?? [])
+        .filter((channel) => !completedChannels.includes(channel)),
+      failedChannels: (observation.captureDiagnostics?.failedChannels ?? [])
+        .filter((channel) => !completedChannels.includes(channel)),
+    },
+    basis: uniqueStrings([
+      ...observation.basis,
+      "settled_control_inventory_completed",
+      "geometry:captured",
+      "recovery:independent_consent_capture_completed",
+    ]),
+    evidenceRefs: [
+      ...observation.evidenceRefs,
+      {
+        artifactId: "consent_control_geometry",
+        eventType: "consent_control_geometry",
+        label: "Bounded independent consent-control geometry evidence",
+        path: geometryArtifactPath,
+        refId: "consent_control_geometry_evidence",
+      },
+    ],
+  };
 }
 
 function normalizeUrl(url: string): string {

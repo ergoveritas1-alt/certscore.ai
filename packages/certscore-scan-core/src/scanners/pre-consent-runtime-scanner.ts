@@ -4496,7 +4496,7 @@ async function waitForSufficientDirectCmpSemanticControls(
   }
 }
 
-async function readRapidFirstLayerConsentUiObservation(
+export async function readRapidFirstLayerConsentUiObservation(
   page: Page,
   scanStartedAtMs: number,
   timeoutMs = 750,
