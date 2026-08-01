@@ -193,6 +193,71 @@ test("independent typed DOM and geometry recovery completes consent inspection w
   assert.equal(outcome.limitationKeys.includes("consent_surface_inspection_runtime_partial"), false);
 });
 
+test("corroborated positive DOM and accessibility capture completes a partial consent lane without requiring geometry", () => {
+  const input = baseInput();
+  input.modulesRun![0]!.status = "partial";
+  input.runtimeCoverage = {
+    ...input.runtimeCoverage!,
+    coverageStatus: "limited_partial",
+    limitationKeys: ["pre_consent_runtime_partial", "consent_control_geometry_unavailable"],
+  };
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    captureStatus: "observed",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "accessibility_tree"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    basis: ["inventory:direct_cmp_semantic_controls", "inventory:accessibility_tree_controls"],
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    visibleChoiceLabels: ["Accept All", "Show Purposes"],
+    acceptControlObserved: true,
+    managePreferencesControlObserved: true,
+    controls: [
+      { actionType: "accept_all", classifierReasonCodes: ["canonical_match"], label: "Accept All", visible: true },
+      { actionType: "manage_preferences", classifierReasonCodes: ["canonical_match"], label: "Show Purposes", visible: true },
+    ],
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(input.runtimeCoverage.coverageStatus, "limited_partial");
+  assert.equal(outcome.outcome, "actionable_surface_observed");
+  assert.equal(outcome.coverageStatus, "complete");
+  assert.equal(outcome.inspectionCompleted, true);
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "page_script_inventory")?.status, "observed");
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "accessibility_tree")?.status, "observed");
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.status, "not_observed");
+  assert.equal(outcome.limitationKeys.includes("consent_surface_inspection_runtime_partial"), false);
+});
+
+test("corroborating inventory channels do not complete a partial negative consent lane without geometry", () => {
+  const input = baseInput();
+  input.modulesRun![0]!.status = "partial";
+  input.runtimeCoverage = {
+    ...input.runtimeCoverage!,
+    coverageStatus: "limited_partial",
+    limitationKeys: ["pre_consent_runtime_partial"],
+  };
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    captureStatus: "no_evidence",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "accessibility_tree"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "indeterminate_limited_coverage");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.equal(outcome.inspectionCompleted, false);
+});
+
 test("missing settled inventory keeps a negative observation indeterminate", () => {
   const input = baseInput();
   input.consentUiObservations![0]!.basis = ["insufficient_banner_keywords"];

@@ -2000,6 +2000,24 @@ export const consentSurfaceInspectionOutcomeSchema = z.object({
 
 type ConsentEvidenceChannel = z.infer<typeof consentSurfaceInspectionOutcomeSchema>["evidenceChannels"][number];
 
+function hasVerifiedPositiveConsentCapture(
+  observations: z.infer<typeof consentUiObservationSchema>[],
+): boolean {
+  return observations.some((observation) =>
+    observation.captureStatus === "observed" &&
+    observation.likelyPresent &&
+    observation.layerInspected === "first_layer" &&
+    observation.captureDiagnostics?.completedChannels.includes("dom_inventory") === true &&
+    observation.captureDiagnostics.completedChannels.includes("accessibility_tree") &&
+    (
+      observation.acceptControlObserved ||
+      observation.rejectControlObserved ||
+      observation.managePreferencesControlObserved ||
+      observation.controls.some((control) => control.visible !== false)
+    )
+  );
+}
+
 function deriveConsentEvidenceChannels(input: {
   cmpRuntimeObservations: z.infer<typeof cmpRuntimeObservationSchema>[];
   consentUiObservations: z.infer<typeof consentUiObservationSchema>[];
@@ -2017,7 +2035,9 @@ function deriveConsentEvidenceChannels(input: {
     observation.captureDiagnostics?.completedChannels.includes("dom_inventory") === true &&
     observation.captureDiagnostics.completedChannels.includes("geometry")
   );
-  const runtimeIncomplete = preConsentRun?.status !== "completed" && !independentRecoveryCompleted;
+  const verifiedPositiveCaptureCompleted = hasVerifiedPositiveConsentCapture(observations);
+  const consentLaneCompleted = independentRecoveryCompleted || verifiedPositiveCaptureCompleted;
+  const runtimeIncomplete = preConsentRun?.status !== "completed" && !consentLaneCompleted;
   const hasObservationBasis = (pattern: RegExp) => observations.some((observation) =>
     observation.basis.some((basis) => pattern.test(basis))
   );
@@ -2057,7 +2077,7 @@ function deriveConsentEvidenceChannels(input: {
   const geometryObserved = hasObservationBasis(/geometry:(?:captured|confirmed)|geometry_proof/i);
   const geometryIncomplete = hasObservationBasis(/geometry_capture_unavailable|geometry.*(?:failed|unavailable)/i);
   const consentObservationIncomplete =
-    !independentRecoveryCompleted && (
+    !consentLaneCompleted && (
       observations.some((observation) => observation.captureStatus === "incomplete") ||
       hasObservationBasis(/bounded_capture_timeout_or_failure|probe_failed|runtime_partial/i)
     );
@@ -2158,7 +2178,9 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     observation.captureDiagnostics?.completedChannels.includes("dom_inventory") === true &&
     observation.captureDiagnostics.completedChannels.includes("geometry")
   );
-  const observationFailed = observations.length === 0 || !independentRecoveryCompleted && observations.some((observation) =>
+  const verifiedPositiveCaptureCompleted = hasVerifiedPositiveConsentCapture(observations);
+  const consentLaneCompleted = independentRecoveryCompleted || verifiedPositiveCaptureCompleted;
+  const observationFailed = observations.length === 0 || !consentLaneCompleted && observations.some((observation) =>
     observation.captureStatus === "incomplete" ||
     (
       observation.captureStatus === undefined &&
@@ -2183,7 +2205,7 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
   ]);
   const materialLimitationKeys = (input.runtimeCoverage?.limitationKeys ?? []).filter(
     (key) => key !== "post_consent_flow_runtime_disabled" &&
-      !(independentRecoveryCompleted && supersededConsentRecoveryLimitations.has(key))
+      !(consentLaneCompleted && supersededConsentRecoveryLimitations.has(key))
   );
   const retainedVisualOrDomEvidence =
     input.visualCapture?.status === "available" ||
@@ -2192,7 +2214,7 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
   const inspectionLimitationKeys = [
     ...materialLimitationKeys,
     !preConsentRun ? "consent_surface_inspection_runtime_not_run" : null,
-    preConsentRun && preConsentRun.status !== "completed" && !independentRecoveryCompleted
+    preConsentRun && preConsentRun.status !== "completed" && !consentLaneCompleted
       ? `consent_surface_inspection_runtime_${preConsentRun.status}`
       : null,
     observations.length === 0 ? "consent_surface_inspection_observation_missing" : null,
@@ -2205,7 +2227,7 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     .filter((value, index, values) => values.indexOf(value) === index)
     .slice(0, 16);
   const inspectionCompleted =
-    (preConsentRun?.status === "completed" || independentRecoveryCompleted) &&
+    (preConsentRun?.status === "completed" || consentLaneCompleted) &&
     input.runtimeCoverage?.coverageStatus !== "limited_none" &&
     input.runtimeCoverage?.coverageStatus !== "not_applicable" &&
     inspectionLimitationKeys.length === 0;
