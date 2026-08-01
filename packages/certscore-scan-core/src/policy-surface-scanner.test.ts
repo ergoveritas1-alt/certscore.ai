@@ -1235,6 +1235,38 @@ test("policy section extraction preserves structured table rows for canonical mu
   assert.equal(evidence.every((row) => row.status === "diagnostic_only" && row.productionCredit === false), true);
 });
 
+test("policy section extraction retains canonical topic windows from a long headingless policy body", () => {
+  const sourceUrl = "https://media.example/privacy";
+  const visibleText = [
+    "Privacy Policy. This policy describes how Media Example handles personal information when you use our services.",
+    "Background information about our products and accounts. ".repeat(30),
+    "How we use your personal information. We use your personal information to operate, provide, develop, and improve the products and services offered to customers.",
+    "We share personal information with service providers, affiliates, analytics providers, and advertising partners that support the services.",
+    "Personal information may be transferred to and processed in the United States or other countries using Standard Contractual Clauses and other appropriate safeguards.",
+    "You may exercise rights to access, correct, delete, restrict, object to processing, and receive a portable copy of your personal information.",
+  ].join(" ");
+  const sections = extractPolicySections({
+    html: `<main>${visibleText}</main>`,
+    sourceUrl,
+    visibleText,
+  });
+  const evidence = retainedArticle13SectionEvidenceFromSections(sections, sourceUrl);
+  const row = (coverageArea: string) => evidence.find((candidate) =>
+    candidate.coverageArea === coverageArea
+  );
+
+  assert.equal(row("processing_purposes")?.signalObserved, "observed");
+  assert.equal(row("recipients_or_vendor_categories")?.signalObserved, "observed");
+  assert.equal(row("international_transfers")?.signalObserved, "observed");
+  assert.equal(row("data_subject_rights")?.signalObserved, "observed");
+  assert.equal(
+    sections.some((section) =>
+      section.heading !== "Policy body" && section.extractionState === "complete"
+    ),
+    true,
+  );
+});
+
 test("cookie disclosure extraction retains Oxfam-style named-cookie tables", () => {
   const sourceUrl = "https://www.oxfam.org/en/cookies";
   const html = `
@@ -1711,6 +1743,14 @@ test("policySurfaceScanner follows a rendered dated privacy index and extracts t
 
     assert.deepEqual(privacy.article13DisclosureSignals, [], "PDF classifier evidence must not create default Article 13 signals");
     assert.deepEqual(privacy.observedTopics, [], "PDF classifier evidence must not create default observed topics");
+    assert.ok(
+      privacy.retainedArticle13SectionEvidence.length > 0,
+      "PDF sections should retain typed Article 13 evidence for canonical downstream review",
+    );
+    assert.equal(
+      privacy.retainedArticle13SectionEvidence.every((row) => row.evidenceSource === "deterministic"),
+      true,
+    );
     assert.equal(privacy.traversalDepth, 1);
     assert.equal(privacy.selectionReasonCodes?.includes("latest_dated_privacy_document_link"), true);
   });

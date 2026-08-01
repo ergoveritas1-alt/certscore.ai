@@ -1968,7 +1968,7 @@ async function processPolicyCandidate({
     sourceText: visibleText,
   });
   const allowLegacyArticle13Extraction = fetched.documentFormat !== "pdf";
-  const sectionEvidence = textQuality.usable && allowLegacyArticle13Extraction && effectiveCandidate.deterministicSurfaceType === "privacy_policy"
+  const sectionEvidence = textQuality.usable && effectiveCandidate.deterministicSurfaceType === "privacy_policy"
     ? retainedArticle13SectionEvidenceFromSections(policySections, effectiveCandidate.normalizedUrl)
     : [];
   const deterministic = textQuality.usable
@@ -6363,8 +6363,12 @@ export function extractPolicySections(input: {
   const htmlSections = extractPolicySectionsFromHtml(input.html, input.sourceUrl);
   const tableSections = extractPolicyTableRowsFromHtml(input.html, input.sourceUrl);
   const fallbackSections = extractPolicySectionsFromVisibleText(input.visibleText, input.sourceUrl);
+  const topicWindowSections = extractCanonicalTopicWindowSectionsFromVisibleText(
+    input.visibleText,
+    input.sourceUrl,
+  );
   const baseSections = htmlSections.length >= 3 ? htmlSections : fallbackSections;
-  const sections = [...tableSections, ...baseSections].filter((section, index, all) =>
+  const sections = [...tableSections, ...baseSections, ...topicWindowSections].filter((section, index, all) =>
     all.findIndex((candidate) =>
       candidate.sourceUrl === section.sourceUrl &&
       normalizeWhitespace(candidate.heading) === normalizeWhitespace(section.heading) &&
@@ -6384,6 +6388,61 @@ export function extractPolicySections(input: {
     })
     .filter((section) => section.textExcerpt.length >= 80)
     .slice(0, 80);
+}
+
+function extractCanonicalTopicWindowSectionsFromVisibleText(
+  visibleText: string,
+  sourceUrl: string,
+): RetainedPolicySection[] {
+  const normalized = normalizeWhitespace(visibleText);
+  if (normalized.length <= 1_200) {
+    return [];
+  }
+
+  return classifyGdprTransparencyTopics({ text: normalized, maxMatches: 24 }).matches.flatMap((match) => {
+    const termPattern = new RegExp(
+      escapeRegExp(match.matchedTerm).replace(/\\ /g, "\\s+"),
+      "iu",
+    );
+    const located = termPattern.exec(normalized);
+    if (!located || located.index === undefined) {
+      return [];
+    }
+
+    const anchorStart = located.index;
+    const anchorEnd = anchorStart + located[0].length;
+    const precedingBoundaries = [
+      normalized.lastIndexOf(". ", anchorStart),
+      normalized.lastIndexOf("? ", anchorStart),
+      normalized.lastIndexOf("! ", anchorStart),
+    ];
+    const precedingBoundary = Math.max(...precedingBoundaries);
+    const start = precedingBoundary >= 0 && anchorStart - precedingBoundary <= 360
+      ? precedingBoundary + 2
+      : Math.max(0, anchorStart - 320);
+    const maximumEnd = Math.min(normalized.length, start + 1_000);
+    const followingBoundaries = [
+      normalized.indexOf(". ", anchorEnd),
+      normalized.indexOf("? ", anchorEnd),
+      normalized.indexOf("! ", anchorEnd),
+    ].filter((index) => index >= anchorEnd + 40 && index <= maximumEnd);
+    const end = followingBoundaries.length > 0
+      ? Math.max(...followingBoundaries) + 1
+      : maximumEnd;
+    const textExcerpt = normalizeWhitespace(normalized.slice(start, end));
+    if (textExcerpt.length < 80) {
+      return [];
+    }
+
+    return [{
+      sourceUrl,
+      heading: match.matchedTerm.slice(0, 160),
+      textExcerpt,
+      charStart: start,
+      charEnd: end,
+      quality: policySectionQuality(textExcerpt),
+    }];
+  });
 }
 
 type CookieDisclosureColumn =
