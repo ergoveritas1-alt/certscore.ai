@@ -60,6 +60,57 @@ test("typed partial consent diagnostics trigger recovery without relying on erro
   }), true);
 });
 
+test("typed consent recovery covers partial modules and missing geometry channels", () => {
+  const observedControls = {
+    observationId: "consent_ui_pre_consent",
+    observedAtMs: 1,
+    captureStatus: "observed" as const,
+    likelyPresent: true,
+    basis: ["settled_control_inventory_completed"],
+    visibleChoiceLabels: ["Accept All"],
+    defaultTogglePurposeLabels: [],
+    precheckedOptionalPurposeCount: 0,
+    precheckedOptionalPurposeLabels: [],
+    acceptControlObserved: true,
+    rejectControlObserved: false,
+    managePreferencesControlObserved: false,
+    controls: [],
+    impliedConsentLanguageObserved: false,
+    impliedConsentLanguageEvidence: [],
+    evidenceRefs: [],
+    confidence: 0.8,
+  };
+  assert.equal(consentInspectionNeedsRecovery({
+    moduleStatus: "partial",
+    observations: [observedControls],
+  }), true);
+  assert.equal(consentInspectionNeedsRecovery({
+    moduleStatus: "completed",
+    observations: [{
+      ...observedControls,
+      captureStatus: "no_evidence",
+      likelyPresent: false,
+      basis: ["settled_control_inventory_completed", "geometry_capture_unavailable"],
+    }],
+  }), true);
+  assert.equal(consentInspectionNeedsRecovery({
+    moduleStatus: "partial",
+    observations: [{
+      ...observedControls,
+      captureDiagnostics: {
+        completedChannels: ["dom_inventory", "geometry"],
+        timedOutChannels: [],
+        failedChannels: [],
+      },
+      basis: [
+        "settled_control_inventory_completed",
+        "geometry:captured",
+        "recovery:independent_consent_capture_completed",
+      ],
+    }],
+  }), false);
+});
+
 test("visual fallback retains bounded consent-surface evidence with the screenshot", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-visual-fallback-"));

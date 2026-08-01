@@ -462,9 +462,17 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         currentConsentObservation.controls.length === 0 &&
         screenshotFallback.consentRecoveryCompleted &&
         screenshotFallback.consentUiObservation?.captureStatus === "no_evidence";
-      const reconciledConsentObservation = typedCompletedNegativeRecovery
+      const baseReconciledConsentObservation = typedCompletedNegativeRecovery
         ? screenshotFallback.consentUiObservation
         : recoveryResolution?.observation ?? screenshotFallback.consentUiObservation;
+      const recoveryGeometryPath = screenshotFallback.consentUiObservation?.evidenceRefs.find((reference) =>
+        reference.artifactId === "consent_control_geometry"
+      )?.path;
+      const reconciledConsentObservation = baseReconciledConsentObservation &&
+          screenshotFallback.consentRecoveryCompleted &&
+          recoveryGeometryPath
+        ? markConsentRecoveryCompleted(baseReconciledConsentObservation, recoveryGeometryPath)
+        : baseReconciledConsentObservation;
       const retainedConsentUiObservations = reconciledConsentObservation
         ? [
           ...preConsentResult.consentUiObservations.slice(0, Math.max(0, preConsentResult.consentUiObservations.length - 1)),
@@ -2520,10 +2528,22 @@ export function consentInspectionNeedsRecovery(input: {
   moduleStatus: CanonicalEvidenceBundle["modulesRun"][number]["status"];
   observations: ConsentUiObservation[];
 }): boolean {
-  return input.moduleStatus === "partial" && input.observations.some((observation) =>
+  const verifiedRecoveryCompleted = input.observations.some((observation) =>
+    observation.captureStatus !== "incomplete" &&
+    observation.basis.includes("recovery:independent_consent_capture_completed") &&
+    observation.captureDiagnostics?.completedChannels.includes("dom_inventory") === true &&
+    observation.captureDiagnostics.completedChannels.includes("geometry")
+  );
+  if (verifiedRecoveryCompleted) {
+    return false;
+  }
+  return input.moduleStatus === "partial" || input.observations.some((observation) =>
     observation.captureStatus === "incomplete" ||
     (observation.captureDiagnostics?.timedOutChannels.length ?? 0) > 0 ||
-    (observation.captureDiagnostics?.failedChannels.length ?? 0) > 0
+    (observation.captureDiagnostics?.failedChannels.length ?? 0) > 0 ||
+    observation.basis.some((basis) =>
+      /geometry_capture_unavailable|geometry:incomplete_not_authoritative|runtime_partial/i.test(basis)
+    )
   );
 }
 
