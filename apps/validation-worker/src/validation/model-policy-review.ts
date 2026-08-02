@@ -16,7 +16,7 @@ const OPENAI_RESPONSES_API_URL = "https://api.openai.com/v1/responses";
 export const POLICY_MODEL_REVIEW_CONTRACT_VERSION = "policy_model_review.v2" as const;
 export const POLICY_MODEL_REVIEW_PROMPT_VERSION = "policy_semantic_review.v5";
 const POLICY_REVIEW_SCHEMA_VERSION = "policy_semantic_review_output.v2";
-const POLICY_REVIEW_INVARIANT_VERSION = "policy_review_invariants.v9";
+const POLICY_REVIEW_INVARIANT_VERSION = "policy_review_invariants.v10";
 const MAX_DOCUMENTS = 6;
 const MAX_DOCUMENT_TEXT_CHARS = 18_000;
 const MAX_PACKET_TEXT_CHARS = 54_000;
@@ -340,6 +340,23 @@ export function selectBoundedPolicyReviewText(rawText: string, limit = MAX_DOCUM
   // Preserve document identity and scope, then retain topic-balanced passages
   // from the complete source before reserving space for late contact sections.
   addExcerpt(0, 2_400);
+  const retentionPattern = new RegExp(
+    "\\b(?:how long do we keep|additional information about data retention|retention|how long we retain|as long as necessary|retention criteria)\\b",
+    "gi",
+  );
+  let strongestRetentionBounds: { end: number; score: number; start: number } | null = null;
+  for (const match of rawText.matchAll(retentionPattern)) {
+    if (match.index === undefined) continue;
+    const start = match.index;
+    const end = Math.min(rawText.length, start + 1_600);
+    const score = retentionEvidenceSpecificityScore(rawText.slice(start, end));
+    if (!strongestRetentionBounds || score > strongestRetentionBounds.score) {
+      strongestRetentionBounds = { end, score, start };
+    }
+  }
+  if (strongestRetentionBounds) {
+    addExcerpt(strongestRetentionBounds.start, strongestRetentionBounds.end);
+  }
   for (const anchor of POLICY_REVIEW_TEXT_ANCHORS) {
     const match = anchor.exec(rawText);
     anchor.lastIndex = 0;
@@ -1217,16 +1234,31 @@ function boundedRetentionExcerpt(text: string) {
   ];
   let best = "";
   for (const anchor of anchors) {
-    const match = anchor.exec(normalized);
-    anchor.lastIndex = 0;
-    if (!match || match.index === undefined) continue;
-    const start = Math.max(0, match.index - 80);
-    const excerpt = normalized.slice(start, Math.min(normalized.length, match.index + 520));
-    if (retentionEvidenceSpecificityScore(excerpt) > retentionEvidenceSpecificityScore(best)) {
-      best = excerpt;
+    const matches = normalized.matchAll(new RegExp(anchor.source, "gi"));
+    for (const match of matches) {
+      if (match.index === undefined) continue;
+      const excerpt = normalized.slice(
+        match.index,
+        Math.min(normalized.length, match.index + 760),
+      );
+      if (retentionEvidenceSpecificityScore(excerpt) > retentionEvidenceSpecificityScore(best)) {
+        best = excerpt;
+      }
     }
   }
-  return best.slice(0, 360).trim();
+  if (best.length <= 600) return best.trim();
+  const bounded = best.slice(0, 600);
+  const lastSentenceBoundary = Math.max(
+    bounded.lastIndexOf(". "),
+    bounded.lastIndexOf("; "),
+    bounded.lastIndexOf("? "),
+    bounded.lastIndexOf("! "),
+  );
+  if (lastSentenceBoundary >= 180) {
+    return bounded.slice(0, lastSentenceBoundary + 1).trim();
+  }
+  const lastWordBoundary = bounded.lastIndexOf(" ");
+  return bounded.slice(0, Math.max(1, lastWordBoundary)).trim();
 }
 
 function canonicalRetentionEvidence(

@@ -128,6 +128,24 @@ test("bounded policy review text retains late transfer, rights, recipient, and p
   assert.match(retained, /Attention: Privacy Officer/i);
 });
 
+test("bounded policy review text prefers the strongest retained retention passage", () => {
+  const text = [
+    "Privacy notice introduction. ".repeat(180),
+    "Additional Information About Data Retention. We retain information as required by law.",
+    "Other policy context. ".repeat(900),
+    "How Long Do We Keep Your Personal Information? We keep personal information for the entire duration of your account so you can review past purchases. Operational cookies remain for 13 months, while privacy-setting cookies may remain for up to 5 years. After account closure, we delete personal information unless it is needed for tax, accounting, fraud prevention, or legal claims.",
+    "Contact details and revisions. ".repeat(180)
+  ].join(" ");
+
+  const retained = selectBoundedPolicyReviewText(text);
+
+  assert.equal(retained.length <= 18_000, true);
+  assert.match(retained, /entire duration of your account/i);
+  assert.match(retained, /13 months/i);
+  assert.match(retained, /up to 5 years/i);
+  assert.match(retained, /After account closure/i);
+});
+
 test("canonical v2 policy surfaces become bounded review documents without raw runtime values", () => {
   const packet = buildPolicyReviewPacketFromCanonicalBundle({
     scanId: "22222222-2222-4222-8222-222222222222",
