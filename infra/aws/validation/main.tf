@@ -4,11 +4,6 @@ data "aws_availability_zones" "available" {
 
 data "aws_caller_identity" "current" {}
 
-data "aws_subnet" "configured_ecs_task" {
-  for_each = toset(var.ecs_task_subnet_ids)
-  id       = each.value
-}
-
 check "s3_static_credentials_are_paired" {
   assert {
     condition = (
@@ -17,15 +12,6 @@ check "s3_static_credentials_are_paired" {
       trimspace(var.s3_access_key_id_secret_arn) != "" && trimspace(var.s3_secret_access_key_secret_arn) != ""
     )
     error_message = "s3_access_key_id_secret_arn and s3_secret_access_key_secret_arn must be configured together."
-  }
-}
-
-check "validation_web_target_group_vpc" {
-  assert {
-    condition = var.web_desired_count == 0 || alltrue([
-      for subnet in values(data.aws_subnet.configured_ecs_task) : subnet.vpc_id == aws_vpc.validation.id
-    ])
-    error_message = "When validation ops web is enabled, ecs_task_subnet_ids must belong to the validation ALB target group's VPC. Use a separate worker-only stack or establish private database routing instead of placing the ALB-backed web task in another VPC."
   }
 }
 
@@ -842,38 +828,6 @@ resource "aws_ecs_task_definition" "worker" {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
   }
-
-  tags = local.common_tags
-}
-
-resource "aws_ecs_service" "web" {
-  name                   = "${local.prefix}-ops-web"
-  cluster                = aws_ecs_cluster.validation.id
-  task_definition        = aws_ecs_task_definition.web.arn
-  desired_count          = var.web_desired_count
-  launch_type            = "FARGATE"
-  enable_execute_command = true
-
-  network_configuration {
-    assign_public_ip = var.ecs_task_assign_public_ip
-    security_groups  = local.ecs_task_security_groups
-    subnets          = local.ecs_task_subnets
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.web.arn
-    container_name   = "validation-ops-web"
-    container_port   = 3000
-  }
-
-  deployment_circuit_breaker {
-    enable   = true
-    rollback = true
-  }
-
-  health_check_grace_period_seconds = 90
-
-  depends_on = [aws_lb_listener.http_redirect, aws_lb_listener.http_forward, aws_lb_listener.https]
 
   tags = local.common_tags
 }

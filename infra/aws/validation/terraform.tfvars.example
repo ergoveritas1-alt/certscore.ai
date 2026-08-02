@@ -40,8 +40,6 @@ validation_default_sample_interval_minutes = "20"
 validation_openai_model         = "gpt-5.4-nano"
 worker_concurrency              = "1"
 llm_enrichment_enabled          = "0"
-web_desired_count               = 0
-
 tags = {
   Environment = "production"
   Service     = "validation"
