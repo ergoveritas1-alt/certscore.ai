@@ -72,7 +72,11 @@ test("scanner Lambda infrastructure is bounded and failure-aware", async () => {
 test("routine scanner deploys promote immutable digests without recreating infrastructure", async () => {
   const source = await readFile("scripts/deploy-fast.ts", "utf8");
   const deployFunction = source.match(/async function deployScanners[\s\S]*?\n}\n\nasync function verifyScanners/)?.[0] ?? "";
+  const verifyFunction = source.match(/async function verifyScanners[\s\S]*?\n}\n\nasync function ensureWorkflowRun/)?.[0] ?? "";
   assert.match(deployFunction, /imageDetails\[0\]\.imageDigest/);
   assert.match(deployFunction, /"lambda", "update-function-code"/);
   assert.doesNotMatch(deployFunction, /setup-dev-aws-image\.sh/);
+  assert.match(verifyFunction, /imageTag=\$\{expectedSha\}/);
+  assert.match(verifyFunction, /endsWith\(`@\$\{expectedDigest\}`\)/);
+  assert.doesNotMatch(verifyFunction, /endsWith\(`:\$\{expectedSha\}`\)/);
 });
