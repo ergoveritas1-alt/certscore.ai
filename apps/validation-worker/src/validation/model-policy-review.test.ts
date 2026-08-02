@@ -800,6 +800,76 @@ test("a retained numeric retention range receives credit", async () => {
   );
 });
 
+test("verified retained retention context replaces a short model excerpt", async () => {
+  const packet = buildFixturePacket([
+    "How Long Do We Keep Your Personal Information?",
+    "We keep your personal information for as long as required to fulfil the purposes described in this privacy notice, as required by law for tax and accounting purposes, or as otherwise communicated to you.",
+    "For the entire duration of your account, we retain order information so you can review past purchases.",
+    "After you close your account, we delete personal information unless it is needed for legal claims or fraud prevention.",
+    "We retain such information for as long as required by law, including for legal claims and fraud prevention."
+  ].join(" "));
+  const rows = completeRows({
+    data_retention: {
+      status: "observed",
+      confidence: 0.96,
+      sourceDocumentIds: [packet.documents[0]!.documentId],
+      sourceUrls: [packet.documents[0]!.canonicalUrl],
+      evidenceExcerpts: ["“We retain such information for as long as required by law...”"],
+      reasonCodes: ["retention_period", "retention_criteria"],
+      rationale: "Retention criteria were retained."
+    }
+  });
+  const artifact = await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async () => new Response(JSON.stringify({
+      model: "gpt-5.4-mini",
+      choices: [{ message: { content: JSON.stringify({ rows }) } }]
+    }), { status: 200 }),
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet
+  });
+
+  const retention = artifact.rows.find((row) => row.topic === "data_retention");
+  assert.equal(retention?.status, "observed");
+  assert.ok(retention?.reasonCodes.includes("verified_retention_passage_selected"));
+  assert.match(retention?.evidenceExcerpts[0] ?? "", /tax and accounting purposes/i);
+  assert.match(retention?.evidenceExcerpts[0] ?? "", /entire duration of your account/i);
+  assert.doesNotMatch(retention?.evidenceExcerpts[0] ?? "", /^[“\"]|[”\"]$/);
+});
+
+test("model-added enclosing quotation marks are removed before persistence", async () => {
+  const packet = buildFixturePacket(
+    "Your data will be deleted after final processing of your request, provided that this does not conflict with statutory retention obligations."
+  );
+  const rows = completeRows({
+    data_retention: {
+      status: "observed",
+      confidence: 0.95,
+      sourceDocumentIds: [packet.documents[0]!.documentId],
+      sourceUrls: [packet.documents[0]!.canonicalUrl],
+      evidenceExcerpts: ["“Your data will be deleted after final processing of your request, provided that this does not conflict with statutory retention obligations.”"],
+      reasonCodes: ["deletion_after_processing"],
+      rationale: "Deletion criteria were retained."
+    }
+  });
+  const artifact = await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async () => new Response(JSON.stringify({
+      model: "gpt-5.4-mini",
+      choices: [{ message: { content: JSON.stringify({ rows }) } }]
+    }), { status: 200 }),
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet
+  });
+
+  const excerpt = artifact.rows.find((row) => row.topic === "data_retention")?.evidenceExcerpts[0] ?? "";
+  assert.equal(excerpt.startsWith("“"), false);
+  assert.equal(excerpt.endsWith("”"), false);
+  assert.match(excerpt, /deleted after final processing/i);
+});
+
 test("service-provider policy passages cannot establish target policy findings", async () => {
   const packet = buildFixturePacket(
     "Cloudflare processes personal data to provide security and content-delivery services."

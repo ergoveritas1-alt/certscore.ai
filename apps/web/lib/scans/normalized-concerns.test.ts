@@ -2265,6 +2265,50 @@ test("enforced invariant-verified Mini policy review creates checklist-only norm
   );
 });
 
+test("verified retention review evidence survives the normalized concern boundary", () => {
+  const retentionExcerpt =
+    "We keep personal information for the duration of the account and delete it after closure unless it is needed for tax, accounting, fraud prevention, or legal claims.";
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyModelReviewArtifact: makeProductionPolicyModelReviewArtifact({
+        rows: [
+          {
+            topic: "data_retention",
+            status: "observed",
+            confidence: 0.96,
+            sourceDocumentIds: ["policy-1"],
+            sourceUrls: ["https://example.com/privacy"],
+            evidenceExcerpts: [retentionExcerpt],
+            conflictingExcerpts: [],
+            reasonCodes: [
+              "policy_review_invariants_applied_v1",
+              "verified_retention_passage_selected"
+            ],
+            rationale:
+              "A substantive retained passage passed the production invariants."
+          }
+        ]
+      })
+    },
+    validationFindings: []
+  });
+  const concern = concerns.find(
+    (candidate) =>
+      candidate.originKey === "gdpr_transparency.article13.data_retention"
+  );
+
+  assert.ok(concern);
+  assert.equal(concern.regulatoryChecklistEligibility, "observed");
+  assert.deepEqual(concern.evidenceBundle.rawEvidence?.policySnippets, [
+    retentionExcerpt
+  ]);
+  assert.deepEqual(concern.evidenceBundle.rawEvidence?.classifierReasonCodes, [
+    "policy_review_invariants_applied_v1",
+    "verified_retention_passage_selected"
+  ]);
+});
+
 test("shadow or non-production Mini policy review cannot create normalized evidence", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],

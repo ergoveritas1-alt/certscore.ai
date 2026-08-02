@@ -16,7 +16,7 @@ const OPENAI_RESPONSES_API_URL = "https://api.openai.com/v1/responses";
 export const POLICY_MODEL_REVIEW_CONTRACT_VERSION = "policy_model_review.v2" as const;
 export const POLICY_MODEL_REVIEW_PROMPT_VERSION = "policy_semantic_review.v5";
 const POLICY_REVIEW_SCHEMA_VERSION = "policy_semantic_review_output.v2";
-const POLICY_REVIEW_INVARIANT_VERSION = "policy_review_invariants.v8";
+const POLICY_REVIEW_INVARIANT_VERSION = "policy_review_invariants.v9";
 const MAX_DOCUMENTS = 6;
 const MAX_DOCUMENT_TEXT_CHARS = 18_000;
 const MAX_PACKET_TEXT_CHARS = 54_000;
@@ -1176,6 +1176,102 @@ function hasSubstantiveRetentionEvidence(packet: PolicyReviewPacket) {
   ].some((pattern) => pattern.test(policyText));
 }
 
+function normalizePolicyReviewExcerpt(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const quotePairs = [
+    ["“", "”"],
+    ["\"", "\""],
+    ["‘", "’"],
+    ["'", "'"]
+  ] as const;
+  for (const [opening, closing] of quotePairs) {
+    if (
+      normalized.length >= 2 &&
+      normalized.startsWith(opening) &&
+      normalized.endsWith(closing)
+    ) {
+      return normalized.slice(opening.length, -closing.length).trim();
+    }
+  }
+  return normalized;
+}
+
+function retentionEvidenceSpecificityScore(value: string) {
+  const text = normalizePolicyReviewExcerpt(value);
+  let score = Math.min(10, Math.floor(text.length / 60));
+  if (/\b(?:retain|retained|retaining|keep|kept|storage period|retention period|delete|deleted|erase|anonymi[sz]e)\b/i.test(text)) score += 8;
+  if (/\b(?:as long as necessary|for the purposes?|account remains active|entire duration|after you close|no longer than|until|within\s+\d+)\b/i.test(text)) score += 14;
+  if (/\b(?:tax|accounting|legal claims?|disputes?|fraud|security|contractual|statutory retention obligations?)\b/i.test(text)) score += 12;
+  if (/\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:days?|months?|years?)\b/i.test(text)) score += 16;
+  return score;
+}
+
+function boundedRetentionExcerpt(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const anchors = [
+    /\bHow Long Do We Keep Your Personal Information\??/i,
+    /\bAdditional Information About Data Retention\b/i,
+    /\b(?:we|you) (?:keep|retain) (?:your |the )?(?:personal )?(?:information|data)\b/i,
+    /\b(?:your |the )?(?:personal )?(?:information|data) (?:is|will be) (?:deleted|erased|anonymi[sz]ed)\b/i,
+    /\b(?:retention|storage) period\b/i,
+  ];
+  let best = "";
+  for (const anchor of anchors) {
+    const match = anchor.exec(normalized);
+    anchor.lastIndex = 0;
+    if (!match || match.index === undefined) continue;
+    const start = Math.max(0, match.index - 80);
+    const excerpt = normalized.slice(start, Math.min(normalized.length, match.index + 520));
+    if (retentionEvidenceSpecificityScore(excerpt) > retentionEvidenceSpecificityScore(best)) {
+      best = excerpt;
+    }
+  }
+  return best.slice(0, 360).trim();
+}
+
+function canonicalRetentionEvidence(
+  row: PolicyModelReviewRow,
+  packet: PolicyReviewPacket,
+): CanonicalRetainedTopicEvidence | null {
+  const referencedIds = new Set(row.sourceDocumentIds);
+  const documents = packet.documents
+    .filter((document) =>
+      isTargetPolicyDocument(document) &&
+      document.documentFetchState === "fetched" &&
+      document.documentEvaluationState === "usable"
+    )
+    .sort((left, right) =>
+      Number(referencedIds.has(right.documentId)) - Number(referencedIds.has(left.documentId))
+    );
+  const currentExcerpt = normalizePolicyReviewExcerpt(
+    row.evidenceExcerpts[0] ?? row.conflictingExcerpts[0] ?? "",
+  );
+  let selected: CanonicalRetainedTopicEvidence | null = currentExcerpt
+    ? {
+        excerpt: currentExcerpt,
+        provenance: "review_excerpt",
+        sourceDocumentId: row.sourceDocumentIds[0] ?? "",
+        sourceUrl: row.sourceUrls[0] ?? "",
+      }
+    : null;
+  for (const document of documents) {
+    const excerpt = boundedRetentionExcerpt(document.text);
+    if (
+      excerpt &&
+      retentionEvidenceSpecificityScore(excerpt) >
+        retentionEvidenceSpecificityScore(selected?.excerpt ?? "")
+    ) {
+      selected = {
+        excerpt,
+        provenance: "verified_retained_packet",
+        sourceDocumentId: document.documentId,
+        sourceUrl: document.canonicalUrl,
+      };
+    }
+  }
+  return selected;
+}
+
 type CanonicalRetainedTopicEvidence = {
   excerpt: string;
   provenance: "review_excerpt" | "verified_retained_packet";
@@ -1364,6 +1460,31 @@ function enforcePolicyReviewInvariants(
         rationale: "A generic reference to retaining data does not establish a retention period or substantive retention criteria."
       });
     }
+    if (row.topic === "data_retention" && row.status === "observed") {
+      const canonicalEvidence = canonicalRetentionEvidence(row, packet);
+      if (canonicalEvidence) {
+        return policyModelReviewRowSchema.parse({
+          ...row,
+          sourceDocumentIds: canonicalEvidence.sourceDocumentId
+            ? [canonicalEvidence.sourceDocumentId]
+            : row.sourceDocumentIds,
+          sourceUrls: canonicalEvidence.sourceUrl
+            ? [canonicalEvidence.sourceUrl]
+            : row.sourceUrls,
+          evidenceExcerpts: canonicalEvidence.excerpt
+            ? [canonicalEvidence.excerpt]
+            : row.evidenceExcerpts,
+          reasonCodes: [
+            ...new Set([
+              ...row.reasonCodes,
+              canonicalEvidence.provenance === "verified_retained_packet"
+                ? "verified_retention_passage_selected"
+                : "review_retention_passage_normalized",
+            ]),
+          ].slice(0, 20),
+        });
+      }
+    }
     const canonicalTopic = row.topic === "processing_purposes"
       ? "processing_purposes" as const
       : row.topic === "legal_basis"
@@ -1512,12 +1633,17 @@ function parseRows(
     throw new Error("Structured policy review output did not include the required topic map.");
   }
   const rowMap = parsed.rows as Record<string, unknown>;
-  const rows = topics.map((topic) =>
-    policyModelReviewRowSchema.parse({
+  const rows = topics.map((topic) => {
+    const row = policyModelReviewRowSchema.parse({
       ...getRecord(rowMap[topic]),
       topic
-    })
-  );
+    });
+    return policyModelReviewRowSchema.parse({
+      ...row,
+      evidenceExcerpts: row.evidenceExcerpts.map(normalizePolicyReviewExcerpt),
+      conflictingExcerpts: row.conflictingExcerpts.map(normalizePolicyReviewExcerpt),
+    });
+  });
   return enforcePolicyReviewInvariants(rows, packet);
 }
 
