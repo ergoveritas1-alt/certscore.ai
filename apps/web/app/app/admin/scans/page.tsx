@@ -282,7 +282,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-          <table className="min-w-[2800px] table-fixed text-left text-xs">
+          <table className="w-[2828px] min-w-[2828px] table-fixed text-left text-xs">
             <colgroup>
               <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "150px" }} />
               <col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} /><col style={{ width: "180px" }} />
