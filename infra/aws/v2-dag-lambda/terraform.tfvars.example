@@ -4,7 +4,11 @@ image_uris = {
   us_west_2    = "123456789012.dkr.ecr.us-west-2.amazonaws.com/certscore-v2-dag-local-lambda@sha256:REPLACE"
 }
 
-alarm_actions = ["arn:aws:sns:us-west-2:123456789012:certscore-operations"]
+alarm_actions_by_region = {
+  eu-central-1 = ["arn:aws:sns:eu-central-1:123456789012:certscore-operations"]
+  eu-west-1    = ["arn:aws:sns:eu-west-1:123456789012:certscore-operations"]
+  us-west-2    = ["arn:aws:sns:us-west-2:123456789012:certscore-operations"]
+}
 
 # Preserve the existing regional proxy variables during import. Never commit
 # credentials; place real values in an ignored .auto.tfvars file or a secrets-aware runner.

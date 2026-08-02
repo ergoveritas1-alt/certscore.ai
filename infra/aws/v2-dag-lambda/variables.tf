@@ -60,10 +60,30 @@ variable "log_retention_days" {
   default     = 30
 }
 
-variable "alarm_actions" {
-  description = "SNS topic ARNs notified by scanner Lambda and queue alarms."
-  type        = list(string)
-  default     = []
+variable "alarm_actions_by_region" {
+  description = "Regional SNS topic ARNs notified by scanner Lambda and queue alarms. Each topic must be in the same region as its alarms."
+  type        = map(list(string))
+  default     = {}
+
+  validation {
+    condition = length(setsubtract(
+      toset(keys(var.alarm_actions_by_region)),
+      toset(["eu-central-1", "eu-west-1", "us-west-2"])
+    )) == 0
+    error_message = "alarm_actions_by_region supports only eu-central-1, eu-west-1, and us-west-2."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for region, action_arns in var.alarm_actions_by_region : [
+        for action_arn in action_arns : can(regex(
+          "^arn:aws[a-z-]*:sns:${region}:[0-9]{12}:[A-Za-z0-9_-]+$",
+          action_arn
+        ))
+      ]
+    ]))
+    error_message = "Every alarm action must be an SNS topic ARN in the same region as its map key."
+  }
 }
 
 variable "environment_variables_by_region" {
