@@ -115,7 +115,7 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
 
   assert.match(pageSource, /\{ label: "Requester IP" \}, \{ label: "Requested" \}/);
   assert.match(pageSource, /\{ label: "Scan ID" \}, \{ label: "Scanner egress" \},/);
-  assert.match(pageSource, /\{ label: "Scanner egress" \}, \{ label: "Open"/);
+  assert.match(pageSource, /\{ label: "Scanner egress" \},\s+\{ label: "Open"/);
   assert.match(pageSource, /formatRequestedDateTime/);
   assert.match(pageSource, /requestedDateTime\.date/);
   assert.match(pageSource, /requestedDateTime\.time/);
@@ -124,6 +124,15 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
   assert.match(listSource, /scannerEgressId: scannerEgress\.id/);
   assert.match(listSource, /shouldUseLocalV2DagScanTool\(\)/);
   assert.match(repositorySource, /scan_outcome,\s+stop_reason_code,\s+stop_reason_detail,\s+stop_reason_label,\s+egress_id,\s+egress_type,/);
+});
+
+test("Admin Scans gives access outcomes room for at most two visible lines", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+
+  assert.match(pageSource, /w-\[2828px\] min-w-\[2828px\] table-fixed/);
+  assert.match(pageSource, /<col style=\{\{ width: "240px" \}\}/);
+  assert.match(pageSource, /line-clamp-2 leading-4/);
+  assert.match(pageSource, /title=\{accessLabel\}/);
 });
 
 test("Admin activity pagination supports a direct page jump", async () => {
@@ -171,7 +180,8 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   assert.match(scansSource, /const scoreAssessment = noGo\.isNoGo \? null : legacyScoreAssessmentMap\.get\(scan\.id\) \?\? null/);
   assert.match(pulseSource, /SCAN_NO_GO_SNAPSHOT_OUTCOMES/);
   assert.match(pulseSource, /PULSE_NO_GO_SQL/);
-  assert.match(pulseSource, /const score = noGo\.isNoGo \? null : retainedScore/);
+  assert.match(pulseSource, /const canonicalSummary = projectCanonicalSurfaceSummary/);
+  assert.match(pulseSource, /const score = canonicalSummary\.score/);
   assert.match(pulseSource, /if \(item\.noGoFlag\)/);
   assert.match(repositorySource, /scan_no_go_assessment/);
   assert.match(repositorySource, /visual_access_review/);

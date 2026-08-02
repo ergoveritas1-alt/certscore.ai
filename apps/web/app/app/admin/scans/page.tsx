@@ -282,11 +282,11 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-          <table className="min-w-[2670px] table-fixed text-left text-xs">
+          <table className="w-[2828px] min-w-[2828px] table-fixed text-left text-xs">
             <colgroup>
               <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "150px" }} />
               <col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} /><col style={{ width: "180px" }} />
-              <col style={{ width: "110px" }} /><col style={{ width: "80px" }} />
+              <col style={{ width: "240px" }} /><col style={{ width: "80px" }} />
               <col style={{ width: "205px" }} /><col style={{ width: "135px" }} /><col style={{ width: "145px" }} />
               <col style={{ width: "180px" }} /><col style={{ width: "65px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} />
               <col style={{ width: "80px" }} /><col style={{ width: "160px" }} /><col style={{ width: "190px" }} /><col style={{ width: "190px" }} /><col style={{ width: "78px" }} />
@@ -317,6 +317,7 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                 const scanFromMarker = getScanFromMarkerInput(scan.scanFromValue);
                 const matrix = scan.evidenceMatrix;
                 const requestedDateTime = formatRequestedDateTime(scan.requestedAt ?? scan.createdAt);
+                const accessLabel = getAccessLabel(scan);
                 return (
                   <tr key={scan.activityId} className="group h-[52px] hover:bg-slate-50/70">
                     <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50" title={status.label}><span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /><span className={status.label === "No-go" ? "text-rose-700" : "text-slate-700"}>{status.label}</span></span></td>
@@ -332,7 +333,10 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                     <td className="px-2.5 py-1.5" title={[scan.scoreLabel, scan.scoreVersion, scan.scoreCoverageConfidence ? `${scan.scoreCoverageConfidence} coverage` : null, scan.scoreScoredAt ? `scored ${scan.scoreScoredAt}` : null].filter(Boolean).join(" · ") || undefined}><span className="text-sm font-semibold text-slate-950">{scan.certscoreOverall ?? "—"}</span>{scan.certscoreOverall !== null ? <span className="text-slate-400">/100</span> : null}</td>
                     <td className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.topFindingCount ?? "—"}</span></td>
                     <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="Privacy" label="Privacy notice" result={matrix?.privacyConsent.privacyNotice ?? null} /><EvidenceCode code="CMP" label="CMP framework" result={matrix?.privacyConsent.cmp ?? null} /></p><p className="truncate text-[10px] text-slate-500" title={evidenceTitle("Consent mechanism", matrix?.privacyConsent.mechanism ?? null)}>Mechanism {matrix?.privacyConsent.cmpVendorName ?? evidenceMark(matrix?.privacyConsent.mechanism ?? null)}</p></td>
-                    <td className="px-2.5 py-1.5"><span className={status.label === "No-go" || status.label === "Failed" ? "font-semibold text-rose-700" : "text-slate-700"}>{getAccessLabel(scan)}</span>{scan.interruptionLabel ? <p className="truncate text-[10px] text-slate-400" title={scan.interruptionReason ?? undefined}>{scan.interruptionLabel}</p> : null}</td>
+                    <td className="px-2.5 py-1.5" title={accessLabel}>
+                      <span className={`line-clamp-2 leading-4 ${status.label === "No-go" || status.label === "Failed" ? "font-semibold text-rose-700" : "text-slate-700"}`}>{accessLabel}</span>
+                      {!scan.noGoFlag && scan.interruptionLabel ? <p className="truncate text-[10px] text-slate-400" title={scan.interruptionReason ?? undefined}>{scan.interruptionLabel}</p> : null}
+                    </td>
                     <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="A" label="Accept" result={matrix?.privacyConsent.accept ?? null} /><EvidenceCode code="R" label="Reject" result={matrix?.privacyConsent.reject ?? null} /><EvidenceCode code="O" label="Options" result={matrix?.privacyConsent.options ?? null} /></p><p className="truncate text-[10px] text-slate-400">Canonical controls</p></td>
                     <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transparency.aggregate ?? null} labels={TRANSPARENCY_LABELS} results={matrix?.transparency.results ?? null} /></td>
                     <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transport.aggregate ?? null} labels={TRANSPORT_LABELS} results={matrix?.transport.results ?? null} /></td>

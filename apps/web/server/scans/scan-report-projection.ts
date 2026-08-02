@@ -23,7 +23,7 @@ import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/exec
 import { filterVisibleExecutiveTopFindings } from "../../lib/scans/executive-top-finding-visibility";
 import {
   buildChecklistConcernTopFindings,
-  mergeCanonicalHighPriorityFindings
+  selectCanonicalHighPriorityFindings
 } from "../../lib/scans/checklist-concern-top-findings";
 import {
   buildPersistedFirstLayerConsentEvidence,
@@ -453,10 +453,9 @@ export async function deriveScanReportProjectionValue(
         unifiedFindings: reportState.globalUnifiedFindings
       })
     : null;
-  const canonicalHighPriorityFindings = mergeCanonicalHighPriorityFindings({
-    checklistFindings: buildChecklistConcernTopFindings(checklist),
-    executiveFindings: executiveFindingsProjection.topFindings
-  });
+  const canonicalHighPriorityFindings = selectCanonicalHighPriorityFindings(
+    buildChecklistConcernTopFindings(checklist)
+  );
   const choices = firstLayerConsentChoices(projectionScanRecord);
   assertCanonicalConsentProjectionInput(scanRecord, assessment);
   const trancoFromConfig = trancoRankFromScanConfig(scanRecord.scan.scanConfigJson);
