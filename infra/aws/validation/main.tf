@@ -744,6 +744,7 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
         Effect = "Allow"
         Action = [
           "logs:DescribeLogStreams",
+          "logs:FilterLogEvents",
           "logs:GetLogEvents"
         ]
         Resource = "*"
