@@ -56,8 +56,9 @@ test("completed dashboard reports stream an honest report shell before detailed 
   const loadingCard = await readFile("apps/web/components/scans/scan-report-loading-card.tsx", "utf8");
 
   assert.match(loadingState, /ScanReportLoadingCard/);
-  assert.match(loadingState, /Finishing your report/);
-  assert.match(loadingState, /Loading detailed cookies, trackers, retained evidence, and privacy review/);
+  assert.match(loadingState, /Loading your report/);
+  assert.match(loadingState, /loading the latest scan results, including cookies, trackers, and privacy findings/i);
+  assert.doesNotMatch(loadingState, /Finishing your report/);
   assert.match(loadingCard, /scan-hourglass/);
   assert.doesNotMatch(loadingState, /summary\.overallScore|summary\.topFindingCount/);
   assert.match(source, /COMPLETED_SCAN_DETAIL_CACHE_TTL_MS = 15_000/);

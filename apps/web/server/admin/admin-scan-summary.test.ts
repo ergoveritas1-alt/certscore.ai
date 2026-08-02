@@ -113,7 +113,12 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
   const listSource = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
   const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
 
-  assert.match(pageSource, /\{ label: "Requester IP" \}, \{ label: "Scanner egress" \}/);
+  assert.match(pageSource, /\{ label: "Requester IP" \}, \{ label: "Requested" \}/);
+  assert.match(pageSource, /\{ label: "Scan ID" \}, \{ label: "Scanner egress" \},/);
+  assert.match(pageSource, /\{ label: "Scanner egress" \}, \{ label: "Open"/);
+  assert.match(pageSource, /formatRequestedDateTime/);
+  assert.match(pageSource, /requestedDateTime\.date/);
+  assert.match(pageSource, /requestedDateTime\.time/);
   assert.match(pageSource, /Requester IP identifies who reached CertScore/);
   assert.match(pageSource, /scan\.scannerEgressId/);
   assert.match(listSource, /scannerEgressId: scannerEgress\.id/);

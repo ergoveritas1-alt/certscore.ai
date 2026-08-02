@@ -1397,6 +1397,34 @@ function getConsentPaidDeclinePathConcern(
   }) ?? null;
 }
 
+function getConsentOperationalSurfaceConcern(
+  input: GdprEprivacyCoveragePolicyInput
+) {
+  return (input.normalizedConcerns ?? []).find((concern) => {
+    const rawEvidence = concern.evidenceBundle.rawEvidence;
+    return concern.originKey === "consent.operational_surface.not_observed" &&
+      concern.originType === "runtime_artifact" &&
+      concern.promotionEligibility === "internal_only" &&
+      concern.externalSurfacingEligibility === "audit_only" &&
+      concern.regulatoryChecklistEligibility === "none" &&
+      rawEvidence?.consentOperationalSurfaceEvidence === true;
+  }) ?? null;
+}
+
+function getConsentRefusalPathBeforeNonessentialActivityConcern(
+  input: GdprEprivacyCoveragePolicyInput
+) {
+  return (input.normalizedConcerns ?? []).find((concern) => {
+    const rawEvidence = concern.evidenceBundle.rawEvidence;
+    return concern.originKey === "consent.refusal_path.unavailable_before_nonessential_activity" &&
+      concern.originType === "runtime_artifact" &&
+      concern.promotionEligibility === "internal_only" &&
+      concern.externalSurfacingEligibility === "audit_only" &&
+      concern.regulatoryChecklistEligibility === "review_signal" &&
+      rawEvidence?.consentRefusalPathBeforeNonessentialActivityEvidence === true;
+  }) ?? null;
+}
+
 function getFirstLayerNoticeGateEvidence(input: GdprEprivacyCoveragePolicyInput) {
   const evidence = getFirstLayerConsentChoiceEvidence(input);
   const visibleChoiceLabels = evidence.visibleChoiceLabels;
@@ -1895,6 +1923,7 @@ function hasFingerprintingRuntimeCoverage(input: GdprEprivacyCoveragePolicyInput
 }
 
 function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const operationalSurfaceConcern = getConsentOperationalSurfaceConcern(input);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const consentSurfaceInspection =
     getObject(input.runtimeArtifacts, ["consentSurfaceInspection", "consent_surface_inspection"]) ??
@@ -1964,11 +1993,7 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
       getString(consentSurfaceInspection, ["coverageStatus", "coverage_status"]) ?? "",
     );
 
-  const completeNoSurfaceObservation =
-    getString(consentSurfaceInspection, ["outcome"]) === "no_surface_observed_complete_coverage" &&
-    getString(consentSurfaceInspection, ["coverageStatus", "coverage_status"]) === "complete" &&
-    getBoolean(consentSurfaceInspection, ["inspectionCompleted", "inspection_completed"]) === true &&
-    getBoolean(consentSurfaceInspection, ["inspectedPreInteraction", "inspected_pre_interaction"]) === true;
+  const completeNoSurfaceObservation = hasCompleteNoConsentSurfaceObservation(input);
 
   const cmpEvidence = getCmpFrameworkSignalEvidence(input);
   // A complete, typed no-surface inspection is stronger than a separate CMP
@@ -2001,18 +2026,44 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     );
   }
 
-  if (completeNoSurfaceObservation) {
+  if (completeNoSurfaceObservation && operationalSurfaceConcern) {
     return makeOutcome(
       "consent_surface_observed",
       "Not observed",
-      "The completed pre-interaction consent-surface inspection did not observe a GDPR/ePrivacy consent surface in the tested context.",
+      "No operational consent surface was retained in the tested context.",
       ["Evidence: complete pre-interaction consent-surface inspection"],
       {
         retainedEvidence: {
+          consentOperationalSurfaceConcern: {
+            canonicalConcernKey: operationalSurfaceConcern.canonicalConcernKey,
+            originKey: operationalSurfaceConcern.originKey,
+            regulatoryChecklistEligibility: operationalSurfaceConcern.regulatoryChecklistEligibility
+          },
           consentSurfaceInspection,
           consentSurfaceObserved: false,
-          gdprEprivacyConsentSurfaceObserved: false
+          gdprEprivacyConsentSurfaceObserved: false,
+          scoreEffect: "none"
         }
+      }
+    );
+  }
+
+  if (completeNoSurfaceObservation && !operationalSurfaceConcern) {
+    return makeOutcome(
+      "consent_surface_observed",
+      "Not confirmed",
+      "A complete no-surface assessment was retained, but its normalized operational-surface concern was unavailable to concern policy.",
+      ["Evidence: ConsentControlAssessment retained", "Limitation: normalized operational-surface concern missing"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "CertScore.ai.normalizedConcerns.consentOperationalSurface",
+            "policy-gated normalized operational-surface concern",
+            "missing",
+            "Required to preserve the canonical assessment → normalized concern → concern policy → checklist flow."
+          )
+        ],
+        retainedEvidence: { consentSurfaceObserved: false }
       }
     );
   }
@@ -2373,17 +2424,21 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
 
 function deriveCmpFrameworkSignalOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const cmpEvidence = getCmpFrameworkSignalEvidence(input);
+  const operationalSurfaceConcern = getConsentOperationalSurfaceConcern(input);
   const cmpVendorName = cmpEvidence.cmpVendorName;
   const cmpSignals = cmpEvidence.cmpSignals;
   const cmpObserved = cmpEvidence.cmpObserved;
 
   if (cmpObserved) {
+    const infrastructureWithoutSurface = Boolean(operationalSurfaceConcern);
     return makeOutcome(
       "cmp_framework_signal_observed",
       "Observed",
-      cmpVendorName
-        ? `A consent-management framework signal was retained: ${cmpVendorName}.`
-        : "A consent-management framework or CMP runtime signal was retained in the tested context.",
+      infrastructureWithoutSurface
+        ? "Consent-management infrastructure was observed; configuration review recommended."
+        : cmpVendorName
+          ? `A consent-management framework signal was retained: ${cmpVendorName}.`
+          : "A consent-management framework or CMP runtime signal was retained in the tested context.",
       [
         cmpVendorName ? `CMP: ${cmpVendorName}` : null,
         ...cmpSignals.map((signal) => `CMP signal: ${signal}`).slice(0, 5),
@@ -2393,7 +2448,16 @@ function deriveCmpFrameworkSignalOutcome(input: GdprEprivacyCoveragePolicyInput)
         retainedEvidence: {
           cmpFrameworkSignalObserved: true,
           cmpRuntimeSignalLabels: compactArray(cmpSignals, 8),
-          cmpVendorName
+          cmpVendorName,
+          ...(infrastructureWithoutSurface
+            ? {
+                consentOperationalSurfaceConcern: {
+                  canonicalConcernKey: operationalSurfaceConcern?.canonicalConcernKey,
+                  originKey: operationalSurfaceConcern?.originKey
+                },
+                scoreEffect: "none"
+              }
+            : {})
         }
       }
     );
@@ -3943,6 +4007,8 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     getBoolean(input.runtimeArtifacts, ["consent_reject_interaction_succeeded"]) === true;
   const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
   const paidDeclinePathConcern = getConsentPaidDeclinePathConcern(input);
+  const operationalSurfaceConcern = getConsentOperationalSurfaceConcern(input);
+  const refusalPathConcern = getConsentRefusalPathBeforeNonessentialActivityConcern(input);
   const rejectPathAvailable = consentControlAssessment
     ? consentControlAssessment.controls.reject.state === "observed"
     : rejectInteractionSucceeded ||
@@ -4015,6 +4081,59 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     if (incompleteInspectionOutcome) {
       return incompleteInspectionOutcome;
     }
+  }
+
+  if (operationalSurfaceConcern && refusalPathConcern) {
+    return makeOutcome(
+      "reject_all_path_availability",
+      "Review signal",
+      "No observable refusal path was retained before non-essential activity.",
+      uniqueStrings([
+        ...operationalSurfaceConcern.evidenceBundle.runtimeArtifacts,
+        ...refusalPathConcern.evidenceBundle.runtimeArtifacts,
+        "Evidence: complete pre-interaction consent-surface inspection",
+        "Evidence: classified non-essential pre-consent activity"
+      ]).slice(0, 12),
+      {
+        retainedEvidence: {
+          consentOperationalSurfaceConcern: {
+            canonicalConcernKey: operationalSurfaceConcern.canonicalConcernKey,
+            originKey: operationalSurfaceConcern.originKey
+          },
+          consentRefusalPathConcern: {
+            canonicalConcernKey: refusalPathConcern.canonicalConcernKey,
+            originKey: refusalPathConcern.originKey,
+            regulatoryChecklistEligibility: refusalPathConcern.regulatoryChecklistEligibility
+          },
+          consentSurfaceObserved: false,
+          firstLayerCookieConsentBannerObserved: false,
+          preconsentCookieOrTrackingActivityObserved: true,
+          rejectControlObserved: false,
+          scoreAttribution: "reject_all_path_availability"
+        }
+      }
+    );
+  }
+
+  if (operationalSurfaceConcern) {
+    return makeOutcome(
+      "reject_all_path_availability",
+      "Not observed",
+      "No reject control was retained because no operational consent surface was retained.",
+      ["Evidence: complete pre-interaction consent-surface inspection"],
+      {
+        retainedEvidence: {
+          consentOperationalSurfaceConcern: {
+            canonicalConcernKey: operationalSurfaceConcern.canonicalConcernKey,
+            originKey: operationalSurfaceConcern.originKey
+          },
+          consentSurfaceObserved: false,
+          firstLayerCookieConsentBannerObserved: false,
+          rejectControlObserved: false,
+          scoreEffect: "none"
+        }
+      }
+    );
   }
   
   if (!consentControlAssessment && noticeGateEvidence.gateObserved) {
@@ -4387,6 +4506,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
 
 function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  const operationalSurfaceConcern = getConsentOperationalSurfaceConcern(input);
   const prominenceConcern = getConsentOptionsControlProminenceConcern(input);
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
   const cmpEvidence = getCmpFrameworkSignalEvidence(input);
@@ -4398,6 +4518,27 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
     ...evidence.visibleOptionsLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
     evidence.layerInspected ? `Layer inspected: ${evidence.layerInspected}` : null
   ].filter((value): value is string => Boolean(value));
+
+  if (operationalSurfaceConcern) {
+    return makeOutcome(
+      "options_settings_preferences_control",
+      "Not observed",
+      "No options control was retained because no operational consent surface was retained.",
+      ["Evidence: complete pre-interaction consent-surface inspection"],
+      {
+        retainedEvidence: {
+          consentOperationalSurfaceConcern: {
+            canonicalConcernKey: operationalSurfaceConcern.canonicalConcernKey,
+            originKey: operationalSurfaceConcern.originKey
+          },
+          consentSurfaceObserved: false,
+          firstLayerCookieConsentBannerObserved: false,
+          optionsControlObserved: false,
+          scoreEffect: "none"
+        }
+      }
+    );
+  }
 
   if (consentControlAssessment) {
     if (!prominenceConcern) {
@@ -4765,6 +4906,7 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
 
 function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  const operationalSurfaceConcern = getConsentOperationalSurfaceConcern(input);
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
   const cmpEvidence = getCmpFrameworkSignalEvidence(input);
   const evidence = getFirstLayerAcceptControlEvidence(input);
@@ -4775,6 +4917,27 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
     ...evidence.visibleAcceptLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
     evidence.layerInspected ? `Layer inspected: ${evidence.layerInspected}` : null
   ].filter((value): value is string => Boolean(value));
+
+  if (operationalSurfaceConcern) {
+    return makeOutcome(
+      "accept_consent_control",
+      "Not observed",
+      "No accept control was retained because no operational consent surface was retained.",
+      ["Evidence: complete pre-interaction consent-surface inspection"],
+      {
+        retainedEvidence: {
+          acceptControlObserved: false,
+          consentOperationalSurfaceConcern: {
+            canonicalConcernKey: operationalSurfaceConcern.canonicalConcernKey,
+            originKey: operationalSurfaceConcern.originKey
+          },
+          consentSurfaceObserved: false,
+          firstLayerCookieConsentBannerObserved: false,
+          scoreEffect: "none"
+        }
+      }
+    );
+  }
 
   if (evidence.acceptControlObserved) {
     return makeOutcome(

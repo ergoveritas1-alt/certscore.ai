@@ -3171,29 +3171,16 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
     const noRejectRetainedWithPreconsentActivity =
       item.id === "reject_all_path_availability" &&
       (item.status === "Gap observed" || item.status === "Review signal") &&
-      readRetainedBoolean(retained, [
-        "preconsentCookieOrTrackingActivityObserved",
-        "preconsent_cookie_or_tracking_activity_observed"
-      ]) === true &&
+      (
+        (item.status === "Review signal" && Boolean(getRecordValue(retained.consentRefusalPathConcern))) ||
+        (item.status === "Gap observed" && readRetainedBoolean(retained, [
+          "preconsentCookieOrTrackingActivityObserved",
+          "preconsent_cookie_or_tracking_activity_observed"
+        ]) === true)
+      ) &&
       readRetainedBoolean(retained, ["rejectControlObserved", "reject_control_observed"]) === false;
-    const noOptionsRetainedWithPreconsentActivity =
-      item.id === "options_settings_preferences_control" &&
-      (item.status === "Gap observed" || item.status === "Review signal") &&
-      readRetainedBoolean(retained, [
-        "preconsentCookieOrTrackingActivityObserved",
-        "preconsent_cookie_or_tracking_activity_observed"
-      ]) === true &&
-      readRetainedBoolean(retained, ["optionsControlObserved", "options_control_observed"]) === false;
-    const noAcceptRetainedWithPreconsentActivity =
-      item.id === "accept_consent_control" &&
-      (item.status === "Gap observed" || item.status === "Review signal") &&
-      readRetainedBoolean(retained, [
-        "preconsentCookieOrTrackingActivityObserved",
-        "preconsent_cookie_or_tracking_activity_observed"
-      ]) === true &&
-      readRetainedBoolean(retained, ["acceptControlObserved", "accept_control_observed"]) === false;
 
-    if (noRejectRetainedWithPreconsentActivity || noAcceptRetainedWithPreconsentActivity || noOptionsRetainedWithPreconsentActivity) {
+    if (noRejectRetainedWithPreconsentActivity) {
       return item;
     }
 

@@ -737,10 +737,17 @@ export async function recordLocalV2DagLambdaResultEvent(
     // canonical completion markers are present.
     try {
       const { publishCanonicalScanReportProjection } = await import("./canonical-scan-report-publisher");
-      await publishCanonicalScanReportProjection({
+      const publication = await publishCanonicalScanReportProjection({
         organizationId: context.organizationId,
         scanId: parsedMessage.scanId
       });
+      if (publication.status === "ready") {
+        const { materializeAdminScanSummary } = await import("../admin/admin-scan-summary");
+        const adminSummary = await materializeAdminScanSummary(parsedMessage.scanId, context.organizationId);
+        if (!adminSummary?.adminEvidenceMatrix) {
+          throw new Error("Canonical Admin evidence matrix persistence was incomplete.");
+        }
+      }
     } catch (error) {
       console.error(JSON.stringify({
         event: "scan.report_projection.completion_persistence_failed",

@@ -192,6 +192,7 @@ function isExcludedFromDenominator(row: RegulatoryCoverageRow) {
       ? retained.policyEvidenceAssessment as Record<string, unknown>
       : null;
   return (
+    retained.scoreEffect === "none" ||
     policyEvidenceAssessment?.scoreEffect === "none" ||
     row.assessmentStatus === "not_applicable" ||
     row.status === "not_applicable" ||

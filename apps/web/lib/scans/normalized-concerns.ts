@@ -3020,6 +3020,136 @@ function getConsentControlAssessmentForConcern(
   return null;
 }
 
+function buildConsentNoSurfaceConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  if (
+    !assessment ||
+    assessment.assessmentStatus !== "complete" ||
+    assessment.coverage.status !== "complete" ||
+    assessment.document.identityStatus !== "matched" ||
+    assessment.scan.noGo !== false ||
+    assessment.surface.status !== "not_observed"
+  ) {
+    return [];
+  }
+
+  const hybridRuntimeEvidence = getRuntimeRecord(runtimeArtifacts, [
+    "hybridRuntimeEvidence",
+    "hybrid_runtime_evidence"
+  ]);
+  const consentSummary = getRuntimeRecord(hybridRuntimeEvidence, [
+    "consentSummary",
+    "consent_summary"
+  ]);
+  const cmpVendorName = getRuntimeString(runtimeArtifacts, ["cmpVendorName", "cmp_vendor_name"]);
+  const cmpRuntimeSignalLabels = getRuntimeStringArray(runtimeArtifacts, [
+    "cmpRuntimeSignalLabels",
+    "cmp_runtime_signal_labels"
+  ]).slice(0, 8);
+  const cmpInfrastructureObserved = Boolean(cmpVendorName) ||
+    cmpRuntimeSignalLabels.length > 0 ||
+    getRuntimeBoolean(runtimeArtifacts, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true ||
+    getRuntimeBoolean(hybridRuntimeEvidence, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true ||
+    getRuntimeBoolean(consentSummary, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true;
+  const runtimeEvidenceArtifacts = uniqueStrings([
+    ...assessment.surface.evidenceRefs,
+    ...assessment.controls.accept.evidenceRefs,
+    ...assessment.controls.reject.evidenceRefs,
+    ...assessment.controls.options.evidenceRefs,
+    "scan_runtime_artifacts.consent_control_assessment"
+  ]).slice(0, 12);
+  const sharedEvidence = {
+    cmpInfrastructureObserved,
+    cmpRuntimeSignalLabels,
+    cmpVendorName,
+    consentControlAssessmentContractVersion: assessment.artifactVersion,
+    consentControlAssessmentSourceHash: assessment.provenance.sourceHash,
+    consentControlAssessmentStatus: assessment.assessmentStatus,
+    consentControlCoverageStatus: assessment.coverage.status,
+    consentDocumentIdentityStatus: assessment.document.identityStatus,
+    consentOperationalSurfaceEvidence: true,
+    consentSurfaceStatus: assessment.surface.status,
+    runtimeEvidenceArtifacts
+  };
+  const concerns = [
+    buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "A complete, same-document pre-interaction consent-control assessment retained no operational consent surface in the tested context.",
+      domainContext,
+      evidence: runtimeEvidenceArtifacts,
+      observedValue: "not_observed",
+      originKey: "consent.operational_surface.not_observed",
+      originType: "runtime_artifact",
+      rawEvidence: sharedEvidence,
+      severity: "low",
+      signalKey: "privacy.consent_operational_surface_not_observed",
+      signalLabel: "Operational consent surface not observed",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Operational consent surface not observed"
+    })
+  ];
+
+  const storageAssessment = buildPreConsentStorageAssessment({ runtimeArtifacts });
+  const consentTimeline =
+    getRuntimeRecord(runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
+    getRuntimeRecord(hybridRuntimeEvidence, ["consentTimeline", "consent_timeline"]);
+  const requestRows = [
+    ...getRuntimeObjectArray(runtimeArtifacts, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"]),
+    ...getRuntimeObjectArray(hybridRuntimeEvidence, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"])
+  ];
+  const classifiedRequests = buildPromotionGradePreconsentRequests({
+    rows: requestRows,
+    consentTimeline,
+    maxItems: 12
+  });
+  if (
+    storageAssessment.status === "classified_nonessential_observed" ||
+    classifiedRequests.length > 0
+  ) {
+    concerns.push(buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "Classified non-essential pre-consent activity was retained, while the complete consent-control assessment retained no observable refusal path.",
+      domainContext,
+      evidence: uniqueStrings([
+        ...runtimeEvidenceArtifacts,
+        ...classifiedRequests.flatMap((request) => request.evidenceRefs),
+        ...storageAssessment.evidenceRows.map((row) => `storage:${row.name}${row.domain ? `@${row.domain}` : ""}`)
+      ]).slice(0, 12),
+      observedValue: "unavailable_before_nonessential_activity",
+      originKey: "consent.refusal_path.unavailable_before_nonessential_activity",
+      originType: "runtime_artifact",
+      rawEvidence: {
+        ...sharedEvidence,
+        consentRefusalPathBeforeNonessentialActivityEvidence: true,
+        preConsentStorageAssessment: storageAssessment,
+        promotionGradePreconsentRequests: classifiedRequests.map((request) => ({
+          evidenceRefs: request.evidenceRefs.slice(0, 6),
+          firstSeenMs: request.firstSeenMs,
+          hostname: request.hostname,
+          requestUrl: request.requestUrl,
+          vendorCategory: request.vendorCategory,
+          vendorName: request.vendorName
+        })),
+        rejectControlState: assessment.controls.reject.state
+      },
+      severity: "medium",
+      signalKey: "privacy.consent_refusal_path_unavailable_before_nonessential_activity",
+      signalLabel: "No observable refusal path before non-essential activity",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "No observable refusal path before non-essential activity"
+    }));
+  }
+
+  return concerns;
+}
+
 function buildConsentOptionsControlProminenceConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
@@ -3252,6 +3382,7 @@ export function buildNormalizedConcerns(input: {
     }),
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildConsentNoSurfaceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPreConsentStorageAssessmentConcerns(input.runtimeArtifacts, input.domainContext),

@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
+import { parseAdminEvidenceMatrix, projectAdminEvidenceMatrix } from "./admin-evidence-matrix";
+
+function row(id: string, status: GdprEprivacyCoverageChecklistItem["status"], note: string): GdprEprivacyCoverageChecklistItem {
+  return { id, status, note, explanation: note, label: id } as GdprEprivacyCoverageChecklistItem;
+}
+
+test("projects bounded Admin evidence only from canonical checklist rows", () => {
+  const matrix = projectAdminEvidenceMatrix({
+    checklistRows: [
+      row("controller_contact_disclosure", "Observed", "Controller details retained."),
+      row("reject_all_path_availability", "Review signal", "No observable refusal path before non-essential activity."),
+      row("transport_security_https_delivery", "Gap observed", "HTTP delivery retained."),
+      row("session_replay_fingerprinting_review", "Not confirmed", "Review retained runtime evidence."),
+      row("device_identification_fingerprinting_signal_observed", "Not observed", "No fingerprinting signal retained."),
+      row("consent_surface_observed", "Not observed", "No operational consent surface was retained."),
+      row("cmp_framework_signal_observed", "Observed", "Configuration review recommended."),
+      row("accept_consent_control", "Not observed", "No operational consent surface was retained."),
+      row("options_settings_preferences_control", "Not observed", "No operational consent surface was retained."),
+      row("privacy_notice_availability", "Observed", "Privacy notice retained.")
+    ],
+    cmpVendorName: "Example CMP",
+    generatedAt: "2026-08-02T12:00:00.000Z",
+    sourceProjectionVersion: "scan_report_display_projection.v1"
+  });
+
+  assert.equal(matrix.version, "admin_evidence_matrix.v1");
+  assert.equal(matrix.privacyConsent.reject?.status, "review_signal");
+  assert.equal(matrix.privacyConsent.mechanism?.status, "not_observed");
+  assert.equal(matrix.transparency.results.CC?.status, "observed");
+  assert.equal(matrix.transparency.results.LB, null);
+  assert.deepEqual(matrix.transparency.aggregate, { concern: 0, observed: 1, projected: 1, review: 0, total: 10, unresolved: 0 });
+  assert.equal(matrix.transport.results.HD?.status, "gap_observed");
+  assert.equal(matrix.runtime.results.SR?.status, "not_confirmed");
+  assert.equal(matrix.runtime.aggregate.concern, 0);
+  assert.equal(parseAdminEvidenceMatrix(matrix)?.privacyConsent.cmpVendorName, "Example CMP");
+});
+
+test("bounds descriptors and rejects malformed persisted projections", () => {
+  const matrix = projectAdminEvidenceMatrix({
+    checklistRows: [row("controller_contact_disclosure", "Observed", "x".repeat(400))],
+    cmpVendorName: null,
+    sourceProjectionVersion: null
+  });
+  assert.ok((matrix.transparency.results.CC?.descriptor.length ?? 0) <= 220);
+  assert.equal(parseAdminEvidenceMatrix({ ...matrix, version: "admin_evidence_matrix.v2" }), null);
+  assert.equal(parseAdminEvidenceMatrix({ ...matrix, transparency: { ...matrix.transparency, aggregate: null } }), null);
+});

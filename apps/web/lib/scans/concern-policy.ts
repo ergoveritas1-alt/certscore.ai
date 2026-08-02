@@ -2319,6 +2319,25 @@ function getConsentOptionsControlChecklistEligibility(input: {
   return "none";
 }
 
+function getConsentNoSurfaceChecklistEligibility(input: {
+  originKey: string;
+  rawEvidence: Record<string, unknown> | null | undefined;
+}): NormalizedConcernRegulatoryChecklistEligibility | null {
+  if (
+    input.originKey === "consent.operational_surface.not_observed" &&
+    input.rawEvidence?.consentOperationalSurfaceEvidence === true
+  ) {
+    return "none";
+  }
+  if (
+    input.originKey === "consent.refusal_path.unavailable_before_nonessential_activity" &&
+    input.rawEvidence?.consentRefusalPathBeforeNonessentialActivityEvidence === true
+  ) {
+    return "review_signal";
+  }
+  return null;
+}
+
 function getConsentPaidDeclinePathChecklistEligibility(input: {
   originKey: string;
   rawEvidence: Record<string, unknown> | null | undefined;
@@ -2463,6 +2482,19 @@ export function deriveConcernPolicy(input: {
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
 
   const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  const consentNoSurfaceChecklistEligibility = getConsentNoSurfaceChecklistEligibility({
+    originKey: input.concern.originKey,
+    rawEvidence: input.rawEvidence
+  });
+  if (consentNoSurfaceChecklistEligibility !== null) {
+    return {
+      allowedNarrativeTier: consentNoSurfaceChecklistEligibility === "review_signal" ? "moderate" : "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility: consentNoSurfaceChecklistEligibility
+    };
+  }
   const consentPaidDeclinePathChecklistEligibility = getConsentPaidDeclinePathChecklistEligibility({
     originKey: input.concern.originKey,
     rawEvidence: input.rawEvidence

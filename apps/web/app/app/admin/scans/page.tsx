@@ -10,6 +10,7 @@ import { withServerTiming } from "../../../../server/performance/log-server-timi
 import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
 import { AdminScansFilterForm } from "./admin-scans-filter-form";
+import type { AdminEvidenceAggregate, AdminEvidenceResult } from "../../../../lib/scans/admin-evidence-matrix";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -85,6 +86,95 @@ function formatAdminScanDuration(scan: Pick<AdminScanListItem, "completedAt" | "
   const seconds = (end - start) / 1000;
   return seconds >= 60 ? `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s` : `${seconds.toFixed(1)}s`;
 }
+
+function formatRequestedDateTime(value: string | null) {
+  if (!value) return { date: "Not available", time: "" };
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return { date: "Not available", time: "" };
+  return {
+    date: new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "America/Los_Angeles"
+    }).format(parsed),
+    time: new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "America/Los_Angeles",
+      timeZoneName: "short"
+    }).format(parsed)
+  };
+}
+
+const EVIDENCE_MARKS = {
+  observed: { mark: "✓", className: "text-emerald-700" },
+  gap_observed: { mark: "!", className: "text-rose-700" },
+  review_signal: { mark: "△", className: "text-amber-700" },
+  not_observed: { mark: "—", className: "text-slate-500" },
+  not_confirmed: { mark: "?", className: "text-amber-700" },
+  not_testable: { mark: "×", className: "text-slate-400" },
+  insufficient_evidence: { mark: "×", className: "text-slate-400" },
+  out_of_scope: { mark: "·", className: "text-slate-400" }
+} as const;
+
+const STATUS_LABELS = {
+  observed: "Observed",
+  gap_observed: "Gap observed",
+  review_signal: "Partial concern / review signal",
+  not_observed: "Not observed",
+  not_confirmed: "Not confirmed",
+  not_testable: "Not testable",
+  insufficient_evidence: "Insufficient evidence",
+  out_of_scope: "Out of scope"
+} as const;
+
+function evidenceTitle(label: string, result: AdminEvidenceResult | null) {
+  const statusLabel = label === "Reject" && result?.status === "review_signal"
+    ? "Partial concern"
+    : result
+      ? STATUS_LABELS[result.status]
+      : null;
+  return result
+    ? `${label}: ${statusLabel} — ${result.descriptor}`
+    : `${label}: not projected for this scan`;
+}
+
+function evidenceMark(result: AdminEvidenceResult | null) {
+  return result ? EVIDENCE_MARKS[result.status].mark : "·";
+}
+
+function EvidenceCode({ code, label, result }: { code: string; label: string; result: AdminEvidenceResult | null }) {
+  const presentation = result ? EVIDENCE_MARKS[result.status] : { mark: "·", className: "text-slate-300" };
+  return <span className={`whitespace-nowrap font-semibold ${presentation.className}`} title={evidenceTitle(label, result)}>{code}{presentation.mark}</span>;
+}
+
+function aggregateLabel(aggregate: AdminEvidenceAggregate) {
+  if (aggregate.projected === 0) return "Not projected";
+  return `${aggregate.observed}/${aggregate.total} ✓ · ${aggregate.review}△ · ${aggregate.concern}!`;
+}
+
+function EvidenceGroupCell({
+  aggregate,
+  labels,
+  results
+}: {
+  aggregate: AdminEvidenceAggregate | null;
+  labels: Record<string, string>;
+  results: Record<string, AdminEvidenceResult | null> | null;
+}) {
+  return <>
+    <p className="truncate text-[10px] font-medium text-slate-600">{aggregate ? aggregateLabel(aggregate) : "Not projected"}</p>
+    <p className="flex items-center gap-1.5 overflow-hidden text-[10px] leading-4">
+      {Object.entries(labels).map(([code, label]) => <EvidenceCode code={code} key={code} label={label} result={results?.[code] ?? null} />)}
+    </p>
+  </>;
+}
+
+const TRANSPARENCY_LABELS = { CC: "Controller/contact", LB: "Legal basis", DR: "Data retention", PP: "Processing purposes", RC: "Recipients/categories", DS: "Data-subject rights", IT: "International transfers", PC: "Privacy contact", SA: "Supervisory authority", AD: "Automated decisions/profiling" };
+const TRANSPORT_LABELS = { HD: "HTTPS delivery", HR: "HTTP redirect", MC: "Mixed content", TC: "TLS certificate", FT: "Form transport" };
+const RUNTIME_LABELS = { FP: "Device ID/fingerprinting", SR: "Session replay", IF: "Third-party iframe", SM: "Social media", "3P": "Embedded third-party services" };
 
 function getAccessLabel(scan: AdminScanListItem) {
   if (scan.noGoFlag) {
@@ -192,21 +282,23 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-          <table className="min-w-[1860px] table-fixed text-left text-xs">
+          <table className="min-w-[2670px] table-fixed text-left text-xs">
             <colgroup>
-              <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "190px" }} /><col style={{ width: "170px" }} />
-              <col style={{ width: "150px" }} /><col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} />
-              <col style={{ width: "210px" }} /><col style={{ width: "110px" }} /><col style={{ width: "80px" }} />
+              <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "150px" }} />
+              <col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} /><col style={{ width: "180px" }} />
+              <col style={{ width: "110px" }} /><col style={{ width: "80px" }} />
+              <col style={{ width: "205px" }} /><col style={{ width: "135px" }} /><col style={{ width: "145px" }} />
               <col style={{ width: "180px" }} /><col style={{ width: "65px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} />
-              <col style={{ width: "160px" }} /><col style={{ width: "78px" }} />
+              <col style={{ width: "80px" }} /><col style={{ width: "160px" }} /><col style={{ width: "190px" }} /><col style={{ width: "190px" }} /><col style={{ width: "78px" }} />
             </colgroup>
             <thead className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
               <tr>
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" },
-                  { label: "Requester IP" }, { label: "Scanner egress" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
+                  { label: "Requester IP" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
-                  { label: "A/R/O" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
+                  { label: "A/R/O" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
+                  { label: "Scan ID" }, { label: "Scanner egress" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }
                 ].map(({ label, className }) => <th key={label} className={`border-b border-slate-200 px-2.5 py-1.5 font-semibold ${className ?? ""}`}>{label}</th>)}
               </tr>
@@ -223,31 +315,36 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                 const freshness = getScanFreshnessBadge(scan);
                 const duration = scan.linkedScanId ? formatAdminScanDuration(scan) : null;
                 const scanFromMarker = getScanFromMarkerInput(scan.scanFromValue);
+                const matrix = scan.evidenceMatrix;
+                const requestedDateTime = formatRequestedDateTime(scan.requestedAt ?? scan.createdAt);
                 return (
                   <tr key={scan.activityId} className="group h-[52px] hover:bg-slate-50/70">
                     <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50" title={status.label}><span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /><span className={status.label === "No-go" ? "text-rose-700" : "text-slate-700"}>{status.label}</span></span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={scan.requesterName ?? provenance.label}>{scan.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${requesterIpLabel(scan)} · ${scan.requesterIpSource.replaceAll("_", " ")}`}>{requesterIpLabel(scan)}</p></td>
-                    <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] text-slate-700" title={scan.scannerEgressId ?? "Scanner egress not recorded"}>{scan.scannerEgressId ?? "Not recorded"}</p><p className="mt-0.5 truncate text-[10px] text-slate-400" title={scan.scannerEgressProvider ?? undefined}>{scan.scannerEgressProvider ?? "Outbound runtime"}</p></td>
-                    <td className="whitespace-nowrap px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}</td>
+                    <td className="px-2.5 py-1.5 text-[10px] leading-4 text-slate-600" title={formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}><p className="truncate">{requestedDateTime.date}</p><p className="truncate text-slate-500">{requestedDateTime.time}</p></td>
                     <td className="px-2.5 py-1.5">
                       <div className="flex min-w-0 items-center gap-1.5">
                         <p className="min-w-0 flex-1 truncate font-semibold text-slate-900" title={scan.domainHostname ?? scan.requestedUrl ?? "Unknown target"}>{scan.domainHostname ?? scan.requestedUrl ?? "Unknown target"}</p>
                         <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">{scan.scanType}</span>
                       </div>
-                      <p className="truncate font-mono text-[10px] text-slate-400" title={scan.linkedScanId ?? scan.scanId}>scan_id {scan.linkedScanId ?? scan.scanId}</p>
                     </td>
                     <td className="px-2.5 py-1.5 font-medium text-slate-700">{scan.trancoRank ? `#${scan.trancoRank.toLocaleString()}` : "—"}</td>
                     <td className="px-2.5 py-1.5" title={[scan.scoreLabel, scan.scoreVersion, scan.scoreCoverageConfidence ? `${scan.scoreCoverageConfidence} coverage` : null, scan.scoreScoredAt ? `scored ${scan.scoreScoredAt}` : null].filter(Boolean).join(" · ") || undefined}><span className="text-sm font-semibold text-slate-950">{scan.certscoreOverall ?? "—"}</span>{scan.certscoreOverall !== null ? <span className="text-slate-400">/100</span> : null}</td>
                     <td className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.topFindingCount ?? "—"}</span></td>
-                    <td className="px-2.5 py-1.5"><p className="whitespace-nowrap">Privacy {scan.privacyPolicyPresent === true ? "✓" : scan.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={scan.cmpVendorName ?? undefined}>CMP {scan.cmpVendorName ?? "—"}</p></td>
+                    <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="Privacy" label="Privacy notice" result={matrix?.privacyConsent.privacyNotice ?? null} /><EvidenceCode code="CMP" label="CMP framework" result={matrix?.privacyConsent.cmp ?? null} /></p><p className="truncate text-[10px] text-slate-500" title={evidenceTitle("Consent mechanism", matrix?.privacyConsent.mechanism ?? null)}>Mechanism {matrix?.privacyConsent.cmpVendorName ?? evidenceMark(matrix?.privacyConsent.mechanism ?? null)}</p></td>
                     <td className="px-2.5 py-1.5"><span className={status.label === "No-go" || status.label === "Failed" ? "font-semibold text-rose-700" : "text-slate-700"}>{getAccessLabel(scan)}</span>{scan.interruptionLabel ? <p className="truncate text-[10px] text-slate-400" title={scan.interruptionReason ?? undefined}>{scan.interruptionLabel}</p> : null}</td>
-                    <td className="whitespace-nowrap px-2.5 py-1.5 font-medium text-slate-700" title="Accept / Reject / Options controls observed on the first consent layer">{scan.consentAro ? `A${scan.consentAro.accept === true ? "✓" : scan.consentAro.accept === false ? "—" : "?"} R${scan.consentAro.reject === true ? "✓" : scan.consentAro.reject === false ? "—" : "?"} O${scan.consentAro.options === true ? "✓" : scan.consentAro.options === false ? "—" : "?"}` : "—"}</td>
+                    <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="A" label="Accept" result={matrix?.privacyConsent.accept ?? null} /><EvidenceCode code="R" label="Reject" result={matrix?.privacyConsent.reject ?? null} /><EvidenceCode code="O" label="Options" result={matrix?.privacyConsent.options ?? null} /></p><p className="truncate text-[10px] text-slate-400">Canonical controls</p></td>
+                    <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transparency.aggregate ?? null} labels={TRANSPARENCY_LABELS} results={matrix?.transparency.results ?? null} /></td>
+                    <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transport.aggregate ?? null} labels={TRANSPORT_LABELS} results={matrix?.transport.results ?? null} /></td>
+                    <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.runtime.aggregate ?? null} labels={RUNTIME_LABELS} results={matrix?.runtime.results ?? null} /></td>
                     <td className={`px-2.5 py-1.5 font-medium ${duration && (duration.includes("m") || Number.parseFloat(duration) > 60) ? "text-amber-700" : "text-slate-800"}`}>{duration ?? (scan.status === "running" ? "Running" : "—")}</td>
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.scanOutcome ?? undefined}>{formatScanOutcome(scan.scanOutcome, scan.noGoFlag)}</td>
                     <td className="px-2.5 py-1.5" title={scan.scanFromLabel}><span aria-label={scan.scanFromLabel} className="inline-flex"><ScanFromMarker flag={"flag" in scanFromMarker ? scanFromMarker.flag : undefined} icon={"icon" in scanFromMarker ? scanFromMarker.icon : undefined} selected /></span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${freshness.className}`}>{freshness.label}</span></td>
                     <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700" title={scan.primaryLanguage ? `${scan.primaryLanguageConfidence ?? "unknown"} confidence · ${(scan.primaryLanguageSource ?? "unknown").replaceAll("_", " ")}` : "No reliable retained language evidence"}>{scan.primaryLanguage ?? "—"}</td>
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.industry ?? undefined}>{scan.industry ?? "—"}</td>
+                    <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] text-slate-700" title={scan.linkedScanId ?? scan.scanId}>{scan.linkedScanId ?? scan.scanId}</p></td>
+                    <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] text-slate-700" title={scan.scannerEgressId ?? "Scanner egress not recorded"}>{scan.scannerEgressId ?? "Not recorded"}</p><p className="mt-0.5 truncate text-[10px] text-slate-400" title={scan.scannerEgressProvider ?? undefined}>{scan.scannerEgressProvider ?? "Outbound runtime"}</p></td>
                     <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 group-hover:bg-slate-50">{scan.linkedScanId && scan.scanViewHref ? <AdminScanActions compact domainLabel={scan.domainHostname ?? scan.requestedUrl ?? "Scanned website"} scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} visualEvidenceHref={scan.visualEvidenceHref} /> : <span className="text-slate-400">—</span>}</td>
                   </tr>
                 );

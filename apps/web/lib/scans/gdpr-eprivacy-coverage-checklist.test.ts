@@ -1710,21 +1710,69 @@ test("deriveGdprEprivacyCoverageChecklist keeps missing reject as a gap when pre
 });
 
 test("completed no-surface inspection with pre-consent activity presents missing decline as a partial concern", () => {
+  const finalUrl = "https://no-surface.example/";
+  const assessment = deriveConsentControlAssessment({
+    scan: {
+      scanId: "scan-no-surface",
+      requestedUrl: finalUrl,
+      finalUrl,
+      scanStatus: "completed",
+      noGo: false
+    },
+    document: {
+      canonicalDocumentId: finalUrl,
+      observedDocumentIds: [finalUrl],
+      identityStatus: "matched"
+    },
+    observations: [{
+      observationId: "complete-negative",
+      observedAtMs: 1_000,
+      likelyPresent: false,
+      layerInspected: "first_layer",
+      documentId: finalUrl,
+      captureStatus: "no_evidence",
+      completedChannels: ["dom_inventory"],
+      controls: []
+    }],
+    geometry: {
+      assessmentStatus: "complete",
+      documentId: finalUrl,
+      completedChannels: ["geometry"],
+      incompleteChannels: [],
+      candidates: []
+    },
+    surface: { status: "not_observed", evidenceRefs: ["CanonicalEvidenceBundle.json"] },
+    coverage: {
+      status: "complete",
+      requiredChannels: ["dom_inventory", "geometry"],
+      completedChannels: ["dom_inventory", "geometry"],
+      incompleteChannels: []
+    }
+  });
+  const runtimeArtifacts = {
+    cmpFrameworkSignalObserved: true,
+    consentControlAssessment: assessment,
+    requestPurposeClassificationConfidence: [{
+      category: "analytics",
+      collectionEndpointObserved: true,
+      confidence: 0.95,
+      essentiality: "non_essential",
+      evidenceRefs: ["CanonicalEvidenceBundle.json#request-1"],
+      firstSeenMs: 400,
+      requestUrl: "https://www.google-analytics.com/g/collect?v=2",
+      runtimePhase: "pre_consent",
+      vendorName: "Google Analytics"
+    }]
+  };
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
   const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     coverageLimited: false,
-    normalizedConcerns: [],
-    runtimeArtifacts: {
-      hybridRuntimeEvidence: {
-        networkSummary: {
-          preConsentThirdPartyRequestCount: 4
-        }
-      },
-      rejectPathDepthAndAvailability: {
-        firstLayerCookieConsentBannerObserved: false,
-        gdprEprivacyConsentSurfaceObserved: "unconfirmed",
-        rejectAvailableOnFirstLayer: false
-      }
-    },
+    normalizedConcerns,
+    runtimeArtifacts,
     scanCompleted: true,
     snapshot: {
       cookie_banner_present: false,
@@ -1743,9 +1791,27 @@ test("completed no-surface inspection with pre-consent activity presents missing
   assert.equal(rejectPath.assessmentStatus, "review_signal");
   assert.equal(rejectPath.evidenceState, "observed");
   assert.equal(getEvidenceLabel(rejectPath), "Partial concern");
-  assert.match(rejectPath.limitation ?? "", /meaningful opportunity to refuse/i);
+  assert.equal(rejectPath.limitation, "No observable refusal path was retained before non-essential activity.");
+  assert.equal(byId(items, "consent_surface_observed").status, "Not observed");
+  assert.equal(byId(items, "cmp_framework_signal_observed").status, "Observed");
   assert.equal(byId(items, "accept_consent_control").status, "Not observed");
   assert.equal(byId(items, "options_settings_preferences_control").status, "Not observed");
+  assert.equal(
+    byId(items, "consent_surface_observed").limitation,
+    "No operational consent surface was retained in the tested context."
+  );
+  assert.equal(
+    byId(items, "cmp_framework_signal_observed").limitation,
+    "Consent-management infrastructure was observed; configuration review recommended."
+  );
+  assert.equal(
+    byId(items, "accept_consent_control").limitation,
+    "No accept control was retained because no operational consent surface was retained."
+  );
+  assert.equal(
+    byId(items, "options_settings_preferences_control").limitation,
+    "No options control was retained because no operational consent surface was retained."
+  );
 });
 
 test("deriveGdprEprivacyCoverageChecklist keeps missing reject as a gap without relying on policy reason strings", () => {

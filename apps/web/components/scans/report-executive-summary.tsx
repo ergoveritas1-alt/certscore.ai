@@ -94,7 +94,7 @@ export function ReportExecutiveSummary({
         </details>
       ) : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 sm:px-6 sm:py-5">
         <div className="space-y-4">
           <div className="space-y-2">
             <div className="flex items-center gap-1.5">

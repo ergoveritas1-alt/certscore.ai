@@ -69,14 +69,12 @@ function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanSt
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
           Scan: {statusProjection.domainHostname?.trim() || "website"}
         </h1>
-        <p className="mt-2 text-sm text-slate-500">The scan is complete. Preparing its retained evidence and review.</p>
+        <p className="mt-2 text-sm text-slate-500">Your scan is complete. Loading the latest report details.</p>
       </div>
       <div className="flex min-h-[48vh] items-center justify-center rounded-2xl border border-sky-100 bg-sky-50/60 px-6 py-10">
         <ScanReportLoadingCard
-          description={statusProjection.reportReady
-            ? "Loading detailed cookies, trackers, retained evidence, and privacy review."
-            : "Loading the evidence summary, cookies and trackers, and privacy review."}
-          title={statusProjection.reportReady ? "Finishing your report" : "Building the report view"}
+          description="We’re loading the latest scan results, including cookies, trackers, and privacy findings."
+          title="Loading your report"
         />
       </div>
     </div>

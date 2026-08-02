@@ -154,7 +154,7 @@ export default async function MarketingHomePage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen overflow-x-clip bg-slate-50">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(findingRegistrySchema) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(scannerSolutionsSchema) }} />
@@ -165,12 +165,12 @@ export default async function MarketingHomePage() {
           <Image alt="" className="object-cover object-[62%_center]" fill priority sizes="100vw" src="/marketing/hero/futuristic-tech-shield-and-network-fast.jpg" />
         </div>
         <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(1,10,27,0.06)_0%,rgba(1,10,27,0.02)_48%,rgba(1,10,27,0.12)_100%)]" aria-hidden="true" />
-        <div className="relative -top-5 mx-auto grid min-h-[595px] max-w-6xl gap-12 px-6 py-14 sm:py-20 lg:grid-cols-[minmax(0,650px)_minmax(0,1fr)] lg:items-center lg:gap-8 lg:py-16">
-          <div className="relative z-20 max-w-[680px] space-y-8 lg:-translate-y-1">
+        <div className="relative top-0 mx-auto grid min-h-0 max-w-6xl gap-8 px-4 py-10 sm:px-6 sm:py-20 lg:-top-5 lg:min-h-[595px] lg:grid-cols-[minmax(0,650px)_minmax(0,1fr)] lg:items-center lg:gap-8 lg:py-16">
+          <div className="relative z-20 max-w-[680px] space-y-7 sm:space-y-8 lg:-translate-y-1">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-300">Evidence-led website review</p>
             <h1 className="text-[2rem] font-bold leading-[1.08] tracking-[-0.035em] text-white sm:text-5xl lg:text-[3.5rem]">
-              <span className="block whitespace-nowrap">See what websites <span className="text-[#178cff]">reveal</span></span>
-              <span className="block whitespace-nowrap">about privacy risk.</span>
+              <span className="block sm:whitespace-nowrap">See what websites <span className="text-[#178cff]">reveal</span></span>
+              <span className="block sm:whitespace-nowrap">about privacy risk.</span>
             </h1>
             <div className="max-w-[650px]">
               <p className="text-base leading-8 text-slate-300 sm:text-xl">
@@ -186,7 +186,7 @@ export default async function MarketingHomePage() {
                 <DomainScanForm buttonLabel="Scan a website" inputLabel="Website URL to scan" inputPlaceholder="Enter website here:" mode="full" requestSource="homepage" scanSource="homepage" variant="homepage-hero" />
               </div>
             </div>
-            <div className="flex flex-nowrap gap-x-6 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-medium text-slate-100 shadow-[0_12px_28px_rgba(2,6,23,0.12)] backdrop-blur-sm">
+            <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-medium text-slate-100 shadow-[0_12px_28px_rgba(2,6,23,0.12)] backdrop-blur-sm sm:flex-nowrap sm:gap-x-6 sm:overflow-x-auto">
               <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">
                 <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="9.25" /><path d="m8 12.2 2.5 2.5 5.5-6" />
@@ -232,7 +232,7 @@ export default async function MarketingHomePage() {
             </div>
           </div>
 
-          <div className="relative z-10 flex items-center justify-center lg:-mr-24 lg:-translate-y-3 lg:justify-end" aria-hidden="true">
+          <div className="relative z-10 hidden items-center justify-center lg:-mr-24 lg:-translate-y-3 lg:flex lg:justify-end" aria-hidden="true">
             <Image alt="" className="h-auto w-full max-w-[476px] -translate-x-[15px] blur-[0.85px] opacity-[0.51] mix-blend-screen drop-shadow-[0_32px_45px_rgba(0,0,0,0.35)]" height={1190} sizes="(min-width: 1024px) 36vw, 92vw" src="/marketing/hero/scan-report-dashboard-with-privacy-details.jpg" width={1438} />
           </div>
         </div>
@@ -241,7 +241,7 @@ export default async function MarketingHomePage() {
       <HomepageFindingsOverview findings={findings} />
 
       <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-14">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-14">
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div className="max-w-3xl space-y-3">
               <Badge tone="neutral">Scanner solutions</Badge>
@@ -278,7 +278,7 @@ export default async function MarketingHomePage() {
       </section>
 
       <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-16">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
           <div className="max-w-2xl space-y-3">
             <Badge tone="neutral">Personas</Badge>
             <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Who CertScore.ai is built for</h2>
@@ -315,8 +315,8 @@ export default async function MarketingHomePage() {
       </section>
 
       <section className="bg-slate-50">
-        <div className="mx-auto max-w-6xl px-6 py-10">
-          <div className="overflow-hidden rounded-[2.25rem] bg-[linear-gradient(135deg,#081127_0%,#0b1a3f_45%,#132b63_100%)] px-6 py-10 shadow-[0_24px_60px_rgba(8,17,39,0.24)] sm:px-10 sm:py-12">
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+          <div className="overflow-hidden rounded-[1.5rem] bg-[linear-gradient(135deg,#081127_0%,#0b1a3f_45%,#132b63_100%)] px-5 py-8 shadow-[0_24px_60px_rgba(8,17,39,0.24)] sm:rounded-[2.25rem] sm:px-10 sm:py-12">
             <div className="max-w-4xl space-y-6">
               <h2 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
                 Get a clearer read on website privacy diagnostics.
@@ -348,7 +348,7 @@ export default async function MarketingHomePage() {
       </section>
 
       <section className="border-t border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-8">
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
             CertScore.ai provides automated, evidence-based insights into website behavior. It is not legal advice, certification, or a compliance determination.
           </p>

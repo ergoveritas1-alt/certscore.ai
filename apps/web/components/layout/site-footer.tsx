@@ -74,7 +74,7 @@ export function SiteFooter() {
   );
   return (
     <footer className="border-t border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8 text-sm text-slate-500">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 text-sm text-slate-500 sm:px-6">
         <p className="max-w-none text-xs leading-5 text-slate-500 lg:whitespace-nowrap">
           {FOOTER_DISCLAIMER_COPY}
         </p>

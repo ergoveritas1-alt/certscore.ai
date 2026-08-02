@@ -54,8 +54,9 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
       !projection.reportReady &&
       (projection.status === "completed" || projection.status === "completed_limited")
     ) {
+      const projectionOrganizationId = projection.organizationId;
       await publishCanonicalScanReportProjection({
-        organizationId: projection.organizationId,
+        organizationId: projectionOrganizationId,
         scanId
       }).then(async (publication) => {
         console.info(JSON.stringify({
@@ -65,6 +66,11 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
           status: publication.status
         }));
         if (publication.status === "ready") {
+          const { materializeAdminScanSummary } = await import("../../../../server/admin/admin-scan-summary");
+          const adminSummary = await materializeAdminScanSummary(scanId, projectionOrganizationId);
+          if (!adminSummary?.adminEvidenceMatrix) {
+            throw new Error("Canonical Admin evidence matrix persistence was incomplete.");
+          }
           projection = await getPublicScanStatusProjection(scanId) ?? projection;
         }
       }).catch((error) => {

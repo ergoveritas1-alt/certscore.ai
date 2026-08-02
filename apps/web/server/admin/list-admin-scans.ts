@@ -38,6 +38,10 @@ import { shouldUseLocalV2DagScanTool } from "../scans/local-v2-dag-scan-config";
 import { withServerTiming } from "../performance/log-server-timing";
 import { projectCanonicalSurfaceSummary } from "../../lib/scans/canonical-surface-summary";
 import {
+  parseAdminEvidenceMatrix,
+  type AdminEvidenceMatrix
+} from "../../lib/scans/admin-evidence-matrix";
+import {
   loadCachedAdminScanFilterOptions,
   loadCachedAdminScanOverviewCounts
 } from "./admin-query-cache";
@@ -90,6 +94,7 @@ export type AdminScanListItem = {
   scoreVersion: string | null;
   cmpVendorName: string | null;
   consentAro: AdminConsentAro | null;
+  evidenceMatrix: AdminEvidenceMatrix | null;
   completedAt: string | null;
   createdAt: string;
   domainHostname: string | null;
@@ -444,6 +449,7 @@ export async function listAdminScansPage(
         status: scan.status
       }),
       consentAro: canonicalSummary.consentAro,
+      evidenceMatrix: parseAdminEvidenceMatrix(overviewSnapshot?.admin_evidence_matrix),
       scannerEgressId: scannerEgress.id,
       scannerEgressProvider: scannerEgress.provider,
       trancoRank: overviewSnapshot?.tranco_rank ?? null,
@@ -561,6 +567,7 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     scoreVersion: linkedScan?.scoreVersion ?? null,
     cmpVendorName: linkedScan?.cmpVendorName ?? null,
     consentAro: linkedScan?.consentAro ?? null,
+    evidenceMatrix: linkedScan?.evidenceMatrix ?? null,
     completedAt: linkedScan?.completedAt ?? request.reused_completed_at,
     createdAt: request.requested_at,
     domainHostname: request.scan_domain_hostname ?? request.normalized_domain,

@@ -9,6 +9,7 @@
 body {
   @apply bg-sand text-ink antialiased;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-x: clip;
 }
 
 a {

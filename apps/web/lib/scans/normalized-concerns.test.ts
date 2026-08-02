@@ -321,6 +321,83 @@ test("normalizes a retained paid decline variant as a checklist-only review sign
   assert.equal(concern.evidenceBundle.rawEvidence?.consentPaidDeclinePathEvidence, true);
 });
 
+test("normalizes complete no-surface evidence and classified activity into a reject review signal", () => {
+  const finalUrl = "https://no-surface.example/";
+  const assessment = deriveConsentControlAssessment({
+    scan: {
+      scanId: "scan-no-surface",
+      requestedUrl: finalUrl,
+      finalUrl,
+      scanStatus: "completed",
+      noGo: false
+    },
+    document: {
+      canonicalDocumentId: finalUrl,
+      observedDocumentIds: [finalUrl],
+      identityStatus: "matched"
+    },
+    observations: [{
+      observationId: "complete-negative",
+      observedAtMs: 100,
+      likelyPresent: false,
+      layerInspected: "first_layer",
+      documentId: finalUrl,
+      captureStatus: "no_evidence",
+      completedChannels: ["dom_inventory"],
+      controls: []
+    }],
+    geometry: {
+      assessmentStatus: "complete",
+      documentId: finalUrl,
+      completedChannels: ["geometry"],
+      incompleteChannels: [],
+      candidates: []
+    },
+    surface: { status: "not_observed", evidenceRefs: ["CanonicalEvidenceBundle.json"] },
+    coverage: {
+      status: "complete",
+      requiredChannels: ["dom_inventory", "geometry"],
+      completedChannels: ["dom_inventory", "geometry"],
+      incompleteChannels: []
+    }
+  });
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      consentControlAssessment: assessment,
+      requestPurposeClassificationConfidence: [{
+        category: "analytics",
+        collectionEndpointObserved: true,
+        confidence: 0.95,
+        essentiality: "non_essential",
+        evidenceRefs: ["CanonicalEvidenceBundle.json#request-1"],
+        firstSeenMs: 400,
+        requestUrl: "https://www.google-analytics.com/g/collect?v=2",
+        runtimePhase: "pre_consent",
+        vendorName: "Google Analytics"
+      }]
+    },
+    validationFindings: []
+  });
+
+  const surface = concerns.find((concern) =>
+    concern.originKey === "consent.operational_surface.not_observed"
+  );
+  const refusal = concerns.find((concern) =>
+    concern.originKey === "consent.refusal_path.unavailable_before_nonessential_activity"
+  );
+  assert.ok(surface);
+  assert.equal(surface.regulatoryChecklistEligibility, "none");
+  assert.equal(surface.promotionEligibility, "internal_only");
+  assert.ok(refusal);
+  assert.equal(refusal.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(refusal.promotionEligibility, "internal_only");
+  assert.equal(
+    refusal.evidenceBundle.rawEvidence?.consentRefusalPathBeforeNonessentialActivityEvidence,
+    true
+  );
+});
+
 test("normalizes snapshot signal candidates into eligible concerns", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [

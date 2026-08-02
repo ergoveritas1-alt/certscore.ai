@@ -165,6 +165,38 @@ export type InventoryGroupRow = {
   vendor: string;
 };
 
+export type RuntimeInventoryPresentationState =
+  | { status: "retained"; message: null }
+  | { status: "empty"; message: "No retained cookies or trackers were detected for this scan." }
+  | { status: "insufficient_evidence"; message: "Cookie and tracker inventory was not available because retained runtime coverage was incomplete." }
+  | { status: "pending"; message: "Cookie and tracker inventory is not yet available." };
+
+export function deriveRuntimeInventoryPresentationState(input: {
+  groupedRowCount: number;
+  runtimeCoverageLimited: boolean;
+  scanCompleted: boolean;
+}): RuntimeInventoryPresentationState {
+  if (input.groupedRowCount > 0) {
+    return { status: "retained", message: null };
+  }
+  if (input.runtimeCoverageLimited) {
+    return {
+      status: "insufficient_evidence",
+      message: "Cookie and tracker inventory was not available because retained runtime coverage was incomplete."
+    };
+  }
+  if (input.scanCompleted) {
+    return {
+      status: "empty",
+      message: "No retained cookies or trackers were detected for this scan."
+    };
+  }
+  return {
+    status: "pending",
+    message: "Cookie and tracker inventory is not yet available."
+  };
+}
+
 export function isTimedPreConsentInventoryRow(row: TrackerInventoryRow) {
   if ((row.cookieNames?.length ?? 0) > 0) {
     return true;
@@ -1460,7 +1492,8 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
     unresolvedHosts: vendorSurfaceProjection.evidenceInventory.unresolvedVendorHosts
   }));
   const browserExtensionRequestRows = buildBrowserExtensionRequestInventoryRows(hybridRuntimeEvidence);
-  const trackerRows = browserExtensionRequestRows.length > 0 ? browserExtensionRequestRows : canonicalTrackerRows;
+  const trackerRows = (browserExtensionRequestRows.length > 0 ? browserExtensionRequestRows : canonicalTrackerRows)
+    .filter(isTimedPreConsentInventoryRow);
   const dataFlows = buildPreConsentDataFlows(hybridRuntimeEvidence);
   const requestRows = buildSanitizedRequestEvidenceRows(hybridRuntimeEvidence);
 

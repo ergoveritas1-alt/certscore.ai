@@ -30,7 +30,7 @@ export function CollapsibleSectionCard({
       <Card className={cn("border border-slate-200 bg-white", className)}>
         <div
           className={cn(
-            "flex items-start gap-3 px-6 py-5",
+            "flex items-start gap-3 px-4 py-4 sm:px-6 sm:py-5",
             summaryClassName
           )}
         >
@@ -40,7 +40,7 @@ export function CollapsibleSectionCard({
             {subtitle ? <div className="mt-1 text-sm text-slate-500">{subtitle}</div> : null}
           </div>
         </div>
-        <div className={cn("px-6 pb-6 pt-0", contentClassName)}>{children}</div>
+        <div className={cn("px-4 pb-5 pt-0 sm:px-6 sm:pb-6", contentClassName)}>{children}</div>
       </Card>
     );
   }
@@ -50,7 +50,7 @@ export function CollapsibleSectionCard({
       <details suppressHydrationWarning className="group/section" {...(defaultOpen ? { open: true } : {})}>
         <summary
           className={cn(
-            "flex cursor-pointer list-none items-start gap-3 px-6 py-5 marker:hidden [&::-webkit-details-marker]:hidden",
+            "flex cursor-pointer list-none items-start gap-3 px-4 py-4 sm:px-6 sm:py-5 marker:hidden [&::-webkit-details-marker]:hidden",
             summaryClassName
           )}
         >
@@ -62,7 +62,7 @@ export function CollapsibleSectionCard({
             {subtitle ? <div className="mt-1 text-sm text-slate-500">{subtitle}</div> : null}
           </div>
         </summary>
-        <div className={cn("px-6 pb-6 pt-0", contentClassName)}>{children}</div>
+        <div className={cn("px-4 pb-5 pt-0 sm:px-6 sm:pb-6", contentClassName)}>{children}</div>
       </details>
     </Card>
   );

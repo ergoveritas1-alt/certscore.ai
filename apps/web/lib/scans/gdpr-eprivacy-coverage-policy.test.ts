@@ -3319,18 +3319,16 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes distinguishes a CMP signal from a
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats complete no-surface inspection as authoritative", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [],
+    coverage: "complete",
+    surface: "not_observed",
+  });
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
-    runtimeArtifacts: {
-      consentSurfaceInspection: {
-        coverageStatus: "complete",
-        inspectedPreInteraction: true,
-        inspectionCompleted: true,
-        outcome: "no_surface_observed_complete_coverage",
-        observedAtMs: 6400
-      },
+    ...makeCanonicalConsentPolicyInput(assessment, {
       consentSurfaceObserved: true
-    },
+    }),
     snapshot: {
       cookie_banner_present: true
     }
@@ -3344,27 +3342,26 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats complete no-surface inspec
 });
 
 test("a complete no-surface inspection takes precedence over a separate CMP runtime signal", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [],
+    coverage: "complete",
+    surface: "not_observed",
+  });
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
-    runtimeArtifacts: {
+    ...makeCanonicalConsentPolicyInput(assessment, {
       cmp_framework_signal_observed: true,
       cmp_runtime_signal_labels: ["HubSpot Banner"],
       cmp_vendor_name: "HubSpot CMP",
-      consentSurfaceInspection: {
-        coverageStatus: "complete",
-        inspectedPreInteraction: true,
-        inspectionCompleted: true,
-        outcome: "no_surface_observed_complete_coverage",
-        consentSurfaceObserved: false,
-        actionableControlObserved: false,
-        observedAtMs: 6400
-      },
       consent_surface_observed: false
-    }
+    })
   });
 
   assert.equal(outcomes.consent_surface_observed?.status, "Not observed");
-  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /completed pre-interaction.*did not observe/i);
+  assert.equal(
+    outcomes.consent_surface_observed?.limitation,
+    "No operational consent surface was retained in the tested context."
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps a typed limited surface observed while leaving controls unconfirmed", () => {

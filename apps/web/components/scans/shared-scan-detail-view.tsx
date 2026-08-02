@@ -129,7 +129,6 @@ import { isGenericBrowserCookieHelpUrl } from "../../lib/scans/policy-surface-ur
 import { deriveHighRiskTrackingContext } from "../../lib/scans/high-risk-tracking-context";
 import {
   buildPreConsentStorageAssessment,
-  buildRuntimeCookieInventory,
   isEligibleNonEssentialPreconsentStorageRow,
   projectPreConsentStorageMetric,
   type RuntimeCookieEvidenceRow
@@ -137,23 +136,17 @@ import {
 import { buildScanProof } from "../../lib/scans/scan-proof";
 import {
   buildReportSurfaceVendorProjection,
-  buildPreConsentDataFlows,
-  buildRuntimeInventoryGroupRows,
-  buildSanitizedRequestEvidenceRows,
+  buildRuntimeInventoryProjectionFromScan,
   buildTrackerInventoryGroupRows,
-  buildTrackerInventoryRows,
   classifyInventoryEvidence,
+  deriveRuntimeInventoryPresentationState,
   deriveInventoryMacroCategory,
   getInventoryGroupRowRenderKey,
   getTrackerConsentReviewPriority,
   isCmpOrFunctionalVendorDomain,
-  isTimedPreConsentInventoryRow,
   type ConsentReviewPriority,
   type InventoryConfidence,
-  type InventoryGroupRow,
-  type PreConsentDataFlow,
-  type SanitizedRequestEvidenceRow,
-  type TrackerInventoryRow
+  type InventoryGroupRow
 } from "../../lib/scans/runtime-inventory-projection";
 import {
   getAllowedConflictType,
@@ -1009,20 +1002,15 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
 }
 
 function RuntimeInventoryTable({
-  cookieRows,
-  dataFlows,
-  firstPartyDomain,
-  requestRows,
-  trackerRows
+  presentationState,
+  projection
 }: {
-  cookieRows: RuntimeCookieEvidenceRow[];
-  dataFlows: PreConsentDataFlow[];
-  firstPartyDomain?: string | null;
-  requestRows: SanitizedRequestEvidenceRow[];
-  trackerRows: TrackerInventoryRow[];
+  presentationState: ReturnType<typeof deriveRuntimeInventoryPresentationState>;
+  projection: ReturnType<typeof buildRuntimeInventoryProjectionFromScan>;
 }) {
-  const groupedInventoryRows = buildRuntimeInventoryGroupRows({ cookieRows, dataFlows, firstPartyDomain, requestRows, trackerRows });
+  const groupedInventoryRows = projection.groupedRows;
   const copyPayload = buildRuntimeInventoryCopyPayload(groupedInventoryRows);
+  const hasRetainedInventory = presentationState.status === "retained";
 
   return (
     <section>
@@ -1038,12 +1026,15 @@ function RuntimeInventoryTable({
             />
           </p>
         </summary>
-        <CopyJsonButton
-          className="absolute right-3 top-4 z-20 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-950 lg:right-5"
-          label="Copy table"
-          payload={copyPayload}
-        />
-        <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:px-5">
+        {hasRetainedInventory ? (
+          <CopyJsonButton
+            className="absolute right-3 top-4 z-20 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-950 lg:right-5"
+            label="Copy table"
+            payload={copyPayload}
+          />
+        ) : null}
+        {hasRetainedInventory ? (
+          <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:px-5">
           <div className="grid gap-3 lg:grid-cols-3 lg:items-stretch">
             <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
             <InventoryPurposeCard rows={groupedInventoryRows} />
@@ -1137,17 +1128,20 @@ function RuntimeInventoryTable({
                     </td>
                   </tr>
                 ))}
-                {groupedInventoryRows.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-5 text-center text-slate-500" colSpan={12}>No retained cookies or trackers were detected for this scan.</td>
-                  </tr>
-                ) : null}
               </tbody>
             </table>
             </div>
           </div>
           <PreConsentDataFlowSummary rows={groupedInventoryRows} />
-        </div>
+          </div>
+        ) : (
+          <div
+            className="mx-3.5 mb-5 rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-10 text-center lg:mx-5"
+            data-runtime-inventory-state={presentationState.status}
+          >
+            <p className="text-sm font-medium text-slate-600">{presentationState.message}</p>
+          </div>
+        )}
       </details>
     </section>
   );
@@ -4582,7 +4576,7 @@ export function shouldShowRegulatoryChecklistSection(input: {
 
 function LimitedSurfaceReview(input: { review: UnverifiedHomepageReview }) {
   return (
-    <div className="space-y-4 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5">
+    <div className="space-y-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 sm:px-6 sm:py-5">
       <div className="space-y-1">
         <p className="text-base font-semibold text-amber-950">Executive summary</p>
         <p className="text-sm font-semibold text-amber-950">{input.review.title}</p>
@@ -4851,7 +4845,7 @@ function AccessPostureSummaryCard(input: {
   })();
 
   return (
-    <div className="space-y-4 rounded-2xl border border-sky-200 bg-sky-50 px-6 py-5">
+    <div className="space-y-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 sm:px-6 sm:py-5">
       <div className="space-y-1">
         <p className="text-base font-semibold text-sky-950">Access posture</p>
         <p className="text-sm text-sky-900">
@@ -4974,7 +4968,7 @@ function AgencyAdvisorySummary(input: {
   const maxThemeCount = topThemes.reduce((max, theme) => Math.max(max, theme.count), 0);
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 px-6 py-5">
+    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 px-4 py-4 sm:px-6 sm:py-5">
       <div className="space-y-4">
         <p className="text-base font-semibold text-slate-900">Supporting analysis</p>
 
@@ -5347,7 +5341,7 @@ function FindingsOverview(input: { findings: UnifiedFindingDisplayPacket[] }) {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 px-6 py-5">
+    <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 px-4 py-4 sm:px-6 sm:py-5">
       <details className="group/noteworthy" open={true}>
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
           <span className="flex min-w-0 items-center gap-3">
@@ -6286,6 +6280,8 @@ type ScanReportRenderProjection = {
   globalUnifiedFindings: ScanReportUnifiedFindingState["globalUnifiedFindings"];
   normalizedConcerns: NonNullable<ScanReportUnifiedFindingState["normalizedConcerns"]>;
   ownerUnifiedFindings: UnifiedFindingDisplayPacket[];
+  runtimeInventory: ReturnType<typeof buildRuntimeInventoryProjectionFromScan>;
+  runtimeInventoryPresentation: ReturnType<typeof deriveRuntimeInventoryPresentationState>;
 };
 
 // Keep only the compact projection for a short completed-report viewing window.
@@ -6316,12 +6312,25 @@ function getScanReportRenderRevision(scanRecord: ScanDetailResponse) {
 
 function buildScanReportRenderProjection(scanRecord: ScanDetailResponse): ScanReportRenderProjection {
   const state = debugBuildScanReportUnifiedFindingState(scanRecord);
+  const normalizedConcerns = state.normalizedConcerns ?? [];
+  const runtimeInventory = buildRuntimeInventoryProjectionFromScan(scanRecord);
+  const runtimeCoverageLimited = normalizedConcerns.some((concern) =>
+    concern.originType === "runtime_artifact" &&
+    concern.originKey.startsWith("scan_quality.runtime_coverage.") &&
+    concern.evidenceBundle.rawEvidence?.runtimeCoverageStatus !== "usable"
+  );
 
   return {
     derivedContext: state.derivedContext,
     globalUnifiedFindings: state.globalUnifiedFindings,
-    normalizedConcerns: state.normalizedConcerns ?? [],
-    ownerUnifiedFindings: buildScanReportUnifiedFindingsFromState(state)
+    normalizedConcerns,
+    ownerUnifiedFindings: buildScanReportUnifiedFindingsFromState(state),
+    runtimeInventory,
+    runtimeInventoryPresentation: deriveRuntimeInventoryPresentationState({
+      groupedRowCount: runtimeInventory.groupedRows.length,
+      runtimeCoverageLimited,
+      scanCompleted: scanRecord.scan.status === "completed"
+    })
   };
 }
 
@@ -6861,7 +6870,7 @@ function ResultHeroPanel(input: {
   return (
     <section
       className={cx(
-        "relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-gradient-to-br p-6 shadow-[0_24px_80px_-36px_rgba(15,23,42,0.35)] md:p-7",
+        "relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-gradient-to-br p-4 shadow-[0_24px_80px_-36px_rgba(15,23,42,0.35)] sm:p-6 md:p-7",
         tone.panel
       )}
     >
@@ -7357,12 +7366,9 @@ export async function SharedScanDetailView({
     vendorCategoryCounts: certScoreSummary.vendorCategoryCounts
   });
   const executiveResolvedVendorNames = vendorSurfaceProjection.execSummary.resolvedVendorNames;
-  const inventoryResolvedVendorNames = vendorSurfaceProjection.evidenceInventory.resolvedVendorNames;
   const executiveThirdPartyDomains = vendorSurfaceProjection.execSummary.thirdPartyDomains;
-  const inventoryThirdPartyDomains = vendorSurfaceProjection.evidenceInventory.thirdPartyDomains;
   const executiveThirdPartyRequestCount = certScoreSummary.thirdPartyRequestCount;
   const executiveTopObservedEntities = vendorSurfaceProjection.execSummary.topObservedEntities;
-  const inventoryTopObservedEntities = vendorSurfaceProjection.evidenceInventory.topObservedEntities;
   const executiveVendorCategoryCounts = vendorSurfaceProjection.execSummary.vendorCategoryCounts;
   const executiveTrackerSummary = certScoreSummary.trackerSummary;
   const executiveUnresolvedVendorHosts = vendorSurfaceProjection.execSummary.unresolvedVendorHosts;
@@ -7378,13 +7384,8 @@ export async function SharedScanDetailView({
     executiveFingerprintCategories.length > 0 ||
     executiveFingerprintReasons.length > 0 ||
     certScoreSummary.fingerprintLabel !== "None detected";
-  const runtimeCookieInventory = buildRuntimeCookieInventory({
-    hybridRuntimeEvidence,
-    runtimeArtifacts
-  });
-  const cookieInventoryRows = runtimeCookieInventory.rows;
-  const preConsentDataFlows = buildPreConsentDataFlows(hybridRuntimeEvidence);
-  const sanitizedRequestEvidenceRows = buildSanitizedRequestEvidenceRows(hybridRuntimeEvidence);
+  const scanReportRenderProjection = getScanReportRenderProjection(scanRecord);
+  const cookieInventoryRows = scanReportRenderProjection.runtimeInventory.cookieRows;
   const preConsentStorageAssessment = buildPreConsentStorageAssessment({
     hybridRuntimeEvidence,
     runtimeArtifacts,
@@ -7402,16 +7403,7 @@ export async function SharedScanDetailView({
     ? null
     : preConsentStorageMetric.explanation;
   const beforeConsentStorageScope = preConsentStorageMetric.scope;
-  const trackerInventoryRows = buildTrackerInventoryRows({
-    domains: inventoryThirdPartyDomains,
-    firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
-    preConsentVendors: certScoreSummary.preConsentVendorNames,
-    resolvedVendors: inventoryResolvedVendorNames,
-    sessionReplayVendors: certScoreSummary.sessionReplayVendorNames,
-    trackerVendors: scanRecord.trackerVendors,
-    topObservedEntities: inventoryTopObservedEntities,
-    unresolvedHosts: executiveUnresolvedVendorHosts
-  }).filter(isTimedPreConsentInventoryRow);
+  const trackerInventoryRows = scanReportRenderProjection.runtimeInventory.trackerRows;
   const trackerPriorityRows = buildTrackerInventoryGroupRows(trackerInventoryRows).map((row) => ({
     domains: row.domains,
     firstSeenMs: row.firstSeenMs,
@@ -7423,7 +7415,6 @@ export async function SharedScanDetailView({
     vendor: row.vendor
   }));
   const reviewSectionError: string | null = null;
-  const scanReportRenderProjection = getScanReportRenderProjection(scanRecord);
   const { taxonomySnapshotSections } = scanReportRenderProjection.derivedContext;
 
   const preConsentTrackingObserved =
@@ -7730,7 +7721,7 @@ export async function SharedScanDetailView({
           : null;
 
   return (
-    <div className="min-w-0 overflow-x-hidden space-y-8">
+    <div className="min-w-0 space-y-6 overflow-x-hidden sm:space-y-8">
       {scanRecord.scan.status === "completed" ? (
         <ScanCompletedEvent scanSource={analyticsScanSource} domain={scanRecord.scan.domainHostname ?? null} />
       ) : null}
@@ -7802,7 +7793,7 @@ export async function SharedScanDetailView({
       {!isScanInFlight ? (
         <>
           {isScanFailed ? (
-            <section className="rounded-[1.4rem] border border-rose-200 bg-rose-50/60 px-6 py-5">
+            <section className="rounded-[1.4rem] border border-rose-200 bg-rose-50/60 px-4 py-4 sm:px-6 sm:py-5">
               <div className="flex items-start gap-3">
                 <svg viewBox="0 0 24 24" className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" aria-hidden="true">
                   <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -7883,11 +7874,8 @@ export async function SharedScanDetailView({
           ) : null}
           {isNoGoReport ? null : (
             <RuntimeInventoryTable
-              cookieRows={cookieInventoryRows}
-              dataFlows={preConsentDataFlows}
-              firstPartyDomain={scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost}
-              requestRows={sanitizedRequestEvidenceRows}
-              trackerRows={trackerInventoryRows}
+              presentationState={scanReportRenderProjection.runtimeInventoryPresentation}
+              projection={scanReportRenderProjection.runtimeInventory}
             />
           )}
           {showRegulatoryChecklistSection ? (

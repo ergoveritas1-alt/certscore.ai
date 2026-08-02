@@ -191,7 +191,7 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col">
-        <header className="relative z-[80] border-b border-slate-800 bg-slate-950 pl-[17px] pr-6 pt-2 pb-0 text-white">
+        <header className="relative z-[80] border-b border-slate-800 bg-slate-950 px-4 pt-2 pb-0 text-white sm:pr-6 lg:pl-[17px]">
           {process.env.NODE_ENV === "development" && DEV_INSTANCE_LABEL ? (
             <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-300/10 px-3 py-2 font-mono text-[11px] text-amber-100">
               <span className="rounded-full border border-amber-300/30 bg-amber-300/15 px-2 py-0.5 uppercase tracking-[0.2em] text-amber-200">

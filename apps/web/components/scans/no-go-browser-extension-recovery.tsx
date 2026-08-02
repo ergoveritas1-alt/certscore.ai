@@ -7,7 +7,7 @@ export function NoGoBrowserExtensionRecovery({
   isTargetSiteState: boolean;
 }) {
   return (
-    <section className="overflow-hidden rounded-[1.4rem] border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-6 py-6 shadow-sm">
+    <section className="overflow-hidden rounded-[1.4rem] border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-4 py-5 sm:px-6 sm:py-6 shadow-sm">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="max-w-3xl space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700">Alternate scan path</p>

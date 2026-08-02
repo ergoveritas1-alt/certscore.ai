@@ -71,6 +71,39 @@ test("contextual inline and persistent settings links do not incur a material sc
   }
 });
 
+test("no-surface consent rows attribute score effect only to the reject partial concern", () => {
+  const rows = [
+    "consent_surface_observed",
+    "cmp_framework_signal_observed",
+    "accept_consent_control",
+    "options_settings_preferences_control"
+  ].map((id) => ({
+    assessmentStatus: "checked" as const,
+    criticalEvidence: { retainedEvidence: { scoreEffect: "none" } },
+    evidenceState: "not_observed" as const,
+    id,
+    status: "Not observed"
+  }));
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [
+      ...rows,
+      {
+        assessmentStatus: "review_signal",
+        criticalEvidence: {
+          retainedEvidence: { scoreAttribution: "reject_all_path_availability" }
+        },
+        evidenceState: "observed",
+        id: "reject_all_path_availability",
+        status: "Review signal"
+      }
+    ]
+  });
+
+  assert.equal(result.score, 45);
+  assert.equal(result.coverageRatio, 1);
+});
+
 test("contextual browser capability access does not incur a fingerprinting score penalty", () => {
   const result = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",

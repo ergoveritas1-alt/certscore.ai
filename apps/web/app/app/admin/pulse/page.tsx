@@ -11,6 +11,7 @@ import { getAdminPulseFilterOptions, getAdminPulseOverviewCounts, listAdminPulse
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminReportLink } from "../scans/admin-scan-actions";
 import { AdminScansFilterForm } from "../scans/admin-scans-filter-form";
+import type { AdminEvidenceAggregate, AdminEvidenceResult } from "../../../../lib/scans/admin-evidence-matrix";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -77,6 +78,50 @@ function freshnessLabel(value: string | null, forced: boolean | null) {
 function outcomeLabel(value: string | null, noGo: boolean) {
   return value ? `${formatLabel(value)} (${noGo ? "No-go" : "Go"})` : "—";
 }
+
+function formatRequestedDateTime(value: string | null) {
+  if (!value) return { date: "Not available", time: "" };
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return { date: "Not available", time: "" };
+  return {
+    date: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" }).format(parsed),
+    time: new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Los_Angeles", timeZoneName: "short" }).format(parsed)
+  };
+}
+
+const EVIDENCE_MARKS = {
+  observed: { mark: "✓", className: "text-emerald-700" },
+  gap_observed: { mark: "!", className: "text-rose-700" },
+  review_signal: { mark: "△", className: "text-amber-700" },
+  not_observed: { mark: "—", className: "text-slate-500" },
+  not_confirmed: { mark: "?", className: "text-amber-700" },
+  not_testable: { mark: "×", className: "text-slate-400" },
+  insufficient_evidence: { mark: "×", className: "text-slate-400" },
+  out_of_scope: { mark: "·", className: "text-slate-400" }
+} as const;
+
+const STATUS_LABELS = {
+  observed: "Observed", gap_observed: "Gap observed", review_signal: "Review signal", not_observed: "Not observed",
+  not_confirmed: "Not confirmed", not_testable: "Not testable", insufficient_evidence: "Insufficient evidence", out_of_scope: "Out of scope"
+} as const;
+
+function evidenceTitle(label: string, result: AdminEvidenceResult | null) {
+  return result ? `${label}: ${STATUS_LABELS[result.status]} — ${result.descriptor}` : `${label}: not projected for this request`;
+}
+
+function EvidenceCode({ code, label, result }: { code: string; label: string; result: AdminEvidenceResult | null }) {
+  const presentation = result ? EVIDENCE_MARKS[result.status] : { mark: "·", className: "text-slate-300" };
+  return <span className={`whitespace-nowrap font-semibold ${presentation.className}`} title={evidenceTitle(label, result)}>{code}{presentation.mark}</span>;
+}
+
+function EvidenceGroupCell({ aggregate, labels, results }: { aggregate: AdminEvidenceAggregate | null; labels: Record<string, string>; results: Record<string, AdminEvidenceResult | null> | null }) {
+  const summary = aggregate && aggregate.projected > 0 ? `${aggregate.observed}/${aggregate.total} ✓ · ${aggregate.review}△ · ${aggregate.concern}!` : "Not projected";
+  return <><p className="truncate text-[10px] font-medium text-slate-600">{summary}</p><p className="flex items-center gap-1.5 overflow-hidden text-[10px] leading-4">{Object.entries(labels).map(([code, label]) => <EvidenceCode code={code} key={code} label={label} result={results?.[code] ?? null} />)}</p></>;
+}
+
+const TRANSPARENCY_LABELS = { CC: "Controller/contact", LB: "Legal basis", DR: "Data retention", PP: "Processing purposes", RC: "Recipients/categories", DS: "Data-subject rights", IT: "International transfers", PC: "Privacy contact", SA: "Supervisory authority", AD: "Automated decisions/profiling" };
+const TRANSPORT_LABELS = { HD: "HTTPS delivery", HR: "HTTP redirect", MC: "Mixed content", TC: "TLS certificate", FT: "Form transport" };
+const RUNTIME_LABELS = { FP: "Device ID/fingerprinting", SR: "Session replay", IF: "Third-party iframe", SM: "Social media", "3P": "Embedded third-party services" };
 
 function accessLabel(request: {
   accessPostureClass: string | null;
@@ -354,14 +399,15 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
         />
 
         <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="table-fixed text-left text-xs" style={{ minWidth: "1920px" }}>
+          <table className="table-fixed text-left text-xs" style={{ minWidth: "2790px" }}>
             <colgroup>
               <col style={{ width: "40px" }} /><col style={{ width: "70px" }} /><col style={{ width: "175px" }} />
-              <col style={{ width: "140px" }} /><col style={{ width: "165px" }} /><col style={{ width: "70px" }} /><col style={{ width: "75px" }} />
+              <col style={{ width: "115px" }} /><col style={{ width: "140px" }} /><col style={{ width: "70px" }} /><col style={{ width: "75px" }} />
               <col style={{ width: "60px" }} /><col style={{ width: "210px" }} /><col style={{ width: "110px" }} />
-              <col style={{ width: "75px" }} /><col style={{ width: "180px" }} /><col style={{ width: "55px" }} /><col style={{ width: "100px" }} />
-              <col style={{ width: "65px" }} /><col style={{ width: "160px" }} /><col style={{ width: "120px" }} />
-              <col style={{ width: "130px" }} /><col style={{ width: "70px" }} />
+              <col style={{ width: "75px" }} /><col style={{ width: "205px" }} /><col style={{ width: "135px" }} /><col style={{ width: "145px" }} />
+              <col style={{ width: "55px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} /><col style={{ width: "160px" }} />
+              <col style={{ width: "120px" }} /><col style={{ width: "130px" }} /><col style={{ width: "70px" }} /><col style={{ width: "120px" }} /><col style={{ width: "190px" }} /><col style={{ width: "190px" }} />
+              <col style={{ width: "78px" }} />
             </colgroup>
             <thead className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
               <tr>
@@ -369,8 +415,8 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Route" },
                   { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
-                  { label: "A/R/O" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" },
-                  { label: "Industry" }, { label: "Mode" }, { label: "Usage" },
+                  { label: "A/R/O" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" },
+                  { label: "Industry" }, { label: "Mode" }, { label: "Usage" }, { label: "Scan ID" }, { label: "Scanner egress" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }
                 ].map(({ label, className }) => <th className={`border-b border-slate-200 px-2.5 py-1.5 font-semibold ${className ?? ""}`} key={label}>{label}</th>)}
               </tr>
@@ -387,19 +433,24 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                 const marker = getScanFromMarkerInput(request.scanFromValue);
                 const scanReportHref = getAdminAuthenticatedScanHref(request.scanId);
                 const openHref = scanReportHref || `/app/admin/pulse/${request.publicId}`;
+                const requestedDateTime = formatRequestedDateTime(request.requestedAt);
+                const matrix = request.evidenceMatrix;
                 return (
                   <tr className="group h-[52px] hover:bg-slate-50/70" key={request.publicId}>
                     <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50" title={status.label}><span className="inline-flex items-center gap-1.5 font-semibold"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /><span className={status.label === "No-go" ? "text-rose-700" : "text-slate-700"}>{status.label}</span></span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${routeClass(request.apiRoute)}`}>{request.apiRoute}</span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={request.requesterName ?? provenance.label}>{request.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${sourceIpLabel(request)} · ${request.sourceIpSource.replaceAll("_", " ")}`}>{sourceIpLabel(request)}</p></td>
-                    <td className="whitespace-nowrap px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(request.requestedAt)}</td>
-                    <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-900" title={request.normalizedDomain ?? undefined}>{request.normalizedDomain ?? "Unknown"}</p><p className="truncate font-mono text-[10px] text-slate-400" title={request.publicId}>{request.publicId}</p></td>
+                    <td className="px-2.5 py-1.5 text-[10px] leading-4 text-slate-600" title={formatAdminDateTime(request.requestedAt)}><p className="truncate">{requestedDateTime.date}</p><p className="truncate text-slate-500">{requestedDateTime.time}</p></td>
+                    <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-900" title={request.normalizedDomain ?? undefined}>{request.normalizedDomain ?? "Unknown"}</p></td>
                     <td className="px-2.5 py-1.5 font-medium text-slate-700">{request.trancoRank ? `#${request.trancoRank.toLocaleString()}` : "—"}</td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.score !== null ? <><span>{request.score}</span><span className="text-[11px] font-normal text-slate-400">/100</span></> : "—"}</td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.topFindingCount ?? "—"}</td>
-                    <td className="px-2.5 py-1.5"><p className="whitespace-nowrap">Privacy {request.privacyPolicyPresent === true ? "✓" : request.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={request.cmpVendorName ?? undefined}>CMP {request.cmpVendorName ?? "—"}</p></td>
+                    <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="Privacy" label="Privacy notice" result={matrix?.privacyConsent.privacyNotice ?? null} /><EvidenceCode code="CMP" label="CMP framework" result={matrix?.privacyConsent.cmp ?? null} /></p><p className="truncate text-[10px] text-slate-500" title={evidenceTitle("Consent mechanism", matrix?.privacyConsent.mechanism ?? null)}>Mechanism {matrix?.privacyConsent.cmpVendorName ?? (matrix?.privacyConsent.mechanism ? EVIDENCE_MARKS[matrix.privacyConsent.mechanism.status].mark : "·")}</p></td>
                     <td className="truncate px-2.5 py-1.5 font-medium text-slate-700" title={request.noGoReason ?? undefined}>{accessLabel(request)}</td>
-                    <td className="whitespace-nowrap px-2.5 py-1.5 font-medium text-slate-700" title="Accept / Reject / Options controls observed on the first consent layer">{request.consentAro ? `A${request.consentAro.accept === true ? "✓" : request.consentAro.accept === false ? "—" : "?"} R${request.consentAro.reject === true ? "✓" : request.consentAro.reject === false ? "—" : "?"} O${request.consentAro.options === true ? "✓" : request.consentAro.options === false ? "—" : "?"}` : "—"}</td>
+                    <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="A" label="Accept" result={matrix?.privacyConsent.accept ?? null} /><EvidenceCode code="R" label="Reject" result={matrix?.privacyConsent.reject ?? null} /><EvidenceCode code="O" label="Options" result={matrix?.privacyConsent.options ?? null} /></p><p className="truncate text-[10px] text-slate-400">Canonical controls</p></td>
+                    <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transparency.aggregate ?? null} labels={TRANSPARENCY_LABELS} results={matrix?.transparency.results ?? null} /></td>
+                    <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transport.aggregate ?? null} labels={TRANSPORT_LABELS} results={matrix?.transport.results ?? null} /></td>
+                    <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.runtime.aggregate ?? null} labels={RUNTIME_LABELS} results={matrix?.runtime.results ?? null} /></td>
                     <td className="px-2.5 py-1.5 font-medium text-slate-800">{request.elapsedSeconds !== null ? `${Number.isInteger(Math.round(request.elapsedSeconds * 10) / 10) ? Math.round(request.elapsedSeconds * 10) / 10 : (Math.round(request.elapsedSeconds * 10) / 10).toFixed(1)}s` : "—"}</td>
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={request.scanOutcome ?? undefined}>{outcomeLabel(request.scanOutcome, request.noGoFlag)}</td>
                     <td className="px-2.5 py-1.5" title={request.scanFromLabel}><span aria-label={request.scanFromLabel} className="inline-flex"><ScanFromMarker flag={"flag" in marker ? marker.flag : undefined} icon={"icon" in marker ? marker.icon : undefined} selected /></span></td>
@@ -408,6 +459,8 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                     <td className="truncate px-2.5 py-1.5 text-slate-700" title={request.industry ?? undefined}>{request.industry ?? "—"}</td>
                     <td className="px-2.5 py-1.5"><p className="font-medium text-slate-800">{formatLabel(request.detail)}</p><p className="text-[10px] text-slate-500">{formatLabel(request.format)}</p></td>
                     <td className="px-2.5 py-1.5"><p>{request.feedbackCount} feedback</p><p className="text-[10px] text-slate-500">JSON {request.summaryJsonDownloads + request.evidenceJsonDownloads}</p></td>
+                    <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] text-slate-700" title={request.scanId ?? undefined}>{request.scanId ?? "—"}</p></td>
+                    <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] text-slate-700" title={request.scannerEgressId ?? "Scanner egress not recorded"}>{request.scannerEgressId ?? "Not recorded"}</p><p className="mt-0.5 truncate text-[10px] text-slate-400" title={request.scannerEgressProvider ?? undefined}>{request.scannerEgressProvider ?? "Outbound runtime"}</p></td>
                     <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 text-center group-hover:bg-slate-50"><AdminReportLink ariaLabel={scanReportHref ? `Open scan report ${request.scanId}` : `Open API request ${request.publicId}`} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white font-semibold text-sky-700" href={openHref}>→</AdminReportLink></td>
                   </tr>
                 );

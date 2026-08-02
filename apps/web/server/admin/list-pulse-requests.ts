@@ -18,6 +18,7 @@ import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-r
 import { shouldUseLocalV2DagScanTool } from "../scans/local-v2-dag-scan-config";
 import { withServerTiming } from "../performance/log-server-timing";
 import { projectCanonicalSurfaceSummary } from "../../lib/scans/canonical-surface-summary";
+import { parseAdminEvidenceMatrix, type AdminEvidenceMatrix } from "../../lib/scans/admin-evidence-matrix";
 
 export type AdminPulseRequestStatus =
   | "queued"
@@ -41,6 +42,7 @@ export type AdminPulseRequestListItem = {
   noGoSource: AdminNoGoProjection["source"];
   cmpVendorName: string | null;
   consentAro: { accept: boolean | null; reject: boolean | null; options: boolean | null } | null;
+  evidenceMatrix: AdminEvidenceMatrix | null;
   completedAt: string | null;
   createdAt: string;
   detail: string | null;
@@ -63,6 +65,8 @@ export type AdminPulseRequestListItem = {
   resultPulseUrl: string | null;
   resultReportUrl: string | null;
   scanId: string | null;
+  scannerEgressId: string | null;
+  scannerEgressProvider: string | null;
   scanOutcome: string | null;
   trancoRank: number | null;
   score: number | null;
@@ -369,6 +373,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     noGoSource: noGo.source,
     cmpVendorName: canonicalSummary.cmpVendorName,
     consentAro: canonicalSummary.consentAro,
+    evidenceMatrix: parseAdminEvidenceMatrix(row.admin_evidence_matrix),
     createdAt: timestampString(row.created_at) ?? String(row.created_at),
     detail: getRequestContextString(requestContext, "detail"),
     elapsedSeconds:
@@ -400,6 +405,8 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId,
+    scannerEgressId: shouldUseLocalV2DagScanTool() ? null : typeof row.scanner_egress_id === "string" ? row.scanner_egress_id : null,
+    scannerEgressProvider: shouldUseLocalV2DagScanTool() ? null : typeof row.scanner_egress_provider === "string" ? row.scanner_egress_provider : null,
     scanOutcome: selectAdminScanOutcome({
       scanOutcome: typeof snapshot?.scan_outcome === "string" ? snapshot.scan_outcome : typeof row.scan_outcome === "string" ? row.scan_outcome : null,
       stopReasonCode: typeof snapshot?.stop_reason_code === "string" ? snapshot.stop_reason_code : null,
@@ -536,6 +543,8 @@ export async function listAdminPulseRequestsPage(input: AdminPulseRequestListInp
             pr.created_at,
             coalesce(app_user.email, auth_user.email, api_key.created_by) as requester_name,
             s.status as scan_status,
+            s.egress_id as scanner_egress_id,
+            s.egress_provider as scanner_egress_provider,
             s.organization_id::text as scan_organization_id,
             s.completed_at as scan_completed_at,
             case
@@ -547,6 +556,7 @@ export async function listAdminPulseRequestsPage(input: AdminPulseRequestListInp
             ss.total_signals::int as snapshot_total_signals,
             ss.report_finding_count::int as snapshot_finding_count,
             ss.admin_summary_generated_at,
+            ss.admin_evidence_matrix,
             ss.certscore_overall::int as snapshot_score,
             ss.top_finding_count::int as top_finding_count,
             ss.consent_accept_observed,
@@ -707,6 +717,8 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               pr.updated_at,
               coalesce(app_user.email, auth_user.email, api_key.created_by) as requester_name,
               s.status as scan_status,
+              s.egress_id as scanner_egress_id,
+              s.egress_provider as scanner_egress_provider,
               s.completed_at as scan_completed_at,
               case
                 when s.completed_at is not null and s.started_at is not null
@@ -717,6 +729,7 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               ss.total_signals::int as snapshot_total_signals,
               ss.report_finding_count::int as snapshot_finding_count,
               ss.admin_summary_generated_at,
+              ss.admin_evidence_matrix,
               ss.certscore_overall::int as snapshot_score,
               ss.top_finding_count::int as top_finding_count,
               ss.consent_accept_observed,
@@ -879,8 +892,11 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             pr.elapsed_seconds,
             pr.created_at,
             s.scan_config_json,
+            s.egress_id as scanner_egress_id,
+            s.egress_provider as scanner_egress_provider,
             ss.certscore_overall::int as snapshot_score,
             ss.admin_summary_generated_at,
+            ss.admin_evidence_matrix,
             ss.top_finding_count::int as top_finding_count,
             ss.consent_accept_observed,
             ss.consent_evidence_status,

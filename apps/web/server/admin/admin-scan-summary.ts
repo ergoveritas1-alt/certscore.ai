@@ -2,6 +2,11 @@ import "server-only";
 
 import { queryOne } from "@website-signal-risk-scanner/db";
 import { buildPulseProjection } from "../../lib/pulse/projection";
+import {
+  projectAdminEvidenceMatrix,
+  type AdminEvidenceMatrix
+} from "../../lib/scans/admin-evidence-matrix";
+import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { getAnonymousScanById, getScanById } from "../scans/get-scan-by-id";
 import type { PublicScanRecord } from "../scans/get-public-scan-record";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
@@ -11,6 +16,7 @@ import { projectAdminNoGo } from "./admin-no-go";
 import { persistAdminScanSummary } from "./repository";
 
 export type AdminScanSummary = {
+  adminEvidenceMatrix: AdminEvidenceMatrix;
   cmpVendorName: string | null;
   industry: string | null;
   primaryLanguage: string | null;
@@ -101,7 +107,7 @@ export async function persistAdminScanSummaryForRecord(
   }
 
   const reportProjection = buildPulseProjection({
-    detail: "summary",
+    detail: "evidence",
     format: "json",
     freshnessMode: "latest",
     pulseRequestId: `admin:${scanId}`,
@@ -114,7 +120,14 @@ export async function persistAdminScanSummaryForRecord(
   const reportSummary = reportProjectionRecord.summary && typeof reportProjectionRecord.summary === "object"
     ? reportProjectionRecord.summary as Record<string, unknown>
     : null;
-  const reportTopFindings = Array.isArray(reportProjectionRecord.topFindings) ? reportProjectionRecord.topFindings : [];
+  const surfacedResults = recordObject(reportProjectionRecord, "surfacedResults");
+  const reportTopFindings = Array.isArray(surfacedResults?.gdprEprivacyFindings)
+    ? surfacedResults.gdprEprivacyFindings
+    : [];
+  const checklistPacket = recordObject(reportProjectionRecord, "gdprEprivacyChecklistRows");
+  const checklistRows = Array.isArray(checklistPacket?.items)
+    ? checklistPacket.items.filter((row): row is GdprEprivacyCoverageChecklistItem => Boolean(row && typeof row === "object" && !Array.isArray(row)))
+    : [];
   const resultDisposition = recordString(reportProjectionRecord, "resultDisposition");
   const topFindingIds = reportTopFindings.flatMap((finding) => {
     if (!finding || typeof finding !== "object" || Array.isArray(finding)) return [];
@@ -138,8 +151,15 @@ export async function persistAdminScanSummaryForRecord(
   const visualEvidenceArtifacts = Array.isArray(runtimeArtifacts?.visual_evidence_artifacts)
     ? runtimeArtifacts.visual_evidence_artifacts
     : null;
+  const cmpVendorName = noGo.isNoGo ? null : recordString(snapshot, "cmp_vendor_name");
+  const adminEvidenceMatrix = projectAdminEvidenceMatrix({
+    checklistRows,
+    cmpVendorName,
+    sourceProjectionVersion: recordString(snapshot, "report_projection_version")
+  });
   const summary: AdminScanSummary = {
-    cmpVendorName: noGo.isNoGo ? null : recordString(snapshot, "cmp_vendor_name"),
+    adminEvidenceMatrix,
+    cmpVendorName,
     industry: canonicalScanRecord.domainBenchmark?.industry ?? null,
     primaryLanguage: recordString(snapshot, "site_language_primary"),
     privacyPolicyPresent: noGo.isNoGo ? null : recordBoolean(snapshot, "privacy_policy_present"),

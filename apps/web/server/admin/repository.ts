@@ -90,6 +90,7 @@ export type AdminScanDetailSummaryRow = AdminScanQueryRow & {
 };
 
 export type AdminScanSnapshotRow = {
+  admin_evidence_matrix?: Record<string, unknown> | null;
   admin_industry_label?: string | null;
   admin_summary_generated_at?: string | null;
   access_posture_class?: AccessPostureClass | null;
@@ -1043,6 +1044,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
     scanIds.length
       ? query<AdminScanSnapshotRow>(
           `select scan_id,
+                  admin_evidence_matrix,
                   certscore_overall,
                   admin_industry_label,
                   admin_summary_generated_at,
@@ -1276,6 +1278,7 @@ export async function loadAdminPulseScanAttributionRows(scanIds: string[], reque
 }
 
 export async function persistAdminScanSummary(input: {
+  adminEvidenceMatrix: unknown;
   cmpVendorName: string | null;
   industry: string | null;
   primaryLanguage: string | null;
@@ -1294,7 +1297,8 @@ export async function persistAdminScanSummary(input: {
        admin_summary_generated_at, admin_industry_label, top_finding_count,
        site_language_primary, scan_outcome,
        privacy_policy_present, cmp_vendor_name, tranco_rank,
-       scan_no_go_assessment, visual_access_review, visual_evidence_artifacts
+       scan_no_go_assessment, visual_access_review, visual_evidence_artifacts,
+       admin_evidence_matrix
      )
      select scans.id,
             scans.organization_id,
@@ -1310,7 +1314,8 @@ export async function persistAdminScanSummary(input: {
             $8,
             $9::jsonb,
             $10::jsonb,
-            $11::jsonb
+            $11::jsonb,
+            $12::jsonb
       from scans
       where scans.id = $1
         and scans.domain_id is not null
@@ -1325,7 +1330,8 @@ export async function persistAdminScanSummary(input: {
            tranco_rank = coalesce(excluded.tranco_rank, scan_snapshots.tranco_rank),
            scan_no_go_assessment = coalesce(excluded.scan_no_go_assessment, scan_snapshots.scan_no_go_assessment),
            visual_access_review = coalesce(excluded.visual_access_review, scan_snapshots.visual_access_review),
-           visual_evidence_artifacts = coalesce(excluded.visual_evidence_artifacts, scan_snapshots.visual_evidence_artifacts)`,
+           visual_evidence_artifacts = coalesce(excluded.visual_evidence_artifacts, scan_snapshots.visual_evidence_artifacts),
+           admin_evidence_matrix = excluded.admin_evidence_matrix`,
     [
       input.scanId,
       input.topFindingCount,
@@ -1337,7 +1343,8 @@ export async function persistAdminScanSummary(input: {
       input.trancoRank ?? null,
       input.scanNoGoAssessment ? JSON.stringify(input.scanNoGoAssessment) : null,
       input.visualAccessReview ? JSON.stringify(input.visualAccessReview) : null,
-      input.visualEvidenceArtifacts ? JSON.stringify(input.visualEvidenceArtifacts) : null
+      input.visualEvidenceArtifacts ? JSON.stringify(input.visualEvidenceArtifacts) : null,
+      JSON.stringify(input.adminEvidenceMatrix)
     ]
   );
 

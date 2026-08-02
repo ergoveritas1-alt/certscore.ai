@@ -10,11 +10,49 @@ import {
   buildTrackerInventoryRows,
   classifyInventoryEvidence,
   deriveInventoryMacroCategory,
+  deriveRuntimeInventoryPresentationState,
   getInventoryGroupRowRenderKey,
   getTrackerConsentReviewPriority,
   isInventoryDisplayHostname,
   isTimedPreConsentInventoryRow,
 } from "./runtime-inventory-projection";
+
+test("projects an empty inventory message only when canonical coverage is not limited", () => {
+  assert.deepEqual(
+    deriveRuntimeInventoryPresentationState({
+      groupedRowCount: 0,
+      runtimeCoverageLimited: false,
+      scanCompleted: true
+    }),
+    {
+      status: "empty",
+      message: "No retained cookies or trackers were detected for this scan."
+    }
+  );
+
+  assert.deepEqual(
+    deriveRuntimeInventoryPresentationState({
+      groupedRowCount: 0,
+      runtimeCoverageLimited: true,
+      scanCompleted: true
+    }),
+    {
+      status: "insufficient_evidence",
+      message: "Cookie and tracker inventory was not available because retained runtime coverage was incomplete."
+    }
+  );
+});
+
+test("retained canonical inventory rows take precedence over a coverage limitation", () => {
+  assert.deepEqual(
+    deriveRuntimeInventoryPresentationState({
+      groupedRowCount: 2,
+      runtimeCoverageLimited: true,
+      scanCompleted: true
+    }),
+    { status: "retained", message: null }
+  );
+});
 
 test("projects bounded request-level evidence without retaining parameter or cookie values", () => {
   const rows = buildSanitizedRequestEvidenceRows({
