@@ -316,12 +316,6 @@ variable "worker_memory" {
   default     = 1024
 }
 
-variable "web_desired_count" {
-  description = "Desired task count for validation ops web."
-  type        = number
-  default     = 0
-}
-
 variable "worker_desired_count" {
   description = "Desired task count for validation worker."
   type        = number

@@ -2,16 +2,21 @@
 
 This runbook covers the validation runtime lane only. It is not the primary `certscore.ai` production web path.
 
+> The validation ops-web surface is retired and its ECS service must remain
+> absent. The web deployment sections below are historical recovery reference
+> only. Follow [validation-retirement-plan.md](/Users/benmasek/WC01/docs/validation-retirement-plan.md)
+> for the current production topology.
+
 Preferred production target:
 
-- AWS ECS/Fargate for the validation ops web surface, validation worker, and validation scheduler
+- AWS ECS/Fargate for the validation worker; the scheduler remains at zero
 - AWS ECS/Fargate remains the primary public web host for `certscore.ai`
 
 The active validation path is the AWS stack under [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation) with rollout steps in [docs/validation-aws-cutover-runbook.md](/Users/benmasek/WC01/docs/validation-aws-cutover-runbook.md).
 
 - primary product web production stays on the ECS/Fargate public web lane with root `apps/web`
-- validation uses a separate AWS validation ops surface with `APP_FLAVOR=validation_ops`
-- validation worker and scheduler run outside the primary web deployment lane
+- the validation ops-web ECS service is absent
+- the validation worker runs outside the primary web deployment lane
 - shared PostgreSQL database initially
 
 ## 1. Prerequisites

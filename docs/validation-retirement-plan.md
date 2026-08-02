@@ -2,7 +2,12 @@
 
 ## Current Decision
 
-The product-facing validation admin surface is retired from `apps/web`. The validation scheduler and validation ops web service have been scaled to zero. The validation ECS worker is not safe to shut down yet because production ops monitoring currently uses it as a private AWS execution lane for database probes and scheduled monitoring sweeps.
+The product-facing validation admin surface is retired from `apps/web`. The
+validation ops-web ECS service has been deleted and must not be recreated. Its
+task definition and surrounding recovery infrastructure remain temporarily. The
+validation scheduler remains scaled to zero. The validation ECS worker is not
+safe to shut down yet because production ops monitoring currently uses it as a
+private AWS execution lane for database probes and scheduled monitoring sweeps.
 
 ## Keep Running Until Migrated
 
@@ -45,7 +50,8 @@ Before scaling down or deleting validation services:
 
 1. Remove product web validation routes and navigation.
 2. Migrate production ops monitor/probe execution off the validation worker.
-3. Keep `certscore-validation-scheduler` and `certscore-validation-ops-web` at desired count zero.
+3. Keep `certscore-validation-scheduler` at desired count zero and keep the
+   deleted `certscore-validation-ops-web` service absent.
 4. Scale `certscore-validation-worker` to zero.
 5. Disable validation worker deploy workflows.
 6. Delete validation-specific Terraform/service definitions after a quiet period.

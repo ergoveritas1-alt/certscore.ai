@@ -95,10 +95,10 @@ prefix and have the intended retention policy.
 
 ## 6. Validation network follow-up
 
-The validation stack now fails planning when an enabled ALB-backed validation
-web task is placed in a different VPC from its target group. The current
-worker-only cross-VPC subnet override remains supported while validation ops web
-desired count is zero.
+The retired validation ops-web ECS service is intentionally absent. Its task
+definition and surrounding recovery infrastructure remain temporarily, while
+the worker-only cross-VPC subnet override continues to support the active
+validation worker lane.
 
 Consolidating the remaining validation worker and database networking requires
 a separately reviewed live-state migration. Do not destroy the existing
