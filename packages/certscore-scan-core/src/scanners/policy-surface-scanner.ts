@@ -1066,7 +1066,7 @@ export async function recoverPolicyDocumentsFromRetainedRenderedLinks(input: {
     absoluteDeadlineAtMs: moduleStartedAtMs + 12_000,
     internalBudgetMs: 12_000,
     renderedRecoverySessionPrimerUrl: input.links.find((link) =>
-      sameOrigin(input.scannerInput.normalizedUrl, link.pageUrl)
+      isPolicySessionPrimerCompatible(input.scannerInput.normalizedUrl, link.pageUrl)
     )?.pageUrl ?? input.scannerInput.normalizedUrl,
   };
   const fetchCaches: PolicyDocumentFetchCaches = {
@@ -2344,7 +2344,7 @@ async function fetchRenderedPolicyDocumentText(input: {
       : undefined;
     if (
       sessionPrimerUrl &&
-      sameOrigin(sessionPrimerUrl, input.url) &&
+      isPolicySessionPrimerCompatible(sessionPrimerUrl, input.url) &&
       canonicalPolicyUrlIdentity(sessionPrimerUrl) !== canonicalPolicyUrlIdentity(input.url)
     ) {
       const primerTimeoutMs = Math.min(
@@ -8002,6 +8002,24 @@ export function isFetchablePolicyCandidateForPolicySurface(input: {
 function sameOrigin(left: string, right: string): boolean {
   try {
     return new URL(left).origin === new URL(right).origin;
+  } catch {
+    return false;
+  }
+}
+
+export function isPolicySessionPrimerCompatible(left: string, right: string): boolean {
+  if (sameOrigin(left, right)) {
+    return true;
+  }
+  try {
+    const leftUrl = new URL(left);
+    const rightUrl = new URL(right);
+    if (leftUrl.protocol !== "https:" || rightUrl.protocol !== "https:") {
+      return false;
+    }
+    const leftDomain = getRegistrableDomainFromUrl(leftUrl.toString());
+    const rightDomain = getRegistrableDomainFromUrl(rightUrl.toString());
+    return Boolean(leftDomain && rightDomain && leftDomain === rightDomain);
   } catch {
     return false;
   }

@@ -4,8 +4,9 @@ import test from "node:test";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
+import { getEvidenceLabel } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
-import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
+import { buildNormalizedConcerns, buildUnifiedFindingCandidatesFromConcerns } from "../../lib/scans/normalized-concerns";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
 import {
@@ -19,7 +20,7 @@ import { withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-pr
 const GENERIC_URL = "https://site-under-test.example/";
 
 type FixtureControl = {
-  actionType: "accept_all" | "reject_all" | "manage_preferences";
+  actionType: "accept_all" | "reject_all" | "manage_preferences" | "other";
   classifierReasonCodes?: string[];
   classifierVariant?: string;
   label: string;
@@ -28,6 +29,7 @@ type FixtureControl = {
   matchStrength?: "direct" | "equivalent" | "contextual";
   presentationType?: "dedicated_button" | "inline_link";
   placementType?: "action_cluster" | "first_layer_body";
+  semanticRole?: "dismiss";
 };
 
 type ConsentFlowFixture = {
@@ -436,6 +438,68 @@ test("canonical consent-control flow consumes Slovenian typed controls without d
     ),
     true,
   );
+});
+
+test("canonical consent-control flow projects UniConsent accept/options evidence and a partial reject concern", () => {
+  const story = projectConsentStory({
+    firstLayerControls: [
+      {
+        actionType: "accept_all",
+        classifierReasonCodes: ["matched_accept", "match_strength_direct"],
+        label: "Agree and proceed",
+        matchedTerm: "agree and proceed",
+      },
+      {
+        actionType: "manage_preferences",
+        classifierReasonCodes: ["matched_options", "match_strength_direct"],
+        label: "Manage Options",
+        matchedTerm: "manage options",
+        presentationType: "dedicated_button",
+      },
+    ],
+  });
+
+  assert.equal(story.assessment.controls.accept.state, "observed");
+  assert.equal(story.assessment.controls.options.state, "observed");
+  assert.equal(story.assessment.controls.reject.state, "not_observed");
+  assert.equal(story.row.status, "Observed");
+  assert.equal(story.rejectRow.status, "Review signal");
+  assert.equal(story.rejectRow.assessmentStatus, "review_signal");
+  assert.equal(getEvidenceLabel(story.rejectRow), "Partial concern");
+  assert.equal(story.rejectScore.score, 45);
+  assert.match(story.rejectRow.limitation ?? "", /no same-layer reject/i);
+});
+
+test("canonical consent-control flow projects dismiss-only evidence through every policy boundary", () => {
+  const story = projectConsentStory({
+    firstLayerControls: [{
+      actionType: "other",
+      classifierReasonCodes: ["matched_dismiss", "match_strength_direct"],
+      label: "Close",
+      matchedTerm: "close",
+      semanticRole: "dismiss",
+    }],
+  });
+  const dismissConcern = story.normalizedConcerns.find((concern) =>
+    concern.originKey === "consent.dismiss_without_reject.complete_first_layer"
+  );
+  const unifiedCandidates = buildUnifiedFindingCandidatesFromConcerns(
+    dismissConcern ? [dismissConcern] : []
+  );
+
+  assert.equal(story.assessment.surface.status, "observed_actionable");
+  assert.equal(story.assessment.evidence[0]?.intent, "dismiss");
+  assert.equal(story.assessment.controls.accept.state, "not_observed");
+  assert.equal(story.assessment.controls.reject.state, "not_observed");
+  assert.equal(story.assessment.controls.options.state, "not_observed");
+  assert.ok(dismissConcern);
+  assert.equal(dismissConcern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(dismissConcern.promotionEligibility, "eligible");
+  assert.equal(
+    unifiedCandidates[0]?.normalizedConcern.suggestedUnifiedFindingId,
+    "dismiss_without_reject"
+  );
+  assert.equal(story.rejectRow.status, "Review signal");
 });
 
 test("canonical consent-control flow projects reject-and-subscribe as a partial concern", () => {

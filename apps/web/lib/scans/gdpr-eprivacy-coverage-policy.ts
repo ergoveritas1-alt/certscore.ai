@@ -1397,6 +1397,20 @@ function getConsentPaidDeclinePathConcern(
   }) ?? null;
 }
 
+function getConsentDismissWithoutRejectConcern(
+  input: GdprEprivacyCoveragePolicyInput
+) {
+  return (input.normalizedConcerns ?? []).find((concern) => {
+    const rawEvidence = concern.evidenceBundle.rawEvidence;
+    return concern.originKey === "consent.dismiss_without_reject.complete_first_layer" &&
+      concern.originType === "runtime_artifact" &&
+      concern.promotionEligibility === "eligible" &&
+      concern.externalSurfacingEligibility === "eligible" &&
+      concern.regulatoryChecklistEligibility === "review_signal" &&
+      rawEvidence?.consentDismissWithoutRejectEvidence === true;
+  }) ?? null;
+}
+
 function getConsentOperationalSurfaceConcern(
   input: GdprEprivacyCoveragePolicyInput
 ) {
@@ -4007,6 +4021,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     getBoolean(input.runtimeArtifacts, ["consent_reject_interaction_succeeded"]) === true;
   const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
   const paidDeclinePathConcern = getConsentPaidDeclinePathConcern(input);
+  const dismissWithoutRejectConcern = getConsentDismissWithoutRejectConcern(input);
   const operationalSurfaceConcern = getConsentOperationalSurfaceConcern(input);
   const refusalPathConcern = getConsentRefusalPathBeforeNonessentialActivityConcern(input);
   const rejectPathAvailable = consentControlAssessment
@@ -4069,6 +4084,36 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
           retainedConsentPaidDeclineControls: retainedControls
         }
       }
+    );
+  }
+
+  if (dismissWithoutRejectConcern) {
+    const rawEvidence = dismissWithoutRejectConcern.evidenceBundle.rawEvidence ?? {};
+    const retainedControls = getObjectArray(rawEvidence, ["retainedDismissControls", "retained_dismiss_controls"]);
+    const visibleLabels = retainedControls
+      .map((control) => getString(control, ["label"]))
+      .filter((label): label is string => Boolean(label));
+    return makeOutcome(
+      "reject_all_path_availability",
+      "Review signal",
+      "A complete first-layer consent inventory retained a dismissal control, but no reject, decline, necessary-only, or equivalent refusal control. This is an availability signal for review; CertScore.ai did not interact with the control or determine legal compliance.",
+      uniqueStrings([
+        ...dismissWithoutRejectConcern.evidenceBundle.runtimeArtifacts,
+        ...visibleLabels.map((label) => `Visible dismissal: ${label}`),
+        "Result: no first-layer reject/equivalent control retained",
+      ]).slice(0, 12),
+      {
+        retainedEvidence: {
+          consentDismissWithoutRejectConcern: {
+            canonicalConcernKey: dismissWithoutRejectConcern.canonicalConcernKey,
+            originKey: dismissWithoutRejectConcern.originKey,
+          },
+          dismissControlObserved: true,
+          firstLayerCookieConsentBannerObserved: true,
+          rejectControlObserved: false,
+          retainedDismissControls: retainedControls,
+        },
+      },
     );
   }
 
@@ -4166,7 +4211,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
   if (firstLayerAcceptWithoutRejectObserved) {
     return makeOutcome(
       "reject_all_path_availability",
-      "Gap observed",
+      "Review signal",
       "A first-layer GDPR/ePrivacy cookie consent surface was retained with an accept option and non-essential cookie/purpose text, but no same-layer reject, decline, refuse, or continue-without-accepting option was retained. This is a first-layer availability signal only; CertScore.ai did not run a consent flow.",
       [
         "Evidence: retained first-layer consent controls",

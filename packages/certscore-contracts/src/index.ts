@@ -2168,6 +2168,7 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
           control.semanticRole === "reject" ||
           control.semanticRole === "necessary_only" ||
           control.semanticRole === "preferences" ||
+          control.semanticRole === "dismiss" ||
           (
             !control.semanticRole &&
             ["accept_all", "reject_all", "manage_preferences", "save_preferences"].includes(control.actionType)

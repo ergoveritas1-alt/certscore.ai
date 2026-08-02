@@ -136,6 +136,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "allow non-essential cookies"),
     ...direct("accept", "agree and close"),
     ...direct("accept", "agree and continue"),
+    ...direct("accept", "agree and proceed"),
     ...direct("accept", "accept and continue"),
     ...direct("accept", "accept and close"),
     ...direct("accept", "accept selections"),

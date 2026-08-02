@@ -2358,6 +2358,24 @@ function getConsentPaidDeclinePathChecklistEligibility(input: {
     : "none";
 }
 
+function getConsentDismissWithoutRejectChecklistEligibility(input: {
+  originKey: string;
+  rawEvidence: Record<string, unknown> | null | undefined;
+}): NormalizedConcernRegulatoryChecklistEligibility | null {
+  if (
+    input.originKey !== "consent.dismiss_without_reject.complete_first_layer" ||
+    input.rawEvidence?.consentDismissWithoutRejectEvidence !== true
+  ) {
+    return null;
+  }
+  return input.rawEvidence?.consentControlAssessmentStatus === "complete" &&
+    input.rawEvidence?.consentControlCoverageStatus === "complete" &&
+    input.rawEvidence?.firstLayerRejectState === "not_observed" &&
+    input.rawEvidence?.dismiss_without_reject === true
+      ? "review_signal"
+      : "none";
+}
+
 function getPreConsentStorageAssessmentChecklistEligibility(input: {
   originKey: string;
   rawEvidence: Record<string, unknown> | null | undefined;
@@ -2506,6 +2524,20 @@ export function deriveConcernPolicy(input: {
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "internal_only",
       regulatoryChecklistEligibility: consentPaidDeclinePathChecklistEligibility
+    };
+  }
+  const consentDismissWithoutRejectChecklistEligibility = getConsentDismissWithoutRejectChecklistEligibility({
+    originKey: input.concern.originKey,
+    rawEvidence: input.rawEvidence
+  });
+  if (consentDismissWithoutRejectChecklistEligibility !== null) {
+    const eligible = consentDismissWithoutRejectChecklistEligibility === "review_signal";
+    return {
+      allowedNarrativeTier: eligible ? "moderate" : "weak",
+      externalSurfacingEligibility: eligible ? "eligible" : "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: eligible ? "eligible" : "internal_only",
+      regulatoryChecklistEligibility: consentDismissWithoutRejectChecklistEligibility
     };
   }
   const consentOptionsChecklistEligibility = getConsentOptionsControlChecklistEligibility({

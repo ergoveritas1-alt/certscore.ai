@@ -81,8 +81,8 @@ function deriveGdprEprivacyCoveragePolicyOutcomes(
 
 function makeCanonicalConsentAssessment(input: {
   controls?: Array<{
-    actionType: "accept_all" | "reject_all" | "manage_preferences";
-    intent: "accept" | "reject" | "options";
+    actionType: "accept_all" | "reject_all" | "manage_preferences" | "other";
+    intent: "accept" | "reject" | "options" | "dismiss";
     label: string;
     presentationType?: "dedicated_button" | "inline_link" | "persistent_link" | "unknown";
     placementType?: "action_cluster" | "first_layer_body" | "persistent_surface" | "unknown";
@@ -4490,7 +4490,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes carries CMP expectation for missi
   assert.equal(optionsOutcome?.criticalEvidence.retainedEvidence.optionsControlEvidenceRetained, false);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes flags first-layer accept-only cookie consent as a reject-option gap", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes projects first-layer accept-only cookie consent as a partial reject concern", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -4518,7 +4518,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes flags first-layer accept-only coo
   });
 
   const outcome = outcomes.reject_all_path_availability;
-  assert.equal(outcome?.status, "Gap observed");
+  assert.equal(outcome?.status, "Review signal");
   assert.match(outcome?.limitation ?? "", /no same-layer reject, decline, refuse, or continue-without-accepting option/i);
   assert.match(outcome?.limitation ?? "", /first-layer availability signal only/i);
   assert.equal(outcome?.criticalEvidence.retainedEvidence.acceptControlObserved, true);
@@ -7788,7 +7788,7 @@ test("canonical consent assessment exclusively supplies current-scan A/R/O polic
   });
 
   assert.equal(outcomes.accept_consent_control?.status, "Observed");
-  assert.equal(outcomes.reject_all_path_availability?.status, "Gap observed");
+  assert.equal(outcomes.reject_all_path_availability?.status, "Review signal");
   assert.equal(outcomes.options_settings_preferences_control?.status, "Observed");
   assert.equal(
     outcomes.reject_all_path_availability?.criticalEvidence.retainedEvidence.rejectControlObserved,
@@ -8006,6 +8006,33 @@ test("limited canonical consent assessment cannot create missing-control finding
   assert.notEqual(outcomes.reject_all_path_availability?.status, "Gap observed");
   assert.notEqual(outcomes.options_settings_preferences_control?.status, "Gap observed");
   assert.notEqual(outcomes.consent_choice_quality?.status, "Gap observed");
+});
+
+test("complete dismiss-only assessment projects reject as a partial concern", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [{ actionType: "other", intent: "dismiss", label: "Close" }],
+  });
+  const input = makeCanonicalConsentPolicyInput(assessment);
+  const concerns = input.normalizedConcerns;
+  const dismissConcern = concerns.find((concern) =>
+    concern.originKey === "consent.dismiss_without_reject.complete_first_layer"
+  );
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    ...input,
+    snapshot: { cookie_banner_present: true },
+  });
+
+  assert.equal(assessment.surface.status, "observed_actionable");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.ok(dismissConcern);
+  assert.equal(dismissConcern.suggestedUnifiedFindingId, "dismiss_without_reject");
+  assert.equal(dismissConcern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(dismissConcern.promotionEligibility, "eligible");
+  assert.equal(outcomes.reject_all_path_availability?.status, "Review signal");
+  assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /dismissal control/i);
 });
 
 test("complete no-surface assessment reports factual not-observed controls without creating control gaps", () => {

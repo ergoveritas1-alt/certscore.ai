@@ -3246,6 +3246,95 @@ function buildConsentOptionsControlProminenceConcerns(
   ];
 }
 
+function buildConsentDismissWithoutRejectConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  if (
+    !assessment ||
+    assessment.assessmentStatus !== "complete" ||
+    assessment.coverage.status !== "complete" ||
+    assessment.document.identityStatus !== "matched" ||
+    assessment.scan.noGo !== false ||
+    assessment.surface.status !== "observed_actionable" ||
+    assessment.controls.reject.state !== "not_observed"
+  ) {
+    return [];
+  }
+
+  const retainedDismissControls = assessment.evidence
+    .filter((evidence) =>
+      evidence.intent === "dismiss" &&
+      evidence.layer === "first_layer" &&
+      evidence.visible === true &&
+      evidence.actionable === true
+    )
+    .slice(0, 8)
+    .map((evidence) => ({
+      artifactRefs: evidence.artifactRefs.slice(0, 8),
+      evidenceId: evidence.evidenceId,
+      label: evidence.label,
+      observedAtMs: evidence.observedAtMs,
+    }));
+  if (retainedDismissControls.length === 0) {
+    return [];
+  }
+
+  const runtimeEvidenceArtifacts = uniqueStrings([
+    ...assessment.surface.evidenceRefs,
+    ...retainedDismissControls.flatMap((control) => [control.evidenceId, ...control.artifactRefs]),
+    "scan_runtime_artifacts.consent_control_assessment",
+  ]).slice(0, 16);
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "A complete, same-document first-layer consent inventory retained a dismissal control but no reject, decline, necessary-only, or equivalent refusal control.",
+      domainContext,
+      evidence: retainedDismissControls
+        .map((control) => control.label)
+        .filter((label): label is string => Boolean(label)),
+      observedValue: "dismiss_without_reject",
+      originKey: "consent.dismiss_without_reject.complete_first_layer",
+      originType: "runtime_artifact",
+      rawEvidence: {
+        consentControlAssessmentContractVersion: assessment.artifactVersion,
+        consentControlAssessmentSourceHash: assessment.provenance.sourceHash,
+        consentControlAssessmentStatus: assessment.assessmentStatus,
+        consentControlCoverageStatus: assessment.coverage.status,
+        consentDismissWithoutRejectEvidence: true,
+        consentSurfaceObserved: true,
+        consentSurfaceDiagnostics: {
+          consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+          preChoiceState: true,
+          sameSurfaceCandidates: true,
+          stableRenderedState: true,
+          visibleInViewport: true,
+        },
+        consentUiPathEvidence: {
+          firstLayerCookieConsentBannerObserved: true,
+          gdprEprivacyConsentSurfaceObserved: "confirmed",
+          layerInspected: "first_layer",
+        },
+        dismiss_without_reject: true,
+        firstLayerAcceptState: assessment.controls.accept.state,
+        firstLayerOptionsState: assessment.controls.options.state,
+        firstLayerRejectState: assessment.controls.reject.state,
+        retainedDismissControls,
+        runtimeEvidenceArtifacts,
+      },
+      severity: "medium",
+      signalKey: "privacy.dark_pattern_dismiss_without_reject",
+      signalLabel: "Dismiss without reject",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Dismiss without reject",
+    }),
+  ];
+}
+
 function buildConsentPaidDeclinePathConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
@@ -3383,6 +3472,7 @@ export function buildNormalizedConcerns(input: {
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentNoSurfaceConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildConsentDismissWithoutRejectConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPreConsentStorageAssessmentConcerns(input.runtimeArtifacts, input.domainContext),

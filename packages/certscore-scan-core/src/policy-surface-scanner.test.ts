@@ -24,6 +24,7 @@ import {
   isFetchablePolicyHrefForPolicySurface,
   isFetchablePolicyUrlForPolicySurface,
   isGdprNoticeSupplementLink,
+  isPolicySessionPrimerCompatible,
   mergePolicySurfaceObservations,
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
   policySurfaceObservationsFromRetainedRenderedLinks,
@@ -321,6 +322,30 @@ test("browser recovery primes the observed same-origin session and prioritizes t
     await once(server, "close");
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("browser recovery accepts a secure www redirect as the same policy session site", () => {
+  assert.equal(
+    isPolicySessionPrimerCompatible(
+      "https://usccb.org/",
+      "https://www.usccb.org/about/privacy-policy.cfm",
+    ),
+    true,
+  );
+  assert.equal(
+    isPolicySessionPrimerCompatible(
+      "https://usccb.org/",
+      "https://privacy.example.org/policy",
+    ),
+    false,
+  );
+  assert.equal(
+    isPolicySessionPrimerCompatible(
+      "http://usccb.org/",
+      "https://www.usccb.org/about/privacy-policy.cfm",
+    ),
+    false,
+  );
 });
 
 test("policySurfaceScanner decodes compressed policy HTML before topic extraction", async () => {

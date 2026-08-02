@@ -28,6 +28,7 @@ export type StaticFixturePage =
   | "consent-compact-cookie-controls"
   | "consent-compact-privacy-settings-controls"
   | "consent-contextual-approval-offscreen"
+  | "consent-dismiss-only"
   | "consent-contextual-continue-accept"
   | "consent-deny-non-essential"
   | "consent-generic-learn-more-page-context"
@@ -213,6 +214,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-compact-cookie-controls": "consent-compact-cookie-controls",
   "consent-compact-privacy-settings-controls": "consent-compact-privacy-settings-controls",
   "consent-contextual-approval-offscreen": "consent-contextual-approval-offscreen",
+  "consent-dismiss-only": "consent-dismiss-only",
   "consent-contextual-continue-accept": "consent-contextual-continue-accept",
   "consent-deny-non-essential": "consent-deny-non-essential",
   "consent-generic-learn-more-page-context": "consent-generic-learn-more-page-context",
@@ -1350,6 +1352,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     compactCookieControls: caseName === "consent-compact-cookie-controls",
     compactPrivacySettingsControls: caseName === "consent-compact-privacy-settings-controls",
     contextualApprovalOffscreen: caseName === "consent-contextual-approval-offscreen",
+    dismissOnly: caseName === "consent-dismiss-only",
     firstLayerNecessaryToggleOnly: caseName === "consent-first-layer-necessary-toggle-only",
     firstLayerOptionalToggleOff: caseName === "consent-first-layer-optional-toggle-off",
     firstLayerOptionalToggleOn: caseName === "consent-first-layer-optional-toggle-on",
@@ -1549,6 +1552,16 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
       <script>
         window.OneTrust = { fixture: true };
       </script>
+    `;
+  }
+  if (options.dismissOnly) {
+    return `
+      <main style="min-height: 900px;"><h1>Dismiss-only consent fixture</h1></main>
+      <section id="sliding-popup" class="eu-cookie-compliance-banner" style="position: fixed; inset: auto 0 0; padding: 16px; background: green; color: white;">
+        <p>This website uses cookies. By continuing you are agreeing to our <a href="/privacy">Privacy Policy</a>.</p>
+        <button id="cookie-close" type="button">Close</button>
+      </section>
+      <script>window.drupalSettings = { eu_cookie_compliance: { popup_enabled: true } };</script>
     `;
   }
   if (options.lateFirstLayerChoiceControls) {
@@ -1868,9 +1881,11 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     ? `<button id="accept-essential" type="button">Accept Essential</button>`
     : options.ambiguous
     ? `<button id="continue" type="button">Continue</button>`
+    : options.noReject
+    ? `<button id="accept-all" type="button"><span>Agree and proceed</span></button>`
     : `<button id="accept-all" type="button">Accept All</button>`;
-  const manageButton = options.manage || options.ambiguous || preferenceOnly || options.rejectSubscribe || options.rejectPay
-    ? `<button id="settings" type="button">Settings</button>`
+  const manageButton = options.manage || options.ambiguous || options.noReject || preferenceOnly || options.rejectSubscribe || options.rejectPay
+    ? `<button id="settings" type="button">${options.noReject ? "Manage Options" : "Settings"}</button>`
     : "";
   const postChoiceFooter = options.postChoiceReopen
     ? `<footer><button id="post-choice-settings" type="button">Cookie Settings</button></footer>`

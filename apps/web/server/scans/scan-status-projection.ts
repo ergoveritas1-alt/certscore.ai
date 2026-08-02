@@ -224,6 +224,10 @@ export function isPendingScanStatus(status: string) {
   return status === "queued" || status === "running" || status === "processing";
 }
 
+export function isCompletedScanStatus(status: string) {
+  return status === "completed" || status === "completed_limited";
+}
+
 export function buildLightweightScanStatusResponse(projection: ScanStatusProjection) {
   return {
     domain: projection.domainHostname,

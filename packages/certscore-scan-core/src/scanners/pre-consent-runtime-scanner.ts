@@ -4941,6 +4941,8 @@ async function readConsentUiObservation(
     return {
       ...control,
       actionType: actionType ?? control.actionType,
+      semanticRole: classification.semanticRole,
+      confidence: classification.confidence,
       matchedTerm: classification.matchedTerm,
       matchedLocale: classification.matchedLocale,
       matchStrength: classification.matchStrength,
@@ -4952,7 +4954,11 @@ async function readConsentUiObservation(
   for (const control of classifiedControls) {
     if (
       control.inventorySource !== "full_document_consent_surface" ||
-      (control.actionType === "other" && !isPaidDeclineVariant(control.classifierVariant))
+      (
+        control.actionType === "other" &&
+        control.semanticRole !== "dismiss" &&
+        !isPaidDeclineVariant(control.classifierVariant)
+      )
     ) {
       continue;
     }
@@ -4979,7 +4985,11 @@ async function readConsentUiObservation(
   );
   const retainedControlKeys = new Set<string>();
   const enrichedControls = classifiedControls.filter((control) => {
-    if (control.actionType === "other" && !isPaidDeclineVariant(control.classifierVariant)) {
+    if (
+      control.actionType === "other" &&
+      control.semanticRole !== "dismiss" &&
+      !isPaidDeclineVariant(control.classifierVariant)
+    ) {
       rejectedReasons.add("classifier_other_unknown");
       return false;
     }
@@ -5016,10 +5026,16 @@ async function readConsentUiObservation(
       control.matchStrength === "contextual" &&
       control.classifierReasonCodes?.includes("context_satisfied") === true &&
       control.classifierVariant === "approval_acknowledgment";
+    const isContextConfirmedDismissControl =
+      control.actionType === "other" &&
+      control.semanticRole === "dismiss" &&
+      control.matchStrength === "direct" &&
+      control.classifierReasonCodes?.includes("matched_dismiss") === true;
     if (
       control.inventorySource === "full_document_consent_surface" &&
       (classifiedConsentSurfaceControlsByContainer.get(control.inventoryContainerKey ?? "unknown")?.size ?? 0) < 2 &&
-      !isContextConfirmedApprovalControl
+      !isContextConfirmedApprovalControl &&
+      !isContextConfirmedDismissControl
     ) {
       rejectedReasons.add("generic_container_fewer_than_two_classified_controls");
       return false;

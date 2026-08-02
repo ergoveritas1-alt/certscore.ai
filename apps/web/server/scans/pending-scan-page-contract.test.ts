@@ -72,9 +72,31 @@ test("completed v2 report routes fail closed to the verified persisted projectio
     const source = await readFile(page, "utf8");
 
     assert.match(source, /loadPersistedScanReportProjection/);
-    assert.match(source, /reportProjectionRequired && !localPersistedReportProjection/);
+    assert.match(
+      source,
+      /isCompletedScanStatus\(statusProjection\.status\)[\s\S]*?reportProjectionRequired &&[\s\S]*?!localPersistedReportProjection/
+    );
     assert.doesNotMatch(source, /materializeLocalV2DagScanDetail/);
     assert.doesNotMatch(source, /persistScanReportProjection/);
+  }
+});
+
+test("terminal failed v2 scans bypass completed-report finalization", async () => {
+  for (const page of pages) {
+    const source = await readFile(page, "utf8");
+    const reportProjectionFallback = source.indexOf(
+      "isCompletedScanStatus(statusProjection.status)",
+      source.indexOf("localPersistedReportProjection")
+    );
+    const pendingFallback = source.indexOf("<PendingScanDetailView", reportProjectionFallback);
+    const fullRecordLoadCandidates = ["getScanById(", "getPublicScanById("]
+      .map((call) => source.indexOf(call, reportProjectionFallback))
+      .filter((index) => index >= 0);
+    const fullRecordLoad = Math.min(...fullRecordLoadCandidates);
+
+    assert.ok(reportProjectionFallback >= 0, `${page} must gate report finalization on a completed status`);
+    assert.ok(pendingFallback > reportProjectionFallback, `${page} must retain the completed-report pending fallback`);
+    assert.ok(fullRecordLoad > pendingFallback, `${page} must load terminal failed records after bypassing that fallback`);
   }
 });
 

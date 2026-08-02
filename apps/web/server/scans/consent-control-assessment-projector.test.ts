@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
-import { deriveMaterializedConsentControlAssessment } from "./consent-control-assessment-projector";
+import { deriveMaterializedConsentControlAssessment, deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
 
 function bundle(
   controls: Array<Record<string, unknown>>,
@@ -157,6 +157,80 @@ test("completed typed DOM controls survive an independent accessibility timeout"
   assert.equal(assessment.controls.accept.state, "observed");
   assert.equal(assessment.controls.reject.state, "observed");
   assert.equal(assessment.controls.options.state, "observed");
+});
+
+test("complete dismiss-only inventory projects actionable surface with A/R/O not observed", () => {
+  const url = "https://dismiss-only.example/";
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([{
+      actionType: "other",
+      artifactRef: "CanonicalEvidenceBundle.json#dismiss-close",
+      classifierReasonCodes: ["matched_dismiss", "match_strength_direct"],
+      label: "Close",
+      layer: "first_layer",
+      matchStrength: "direct",
+      semanticRole: "dismiss",
+      visible: true,
+    }], { url }),
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.coverage.status, "complete");
+  assert.equal(assessment.surface.status, "observed_actionable");
+  assert.equal(assessment.evidence[0]?.intent, "dismiss");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+});
+
+test("WS01 complete dismiss-only observation projects into ConsentControlAssessment v2", () => {
+  const assessment = deriveWs01ConsentControlAssessment({
+    completedAt: "2026-08-02T21:06:48.000Z",
+    firstLayerConsentChoices: {
+      capturedAtMs: 7_501,
+      capturedBeforeInteraction: true,
+      controlInventoryComplete: true,
+      documentUrl: "https://www.usccb.org/",
+      layerInspected: "first_layer",
+      normalizedChoices: [{ action: "dismiss", label: "Close", sameSurface: true }],
+      sameSurfaceCandidates: true,
+    },
+    requestedUrl: "https://usccb.org/",
+    scanId: "scan-ws01-dismiss-only",
+    scanStatus: "completed",
+  });
+
+  assert.ok(assessment);
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.document.identityStatus, "matched");
+  assert.equal(assessment.surface.status, "observed_actionable");
+  assert.equal(assessment.evidence[0]?.intent, "dismiss");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.equal(assessment.provenance.sourceBundleVersion, "ws01.hybrid_runtime_evidence.v1");
+});
+
+test("WS01 incomplete consent inventory does not create a canonical negative assessment", () => {
+  const assessment = deriveWs01ConsentControlAssessment({
+    firstLayerConsentChoices: {
+      capturedBeforeInteraction: true,
+      controlInventoryComplete: false,
+      documentUrl: "https://www.usccb.org/",
+      layerInspected: "first_layer",
+      normalizedChoices: [{ action: "dismiss", label: "Close", sameSurface: true }],
+      sameSurfaceCandidates: true,
+    },
+    scanId: "scan-ws01-incomplete",
+    scanStatus: "completed",
+  });
+
+  assert.equal(assessment, null);
 });
 
 test("geometry projection retains inline and persistent options presentation", () => {

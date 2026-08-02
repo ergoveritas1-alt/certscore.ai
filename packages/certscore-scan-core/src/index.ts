@@ -291,6 +291,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   await phaseRecorder.record("artifact_writer", "completed", { outDir });
   const useSingleBrowser = input.browserReuseMode === "single" && (preConsentEnabled || policySurfaceEnabled);
   let sharedBrowser: Browser | undefined;
+  const policySurfaceAbortController = new AbortController();
   if (useSingleBrowser) {
     await phaseRecorder.record("shared_browser", "started", {
       mode: "single_chromium_process",
@@ -343,7 +344,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       nanoAssistProvider: nanoPolicyAssistProvider,
       policySurfaceSeeds: input.policySurfaceSeeds,
       discoveryMode: input.scenarioPlanningMode === "planned_parallel" ? "fast" : "full",
-      signal: input.signal,
+      signal: input.signal
+        ? AbortSignal.any([input.signal, policySurfaceAbortController.signal])
+        : policySurfaceAbortController.signal,
     }).then(
       (value) => {
         const normalizedValue = normalizePolicySurfaceResultForEarlyHandoff(value);
@@ -651,6 +654,16 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       "policy_surface_no_go_diagnostic_grace",
       policySurfaceSettled?.status === "fulfilled" ? "completed" : "skipped",
     );
+    if (!policySurfaceSettled) {
+      await phaseRecorder.record("policy_surface_no_go_cancellation", "started", {
+        reason: "policy_output_not_required_after_confirmed_no_go",
+      });
+      policySurfaceAbortController.abort(
+        new Error("Policy-surface work canceled after the confirmed no-go diagnostic grace window."),
+      );
+      await policySurfaceResultPromise;
+      await phaseRecorder.record("policy_surface_no_go_cancellation", "completed");
+    }
   }
   throwIfAborted(input.signal);
   await phaseRecorder.record("policy_surface_for_output", policyRequiredForOutput ? "started" : "skipped");
@@ -1054,6 +1067,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   });
   return bundle;
   } finally {
+    policySurfaceAbortController.abort(
+      new Error("Policy-surface work canceled because the scan core is closing."),
+    );
     if (sharedBrowser) {
       await phaseRecorder.record("shared_browser_close", "started");
       await sharedBrowser.close().catch(() => undefined);

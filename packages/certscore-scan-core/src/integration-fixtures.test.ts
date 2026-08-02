@@ -2206,6 +2206,41 @@ test("pre-consent runtime scanner retains a context-confirmed off-viewport appro
   }
 });
 
+test("pre-consent runtime scanner retains a dismiss-only first-layer consent control", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-dismiss-only-"));
+  try {
+    const url = server.urlFor("consent-dismiss-only");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      routeFulfillers,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      waitMode: "fast",
+    });
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.layerInspected, "first_layer");
+    assert.equal(observation?.acceptControlObserved, false);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.equal(observation?.managePreferencesControlObserved, false);
+    assert.deepEqual(observation?.visibleChoiceLabels, ["Close"]);
+    assert.equal(observation?.controls[0]?.actionType, "other");
+    assert.equal(observation?.controls[0]?.semanticRole, "dismiss");
+    assert.equal(observation?.controls[0]?.classifierReasonCodes.includes("matched_dismiss"), true);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner inventories open shadow-root consent controls without interaction", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-shadow-context-controls-"));
@@ -2405,7 +2440,7 @@ test("pre-consent runtime scanner does not classify bare generic choice controls
   }
 });
 
-test("pre-consent runtime scanner retains first-layer accept-only consent surface as no reject observed", async () => {
+test("pre-consent runtime scanner retains UniConsent-style accept and options controls as no reject observed", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-no-reject-"));
   try {
@@ -2420,11 +2455,17 @@ test("pre-consent runtime scanner retains first-layer accept-only consent surfac
     assert.equal(observation?.likelyPresent, true);
     assert.equal(observation?.layerInspected, "first_layer");
     assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
     assert.equal(observation?.rejectControlObserved, false);
     assert.equal(
-      observation?.visibleChoiceLabels.some((label) => /\baccept all\b/i.test(label)),
+      observation?.visibleChoiceLabels.includes("Agree and proceed"),
       true,
-      "scanner should retain visible first-layer accept label",
+      "scanner should retain the canonical UniConsent accept label before classification",
+    );
+    assert.equal(
+      observation?.visibleChoiceLabels.includes("Manage Options"),
+      true,
+      "scanner should retain the visible first-layer options label",
     );
     assert.equal(
       observation?.visibleChoiceLabels.some((label) => /\b(?:reject|decline|refuse)\b/i.test(label)),

@@ -162,6 +162,7 @@ test("classifies direct accept controls across English, German, and French", () 
     ["Allow all", "en"],
     ["I agree", "en"],
     ["Agree and close", "en"],
+    ["Agree and proceed", "en"],
     ["Akzeptieren", "de"],
     ["Alle akzeptieren", "de"],
     ["Zustimmen", "de"],

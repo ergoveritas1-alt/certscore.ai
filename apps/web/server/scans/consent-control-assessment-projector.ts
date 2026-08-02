@@ -216,7 +216,11 @@ export function deriveMaterializedConsentControlAssessment(input: {
       observation.controls.length > 0 &&
       observation.controls.every((control) =>
         control.visible === true &&
-        (control.actionType !== "other" || retainedControlVariant(control.classifierReasonCodes) !== null) &&
+        (
+          control.actionType !== "other" ||
+          control.semanticRole === "dismiss" ||
+          retainedControlVariant(control.classifierReasonCodes) !== null
+        ) &&
         (control.layer ?? observation.layerInspected) === "first_layer"
       );
   });
@@ -274,7 +278,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           visible: control.visible,
           actionable:
             control.visible === true &&
-            (actionType !== "other" || controlVariant !== null),
+            (actionType !== "other" || control.semanticRole === "dismiss" || controlVariant !== null),
           observedAtMs: observationTimestamp(observation),
           documentId: observationDocumentId,
           channels: observation.captureDiagnostics?.completedChannels,
@@ -412,6 +416,124 @@ export function deriveMaterializedConsentControlAssessment(input: {
       bundleVersion: input.bundle.schemaVersion,
       geometryVersion: geometry?.artifactVersion ?? null,
       computedAt: input.bundle.completedAt,
+    },
+  });
+}
+
+export function deriveWs01ConsentControlAssessment(input: {
+  completedAt?: string | null;
+  firstLayerConsentChoices: Record<string, unknown> | null | undefined;
+  requestedUrl?: string | null;
+  scanId: string;
+  scanStatus: string;
+}): ConsentControlAssessment | null {
+  const choices = input.firstLayerConsentChoices;
+  if (!choices) return null;
+  const documentId = normalizedDocumentId(
+    typeof choices.documentUrl === "string"
+      ? choices.documentUrl
+      : typeof choices.document_url === "string"
+        ? choices.document_url
+        : null,
+  );
+  const capturedBeforeInteraction = choices.capturedBeforeInteraction === true ||
+    choices.captured_before_interaction === true;
+  const inventoryComplete = choices.controlInventoryComplete === true ||
+    choices.control_inventory_complete === true;
+  const layerInspected = choices.layerInspected === "first_layer" ||
+    choices.layer_inspected === "first_layer";
+  const sameSurface = choices.sameSurfaceCandidates === true ||
+    choices.same_surface_candidates === true;
+  if (!documentId || !capturedBeforeInteraction || !inventoryComplete || !layerInspected || !sameSurface) {
+    return null;
+  }
+
+  const rawChoices = Array.isArray(choices.normalizedChoices)
+    ? choices.normalizedChoices
+    : Array.isArray(choices.normalized_choices)
+      ? choices.normalized_choices
+      : [];
+  const controls = rawChoices.flatMap((value, index): ConsentControlAssessmentCandidate[] => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const row = value as Record<string, unknown>;
+    if (row.sameSurface !== true && row.same_surface !== true) return [];
+    const label = typeof row.label === "string" ? row.label.trim().slice(0, 120) : "";
+    if (!label) return [];
+    const action = typeof row.action === "string" ? row.action : "unknown";
+    const intent: ConsentControlAssessmentCandidate["intent"] =
+      action === "accept" ? "accept" :
+      action === "reject" ? "reject" :
+      action === "settings" ? "options" :
+      action === "dismiss" ? "dismiss" : "other";
+    const actionType: ConsentControlAssessmentCandidate["actionType"] =
+      action === "accept" ? "accept_all" :
+      action === "reject" ? "reject_all" :
+      action === "settings" ? "manage_preferences" : "other";
+    return [{
+      evidenceId: `ws01:first-layer:${index}:${label.toLowerCase()}`,
+      intent,
+      semanticRole: action === "dismiss" ? "dismiss" : undefined,
+      actionType,
+      label,
+      layer: "first_layer",
+      visible: true,
+      actionable: true,
+      observedAtMs: typeof choices.capturedAtMs === "number"
+        ? Math.max(0, Math.round(choices.capturedAtMs))
+        : typeof choices.captured_at_ms === "number"
+          ? Math.max(0, Math.round(choices.captured_at_ms))
+          : 0,
+      documentId,
+      channels: ["dom_inventory"],
+      artifactRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.firstLayerConsentChoices"],
+    }];
+  });
+  if (controls.length === 0) return null;
+
+  const requestedUrl = normalizedDocumentId(input.requestedUrl) ?? documentId;
+  const observedAtMs = controls[0]?.observedAtMs ?? 0;
+  return deriveConsentControlAssessment({
+    scan: {
+      scanId: input.scanId,
+      requestedUrl,
+      finalUrl: documentId,
+      scanStatus: input.scanStatus,
+      noGo: false,
+    },
+    document: {
+      canonicalDocumentId: documentId,
+      observedDocumentIds: [documentId],
+      identityStatus: "matched",
+    },
+    observations: [{
+      observationId: "ws01-first-layer-consent-choices",
+      observedAtMs,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      documentId,
+      captureStatus: "observed",
+      completedChannels: ["dom_inventory"],
+      incompleteChannels: [],
+      evidenceRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.firstLayerConsentChoices"],
+      controls,
+    }],
+    surface: {
+      status: "observed_actionable",
+      firstObservedAtMs: observedAtMs,
+      lastObservedAtMs: observedAtMs,
+      evidenceRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.firstLayerConsentChoices"],
+    },
+    coverage: {
+      status: "complete",
+      requiredChannels: ["dom_inventory"],
+      completedChannels: ["dom_inventory"],
+      incompleteChannels: [],
+      reasonCodes: ["ws01_complete_first_layer_control_inventory"],
+    },
+    source: {
+      bundleVersion: "ws01.hybrid_runtime_evidence.v1",
+      projectorVersion: "2.0.0-ws01",
+      computedAt: input.completedAt ?? new Date(0).toISOString(),
     },
   });
 }
