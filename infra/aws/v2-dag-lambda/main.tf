@@ -103,7 +103,7 @@ module "eu_central_1" {
   }
 
   account_id                       = data.aws_caller_identity.current.account_id
-  alarm_actions                    = var.alarm_actions
+  alarm_actions                    = lookup(var.alarm_actions_by_region, local.regions.eu_central_1, [])
   artifact_bucket                  = local.artifact_buckets.eu_central_1
   artifact_prefix                  = var.artifact_prefix
   environment_variables            = lookup(var.environment_variables_by_region, "eu-central-1", {})
@@ -132,7 +132,7 @@ module "eu_west_1" {
   }
 
   account_id                       = data.aws_caller_identity.current.account_id
-  alarm_actions                    = var.alarm_actions
+  alarm_actions                    = lookup(var.alarm_actions_by_region, local.regions.eu_west_1, [])
   artifact_bucket                  = local.artifact_buckets.eu_west_1
   artifact_prefix                  = var.artifact_prefix
   environment_variables            = lookup(var.environment_variables_by_region, "eu-west-1", {})
@@ -161,7 +161,7 @@ module "us_west_2" {
   }
 
   account_id                       = data.aws_caller_identity.current.account_id
-  alarm_actions                    = var.alarm_actions
+  alarm_actions                    = lookup(var.alarm_actions_by_region, local.regions.us_west_2, [])
   artifact_bucket                  = local.artifact_buckets.us_west_2
   artifact_prefix                  = var.artifact_prefix
   environment_variables            = lookup(var.environment_variables_by_region, "us-west-2", {})
