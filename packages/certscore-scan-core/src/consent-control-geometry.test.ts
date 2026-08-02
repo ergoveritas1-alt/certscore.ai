@@ -814,6 +814,24 @@ test("does not count footer-only Cookie settings as first-layer options", async 
   assert.equal(footerCandidate?.decisionStatus, "footer_or_policy_link");
 });
 
+test("captures a canonical first-layer settings label on a custom cursor control", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" style="position: fixed; left: 100px; top: 100px; width: 620px; padding: 20px; background: white;">
+      <h2>Information and consent for cookies</h2>
+      <p>We use cookies and similar technologies. Choose how your data is used.</p>
+      <div class="cookie-settings-toggle"><span class="cursor-pointer">Cookie settings</span></div>
+      <button>Accept All</button>
+      <button>Accept only essential</button>
+    </div>
+  `);
+
+  const settings = findCandidate(artifact, "Cookie settings");
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(settings?.actionType, "manage_preferences");
+  assert.equal(settings?.decisionStatus, "confirmed_visible");
+  assert.equal(settings?.layer, "first_layer");
+});
+
 test("retains hidden DOM buttons as candidates without counting them as visible", async () => {
   const artifact = await captureFixture(`
     <div id="onetrust-banner-sdk" role="dialog" aria-label="Cookie banner" style="position: fixed; bottom: 20px; left: 20px; padding: 20px; background: white;">

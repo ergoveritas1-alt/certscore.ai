@@ -39,10 +39,7 @@ import {
   GdprEprivacyCoverageChecklistCard,
   GdprEprivacyCoverageSummaryPills
 } from "./gdpr-eprivacy-coverage-checklist-card";
-import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
 import {
-  getAssessmentDirection,
-  getEvidenceLabel,
   summarizeGdprEprivacyAssessmentDirections
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import { InfoTip } from "./info-tip";
@@ -183,7 +180,10 @@ import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
-import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
+import {
+  buildChecklistConcernTopFindings,
+  mergeCanonicalHighPriorityFindings
+} from "../../lib/scans/checklist-concern-top-findings";
 import {
   formatCollectionEndpointType,
 } from "../../lib/scans/tracker-risk";
@@ -1139,7 +1139,7 @@ function RuntimeInventoryTable({
                 ))}
                 {groupedInventoryRows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-5 text-center text-slate-500" colSpan={12}>No retained cookie or tracker rows for this scan.</td>
+                    <td className="px-3 py-5 text-center text-slate-500" colSpan={12}>No retained cookies or trackers were detected for this scan.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -7626,25 +7626,9 @@ export async function SharedScanDetailView({
   const executiveDisplayedScore = browserCoverageSufficient && criticalCoverageComplete !== false
     ? persistedCanonicalOverallScore ?? canonicalOverallScore
     : null;
-  const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
-    gdprEprivacyArea: {
-      id: "gdpr_eprivacy",
-      rows: reportableGdprEprivacyCoverageChecklist.map((item) => {
-        const checklistDescriptor = deriveGdprEprivacyCoverageChecklistRowRationale(item);
-        return {
-          ...item,
-          assessmentDirection: getAssessmentDirection(item),
-          criticalEvidence: {
-            ...item.criticalEvidence,
-            statusBasis: checklistDescriptor
-          },
-          evidenceLabel: getEvidenceLabel(item),
-          note: checklistDescriptor
-        };
-      }),
-      title: "GDPR / ePrivacy"
-    }
-  });
+  const regulatoryGapTopFindings = buildChecklistConcernTopFindings(
+    gdprEprivacyCoverageChecklist
+  );
   const regulatoryGapTopFindingIds = new Set(regulatoryGapTopFindings.map((finding) => finding.id));
   const allExecutiveFindingsWithRegulatoryGaps = executiveAccessLimitationNotice
     ? allExecutiveFindings
@@ -7654,7 +7638,10 @@ export async function SharedScanDetailView({
       ];
   const topExecutiveFindings = executiveAccessLimitationNotice
     ? [executiveAccessLimitationNotice.finding]
-    : regulatoryGapTopFindings;
+    : mergeCanonicalHighPriorityFindings({
+        checklistFindings: regulatoryGapTopFindings,
+        executiveFindings: executiveFindingsProjection.topFindings
+      });
   const scanCalibrationSummary = buildScanCalibrationSummary({
     accessLimitationNotice: executiveAccessNoticeCardProps,
     beforeConsentCookieCount: cookiesBeforeConsentCount,

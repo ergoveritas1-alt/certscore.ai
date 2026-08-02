@@ -37,6 +37,32 @@ test("getEvidenceLabel keeps insufficient evidence distinct from missing test co
   assert.equal(getEvidenceLabel(missingCoverage), "Not testable");
 });
 
+test("getEvidenceLabel presents a neutral canonical policy no-match result distinctly", () => {
+  const item = makeChecklistItem({
+    assessmentStatus: "coverage_limitation",
+    criticalEvidence: {
+      retainedEvidence: {
+        policyEvidenceAssessment: {
+          contractVersion: "certscore.policy-topic-evidence-assessment.v1",
+          result: "not_located_automatically",
+          scoreEffect: "none"
+        }
+      }
+    },
+    evidenceState: "not_testable",
+    id: "legal_basis_disclosure_observed",
+    label: "Legal basis disclosure",
+    status: "Not confirmed"
+  });
+
+  assert.equal(getEvidenceLabel(item), "No match found");
+  assert.equal(getAssessmentDirection(item), "technical_limitation");
+  assert.equal(
+    getGdprEprivacyCoverageChecklistRowRationaleForAudit(item),
+    "CertScore retained a usable privacy policy but found no sufficiently direct legal-basis passage during automated analysis. This does not establish that the disclosure is absent."
+  );
+});
+
 test("retained but thin policy extraction is not confirmed without becoming not testable", () => {
   const item = makeChecklistItem({
     assessmentStatus: "coverage_limitation",

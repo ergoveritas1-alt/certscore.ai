@@ -13,8 +13,18 @@ import { debugBuildScanReportUnifiedFindingStateForScan } from "../../lib/scans/
 import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
 import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "./scan-detail-checklist";
 import { buildRuntimeCookieInventory } from "../../lib/scans/runtime-cookie-evidence";
+import { deriveCertScoreFindings } from "../../lib/scans/derive-findings";
+import {
+  buildTrackerInventoryGroupRows,
+  buildTrackerInventoryRows,
+  isTimedPreConsentInventoryRow
+} from "../../lib/scans/runtime-inventory-projection";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { filterVisibleExecutiveTopFindings } from "../../lib/scans/executive-top-finding-visibility";
+import {
+  buildChecklistConcernTopFindings,
+  mergeCanonicalHighPriorityFindings
+} from "../../lib/scans/checklist-concern-top-findings";
 import {
   buildPersistedFirstLayerConsentEvidence,
   projectFirstLayerConsentChoices
@@ -376,6 +386,28 @@ export async function deriveScanReportProjectionValue(
   const runtimeCookieRows = buildRuntimeCookieInventory({
     runtimeArtifacts: scanRecord.runtimeArtifacts
   }).rows;
+  const presentationSummary = deriveCertScoreFindings(scanRecord);
+  const runtimeTrackerPriorityRows = buildTrackerInventoryGroupRows(
+    buildTrackerInventoryRows({
+      domains: scanRecord.trackerVendors.flatMap((vendor) => vendor.scriptHost ? [vendor.scriptHost] : []),
+      firstPartyDomain: scanRecord.scan.domainHostname ?? presentationSummary.requestedHost,
+      preConsentVendors: presentationSummary.preConsentVendorNames,
+      resolvedVendors: presentationSummary.resolvedVendorNames,
+      sessionReplayVendors: presentationSummary.sessionReplayVendorNames,
+      trackerVendors: scanRecord.trackerVendors,
+      topObservedEntities: presentationSummary.topObservedEntities,
+      unresolvedHosts: presentationSummary.unresolvedVendorHosts
+    }).filter(isTimedPreConsentInventoryRow)
+  ).map((row) => ({
+    domains: row.domains,
+    firstSeenMs: row.firstSeenMs,
+    party: row.party,
+    priority: row.priority,
+    purpose: row.purpose,
+    requestCount: row.requestCount ?? null,
+    regulatoryRelevance: row.regulatoryRelevance,
+    vendor: row.vendor
+  }));
   const checklist = deriveSharedScanDetailGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     events: scanRecord.events,
@@ -384,6 +416,7 @@ export async function deriveScanReportProjectionValue(
     projectedFindings: executiveFindingsProjection.findings,
     runtimeArtifacts: scanRecord.runtimeArtifacts,
     runtimeCookieRows,
+    runtimeTrackerPriorityRows,
     scanCompleted: scanRecord.scan.status === "completed",
     snapshot: scanRecord.snapshot,
     unifiedFindings: reportState.globalUnifiedFindings
@@ -394,6 +427,10 @@ export async function deriveScanReportProjectionValue(
         unifiedFindings: reportState.globalUnifiedFindings
       })
     : null;
+  const canonicalHighPriorityFindings = mergeCanonicalHighPriorityFindings({
+    checklistFindings: buildChecklistConcernTopFindings(checklist),
+    executiveFindings: executiveFindingsProjection.topFindings
+  });
   const choices = firstLayerConsentChoices(scanRecord);
   const assessment = canonicalConsentAssessment(scanRecord);
   assertCanonicalConsentProjectionInput(scanRecord, assessment);
@@ -409,7 +446,7 @@ export async function deriveScanReportProjectionValue(
 
   return {
     score,
-    topFindingCount: filterVisibleExecutiveTopFindings(executiveFindingsProjection.topFindings).length,
+    topFindingCount: filterVisibleExecutiveTopFindings(canonicalHighPriorityFindings).length,
     findingCount: reportState.globalUnifiedFindings.length || numberValue(snapshot?.report_finding_count),
     cmpVendorName: stringValue(snapshot?.cmp_vendor_name),
     privacyPolicyPresent: booleanValue(sourceSnapshot?.privacy_policy_present) ?? booleanValue(snapshot?.privacy_policy_present),

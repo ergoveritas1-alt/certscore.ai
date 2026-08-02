@@ -4651,7 +4651,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes fails closed when cookie-policy o
   assert.equal(outcomes.privacy_notice_availability?.status, "Not testable");
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes uses the persisted typed consent assessment as banner evidence", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats a persisted typed consent surface as observed cookie-notice availability", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -4680,9 +4680,42 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes uses the persisted typed consent 
     }
   });
 
-  assert.equal(outcomes.cookie_notice_policy_availability?.status, "Review signal");
+  assert.equal(outcomes.cookie_notice_policy_availability?.status, "Observed");
   assert.equal(
     outcomes.cookie_notice_policy_availability?.criticalEvidence.retainedEvidence.bannerOnlyCookieNotice,
+    true
+  );
+  assert.equal(
+    outcomes.cookie_notice_policy_availability?.criticalEvidence.retainedEvidence.preferenceInterfaceConfirmed,
+    true
+  );
+  assert.equal(
+    outcomes.cookie_notice_policy_availability?.criticalEvidence.retainedEvidence.cookiePolicyPresent,
+    false
+  );
+  assert.match(
+    outcomes.cookie_notice_policy_availability?.limitation ?? "",
+    /separate durable cookie policy or named-cookie inventory was not confirmed/i
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps an untyped banner-only signal under review", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      cookieNoticeObserved: true,
+      policySurfaceInspection: {
+        coverageStatus: "complete",
+        inspectionCompleted: true,
+        linkDiscoveryCoverageStatus: "complete",
+        observedSurfaceTypes: []
+      }
+    }
+  });
+
+  assert.equal(outcomes.cookie_notice_policy_availability?.status, "Review signal");
+  assert.equal(
+    outcomes.cookie_notice_policy_availability?.criticalEvidence.retainedEvidence.cookieNoticeObserved,
     true
   );
 });

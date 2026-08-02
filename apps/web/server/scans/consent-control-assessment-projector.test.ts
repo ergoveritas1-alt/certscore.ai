@@ -211,6 +211,36 @@ test("geometry projection retains inline and persistent options presentation", (
   );
 });
 
+test("geometry projection carries a custom first-layer settings control into ConsentControlAssessment v2", () => {
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([
+      { actionType: "accept_all", label: "Accept All", visible: true, layer: "first_layer" },
+      { actionType: "reject_all", label: "Accept only essential", visible: true, layer: "first_layer" },
+    ]),
+    consentControlGeometryEvidence: geometry([{
+      candidateId: "custom-settings",
+      actionType: "manage_preferences",
+      classifierReasonCodes: ["matched_options", "match_strength_direct", "context_satisfied"],
+      label: "Cookie settings",
+      layer: "first_layer",
+      presentationType: "unknown",
+      enabled: true,
+      decisionStatus: "confirmed_visible",
+    }]),
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: "https://oxfam.org/en",
+    noGo: false,
+    requestedUrl: "https://oxfam.org/en",
+  });
+
+  assert.equal(assessment.controls.options.state, "observed");
+  const options = assessment.evidence.find((row) => row.evidenceId === "custom-settings");
+  assert.equal(options?.intent, "options");
+  assert.equal(options?.layer, "first_layer");
+  assert.equal(options?.visible, true);
+  assert.equal(options?.actionable, true);
+});
+
 test("CNN retained geometry keeps an explicitly inventoried missing reject as not_observed", () => {
   const assessment = deriveMaterializedConsentControlAssessment({
     bundle: bundle([

@@ -1105,6 +1105,7 @@ function collectConsentGeometryInPage(input: {
     "[class*='btn' i]",
     "[class*='button' i]",
     "[class*='action' i]",
+    "[class*='cursor-pointer' i]",
     "[class*='didomi-components-button' i]",
     "[class*='didomi-button' i]",
     "[id*='didomi' i][class*='accept' i]",
@@ -1335,7 +1336,7 @@ function collectConsentGeometryInPage(input: {
     const id = element.getAttribute("id") || "";
     return !(
       element.hasAttribute("onclick") ||
-      /\b(?:btn|button|choice|option|preference|purpose)\b/i.test(className) ||
+      /\b(?:btn|button|choice|option|preference|purpose|cursor-pointer)\b/i.test(className) ||
       /(?:btn|button|choice|option|preference|purpose)/i.test(id)
     );
   }

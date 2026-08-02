@@ -1289,6 +1289,10 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
       `${row.purpose} ${(row.regulatoryRelevance ?? []).join(" ")}`
     )
   );
+  const classifiedConcernInventory =
+    !serviceConnectionOnly &&
+    !contextualInfrastructureOnly &&
+    (selectedPriority === "high" || selectedPriority === "medium");
 
   return {
     criticalEvidence: {
@@ -1324,7 +1328,7 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
         tagManagerOnly: serviceConnectionOnly && thirdPartyRows.every((row) => /tag management|tag_manager/i.test(row.purpose)),
         trackingEvidenceAssessment: {
           result: "not_confirmed_from_grouped_inventory",
-          scoreEffect: "none"
+          scoreEffect: classifiedConcernInventory ? "review" : "none"
         },
         trackerPriority: selectedPriority,
         trackerPriorityLabel: priorityLabel

@@ -25,8 +25,12 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
           label: "Pre-consent cookies/storage",
           note: "Non-essential storage was retained.",
           criticalEvidence: {
+            projectedFindings: [{
+              id: "analytics_cookie_pre_consent",
+              label: "Analytics cookies before consent"
+            }],
             retainedEvidence: {
-              advertisingCookieStorageObserved: true
+              selectedEvidenceStrength: "strong"
             }
           }
         },
@@ -154,6 +158,7 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
     "regulatory_gap__gdpr_eprivacy__accept_consent_control",
     "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control",
     "regulatory_gap__gdpr_eprivacy__cookie_notice_policy_availability",
+    "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
     "regulatory_gap__gdpr_eprivacy__retention_disclosure",
     "regulatory_gap__gdpr_eprivacy__preference_withdrawal_control"
   ]);
@@ -165,11 +170,12 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
       "potential_gap",
       "potential_gap",
       "potential_gap",
+      "potential_concern",
       "partial_rating",
       "partial_rating"
     ]
   );
-  assert.equal(findings[0]?.label, "Pre-consent tracking and storage");
+  assert.equal(findings[0]?.label, "Pre-consent non-essential tracking");
   assert.equal(
     Array.isArray(findings[0]?.evidenceDetails?.policyEvidenceDetails?.groupedRuntimeSignals),
     true,
@@ -397,6 +403,29 @@ test("buildRegulatoryGapTopFindings keeps Article 13 extraction limitations out 
     findings.some((finding) => finding.id === "regulatory_gap__gdpr_eprivacy__retention_disclosure"),
     true
   );
+});
+
+test("buildRegulatoryGapTopFindings keeps canonical policy no-match rows neutral", () => {
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [
+        {
+          assessmentDirection: "technical_limitation",
+          assessmentStatus: "coverage_limitation",
+          evidenceLabel: "No match found",
+          evidenceState: "not_testable",
+          id: "legal_basis_disclosure_observed",
+          label: "Legal basis disclosure",
+          note: "Automated analysis did not retain a sufficiently direct legal-basis passage.",
+          status: "Not confirmed"
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(findings, []);
 });
 
 test("buildRegulatoryGapTopFindings does not promote gap-observed unknown-only no-go runtime rows", () => {

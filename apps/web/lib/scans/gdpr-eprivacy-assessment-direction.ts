@@ -2,7 +2,7 @@ import type {
   GdprEprivacyCoverageChecklistItem
 } from "./gdpr-eprivacy-coverage-checklist";
 
-export type EvidenceLabel = "Observed" | "Not observed" | "Potential gap" | "Partial concern" | "Not confirmed" | "Not testable";
+export type EvidenceLabel = "Observed" | "Not observed" | "Potential gap" | "Partial concern" | "Not confirmed" | "No match found" | "Not testable";
 export type AssessmentDirection =
   | "positive_signal"
   | "neutral_signal"
@@ -89,6 +89,12 @@ export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): Evide
     return "Not confirmed";
   }
   if (
+    item.status === "Not confirmed" &&
+    getPolicyEvidenceAssessmentResult(item) === "not_located_automatically"
+  ) {
+    return "No match found";
+  }
+  if (
     (item.status === "Not confirmed" || item.status === "Not testable") &&
     retainedPolicySurfaceExtractionLimited(item)
   ) {
@@ -114,6 +120,14 @@ export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): Evide
     return "Observed";
   }
   return "Not observed";
+}
+
+function getPolicyEvidenceAssessmentResult(item: GdprEprivacyCoverageChecklistItem) {
+  const assessment =
+    retainedRecord(item, "policyEvidenceAssessment") ??
+    retainedRecord(item, "policy_evidence_assessment");
+  const result = assessment?.result ?? assessment?.assessmentResult ?? assessment?.assessment_result;
+  return typeof result === "string" ? result : null;
 }
 
 function retainedPolicyExtractionLimited(item: GdprEprivacyCoverageChecklistItem) {
@@ -155,7 +169,11 @@ function retainedPolicySurfaceExtractionLimited(item: GdprEprivacyCoverageCheckl
 }
 
 function isRowSpecificExtractionNotConfirmed(item: GdprEprivacyCoverageChecklistItem) {
-  if (item.assessmentStatus === "review_signal" && item.status === "Not confirmed") {
+  if (
+    item.assessmentStatus === "review_signal" &&
+    item.status === "Not confirmed" &&
+    !RISK_SIGNAL_ROW_IDS.has(item.id)
+  ) {
     return true;
   }
   const signalObserved = item.criticalEvidence.retainedEvidence.signalObserved;
@@ -437,7 +455,7 @@ function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem)
 
 export function getAssessmentDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection {
   const evidenceLabel = getEvidenceLabel(item);
-  if (evidenceLabel === "Not testable") {
+  if (evidenceLabel === "Not testable" || evidenceLabel === "No match found") {
     return "technical_limitation";
   }
   if (evidenceLabel === "Not confirmed" && retainedPolicySurfaceExtractionLimited(item)) {

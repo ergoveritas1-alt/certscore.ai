@@ -23,6 +23,8 @@ const serverOnlyPath = require.resolve("server-only");
 test("pre-consent inventory keeps purpose and evidence separate, removes requests, and places category last", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
 
+  assert.match(source, /No retained cookies or trackers were detected for this scan\./);
+  assert.doesNotMatch(source, /No retained cookie or tracker rows for this scan\./);
   assert.match(source, /\["Type", "Vendor", "Purpose", "Evidence", "First seen", "Cookie name\(s\)", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"\]/);
   assert.match(source, /label="Purpose"[\s\S]*>Evidence<\/[a-z]+>[\s\S]*>Relationship<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
   assert.doesNotMatch(source, />Req\.<\/[a-z]+>/);

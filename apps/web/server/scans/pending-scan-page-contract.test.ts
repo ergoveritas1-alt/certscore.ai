@@ -53,12 +53,12 @@ test("completed dashboard reports stream an honest report shell before detailed 
   const loadingStateStart = source.indexOf("function ScanDetailLoadingState");
   const loadingStateEnd = source.indexOf("function canViewCapturedImage", loadingStateStart);
   const loadingState = source.slice(loadingStateStart, loadingStateEnd);
+  const loadingCard = await readFile("apps/web/components/scans/scan-report-loading-card.tsx", "utf8");
 
-  assert.match(loadingState, /Building the report view/);
-  assert.match(loadingState, /Report generated/);
-  assert.match(loadingState, /Overall score/);
-  assert.match(loadingState, /Findings to review/);
+  assert.match(loadingState, /ScanReportLoadingCard/);
+  assert.match(loadingState, /Finishing your report/);
   assert.match(loadingState, /Loading detailed cookies, trackers, retained evidence, and privacy review/);
+  assert.match(loadingCard, /scan-hourglass/);
   assert.doesNotMatch(loadingState, /summary\.overallScore|summary\.topFindingCount/);
   assert.match(source, /COMPLETED_SCAN_DETAIL_CACHE_TTL_MS = 15_000/);
   assert.doesNotMatch(source, /unstable_cache/);

@@ -168,6 +168,7 @@ function getEvidenceLabelBadgeClasses(label: EvidenceLabel) {
       return "border-slate-200 bg-white text-slate-700";
     case "Not confirmed":
       return "border-slate-200 bg-white text-slate-700";
+    case "No match found":
     case "Not testable":
       return "border-slate-300 bg-slate-100 text-slate-700";
     case "Not observed":
@@ -918,6 +919,14 @@ function getCoverageIconMeta(direction: AssessmentDirection, evidenceLabel?: Evi
         tooltip: "Retained evidence is context-dependent and needs human review, not automatic pass/fail treatment."
       };
     case "technical_limitation":
+      if (evidenceLabel === "No match found") {
+        return {
+          className: "border-slate-300 bg-slate-100 text-slate-600",
+          icon: "slash" as const,
+          label: "No match found",
+          tooltip: "Automated analysis did not retain a sufficiently direct matching passage. This does not establish that the disclosure is absent."
+        };
+      }
       return {
         className: "border-slate-300 bg-slate-100 text-slate-600",
         icon: "slash" as const,

@@ -62,13 +62,14 @@ export function buildRegulatoryGapTopFindings(input: RegulatoryGapTopFindingInpu
   ]);
 }
 
-const PRECONSENT_RUNTIME_CLUSTER_ROW_IDS = new Set([
-  "pre_consent_cookies_storage",
+// Keep the distinct cookie/storage checklist concern visible. Other overlapping
+// tracker-category rows are supporting evidence for the primary tracking card.
+const PRECONSENT_TRACKING_CLUSTER_ROW_IDS = new Set([
   "pre_consent_third_party_tracking",
   "advertising_retargeting_vendor_signal_observed",
   "retargeting_behavioral_advertising_signal_observed",
   "analytics_vendor_observed",
-  "embedded_content_pre_consent",
+  "embedded_content_pre_consent"
 ]);
 
 function regulatoryRowId(finding: CertScoreFinding) {
@@ -79,15 +80,13 @@ function regulatoryRowId(finding: CertScoreFinding) {
 function clusterRelatedRuntimeTopFindings(findings: CertScoreFinding[]) {
   const clustered = findings.filter((finding) => {
     const rowId = regulatoryRowId(finding);
-    return rowId ? PRECONSENT_RUNTIME_CLUSTER_ROW_IDS.has(rowId) : false;
+    return rowId ? PRECONSENT_TRACKING_CLUSTER_ROW_IDS.has(rowId) : false;
   });
   if (clustered.length < 2) {
     return findings;
   }
 
-  const primary = clustered.find((finding) => regulatoryRowId(finding) === "pre_consent_third_party_tracking") ??
-    clustered.find((finding) => regulatoryRowId(finding) === "pre_consent_cookies_storage") ??
-    clustered[0];
+  const primary = clustered.find((finding) => regulatoryRowId(finding) === "pre_consent_third_party_tracking") ?? clustered[0];
   if (!primary) {
     return findings;
   }
@@ -95,38 +94,31 @@ function clusterRelatedRuntimeTopFindings(findings: CertScoreFinding[]) {
   const supportingRows = supporting.map((finding) => ({
     id: regulatoryRowId(finding),
     label: finding.label,
-    shortSummary: finding.shortSummary,
+    shortSummary: finding.shortSummary
   }));
   const clusteredRowIds = new Set(clustered.map(regulatoryRowId));
-  const labelParts = [
-    [...clusteredRowIds].some((rowId) => rowId === "pre_consent_third_party_tracking" || rowId === "advertising_retargeting_vendor_signal_observed" || rowId === "retargeting_behavioral_advertising_signal_observed" || rowId === "analytics_vendor_observed")
-      ? "tracking"
-      : null,
-    clusteredRowIds.has("pre_consent_cookies_storage") ? "storage" : null,
-    clusteredRowIds.has("embedded_content_pre_consent") ? "embedded services" : null,
-  ].filter((value): value is string => Boolean(value));
-  const groupedLabel = `Pre-consent ${labelParts.length > 1
-    ? `${labelParts.slice(0, -1).join(", ")} and ${labelParts.at(-1)}`
-    : labelParts[0] ?? "runtime signals"}`;
+  const groupedLabel = clusteredRowIds.has("embedded_content_pre_consent")
+    ? "Pre-consent tracking and embedded services"
+    : "Pre-consent non-essential tracking";
   const groupedPrimary: CertScoreFinding = {
     ...primary,
     label: groupedLabel,
-    shortSummary: primary.shortSummary,
     evidencePreview: [
       ...primary.evidencePreview,
-      ...supporting.map((finding) => `Supporting signal: ${finding.label}`),
+      ...supporting.map((finding) => `Supporting signal: ${finding.label}`)
     ].slice(0, 8),
     evidenceRefs: [...new Set(clustered.flatMap((finding) => finding.evidenceRefs))],
     evidenceDetails: {
       ...primary.evidenceDetails,
       policyEvidenceDetails: {
         ...primary.evidenceDetails?.policyEvidenceDetails,
-        groupedRuntimeSignals: supportingRows,
-      },
-    },
+        groupedRuntimeSignals: supportingRows
+      }
+    }
   };
   const clusteredIds = new Set(clustered.map((finding) => finding.id));
-  return findings.map((finding) => finding === primary ? groupedPrimary : finding)
+  return findings
+    .map((finding) => finding === primary ? groupedPrimary : finding)
     .filter((finding) => !clusteredIds.has(finding.id) || finding.id === primary.id);
 }
 
@@ -265,7 +257,7 @@ function getRegulatoryTopFindingConcernKind(row: RegulatoryGapTopFindingRow): Re
       : "potential_concern";
   }
   const evidenceLabel = getEvidenceLabel(row);
-  if (evidenceLabel === "Not testable") {
+  if (evidenceLabel === "Not testable" || evidenceLabel === "No match found") {
     return null;
   }
   if (
@@ -313,6 +305,9 @@ function getRegulatoryTopFindingConcernKind(row: RegulatoryGapTopFindingRow): Re
 }
 
 function getEvidenceLabel(row: RegulatoryGapTopFindingRow) {
+  if (row.evidenceLabel === "No match found") {
+    return "No match found";
+  }
   if (row.assessmentStatus === "coverage_limitation" || row.evidenceState === "not_testable" || row.status === "Not testable") {
     return "Not testable";
   }
@@ -369,7 +364,7 @@ function isArticle13ExtractionLimitedRow(row: RegulatoryGapTopFindingRow) {
     return false;
   }
   const evidenceLabel = getEvidenceLabel(row);
-  if (evidenceLabel !== "Partial" && evidenceLabel !== "Not testable") {
+  if (evidenceLabel !== "Partial" && evidenceLabel !== "Not testable" && evidenceLabel !== "No match found") {
     return false;
   }
   return evidenceMentions(
@@ -487,7 +482,14 @@ function evidenceMentions(row: RegulatoryGapTopFindingRow, pattern: RegExp) {
 }
 
 function hasHighConfidenceStorageConcern(row: RegulatoryGapTopFindingRow) {
-  return retainedBoolean(row, [
+  const projectedStorageFinding = (row.criticalEvidence?.projectedFindings ?? []).some((finding) => {
+    if (!finding || typeof finding !== "object" || Array.isArray(finding)) {
+      return false;
+    }
+    const id = (finding as Record<string, unknown>).id;
+    return typeof id === "string" && PROJECTED_PRECONSENT_STORAGE_FINDING_IDS.has(id);
+  });
+  return projectedStorageFinding || retainedBoolean(row, [
     "eligibleNonEssentialCookieStorageFindingProjected",
     "nonEssentialCookieStorageObserved",
     "non_essential_cookie_storage_observed",
@@ -499,6 +501,12 @@ function hasHighConfidenceStorageConcern(row: RegulatoryGapTopFindingRow) {
     "deviceIdentificationStorageObserved"
   ]);
 }
+
+const PROJECTED_PRECONSENT_STORAGE_FINDING_IDS = new Set([
+  "adtech_cookie_pre_consent",
+  "analytics_cookie_pre_consent",
+  "third_party_cookie_pre_consent"
+]);
 
 function hasHighConfidenceAdvertisingConcern(row: RegulatoryGapTopFindingRow) {
   const count = retainedNumber(row, [

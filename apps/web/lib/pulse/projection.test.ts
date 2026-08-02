@@ -200,8 +200,10 @@ test("Pulse projection does not cap top findings by detail level", () => {
 
   assert.match(source, /selectPublicPulseFindingsFromUnifiedProjection/);
   assert.match(source, /reportSurface\.topFindings\.map\(/);
-  assert.match(source, /buildRegulatoryGapTopFindings/);
-  assert.match(source, /row\.assessmentStatus === "gap_observed"/);
+  assert.match(source, /buildChecklistConcernTopFindings/);
+  assert.match(source, /mergeCanonicalHighPriorityFindings/);
+  assert.match(source, /evidenceLabel: getEvidenceLabel\(item\)/);
+  assert.doesNotMatch(source, /row\.assessmentStatus === "gap_observed"/);
   assert.doesNotMatch(source, /topFindings = executive\.topFindings\.slice\(/);
   assert.doesNotMatch(source, /input\.detail === "tiny" \? 3 : 5/);
 });

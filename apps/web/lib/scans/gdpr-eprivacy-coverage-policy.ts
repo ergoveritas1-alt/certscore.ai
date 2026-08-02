@@ -2441,6 +2441,7 @@ function getCmpFrameworkSignalEvidence(input: GdprEprivacyCoveragePolicyInput) {
 }
 
 function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const consentSummary = getObject(hybridRuntimeEvidence, ["consentSummary", "consent_summary"]);
   const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
@@ -2488,8 +2489,9 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
     policySurfaceControls.some((control) => /cookie|consent_withdrawal/i.test(control)) ||
     policySurfaceUrls.some((url) => /cookie|preference|privacy[-_ ]?center|settings/i.test(url)) ||
     /cookie (policy|notice|declaration|table|settings)|privacy choices|manage cookies|cookie preference/i.test(policySurfaceText);
+  const typedCookieNoticeObserved = hasTypedConsentSurfaceObservation(input);
   const bannerOnlyCookieNotice =
-    hasTypedConsentSurfaceObservation(input) ||
+    typedCookieNoticeObserved ||
     getBoolean(input.runtimeArtifacts, ["cookieNoticeObserved", "cookie_notice_observed"]) === true ||
     getBoolean(hybridRuntimeEvidence, ["cookieNoticeObserved", "cookie_notice_observed"]) === true ||
     getBoolean(consentSummary, ["cookieNoticeObserved", "cookie_notice_observed", "bannerPresent", "banner_present"]) === true ||
@@ -2536,6 +2538,34 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
           cookiePolicyUrls: compactArray(policySurfaceUrls, 4),
           observedPolicyControls: compactArray(policySurfaceControls, 6),
           observedPolicyTopics: compactArray(policySurfaceTopics, 6)
+        }
+      }
+    );
+  }
+
+  if (typedCookieNoticeObserved) {
+    const preferenceInterfaceConfirmed = consentControlAssessment?.controls.options.state === "observed";
+    return makeOutcome(
+      "cookie_notice_policy_availability",
+      "Observed",
+      preferenceInterfaceConfirmed
+        ? "A first-layer cookie notice and a cookie settings/preferences control were retained in the tested context. A separate durable cookie policy or named-cookie inventory was not confirmed."
+        : "A first-layer cookie notice was retained in the tested context. A separate durable cookie policy, cookie settings surface, or named-cookie inventory was not confirmed.",
+      [
+        "Evidence: typed first-layer cookie consent surface retained",
+        preferenceInterfaceConfirmed
+          ? "Evidence: typed cookie settings/preferences control retained"
+          : "Not confirmed: cookie settings/preferences control",
+        "Not confirmed: separate durable cookie policy or named-cookie inventory"
+      ],
+      {
+        retainedEvidence: {
+          bannerOnlyCookieNotice: true,
+          cookieNoticeObserved: true,
+          cookiePolicyPresent: false,
+          granularCookieInventoryConfirmed: false,
+          preferenceInterfaceConfirmed,
+          preConsentRuntimeEvidence
         }
       }
     );

@@ -38,6 +38,13 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
   const firstSeenMs = getFirstEvidenceMs(item);
   const evidenceLabel = getEvidenceLabel(item);
 
+  if (evidenceLabel === "No match found") {
+    if (item.id === "legal_basis_disclosure_observed") {
+      return "CertScore retained a usable privacy policy but found no sufficiently direct legal-basis passage during automated analysis. This does not establish that the disclosure is absent.";
+    }
+    return `CertScore retained a usable policy surface but found no sufficiently direct passage for ${item.label.toLowerCase()} during automated analysis. This does not establish that the disclosure is absent.`;
+  }
+
   if (evidenceLabel === "Not testable") {
     return null;
   }

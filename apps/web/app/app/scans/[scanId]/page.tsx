@@ -71,39 +71,14 @@ function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanSt
         </h1>
         <p className="mt-2 text-sm text-slate-500">The scan is complete. Preparing its retained evidence and review.</p>
       </div>
-      {statusProjection.reportReady ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Exec Summary</p>
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
-              Report generated
-            </span>
-          </div>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-4">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Overall score</p>
-              <div className="mt-3 h-10 w-28 animate-pulse rounded-lg bg-slate-200" aria-hidden="true" />
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-4">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">Findings to review</p>
-              <div className="mt-3 h-10 w-16 animate-pulse rounded-lg bg-slate-200" aria-hidden="true" />
-            </div>
-          </div>
-          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3">
-            <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-sky-500" aria-hidden="true" />
-            <p className="text-sm text-slate-600">
-              Loading detailed cookies, trackers, retained evidence, and privacy review.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="flex min-h-[48vh] items-center justify-center rounded-2xl border border-sky-100 bg-sky-50/60 px-6 py-10">
-          <ScanReportLoadingCard
-            description="Loading the evidence summary, cookies and trackers, and privacy review."
-            title="Building the report view"
-          />
-        </div>
-      )}
+      <div className="flex min-h-[48vh] items-center justify-center rounded-2xl border border-sky-100 bg-sky-50/60 px-6 py-10">
+        <ScanReportLoadingCard
+          description={statusProjection.reportReady
+            ? "Loading detailed cookies, trackers, retained evidence, and privacy review."
+            : "Loading the evidence summary, cookies and trackers, and privacy review."}
+          title={statusProjection.reportReady ? "Finishing your report" : "Building the report view"}
+        />
+      </div>
     </div>
   );
 }

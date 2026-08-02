@@ -5,7 +5,7 @@ import {
   deriveGdprEprivacyCoverageChecklist,
   type GdprEprivacyCoverageChecklistItem
 } from "./gdpr-eprivacy-coverage-checklist";
-import { getEvidenceLabel } from "./gdpr-eprivacy-assessment-direction";
+import { getAssessmentDirection, getEvidenceLabel } from "./gdpr-eprivacy-assessment-direction";
 import {
   deriveGdprEprivacyCoveragePolicyOutcomes,
   type GdprEprivacyCoverageOutcome
@@ -293,6 +293,8 @@ test("checklist keeps automated policy retrieval limitations neutral", () => {
   assert.equal(legalBasis.status, "Not confirmed");
   assert.equal(legalBasis.assessmentStatus, "coverage_limitation");
   assert.equal(legalBasis.evidenceState, "not_testable");
+  assert.equal(getEvidenceLabel(legalBasis), "No match found");
+  assert.equal(getAssessmentDirection(legalBasis), "technical_limitation");
   assert.equal(legalBasis.tone, "neutral");
 });
 
@@ -859,7 +861,7 @@ test("deriveGdprEprivacyCoverageChecklist lets medium cookie inventory override 
   assert.match(row.explanation, /Quantcast - Analytics \(1.19s\)/);
 });
 
-test("deriveGdprEprivacyCoverageChecklist keeps high-priority tracker inventory neutral without unified eligibility", () => {
+test("deriveGdprEprivacyCoverageChecklist projects classified high-priority tracker inventory as a partial concern", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     runtimeTrackerPriorityRows: [
@@ -884,7 +886,8 @@ test("deriveGdprEprivacyCoverageChecklist keeps high-priority tracker inventory 
 
   const row = byId(items, "pre_consent_third_party_tracking");
   assert.equal(row.status, "Not confirmed");
-  assert.equal(row.assessmentStatus, "coverage_limitation");
+  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(getEvidenceLabel(row), "Partial concern");
   assert.equal(row.criticalEvidence.retainedEvidence.trackerPriority, "high");
   assert.equal(row.criticalEvidence.missingOrIncompleteSourceSignals.length, 1);
   assert.equal(row.criticalEvidence.retainedEvidence.preconsentThirdPartyTrackerGroupCount, 2);
@@ -896,7 +899,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps high-priority tracker inventory 
   assert.match(row.criticalEvidence.statusBasis, /High priority.*Advertising/);
 });
 
-test("deriveGdprEprivacyCoverageChecklist keeps medium pre-consent tracking inventory neutral without unified eligibility", () => {
+test("deriveGdprEprivacyCoverageChecklist projects classified medium tracker inventory as a partial concern", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     runtimeTrackerPriorityRows: [
@@ -914,7 +917,8 @@ test("deriveGdprEprivacyCoverageChecklist keeps medium pre-consent tracking inve
 
   const row = byId(items, "pre_consent_third_party_tracking");
   assert.equal(row.status, "Not confirmed");
-  assert.equal(row.assessmentStatus, "coverage_limitation");
+  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(getEvidenceLabel(row), "Partial concern");
   assert.equal(row.criticalEvidence.retainedEvidence.trackerPriority, "medium");
   assert.match(row.explanation, /Optimizely - A\/B Testing \(2.10s\)/);
   assert.match(row.criticalEvidence.statusBasis, /Medium priority.*A\/B Testing/);
