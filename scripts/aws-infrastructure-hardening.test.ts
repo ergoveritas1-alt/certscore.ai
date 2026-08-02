@@ -38,6 +38,11 @@ test("GitHub deploy roles restrict PassRole to ECS task roles", async () => {
   }
 });
 
+test("validation deploy assumes its dedicated AWS role", async () => {
+  const source = await readFile(".github/workflows/validation-aws-deploy.yml", "utf8");
+  assert.match(source, /vars\.AWS_VALIDATION_ROLE_TO_ASSUME/);
+});
+
 test("Terraform stacks use a partial remote S3 backend", async () => {
   for (const path of [
     "infra/aws/web-ecs/versions.tf",
