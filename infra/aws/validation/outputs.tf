@@ -28,6 +28,11 @@ output "github_actions_deploy_role_arn" {
   value       = aws_iam_role.github_actions_deploy.arn
 }
 
+output "github_actions_oidc_provider_arn" {
+  description = "Account-wide GitHub Actions OIDC provider ARN reused by this stack."
+  value       = var.github_actions_oidc_provider_arn
+}
+
 output "web_ecr_repository_url" {
   description = "ECR repository URL for the validation ops web image."
   value       = aws_ecr_repository.web.repository_url

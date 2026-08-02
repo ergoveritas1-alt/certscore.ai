@@ -5,12 +5,15 @@ let s3Client: S3Client | null = null;
 
 function createS3Client() {
   const env = getS3Env();
+  const credentials = env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY
+    ? {
+        accessKeyId: env.S3_ACCESS_KEY_ID,
+        secretAccessKey: env.S3_SECRET_ACCESS_KEY
+      }
+    : undefined;
 
   return new S3Client({
-    credentials: {
-      accessKeyId: env.S3_ACCESS_KEY_ID,
-      secretAccessKey: env.S3_SECRET_ACCESS_KEY
-    },
+    credentials,
     endpoint: env.S3_ENDPOINT,
     forcePathStyle: env.S3_FORCE_PATH_STYLE ?? false,
     region: env.S3_REGION

@@ -84,17 +84,29 @@ export const databaseEnvSchema = z.object({
   )
 });
 
-export const s3EnvSchema = z.object({
-  S3_ACCESS_KEY_ID: z.string().min(1),
-  S3_BUCKET: z.string().min(1),
-  S3_ENDPOINT: z.string().url().optional(),
-  S3_FORCE_PATH_STYLE: z
-    .enum(["true", "false", "1", "0"])
-    .optional()
-    .transform((value) => (value === "true" || value === "1" ? true : value === "false" || value === "0" ? false : undefined)),
-  S3_REGION: z.string().min(1),
-  S3_SECRET_ACCESS_KEY: z.string().min(1)
-});
+export const s3EnvSchema = z
+  .object({
+    S3_ACCESS_KEY_ID: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
+    S3_BUCKET: z.string().min(1),
+    S3_ENDPOINT: z.string().url().optional(),
+    S3_FORCE_PATH_STYLE: z
+      .enum(["true", "false", "1", "0"])
+      .optional()
+      .transform((value) => (value === "true" || value === "1" ? true : value === "false" || value === "0" ? false : undefined)),
+    S3_REGION: z.string().min(1),
+    S3_SECRET_ACCESS_KEY: z.preprocess(emptyStringToUndefined, z.string().min(1).optional())
+  })
+  .superRefine((value, context) => {
+    if (Boolean(value.S3_ACCESS_KEY_ID) === Boolean(value.S3_SECRET_ACCESS_KEY)) {
+      return;
+    }
+
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [value.S3_ACCESS_KEY_ID ? "S3_SECRET_ACCESS_KEY" : "S3_ACCESS_KEY_ID"],
+      message: "S3 access key id and secret access key must be configured together"
+    });
+  });
 
 export type StorageBucketEnv = z.infer<typeof storageBucketEnvSchema>;
 export type DatabaseEnv = z.infer<typeof databaseEnvSchema>;

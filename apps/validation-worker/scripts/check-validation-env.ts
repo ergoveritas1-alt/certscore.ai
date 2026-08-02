@@ -3,10 +3,10 @@ import { z } from "zod";
 const validationWorkerCheckSchema = z.object({
   DATABASE_URL: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
-  S3_ACCESS_KEY_ID: z.string().min(1),
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
   S3_BUCKET: z.string().min(1),
   S3_REGION: z.string().min(1),
-  S3_SECRET_ACCESS_KEY: z.string().min(1),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   S3_ENDPOINT: z.string().url().optional(),
   S3_FORCE_PATH_STYLE: z.enum(["0", "1", "false", "true"]).optional(),
   VALIDATION_PIPELINE_ENABLED: z.enum(["0", "1"]).optional(),
@@ -24,6 +24,13 @@ const validationWorkerCheckSchema = z.object({
   SCANNER_CRAWLER_NAME: z.string().min(1).optional(),
   SCANNER_CRAWLER_PUBLIC_URL: z.string().url().optional(),
   VALIDATION_CRAWLER_PUBLIC_URL: z.string().url().optional()
+}).superRefine((value, context) => {
+  if (Boolean(value.S3_ACCESS_KEY_ID) === Boolean(value.S3_SECRET_ACCESS_KEY)) return;
+  context.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: [value.S3_ACCESS_KEY_ID ? "S3_SECRET_ACCESS_KEY" : "S3_ACCESS_KEY_ID"],
+    message: "S3 access key id and secret access key must be configured together"
+  });
 });
 
 function pass(label: string, details: string) {
@@ -55,6 +62,7 @@ function main() {
   info("database url", values.DATABASE_URL.replace(/:[^:@/]+@/, ":***@"));
   info("storage bucket", values.S3_BUCKET);
   info("storage region", values.S3_REGION);
+  info("storage credentials", values.S3_ACCESS_KEY_ID ? "Explicit S3-compatible credential pair." : "AWS SDK task-role/default provider chain.");
   info("pipeline enabled", values.VALIDATION_PIPELINE_ENABLED ?? "1");
   info("default run mode", values.VALIDATION_DEFAULT_RUN_MODE ?? "manual");
   info("default interval", values.VALIDATION_DEFAULT_SAMPLE_INTERVAL_MINUTES ?? "20");

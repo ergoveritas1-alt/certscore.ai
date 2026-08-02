@@ -33,6 +33,19 @@ logs/
 .env.*
 !.env.example
 
+# Terraform local state and operator inputs
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+terraform.tfvars.json
+backend.hcl
+*.auto.tfvars
+*.auto.tfvars.json
+crash.log
+crash.*.log
+
 # Sensitive local scripts
 scripts/*-to-local.ts
 

@@ -5,6 +5,7 @@ This runbook describes the lower-cost AWS shape for CertScore while preserving t
 ## Always-on services
 
 - `certscore-web-certscore`
+- `certscore-web-mcp` (one task while MCP sessions remain process-resident)
 - `certscore-web-alb`
 - `wc01-postgres-enc`
 - S3 report/artifact storage

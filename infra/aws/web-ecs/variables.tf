@@ -7,7 +7,7 @@ variable "project_name" {
 variable "github_actions_subjects" {
   description = "GitHub OIDC subject patterns allowed to assume the future deploy role."
   type        = list(string)
-  default     = ["repo:ergoveritas1-alt/certscore.ai:*"]
+  default     = ["repo:ergoveritas1-alt/certscore.ai:ref:refs/heads/main"]
 }
 
 variable "github_actions_extra_ecr_repository_arns" {
@@ -52,6 +52,30 @@ variable "assign_public_ip" {
   default     = false
 }
 
+variable "alb_access_logs_bucket" {
+  description = "Optional S3 bucket configured to accept ALB access logs. Leave empty to disable until the bucket policy is ready."
+  type        = string
+  default     = ""
+}
+
+variable "alb_access_logs_prefix" {
+  description = "Object-key prefix for ALB access logs."
+  type        = string
+  default     = "certscore/public-alb"
+}
+
+variable "enable_waf" {
+  description = "Attach an AWS-managed common-rule and source-IP rate-limit WAF ACL to the public ALB."
+  type        = bool
+  default     = false
+}
+
+variable "waf_rate_limit" {
+  description = "Maximum requests per source IP in the AWS WAF rate-based evaluation window."
+  type        = number
+  default     = 2000
+}
+
 variable "certscore_domain_name" {
   description = "Public hostname for the CertScore web service."
   type        = string
@@ -83,13 +107,25 @@ variable "image_tag" {
 }
 
 variable "mcp_image_tag" {
-  description = "Immutable image tag for the MCP HTTP sidecar deployed with the CertScore web task."
+  description = "Immutable image tag for the isolated MCP HTTP ECS service."
   type        = string
-  default     = "mcp-v0.2.7"
+  default     = "mcp-v0.2.12"
+}
+
+variable "mcp_cpu" {
+  description = "CPU units for the isolated MCP task."
+  type        = number
+  default     = 256
+}
+
+variable "mcp_memory" {
+  description = "Memory for the isolated MCP task."
+  type        = number
+  default     = 512
 }
 
 variable "mcp_ecr_repository_name" {
-  description = "ECR repository containing the MCP HTTP sidecar image."
+  description = "ECR repository containing the MCP HTTP service image."
   type        = string
   default     = "certscore-web-mcp"
 }
@@ -209,13 +245,13 @@ variable "openai_api_key_secret_arn" {
 }
 
 variable "s3_access_key_id_secret_arn" {
-  description = "Secrets Manager ARN containing S3_ACCESS_KEY_ID."
+  description = "Optional Secrets Manager ARN containing S3_ACCESS_KEY_ID for non-AWS S3-compatible storage. ECS production should use its task role."
   type        = string
   default     = ""
 }
 
 variable "s3_secret_access_key_secret_arn" {
-  description = "Secrets Manager ARN containing S3_SECRET_ACCESS_KEY."
+  description = "Optional Secrets Manager ARN containing S3_SECRET_ACCESS_KEY for non-AWS S3-compatible storage. Must be configured with s3_access_key_id_secret_arn."
   type        = string
   default     = ""
 }

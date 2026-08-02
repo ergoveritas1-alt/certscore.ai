@@ -21,9 +21,8 @@ on:
       - "turbo.json"
   workflow_dispatch:
 
-# MCP and web containers share one ECS task definition.
 concurrency:
-  group: public-web-aws-production
+  group: mcp-aws-production
   cancel-in-progress: false
 
 jobs:
@@ -37,10 +36,10 @@ jobs:
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       ECR_MCP_REPOSITORY: certscore-web-mcp
       ECS_CLUSTER_NAME: ${{ vars.AWS_WEB_ECS_CLUSTER || 'certscore-web-cluster' }}
-      ECS_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE || 'certscore-web-certscore' }}
+      ECS_SERVICE_NAME: ${{ vars.AWS_MCP_ECS_SERVICE || 'certscore-web-mcp' }}
       ECS_CONTAINER_NAME: mcp-http
       ECS_LOG_GROUP: /ecs/certscore-web/mcp
-      MCP_TARGET_GROUP_NAME: certscore-web-mcp
+      MCP_TARGET_GROUP_NAME: certscore-web-mcp-service
       MCP_PUBLIC_URL: https://mcp.certscore.ai
       OAUTH_ISSUER: https://certscore.ai
       OAUTH_SECRET_ID: certscore/oauth-jwt-secret
@@ -51,12 +50,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate consolidated deploy configuration
+      - name: Validate isolated deploy configuration
         run: |
           test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing AWS_ROLE_TO_ASSUME" && exit 1)
           test "${AWS_REGION}" = "us-west-1" || (echo "Hosted MCP must deploy in us-west-1" && exit 1)
           test "${ECS_CLUSTER_NAME}" = "certscore-web-cluster" || (echo "Unexpected ECS cluster: ${ECS_CLUSTER_NAME}" && exit 1)
-          test "${ECS_SERVICE_NAME}" = "certscore-web-certscore" || (echo "Unexpected ECS service: ${ECS_SERVICE_NAME}" && exit 1)
+          test "${ECS_SERVICE_NAME}" = "certscore-web-mcp" || (echo "Unexpected ECS service: ${ECS_SERVICE_NAME}" && exit 1)
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -89,13 +88,16 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
 
-      - name: Validate live consolidated service
+      - name: Validate live MCP service
         run: |
           current_task_definition="$(aws ecs describe-services --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}" --query 'services[0].taskDefinition' --output text)"
           test -n "${current_task_definition}" && test "${current_task_definition}" != "None"
           containers="$(aws ecs describe-task-definition --task-definition "${current_task_definition}" --query 'taskDefinition.containerDefinitions[].name' --output text)"
-          grep -qw certscore-web <<<"${containers}"
           grep -qw mcp-http <<<"${containers}"
+          if grep -qw certscore-web <<<"${containers}"; then
+            echo "MCP must use its isolated task definition, not the public web task definition."
+            exit 1
+          fi
           echo "PREVIOUS_TASK_DEFINITION_ARN=${current_task_definition}" >> "${GITHUB_ENV}"
           target_group_arn="$(aws elbv2 describe-target-groups --names "${MCP_TARGET_GROUP_NAME}" --query 'TargetGroups[0].TargetGroupArn' --output text)"
           test -n "${target_group_arn}" && test "${target_group_arn}" != "None"
@@ -146,13 +148,13 @@ jobs:
           test -n "${manifest}" && test "${manifest}" != "None"
           aws ecr put-image --repository-name "${ECR_MCP_REPOSITORY}" --image-tag "${RELEASE_TAG}" --image-manifest "${manifest}" >/dev/null
 
-      - name: Register combined task definition
+      - name: Register MCP task definition
         run: |
           aws ecs describe-task-definition --task-definition "${PREVIOUS_TASK_DEFINITION_ARN}" | jq '.taskDefinition | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) | .containerDefinitions = (.containerDefinitions | map(if .name == env.ECS_CONTAINER_NAME then .image = "\(env.MCP_IMAGE):\(env.GITHUB_SHA)" else . end))' > /tmp/mcp-task-definition.json
           task_definition_arn="$(aws ecs register-task-definition --cli-input-json file:///tmp/mcp-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)"
           echo "MCP_TASK_DEFINITION_ARN=${task_definition_arn}" >> "${GITHUB_ENV}"
 
-      - name: Deploy combined task definition
+      - name: Deploy MCP task definition
         run: |
           aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_SERVICE_NAME}" --task-definition "${MCP_TASK_DEFINITION_ARN}" --force-new-deployment >/dev/null
           aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}"

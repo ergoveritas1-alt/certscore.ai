@@ -12,5 +12,15 @@ terraform {
 }
 
 provider "aws" {
-  region = var.aws_region
+  region = "eu-central-1"
+}
+
+provider "aws" {
+  alias  = "eu_west"
+  region = "eu-west-1"
+}
+
+provider "aws" {
+  alias  = "us_west"
+  region = "us-west-2"
 }

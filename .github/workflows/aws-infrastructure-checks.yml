@@ -1,0 +1,52 @@
+name: AWS Infrastructure Checks
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/aws-infrastructure-checks.yml"
+      - ".github/workflows/mcp-aws-ecs-deploy.yml"
+      - "apps/validation-worker/scripts/check-validation-env.ts"
+      - "apps/validation-worker/scripts/check-validation-runtime.ts"
+      - "infra/aws/**"
+      - "scripts/deploy-fast.ts"
+      - "packages/db/src/env.test.ts"
+      - "packages/db/src/env.ts"
+      - "packages/db/src/s3.ts"
+      - "scripts/aws-infrastructure-hardening.test.ts"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/aws-infrastructure-checks.yml"
+      - ".github/workflows/mcp-aws-ecs-deploy.yml"
+      - "apps/validation-worker/scripts/check-validation-env.ts"
+      - "apps/validation-worker/scripts/check-validation-runtime.ts"
+      - "infra/aws/**"
+      - "scripts/deploy-fast.ts"
+      - "packages/db/src/env.test.ts"
+      - "packages/db/src/env.ts"
+      - "packages/db/src/s3.ts"
+      - "scripts/aws-infrastructure-hardening.test.ts"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.2"
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:aws-infrastructure
+      - run: terraform -chdir=infra/aws/web-ecs init -backend=false -input=false
+      - run: terraform -chdir=infra/aws/web-ecs validate
+      - run: terraform -chdir=infra/aws/validation init -backend=false -input=false
+      - run: terraform -chdir=infra/aws/validation validate
+      - run: terraform -chdir=infra/aws/v2-dag-lambda init -backend=false -input=false
+      - run: terraform -chdir=infra/aws/v2-dag-lambda validate

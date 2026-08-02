@@ -23,17 +23,27 @@ output "github_actions_deploy_role_arn" {
   value       = aws_iam_role.github_actions_deploy.arn
 }
 
+output "github_actions_oidc_provider_arn" {
+  description = "Account-wide GitHub Actions OIDC provider ARN to reuse from other stacks."
+  value       = aws_iam_openid_connect_provider.github_actions.arn
+}
+
 output "web_ecr_repository_url" {
   description = "ECR repository URL for the public web image."
   value       = aws_ecr_repository.web.repository_url
 }
 
 output "mcp_ecr_repository_url" {
-  description = "ECR repository URL for the consolidated MCP sidecar image."
+  description = "ECR repository URL for the isolated MCP service image."
   value       = aws_ecr_repository.mcp.repository_url
 }
 
 output "mcp_target_group_arn" {
-  description = "Target group ARN for consolidated MCP health checks and deployment verification."
-  value       = aws_lb_target_group.mcp.arn
+  description = "Target group ARN for isolated MCP health checks and deployment verification."
+  value       = aws_lb_target_group.mcp_service.arn
+}
+
+output "ecs_mcp_service_name" {
+  description = "ECS service name for mcp.certscore.ai."
+  value       = aws_ecs_service.mcp.name
 }
