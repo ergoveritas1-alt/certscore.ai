@@ -1,6 +1,7 @@
 project_name                    = "certscore-validation"
-aws_region                      = "us-east-1"
-github_actions_subjects         = ["repo:ergoveritas1-alt/certscore.ai:*"]
+aws_region                      = "us-west-1"
+github_actions_subjects         = ["repo:ergoveritas1-alt/certscore.ai:ref:refs/heads/main"]
+github_actions_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
 validation_domain_name          = "validation.certscore.ai"
 hosted_zone_id                  = "Z1234567890"
 existing_certificate_arn        = ""
@@ -12,18 +13,18 @@ ecs_task_subnet_ids             = ["subnet-053d0eaa45152d300", "subnet-000adac28
 ecs_task_security_group_ids     = ["sg-0503154fb5532cb04"]
 ecs_task_assign_public_ip       = true
 
-database_url_secret_arn         = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/database-url"
-better_auth_secret_arn          = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/better-auth-secret"
+database_url_secret_arn         = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/database-url"
+better_auth_secret_arn          = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/better-auth-secret"
 google_client_id_secret_arn     = ""
 google_client_secret_secret_arn = ""
-openai_api_key_secret_arn       = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/openai-api-key"
+openai_api_key_secret_arn       = "arn:aws:secretsmanager:us-west-1:123456789012:secret:certscore/openai-api-key"
 
 s3_bucket                       = "scan-artifacts"
-s3_region                       = "us-east-1"
+s3_region                       = "us-west-1"
 s3_endpoint                     = ""
 s3_force_path_style             = ""
-s3_access_key_id_secret_arn     = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/s3-access-key-id"
-s3_secret_access_key_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:certscore/s3-secret-access-key"
+s3_access_key_id_secret_arn     = ""
+s3_secret_access_key_secret_arn = ""
 
 certscore_admin_emails          = "ops@example.com"
 next_public_auth_google_enabled = "false"

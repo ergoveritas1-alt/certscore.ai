@@ -472,16 +472,33 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
             }
           });
         }
+        const digestResult = await run([
+          "aws", "ecr", "describe-images",
+          "--region", region,
+          "--repository-name", "certscore-v2-dag-local-lambda",
+          "--image-ids", `imageTag=${input.ref}`,
+          "--query", "imageDetails[0].imageDigest",
+          "--output", "text"
+        ], { quiet: true });
+        const imageDigest = digestResult.stdout.trim();
+        if (!/^sha256:[a-f0-9]{64}$/.test(imageDigest)) {
+          throw new Error(`Could not resolve an immutable scanner image digest in ${region}.`);
+        }
+        const digestImageUri = `${imageUri.split(":")[0]}@${imageDigest}`;
         await run([
-          "bash",
-          "scripts/local-v2-dag-lambda/setup-dev-aws-image.sh",
-          imageUri
-        ], {
-          env: { AWS_REGION: region }
-        });
+          "aws", "lambda", "update-function-code",
+          "--region", region,
+          "--function-name", "certscore-v2-dag-local-lambda",
+          "--image-uri", digestImageUri
+        ], { quiet: true });
+        await run([
+          "aws", "lambda", "wait", "function-updated-v2",
+          "--region", region,
+          "--function-name", "certscore-v2-dag-local-lambda"
+        ], { quiet: true });
         return {
           durationMs: Date.now() - regionStart,
-          imageUri,
+          imageUri: digestImageUri,
           region,
           runtimeBase: input.pushRuntimeBase ? "rebuilt" : useRuntimeBase ? "reused" : "not-used"
         };

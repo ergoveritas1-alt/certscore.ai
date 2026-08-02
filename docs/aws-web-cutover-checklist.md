@@ -63,8 +63,8 @@ The web runtime in `apps/web` currently depends on these classes of services.
 - `S3_BUCKET`
 - `S3_REGION`
 - `S3_ENDPOINT` when using a non-AWS S3-compatible provider
-- `S3_ACCESS_KEY_ID`
-- `S3_SECRET_ACCESS_KEY`
+- ECS task-role access to `S3_BUCKET`
+- explicit S3 key pair only for non-AWS compatible endpoints
 - `S3_FORCE_PATH_STYLE` when required
 
 ### Required for outbound email features
@@ -128,7 +128,7 @@ If Amplify is reintroduced, secrets must be handled as an explicit deployment co
 
 - Better Auth secret is available to server runtime
 - database connection strings are available to server runtime
-- S3 credentials are available to server runtime
+- the server runtime can access S3 through its scoped ECS task role
 - Gmail credentials are available to server runtime
 - any search or model API keys required by enabled features are available to server runtime
 

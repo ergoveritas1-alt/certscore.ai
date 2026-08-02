@@ -9,6 +9,21 @@ This directory is the infrastructure entry point for the public web ECS/Fargate 
 
 It now contains a deployable baseline stack, but it still needs real account inputs before apply.
 
+## Terraform state
+
+Production state uses the partial S3 backend declared in `versions.tf`. Copy
+`backend.hcl.example` outside the repository, fill in the versioned state
+bucket, and initialize with locking enabled:
+
+```bash
+terraform init -backend-config=/secure/path/web-ecs.backend.hcl
+```
+
+For an existing local state, back it up and run the same command with
+`-migrate-state`. Do not run an apply until the remote state contains the
+existing production resources. Local state, plan files, and real tfvars are
+ignored by the repository.
+
 ## Purpose
 
 The current repo decision is:
@@ -29,13 +44,22 @@ This directory exists to hold the AWS infrastructure for `certscore.ai` using:
 The baseline stack provisions:
 
 - one ALB for the public web surface
+- optional AWS WAF managed common rules and a source-IP rate limit
+- optional ALB access logging to a preconfigured S3 log bucket
 - one ECS security group for web tasks
 - one ECR repository for the shared `apps/web` image
-- one ECS service for `certscore.ai` and `mcp.certscore.ai`
-- one task definition containing the web container and lightweight MCP HTTP sidecar
+- one autoscaled ECS service for `certscore.ai`
+- one isolated single-task ECS service for the process-resident MCP HTTP transport
+- separate web and MCP task roles and deployment boundaries
 - IAM roles for ECS runtime and GitHub Actions deploys
 
 The stack expects you to supply an existing VPC and existing public and private subnets. The current fastest practical path is to place the public web stack in the same VPC as RDS so database access can be granted by security group instead of public IP allowlists.
+
+The example enables WAF with the AWS common managed rules in count mode and the
+source-IP rate rule in blocking mode. Review sampled managed-rule matches before
+changing the common rule group to blocking, especially for MCP JSON requests.
+ALB access logging remains disabled until `alb_access_logs_bucket` names a bucket
+whose policy permits regional Elastic Load Balancing log delivery.
 
 ## Existing AWS pattern this stack copies
 
@@ -89,11 +113,17 @@ The default example now targets the RDS/default VPC because that is the fastest 
 - service name for `certscore.ai`
 - custom domain name
 - existing ACM certificate ARN for the public host
-- immutable MCP sidecar image tag from the `certscore-web-mcp` ECR repository
+- immutable MCP service image tag from the `certscore-web-mcp` ECR repository
 
-The MCP HTTP runtime shares the CertScore web task ENI and Fargate allocation. The ALB keeps separate target groups for ports 3000 and 3004, so the web and MCP health checks and host routing remain independent without a second ECS task or public IPv4 address.
+The MCP HTTP runtime uses an isolated ECS service and task role. Its transport
+keeps active protocol sessions in process memory, so the service intentionally
+runs exactly one task and uses stop-before-start deployments. This avoids
+cross-task `invalid_session` failures and prevents the public MCP container from
+inheriting the web task's Lambda, SQS, and S3 permissions. A future move above
+one MCP task requires a stateless or externally coordinated transport contract;
+do not raise its desired count while sessions remain process-resident.
 
-The hosted sidecar is built from tracked `apps/mcp` and `packages/certscore-mcp-auth` source by `.github/workflows/mcp-aws-ecs-deploy.yml`. That workflow serializes with the web deploy, pushes a Git-SHA image to `certscore-web-mcp`, registers a new combined task-definition revision, verifies OAuth metadata and authenticated `tools/list`, and automatically rolls back to the previous task definition if production verification fails. Do not deploy to the retired standalone MCP service.
+The hosted service is built from tracked `apps/mcp` and `packages/certscore-mcp-auth` source by `.github/workflows/mcp-aws-ecs-deploy.yml`. That workflow pushes a Git-SHA image to `certscore-web-mcp`, registers a new MCP-only task-definition revision, verifies OAuth metadata and authenticated `tools/list`, and automatically rolls back to the previous task definition if production verification fails.
 
 Manual rollback keeps the prior task definition and immutable image available:
 
@@ -101,8 +131,8 @@ Manual rollback keeps the prior task definition and immutable image available:
 aws ecs update-service \
   --region us-west-1 \
   --cluster certscore-web-cluster \
-  --service certscore-web-certscore \
-  --task-definition <previous-certscore-web-certscore-revision> \
+  --service certscore-web-mcp \
+  --task-definition <previous-certscore-web-mcp-revision> \
   --force-new-deployment
 ```
 
@@ -122,7 +152,8 @@ aws ecs update-service \
 - `DATABASE_URL`
 - `BETTER_AUTH_SECRET`
 - optional Google OAuth secrets
-- S3 credentials
+- optional S3 credentials only for non-AWS S3-compatible development storage;
+  AWS ECS uses the scoped task role and SDK credential provider chain
 - Gmail credentials
 - `FEEDBACK_TO_EMAIL`
 - optional `BILLING_ALERT_TO_EMAIL`

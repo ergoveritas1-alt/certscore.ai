@@ -5,13 +5,20 @@ import { z } from "zod";
 const runtimeSchema = z.object({
   DATABASE_URL: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
-  S3_ACCESS_KEY_ID: z.string().min(1),
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
   S3_BUCKET: z.string().min(1),
   S3_REGION: z.string().min(1),
-  S3_SECRET_ACCESS_KEY: z.string().min(1),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   S3_ENDPOINT: z.string().url().optional(),
   S3_FORCE_PATH_STYLE: z.enum(["0", "1", "false", "true"]).optional(),
   VALIDATION_PIPELINE_ENABLED: z.enum(["0", "1"]).optional()
+}).superRefine((value, context) => {
+  if (Boolean(value.S3_ACCESS_KEY_ID) === Boolean(value.S3_SECRET_ACCESS_KEY)) return;
+  context.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: [value.S3_ACCESS_KEY_ID ? "S3_SECRET_ACCESS_KEY" : "S3_ACCESS_KEY_ID"],
+    message: "S3 access key id and secret access key must be configured together"
+  });
 });
 
 function pass(label: string, details: string) {
@@ -87,7 +94,7 @@ async function main() {
   }
 
   if (!hasS3Env()) {
-    fail("validation storage", "Set S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY in apps/web/.env.local.");
+    fail("validation storage", "Set S3_BUCKET and S3_REGION, plus both S3 credential values only when the AWS SDK default provider chain is unavailable.");
     process.exitCode = 1;
     return;
   }

@@ -49,8 +49,9 @@ For the public host, provide:
 - `S3_BUCKET`
 - `S3_REGION`
 - `S3_ENDPOINT` when required
-- `S3_ACCESS_KEY_ID`
-- `S3_SECRET_ACCESS_KEY`
+- ECS task-role S3 access for the configured bucket
+- `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` only for a non-AWS
+  S3-compatible endpoint that cannot use the task role
 - `S3_FORCE_PATH_STYLE` when required
 - `GMAIL_SMTP_USER`
 - `GMAIL_SMTP_APP_PASSWORD`
@@ -136,7 +137,7 @@ Use Secrets Manager-backed task definition secrets for:
 - database URLs
 - Better Auth secret
 - Google OAuth secrets
-- S3 credentials
+- scoped S3 permissions on the ECS task role
 - Gmail credentials
 - model API keys
 

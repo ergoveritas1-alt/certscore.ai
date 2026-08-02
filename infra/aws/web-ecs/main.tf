@@ -8,6 +8,17 @@ data "tls_certificate" "github_actions_oidc" {
   url = "https://token.actions.githubusercontent.com"
 }
 
+check "s3_static_credentials_are_paired" {
+  assert {
+    condition = (
+      trimspace(var.s3_access_key_id_secret_arn) == "" && trimspace(var.s3_secret_access_key_secret_arn) == ""
+      ) || (
+      trimspace(var.s3_access_key_id_secret_arn) != "" && trimspace(var.s3_secret_access_key_secret_arn) != ""
+    )
+    error_message = "s3_access_key_id_secret_arn and s3_secret_access_key_secret_arn must be configured together."
+  }
+}
+
 locals {
   prefix                      = var.project_name
   vpc_id                      = var.existing_vpc_id
@@ -90,12 +101,14 @@ locals {
     [
       { name = "DATABASE_URL", valueFrom = var.database_url_secret_arn },
       { name = "BETTER_AUTH_SECRET", valueFrom = var.better_auth_secret_arn },
-      { name = "S3_ACCESS_KEY_ID", valueFrom = var.s3_access_key_id_secret_arn },
-      { name = "S3_SECRET_ACCESS_KEY", valueFrom = var.s3_secret_access_key_secret_arn },
       { name = "GMAIL_SMTP_USER", valueFrom = var.gmail_smtp_user_secret_arn },
       { name = "GMAIL_SMTP_APP_PASSWORD", valueFrom = var.gmail_smtp_app_password_secret_arn },
       { name = "FEEDBACK_TO_EMAIL", valueFrom = var.feedback_to_email_secret_arn }
     ],
+    var.s3_access_key_id_secret_arn != "" && var.s3_secret_access_key_secret_arn != "" ? [
+      { name = "S3_ACCESS_KEY_ID", valueFrom = var.s3_access_key_id_secret_arn },
+      { name = "S3_SECRET_ACCESS_KEY", valueFrom = var.s3_secret_access_key_secret_arn }
+    ] : [],
     var.billing_alert_to_email_secret_arn != "" ? [{ name = "BILLING_ALERT_TO_EMAIL", valueFrom = var.billing_alert_to_email_secret_arn }] : [],
     var.google_client_id_secret_arn != "" ? [{ name = "GOOGLE_CLIENT_ID", valueFrom = var.google_client_id_secret_arn }] : [],
     var.google_client_secret_secret_arn != "" ? [{ name = "GOOGLE_CLIENT_SECRET", valueFrom = var.google_client_secret_secret_arn }] : [],
@@ -152,7 +165,7 @@ resource "aws_security_group" "ecs_tasks" {
   }
 
   ingress {
-    description     = "ALB access to MCP sidecar"
+    description     = "ALB access to isolated MCP service"
     from_port       = 3004
     to_port         = 3004
     protocol        = "tcp"
@@ -191,7 +204,91 @@ resource "aws_lb" "web" {
   # Pin append mode so caller-supplied values cannot replace that peer address.
   xff_header_processing_mode = "append"
 
+  dynamic "access_logs" {
+    for_each = trimspace(var.alb_access_logs_bucket) != "" ? [1] : []
+    content {
+      bucket  = var.alb_access_logs_bucket
+      enabled = true
+      prefix  = var.alb_access_logs_prefix
+    }
+  }
+
   tags = merge(local.common_tags, { Name = "${local.prefix}-alb" })
+}
+
+resource "aws_wafv2_web_acl" "public" {
+  count = var.enable_waf ? 1 : 0
+
+  name  = "${local.prefix}-public"
+  scope = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "aws-common-rules"
+    priority = 10
+
+    override_action {
+      count {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.prefix}-aws-common-rules"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "source-ip-rate-limit"
+    priority = 20
+
+    action {
+      block {}
+    }
+
+    statement {
+      rate_based_statement {
+        aggregate_key_type = "IP"
+        limit              = var.waf_rate_limit
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.prefix}-source-ip-rate-limit"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${local.prefix}-public-waf"
+    sampled_requests_enabled   = true
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_wafv2_web_acl_association" "public_alb" {
+  count = var.enable_waf ? 1 : 0
+
+  resource_arn = aws_lb.web.arn
+  web_acl_arn  = aws_wafv2_web_acl.public[0].arn
+}
+
+moved {
+  from = aws_lb_target_group.mcp
+  to   = aws_lb_target_group.mcp_legacy
 }
 
 resource "aws_lb_target_group" "certscore" {
@@ -216,7 +313,7 @@ resource "aws_lb_target_group" "certscore" {
   tags = merge(local.common_tags, { Name = "${local.prefix}-certscore-tg" })
 }
 
-resource "aws_lb_target_group" "mcp" {
+resource "aws_lb_target_group" "mcp_legacy" {
   name        = substr(replace("${local.prefix}-mcp", "/[^a-zA-Z0-9-]/", "-"), 0, 32)
   port        = 3004
   protocol    = "HTTP"
@@ -240,6 +337,32 @@ resource "aws_lb_target_group" "mcp" {
   }
 
   tags = merge(local.common_tags, { Name = "${local.prefix}-mcp-tg" })
+}
+
+resource "aws_lb_target_group" "mcp_service" {
+  name        = substr(replace("${local.prefix}-mcp-service", "/[^a-zA-Z0-9-]/", "-"), 0, 32)
+  port        = 3004
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = local.vpc_id
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200-399"
+    path                = "/healthz"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 3
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = merge(local.common_tags, { Name = "${local.prefix}-mcp-service-tg" })
 }
 
 resource "aws_lb_listener" "http" {
@@ -293,19 +416,76 @@ resource "aws_lb_listener_certificate" "mcp" {
 }
 
 resource "aws_lb_listener_rule" "mcp_host" {
-  count = local.certificate_arn != null && local.mcp_certificate_arn != null ? 1 : 0
+  count = local.certificate_arn != null ? 1 : 0
 
   listener_arn = aws_lb_listener.https[0].arn
   priority     = 100
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.mcp.arn
+    target_group_arn = aws_lb_target_group.mcp_service.arn
   }
 
   condition {
     host_header {
       values = [var.mcp_domain_name]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "mcp_http_host" {
+  count = local.certificate_arn == null ? 1 : 0
+
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.mcp_service.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.mcp_domain_name]
+    }
+  }
+}
+
+# Keep the isolated target group associated with the ALB before the production
+# host rule moves. This enables a staged ECS service cutover without routing
+# public requests to an empty target group.
+resource "aws_lb_listener_rule" "mcp_staging_association" {
+  count = local.certificate_arn != null ? 1 : 0
+
+  listener_arn = aws_lb_listener.https[0].arn
+  priority     = 101
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.mcp_service.arn
+  }
+
+  condition {
+    host_header {
+      values = ["mcp-staging.invalid"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "mcp_http_staging_association" {
+  count = local.certificate_arn == null ? 1 : 0
+
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 101
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.mcp_service.arn
+  }
+
+  condition {
+    host_header {
+      values = ["mcp-staging.invalid"]
     }
   }
 }
@@ -495,6 +675,41 @@ resource "aws_iam_role" "task" {
   tags = local.common_tags
 }
 
+resource "aws_iam_role" "mcp_task" {
+  name = "${local.prefix}-mcp-task"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "mcp_task_exec" {
+  name = "${local.prefix}-mcp-ecs-exec"
+  role = aws_iam_role.mcp_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "task_exec" {
   name = "${local.prefix}-ecs-exec"
   role = aws_iam_role.task.id
@@ -506,6 +721,22 @@ resource "aws_iam_role_policy" "task_exec" {
         Effect   = "Allow"
         Action   = ["ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"]
         Resource = "*"
+      },
+      {
+        Sid    = "UseSharedArtifactBucket"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "arn:aws:s3:::${var.s3_bucket}/*"
+      },
+      {
+        Sid      = "ListSharedArtifactBucket"
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = "arn:aws:s3:::${var.s3_bucket}"
       },
       {
         Sid    = "InvokeRegionalV2DagLambda"
@@ -642,9 +873,18 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
         Resource = data.aws_secretsmanager_secret.oauth_jwt.arn
       },
       {
-        Effect   = "Allow"
-        Action   = ["iam:PassRole"]
-        Resource = "*"
+        Effect = "Allow"
+        Action = ["iam:PassRole"]
+        Resource = [
+          aws_iam_role.execution.arn,
+          aws_iam_role.task.arn,
+          aws_iam_role.mcp_task.arn
+        ]
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "ecs-tasks.amazonaws.com"
+          }
+        }
       },
       {
         Effect = "Allow"
@@ -698,11 +938,32 @@ resource "aws_ecs_task_definition" "certscore" {
           awslogs-stream-prefix = "ecs"
         }
       }
-    },
+    }
+  ])
+
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_ecs_task_definition" "mcp" {
+  family                   = "${local.prefix}-mcp"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = tostring(var.mcp_cpu)
+  memory                   = tostring(var.mcp_memory)
+  execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.mcp_task.arn
+
+  container_definitions = jsonencode([
     {
-      name      = "mcp-http"
-      image     = "${aws_ecr_repository.mcp.repository_url}:${var.mcp_image_tag}"
-      essential = true
+      name                   = "mcp-http"
+      image                  = "${aws_ecr_repository.mcp.repository_url}:${var.mcp_image_tag}"
+      essential              = true
+      readonlyRootFilesystem = true
       portMappings = [
         {
           containerPort = 3004
@@ -771,12 +1032,6 @@ resource "aws_ecs_service" "certscore" {
     container_port   = 3000
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.mcp.arn
-    container_name   = "mcp-http"
-    container_port   = 3004
-  }
-
   deployment_circuit_breaker {
     enable   = true
     rollback = true
@@ -789,6 +1044,44 @@ resource "aws_ecs_service" "certscore" {
   }
 
   depends_on = [aws_lb_listener.http, aws_lb_listener.https]
+
+  tags = local.common_tags
+}
+
+resource "aws_ecs_service" "mcp" {
+  name                               = "${local.prefix}-mcp"
+  cluster                            = local.ecs_cluster_name
+  task_definition                    = aws_ecs_task_definition.mcp.arn
+  desired_count                      = 1
+  launch_type                        = "FARGATE"
+  enable_execute_command             = true
+  deployment_maximum_percent         = 100
+  deployment_minimum_healthy_percent = 0
+
+  network_configuration {
+    assign_public_ip = var.assign_public_ip
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    subnets          = local.private_subnets
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.mcp_service.arn
+    container_name   = "mcp-http"
+    container_port   = 3004
+  }
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  health_check_grace_period_seconds = 90
+
+  depends_on = [
+    aws_lb_listener.https,
+    aws_lb_listener_rule.mcp_staging_association,
+    aws_lb_listener_rule.mcp_http_staging_association
+  ]
 
   tags = local.common_tags
 }
@@ -956,7 +1249,7 @@ resource "aws_cloudwatch_metric_alarm" "mcp_no_healthy_targets" {
 
   dimensions = {
     LoadBalancer = aws_lb.web.arn_suffix
-    TargetGroup  = aws_lb_target_group.mcp.arn_suffix
+    TargetGroup  = aws_lb_target_group.mcp_service.arn_suffix
   }
 
   tags = local.common_tags
@@ -978,7 +1271,7 @@ resource "aws_cloudwatch_metric_alarm" "mcp_unhealthy_targets" {
 
   dimensions = {
     LoadBalancer = aws_lb.web.arn_suffix
-    TargetGroup  = aws_lb_target_group.mcp.arn_suffix
+    TargetGroup  = aws_lb_target_group.mcp_service.arn_suffix
   }
 
   tags = local.common_tags
@@ -1000,7 +1293,7 @@ resource "aws_cloudwatch_metric_alarm" "mcp_target_5xx" {
 
   dimensions = {
     LoadBalancer = aws_lb.web.arn_suffix
-    TargetGroup  = aws_lb_target_group.mcp.arn_suffix
+    TargetGroup  = aws_lb_target_group.mcp_service.arn_suffix
   }
 
   tags = local.common_tags
@@ -1022,7 +1315,7 @@ resource "aws_cloudwatch_metric_alarm" "mcp_target_latency" {
 
   dimensions = {
     LoadBalancer = aws_lb.web.arn_suffix
-    TargetGroup  = aws_lb_target_group.mcp.arn_suffix
+    TargetGroup  = aws_lb_target_group.mcp_service.arn_suffix
   }
 
   tags = local.common_tags

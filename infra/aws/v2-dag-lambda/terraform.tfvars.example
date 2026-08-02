@@ -1,0 +1,24 @@
+image_uris = {
+  eu_central_1 = "123456789012.dkr.ecr.eu-central-1.amazonaws.com/certscore-v2-dag-local-lambda@sha256:REPLACE"
+  eu_west_1    = "123456789012.dkr.ecr.eu-west-1.amazonaws.com/certscore-v2-dag-local-lambda@sha256:REPLACE"
+  us_west_2    = "123456789012.dkr.ecr.us-west-2.amazonaws.com/certscore-v2-dag-local-lambda@sha256:REPLACE"
+}
+
+alarm_actions = ["arn:aws:sns:us-west-2:123456789012:certscore-operations"]
+
+# Preserve the existing regional proxy variables during import. Never commit
+# credentials; place real values in an ignored .auto.tfvars file or a secrets-aware runner.
+environment_variables_by_region = {
+  eu-central-1 = {
+    SCAN_PROXY_ENABLED = "true"
+    SCAN_EGRESS_LABEL  = "eu-de-production"
+  }
+}
+
+# Populate only for regions whose existing Lambda is VPC-attached.
+vpc_config_by_region = {
+  eu-central-1 = {
+    subnet_ids         = ["subnet-replace"]
+    security_group_ids = ["sg-replace"]
+  }
+}

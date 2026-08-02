@@ -16,18 +16,20 @@ This Terraform stack provisions the AWS-only validation worker lane:
 
 ## Apply flow
 
-1. Copy [terraform.tfvars.example](/Users/benmasek/WC01/infra/aws/validation/terraform.tfvars.example) to `terraform.tfvars`.
-2. Fill in the real secret ARNs, DNS, and sizing values.
-3. Run:
+1. Copy `backend.hcl.example` outside the repository and configure the
+   encrypted, versioned Terraform state bucket.
+2. Copy [terraform.tfvars.example](/Users/benmasek/WC01/infra/aws/validation/terraform.tfvars.example) to `terraform.tfvars`.
+3. Fill in the real secret ARNs, DNS, and sizing values.
+4. Run:
 
 ```bash
 cd infra/aws/validation
-terraform init
+terraform init -backend-config=/secure/path/validation.backend.hcl
 terraform plan
 terraform apply
 ```
 
-4. Capture the outputs for:
+5. Capture the outputs for:
    - `validation_ops_base_url`
    - `ecs_cluster_name`
    - `ecs_web_service_name`
@@ -36,7 +38,7 @@ terraform apply
    - `web_ecr_repository_url`
    - `worker_ecr_repository_url`
 
-5. Configure the GitHub Actions AWS deploy workflow with those output values.
+6. Configure the GitHub Actions AWS deploy workflow with those output values.
 
 Required repository configuration for `.github/workflows/validation-aws-deploy.yml`:
 
@@ -55,5 +57,13 @@ Required repository configuration for `.github/workflows/validation-aws-deploy.y
 ## Notes
 
 - The validation worker lane is Postgres-backed.
+- AWS S3 access uses the ECS task role. Static S3 secret ARNs are reserved for
+  non-AWS S3-compatible development storage and should stay empty in AWS.
+- The account-wide GitHub Actions OIDC provider is owned by the web stack and
+  passed here through `github_actions_oidc_provider_arn`. If an older validation
+  state still tracks that same provider, remove only its Terraform state address
+  before planning this version; do not delete the live account-wide provider.
 - The main web app can point admins at the resulting `validation_ops_base_url` with `VALIDATION_OPS_BASE_URL`.
-- The stack now creates the GitHub OIDC provider and a dedicated deploy role for this repository. Tighten `github_actions_subjects` if you want to restrict assumption to only `main` or a narrower workflow pattern.
+- The stack creates the GitHub OIDC provider and a dedicated deploy role whose
+  default trust is restricted to `main`. Prefer a protected GitHub production
+  environment subject when the deployment workflow adopts environment gates.

@@ -7,7 +7,12 @@ variable "project_name" {
 variable "github_actions_subjects" {
   description = "GitHub OIDC subject patterns allowed to assume the deploy role."
   type        = list(string)
-  default     = ["repo:ergoveritas1-alt/certscore.ai:*"]
+  default     = ["repo:ergoveritas1-alt/certscore.ai:ref:refs/heads/main"]
+}
+
+variable "github_actions_oidc_provider_arn" {
+  description = "Account-wide GitHub Actions OIDC provider ARN owned by the web/account foundation stack."
+  type        = string
 }
 
 variable "aws_region" {
@@ -120,13 +125,15 @@ variable "s3_force_path_style" {
 }
 
 variable "s3_access_key_id_secret_arn" {
-  description = "Secrets Manager ARN containing S3_ACCESS_KEY_ID."
+  description = "Optional Secrets Manager ARN containing S3_ACCESS_KEY_ID for non-AWS S3-compatible storage. ECS production should use its task role."
   type        = string
+  default     = ""
 }
 
 variable "s3_secret_access_key_secret_arn" {
-  description = "Secrets Manager ARN containing S3_SECRET_ACCESS_KEY."
+  description = "Optional Secrets Manager ARN containing S3_SECRET_ACCESS_KEY for non-AWS S3-compatible storage. Must be configured with s3_access_key_id_secret_arn."
   type        = string
+  default     = ""
 }
 
 variable "certscore_admin_emails" {

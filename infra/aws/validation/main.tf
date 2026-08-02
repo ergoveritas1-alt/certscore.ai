@@ -4,8 +4,29 @@ data "aws_availability_zones" "available" {
 
 data "aws_caller_identity" "current" {}
 
-data "tls_certificate" "github_actions_oidc" {
-  url = "https://token.actions.githubusercontent.com"
+data "aws_subnet" "configured_ecs_task" {
+  for_each = toset(var.ecs_task_subnet_ids)
+  id       = each.value
+}
+
+check "s3_static_credentials_are_paired" {
+  assert {
+    condition = (
+      trimspace(var.s3_access_key_id_secret_arn) == "" && trimspace(var.s3_secret_access_key_secret_arn) == ""
+      ) || (
+      trimspace(var.s3_access_key_id_secret_arn) != "" && trimspace(var.s3_secret_access_key_secret_arn) != ""
+    )
+    error_message = "s3_access_key_id_secret_arn and s3_secret_access_key_secret_arn must be configured together."
+  }
+}
+
+check "validation_web_target_group_vpc" {
+  assert {
+    condition = var.web_desired_count == 0 || alltrue([
+      for subnet in values(data.aws_subnet.configured_ecs_task) : subnet.vpc_id == aws_vpc.validation.id
+    ])
+    error_message = "When validation ops web is enabled, ecs_task_subnet_ids must belong to the validation ALB target group's VPC. Use a separate worker-only stack or establish private database routing instead of placing the ALB-backed web task in another VPC."
+  }
 }
 
 locals {
@@ -95,20 +116,26 @@ locals {
   web_container_secrets = concat(
     [
       { name = "DATABASE_URL", valueFrom = var.database_url_secret_arn },
-      { name = "BETTER_AUTH_SECRET", valueFrom = var.better_auth_secret_arn },
+      { name = "BETTER_AUTH_SECRET", valueFrom = var.better_auth_secret_arn }
+    ],
+    var.s3_access_key_id_secret_arn != "" && var.s3_secret_access_key_secret_arn != "" ? [
       { name = "S3_ACCESS_KEY_ID", valueFrom = var.s3_access_key_id_secret_arn },
       { name = "S3_SECRET_ACCESS_KEY", valueFrom = var.s3_secret_access_key_secret_arn }
-    ],
+    ] : [],
     var.google_client_id_secret_arn != "" ? [{ name = "GOOGLE_CLIENT_ID", valueFrom = var.google_client_id_secret_arn }] : [],
     var.google_client_secret_secret_arn != "" ? [{ name = "GOOGLE_CLIENT_SECRET", valueFrom = var.google_client_secret_secret_arn }] : [],
     var.web_bot_auth_private_key_secret_arn != "" ? [{ name = "WEB_BOT_AUTH_PRIVATE_KEY_PEM", valueFrom = var.web_bot_auth_private_key_secret_arn }] : []
   )
-  worker_container_secrets = [
-    { name = "DATABASE_URL", valueFrom = var.database_url_secret_arn },
-    { name = "OPENAI_API_KEY", valueFrom = var.openai_api_key_secret_arn },
-    { name = "S3_ACCESS_KEY_ID", valueFrom = var.s3_access_key_id_secret_arn },
-    { name = "S3_SECRET_ACCESS_KEY", valueFrom = var.s3_secret_access_key_secret_arn }
-  ]
+  worker_container_secrets = concat(
+    [
+      { name = "DATABASE_URL", valueFrom = var.database_url_secret_arn },
+      { name = "OPENAI_API_KEY", valueFrom = var.openai_api_key_secret_arn }
+    ],
+    var.s3_access_key_id_secret_arn != "" && var.s3_secret_access_key_secret_arn != "" ? [
+      { name = "S3_ACCESS_KEY_ID", valueFrom = var.s3_access_key_id_secret_arn },
+      { name = "S3_SECRET_ACCESS_KEY", valueFrom = var.s3_secret_access_key_secret_arn }
+    ] : []
+  )
   task_secret_arns = compact(concat(
     [
       var.database_url_secret_arn,
@@ -574,6 +601,22 @@ resource "aws_iam_role_policy" "task_exec" {
         Resource = "*"
       },
       {
+        Sid    = "UseSharedArtifactBucket"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = "arn:aws:s3:::${var.s3_bucket}/*"
+      },
+      {
+        Sid      = "ListSharedArtifactBucket"
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = "arn:aws:s3:::${var.s3_bucket}"
+      },
+      {
         Sid    = "PollRegionalV2DagLambdaResults"
         Effect = "Allow"
         Action = [
@@ -613,14 +656,6 @@ resource "aws_iam_role_policy" "task_ops_monitor" {
   })
 }
 
-resource "aws_iam_openid_connect_provider" "github_actions" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.github_actions_oidc.certificates[0].sha1_fingerprint]
-
-  tags = local.common_tags
-}
-
 resource "aws_iam_role" "github_actions_deploy" {
   name = "${local.prefix}-github-actions-deploy"
 
@@ -630,7 +665,7 @@ resource "aws_iam_role" "github_actions_deploy" {
       {
         Effect = "Allow"
         Principal = {
-          Federated = aws_iam_openid_connect_provider.github_actions.arn
+          Federated = var.github_actions_oidc_provider_arn
         }
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
@@ -699,6 +734,11 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           aws_iam_role.execution.arn,
           aws_iam_role.task.arn
         ]
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "ecs-tasks.amazonaws.com"
+          }
+        }
       },
       {
         Effect = "Allow"
