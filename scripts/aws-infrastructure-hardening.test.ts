@@ -14,7 +14,8 @@ test("MCP uses an isolated single-task ECS service and task role", async () => {
   assert.match(source, /resource "aws_ecs_task_definition" "mcp"/);
   assert.match(source, /resource "aws_iam_role" "mcp_task"/);
   assert.match(mcpService, /desired_count\s+=\s+1/);
-  assert.match(mcpService, /deployment_maximum_percent\s+=\s+100/);
+  assert.match(mcpService, /deployment_maximum_percent\s+=\s+200/);
+  assert.match(mcpService, /deployment_minimum_healthy_percent\s+=\s+100/);
   assert.doesNotMatch(webTask, /mcp-http/);
 });
 
