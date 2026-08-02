@@ -14,7 +14,8 @@ test("MCP uses an isolated single-task ECS service and task role", async () => {
   assert.match(source, /resource "aws_ecs_task_definition" "mcp"/);
   assert.match(source, /resource "aws_iam_role" "mcp_task"/);
   assert.match(mcpService, /desired_count\s+=\s+1/);
-  assert.match(mcpService, /deployment_maximum_percent\s+=\s+100/);
+  assert.match(mcpService, /deployment_maximum_percent\s+=\s+200/);
+  assert.match(mcpService, /deployment_minimum_healthy_percent\s+=\s+100/);
   assert.doesNotMatch(webTask, /mcp-http/);
 });
 
@@ -35,6 +36,11 @@ test("GitHub deploy roles restrict PassRole to ECS task roles", async () => {
     assert.doesNotMatch(passRoleStatement, /Resource\s+=\s+"\*"/);
     assert.match(passRoleStatement, /"iam:PassedToService"\s+=\s+"ecs-tasks\.amazonaws\.com"/);
   }
+});
+
+test("validation deploy assumes its dedicated AWS role", async () => {
+  const source = await readFile(".github/workflows/validation-aws-deploy.yml", "utf8");
+  assert.match(source, /vars\.AWS_VALIDATION_ROLE_TO_ASSUME/);
 });
 
 test("Terraform stacks use a partial remote S3 backend", async () => {
