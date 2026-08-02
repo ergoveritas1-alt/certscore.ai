@@ -281,6 +281,13 @@ jobs:
                   if .name == env.ECS_WORKER_CONTAINER_NAME
                   then .image = "\(env.VALIDATION_WORKER_IMAGE):\(env.GITHUB_SHA)"
                     | del(.command)
+                    | .secrets = (
+                        (.secrets // [])
+                        | map(select(
+                            .name != "S3_ACCESS_KEY_ID"
+                            and .name != "S3_SECRET_ACCESS_KEY"
+                          ))
+                      )
                     | .environment = (
                         (.environment // [])
                         | map(select(

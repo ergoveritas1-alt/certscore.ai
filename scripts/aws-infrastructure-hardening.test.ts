@@ -41,6 +41,11 @@ test("GitHub deploy roles restrict PassRole to ECS task roles", async () => {
 test("validation deploy assumes its dedicated AWS role", async () => {
   const source = await readFile(".github/workflows/validation-aws-deploy.yml", "utf8");
   assert.match(source, /vars\.AWS_VALIDATION_ROLE_TO_ASSUME/);
+  assert.match(source, /\.name != "S3_ACCESS_KEY_ID"/);
+  assert.match(source, /\.name != "S3_SECRET_ACCESS_KEY"/);
+
+  const terraform = await readFile(validationTerraformPath, "utf8");
+  assert.match(terraform, /"logs:FilterLogEvents"/);
 });
 
 test("Terraform stacks use a partial remote S3 backend", async () => {
