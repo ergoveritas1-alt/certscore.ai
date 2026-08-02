@@ -34,32 +34,16 @@ export function buildChecklistConcernTopFindings(
   });
 }
 
-export function mergeCanonicalHighPriorityFindings(input: {
-  checklistFindings: CertScoreFinding[];
-  executiveFindings: CertScoreFinding[];
-}) {
-  const checklistRowIds = new Set(
-    input.checklistFindings
-      .map((finding) => finding.evidenceDetails?.policyEvidenceDetails?.rowId)
-      .filter((rowId): rowId is string => typeof rowId === "string")
-  );
+export function selectCanonicalHighPriorityFindings(checklistFindings: CertScoreFinding[]) {
   const byId = new Map<string, CertScoreFinding>();
-  const nonDuplicateExecutiveFindings = input.executiveFindings.filter((finding) => {
-    const equivalentChecklistRowId = EXECUTIVE_FINDING_CHECKLIST_ROW_EQUIVALENTS[finding.id];
-    return !equivalentChecklistRowId || !checklistRowIds.has(equivalentChecklistRowId);
-  });
-  for (const finding of [...input.checklistFindings, ...nonDuplicateExecutiveFindings]) {
+  // Executive high-priority cards are a checklist concern projection. Unified
+  // runtime findings remain reportable in their owning report surfaces, but an
+  // observed signal must not become a top finding merely because it appears in
+  // the legacy executive allowlist.
+  for (const finding of checklistFindings) {
     if (!byId.has(finding.id)) {
       byId.set(finding.id, finding);
     }
   }
   return [...byId.values()];
 }
-
-const EXECUTIVE_FINDING_CHECKLIST_ROW_EQUIVALENTS: Readonly<Record<string, string>> = {
-  adtech_cookie_pre_consent: "pre_consent_cookies_storage",
-  analytics_cookie_pre_consent: "pre_consent_cookies_storage",
-  pre_consent_tracking_detected: "pre_consent_third_party_tracking",
-  third_party_cookie_pre_consent: "pre_consent_cookies_storage",
-  third_party_tracking_pre_consent: "pre_consent_third_party_tracking"
-};

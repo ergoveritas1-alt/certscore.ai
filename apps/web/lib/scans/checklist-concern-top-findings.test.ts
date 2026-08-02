@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   buildChecklistConcernTopFindings,
-  mergeCanonicalHighPriorityFindings
+  selectCanonicalHighPriorityFindings
 } from "./checklist-concern-top-findings";
 import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
 import type { CertScoreFinding } from "./finding-registry";
@@ -78,44 +78,30 @@ test("canonical checklist concerns include every potential gap and partial conce
   assert.equal(findings[1]?.label, "Pre-consent non-essential tracking");
 });
 
-test("canonical high-priority merge keeps checklist concerns and suppresses equivalent executive duplicates", () => {
+test("canonical high-priority selection uses checklist concerns only", () => {
   const checklistFinding = {
     id: "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
     label: "Non-essential pre-consent cookies/storage"
   } as unknown as CertScoreFinding;
-  const executiveFinding = {
-    id: "pre_consent_tracking_detected",
-    label: "Tracking started before consent"
-  } as unknown as CertScoreFinding;
 
   assert.deepEqual(
-    mergeCanonicalHighPriorityFindings({
-      checklistFindings: [checklistFinding],
-      executiveFindings: [
-        executiveFinding,
-        { id: "unrelated_executive_finding", label: "Unrelated concern" } as unknown as CertScoreFinding
-      ]
-    }).map((finding) => finding.id),
-    [checklistFinding.id, executiveFinding.id, "unrelated_executive_finding"]
+    selectCanonicalHighPriorityFindings([checklistFinding]).map((finding) => finding.id),
+    [checklistFinding.id]
   );
 });
 
-test("canonical high-priority merge prefers the checklist tracking concern over its executive duplicate", () => {
+test("canonical high-priority selection retains the checklist tracking concern", () => {
   const checklistFinding = {
     evidenceDetails: { policyEvidenceDetails: { rowId: "pre_consent_third_party_tracking" } },
     id: "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking",
     label: "Pre-consent non-essential tracking"
   } as unknown as CertScoreFinding;
-  const executiveFinding = {
-    id: "pre_consent_tracking_detected",
-    label: "Tracking started before consent"
-  } as unknown as CertScoreFinding;
-
   assert.deepEqual(
-    mergeCanonicalHighPriorityFindings({
-      checklistFindings: [checklistFinding],
-      executiveFindings: [executiveFinding]
-    }).map((finding) => finding.id),
+    selectCanonicalHighPriorityFindings([checklistFinding]).map((finding) => finding.id),
     [checklistFinding.id]
   );
+});
+
+test("canonical high-priority selection has no standalone runtime-finding input", () => {
+  assert.deepEqual(selectCanonicalHighPriorityFindings([]), []);
 });

@@ -11,7 +11,7 @@ import { getAssessmentDirection, getEvidenceLabel } from "../scans/gdpr-eprivacy
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../scans/gdpr-eprivacy-checklist-rationale";
 import {
   buildChecklistConcernTopFindings,
-  mergeCanonicalHighPriorityFindings
+  selectCanonicalHighPriorityFindings
 } from "../scans/checklist-concern-top-findings";
 import { buildNormalizedConcerns } from "../scans/normalized-concerns";
 import {
@@ -394,10 +394,7 @@ function buildPulseReportSurface(input: {
     };
   });
   const checklistFindings = buildChecklistConcernTopFindings(gdprEprivacyChecklist);
-  const canonicalHighPriorityFindings = mergeCanonicalHighPriorityFindings({
-    checklistFindings,
-    executiveFindings: executive.topFindings
-  });
+  const canonicalHighPriorityFindings = selectCanonicalHighPriorityFindings(checklistFindings);
   const { allFindings, topFindings } = selectPublicPulseFindingsFromUnifiedProjection({
     checklistFindings,
     findings: executive.findings,
