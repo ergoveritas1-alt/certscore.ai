@@ -40,12 +40,12 @@ const RESULT_VISIBILITY_TIMEOUT_SECONDS = 240;
 const MATERIALIZATION_FINALIZING_WAIT_MS = 150_000;
 const MATERIALIZATION_RETRY_SECONDS_MIN = 2;
 const MATERIALIZATION_RETRY_SECONDS_MAX = 15;
-// The Lambda handler has a 60s safety deadline plus a bounded result-publish
-// window. Reconcile a missing terminal result after a small handoff margin,
-// and poll frequently enough that the user-facing failure does not drift into
-// the 90-120s range.
+// The Lambda handler has a 65s safety deadline plus a bounded result-publish
+// window. SQS delivery can be delayed beyond the handler's completion, so the
+// reconciler must leave enough margin for a valid terminal message to arrive
+// before it declares the scan orphaned.
 const ORPHAN_RECONCILIATION_INTERVAL_MS = 10_000;
-const ORPHAN_RECONCILIATION_AGE_MS = 75_000;
+const ORPHAN_RECONCILIATION_AGE_MS = 150_000;
 
 type LambdaResultStatus = "completed" | "failed";
 type LambdaTargetEnvironment = "local" | "production";
@@ -1605,7 +1605,7 @@ export async function reconcileOrphanedLocalV2DagLambdaScans(input: {
        update scans s
           set status = 'failed',
               completed_at = coalesce(s.completed_at, now()),
-              error_message = 'The scanner did not return a terminal result within 75 seconds. No result was inferred; start a new scan.',
+              error_message = 'The scanner did not return a terminal result within 150 seconds. No result was inferred; start a new scan.',
               scan_config_json = jsonb_set(
                 s.scan_config_json,
                 '{execution,v2DagLambda}',

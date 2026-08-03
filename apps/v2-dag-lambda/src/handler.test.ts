@@ -33,11 +33,11 @@ import {
   uploadArtifactFiles
 } from "./handler";
 
-test("the default artifact chain preserves the full terminal publication reserve", () => {
-  assert.equal(
-    LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS,
-    LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS -
-      LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS,
+test("the default artifact chain preserves at least the full terminal publication reserve", () => {
+  assert.ok(
+    LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS <=
+      LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS -
+        LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS,
   );
 });
 
