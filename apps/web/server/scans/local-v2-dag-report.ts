@@ -3177,13 +3177,14 @@ function isNonPolicyEditorialSurface(row: ReturnType<typeof dedupePolicySurfaces
     row.surface.normalizedUrl,
     row.surface.url,
   ].filter(Boolean).join(" ");
-  const label = [
+  const directLabel = [
     row.surface.title,
     row.surface.linkText,
-    row.surface.surroundingTextExcerpt,
   ].filter(Boolean).join(" ");
+  const surroundingLabel = firstString(row.surface.surroundingTextExcerpt) ?? "";
   return /\/(?:customer-stories|customer-story|case-studies|case-study|success-stories|blog|news|insights)(?:\/|$)/i.test(url) ||
-    /\b(?:customer story|case study|success story)\b/i.test(label);
+    /\b(?:customer story|case study|success story)\b/i.test(directLabel) ||
+    (!directLabel && /\b(?:customer story|case study|success story)\b/i.test(surroundingLabel));
 }
 
 function isCanonicalPrivacyNoticeSurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {

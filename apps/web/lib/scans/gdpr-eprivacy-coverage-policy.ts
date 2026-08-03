@@ -4174,6 +4174,43 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     );
   }
 
+  if (
+    refusalPathConcern &&
+    consentControlAssessment?.surface.status === "observed_non_actionable"
+  ) {
+    return makeOutcome(
+      "reject_all_path_availability",
+      "Review signal",
+      "No observable refusal path was retained on the completed non-actionable consent surface before non-essential activity.",
+      uniqueStrings([
+        ...refusalPathConcern.evidenceBundle.runtimeArtifacts,
+        ...(controlInventoryConcern?.evidenceBundle.runtimeArtifacts ?? []),
+        "Evidence: complete first-layer consent-control inventory",
+        "Evidence: classified non-essential pre-consent activity"
+      ]).slice(0, 12),
+      {
+        retainedEvidence: {
+          consentControlInventoryConcern: controlInventoryConcern
+            ? {
+                canonicalConcernKey: controlInventoryConcern.canonicalConcernKey,
+                originKey: controlInventoryConcern.originKey
+              }
+            : undefined,
+          consentRefusalPathConcern: {
+            canonicalConcernKey: refusalPathConcern.canonicalConcernKey,
+            originKey: refusalPathConcern.originKey,
+            regulatoryChecklistEligibility: refusalPathConcern.regulatoryChecklistEligibility
+          },
+          consentSurfaceObserved: true,
+          consentSurfaceStatus: consentControlAssessment.surface.status,
+          preconsentCookieOrTrackingActivityObserved: true,
+          rejectControlObserved: false,
+          scoreAttribution: "reject_all_path_availability"
+        }
+      }
+    );
+  }
+
   if (operationalSurfaceConcern) {
     return makeOutcome(
       "reject_all_path_availability",

@@ -6503,7 +6503,10 @@ function buildConsentUiObservationFromEvidence(input: {
       ...controlBasis,
     ] : [...fallbackBasis, "insufficient_banner_keywords"],
     textExcerpt: text.slice(0, 2_000),
-    layerInspected: controls.length > 0 ? "first_layer" : "unknown",
+    // This probe inventories first-layer consent controls. A completed empty
+    // inventory is still a first-layer observation; `unknown` is reserved for
+    // timed-out or failed capture where absence cannot be established.
+    layerInspected: incomplete ? "unknown" : "first_layer",
     visibleChoiceLabels,
     defaultToggleStatesObserved: defaultToggleEvidence?.defaultToggleStatesObserved ?? null,
     nonEssentialDefaultsOff: defaultToggleEvidence?.nonEssentialDefaultsOff ?? null,
@@ -8502,6 +8505,7 @@ function shouldCaptureSupplementalFullPageScreenshot(input: {
     input.cmpRuntimeObservations.length > 0 ||
     input.consentObservation.likelyPresent ||
     input.consentObservation.layerInspected === "unknown" ||
+    input.consentObservation.basis.includes("settled_control_inventory_completed") ||
     input.consentObservation.controls.length > 0 ||
     hasTextBackedConsentSurface(input.consentObservation);
 }

@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { getProgressTransitionStages, PendingScanDetailView } from "./pending-scan-detail-view";
+import {
+  getProgressTransitionSchedule,
+  getProgressTransitionStages,
+  PendingScanDetailView,
+  shouldRapidlyCompleteProgress,
+  TERMINAL_NAVIGATION_DELAY_MS
+} from "./pending-scan-detail-view";
 
 const baseProps = {
   createdAt: "2026-07-29T23:00:00.000Z",
@@ -17,6 +23,23 @@ test("canonical milestone jumps retain review and report as paced catch-up stage
   assert.deepEqual(getProgressTransitionStages("scan", "complete"), ["review", "report", "complete"]);
   assert.deepEqual(getProgressTransitionStages("review", "complete"), ["report", "complete"]);
   assert.deepEqual(getProgressTransitionStages("report", "report"), []);
+});
+
+test("catch-up pacing holds the opening and finishing milestones long enough to read", () => {
+  assert.deepEqual(getProgressTransitionSchedule("prepare", "scan"), [
+    { delayMs: 1_500, stage: "scan" }
+  ]);
+  assert.deepEqual(getProgressTransitionSchedule("scan", "complete"), [
+    { delayMs: 1_000, stage: "review" },
+    { delayMs: 3_000, stage: "report" },
+    { delayMs: 5_500, stage: "complete" }
+  ]);
+});
+
+test("authoritative report readiness rapidly completes the bar before navigation", () => {
+  assert.equal(TERMINAL_NAVIGATION_DELAY_MS, 750);
+  assert.equal(shouldRapidlyCompleteProgress({ reportReady: true, stage: "complete", status: "completed" }), true);
+  assert.equal(shouldRapidlyCompleteProgress({ reportReady: false, stage: "report", status: "completed" }), false);
 });
 
 test("active scans retain the four-step progress view", () => {

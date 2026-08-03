@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 
-export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v15";
+export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v16";
 export const REPORT_PROJECTION_READY_WARNING_MS = 15_000;
 export const MAX_SCAN_REPORT_PROJECTION_BYTES = 6 * 1024 * 1024;
 
@@ -57,6 +57,39 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
+const RUNTIME_ARTIFACT_CANONICAL_ALIASES = [
+  ["hybrid_runtime_evidence", "hybridRuntimeEvidence"],
+  ["cookie_write_observations", "cookieWriteObservations"],
+  ["policy_disclosure_summary", "policyDisclosureSummary"],
+  ["request_purpose_classification_confidence", "requestPurposeClassificationConfidence"]
+] as const;
+
+function stripReportProjectionFields(record: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(record).filter(([key]) => !key.startsWith("report_projection_"))
+  );
+}
+
+function equivalentForPersistence(left: unknown, right: unknown) {
+  return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
+}
+
+function canonicalizeRuntimeArtifactAliases(runtimeArtifacts: Record<string, unknown>) {
+  const canonical = { ...runtimeArtifacts };
+  for (const [canonicalKey, aliasKey] of RUNTIME_ARTIFACT_CANONICAL_ALIASES) {
+    if (!(aliasKey in canonical)) continue;
+    if (!(canonicalKey in canonical)) {
+      canonical[canonicalKey] = canonical[aliasKey];
+      delete canonical[aliasKey];
+      continue;
+    }
+    if (equivalentForPersistence(canonical[canonicalKey], canonical[aliasKey])) {
+      delete canonical[aliasKey];
+    }
+  }
+  return canonical;
+}
+
 function normalizeProjectionJson(value: unknown) {
   const transported = JSON.stringify(value);
   if (transported === undefined) {
@@ -71,14 +104,18 @@ function serializeProjection(value: unknown) {
 
 export function buildPersistedScanReportProjection(scanRecord: ScanDetailResponse) {
   const snapshot = isRecord(scanRecord.snapshot)
-    ? Object.fromEntries(
-        Object.entries(scanRecord.snapshot).filter(([key]) =>
-          !key.startsWith("report_projection_")
-        )
-      )
+    ? stripReportProjectionFields(scanRecord.snapshot)
+    : null;
+  const previousSnapshot = isRecord(scanRecord.previousSnapshot)
+    ? stripReportProjectionFields(scanRecord.previousSnapshot)
+    : null;
+  const runtimeArtifacts = isRecord(scanRecord.runtimeArtifacts)
+    ? canonicalizeRuntimeArtifactAliases(scanRecord.runtimeArtifacts)
     : null;
   const payload = {
     ...scanRecord,
+    previousSnapshot,
+    runtimeArtifacts,
     snapshot
   } satisfies ScanDetailResponse;
   const normalizedPayload = normalizeProjectionJson(payload) as ScanDetailResponse;

@@ -3879,6 +3879,51 @@ test("summarizePolicySurfaces accepts GDPR Transparency candidates by default", 
   });
 });
 
+test("canonical privacy policy is not discarded by neighboring editorial footer text", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const legalBasisText =
+    "The legal basis for processing your personal data includes consent, contract, and legitimate interests.";
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "footer-privacy-policy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy-policy/",
+      normalizedUrl: "https://example.test/privacy-policy/",
+      confidence: 0.95,
+      status: "fetched",
+      documentEvaluationState: "usable",
+      documentRole: "policy_document",
+      linkText: "Privacy Policy",
+      title: "Privacy Policy",
+      surroundingTextExcerpt:
+        "Advertise Case Study: B2B SaaS Banner Ads Company Subscribe About Contact Careers Privacy Policy",
+      textExcerpt: `Privacy Policy. ${legalBasisText}`,
+      observedTopics: ["legal_basis"],
+      gdprTransparencyTopicCandidates: [
+        {
+          topic: "legal_basis",
+          status: "diagnostic_only",
+          evidenceText: legalBasisText,
+          confidence: 0.9,
+          classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+          matchedLocale: "en",
+          matchedTerm: "legal basis",
+          matchStrength: "equivalent",
+          classifierReasonCodes: ["matched_legal_basis", "match_strength_equivalent"],
+          productionCredit: false
+        }
+      ]
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.deepEqual(summary.privacyPolicyUrls, ["https://example.test/privacy-policy"]);
+  assert.deepEqual(summary.article13DisclosureTypesObserved, ["legal_basis"]);
+  assert.equal(summary.gdprTransparencyProductionEvidenceDiagnostics.acceptedCandidateCount, 1);
+});
+
 test("summarizePolicySurfaces supplements Article 13 signals only from opt-in accepted GDPR Transparency candidates", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const acceptedSpanish = "La base jurídica del tratamiento de datos personales incluye el consentimiento, contrato e intereses legítimos.";

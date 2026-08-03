@@ -209,11 +209,15 @@ export function deriveMaterializedConsentControlAssessment(input: {
       observation.basis.some((basis) =>
         /(?:^|:)(?:rapid|first_layer|accessibility_tree|dom_inventory|viewport)/i.test(basis)
       );
+    const completedEmptyFirstLayerInventory =
+      observation.controls.length === 0 &&
+      (observation.basis ?? []).includes("settled_control_inventory_completed") &&
+      timedOutChannels.length === 0 &&
+      failedChannels.length === 0;
     return observation.captureStatus === "observed" &&
       observation.likelyPresent === true &&
-      observation.layerInspected === "first_layer" &&
+      (observation.layerInspected === "first_layer" || completedEmptyFirstLayerInventory) &&
       (completedTypedChannel || legacyTypedChannelComplete) &&
-      observation.controls.length > 0 &&
       observation.controls.every((control) =>
         control.visible === true &&
         (
@@ -244,11 +248,24 @@ export function deriveMaterializedConsentControlAssessment(input: {
       (retainedDocumentSnapshots.length === 1 ? retainedDocumentSnapshots[0]?.documentId : null) ??
       singleRetainedVisualDocumentId ??
       null;
+    const completedEmptyFirstLayerInventory =
+      observation.captureStatus === "observed" &&
+      observation.likelyPresent === true &&
+      observation.controls.length === 0 &&
+      (observation.basis ?? []).includes("settled_control_inventory_completed") &&
+      (observation.captureDiagnostics?.completedChannels ?? []).some((channel) =>
+        channel === "dom_inventory" || channel === "accessibility_tree"
+      ) &&
+      (observation.captureDiagnostics?.timedOutChannels.length ?? 0) === 0 &&
+      (observation.captureDiagnostics?.failedChannels.length ?? 0) === 0;
+    const retainedLayer = observation.layerInspected === "first_layer" || completedEmptyFirstLayerInventory
+      ? "first_layer" as const
+      : observation.layerInspected;
     return {
       observationId: observation.observationId,
       observedAtMs: observationTimestamp(observation),
       likelyPresent: observation.likelyPresent,
-      layerInspected: observation.layerInspected,
+      layerInspected: retainedLayer,
       documentId: observationDocumentId,
       captureStatus: observation.captureStatus,
       completedChannels: observation.captureDiagnostics?.completedChannels,
@@ -259,7 +276,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       evidenceRefs: (observation.evidenceRefs ?? []).map((reference) => reference.refId),
       controls: (observation.controls ?? []).flatMap((control) => {
         const evidenceId = control.artifactRef ?? `${observation.observationId}:${control.label}`;
-        const layer = control.layer ?? observation.layerInspected;
+        const layer = control.layer ?? retainedLayer;
         const actionType = retainedActionType(control.actionType, control.classifierReasonCodes);
         const controlVariant = retainedControlVariant(control.classifierReasonCodes);
         const candidate: ConsentControlAssessmentCandidate = {

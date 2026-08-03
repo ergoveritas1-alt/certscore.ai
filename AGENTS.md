@@ -64,6 +64,16 @@ Missing, malformed, stale, or unverifiable evidence must fail closed to an unkno
 
 If a downstream result is incorrect, trace the first broken stage in this sequence and fix it there. Do not add surface-specific fallbacks.
 
+### Finding-domain classification
+
+Classify changes by the finding type they produce:
+
+- **Consent:** CMP or consent mechanism, Accept/Reject/Options (A/R/O), refusal or opt-out path, consent state, or control behavior.
+- **Non-consent:** cookies/storage, trackers/vendors, fingerprinting, session replay, GDPR Transparency, Transport Security, policy or policy/runtime comparison, iframe, social-media, or third-party embeds.
+- **Mixed:** pre-consent cookies or trackers. Keep consent and runtime evidence separate, then relate them through normalized concerns and concern policy.
+
+If a finding concerns the visitor's ability to choose or refuse, use the consent flow. Otherwise use the non-consent flow. Downstream surfaces must consume the resulting canonical projection or unified finding/checklist only.
+
 Changes to this flow require focused regression coverage at the affected boundaries:
 
 - WS01 observation -> retained evidence contract

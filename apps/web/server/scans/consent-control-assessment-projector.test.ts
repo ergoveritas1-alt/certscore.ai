@@ -159,6 +159,46 @@ test("completed typed DOM controls survive an independent accessibility timeout"
   assert.equal(assessment.controls.options.state, "observed");
 });
 
+test("completed empty typed inventory retains first-layer A/R/O absence", () => {
+  const url = "https://non-actionable.example/";
+  const source = bundle([], { url });
+  source.consentUiObservations[0]!.layerInspected = "unknown";
+  source.consentUiObservations[0]!.basis = ["settled_control_inventory_completed"];
+  source.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory", "accessibility_tree"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: {
+      actionableControlObserved: false,
+      consentSurfaceObserved: true,
+      coverageStatus: "limited",
+      evidenceChannels: [
+        { channel: "page_script_inventory", status: "observed" },
+        { channel: "accessibility_tree", status: "observed" },
+      ],
+      inspectionCompleted: false,
+      limitationKeys: ["cmp_runtime_without_actionable_surface"],
+      observedAtMs: 6_500,
+      outcome: "non_actionable_surface_observed",
+    },
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.coverage.status, "complete");
+  assert.equal(assessment.surface.status, "observed_non_actionable");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+});
+
 test("complete dismiss-only inventory projects actionable surface with A/R/O not observed", () => {
   const url = "https://dismiss-only.example/";
   const assessment = deriveMaterializedConsentControlAssessment({

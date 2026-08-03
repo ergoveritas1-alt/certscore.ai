@@ -3031,7 +3031,8 @@ function buildConsentNoSurfaceConcerns(
     assessment.coverage.status !== "complete" ||
     assessment.document.identityStatus !== "matched" ||
     assessment.scan.noGo !== false ||
-    assessment.surface.status !== "not_observed"
+    assessment.surface.status !== "not_observed" &&
+    assessment.surface.status !== "observed_non_actionable"
   ) {
     return [];
   }
@@ -3074,7 +3075,7 @@ function buildConsentNoSurfaceConcerns(
     consentSurfaceStatus: assessment.surface.status,
     runtimeEvidenceArtifacts
   };
-  const concerns = [
+  const concerns = assessment.surface.status === "not_observed" ? [
     buildConcernFromSharedInput({
       categoryId: "privacy",
       description:
@@ -3092,7 +3093,7 @@ function buildConsentNoSurfaceConcerns(
       sourceType: "signal",
       title: "Operational consent surface not observed"
     })
-  ];
+  ] : [];
 
   const storageAssessment = buildPreConsentStorageAssessment({ runtimeArtifacts });
   const consentTimeline =
@@ -3114,7 +3115,9 @@ function buildConsentNoSurfaceConcerns(
     concerns.push(buildConcernFromSharedInput({
       categoryId: "privacy",
       description:
-        "Classified non-essential pre-consent activity was retained, while the complete consent-control assessment retained no observable refusal path.",
+        assessment.surface.status === "observed_non_actionable"
+          ? "Classified non-essential pre-consent activity was retained, while the complete first-layer inventory retained a non-actionable consent surface and no observable refusal path."
+          : "Classified non-essential pre-consent activity was retained, while the complete consent-control assessment retained no observable refusal path.",
       domainContext,
       evidence: uniqueStrings([
         ...runtimeEvidenceArtifacts,
@@ -3255,7 +3258,8 @@ function buildConsentControlInventoryConcerns(
     !assessment ||
     assessment.document.identityStatus !== "matched" ||
     assessment.scan.noGo !== false ||
-    assessment.surface.status !== "observed_actionable"
+    assessment.surface.status !== "observed_actionable" &&
+    assessment.surface.status !== "observed_non_actionable"
   ) {
     return [];
   }
