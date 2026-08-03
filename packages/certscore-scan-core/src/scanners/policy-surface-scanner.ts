@@ -1845,8 +1845,8 @@ async function processPolicyCandidate({
     ? await recordPolicyTiming(
       timingBreakdown,
       `policy prefetched text resolution ${candidateIndex + 1}`,
-      `Resolve deterministic text from the already-fetched ${candidate.deterministicSurfaceType} document without starting follow-up network work.`,
-      async () => bestPolicyDocumentText(fetched.text, htmlToVisibleText(fetched.text)),
+      `Resolve retained visible text once from the already-fetched ${candidate.deterministicSurfaceType} document without starting follow-up network work.`,
+      async () => resolvePrefetchedPolicyVisibleText(fetched.text),
     )
     : await recordPolicyTiming(
       timingBreakdown,
@@ -6758,6 +6758,16 @@ function bestPolicyDocumentText(html: string, fallbackVisibleText: string): stri
   return candidates.reduce((best, candidate) =>
     shouldAdoptPolicyDocumentText(candidate, best, { allowTopicDominant: true }) ? candidate : best,
   candidates[0] ?? fallbackVisibleText);
+}
+
+/**
+ * Late-budget candidates have already completed their network fetch. Keep their
+ * full visible policy text, but avoid the normal resolver's repeated whole-HTML
+ * candidate extraction. Those repeated passes can block the event loop long
+ * enough to prevent the canonical evidence bundle from being retained.
+ */
+export function resolvePrefetchedPolicyVisibleText(html: string): string {
+  return stripConsentSurfacePreambleFromPolicyText(htmlToVisibleText(html));
 }
 
 export function stripConsentSurfacePreambleFromPolicyText(value: string): string {

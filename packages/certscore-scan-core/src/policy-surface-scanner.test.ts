@@ -30,6 +30,7 @@ import {
   policySurfaceObservationsFromRetainedRenderedLinks,
   retainedArticle13SectionEvidenceFromSections,
   recoverPolicyDocumentsFromRetainedRenderedLinks,
+  resolvePrefetchedPolicyVisibleText,
   resolvePolicyVisibleText,
   settlePolicyCandidateProcessingBeforeDeadline,
   shouldRetryCanonicalPolicyHost,
@@ -68,6 +69,34 @@ test("removes consent-banner preambles before policy topic extraction", () => {
     stripConsentSurfacePreambleFromPolicyText("Our Privacy Policy explains how we process personal data and your rights."),
     "Our Privacy Policy explains how we process personal data and your rights."
   );
+});
+
+test("late prefetched policy resolution preserves the full visible policy without script noise", () => {
+  const repeatedNoise = "window.__policyChunk = '<div>not retained script noise</div>';".repeat(6_000);
+  const visibleNoise = "Navigation item ".repeat(8_000);
+  const html = `<!doctype html><html><head><script>${repeatedNoise}</script></head><body>
+    <nav>${visibleNoise}</nav>
+    <main>
+      <h1>Privacy Policy</h1>
+      <p>Example Company is the data controller. Contact privacy@example.test.</p>
+      <p>We process personal data to provide our services based on contract and legitimate interests.</p>
+      <p>Our service providers receive information where necessary.</p>
+      <p>We retain account records for seven years and then delete them.</p>
+      <p>You have the right to access, rectify, erase, restrict, object, and port your personal data.</p>
+      <p>International transfers outside the EEA use standard contractual clauses.</p>
+      <p>You may lodge a complaint with your supervisory authority.</p>
+      <p data-marker="late-policy-marker">This final policy paragraph must remain available to retained evidence.</p>
+    </main>
+  </body></html>`;
+
+  const resolved = resolvePrefetchedPolicyVisibleText(html);
+
+  assert.match(resolved, /Example Company is the data controller/);
+  assert.match(resolved, /retain account records for seven years/);
+  assert.match(resolved, /International transfers outside the EEA/);
+  assert.match(resolved, /final policy paragraph must remain available/);
+  assert.doesNotMatch(resolved, /not retained script noise/);
+  assert.ok(resolved.length > visibleNoise.length, "the late path must not truncate retained visible text");
 });
 
 test("localized consent settings shells are not accepted as substantive privacy notices", async () => {
