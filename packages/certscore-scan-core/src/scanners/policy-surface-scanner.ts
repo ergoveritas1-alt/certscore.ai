@@ -1086,6 +1086,10 @@ export async function recoverPolicyDocumentsFromRetainedRenderedLinks(input: {
   }
 
   const moduleStartedAtMs = Date.now();
+  const parentDeadlineRemainingMs = deadlineRemainingMs(input.scannerInput.absoluteDeadlineAtMs);
+  if (parentDeadlineRemainingMs < 1_500) {
+    return { artifactRefs: [], observations: [], timingBreakdown: [] };
+  }
   const timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
   const diagnostics: PolicyFetchDiagnosticsCollector = {
     failedFetches: [],
@@ -1098,8 +1102,11 @@ export async function recoverPolicyDocumentsFromRetainedRenderedLinks(input: {
   const browserRuntime = createPolicyBrowserRuntime(input.scannerInput.browser);
   const recoveryInput: PolicySurfaceScannerInput = {
     ...input.scannerInput,
-    absoluteDeadlineAtMs: moduleStartedAtMs + 12_000,
-    internalBudgetMs: 12_000,
+    absoluteDeadlineAtMs: Math.min(
+      moduleStartedAtMs + 12_000,
+      input.scannerInput.absoluteDeadlineAtMs ?? Number.POSITIVE_INFINITY,
+    ),
+    internalBudgetMs: Math.min(12_000, parentDeadlineRemainingMs),
     renderedRecoverySessionPrimerUrl: input.links.find((link) =>
       isPolicySessionPrimerCompatible(input.scannerInput.normalizedUrl, link.pageUrl)
     )?.pageUrl ?? input.scannerInput.normalizedUrl,
@@ -1459,21 +1466,25 @@ async function fetchPolicyCandidateGroup(input: {
   const policyResults = await recordPolicyTiming(
     input.timingBreakdown,
     `${input.labelPrefix} fetch group`,
-    `Fetch and project up to ${toFetch.length} ranked policy candidates with concurrency ${POLICY_FETCH_CONCURRENCY}. Child fetch/topic timings may overlap and do not sum to wall time.`,
-    () => mapWithConcurrency(
-      toFetch.map((candidate, candidateIndex) => ({ candidate, candidateIndex })),
-      POLICY_FETCH_CONCURRENCY,
-      ({ candidate, candidateIndex }) => processPolicyCandidateBeforeDeadline({
-        input: input.input,
-        fetchCaches: input.fetchCaches,
-        timingBreakdown: input.timingBreakdown,
-        moduleStartedAtMs: input.moduleStartedAtMs,
-        candidate,
-        candidateIndex,
-        policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
-        prefetchedOnly: input.prefetchedOnly,
-      }),
-    ),
+    input.prefetchedOnly
+      ? "Project warmed policy candidates sequentially until one fetched document is retained; this late rescue starts no new direct network work."
+      : `Fetch and project up to ${toFetch.length} ranked policy candidates with concurrency ${POLICY_FETCH_CONCURRENCY}. Child fetch/topic timings may overlap and do not sum to wall time.`,
+    () => input.prefetchedOnly
+      ? processLatePrefetchedPolicyCandidates({ ...input, toFetch })
+      : mapWithConcurrency(
+          toFetch.map((candidate, candidateIndex) => ({ candidate, candidateIndex })),
+          POLICY_FETCH_CONCURRENCY,
+          ({ candidate, candidateIndex }) => processPolicyCandidateBeforeDeadline({
+            input: input.input,
+            fetchCaches: input.fetchCaches,
+            timingBreakdown: input.timingBreakdown,
+            moduleStartedAtMs: input.moduleStartedAtMs,
+            candidate,
+            candidateIndex,
+            policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
+            prefetchedOnly: input.prefetchedOnly,
+          }),
+        ),
   );
   return {
     artifactRefs: policyResults.flatMap((result) => result.artifactRefs),
@@ -1483,6 +1494,40 @@ async function fetchPolicyCandidateGroup(input: {
     ],
     secondaryCandidates: policyResults.flatMap((result) => result.secondaryCandidates),
   };
+}
+
+async function processLatePrefetchedPolicyCandidates(input: {
+  input: PolicySurfaceScannerInput;
+  fetchCaches: PolicyDocumentFetchCaches;
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
+  moduleStartedAtMs: number;
+  policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
+  toFetch: PolicySurfaceCandidate[];
+}): Promise<ProcessPolicyCandidateResult[]> {
+  const results: ProcessPolicyCandidateResult[] = [];
+  for (const [candidateIndex, candidate] of input.toFetch.entries()) {
+    const result = await processPolicyCandidateBeforeDeadline({
+      input: input.input,
+      fetchCaches: input.fetchCaches,
+      timingBreakdown: input.timingBreakdown,
+      moduleStartedAtMs: input.moduleStartedAtMs,
+      candidate,
+      candidateIndex,
+      policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
+      prefetchedOnly: true,
+    });
+    results.push(result);
+    if (
+      result.observation.status === "fetched" &&
+      result.observation.documentEvaluationState === "usable"
+    ) {
+      break;
+    }
+    if (deadlineRemainingMs(input.input.absoluteDeadlineAtMs) < 1_000) {
+      break;
+    }
+  }
+  return results;
 }
 
 function prioritizePolicyCandidateEvaluation(

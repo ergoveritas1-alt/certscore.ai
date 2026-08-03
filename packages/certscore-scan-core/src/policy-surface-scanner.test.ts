@@ -320,6 +320,35 @@ test("browser-recovered privacy links receive a bounded canonical document fetch
   }
 });
 
+test("browser policy recovery does not start after the parent scanner deadline reserve", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-expired-recovery-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const links = [{
+      domLocation: "footer" as const,
+      href: "https://example.test/privacy",
+      linkText: "Privacy Notice",
+      pageUrl: "https://example.test/",
+    }];
+    const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: "https://example.test/",
+        normalizedUrl: "https://example.test/",
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 6_000,
+        absoluteDeadlineAtMs: Date.now() + 1_000,
+        artifactWriter,
+      },
+      links,
+      existingObservations: policySurfaceObservationsFromRetainedRenderedLinks({ links }),
+    });
+
+    assert.deepEqual(recovered, { artifactRefs: [], observations: [], timingBreakdown: [] });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("browser recovery is not suppressed by a retained service-provider privacy policy", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-provider-recovery-"));
@@ -1366,6 +1395,13 @@ test("policySurfaceScanner fast mode stops stalled rendered discovery at the sof
 
     assert.equal(privacy?.status, "fetched");
     assert.ok(Date.now() - startedAtMs < 4_000);
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) =>
+        timing.label === "policy fetch group" &&
+        timing.detail.includes("sequentially until one fetched document is retained")
+      ),
+      true,
+    );
   }, {
     browser: stalledBrowser,
     discoveryMode: "fast",
