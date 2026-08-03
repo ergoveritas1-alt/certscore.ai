@@ -324,6 +324,93 @@ test("browser recovery primes the observed same-origin session and prioritizes t
   }
 });
 
+test("browser recovery clicks an observed policy link when direct and browser navigation are forbidden", async () => {
+  const policyText = Array.from({ length: 12 }, () =>
+    "This Privacy Policy explains the controller, contact details, processing purposes, legal bases, recipients, retention criteria, international transfers, and access, deletion, correction, portability, restriction, and objection rights."
+  ).join(" ");
+  const privacyRequests: Array<{ referer: string; secFetchUser: string }> = [];
+  const server = createServer((request, response) => {
+    if (request.url === "/") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html><body><footer><a id='privacy-link' href='/about/privacy-policy.cfm'>Privacy Policy</a></footer></body></html>");
+      return;
+    }
+    if (request.url === "/about/privacy-policy.cfm") {
+      const referer = request.headers.referer ?? "";
+      const secFetchUser = typeof request.headers["sec-fetch-user"] === "string"
+        ? request.headers["sec-fetch-user"]
+        : "";
+      privacyRequests.push({ referer, secFetchUser });
+      if (referer.endsWith("/")) {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end(`<!doctype html><html><body><main><h1>Privacy Policy</h1><p>${policyText}</p></main></body></html>`);
+        return;
+      }
+      response.writeHead(403, { "content-type": "text/html; charset=utf-8" });
+      response.end("Access denied");
+      return;
+    }
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("Not found");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const homepageUrl = `http://127.0.0.1:${address.port}/`;
+  const privacyUrl = `${homepageUrl}about/privacy-policy.cfm`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-click-recovery-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const links = [{
+      domLocation: "footer" as const,
+      href: privacyUrl,
+      linkText: "Privacy Policy",
+      pageUrl: homepageUrl,
+      selector: "#privacy-link",
+    }];
+    const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: homepageUrl,
+        normalizedUrl: homepageUrl,
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 6_000,
+        artifactWriter,
+        nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      },
+      links,
+      existingObservations: policySurfaceObservationsFromRetainedRenderedLinks({ links }),
+    });
+    const privacy = recovered.observations.find((observation) =>
+      observation.surfaceType === "privacy_policy"
+    );
+    const diagnosticsRef = recovered.artifactRefs.find((artifact) =>
+      artifact.artifactId === "policy_rendered_link_recovery_diagnostics"
+    );
+    assert.ok(diagnosticsRef?.path);
+    const diagnostics = JSON.parse(await readFile(diagnosticsRef.path, "utf8")) as {
+      successfulFetches: Array<{
+        attempts: Array<{ navigationMethod?: string }>;
+      }>;
+    };
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.documentEvaluationState, "usable");
+    assert.equal(privacyRequests.some((request) => request.referer === ""), true);
+    assert.equal(privacyRequests.some((request) => request.referer === homepageUrl), true);
+    assert.equal(
+      diagnostics.successfulFetches.some((fetch) =>
+        fetch.attempts.some((attempt) => attempt.navigationMethod === "observed_link_click")
+      ),
+      true,
+    );
+  } finally {
+    server.close();
+    await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("browser recovery accepts a secure www redirect as the same policy session site", () => {
   assert.equal(
     isPolicySessionPrimerCompatible(

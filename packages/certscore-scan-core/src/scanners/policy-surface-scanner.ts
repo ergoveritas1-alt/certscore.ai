@@ -118,6 +118,11 @@ export interface PolicySurfaceScannerInput {
    * context and is never projected as policy evidence.
    */
   renderedRecoverySessionPrimerUrl?: string;
+  /**
+   * Ephemeral retained-link context used only to reproduce the observed
+   * same-session navigation path. It is not policy evidence or projected data.
+   */
+  renderedRecoveryLinkContexts?: RetainedRenderedPolicyLink[];
   signal?: AbortSignal;
 }
 
@@ -171,6 +176,7 @@ function policySurfaceCandidatesFromRetainedRenderedLinks(
       normalizedUrl: link.href,
       linkText: link.linkText || link.href,
       selector: link.selector,
+      renderedSourcePageUrl: link.pageUrl,
       domLocation: link.domLocation,
       sameOrigin: sameOrigin(link.pageUrl, link.href),
       fetchable: true,
@@ -324,6 +330,7 @@ interface PolicySurfaceCandidate {
   normalizedUrl: string;
   linkText: string;
   selector?: string;
+  renderedSourcePageUrl?: string;
   surroundingTextExcerpt?: string;
   domLocation: "footer" | "header" | "nav" | "body";
   sameOrigin: boolean;
@@ -394,6 +401,7 @@ type PolicyFetchAttemptOutcome =
 
 interface PolicyFetchAttemptDiagnostic {
   mode: "direct" | "rendered";
+  navigationMethod?: "direct_navigation" | "observed_link_click";
   requestedUrl: string;
   finalUrl?: string;
   outcome: PolicyFetchAttemptOutcome;
@@ -1068,6 +1076,7 @@ export async function recoverPolicyDocumentsFromRetainedRenderedLinks(input: {
     renderedRecoverySessionPrimerUrl: input.links.find((link) =>
       isPolicySessionPrimerCompatible(input.scannerInput.normalizedUrl, link.pageUrl)
     )?.pageUrl ?? input.scannerInput.normalizedUrl,
+    renderedRecoveryLinkContexts: input.links,
   };
   const fetchCaches: PolicyDocumentFetchCaches = {
     browserRuntime,
@@ -1744,6 +1753,7 @@ async function processPolicyCandidate({
       `Fetch ${candidate.deterministicSurfaceType} candidate document through bounded browser-rendered navigation after direct fetch failed.`,
       () => fetchRenderedPolicyDocumentSingleFlight(fetchCaches, {
         input,
+        linkContext: renderedPolicyLinkContext(input, candidate),
         primeSession: Boolean(input.renderedRecoverySessionPrimerUrl),
         url: candidate.normalizedUrl,
         timeoutMs: protectedObservedFetch
@@ -1858,6 +1868,7 @@ async function processPolicyCandidate({
       `Fetch ${effectiveCandidate.deterministicSurfaceType} candidate document through bounded browser-rendered navigation after direct fetch retained only low-quality text.`,
       () => fetchRenderedPolicyDocumentSingleFlight(fetchCaches, {
         input,
+        linkContext: renderedPolicyLinkContext(input, effectiveCandidate),
         url: effectiveCandidate.normalizedUrl,
         timeoutMs: protectedObservedFetch
           ? Math.min(
@@ -2324,9 +2335,39 @@ function shouldTryRenderedPolicyDocumentTextFallback(input: {
     !textQuality.usable;
 }
 
+function renderedPolicyLinkContext(
+  input: PolicySurfaceScannerInput,
+  candidate: PolicySurfaceCandidate,
+): {
+  href: string;
+  linkText: string;
+  pageUrl: string;
+  selector?: string;
+} | undefined {
+  const retainedLink = input.renderedRecoveryLinkContexts?.find((link) =>
+    canonicalPolicyUrlIdentity(link.href) === canonicalPolicyUrlIdentity(candidate.normalizedUrl)
+  );
+  const pageUrl = candidate.renderedSourcePageUrl ?? retainedLink?.pageUrl;
+  if (!pageUrl || !isPolicySessionPrimerCompatible(pageUrl, candidate.normalizedUrl)) {
+    return undefined;
+  }
+  return {
+    href: retainedLink?.href ?? candidate.url,
+    linkText: retainedLink?.linkText ?? candidate.linkText,
+    pageUrl,
+    selector: retainedLink?.selector ?? candidate.selector,
+  };
+}
+
 async function fetchRenderedPolicyDocumentText(input: {
   browserRuntime: PolicyBrowserRuntime;
   input: PolicySurfaceScannerInput;
+  linkContext?: {
+    href: string;
+    linkText: string;
+    pageUrl: string;
+    selector?: string;
+  };
   primeSession?: boolean;
   url: string;
   timeoutMs: number;
@@ -2339,9 +2380,9 @@ async function fetchRenderedPolicyDocumentText(input: {
     releaseAbortContext = bindAbortSignalToBrowserContext(context, input.input.signal);
     const page = await context.newPage();
     const navigationDeadlineAtMs = Date.now() + Math.max(1_000, input.timeoutMs);
-    const sessionPrimerUrl = input.primeSession
-      ? input.input.renderedRecoverySessionPrimerUrl
-      : undefined;
+    const sessionPrimerUrl = input.linkContext?.pageUrl ?? (
+      input.primeSession ? input.input.renderedRecoverySessionPrimerUrl : undefined
+    );
     if (
       sessionPrimerUrl &&
       isPolicySessionPrimerCompatible(sessionPrimerUrl, input.url) &&
@@ -2360,10 +2401,24 @@ async function fetchRenderedPolicyDocumentText(input: {
       }).catch(() => undefined);
     }
     const targetNavigationTimeoutMs = Math.max(1_000, navigationDeadlineAtMs - Date.now());
-    const response = await page.goto(input.url, {
-      waitUntil: "domcontentloaded",
-      timeout: targetNavigationTimeoutMs,
-    });
+    const clickNavigation = input.linkContext &&
+      sessionPrimerUrl &&
+      isPolicySessionPrimerCompatible(input.linkContext.pageUrl, input.url)
+      ? await clickObservedPolicyLink(page, {
+          ...input.linkContext,
+          targetUrl: input.url,
+          timeoutMs: targetNavigationTimeoutMs,
+        })
+      : null;
+    const navigationMethod = clickNavigation?.clicked
+      ? "observed_link_click" as const
+      : "direct_navigation" as const;
+    const response = clickNavigation?.clicked
+      ? clickNavigation.response
+      : await page.goto(input.url, {
+          waitUntil: "domcontentloaded",
+          timeout: targetNavigationTimeoutMs,
+        });
     await page.waitForLoadState("networkidle", {
       timeout: Math.min(1_000, Math.max(500, input.timeoutMs)),
     }).catch(() => undefined);
@@ -2383,6 +2438,7 @@ async function fetchRenderedPolicyDocumentText(input: {
     const status = response?.status();
     const attemptBase = {
       mode: "rendered" as const,
+      navigationMethod,
       requestedUrl: input.url,
       finalUrl: page.url() || input.url,
       ...(status !== undefined ? { httpStatus: status } : {}),
@@ -2428,6 +2484,85 @@ async function fetchRenderedPolicyDocumentText(input: {
   } finally {
     releaseAbortContext?.();
     await context?.close().catch(() => undefined);
+  }
+}
+
+async function clickObservedPolicyLink(
+  page: Page,
+  input: {
+    href: string;
+    linkText: string;
+    selector?: string;
+    targetUrl: string;
+    timeoutMs: number;
+  },
+): Promise<{ clicked: boolean; response: Awaited<ReturnType<Page["waitForNavigation"]>> }> {
+  const marker = "data-certscore-policy-recovery-target";
+  const locator = await observedPolicyLinkLocator(page, input);
+  if (!locator) return { clicked: false, response: null };
+  const marked = await locator.evaluate((element, attributeName) => {
+    element.setAttribute(attributeName, "true");
+    if (element.tagName.toLowerCase() === "a") element.setAttribute("target", "_self");
+    return true;
+  }, marker).catch(() => false);
+  if (!marked) return { clicked: false, response: null };
+
+  const markedLocator = page.locator(`[${marker}="true"]`);
+  try {
+    const [response] = await Promise.all([
+      page.waitForNavigation({
+        waitUntil: "domcontentloaded",
+        timeout: Math.max(1_000, input.timeoutMs),
+      }).catch(() => null),
+      markedLocator.click({ timeout: Math.max(1_000, input.timeoutMs) }),
+    ]);
+    return { clicked: true, response };
+  } catch {
+    return {
+      clicked: canonicalPolicyUrlIdentity(page.url()) === canonicalPolicyUrlIdentity(input.targetUrl),
+      response: null,
+    };
+  }
+}
+
+async function observedPolicyLinkLocator(
+  page: Page,
+  input: { href: string; linkText: string; selector?: string; targetUrl: string },
+) {
+  const candidates = [];
+  if (input.selector) {
+    try {
+      const selectorCandidate = page.locator(input.selector);
+      if (await selectorCandidate.count() === 1) candidates.push(selectorCandidate);
+    } catch {
+      // Retained selectors are hints only. Invalid or stale selectors fall
+      // back to the exact retained accessible link label below.
+    }
+  }
+  const namedCandidate = page.getByRole("link", { name: input.linkText, exact: true });
+  if (await namedCandidate.count().catch(() => 0) === 1) candidates.push(namedCandidate);
+
+  const expectedIdentities = new Set([
+    policyClickUrlIdentity(input.href, page.url()),
+    policyClickUrlIdentity(input.targetUrl, page.url()),
+  ].filter(Boolean));
+  for (const candidate of candidates) {
+    const candidateHref = await candidate.getAttribute("href").catch(() => null) ??
+      await candidate.getAttribute("data-href").catch(() => null) ??
+      await candidate.getAttribute("data-url").catch(() => null);
+    if (candidateHref && expectedIdentities.has(policyClickUrlIdentity(candidateHref, page.url()))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function policyClickUrlIdentity(value: string, baseUrl: string): string {
+  try {
+    const url = new URL(value, baseUrl);
+    return `${url.origin}${url.pathname.replace(/\/+$/, "") || "/"}`;
+  } catch {
+    return "";
   }
 }
 
@@ -3216,6 +3351,7 @@ async function extractRenderedCandidates(
         normalizedUrl,
         linkText: candidate.text || normalizedUrl,
         selector: candidate.selector,
+        renderedSourcePageUrl: renderedBaseUrl,
         surroundingTextExcerpt,
         domLocation: candidate.domLocation,
         sameOrigin: sameOrigin(renderedBaseUrl, normalizedUrl),
@@ -5654,6 +5790,12 @@ function fetchRenderedPolicyDocumentSingleFlight(
   fetchCaches: PolicyDocumentFetchCaches,
   input: {
     input: PolicySurfaceScannerInput;
+    linkContext?: {
+      href: string;
+      linkText: string;
+      pageUrl: string;
+      selector?: string;
+    };
     primeSession?: boolean;
     url: string;
     timeoutMs: number;
@@ -5663,7 +5805,10 @@ function fetchRenderedPolicyDocumentSingleFlight(
   // the latter intentionally has a longer evidence wait and must never inherit
   // a shorter earlier attempt.
   const renderClass = input.timeoutMs >= 5_000 ? "quality" : "failure";
-  const key = `${policyDocumentFetchCacheKey(input.url)}|${renderClass}|${input.primeSession ? "primed" : "unprimed"}`;
+  const linkClass = input.linkContext
+    ? `click:${policyDocumentFetchCacheKey(input.linkContext.pageUrl)}:${input.linkContext.selector ?? input.linkContext.linkText}`
+    : "direct-navigation";
+  const key = `${policyDocumentFetchCacheKey(input.url)}|${renderClass}|${input.primeSession ? "primed" : "unprimed"}|${linkClass}`;
   const existing = fetchCaches.rendered.get(key);
   if (existing) {
     return existing;
