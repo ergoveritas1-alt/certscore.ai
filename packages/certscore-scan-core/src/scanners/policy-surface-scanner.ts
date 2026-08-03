@@ -1954,9 +1954,13 @@ async function processPolicyCandidate({
       }
     }
   }
-  const textQuality = assessPolicyTextQuality(visibleText);
+  const retainedVisibleText = visibleText;
+  const analysisVisibleText = boundedAfterSoftBudget
+    ? boundedPrefetchedPolicyAnalysisText(retainedVisibleText)
+    : retainedVisibleText;
+  const textQuality = assessPolicyTextQuality(analysisVisibleText);
   if (textQuality.reason === "low_quality_access_challenge") {
-    const excerpt = boundedExcerpt(visibleText, []);
+    const excerpt = boundedExcerpt(analysisVisibleText, []);
     return {
       observation: observationFromCandidate(effectiveCandidate, {
         status: "failed",
@@ -1974,7 +1978,7 @@ async function processPolicyCandidate({
   }
   const documentSubstance = assessPolicyDocumentSubstance({
     surfaceType: effectiveCandidate.deterministicSurfaceType,
-    text: visibleText,
+    text: analysisVisibleText,
     title,
   });
   if (!textQuality.usable || !documentSubstance.matchesExpectedSurface) {
@@ -1982,17 +1986,19 @@ async function processPolicyCandidate({
       input,
       indexCandidate: effectiveCandidate,
       indexTitle: title,
-      indexText: visibleText,
-      candidates: highValueSecondaryCandidatesFromPolicyPage(
-        effectiveCandidate.normalizedUrl,
-        uniqueStrings(secondaryCandidateHtmlInputs).join("\n"),
-        visibleText,
-      ),
+      indexText: analysisVisibleText,
+      candidates: boundedAfterSoftBudget
+        ? []
+        : highValueSecondaryCandidatesFromPolicyPage(
+            effectiveCandidate.normalizedUrl,
+            uniqueStrings(secondaryCandidateHtmlInputs).join("\n"),
+            analysisVisibleText,
+          ),
     });
     return {
       observation: observationFromCandidate(effectiveCandidate, {
         status: "failed",
-        documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection, visibleText),
+        documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection, analysisVisibleText),
         httpStatus: fetched.status,
         finalUrl: fetchedFinalUrl,
         redirectChain: policyFetchRedirectChain(fetched),
@@ -2001,7 +2007,7 @@ async function processPolicyCandidate({
             ? "consent_settings_shell"
             : "insufficient_policy_text",
         title,
-        textExcerpt: boundedExcerpt(visibleText, []),
+        textExcerpt: boundedExcerpt(analysisVisibleText, []),
         confidence: Math.max(0.35, Math.min(0.55, candidate.assisted?.confidence ?? candidate.deterministicScore)),
       }),
       artifactRefs: [],
@@ -2017,15 +2023,15 @@ async function processPolicyCandidate({
       `policy section extraction ${candidateIndex + 1}`,
       `Extract bounded retained sections from ${effectiveCandidate.deterministicSurfaceType}.`,
       async () => extractPolicySections({
-        html: fetchedHtml,
+        html: boundedAfterSoftBudget ? "" : fetchedHtml,
         sourceUrl: effectiveCandidate.normalizedUrl,
-        visibleText,
+        visibleText: analysisVisibleText,
       }),
     )
     : [];
   const policyCookieDisclosures = textQuality.usable
     ? extractPolicyCookieDisclosures({
-        html: fetchedHtml,
+        html: boundedAfterSoftBudget ? "" : fetchedHtml,
         retainedPolicySections: policySections,
         sourceUrl: effectiveCandidate.normalizedUrl,
       })
@@ -2035,12 +2041,12 @@ async function processPolicyCandidate({
     documentTitle: title,
     documentUrl: effectiveCandidate.normalizedUrl,
     targetUrl: input.normalizedUrl,
-    text: visibleText,
+    text: analysisVisibleText,
   });
   const contentCoverage = policyContentCoverage({
     extractedSections: policySections,
     retainedSections: retainedPolicySections,
-    sourceText: visibleText,
+    sourceText: analysisVisibleText,
   });
   const allowLegacyArticle13Extraction = fetched.documentFormat !== "pdf";
   const sectionEvidence = textQuality.usable && effectiveCandidate.deterministicSurfaceType === "privacy_policy"
@@ -2051,14 +2057,14 @@ async function processPolicyCandidate({
       timingBreakdown,
       `policy deterministic analysis ${candidateIndex + 1}`,
       `Classify bounded deterministic facts for ${effectiveCandidate.deterministicSurfaceType}.`,
-      async () => policyFactsForFetchedDocument(extractPolicyFacts(visibleText), sectionEvidence, {
+      async () => policyFactsForFetchedDocument(extractPolicyFacts(analysisVisibleText), sectionEvidence, {
         allowLegacyArticle13Extraction,
       }),
     )
     : emptyPolicyFacts();
   const finalGdprTransparencyTopicCandidates = effectiveCandidate.deterministicSurfaceType === "privacy_policy"
     ? mergeGdprTransparencyTopicCandidates(
-        gdprTransparencyTopicCandidatesFromText(visibleText),
+        gdprTransparencyTopicCandidatesFromText(analysisVisibleText),
         gdprTransparencyTopicCandidatesFromRetainedPolicySections(policySections),
       )
     : [];
@@ -2069,8 +2075,8 @@ async function processPolicyCandidate({
     deterministic.gdprTransparencyTopicCandidates = finalGdprTransparencyTopicCandidates;
     deterministic.confidence = Math.max(deterministic.confidence, 0.62);
   }
-  const excerpt = boundedExcerpt(visibleText, prioritizedExcerptKeywords(deterministic));
-  const nanoAnalysisExcerpt = textQuality.usable ? boundedPolicyAnalysisExcerpt(visibleText) : "";
+  const excerpt = boundedExcerpt(analysisVisibleText, prioritizedExcerptKeywords(deterministic));
+  const nanoAnalysisExcerpt = textQuality.usable ? boundedPolicyAnalysisExcerpt(analysisVisibleText) : "";
   const excerptId = `policy_excerpt_${stableHash(effectiveCandidate.normalizedUrl)}`;
   throwIfAborted(input.signal);
   if (processingProgress) {
@@ -2102,7 +2108,7 @@ async function processPolicyCandidate({
     () => writePolicySurfaceTextArtifact({
       artifactWriter: input.artifactWriter,
       candidate: effectiveCandidate,
-      visibleText,
+      visibleText: retainedVisibleText,
       scanStartedAtMs: input.scanStartedAtMs,
       policySurfaceTextArtifactBudget,
     }),
@@ -2130,20 +2136,22 @@ async function processPolicyCandidate({
     input,
     indexCandidate: effectiveCandidate,
     indexTitle: title,
-    indexText: visibleText,
-    candidates: highValueSecondaryCandidatesFromPolicyPage(
-      effectiveCandidate.normalizedUrl,
-      uniqueStrings(secondaryCandidateHtmlInputs.flatMap((html) => [
-        html,
-        decodeEmbeddedHtml(html),
-      ])).join("\n"),
-      visibleText,
-    ),
+    indexText: analysisVisibleText,
+    candidates: boundedAfterSoftBudget
+      ? []
+      : highValueSecondaryCandidatesFromPolicyPage(
+          effectiveCandidate.normalizedUrl,
+          uniqueStrings(secondaryCandidateHtmlInputs.flatMap((html) => [
+            html,
+            decodeEmbeddedHtml(html),
+          ])).join("\n"),
+          analysisVisibleText,
+        ),
   });
   return {
     observation: observationFromCandidate(effectiveCandidate, {
       status: "fetched",
-      documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection, visibleText),
+      documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection, analysisVisibleText),
       httpStatus: fetched.status,
       finalUrl: fetchedFinalUrl,
       redirectChain: policyFetchRedirectChain(fetched),
@@ -2166,9 +2174,9 @@ async function processPolicyCandidate({
       mentionedPurposes: merged.mentionedPurposes,
       mentionedRights: merged.mentionedRights,
       mentionedControls: merged.mentionedControls,
-      lastUpdatedText: lastUpdatedText(visibleText),
+      lastUpdatedText: lastUpdatedText(analysisVisibleText),
       retrievedAt: new Date().toISOString(),
-      effectiveDate: effectiveDateText(visibleText),
+      effectiveDate: effectiveDateText(analysisVisibleText),
       translationApplied: false,
       evidenceRefs: [{
         refId: `ref_${excerptId}`,
@@ -6768,6 +6776,10 @@ function bestPolicyDocumentText(html: string, fallbackVisibleText: string): stri
  */
 export function resolvePrefetchedPolicyVisibleText(html: string): string {
   return stripConsentSurfacePreambleFromPolicyText(htmlToVisibleText(html));
+}
+
+export function boundedPrefetchedPolicyAnalysisText(visibleText: string): string {
+  return boundedPolicyAnalysisExcerpt(visibleText);
 }
 
 export function stripConsentSurfacePreambleFromPolicyText(value: string): string {

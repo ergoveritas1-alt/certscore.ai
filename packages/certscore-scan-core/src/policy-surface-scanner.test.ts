@@ -14,6 +14,7 @@ import {
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
   assessPolicyDocumentSubstance,
+  boundedPrefetchedPolicyAnalysisText,
   canonicalWwwPolicyUrlVariant,
   classifyPolicyDocumentOwnership,
   countRecoveredPolicySurfaceObservations,
@@ -90,6 +91,7 @@ test("late prefetched policy resolution preserves the full visible policy withou
   </body></html>`;
 
   const resolved = resolvePrefetchedPolicyVisibleText(html);
+  const analysisText = boundedPrefetchedPolicyAnalysisText(resolved);
 
   assert.match(resolved, /Example Company is the data controller/);
   assert.match(resolved, /retain account records for seven years/);
@@ -97,6 +99,12 @@ test("late prefetched policy resolution preserves the full visible policy withou
   assert.match(resolved, /final policy paragraph must remain available/);
   assert.doesNotMatch(resolved, /not retained script noise/);
   assert.ok(resolved.length > visibleNoise.length, "the late path must not truncate retained visible text");
+  assert.ok(analysisText.length < resolved.length, "late deterministic analysis should use a bounded projection");
+  assert.match(analysisText, /Example Company is the data controller/);
+  assert.match(analysisText, /retain account records for seven years/);
+  assert.match(analysisText, /right to access, rectify, erase, restrict, object, and port/);
+  assert.match(analysisText, /International transfers outside the EEA/);
+  assert.match(analysisText, /lodge a complaint with your supervisory authority/);
 });
 
 test("localized consent settings shells are not accepted as substantive privacy notices", async () => {
