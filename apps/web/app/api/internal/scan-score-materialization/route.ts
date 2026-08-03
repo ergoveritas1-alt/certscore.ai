@@ -106,13 +106,16 @@ export async function POST(request: Request) {
     }
     console.error("[score-assessment] completion materialization failed", {
       code: disposition.code,
+      diagnostic: disposition.diagnostic,
       errorName: error instanceof Error ? error.name : "UnknownError",
+      retryAfterSeconds: disposition.retryAfterSeconds ?? null,
       retryable: disposition.retryable,
       scanId
     });
     return NextResponse.json({
       code: disposition.code,
       error: "Score materialization failed.",
+      retryAfterSeconds: disposition.retryAfterSeconds,
       retryable: disposition.retryable,
     }, { status: disposition.retryable ? 503 : 422 });
   }

@@ -30,3 +30,31 @@ test("infrastructure and unknown failures remain retryable", () => {
     retryable: true,
   });
 });
+
+test("canonical projection finalization requests a bounded fast retry", () => {
+  const error = Object.assign(new Error("Canonical report projection is not ready."), {
+    name: "CanonicalScanReportProjectionNotReadyError",
+    reason: "canonical_findings_not_ready",
+  });
+
+  assert.deepEqual(classifyScoreMaterializationFailure(error), {
+    code: "materialization_not_ready",
+    diagnostic: "materialization_not_ready:canonical_findings_not_ready",
+    retryAfterSeconds: 10,
+    retryable: true,
+  });
+});
+
+test("canonical projection retry diagnostics discard unbounded reasons", () => {
+  const error = Object.assign(new Error("Canonical report projection is not ready."), {
+    name: "CanonicalScanReportProjectionNotReadyError",
+    reason: "sensitive reason with spaces and an unbounded payload",
+  });
+
+  assert.deepEqual(classifyScoreMaterializationFailure(error), {
+    code: "materialization_not_ready",
+    diagnostic: "materialization_not_ready:unspecified",
+    retryAfterSeconds: 10,
+    retryable: true,
+  });
+});

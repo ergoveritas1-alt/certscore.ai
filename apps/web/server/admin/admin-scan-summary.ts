@@ -29,6 +29,16 @@ export type AdminScanSummary = {
 
 const summaryPromises = new Map<string, Promise<AdminScanSummary | null>>();
 
+export class CanonicalScanReportProjectionNotReadyError extends Error {
+  readonly reason: string;
+
+  constructor(reason: string) {
+    super(`Canonical report projection is not ready: ${reason}`);
+    this.name = "CanonicalScanReportProjectionNotReadyError";
+    this.reason = reason;
+  }
+}
+
 async function timedAdminPersistencePhase<T>(
   scanId: string,
   phase: "report_projection" | "admin_summary",
@@ -96,7 +106,7 @@ export async function persistAdminScanSummaryForRecord(
     })
   );
   if (publication.status !== "ready") {
-    throw new Error(`Canonical report projection is ${publication.status}: ${publication.reason}`);
+    throw new CanonicalScanReportProjectionNotReadyError(publication.reason);
   }
   const canonicalScanRecord = await loadPersistedScanReportProjection({
     organizationId,

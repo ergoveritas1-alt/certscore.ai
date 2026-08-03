@@ -254,7 +254,10 @@ test("validation worker Lambda result poller retains leases and bounds result co
 
   assert.match(source, /ChangeMessageVisibilityCommand/);
   assert.match(source, /VisibilityTimeout:\s*0/);
-  assert.match(source, /RESULT_VISIBILITY_TIMEOUT_SECONDS\s*=\s*180/);
+  assert.match(source, /RESULT_VISIBILITY_TIMEOUT_SECONDS\s*=\s*240/);
+  assert.match(source, /MATERIALIZATION_FINALIZING_WAIT_MS\s*=\s*150_000/);
+  assert.match(source, /failure\?\.code === "materialization_not_ready"/);
+  assert.match(source, /await sleep\(retrySeconds \* 1_000\)/);
   assert.match(source, /RESULT_BATCH_CONCURRENCY\s*=\s*3/);
   assert.match(source, /MaxNumberOfMessages:\s*RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /mapWithConcurrency\(messages, RESULT_BATCH_CONCURRENCY/);
