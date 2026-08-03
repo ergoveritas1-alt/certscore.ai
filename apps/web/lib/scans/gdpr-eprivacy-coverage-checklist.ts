@@ -74,6 +74,7 @@ type ChecklistRowDefinition = {
   findingIds: string[];
   defaultFindingStatus: Exclude<GdprEprivacyCoverageChecklistStatus, "Not observed" | "Not testable" | "Out of scope">;
   notObservedText: string;
+  requiresCanonicalCoverageOutcome?: boolean;
   requiresPublicWebCoverage?: boolean;
 };
 
@@ -507,6 +508,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     findingIds: [],
     defaultFindingStatus: "Review signal",
     notObservedText: "No adapter-approved automated decision-making or profiling disclosure evidence was retained for this scan context.",
+    requiresCanonicalCoverageOutcome: true,
     requiresPublicWebCoverage: true
   }
 ];
@@ -1563,22 +1565,6 @@ function getBrowserDeviceEntropyEvidenceFromOutcome(outcome: GdprEprivacyCoverag
   return evidence && typeof evidence === "object" && !Array.isArray(evidence)
     ? evidence as Record<string, unknown>
     : null;
-}
-
-function isApprovedMultilingualArticle13ConcernOutcome(outcome: GdprEprivacyCoverageOutcome | undefined) {
-  const concern = outcome?.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern;
-  return concern && typeof concern === "object" && !Array.isArray(concern);
-}
-
-function shouldIncludeChecklistRowDefinition(
-  definition: ChecklistRowDefinition,
-  coverageOutcome: GdprEprivacyCoverageOutcome | undefined
-) {
-  if (definition.id !== "automated_decision_making_profiling_disclosure") {
-    return true;
-  }
-
-  return isApprovedMultilingualArticle13ConcernOutcome(coverageOutcome);
 }
 
 function getStringArrayEntity(values: unknown) {
@@ -3356,9 +3342,7 @@ export function deriveGdprEprivacyCoverageChecklist(
   const publicCoverageIsTestable = input.scanCompleted && !input.coverageLimited;
   const visualNoGoObserved = scanQualityVisualNoGoObserved(input);
 
-  const rows = CHECKLIST_ROWS
-    .filter((definition) => shouldIncludeChecklistRowDefinition(definition, input.coverageOutcomes?.[definition.id]))
-    .map((definition) => {
+  const rows = CHECKLIST_ROWS.map((definition) => {
     const directCoverageOutcome = input.coverageOutcomes?.[definition.id];
     const canonicalPreconsentStorageOutcome =
       definition.id === "pre_consent_cookies_storage" &&
@@ -3511,11 +3495,16 @@ export function deriveGdprEprivacyCoverageChecklist(
       });
     }
 
-    if (definition.requiresPublicWebCoverage && !publicCoverageIsTestable) {
+    if (
+      definition.requiresCanonicalCoverageOutcome ||
+      (definition.requiresPublicWebCoverage && !publicCoverageIsTestable)
+    ) {
       return buildChecklistItem({
         criticalEvidence: getFallbackCriticalEvidence(
           "Not testable",
-          input.scanCompleted
+          definition.requiresCanonicalCoverageOutcome && input.scanCompleted
+            ? "The canonical row-specific policy outcome was not retained, so this row cannot be evaluated."
+            : input.scanCompleted
             ? "Public-web coverage was limited, so this row cannot be evaluated from the retained scan context."
             : "The scan has not completed, so row evidence is not available yet.",
           definition.id,
@@ -3532,7 +3521,9 @@ export function deriveGdprEprivacyCoverageChecklist(
         explanation: definition.explanation,
         id: definition.id,
         label: definition.label,
-        limitation: input.scanCompleted
+        limitation: definition.requiresCanonicalCoverageOutcome && input.scanCompleted
+          ? "The canonical row-specific policy outcome was not retained; absence is not inferred from missing evidence."
+          : input.scanCompleted
           ? "Public-web coverage was limited, so absence of a finding is not treated as a clean observation."
           : "The scan has not completed, so this coverage row is not testable yet.",
         status: "Not testable" as const,

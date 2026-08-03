@@ -7,6 +7,31 @@ function row(id: string, status: GdprEprivacyCoverageChecklistItem["status"], no
   return { id, status, note, explanation: note, label: id } as GdprEprivacyCoverageChecklistItem;
 }
 
+function policyRow(
+  id: string,
+  result: string,
+  retainedEvidence: Record<string, unknown> = {}
+): GdprEprivacyCoverageChecklistItem {
+  return {
+    ...row(id, result === "disclosure_observed" ? "Observed" : "Not confirmed", id),
+    criticalEvidence: {
+      missingOrIncompleteSourceSignals: [],
+      pipeline: {
+        concernPolicyKey: "gdpr_transparency_article13",
+        projectionStage: "coverage_policy",
+        wc01NormalizedConcernKey: "gdpr_transparency_article13",
+        ws01EvidenceRole: "retained_policy_evidence"
+      },
+      projectedFindings: [],
+      retainedEvidence: {
+        ...retainedEvidence,
+        policyEvidenceAssessment: { result }
+      },
+      statusBasis: "canonical policy evidence assessment"
+    }
+  };
+}
+
 test("projects bounded Admin evidence only from canonical checklist rows", () => {
   const matrix = projectAdminEvidenceMatrix({
     checklistRows: [
@@ -47,4 +72,54 @@ test("bounds descriptors and rejects malformed persisted projections", () => {
   assert.ok((matrix.transparency.results.CC?.descriptor.length ?? 0) <= 220);
   assert.equal(parseAdminEvidenceMatrix({ ...matrix, version: "admin_evidence_matrix.v2" }), null);
   assert.equal(parseAdminEvidenceMatrix({ ...matrix, transparency: { ...matrix.transparency, aggregate: null } }), null);
+});
+
+test("projects the canonical policy evidence failure stage and every transparency row", () => {
+  const extractionHealth = {
+    detectedPolicyLanguage: "de",
+    extractionFailureReason: null,
+    gdprTransparencyLanguageSupported: true,
+    policyTextEvidenceProjectionStatus: "verified_complete",
+    policyTextExtractionStatus: "ok"
+  };
+  const matrix = projectAdminEvidenceMatrix({
+    checklistRows: [
+      policyRow("policy_text_extraction", "not_evaluated", { policyTextExtractionHealth: extractionHealth }),
+      policyRow("controller_contact_disclosure", "disclosure_observed"),
+      policyRow("legal_basis_disclosure_observed", "ambiguous"),
+      policyRow("retention_disclosure_observed", "not_located_automatically"),
+      policyRow("processing_purposes_disclosure", "disclosure_observed"),
+      policyRow("recipients_vendor_categories_disclosure", "not_located_automatically"),
+      policyRow("data_subject_rights_disclosure", "disclosure_observed"),
+      policyRow("international_transfers_disclosure", "ambiguous"),
+      policyRow("dpo_contact_point_disclosure", "not_located_automatically"),
+      policyRow("supervisory_authority_complaint_disclosure", "not_located_automatically"),
+      policyRow("automated_decision_making_profiling_disclosure", "not_located_automatically")
+    ],
+    cmpVendorName: null,
+    sourceProjectionVersion: null
+  });
+
+  assert.equal(matrix.transparency.aggregate.projected, 10);
+  assert.equal(matrix.transparency.results.AD?.status, "not_confirmed");
+  assert.deepEqual(matrix.policyEvidence, {
+    detectedLanguage: "de",
+    extractionFailureReason: null,
+    extractionStatus: "ok",
+    gdprTransparencyLanguageSupported: true,
+    projectionStatus: "verified_complete",
+    stage: "topic_evidence_limited",
+    topicResults: {
+      ambiguous: 2,
+      disclosureObserved: 3,
+      extractionIncomplete: 0,
+      notEvaluated: 0,
+      notLocatedAutomatically: 5
+    }
+  });
+  assert.equal(parseAdminEvidenceMatrix(matrix)?.policyEvidence?.stage, "topic_evidence_limited");
+  assert.equal(parseAdminEvidenceMatrix({
+    ...matrix,
+    policyEvidence: { ...matrix.policyEvidence, stage: "invented" }
+  }), null);
 });

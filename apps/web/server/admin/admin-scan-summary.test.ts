@@ -131,6 +131,8 @@ test("Admin Scans gives access outcomes room for at most two visible lines", asy
 
   assert.match(pageSource, /w-\[2828px\] min-w-\[2828px\] table-fixed/);
   assert.match(pageSource, /<col style=\{\{ width: "240px" \}\}/);
+  assert.match(pageSource, /\{ label: "Language" \}, \{ label: "Access" \}, \{ label: "Industry" \}/);
+  assert.match(pageSource, /width: "80px" \}\} \/><col style=\{\{ width: "240px" \}\} \/><col style=\{\{ width: "160px"/);
   assert.match(pageSource, /line-clamp-2 leading-4/);
   assert.match(pageSource, /title=\{accessLabel\}/);
 });
@@ -145,6 +147,24 @@ test("Admin activity pagination supports a direct page jump", async () => {
   assert.match(controls, /max=\{Math\.max\(1, normalizedPageCount\)\}/);
   assert.match(scansPage, /showPageJump/);
   assert.match(pulsePage, /showPageJump/);
+});
+
+test("Admin Scans and API Activity pagination expose immediate feedback while navigation is pending", async () => {
+  const controls = await readFile("apps/web/components/ui/pagination-controls.tsx", "utf8");
+  const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+
+  assert.match(controls, /useTransition/);
+  assert.match(controls, /startPageNavigation/);
+  assert.match(controls, /router\.push\(href\)/);
+  assert.match(controls, /aria-busy=\{isPageNavigationPending/);
+  assert.match(controls, /\? "Loading…" : "Previous"/);
+  assert.match(controls, /\? "Loading…" : "Next"/);
+  assert.match(controls, /prefetch=\{false\}/);
+  assert.match(scansPage, /<PaginationControls/);
+  assert.match(scansPage, /basePath="\/app\/admin\/scans"/);
+  assert.match(pulsePage, /<PaginationControls/);
+  assert.match(pulsePage, /basePath="\/app\/admin\/pulse"/);
 });
 
 test("API activity presents a persisted clear-access summary consistently with its access filter", async () => {
