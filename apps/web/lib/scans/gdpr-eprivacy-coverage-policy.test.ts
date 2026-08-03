@@ -8033,6 +8033,8 @@ test("complete dismiss-only assessment projects reject as a partial concern", ()
   assert.equal(dismissConcern.promotionEligibility, "eligible");
   assert.equal(outcomes.reject_all_path_availability?.status, "Review signal");
   assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /dismissal control/i);
+  assert.equal(outcomes.accept_consent_control?.status, "Not observed");
+  assert.equal(outcomes.options_settings_preferences_control?.status, "Not observed");
 });
 
 test("complete no-surface assessment reports factual not-observed controls without creating control gaps", () => {

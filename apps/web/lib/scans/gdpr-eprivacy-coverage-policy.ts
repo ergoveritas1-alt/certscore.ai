@@ -1383,6 +1383,20 @@ function getConsentOptionsControlProminenceConcern(
   }) ?? null;
 }
 
+function getConsentControlInventoryConcern(
+  input: GdprEprivacyCoveragePolicyInput
+) {
+  return (input.normalizedConcerns ?? []).find((concern) => {
+    const rawEvidence = concern.evidenceBundle.rawEvidence;
+    return concern.originKey === "consent.control_inventory.complete_first_layer" &&
+      concern.originType === "runtime_artifact" &&
+      concern.promotionEligibility === "internal_only" &&
+      concern.externalSurfacingEligibility === "audit_only" &&
+      concern.regulatoryChecklistEligibility === "none" &&
+      rawEvidence?.consentControlInventoryEvidence === true;
+  }) ?? null;
+}
+
 function getConsentPaidDeclinePathConcern(
   input: GdprEprivacyCoveragePolicyInput
 ) {
@@ -4551,6 +4565,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
 
 function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  const controlInventoryConcern = getConsentControlInventoryConcern(input);
   const operationalSurfaceConcern = getConsentOperationalSurfaceConcern(input);
   const prominenceConcern = getConsentOptionsControlProminenceConcern(input);
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
@@ -4586,6 +4601,39 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
   }
 
   if (consentControlAssessment) {
+    if (!controlInventoryConcern) {
+      return makeOutcome(
+        "options_settings_preferences_control",
+        "Not confirmed",
+        "A typed consent-control assessment was retained, but its normalized control-inventory concern was not available to concern policy.",
+        ["Evidence: ConsentControlAssessment retained", "Limitation: normalized consent-control inventory missing"]
+      );
+    }
+    const inventoryEvidence = controlInventoryConcern.evidenceBundle.rawEvidence ?? {};
+    const optionsState = getString(inventoryEvidence, ["firstLayerOptionsState", "first_layer_options_state"]);
+    const acceptState = getString(inventoryEvidence, ["firstLayerAcceptState", "first_layer_accept_state"]);
+    const rejectState = getString(inventoryEvidence, ["firstLayerRejectState", "first_layer_reject_state"]);
+    if (
+      optionsState === "not_observed" &&
+      acceptState === "not_observed" &&
+      rejectState === "not_observed"
+    ) {
+      return makeOutcome(
+        "options_settings_preferences_control",
+        "Not observed",
+        "The complete retained first-layer consent-control inventory did not include an options, settings, or preferences control.",
+        controlInventoryConcern.evidenceBundle.runtimeArtifacts,
+        {
+          retainedEvidence: {
+            consentControlInventoryConcern: {
+              canonicalConcernKey: controlInventoryConcern.canonicalConcernKey,
+              originKey: controlInventoryConcern.originKey
+            },
+            optionsControlObserved: false
+          }
+        }
+      );
+    }
     if (!prominenceConcern) {
       return makeOutcome(
         "options_settings_preferences_control",
@@ -4951,6 +4999,7 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
 
 function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentControlAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  const controlInventoryConcern = getConsentControlInventoryConcern(input);
   const operationalSurfaceConcern = getConsentOperationalSurfaceConcern(input);
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
   const cmpEvidence = getCmpFrameworkSignalEvidence(input);
@@ -5001,6 +5050,36 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
         }
       }
     );
+  }
+
+  if (consentControlAssessment) {
+    if (!controlInventoryConcern) {
+      return makeOutcome(
+        "accept_consent_control",
+        "Not confirmed",
+        "A typed consent-control assessment was retained, but its normalized control-inventory concern was not available to concern policy.",
+        ["Evidence: ConsentControlAssessment retained", "Limitation: normalized consent-control inventory missing"]
+      );
+    }
+    const inventoryEvidence = controlInventoryConcern.evidenceBundle.rawEvidence ?? {};
+    const acceptState = getString(inventoryEvidence, ["firstLayerAcceptState", "first_layer_accept_state"]);
+    if (acceptState === "not_observed") {
+      return makeOutcome(
+        "accept_consent_control",
+        "Not observed",
+        "The complete retained first-layer consent-control inventory did not include an accept, accept-all, or allow-all control.",
+        controlInventoryConcern.evidenceBundle.runtimeArtifacts,
+        {
+          retainedEvidence: {
+            acceptControlObserved: false,
+            consentControlInventoryConcern: {
+              canonicalConcernKey: controlInventoryConcern.canonicalConcernKey,
+              originKey: controlInventoryConcern.originKey
+            }
+          }
+        }
+      );
+    }
   }
 
   const incompleteInspectionOutcome = makeIncompleteConsentSurfaceInspectionOutcome(

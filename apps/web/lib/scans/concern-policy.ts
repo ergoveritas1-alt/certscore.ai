@@ -2376,6 +2376,19 @@ function getConsentDismissWithoutRejectChecklistEligibility(input: {
       : "none";
 }
 
+function getConsentControlInventoryChecklistEligibility(input: {
+  originKey: string;
+  rawEvidence: Record<string, unknown> | null | undefined;
+}): NormalizedConcernRegulatoryChecklistEligibility | null {
+  if (
+    input.originKey !== "consent.control_inventory.complete_first_layer" ||
+    input.rawEvidence?.consentControlInventoryEvidence !== true
+  ) {
+    return null;
+  }
+  return "none";
+}
+
 function getPreConsentStorageAssessmentChecklistEligibility(input: {
   originKey: string;
   rawEvidence: Record<string, unknown> | null | undefined;
@@ -2500,6 +2513,19 @@ export function deriveConcernPolicy(input: {
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
 
   const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  const consentControlInventoryChecklistEligibility = getConsentControlInventoryChecklistEligibility({
+    originKey: input.concern.originKey,
+    rawEvidence: input.rawEvidence
+  });
+  if (consentControlInventoryChecklistEligibility !== null) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility: consentControlInventoryChecklistEligibility
+    };
+  }
   const consentNoSurfaceChecklistEligibility = getConsentNoSurfaceChecklistEligibility({
     originKey: input.concern.originKey,
     rawEvidence: input.rawEvidence

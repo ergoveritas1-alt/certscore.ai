@@ -3246,6 +3246,66 @@ function buildConsentOptionsControlProminenceConcerns(
   ];
 }
 
+function buildConsentControlInventoryConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  if (
+    !assessment ||
+    assessment.assessmentStatus !== "complete" ||
+    assessment.coverage.status !== "complete" ||
+    assessment.document.identityStatus !== "matched" ||
+    assessment.scan.noGo !== false ||
+    assessment.surface.status !== "observed_actionable"
+  ) {
+    return [];
+  }
+
+  const runtimeEvidenceArtifacts = uniqueStrings([
+    ...assessment.surface.evidenceRefs,
+    ...assessment.controls.accept.evidenceRefs,
+    ...assessment.controls.reject.evidenceRefs,
+    ...assessment.controls.options.evidenceRefs,
+    "scan_runtime_artifacts.consent_control_assessment"
+  ]).slice(0, 16);
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "A complete, same-document first-layer consent-control inventory retained factual Accept, Reject, and Options observation states.",
+      domainContext,
+      evidence: runtimeEvidenceArtifacts,
+      observedValue: [
+        `accept:${assessment.controls.accept.state}`,
+        `reject:${assessment.controls.reject.state}`,
+        `options:${assessment.controls.options.state}`
+      ].join("|"),
+      originKey: "consent.control_inventory.complete_first_layer",
+      originType: "runtime_artifact",
+      rawEvidence: {
+        consentControlAssessmentContractVersion: assessment.artifactVersion,
+        consentControlAssessmentSourceHash: assessment.provenance.sourceHash,
+        consentControlAssessmentStatus: assessment.assessmentStatus,
+        consentControlCoverageStatus: assessment.coverage.status,
+        consentControlInventoryEvidence: true,
+        consentSurfaceStatus: assessment.surface.status,
+        firstLayerAcceptState: assessment.controls.accept.state,
+        firstLayerOptionsState: assessment.controls.options.state,
+        firstLayerRejectState: assessment.controls.reject.state,
+        runtimeEvidenceArtifacts
+      },
+      severity: "low",
+      signalKey: "privacy.consent_control_inventory",
+      signalLabel: "Consent control inventory",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Consent control inventory"
+    })
+  ];
+}
+
 function buildConsentDismissWithoutRejectConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
@@ -3472,6 +3532,7 @@ export function buildNormalizedConcerns(input: {
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentNoSurfaceConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildConsentControlInventoryConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentDismissWithoutRejectConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),
