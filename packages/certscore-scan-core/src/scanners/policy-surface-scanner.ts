@@ -2373,21 +2373,33 @@ async function fetchRenderedPolicyDocumentText(input: {
   primeSession?: boolean;
   url: string;
   timeoutMs: number;
+  allowRetainedPageRetry?: boolean;
 }): Promise<FetchTextResult> {
   let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
+  let sameContextRecoveryPage: Page | undefined;
   let releaseAbortContext: (() => void) | undefined;
+  let retainedRecoveryPage: Page | undefined;
+  let page: Page | undefined;
   try {
     const browser = await input.browserRuntime.getBrowser();
-    const retainedRecoveryPage = input.linkContext &&
-      input.input.renderedRecoveryPage &&
-      !input.input.renderedRecoveryPage.isClosed()
+    retainedRecoveryPage = input.linkContext && input.input.renderedRecoveryPage
       ? input.input.renderedRecoveryPage
       : undefined;
     if (!retainedRecoveryPage) {
       context = await browser.newContext(chromiumContextOptions());
       releaseAbortContext = bindAbortSignalToBrowserContext(context, input.input.signal);
+      page = await context.newPage();
+    } else if (retainedRecoveryPage.isClosed()) {
+      // A late visual-capture failure can close the original page after the
+      // canonical policy link inventory has already been retained. Reopen a
+      // page in the same browser context so session cookies and connection
+      // state survive; a new context would turn valid retained evidence into
+      // an unrelated fresh-session fetch.
+      sameContextRecoveryPage = await retainedRecoveryPage.context().newPage();
+      page = sameContextRecoveryPage;
+    } else {
+      page = retainedRecoveryPage;
     }
-    const page = retainedRecoveryPage ?? await context!.newPage();
     const navigationDeadlineAtMs = Date.now() + Math.max(1_000, input.timeoutMs);
     const sessionPrimerUrl = input.linkContext?.pageUrl ?? (
       input.primeSession ? input.input.renderedRecoverySessionPrimerUrl : undefined
@@ -2480,6 +2492,40 @@ async function fetchRenderedPolicyDocumentText(input: {
       text: text.slice(0, 500_000),
     };
   } catch (error) {
+    if (
+      input.allowRetainedPageRetry !== false &&
+      retainedRecoveryPage &&
+      page === retainedRecoveryPage
+    ) {
+      const retryPage = await retainedRecoveryPage.context().newPage().catch(() => null);
+      if (retryPage) {
+        try {
+          const retried = await fetchRenderedPolicyDocumentText({
+            ...input,
+            input: {
+              ...input.input,
+              renderedRecoveryPage: retryPage,
+            },
+            allowRetainedPageRetry: false,
+          });
+          return {
+            ...retried,
+            attempts: [
+              {
+                mode: "rendered",
+                requestedUrl: input.url,
+                outcome: error instanceof Error && /timeout/i.test(`${error.name} ${error.message}`)
+                  ? "timeout"
+                  : "network_error",
+              },
+              ...(retried.attempts ?? []),
+            ],
+          };
+        } finally {
+          await retryPage.close().catch(() => undefined);
+        }
+      }
+    }
     return {
       attempts: [{
         mode: "rendered",
@@ -2493,6 +2539,7 @@ async function fetchRenderedPolicyDocumentText(input: {
     };
   } finally {
     releaseAbortContext?.();
+    await sameContextRecoveryPage?.close().catch(() => undefined);
     await context?.close().catch(() => undefined);
   }
 }

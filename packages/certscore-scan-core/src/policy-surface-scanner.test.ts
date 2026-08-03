@@ -325,22 +325,26 @@ test("browser recovery primes the observed same-origin session and prioritizes t
   }
 });
 
-test("browser recovery clicks an observed policy link when direct and browser navigation are forbidden", async () => {
+test("browser recovery reopens the retained session after the original policy page becomes unusable", async () => {
   const policyText = Array.from({ length: 12 }, () =>
     "This Privacy Policy explains the controller, contact details, processing purposes, legal bases, recipients, retention criteria, international transfers, and access, deletion, correction, portability, restriction, and objection rights."
   ).join(" ");
-  const privacyRequests: Array<{ referer: string; secFetchUser: string }> = [];
+  const privacyRequests: Array<{ cookie: string; referer: string; secFetchUser: string }> = [];
   let homepageRequests = 0;
   const server = createServer((request, response) => {
     if (request.url === "/") {
       const browserNavigation = request.headers["sec-fetch-mode"] === "navigate";
       if (browserNavigation) homepageRequests += 1;
-      if (browserNavigation && homepageRequests > 1) {
+      const retainedSession = (request.headers.cookie ?? "").includes("certscore_session=retained");
+      if (browserNavigation && homepageRequests > 1 && !retainedSession) {
         response.writeHead(403, { "content-type": "text/html; charset=utf-8" });
         response.end("Access denied");
         return;
       }
-      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        ...(browserNavigation ? { "set-cookie": "certscore_session=retained; Path=/; SameSite=Lax" } : {}),
+      });
       response.end("<!doctype html><html><body><div id='cookie-banner' role='dialog' aria-label='Cookie consent'><p>We use cookies to personalize content.</p><button>Reject all</button><button>Accept all</button></div><footer><a id='privacy-link' href='/about/privacy-policy.cfm'>Privacy Policy</a></footer></body></html>");
       return;
     }
@@ -349,8 +353,9 @@ test("browser recovery clicks an observed policy link when direct and browser na
       const secFetchUser = typeof request.headers["sec-fetch-user"] === "string"
         ? request.headers["sec-fetch-user"]
         : "";
-      privacyRequests.push({ referer, secFetchUser });
-      if (referer.endsWith("/")) {
+      const cookie = request.headers.cookie ?? "";
+      privacyRequests.push({ cookie, referer, secFetchUser });
+      if (referer.endsWith("/") && cookie.includes("certscore_session=retained")) {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end(`<!doctype html><html><body><main><h1>Privacy Policy</h1><p>${policyText}</p></main></body></html>`);
         return;
@@ -398,6 +403,10 @@ test("browser recovery clicks an observed policy link when direct and browser na
       }, null, 2),
     );
     assert.equal(preConsent.renderedPolicyRecoveryPage?.isClosed(), false);
+    // Reproduce a late visual renderer failure after the typed consent and
+    // rendered-link inventories have already been retained. Recovery must
+    // reopen inside this context, not create an unrelated browser session.
+    await preConsent.renderedPolicyRecoveryPage?.close();
     const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
       scannerInput: {
         url: homepageUrl,
@@ -433,7 +442,7 @@ test("browser recovery clicks an observed policy link when direct and browser na
     assert.equal(privacy?.documentEvaluationState, "usable");
     assert.equal(privacyRequests.some((request) => request.referer === ""), true);
     assert.equal(privacyRequests.some((request) => request.referer === homepageUrl), true);
-    assert.equal(homepageRequests, 1);
+    assert.equal(homepageRequests, 2);
     assert.equal(
       diagnostics.successfulFetches.some((fetch) =>
         fetch.attempts.some((attempt) => attempt.navigationMethod === "observed_link_click")
