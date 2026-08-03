@@ -4839,6 +4839,17 @@ export function classifyPolicyDocumentOwnership(input: {
   const controllerLanguage =
     /\b(?:data controller|controller of (?:your|the) (?:personal )?data|responsible for (?:processing|this (?:policy|notice))|this (?:privacy )?(?:policy|notice) applies to|(?:members?|companies|entities)\b.{0,120}\bcontrol(?:s|led|ling)?\b.{0,80}\b(?:information|personal data)|which\b.{0,80}\b(?:entity|member|company)\b.{0,80}\bcontrol(?:s|led|ling)?\b)\b/i
       .test(ownershipExcerpt);
+  const targetNamedInCorporateFamily = targetBrand
+    ? new RegExp(
+      `(?:\\b(?:its|our|the)\\s+(?:subsidiaries|affiliates)\\b.{0,240}\\b${escapeRegExp(targetBrand)}\\b|` +
+        `\\bfamily of (?:companies|brands)\\b.{0,240}\\b${escapeRegExp(targetBrand)}\\b|` +
+        `\\b${escapeRegExp(targetBrand)}\\b.{0,120}\\b(?:is|as|,)?\\s*(?:an?\\s+)?(?:subsidiary|affiliate)\\b)`,
+      "i",
+    ).test(ownershipExcerpt)
+    : false;
+  const corporatePolicyScope =
+    /\b(?:privacy )?(?:policy|notice)\b.{0,160}\bappl(?:y|ies) to\b.{0,180}\b(?:websites?|sites?|applications?|services?)\b.{0,120}\b(?:we|our (?:group|companies|entities|affiliates?))\b.{0,80}\b(?:operate|own|provide|control)|\b(?:websites?|sites?|applications?|services?)\b.{0,120}\b(?:operated|owned|provided|controlled) by\b.{0,100}\b(?:us|our (?:group|companies|entities|affiliates?))\b/i
+      .test(ownershipExcerpt);
 
   if (targetNamed && controllerLanguage) {
     return {
@@ -4848,6 +4859,19 @@ export function classifyPolicyDocumentOwnership(input: {
       ownershipReasonCodes: [
         "cross_site_document",
         "target_brand_named_in_controller_context",
+      ],
+    };
+  }
+
+  if (targetNamedInCorporateFamily && corporatePolicyScope) {
+    return {
+      documentOwnerEntity: documentEntity ?? documentSite ?? undefined,
+      targetRelationship: "first_party_brand",
+      ownershipConfidence: 0.86,
+      ownershipReasonCodes: [
+        "cross_site_document",
+        "target_brand_named_in_corporate_family",
+        "corporate_policy_scope_applies_to_operated_sites",
       ],
     };
   }
