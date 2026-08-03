@@ -365,9 +365,11 @@ test("browser recovery clicks an observed policy link when direct and browser na
     const links = [{
       domLocation: "footer" as const,
       href: privacyUrl,
-      linkText: "Privacy Policy",
+      // The runtime inventory combines textContent, aria-label, and title.
+      // Recovery must still resolve the retained destination when that makes
+      // the retained label differ from the link's accessible name.
+      linkText: "Privacy Policy Privacy Policy",
       pageUrl: homepageUrl,
-      selector: "#privacy-link",
     }];
     const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
       scannerInput: {

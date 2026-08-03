@@ -17,7 +17,7 @@ import {
   type ScanModuleRun,
   type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type Locator, type Page } from "playwright";
 import { Resolver } from "node:dns/promises";
 import { isIP } from "node:net";
 import { request as httpRequest } from "node:http";
@@ -2528,31 +2528,47 @@ async function clickObservedPolicyLink(
 async function observedPolicyLinkLocator(
   page: Page,
   input: { href: string; linkText: string; selector?: string; targetUrl: string },
-) {
-  const candidates = [];
+): Promise<Locator | null> {
+  const expectedIdentities = new Set([
+    policyClickUrlIdentity(input.href, page.url()),
+    policyClickUrlIdentity(input.targetUrl, page.url()),
+  ].filter(Boolean));
+  const matchesExpectedHref = async (candidate: Locator) => {
+    const candidateHref = await candidate.getAttribute("href").catch(() => null) ??
+      await candidate.getAttribute("data-href").catch(() => null) ??
+      await candidate.getAttribute("data-url").catch(() => null);
+    return Boolean(
+      candidateHref && expectedIdentities.has(policyClickUrlIdentity(candidateHref, page.url())),
+    );
+  };
+
   if (input.selector) {
     try {
       const selectorCandidate = page.locator(input.selector);
-      if (await selectorCandidate.count() === 1) candidates.push(selectorCandidate);
+      if (
+        await selectorCandidate.count() === 1 &&
+        await matchesExpectedHref(selectorCandidate)
+      ) return selectorCandidate;
     } catch {
       // Retained selectors are hints only. Invalid or stale selectors fall
       // back to the exact retained accessible link label below.
     }
   }
   const namedCandidate = page.getByRole("link", { name: input.linkText, exact: true });
-  if (await namedCandidate.count().catch(() => 0) === 1) candidates.push(namedCandidate);
+  if (
+    await namedCandidate.count().catch(() => 0) === 1 &&
+    await matchesExpectedHref(namedCandidate)
+  ) return namedCandidate;
 
-  const expectedIdentities = new Set([
-    policyClickUrlIdentity(input.href, page.url()),
-    policyClickUrlIdentity(input.targetUrl, page.url()),
-  ].filter(Boolean));
-  for (const candidate of candidates) {
-    const candidateHref = await candidate.getAttribute("href").catch(() => null) ??
-      await candidate.getAttribute("data-href").catch(() => null) ??
-      await candidate.getAttribute("data-url").catch(() => null);
-    if (candidateHref && expectedIdentities.has(policyClickUrlIdentity(candidateHref, page.url()))) {
-      return candidate;
-    }
+  // Retained pre-consent text can concatenate textContent, aria-label, and
+  // title, so the exact accessible label may legitimately differ. Resolve
+  // the observed destination itself before giving up on same-session click
+  // navigation. The inventory is bounded to the scanner's capture ceiling.
+  const hrefCandidates = page.locator('a[href], [role="link"][data-href], [role="link"][data-url]');
+  const candidateCount = Math.min(await hrefCandidates.count().catch(() => 0), 1_000);
+  for (let index = 0; index < candidateCount; index += 1) {
+    const candidate = hrefCandidates.nth(index);
+    if (await matchesExpectedHref(candidate)) return candidate;
   }
   return null;
 }
