@@ -78,6 +78,7 @@ type ConsentFlowRuntimeInput = Parameters<ConsentFlowRuntimeScanner>[0];
 type ConsentFlowRuntimeResult = Awaited<ReturnType<ConsentFlowRuntimeScanner>>;
 const MAX_MODULE_TIMING_BREAKDOWN_ENTRIES = 40;
 const PRE_CONSENT_DEADLINE_SETTLE_GRACE_MS = 250;
+const MIN_PRE_CONSENT_VISUAL_FALLBACK_START_BUDGET_MS = 1_000;
 
 export {
   chromiumLaunchArgs,
@@ -424,7 +425,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     shouldAttemptIncompleteConsentVisualFallback(preConsentResult, input.preConsentScreenshotMode);
   const shouldCaptureScreenshotOnlyFallback = preConsentEnabled &&
     shouldAttemptScreenshotOnlyFallback(preConsentResult, input.preConsentScreenshotMode);
-  if (shouldCaptureScreenshotOnlyFallback || shouldCaptureIncompleteConsentVisualFallback) {
+  const visualFallbackDeadlineMs = boundedPreConsentVisualFallbackDeadlineMs({
+    absoluteDeadlineAtMs: input.policySurfaceDeadlineAtMs,
+    configuredDeadlineMs: input.preConsentVisualFallbackDeadlineMs,
+  });
+  if (
+    (shouldCaptureScreenshotOnlyFallback || shouldCaptureIncompleteConsentVisualFallback) &&
+    visualFallbackDeadlineMs !== null
+  ) {
     await phaseRecorder.record("pre_consent_screenshot_only_fallback", "started", {
       reason: shouldCaptureIncompleteConsentVisualFallback
         ? "incomplete_consent_inspection"
@@ -437,7 +445,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         ? [normalizedUrl, ...navigationTransportRecoveryUrls(normalizedUrl)]
         : [normalizedUrl],
       scanStartedAtMs: startedAtMs,
-      fallbackDeadlineMs: input.preConsentVisualFallbackDeadlineMs,
+      fallbackDeadlineMs: visualFallbackDeadlineMs,
       screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
       captureMode: shouldCaptureIncompleteConsentVisualFallback ? "full_page" : "viewport",
       recoverConsentEvidence: shouldCaptureIncompleteConsentVisualFallback,
@@ -544,7 +552,12 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     }
   } else {
     await phaseRecorder.record("pre_consent_screenshot_only_fallback", "skipped", {
-      reason: preConsentEnabled ? "not_needed" : "pre_consent_runtime_disabled",
+      reason: !preConsentEnabled
+        ? "pre_consent_runtime_disabled"
+        : (shouldCaptureScreenshotOnlyFallback || shouldCaptureIncompleteConsentVisualFallback) &&
+            visualFallbackDeadlineMs === null
+          ? "insufficient_scan_deadline"
+          : "not_needed",
     });
   }
   const earlyScanNoGoEvidence = input.captureReplay === true
@@ -2521,6 +2534,25 @@ export function shouldAttemptScreenshotOnlyFallback(
     ...(result.moduleRun.errors ?? []),
   ].join("\n");
   return /page_closed|target page, context or browser has been closed|page\.goto|page\/context closed/i.test(errorText);
+}
+
+export function boundedPreConsentVisualFallbackDeadlineMs(input: {
+  absoluteDeadlineAtMs?: number;
+  configuredDeadlineMs?: number;
+  nowMs?: number;
+}): number | null {
+  const configuredDeadlineMs = Math.max(
+    MIN_PRE_CONSENT_VISUAL_FALLBACK_START_BUDGET_MS,
+    input.configuredDeadlineMs ?? 15_000,
+  );
+  if (input.absoluteDeadlineAtMs === undefined) {
+    return configuredDeadlineMs;
+  }
+  const remainingMs = input.absoluteDeadlineAtMs - (input.nowMs ?? Date.now());
+  if (remainingMs < MIN_PRE_CONSENT_VISUAL_FALLBACK_START_BUDGET_MS) {
+    return null;
+  }
+  return Math.min(configuredDeadlineMs, remainingMs);
 }
 
 function shouldAttemptIncompleteConsentVisualFallback(

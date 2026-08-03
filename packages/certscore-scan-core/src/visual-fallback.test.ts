@@ -5,11 +5,26 @@ import path from "node:path";
 import test from "node:test";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
+  boundedPreConsentVisualFallbackDeadlineMs,
   capturePreConsentScreenshotOnlyFallback,
   consentInspectionNeedsRecovery,
 } from "./index.js";
 import { classifyVisualCaptureFailureReason } from "./scanners/pre-consent-runtime-scanner.js";
 import { startStaticFixtureServer } from "./test-fixtures/static-server.js";
+
+test("visual fallback starts only when the scanner has a meaningful deadline budget", () => {
+  assert.equal(boundedPreConsentVisualFallbackDeadlineMs({ configuredDeadlineMs: 6_000 }), 6_000);
+  assert.equal(boundedPreConsentVisualFallbackDeadlineMs({
+    absoluteDeadlineAtMs: 20_000,
+    configuredDeadlineMs: 6_000,
+    nowMs: 15_000,
+  }), 5_000);
+  assert.equal(boundedPreConsentVisualFallbackDeadlineMs({
+    absoluteDeadlineAtMs: 20_000,
+    configuredDeadlineMs: 6_000,
+    nowMs: 19_001,
+  }), null);
+});
 
 test("visual capture distinguishes renderer crashes from browser and page closure", () => {
   assert.equal(

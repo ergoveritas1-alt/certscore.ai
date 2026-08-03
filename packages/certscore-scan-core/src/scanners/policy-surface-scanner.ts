@@ -3066,6 +3066,7 @@ async function warmPolicyDocumentFetchCache(input: {
 
 function extractCandidates(baseUrl: string, html: string, visibleText: string, allowGdprNoticeSupplement = false): PolicySurfaceCandidate[] {
   const candidates: PolicySurfaceCandidate[] = [];
+  const visibleTextLower = visibleText.toLowerCase();
   const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
   let match: RegExpExecArray | null;
   let index = 0;
@@ -3082,7 +3083,7 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string, a
     if (!normalizedUrl) {
       continue;
     }
-    const surroundingTextExcerpt = surroundingText(visibleText, linkText);
+    const surroundingTextExcerpt = surroundingText(visibleText, linkText, visibleTextLower);
     const domLocation = domLocationFor(html, match.index);
     const deterministicBase = classifySurface({
       linkText: candidateText,
@@ -3147,6 +3148,7 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string, a
 
 function extractControlCandidates(baseUrl: string, html: string, visibleText: string): PolicySurfaceCandidate[] {
   const candidates: PolicySurfaceCandidate[] = [];
+  const visibleTextLower = visibleText.toLowerCase();
   const controlPattern = /<(button|[^>]+\brole=["'](?:button|link)["'][^>]*)\b([^>]*)>([\s\S]*?)<\/(?:button|[^>]+)>/gi;
   let match: RegExpExecArray | null;
   let index = 0;
@@ -3165,7 +3167,7 @@ function extractControlCandidates(baseUrl: string, html: string, visibleText: st
       attr(attrs, "id"),
       href,
     ].filter(Boolean).join(" ")).slice(0, 220);
-    const surroundingTextExcerpt = surroundingText(visibleText, text);
+    const surroundingTextExcerpt = surroundingText(visibleText, text, visibleTextLower);
     const deterministic = classifySurface({
       linkText: text,
       url: normalizedUrl,
@@ -3426,12 +3428,13 @@ async function extractRenderedCandidates(
       ...rawCandidates,
       ...fallbackRawCandidates,
     ];
+    const visibleTextLower = visibleText.toLowerCase();
 
     return dedupeCandidates([
       ...renderedHtmlCandidates,
       ...retainedRawCandidates.flatMap((candidate, index): PolicySurfaceCandidate[] => {
       const normalizedUrl = candidate.href ? normalizeUrl(candidate.href, renderedBaseUrl) : renderedBaseUrl;
-      const surroundingTextExcerpt = surroundingText(visibleText, candidate.text);
+      const surroundingTextExcerpt = surroundingText(visibleText, candidate.text, visibleTextLower);
       const deterministic = classifySurface({
         linkText: candidate.text,
         url: normalizedUrl,
@@ -8341,11 +8344,15 @@ function domLocationFor(html: string, index: number): PolicySurfaceCandidate["do
   return "body";
 }
 
-function surroundingText(visibleText: string, linkText: string): string | undefined {
+function surroundingText(
+  visibleText: string,
+  linkText: string,
+  visibleTextLower = visibleText.toLowerCase(),
+): string | undefined {
   if (!linkText) {
     return undefined;
   }
-  const index = visibleText.toLowerCase().indexOf(linkText.toLowerCase());
+  const index = visibleTextLower.indexOf(linkText.toLowerCase());
   if (index < 0) {
     return undefined;
   }
