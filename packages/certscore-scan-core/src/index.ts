@@ -328,6 +328,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         softDeadlineSignal,
         waitMode: leanPreConsent ? "fast" : "full",
+        retainRenderedPolicyRecoverySession: true,
         signal: input.signal,
       }),
     })
@@ -401,6 +402,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotMode: input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always"),
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         waitMode: leanPreConsent ? "fast" : "full",
+        retainRenderedPolicyRecoverySession: true,
       });
       preConsentResult = {
         ...headedRetryResult,
@@ -711,23 +713,28 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       policySurfaceResult.policySurfaceObservations,
       retainedRenderedPolicyObservations,
     );
-    const renderedDocumentRecovery = await recoverPolicyDocumentsFromRetainedRenderedLinks({
-      scannerInput: {
-        url: input.url,
-        normalizedUrl,
-        scanStartedAtMs: startedAtMs,
-        internalBudgetMs: 6_000,
-        artifactWriter,
-        browser: sharedBrowser,
-        renderedRecoveryPage: preConsentResult.renderedPolicyRecoveryPage,
-        nanoAssistProvider: nanoPolicyAssistProvider,
-        discoveryMode: "fast",
-        signal: input.signal,
-      },
-      links: preConsentResult.renderedPolicyLinks,
-      existingObservations: policySurfaceResult.policySurfaceObservations,
-      evidenceRef: renderedPolicyEvidenceRef,
-    });
+    let renderedDocumentRecovery: Awaited<ReturnType<typeof recoverPolicyDocumentsFromRetainedRenderedLinks>>;
+    try {
+      renderedDocumentRecovery = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+        scannerInput: {
+          url: input.url,
+          normalizedUrl,
+          scanStartedAtMs: startedAtMs,
+          internalBudgetMs: 6_000,
+          artifactWriter,
+          browser: preConsentResult.renderedPolicyRecoveryBrowser ?? sharedBrowser,
+          renderedRecoveryPage: preConsentResult.renderedPolicyRecoveryPage,
+          nanoAssistProvider: nanoPolicyAssistProvider,
+          discoveryMode: "fast",
+          signal: input.signal,
+        },
+        links: preConsentResult.renderedPolicyLinks,
+        existingObservations: policySurfaceResult.policySurfaceObservations,
+        evidenceRef: renderedPolicyEvidenceRef,
+      });
+    } finally {
+      await preConsentResult.renderedPolicyRecoveryBrowser?.close().catch(() => undefined);
+    }
     if (renderedDocumentRecovery.observations.length > 0) {
       policySurfaceResult.policySurfaceObservations = mergePolicySurfaceObservations(
         policySurfaceResult.policySurfaceObservations,

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
-import { chromium, type Browser } from "playwright";
+import type { Browser } from "playwright";
 import {
   classifyPrivacySurface,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
@@ -38,6 +38,7 @@ import {
   policySurfaceScanner,
   wwwFallbackUrlForPolicyFetch,
 } from "./scanners/policy-surface-scanner.js";
+import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import { startStaticFixtureServer, type StaticFixturePage } from "./test-fixtures/static-server.js";
 
 test("builds a bounded canonical www retry for policy notices", () => {
@@ -332,14 +333,15 @@ test("browser recovery clicks an observed policy link when direct and browser na
   let homepageRequests = 0;
   const server = createServer((request, response) => {
     if (request.url === "/") {
-      homepageRequests += 1;
-      if (homepageRequests > 1) {
+      const browserNavigation = request.headers["sec-fetch-mode"] === "navigate";
+      if (browserNavigation) homepageRequests += 1;
+      if (browserNavigation && homepageRequests > 1) {
         response.writeHead(403, { "content-type": "text/html; charset=utf-8" });
         response.end("Access denied");
         return;
       }
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      response.end("<!doctype html><html><body><footer><a id='privacy-link' href='/about/privacy-policy.cfm'>Privacy Policy</a></footer></body></html>");
+      response.end("<!doctype html><html><body><div id='cookie-banner' role='dialog' aria-label='Cookie consent'><p>We use cookies to personalize content.</p><button>Reject all</button><button>Accept all</button></div><footer><a id='privacy-link' href='/about/privacy-policy.cfm'>Privacy Policy</a></footer></body></html>");
       return;
     }
     if (request.url === "/about/privacy-policy.cfm") {
@@ -365,23 +367,37 @@ test("browser recovery clicks an observed policy link when direct and browser na
   const address = server.address();
   assert.ok(address && typeof address === "object");
   const homepageUrl = `http://127.0.0.1:${address.port}/`;
-  const privacyUrl = `${homepageUrl}about/privacy-policy.cfm`;
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-click-recovery-"));
-  const browser = await chromium.launch({ headless: true });
-  const browserContext = await browser.newContext();
-  const renderedRecoveryPage = await browserContext.newPage();
+  let recoveryBrowser: Browser | undefined;
   try {
-    await renderedRecoveryPage.goto(homepageUrl, { waitUntil: "domcontentloaded" });
     const artifactWriter = await createArtifactWriter(tempRoot);
-    const links = [{
-      domLocation: "footer" as const,
-      href: privacyUrl,
-      // The runtime inventory combines textContent, aria-label, and title.
-      // Recovery must still resolve the retained destination when that makes
-      // the retained label differ from the link's accessible name.
-      linkText: "Privacy Policy Privacy Policy",
-      pageUrl: homepageUrl,
-    }];
+    const preConsent = await preConsentRuntimeScanner({
+      url: homepageUrl,
+      normalizedUrl: homepageUrl,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 6_000,
+      artifactWriter,
+      screenshotMode: "never",
+      waitMode: "fast",
+      retainRenderedPolicyRecoverySession: true,
+    });
+    const links = preConsent.renderedPolicyLinks.map((link) => ({
+      ...link,
+      // Reproduce the runtime inventory shape that can combine textContent,
+      // aria-label, and title into a label unlike the accessible name.
+      linkText: `${link.linkText} Privacy Policy`,
+    }));
+    recoveryBrowser = preConsent.renderedPolicyRecoveryBrowser;
+    assert.ok(
+      recoveryBrowser?.isConnected(),
+      JSON.stringify({
+        errors: preConsent.moduleRun.errors,
+        homepageRequests,
+        links: preConsent.renderedPolicyLinks,
+        status: preConsent.moduleRun.status,
+      }, null, 2),
+    );
+    assert.equal(preConsent.renderedPolicyRecoveryPage?.isClosed(), false);
     const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
       scannerInput: {
         url: homepageUrl,
@@ -389,8 +405,8 @@ test("browser recovery clicks an observed policy link when direct and browser na
         scanStartedAtMs: Date.now(),
         internalBudgetMs: 6_000,
         artifactWriter,
-        browser,
-        renderedRecoveryPage,
+        browser: recoveryBrowser,
+        renderedRecoveryPage: preConsent.renderedPolicyRecoveryPage,
         nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
       },
       links,
@@ -425,7 +441,7 @@ test("browser recovery clicks an observed policy link when direct and browser na
       true,
     );
   } finally {
-    await browser.close();
+    await recoveryBrowser?.close();
     server.close();
     await once(server, "close");
     await rm(tempRoot, { recursive: true, force: true });

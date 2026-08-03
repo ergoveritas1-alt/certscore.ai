@@ -125,6 +125,8 @@ export interface PreConsentRuntimeScannerInput {
   screenshotMode?: "always" | "selective" | "never";
   screenshotTimeoutMs?: number;
   waitMode?: "full" | "fast";
+  /** Keep the owned page alive only for the enclosing canonical policy handoff. */
+  retainRenderedPolicyRecoverySession?: boolean;
   signal?: AbortSignal;
   /**
    * A module-local deadline may stop pre-consent collection without cancelling
@@ -301,6 +303,8 @@ export interface PreConsentRuntimeScannerResult {
   renderedPolicyLinks: RetainedRenderedPolicyLink[];
   /** Runtime-only same-session page; never persisted or projected. */
   renderedPolicyRecoveryPage?: Page;
+  /** Runtime-only owned browser paired with renderedPolicyRecoveryPage. */
+  renderedPolicyRecoveryBrowser?: Browser;
 }
 
 export type RetainedRenderedPolicyLink = {
@@ -362,6 +366,7 @@ export async function preConsentRuntimeScanner(
 
   const browserMode = input.browserMode ?? "headless";
   const ownsBrowser = !input.browser;
+  let retainOwnedBrowserForPolicyRecovery = false;
   const browser = input.browser ?? await recordTiming(timingBreakdown, "browser launch", `Playwright Chromium launch (${browserMode}).`, () =>
     chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }))
   );
@@ -2230,6 +2235,9 @@ export async function preConsentRuntimeScanner(
       scriptEvents,
       iframeEvents,
     });
+    const retainPolicyRecoverySession = input.retainRenderedPolicyRecoverySession === true &&
+      retainedRenderedPolicyLinkEvidence.length > 0;
+    retainOwnedBrowserForPolicyRecovery = ownsBrowser && retainPolicyRecoverySession;
     return {
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
@@ -2260,7 +2268,10 @@ export async function preConsentRuntimeScanner(
       artifactRefs: transportSecurityArtifactRef ? [transportSecurityArtifactRef] : [],
       vendorResolverInputs,
       renderedPolicyLinks: retainedRenderedPolicyLinkEvidence,
-      renderedPolicyRecoveryPage: page,
+      ...(retainPolicyRecoverySession ? { renderedPolicyRecoveryPage: page } : {}),
+      ...(retainOwnedBrowserForPolicyRecovery
+        ? { renderedPolicyRecoveryBrowser: browser }
+        : {}),
     };
   } catch (error) {
     const parentCancellation = abortReason(parentSignal);
@@ -2383,7 +2394,7 @@ export async function preConsentRuntimeScanner(
     if (networkMetadataSession) {
       await boundedCleanup(networkMetadataSession.detach(), 250);
     }
-    if (ownsBrowser) {
+    if (ownsBrowser && !retainOwnedBrowserForPolicyRecovery) {
       await boundedCleanup(browser.close(), 1_000);
     }
   }
