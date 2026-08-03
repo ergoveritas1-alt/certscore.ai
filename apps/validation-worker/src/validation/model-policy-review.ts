@@ -1223,6 +1223,23 @@ function retentionEvidenceSpecificityScore(value: string) {
   return score;
 }
 
+function isTopicRelevantRetentionExcerpt(value: string) {
+  const text = normalizePolicyReviewExcerpt(value);
+  if (!text) return false;
+  if (
+    /\b(?:data rollover|rollover data|monthly data|data included in (?:the|your) plan|mobile data|internet data)\b/i.test(text) &&
+    !/\b(?:personal (?:data|information)|privacy|retention|retain(?:ed|ing|s)?)\b/i.test(text)
+  ) {
+    return false;
+  }
+  return /\bretention periods?\b/i.test(text) ||
+    (/\bstorage periods?\b/i.test(text) &&
+      /\b(?:personal (?:data|information)|user (?:data|information)|customer (?:data|information)|records?)\b/i.test(text)) ||
+    /\bretain(?:ed|ing|s)?\b.{0,220}\b(?:for|as long as|no longer than|until|necessary|required by law|legal obligation|purpose for which)\b/i.test(text) ||
+    /\b(?:delete|erase|anonymi[sz]e)(?:d|s|ing)?\b.{0,180}\b(?:after|at the end|when|once|no longer|within\s+\d+)\b/i.test(text) ||
+    /\b(?:kept|stored)\b.{0,180}\b(?:for|as long as|until|necessary|required by law)\b/i.test(text);
+}
+
 function boundedRetentionExcerpt(text: string) {
   const normalized = text.replace(/\s+/g, " ").trim();
   const anchors = [
@@ -1278,7 +1295,7 @@ function canonicalRetentionEvidence(
   const currentExcerpt = normalizePolicyReviewExcerpt(
     row.evidenceExcerpts[0] ?? row.conflictingExcerpts[0] ?? "",
   );
-  let selected: CanonicalRetainedTopicEvidence | null = currentExcerpt
+  let selected: CanonicalRetainedTopicEvidence | null = isTopicRelevantRetentionExcerpt(currentExcerpt)
     ? {
         excerpt: currentExcerpt,
         provenance: "review_excerpt",
@@ -1289,7 +1306,7 @@ function canonicalRetentionEvidence(
   for (const document of documents) {
     const excerpt = boundedRetentionExcerpt(document.text);
     if (
-      excerpt &&
+      isTopicRelevantRetentionExcerpt(excerpt) &&
       retentionEvidenceSpecificityScore(excerpt) >
         retentionEvidenceSpecificityScore(selected?.excerpt ?? "")
     ) {
@@ -1516,6 +1533,23 @@ function enforcePolicyReviewInvariants(
           ].slice(0, 20),
         });
       }
+      return policyModelReviewRowSchema.parse({
+        ...row,
+        status: "ambiguous",
+        confidence: Math.min(row.confidence, 0.8),
+        sourceDocumentIds: [],
+        sourceUrls: [],
+        evidenceExcerpts: [],
+        conflictingExcerpts: [],
+        reasonCodes: [
+          ...new Set([
+            ...row.reasonCodes,
+            "retention_excerpt_not_topic_relevant",
+          ]),
+        ].slice(0, 20),
+        rationale:
+          "The proposed passage did not contain topic-relevant personal-data retention evidence, so no observed retention credit is projected.",
+      });
     }
     const canonicalTopic = row.topic === "processing_purposes"
       ? "processing_purposes" as const
