@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const MATRIX_VERSION = "admin_evidence_matrix.v1";
+const MATRIX_VERSION = "admin_evidence_matrix.v2";
 
 type EcsService = {
   networkConfiguration?: {

@@ -51,7 +51,7 @@ test("projects bounded Admin evidence only from canonical checklist rows", () =>
     sourceProjectionVersion: "scan_report_display_projection.v1"
   });
 
-  assert.equal(matrix.version, "admin_evidence_matrix.v1");
+  assert.equal(matrix.version, "admin_evidence_matrix.v2");
   assert.equal(matrix.privacyConsent.reject?.status, "review_signal");
   assert.equal(matrix.privacyConsent.mechanism?.status, "not_observed");
   assert.equal(matrix.transparency.results.CC?.status, "observed");
@@ -70,8 +70,46 @@ test("bounds descriptors and rejects malformed persisted projections", () => {
     sourceProjectionVersion: null
   });
   assert.ok((matrix.transparency.results.CC?.descriptor.length ?? 0) <= 220);
-  assert.equal(parseAdminEvidenceMatrix({ ...matrix, version: "admin_evidence_matrix.v2" }), null);
+  assert.ok(parseAdminEvidenceMatrix({ ...matrix, version: "admin_evidence_matrix.v1" }));
+  assert.equal(parseAdminEvidenceMatrix({ ...matrix, version: "admin_evidence_matrix.v3" }), null);
   assert.equal(parseAdminEvidenceMatrix({ ...matrix, transparency: { ...matrix.transparency, aggregate: null } }), null);
+});
+
+test("uses canonical policy health when the bounded Pulse checklist omits internal retained evidence", () => {
+  const matrix = projectAdminEvidenceMatrix({
+    checklistRows: [
+      row("controller_contact_disclosure", "Observed", "Controller retained."),
+      row("legal_basis_disclosure_observed", "Not confirmed", "No direct passage retained."),
+      row("retention_disclosure_observed", "Observed", "Retention retained."),
+      row("processing_purposes_disclosure", "Observed", "Purposes retained."),
+      row("recipients_vendor_categories_disclosure", "Not confirmed", "No direct passage retained."),
+      row("data_subject_rights_disclosure", "Observed", "Rights retained."),
+      row("international_transfers_disclosure", "Review signal", "Transfer language ambiguous."),
+      row("dpo_contact_point_disclosure", "Observed", "Contact retained."),
+      row("supervisory_authority_complaint_disclosure", "Not confirmed", "No direct passage retained."),
+      row("automated_decision_making_profiling_disclosure", "Not observed", "No disclosure retained.")
+    ],
+    cmpVendorName: null,
+    policyDisclosureSummary: {
+      policyTextExtractionHealth: {
+        detectedPolicyLanguage: "fr",
+        gdprTransparencyLanguageSupported: true,
+        policyTextEvidenceProjectionStatus: "verified_complete",
+        policyTextExtractionStatus: "ok"
+      }
+    },
+    sourceProjectionVersion: null
+  });
+
+  assert.equal(matrix.policyEvidence?.stage, "topic_evidence_limited");
+  assert.equal(matrix.policyEvidence?.detectedLanguage, "fr");
+  assert.deepEqual(matrix.policyEvidence?.topicResults, {
+    ambiguous: 1,
+    disclosureObserved: 5,
+    extractionIncomplete: 0,
+    notEvaluated: 1,
+    notLocatedAutomatically: 3
+  });
 });
 
 test("projects the canonical policy evidence failure stage and every transparency row", () => {

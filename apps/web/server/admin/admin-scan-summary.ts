@@ -162,9 +162,12 @@ export async function persistAdminScanSummaryForRecord(
     ? runtimeArtifacts.visual_evidence_artifacts
     : null;
   const cmpVendorName = noGo.isNoGo ? null : recordString(snapshot, "cmp_vendor_name");
+  const policyDisclosureSummary = recordObject(runtimeArtifacts, "policyDisclosureSummary") ??
+    recordObject(runtimeArtifacts, "policy_disclosure_summary");
   const adminEvidenceMatrix = projectAdminEvidenceMatrix({
     checklistRows,
     cmpVendorName,
+    policyDisclosureSummary,
     sourceProjectionVersion: recordString(snapshot, "report_projection_version")
   });
   const summary: AdminScanSummary = {

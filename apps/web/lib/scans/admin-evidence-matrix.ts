@@ -3,7 +3,12 @@ import type {
   GdprEprivacyCoverageChecklistStatus
 } from "./gdpr-eprivacy-coverage-checklist";
 
-export const ADMIN_EVIDENCE_MATRIX_VERSION = "admin_evidence_matrix.v1" as const;
+export const ADMIN_EVIDENCE_MATRIX_VERSION = "admin_evidence_matrix.v2" as const;
+const LEGACY_ADMIN_EVIDENCE_MATRIX_VERSION = "admin_evidence_matrix.v1" as const;
+const VALID_ADMIN_EVIDENCE_MATRIX_VERSIONS = new Set<string>([
+  ADMIN_EVIDENCE_MATRIX_VERSION,
+  LEGACY_ADMIN_EVIDENCE_MATRIX_VERSION
+]);
 
 export type AdminEvidenceStatus =
   | "observed"
@@ -136,7 +141,7 @@ export type AdminEvidenceMatrix = {
   sourceProjectionVersion: string | null;
   transparency: { aggregate: AdminEvidenceAggregate; results: ResultMap<typeof TRANSPARENCY_ROWS> };
   transport: { aggregate: AdminEvidenceAggregate; results: ResultMap<typeof TRANSPORT_ROWS> };
-  version: typeof ADMIN_EVIDENCE_MATRIX_VERSION;
+  version: typeof ADMIN_EVIDENCE_MATRIX_VERSION | typeof LEGACY_ADMIN_EVIDENCE_MATRIX_VERSION;
 };
 
 const STATUS_MAP: Record<GdprEprivacyCoverageChecklistStatus, AdminEvidenceStatus> = {
@@ -174,9 +179,14 @@ function stringValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function policyEvidenceHealth(row: GdprEprivacyCoverageChecklistItem | undefined) {
+function policyEvidenceHealth(
+  row: GdprEprivacyCoverageChecklistItem | undefined,
+  policyDisclosureSummary?: Record<string, unknown> | null
+) {
   const retained = record(row?.criticalEvidence?.retainedEvidence);
-  const summary = record(retained?.policySurfaceSummary) ?? record(retained?.policy_surface_summary);
+  const summary = policyDisclosureSummary ??
+    record(retained?.policySurfaceSummary) ??
+    record(retained?.policy_surface_summary);
   return record(retained?.policyTextExtractionHealth) ??
     record(retained?.policy_text_extraction_health) ??
     record(summary?.policyTextExtractionHealth) ??
@@ -207,11 +217,14 @@ function policyEvidenceStage(input: {
 
 function projectPolicyEvidenceDiagnostic(
   checklistRows: GdprEprivacyCoverageChecklistItem[],
-  byId: Map<string, GdprEprivacyCoverageChecklistItem>
+  byId: Map<string, GdprEprivacyCoverageChecklistItem>,
+  policyDisclosureSummary?: Record<string, unknown> | null
 ): AdminPolicyEvidenceDiagnostic | null {
   const extractionRow = byId.get("policy_text_extraction");
   const fallbackRow = Object.values(TRANSPARENCY_ROWS).map((id) => byId.get(id)).find(Boolean);
-  const health = policyEvidenceHealth(extractionRow ?? fallbackRow);
+  const health = policyEvidenceHealth(extractionRow ?? fallbackRow, policyDisclosureSummary);
+  const extractionStatus = stringValue(health?.policyTextExtractionStatus ?? health?.policy_text_extraction_status);
+  const projectionStatus = stringValue(health?.policyTextEvidenceProjectionStatus ?? health?.policy_text_evidence_projection_status);
   const topicResults = {
     ambiguous: 0,
     disclosureObserved: 0,
@@ -228,12 +241,20 @@ function projectPolicyEvidenceDiagnostic(
     if (result === "extraction_incomplete") topicResults.extractionIncomplete += 1;
     if (result === "not_evaluated") topicResults.notEvaluated += 1;
     if (result === "not_located_automatically") topicResults.notLocatedAutomatically += 1;
+    if (!result) {
+      const status = byId.get(rowId)?.status;
+      if (status === "Observed") topicResults.disclosureObserved += 1;
+      if (status === "Review signal") topicResults.ambiguous += 1;
+      if (status === "Not observed") topicResults.notEvaluated += 1;
+      if (status === "Not confirmed" || status === "Not testable" || status === "Insufficient evidence") {
+        if (extractionStatus === "ok") topicResults.notLocatedAutomatically += 1;
+        else topicResults.extractionIncomplete += 1;
+      }
+    }
   }
   if (!health && checklistRows.length === 0 && Object.values(topicResults).every((count) => count === 0)) {
     return null;
   }
-  const extractionStatus = stringValue(health?.policyTextExtractionStatus ?? health?.policy_text_extraction_status);
-  const projectionStatus = stringValue(health?.policyTextEvidenceProjectionStatus ?? health?.policy_text_evidence_projection_status);
   return {
     detectedLanguage: stringValue(health?.detectedPolicyLanguage ?? health?.detected_policy_language),
     extractionFailureReason: stringValue(health?.extractionFailureReason ?? health?.extraction_failure_reason),
@@ -286,6 +307,7 @@ export function projectAdminEvidenceMatrix(input: {
   checklistRows: GdprEprivacyCoverageChecklistItem[];
   cmpVendorName: string | null;
   generatedAt?: string;
+  policyDisclosureSummary?: Record<string, unknown> | null;
   sourceProjectionVersion: string | null;
 }): AdminEvidenceMatrix {
   const byId = new Map(input.checklistRows.map((row) => [row.id, row]));
@@ -295,7 +317,7 @@ export function projectAdminEvidenceMatrix(input: {
   return {
     version: ADMIN_EVIDENCE_MATRIX_VERSION,
     generatedAt: input.generatedAt ?? new Date().toISOString(),
-    policyEvidence: projectPolicyEvidenceDiagnostic(input.checklistRows, byId),
+    policyEvidence: projectPolicyEvidenceDiagnostic(input.checklistRows, byId, input.policyDisclosureSummary),
     sourceProjectionVersion: input.sourceProjectionVersion,
     privacyConsent: {
       ...projectResults(PRIVACY_CONSENT_ROWS, byId),
@@ -356,7 +378,7 @@ function isPolicyEvidenceDiagnostic(value: unknown): value is AdminPolicyEvidenc
 export function parseAdminEvidenceMatrix(value: unknown): AdminEvidenceMatrix | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const matrix = value as Record<string, unknown>;
-  if (matrix.version !== ADMIN_EVIDENCE_MATRIX_VERSION || typeof matrix.generatedAt !== "string" || matrix.generatedAt.length > 64) return null;
+  if (typeof matrix.version !== "string" || !VALID_ADMIN_EVIDENCE_MATRIX_VERSIONS.has(matrix.version) || typeof matrix.generatedAt !== "string" || matrix.generatedAt.length > 64) return null;
   if (matrix.sourceProjectionVersion !== null && typeof matrix.sourceProjectionVersion !== "string") return null;
   if (!isPolicyEvidenceDiagnostic(matrix.policyEvidence)) return null;
   const privacyConsent = matrix.privacyConsent as Record<string, unknown> | null;
