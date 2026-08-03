@@ -308,16 +308,18 @@ test("validation worker persists completion scores before acknowledging a Lambda
   assert.match(source, /terminal score materialization failure acknowledged/);
 });
 
-test("validation worker consumes embedded policy evidence before terminal score materialization", async () => {
+test("validation worker records terminal completion before consuming embedded policy evidence", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
-  const fallbackIndex = source.indexOf("await processEmbeddedPolicyEvidenceBeforeTerminalMaterialization");
-  const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult", fallbackIndex);
-  const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted", resultIndex);
+  const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult");
+  const fallbackIndex = source.indexOf("await processEmbeddedPolicyEvidenceBeforeScoreMaterialization", resultIndex);
+  const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted", fallbackIndex);
 
   assert.ok(fallbackIndex >= 0, "expected terminal message policy-evidence fallback");
-  assert.ok(resultIndex > fallbackIndex, "verified policy evidence must be processed before terminal retention");
-  assert.ok(scoreIndex > resultIndex, "static review must be available before canonical score materialization");
+  assert.ok(fallbackIndex > resultIndex, "terminal retention must not wait for semantic review");
+  assert.ok(scoreIndex > fallbackIndex, "static review must be available before canonical score materialization");
   assert.match(source, /policyEvidenceProcessingInFlight/);
+  assert.match(source, /policyEvidenceBackgroundTasks/);
+  assert.match(source, /POLICY_EVIDENCE_BACKGROUND_CONCURRENCY\s*=\s*2/);
 });
 
 test("validation worker synchronizes linked API activity before acknowledging a Lambda result", async () => {
@@ -337,8 +339,8 @@ test("validation worker continuously reconciles accepted scans without terminal 
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
   assert.match(source, /ORPHAN_RECONCILIATION_INTERVAL_MS\s*=\s*10_000/);
-  assert.match(source, /ORPHAN_RECONCILIATION_AGE_MS\s*=\s*240_000/);
-  assert.match(source, /within 240 seconds/);
+  assert.match(source, /ORPHAN_RECONCILIATION_AGE_MS\s*=\s*45_000/);
+  assert.match(source, /within 45 seconds/);
   assert.match(source, /for update of s skip locked/);
   assert.match(source, /lambda_terminal_result_absent/);
   assert.match(source, /void loopReconciliation\(\)/);

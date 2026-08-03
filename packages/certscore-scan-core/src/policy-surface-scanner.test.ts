@@ -32,6 +32,7 @@ import {
   recoverPolicyDocumentsFromRetainedRenderedLinks,
   resolvePolicyVisibleText,
   settlePolicyCandidateProcessingBeforeDeadline,
+  shouldRetryCanonicalPolicyHost,
   shouldUseDirectPolicyDocumentText,
   stripConsentSurfacePreambleFromPolicyText,
   type PolicyNanoAssistProvider,
@@ -46,6 +47,15 @@ test("builds a bounded canonical www retry for policy notices", () => {
   assert.equal(canonicalWwwPolicyUrlVariant("https://edition.cnn.com/privacy"), "https://www.cnn.com/privacy");
   assert.equal(canonicalWwwPolicyUrlVariant("https://www.publisher.example/legal/privacy-policy"), null);
   assert.equal(canonicalWwwPolicyUrlVariant("http://publisher.example/legal/privacy-policy"), null);
+});
+
+test("does not repeat a canonical host retry already attempted by the bounded fetch", () => {
+  const candidateUrl = "https://publisher.example/legal/privacy-policy";
+  assert.equal(shouldRetryCanonicalPolicyHost(candidateUrl, [{ requestedUrl: candidateUrl }]), true);
+  assert.equal(shouldRetryCanonicalPolicyHost(candidateUrl, [
+    { requestedUrl: candidateUrl },
+    { requestedUrl: "https://www.publisher.example/legal/privacy-policy" },
+  ]), false);
 });
 
 test("removes consent-banner preambles before policy topic extraction", () => {

@@ -459,6 +459,16 @@ export function canonicalWwwPolicyUrlVariant(value: string) {
   }
 }
 
+export function shouldRetryCanonicalPolicyHost(
+  candidateUrl: string,
+  attempts: ReadonlyArray<Pick<PolicyFetchAttemptDiagnostic, "requestedUrl">>,
+) {
+  const variant = canonicalWwwPolicyUrlVariant(candidateUrl);
+  return Boolean(variant) && !attempts.some((attempt) =>
+    canonicalPolicyUrlIdentity(attempt.requestedUrl) === canonicalPolicyUrlIdentity(variant!)
+  );
+}
+
 interface PolicyBrowserRuntime {
   close(): Promise<void>;
   getBrowser(): Promise<Browser>;
@@ -1743,7 +1753,7 @@ async function processPolicyCandidate({
   });
   if (!fetched.ok) {
     const canonicalHostVariant = canonicalWwwPolicyUrlVariant(candidate.normalizedUrl);
-    if (canonicalHostVariant) {
+    if (canonicalHostVariant && shouldRetryCanonicalPolicyHost(candidate.normalizedUrl, fetched.attempts ?? [])) {
       const variantFetched = await recordPolicyTiming(
         timingBreakdown,
         `policy canonical host retry ${candidateIndex + 1}`,

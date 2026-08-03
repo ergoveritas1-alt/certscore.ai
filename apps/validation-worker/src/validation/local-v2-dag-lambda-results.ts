@@ -36,16 +36,15 @@ const POLICY_EVIDENCE_REJECTED_EVENT_TYPE = "v2_policy_evidence.rejected";
 const RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
 const RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
 const RESULT_BATCH_CONCURRENCY = 3;
+const POLICY_EVIDENCE_BACKGROUND_CONCURRENCY = 2;
 const RESULT_VISIBILITY_TIMEOUT_SECONDS = 240;
 const MATERIALIZATION_FINALIZING_WAIT_MS = 150_000;
 const MATERIALIZATION_RETRY_SECONDS_MIN = 2;
 const MATERIALIZATION_RETRY_SECONDS_MAX = 15;
-// The Lambda handler has a 65s safety deadline plus a bounded result-publish
-// window. SQS delivery can be delayed beyond the handler's completion, so the
-// reconciler must leave enough margin for a valid terminal message to arrive
-// before it declares the scan orphaned.
+// The production scanner has a 30s terminal-result envelope. Keep a small SQS
+// delivery margin, but do not classify materially slower scans as healthy.
 const ORPHAN_RECONCILIATION_INTERVAL_MS = 10_000;
-const ORPHAN_RECONCILIATION_AGE_MS = 240_000;
+const ORPHAN_RECONCILIATION_AGE_MS = 45_000;
 
 type LambdaResultStatus = "completed" | "failed";
 type LambdaTargetEnvironment = "local" | "production";
@@ -449,6 +448,7 @@ async function processPolicyEvidenceReadyMessageUncoalesced(input: {
 
 type PolicyEvidenceProcessingResult = Awaited<ReturnType<typeof processPolicyEvidenceReadyMessageUncoalesced>>;
 const policyEvidenceProcessingInFlight = new Map<string, Promise<PolicyEvidenceProcessingResult>>();
+const policyEvidenceBackgroundTasks = new Set<Promise<void>>();
 
 async function processPolicyEvidenceReadyMessage(input: {
   queueRegion: string;
@@ -470,6 +470,87 @@ async function processPolicyEvidenceReadyMessage(input: {
       policyEvidenceProcessingInFlight.delete(key);
     }
   }
+}
+
+function startPolicyEvidenceReadyMessageProcessing(input: {
+  client: SQSClient;
+  message: Message;
+  queueRegion: string;
+  queueUrl: string;
+  raw: string;
+  targetEnvironment: LambdaTargetEnvironment;
+}) {
+  if (policyEvidenceBackgroundTasks.size >= POLICY_EVIDENCE_BACKGROUND_CONCURRENCY) {
+    return false;
+  }
+  const task = (async () => {
+    try {
+      await processPolicyEvidenceReadyMessage({
+        queueRegion: input.queueRegion,
+        raw: input.raw,
+        targetEnvironment: input.targetEnvironment,
+      });
+      await input.client.send(new DeleteMessageCommand({
+        QueueUrl: input.queueUrl,
+        ReceiptHandle: receiptHandle(input.message),
+      }));
+    } catch (error) {
+      const resultTargetEnvironment = getLambdaResultTargetEnvironment(input.raw);
+      if (resultTargetEnvironment && resultTargetEnvironment !== input.targetEnvironment) {
+        await input.client.send(new ChangeMessageVisibilityCommand({
+          QueueUrl: input.queueUrl,
+          ReceiptHandle: receiptHandle(input.message),
+          VisibilityTimeout: 0,
+        }));
+        return;
+      }
+      if (error instanceof TerminalEarlyPolicyEvidenceError) {
+        try {
+          await recordTerminalPolicyEvidenceRejection({
+            error,
+            queueRegion: input.queueRegion,
+            raw: input.raw,
+          });
+          await input.client.send(new DeleteMessageCommand({
+            QueueUrl: input.queueUrl,
+            ReceiptHandle: receiptHandle(input.message),
+          }));
+          console.warn("[validation-worker] acknowledged terminal early policy evidence rejection", {
+            messageId: input.message.MessageId ?? null,
+            queueRegion: input.queueRegion,
+            reasonCode: error.code,
+            scanId: error.scanId,
+          });
+          return;
+        } catch (recordError) {
+          console.error("[validation-worker] failed to retain terminal early policy evidence rejection", {
+            error: recordError instanceof Error ? recordError.message : String(recordError),
+            messageId: input.message.MessageId ?? null,
+            queueRegion: input.queueRegion,
+            reasonCode: error.code,
+            scanId: error.scanId,
+          });
+          return;
+        }
+      }
+      console.error("[validation-worker] early policy evidence message rejected", {
+        error: error instanceof Error ? error.message : String(error),
+        messageId: input.message.MessageId ?? null,
+        queueRegion: input.queueRegion,
+      });
+    }
+  })();
+  policyEvidenceBackgroundTasks.add(task);
+  void task
+    .finally(() => policyEvidenceBackgroundTasks.delete(task))
+    .catch((error) => {
+      console.error("[validation-worker] policy evidence background task failed", {
+        error: error instanceof Error ? error.message : String(error),
+        messageId: input.message.MessageId ?? null,
+        queueRegion: input.queueRegion,
+      });
+    });
+  return true;
 }
 
 function isUuid(value: string | null): value is string {
@@ -1340,7 +1421,7 @@ function parseSqsInteger(value: string | undefined) {
   return Number.isInteger(parsed) ? parsed : null;
 }
 
-async function processEmbeddedPolicyEvidenceBeforeTerminalMaterialization(input: {
+async function processEmbeddedPolicyEvidenceBeforeScoreMaterialization(input: {
   message: LambdaPolicyEvidenceMessage;
   queueRegion: string;
   targetEnvironment: LambdaTargetEnvironment;
@@ -1389,63 +1470,22 @@ async function pollOnce(input: {
   const outcomes = await mapWithConcurrency(messages, RESULT_BATCH_CONCURRENCY, async (message) => {
     const rawMessage = messageBody(message);
     if (isPolicyEvidenceReadyMessage(rawMessage)) {
-      try {
-        await processPolicyEvidenceReadyMessage({
-          queueRegion: input.queueRegion,
-          raw: rawMessage,
-          targetEnvironment: input.targetEnvironment,
-        });
-        await input.client.send(new DeleteMessageCommand({
+      const started = startPolicyEvidenceReadyMessageProcessing({
+        client: input.client,
+        message,
+        queueRegion: input.queueRegion,
+        queueUrl: input.queueUrl,
+        raw: rawMessage,
+        targetEnvironment: input.targetEnvironment,
+      });
+      if (!started) {
+        await input.client.send(new ChangeMessageVisibilityCommand({
           QueueUrl: input.queueUrl,
           ReceiptHandle: receiptHandle(message),
+          VisibilityTimeout: 0,
         }));
-        return { deleted: 1, failed: 0, handled: 1 };
-      } catch (error) {
-        const resultTargetEnvironment = getLambdaResultTargetEnvironment(rawMessage);
-        if (resultTargetEnvironment && resultTargetEnvironment !== input.targetEnvironment) {
-          await input.client.send(new ChangeMessageVisibilityCommand({
-            QueueUrl: input.queueUrl,
-            ReceiptHandle: receiptHandle(message),
-            VisibilityTimeout: 0,
-          }));
-          return { deleted: 0, failed: 0, handled: 0 };
-        }
-        if (error instanceof TerminalEarlyPolicyEvidenceError) {
-          try {
-            await recordTerminalPolicyEvidenceRejection({
-              error,
-              queueRegion: input.queueRegion,
-              raw: rawMessage,
-            });
-            await input.client.send(new DeleteMessageCommand({
-              QueueUrl: input.queueUrl,
-              ReceiptHandle: receiptHandle(message),
-            }));
-            console.warn("[validation-worker] acknowledged terminal early policy evidence rejection", {
-              messageId: message.MessageId ?? null,
-              queueRegion: input.queueRegion,
-              reasonCode: error.code,
-              scanId: error.scanId,
-            });
-            return { deleted: 1, failed: 0, handled: 0 };
-          } catch (recordError) {
-            console.error("[validation-worker] failed to retain terminal early policy evidence rejection", {
-              error: recordError instanceof Error ? recordError.message : String(recordError),
-              messageId: message.MessageId ?? null,
-              queueRegion: input.queueRegion,
-              reasonCode: error.code,
-              scanId: error.scanId,
-            });
-            return { deleted: 0, failed: 1, handled: 0 };
-          }
-        }
-        console.error("[validation-worker] early policy evidence message rejected", {
-          error: error instanceof Error ? error.message : String(error),
-          messageId: message.MessageId ?? null,
-          queueRegion: input.queueRegion,
-        });
-        return { deleted: 0, failed: 1, handled: 0 };
       }
+      return { deleted: 0, failed: 0, handled: started ? 1 : 0 };
     }
     const disposition = classifyV2DagLambdaResultDisposition(rawMessage);
     if (disposition.kind === "synthetic_verification") {
@@ -1473,13 +1513,6 @@ async function pollOnce(input: {
     }
     try {
       const parsed = parseLambdaResultMessage(rawMessage, input.targetEnvironment);
-      if (parsed.policyEvidence) {
-        await processEmbeddedPolicyEvidenceBeforeTerminalMaterialization({
-          message: parsed.policyEvidence,
-          queueRegion: input.queueRegion,
-          targetEnvironment: input.targetEnvironment,
-        });
-      }
       await recordLocalV2DagLambdaResult(parsed, {
         consumer: {
           approximateReceiveCount: parseSqsInteger(message.Attributes?.ApproximateReceiveCount),
@@ -1490,6 +1523,13 @@ async function pollOnce(input: {
         }
       });
       if (parsed.status === "completed") {
+        if (parsed.policyEvidence) {
+          await processEmbeddedPolicyEvidenceBeforeScoreMaterialization({
+            message: parsed.policyEvidence,
+            queueRegion: input.queueRegion,
+            targetEnvironment: input.targetEnvironment,
+          });
+        }
         await ensureCompletedScanScoresPersisted({
           scanId: parsed.scanId,
           targetEnvironment: parsed.targetEnvironment,
@@ -1570,7 +1610,7 @@ async function mapWithConcurrency<T, R>(
 export async function reconcileOrphanedLocalV2DagLambdaScans(input: {
   olderThanMs?: number;
 } = {}) {
-  const olderThanMs = Math.max(60_000, input.olderThanMs ?? ORPHAN_RECONCILIATION_AGE_MS);
+  const olderThanMs = Math.max(30_000, input.olderThanMs ?? ORPHAN_RECONCILIATION_AGE_MS);
   const result = await query<{ scan_id: string }>(
     `with stale as (
        select s.id, s.domain_id, s.organization_id
@@ -1605,7 +1645,7 @@ export async function reconcileOrphanedLocalV2DagLambdaScans(input: {
        update scans s
           set status = 'failed',
               completed_at = coalesce(s.completed_at, now()),
-              error_message = 'The scanner did not return a terminal result within 240 seconds. No result was inferred; start a new scan.',
+              error_message = 'The scanner did not return a terminal result within 45 seconds. No result was inferred; start a new scan.',
               scan_config_json = jsonb_set(
                 s.scan_config_json,
                 '{execution,v2DagLambda}',
