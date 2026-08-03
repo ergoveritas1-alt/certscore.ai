@@ -337,8 +337,8 @@ test("validation worker continuously reconciles accepted scans without terminal 
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
   assert.match(source, /ORPHAN_RECONCILIATION_INTERVAL_MS\s*=\s*10_000/);
-  assert.match(source, /ORPHAN_RECONCILIATION_AGE_MS\s*=\s*150_000/);
-  assert.match(source, /within 150 seconds/);
+  assert.match(source, /ORPHAN_RECONCILIATION_AGE_MS\s*=\s*240_000/);
+  assert.match(source, /within 240 seconds/);
   assert.match(source, /for update of s skip locked/);
   assert.match(source, /lambda_terminal_result_absent/);
   assert.match(source, /void loopReconciliation\(\)/);
