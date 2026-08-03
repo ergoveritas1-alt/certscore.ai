@@ -273,6 +273,76 @@ test("browser-recovered privacy links receive a bounded canonical document fetch
   }
 });
 
+test("browser recovery is not suppressed by a retained service-provider privacy policy", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-provider-recovery-"));
+  try {
+    const homepageUrl = server.urlFor("generic-cdn-noise");
+    const privacyUrl = server.urlFor("policy-article13-long");
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const links = [{
+      domLocation: "footer" as const,
+      href: privacyUrl,
+      linkText: "Privacy Notice",
+      pageUrl: homepageUrl,
+    }];
+    const retainedTargetLinks = policySurfaceObservationsFromRetainedRenderedLinks({ links });
+    const serviceProviderPolicy = {
+      ...retainedTargetLinks[0]!,
+      observationId: "policy_surface_service_provider",
+      url: "https://privacy.vendor.example/policy",
+      normalizedUrl: "https://privacy.vendor.example/policy",
+      status: "fetched" as const,
+      documentFetchState: "fetched" as const,
+      documentEvaluationState: "usable" as const,
+      targetRelationship: "service_provider" as const,
+    };
+    const targetControllerPolicy = {
+      ...serviceProviderPolicy,
+      observationId: "policy_surface_target_controller",
+      url: privacyUrl,
+      normalizedUrl: privacyUrl,
+      targetRelationship: "target_controller" as const,
+    };
+
+    const alreadyCovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: homepageUrl,
+        normalizedUrl: homepageUrl,
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 6_000,
+        artifactWriter,
+        nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      },
+      links,
+      existingObservations: [targetControllerPolicy, ...retainedTargetLinks],
+    });
+    assert.deepEqual(alreadyCovered, { artifactRefs: [], observations: [], timingBreakdown: [] });
+
+    const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: homepageUrl,
+        normalizedUrl: homepageUrl,
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 6_000,
+        artifactWriter,
+        nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      },
+      links,
+      existingObservations: [serviceProviderPolicy, ...retainedTargetLinks],
+    });
+
+    assert.equal(recovered.observations.some((observation) =>
+      observation.status === "fetched" &&
+      observation.documentEvaluationState === "usable" &&
+      observation.normalizedUrl === privacyUrl
+    ), true);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("browser recovery primes the observed same-origin session and prioritizes the general privacy notice", async () => {
   const policyText = Array.from({ length: 12 }, () =>
     "This Privacy Notice explains how we process personal data for specified purposes and legal bases. " +

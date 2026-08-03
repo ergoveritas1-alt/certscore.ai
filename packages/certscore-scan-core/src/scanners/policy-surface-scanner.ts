@@ -1057,12 +1057,21 @@ export async function recoverPolicyDocumentsFromRetainedRenderedLinks(input: {
   observations: PolicySurfaceObservation[];
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
 }> {
-  const usablePrivacyDocumentRetained = input.existingObservations.some((observation) =>
+  const targetSite = getRegistrableDomainFromUrl(input.scannerInput.normalizedUrl);
+  const usableTargetPrivacyDocumentRetained = input.existingObservations.some((observation) =>
     observation.surfaceType === "privacy_policy" &&
     observation.status === "fetched" &&
-    observation.documentEvaluationState !== "insufficient"
+    observation.documentEvaluationState !== "insufficient" &&
+    (
+      observation.targetRelationship === "target_controller" ||
+      observation.targetRelationship === "first_party_brand" ||
+      Boolean(
+        targetSite &&
+        getRegistrableDomainFromUrl(observation.normalizedUrl ?? observation.url) === targetSite
+      )
+    )
   );
-  if (usablePrivacyDocumentRetained || input.links.length === 0) {
+  if (usableTargetPrivacyDocumentRetained || input.links.length === 0) {
     return { artifactRefs: [], observations: [], timingBreakdown: [] };
   }
 
