@@ -36,6 +36,7 @@ const POLICY_EVIDENCE_REJECTED_EVENT_TYPE = "v2_policy_evidence.rejected";
 const RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
 const RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
 const RESULT_BATCH_CONCURRENCY = 3;
+const RESULT_QUEUE_POLL_CONCURRENCY = 2;
 const POLICY_EVIDENCE_BACKGROUND_CONCURRENCY = 2;
 const RESULT_VISIBILITY_TIMEOUT_SECONDS = 240;
 const MATERIALIZATION_FINALIZING_WAIT_MS = 150_000;
@@ -1737,12 +1738,15 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
 
   console.info("[validation-worker] v2 DAG Lambda result poller started", {
     pollMs: options.pollMs,
+    pollConcurrency: RESULT_QUEUE_POLL_CONCURRENCY,
     queueRegions: queueUrls.map(parseQueueRegion),
     queueCount: queueUrls.length,
     targetEnvironment: options.targetEnvironment
   });
   for (const queueUrl of queueUrls) {
-    void loopQueue(queueUrl);
+    for (let pollIndex = 0; pollIndex < RESULT_QUEUE_POLL_CONCURRENCY; pollIndex += 1) {
+      void loopQueue(queueUrl);
+    }
   }
   void loopReconciliation();
 
