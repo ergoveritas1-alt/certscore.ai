@@ -1,10 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@website-signal-risk-scanner/ui";
 import type { MouseEvent } from "react";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 export function PaginationNavigationButtons({
   nextHref,
@@ -13,9 +11,8 @@ export function PaginationNavigationButtons({
   nextHref: string | null;
   previousHref: string | null;
 }) {
-  const router = useRouter();
-  const [isPageNavigationPending, startPageNavigation] = useTransition();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const isPageNavigationPending = pendingHref !== null;
 
   function handlePageNavigation(event: MouseEvent<HTMLAnchorElement>, href: string) {
     if (
@@ -29,15 +26,12 @@ export function PaginationNavigationButtons({
       return;
     }
 
-    event.preventDefault();
     if (isPageNavigationPending) {
+      event.preventDefault();
       return;
     }
 
     setPendingHref(href);
-    startPageNavigation(() => {
-      router.push(href);
-    });
   }
 
   return <>
@@ -45,34 +39,32 @@ export function PaginationNavigationButtons({
       {previousHref === null ? (
         <span className="cursor-not-allowed text-slate-400">Previous</span>
       ) : (
-        <Link
+        <a
           aria-busy={isPageNavigationPending && pendingHref === previousHref}
           aria-disabled={isPageNavigationPending}
           className={isPageNavigationPending ? "cursor-wait text-slate-500" : undefined}
           href={previousHref}
           onClick={(event) => handlePageNavigation(event, previousHref)}
-          prefetch={false}
           tabIndex={isPageNavigationPending ? -1 : undefined}
         >
           {isPageNavigationPending && pendingHref === previousHref ? "Loading…" : "Previous"}
-        </Link>
+        </a>
       )}
     </Button>
     <Button asChild disabled={nextHref === null || isPageNavigationPending} size="sm" variant="secondary">
       {nextHref === null ? (
         <span className="cursor-not-allowed text-slate-400">Next</span>
       ) : (
-        <Link
+        <a
           aria-busy={isPageNavigationPending && pendingHref === nextHref}
           aria-disabled={isPageNavigationPending}
           className={isPageNavigationPending ? "cursor-wait text-slate-500" : undefined}
           href={nextHref}
           onClick={(event) => handlePageNavigation(event, nextHref)}
-          prefetch={false}
           tabIndex={isPageNavigationPending ? -1 : undefined}
         >
           {isPageNavigationPending && pendingHref === nextHref ? "Loading…" : "Next"}
-        </Link>
+        </a>
       )}
     </Button>
   </>;

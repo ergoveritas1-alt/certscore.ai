@@ -157,13 +157,13 @@ test("Admin Scans and API Activity pagination expose immediate feedback while na
 
   assert.doesNotMatch(controls, /"use client"/);
   assert.match(controls, /PaginationNavigationButtons/);
-  assert.match(navigationButtons, /useTransition/);
-  assert.match(navigationButtons, /startPageNavigation/);
-  assert.match(navigationButtons, /router\.push\(href\)/);
+  assert.match(navigationButtons, /const isPageNavigationPending = pendingHref !== null/);
+  assert.doesNotMatch(navigationButtons, /useRouter|router\.push|useTransition/);
+  assert.doesNotMatch(navigationButtons, /event\.preventDefault\(\);\n    if \(isPageNavigationPending\)/);
+  assert.match(navigationButtons, /<a/);
   assert.match(navigationButtons, /aria-busy=\{isPageNavigationPending/);
   assert.match(navigationButtons, /\? "Loading…" : "Previous"/);
   assert.match(navigationButtons, /\? "Loading…" : "Next"/);
-  assert.match(navigationButtons, /prefetch=\{false\}/);
   assert.match(scansPage, /<PaginationControls/);
   assert.match(scansPage, /basePath="\/app\/admin\/scans"/);
   assert.match(pulsePage, /<PaginationControls/);
