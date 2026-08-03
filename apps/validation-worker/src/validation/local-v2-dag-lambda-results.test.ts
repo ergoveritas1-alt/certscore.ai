@@ -260,6 +260,7 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /await sleep\(retrySeconds \* 1_000\)/);
   assert.match(source, /RESULT_BATCH_CONCURRENCY\s*=\s*3/);
   assert.match(source, /RESULT_QUEUE_POLL_CONCURRENCY\s*=\s*2/);
+  assert.match(source, /RESULT_FINALIZATION_BACKGROUND_CONCURRENCY\s*=\s*8/);
   assert.match(source, /MaxNumberOfMessages:\s*RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /mapWithConcurrency\(messages, RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /classifyV2DagLambdaResultDisposition\(rawMessage\)/);
@@ -268,7 +269,26 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /async function loopQueue\(queueUrl: string\)/);
   assert.match(source, /for \(const queueUrl of queueUrls\)/);
   assert.match(source, /pollIndex < RESULT_QUEUE_POLL_CONCURRENCY/);
+  assert.match(source, /startCompletedResultFinalization/);
+  assert.match(source, /resultFinalizationBackgroundTasks/);
   assert.doesNotMatch(source, /Promise\.all\(queueUrls\.map/);
+});
+
+test("validation worker frees result poll capacity after retaining the terminal result", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+  const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult");
+  const finalizationStartIndex = source.indexOf("startCompletedResultFinalization", resultIndex);
+  const finalizationBodyIndex = source.indexOf("function startCompletedResultFinalization", finalizationStartIndex);
+  const policyIndex = source.indexOf("await processEmbeddedPolicyEvidenceBeforeScoreMaterialization", finalizationBodyIndex);
+  const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted", policyIndex);
+  const deleteIndex = source.indexOf("new DeleteMessageCommand", scoreIndex);
+
+  assert.ok(resultIndex >= 0, "expected terminal result retention");
+  assert.ok(finalizationStartIndex > resultIndex, "slow downstream work must start after terminal retention");
+  assert.ok(finalizationBodyIndex > finalizationStartIndex, "expected bounded background finalization");
+  assert.ok(policyIndex > finalizationBodyIndex, "policy evidence remains ahead of score materialization");
+  assert.ok(scoreIndex > policyIndex, "score materialization remains canonical downstream work");
+  assert.ok(deleteIndex > scoreIndex, "SQS acknowledgement must follow background finalization");
 });
 
 test("validation worker runtime overlays the current policy evidence contract and terminates malformed packets", async () => {

@@ -37,6 +37,7 @@ const RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
 const RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
 const RESULT_BATCH_CONCURRENCY = 3;
 const RESULT_QUEUE_POLL_CONCURRENCY = 2;
+const RESULT_FINALIZATION_BACKGROUND_CONCURRENCY = 8;
 const POLICY_EVIDENCE_BACKGROUND_CONCURRENCY = 2;
 const RESULT_VISIBILITY_TIMEOUT_SECONDS = 240;
 const MATERIALIZATION_FINALIZING_WAIT_MS = 150_000;
@@ -450,6 +451,7 @@ async function processPolicyEvidenceReadyMessageUncoalesced(input: {
 type PolicyEvidenceProcessingResult = Awaited<ReturnType<typeof processPolicyEvidenceReadyMessageUncoalesced>>;
 const policyEvidenceProcessingInFlight = new Map<string, Promise<PolicyEvidenceProcessingResult>>();
 const policyEvidenceBackgroundTasks = new Set<Promise<void>>();
+const resultFinalizationBackgroundTasks = new Set<Promise<void>>();
 
 async function processPolicyEvidenceReadyMessage(input: {
   queueRegion: string;
@@ -1524,19 +1526,22 @@ async function pollOnce(input: {
         }
       });
       if (parsed.status === "completed") {
-        if (parsed.policyEvidence) {
-          await processEmbeddedPolicyEvidenceBeforeScoreMaterialization({
-            message: parsed.policyEvidence,
-            queueRegion: input.queueRegion,
-            targetEnvironment: input.targetEnvironment,
-          });
-        }
-        await ensureCompletedScanScoresPersisted({
-          scanId: parsed.scanId,
-          targetEnvironment: parsed.targetEnvironment,
-          webBaseUrl: input.webBaseUrl
+        const started = startCompletedResultFinalization({
+          client: input.client,
+          message,
+          parsed,
+          queueRegion: input.queueRegion,
+          queueUrl: input.queueUrl,
+          webBaseUrl: input.webBaseUrl,
         });
-        await persistScannerRuntimeSnapshot(parsed);
+        if (!started) {
+          await input.client.send(new ChangeMessageVisibilityCommand({
+            QueueUrl: input.queueUrl,
+            ReceiptHandle: receiptHandle(message),
+            VisibilityTimeout: 0,
+          }));
+        }
+        return { deleted: 0, failed: 0, handled: 1 };
       }
       await input.client.send(new DeleteMessageCommand({
         QueueUrl: input.queueUrl,
@@ -1585,6 +1590,73 @@ async function pollOnce(input: {
   }
 
   return { deleted, failed, handled, received: messages.length };
+}
+
+function startCompletedResultFinalization(input: {
+  client: SQSClient;
+  message: Message;
+  parsed: LambdaResultMessage;
+  queueRegion: string;
+  queueUrl: string;
+  webBaseUrl?: string;
+}) {
+  if (resultFinalizationBackgroundTasks.size >= RESULT_FINALIZATION_BACKGROUND_CONCURRENCY) {
+    return false;
+  }
+  const task = (async () => {
+    try {
+      if (input.parsed.policyEvidence) {
+        await processEmbeddedPolicyEvidenceBeforeScoreMaterialization({
+          message: input.parsed.policyEvidence,
+          queueRegion: input.queueRegion,
+          targetEnvironment: input.parsed.targetEnvironment,
+        });
+      }
+      await ensureCompletedScanScoresPersisted({
+        scanId: input.parsed.scanId,
+        targetEnvironment: input.parsed.targetEnvironment,
+        webBaseUrl: input.webBaseUrl,
+      });
+      await persistScannerRuntimeSnapshot(input.parsed);
+      await input.client.send(new DeleteMessageCommand({
+        QueueUrl: input.queueUrl,
+        ReceiptHandle: receiptHandle(input.message),
+      }));
+    } catch (error) {
+      console.error("[validation-worker] v2 DAG Lambda result finalization failed", {
+        error: error instanceof Error ? error.message : String(error),
+        messageId: input.message.MessageId ?? null,
+        queueRegion: input.queueRegion,
+        scanId: input.parsed.scanId,
+      });
+      try {
+        await input.client.send(new ChangeMessageVisibilityCommand({
+          QueueUrl: input.queueUrl,
+          ReceiptHandle: receiptHandle(input.message),
+          VisibilityTimeout: 10,
+        }));
+      } catch (visibilityError) {
+        console.error("[validation-worker] failed to release Lambda result after finalization failure", {
+          error: visibilityError instanceof Error ? visibilityError.message : String(visibilityError),
+          messageId: input.message.MessageId ?? null,
+          queueRegion: input.queueRegion,
+          scanId: input.parsed.scanId,
+        });
+      }
+    }
+  })();
+  resultFinalizationBackgroundTasks.add(task);
+  void task
+    .finally(() => resultFinalizationBackgroundTasks.delete(task))
+    .catch((error) => {
+      console.error("[validation-worker] Lambda result finalization background task failed", {
+        error: error instanceof Error ? error.message : String(error),
+        messageId: input.message.MessageId ?? null,
+        queueRegion: input.queueRegion,
+        scanId: input.parsed.scanId,
+      });
+    });
+  return true;
 }
 
 async function mapWithConcurrency<T, R>(
