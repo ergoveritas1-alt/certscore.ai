@@ -299,6 +299,8 @@ export interface PreConsentRuntimeScannerResult {
   artifactRefs: ArtifactRef[];
   vendorResolverInputs: VendorResolverInput[];
   renderedPolicyLinks: RetainedRenderedPolicyLink[];
+  /** Runtime-only same-session page; never persisted or projected. */
+  renderedPolicyRecoveryPage?: Page;
 }
 
 export type RetainedRenderedPolicyLink = {
@@ -2258,6 +2260,7 @@ export async function preConsentRuntimeScanner(
       artifactRefs: transportSecurityArtifactRef ? [transportSecurityArtifactRef] : [],
       vendorResolverInputs,
       renderedPolicyLinks: retainedRenderedPolicyLinkEvidence,
+      renderedPolicyRecoveryPage: page,
     };
   } catch (error) {
     const parentCancellation = abortReason(parentSignal);

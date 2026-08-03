@@ -719,6 +719,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         internalBudgetMs: 6_000,
         artifactWriter,
         browser: sharedBrowser,
+        renderedRecoveryPage: preConsentResult.renderedPolicyRecoveryPage,
         nanoAssistProvider: nanoPolicyAssistProvider,
         discoveryMode: "fast",
         signal: input.signal,

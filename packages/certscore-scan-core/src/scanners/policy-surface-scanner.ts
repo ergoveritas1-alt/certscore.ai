@@ -123,6 +123,8 @@ export interface PolicySurfaceScannerInput {
    * same-session navigation path. It is not policy evidence or projected data.
    */
   renderedRecoveryLinkContexts?: RetainedRenderedPolicyLink[];
+  /** Runtime-only same-session page; never retained as policy evidence. */
+  renderedRecoveryPage?: Page;
   signal?: AbortSignal;
 }
 
@@ -2376,9 +2378,16 @@ async function fetchRenderedPolicyDocumentText(input: {
   let releaseAbortContext: (() => void) | undefined;
   try {
     const browser = await input.browserRuntime.getBrowser();
-    context = await browser.newContext(chromiumContextOptions());
-    releaseAbortContext = bindAbortSignalToBrowserContext(context, input.input.signal);
-    const page = await context.newPage();
+    const retainedRecoveryPage = input.linkContext &&
+      input.input.renderedRecoveryPage &&
+      !input.input.renderedRecoveryPage.isClosed()
+      ? input.input.renderedRecoveryPage
+      : undefined;
+    if (!retainedRecoveryPage) {
+      context = await browser.newContext(chromiumContextOptions());
+      releaseAbortContext = bindAbortSignalToBrowserContext(context, input.input.signal);
+    }
+    const page = retainedRecoveryPage ?? await context!.newPage();
     const navigationDeadlineAtMs = Date.now() + Math.max(1_000, input.timeoutMs);
     const sessionPrimerUrl = input.linkContext?.pageUrl ?? (
       input.primeSession ? input.input.renderedRecoverySessionPrimerUrl : undefined
@@ -2386,7 +2395,8 @@ async function fetchRenderedPolicyDocumentText(input: {
     if (
       sessionPrimerUrl &&
       isPolicySessionPrimerCompatible(sessionPrimerUrl, input.url) &&
-      canonicalPolicyUrlIdentity(sessionPrimerUrl) !== canonicalPolicyUrlIdentity(input.url)
+      canonicalPolicyUrlIdentity(sessionPrimerUrl) !== canonicalPolicyUrlIdentity(input.url) &&
+      canonicalPolicyUrlIdentity(sessionPrimerUrl) !== canonicalPolicyUrlIdentity(page.url())
     ) {
       const primerTimeoutMs = Math.min(
         3_500,

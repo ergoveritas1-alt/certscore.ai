@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
-import type { Browser } from "playwright";
+import { chromium, type Browser } from "playwright";
 import {
   classifyPrivacySurface,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
@@ -329,8 +329,15 @@ test("browser recovery clicks an observed policy link when direct and browser na
     "This Privacy Policy explains the controller, contact details, processing purposes, legal bases, recipients, retention criteria, international transfers, and access, deletion, correction, portability, restriction, and objection rights."
   ).join(" ");
   const privacyRequests: Array<{ referer: string; secFetchUser: string }> = [];
+  let homepageRequests = 0;
   const server = createServer((request, response) => {
     if (request.url === "/") {
+      homepageRequests += 1;
+      if (homepageRequests > 1) {
+        response.writeHead(403, { "content-type": "text/html; charset=utf-8" });
+        response.end("Access denied");
+        return;
+      }
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       response.end("<!doctype html><html><body><footer><a id='privacy-link' href='/about/privacy-policy.cfm'>Privacy Policy</a></footer></body></html>");
       return;
@@ -360,7 +367,11 @@ test("browser recovery clicks an observed policy link when direct and browser na
   const homepageUrl = `http://127.0.0.1:${address.port}/`;
   const privacyUrl = `${homepageUrl}about/privacy-policy.cfm`;
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-click-recovery-"));
+  const browser = await chromium.launch({ headless: true });
+  const browserContext = await browser.newContext();
+  const renderedRecoveryPage = await browserContext.newPage();
   try {
+    await renderedRecoveryPage.goto(homepageUrl, { waitUntil: "domcontentloaded" });
     const artifactWriter = await createArtifactWriter(tempRoot);
     const links = [{
       domLocation: "footer" as const,
@@ -378,6 +389,8 @@ test("browser recovery clicks an observed policy link when direct and browser na
         scanStartedAtMs: Date.now(),
         internalBudgetMs: 6_000,
         artifactWriter,
+        browser,
+        renderedRecoveryPage,
         nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
       },
       links,
@@ -396,10 +409,15 @@ test("browser recovery clicks an observed policy link when direct and browser na
       }>;
     };
 
-    assert.equal(privacy?.status, "fetched");
+    assert.equal(
+      privacy?.status,
+      "fetched",
+      JSON.stringify({ diagnostics, homepageRequests, privacyRequests }, null, 2),
+    );
     assert.equal(privacy?.documentEvaluationState, "usable");
     assert.equal(privacyRequests.some((request) => request.referer === ""), true);
     assert.equal(privacyRequests.some((request) => request.referer === homepageUrl), true);
+    assert.equal(homepageRequests, 1);
     assert.equal(
       diagnostics.successfulFetches.some((fetch) =>
         fetch.attempts.some((attempt) => attempt.navigationMethod === "observed_link_click")
@@ -407,6 +425,7 @@ test("browser recovery clicks an observed policy link when direct and browser na
       true,
     );
   } finally {
+    await browser.close();
     server.close();
     await once(server, "close");
     await rm(tempRoot, { recursive: true, force: true });
