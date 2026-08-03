@@ -166,7 +166,7 @@ test("normalizes complete dismiss-only A/R/O states without promoting them as fi
     validationFindings: []
   });
   const inventory = concerns.find((candidate) =>
-    candidate.originKey === "consent.control_inventory.complete_first_layer"
+    candidate.originKey.startsWith("consent.control_inventory.")
   );
 
   assert.ok(inventory);

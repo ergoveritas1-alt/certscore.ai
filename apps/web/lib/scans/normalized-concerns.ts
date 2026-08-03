@@ -3253,14 +3253,21 @@ function buildConsentControlInventoryConcerns(
   const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
   if (
     !assessment ||
-    assessment.assessmentStatus !== "complete" ||
-    assessment.coverage.status !== "complete" ||
     assessment.document.identityStatus !== "matched" ||
     assessment.scan.noGo !== false ||
     assessment.surface.status !== "observed_actionable"
   ) {
     return [];
   }
+
+  const inventoryComplete =
+    assessment.assessmentStatus === "complete" &&
+    assessment.coverage.status === "complete";
+  const projectControlState = (state: typeof assessment.controls.accept.state) =>
+    state === "observed" || inventoryComplete ? state : "unknown";
+  const acceptState = projectControlState(assessment.controls.accept.state);
+  const rejectState = projectControlState(assessment.controls.reject.state);
+  const optionsState = projectControlState(assessment.controls.options.state);
 
   const runtimeEvidenceArtifacts = uniqueStrings([
     ...assessment.surface.evidenceRefs,
@@ -3278,11 +3285,13 @@ function buildConsentControlInventoryConcerns(
       domainContext,
       evidence: runtimeEvidenceArtifacts,
       observedValue: [
-        `accept:${assessment.controls.accept.state}`,
-        `reject:${assessment.controls.reject.state}`,
-        `options:${assessment.controls.options.state}`
+        `accept:${acceptState}`,
+        `reject:${rejectState}`,
+        `options:${optionsState}`
       ].join("|"),
-      originKey: "consent.control_inventory.complete_first_layer",
+      originKey: inventoryComplete
+        ? "consent.control_inventory.complete_first_layer"
+        : "consent.control_inventory.partial_first_layer",
       originType: "runtime_artifact",
       rawEvidence: {
         consentControlAssessmentContractVersion: assessment.artifactVersion,
@@ -3290,10 +3299,11 @@ function buildConsentControlInventoryConcerns(
         consentControlAssessmentStatus: assessment.assessmentStatus,
         consentControlCoverageStatus: assessment.coverage.status,
         consentControlInventoryEvidence: true,
+        consentControlInventoryComplete: inventoryComplete,
         consentSurfaceStatus: assessment.surface.status,
-        firstLayerAcceptState: assessment.controls.accept.state,
-        firstLayerOptionsState: assessment.controls.options.state,
-        firstLayerRejectState: assessment.controls.reject.state,
+        firstLayerAcceptState: acceptState,
+        firstLayerOptionsState: optionsState,
+        firstLayerRejectState: rejectState,
         runtimeEvidenceArtifacts
       },
       severity: "low",

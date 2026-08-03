@@ -7794,6 +7794,14 @@ test("canonical consent assessment exclusively supplies current-scan A/R/O polic
     outcomes.reject_all_path_availability?.criticalEvidence.retainedEvidence.rejectControlObserved,
     false,
   );
+  assert.match(
+    JSON.stringify(outcomes.accept_consent_control?.criticalEvidence.retainedEvidence.consentControlInventoryConcern),
+    /consent\.control_inventory\.complete_first_layer/,
+  );
+  assert.match(
+    JSON.stringify(outcomes.reject_all_path_availability?.criticalEvidence.retainedEvidence.consentControlInventoryConcern),
+    /consent\.control_inventory\.complete_first_layer/,
+  );
 });
 
 test("balanced first-layer Accept and Decline controls do not make missing settings a potential gap", () => {
@@ -7810,6 +7818,11 @@ test("balanced first-layer Accept and Decline controls do not make missing setti
   });
 
   const outcome = outcomes.options_settings_preferences_control;
+  assert.equal(outcomes.reject_all_path_availability?.status, "Observed");
+  assert.match(
+    JSON.stringify(outcomes.reject_all_path_availability?.criticalEvidence.retainedEvidence.consentControlInventoryConcern),
+    /consent\.control_inventory\.complete_first_layer/,
+  );
   assert.equal(outcome?.status, "Review signal");
   assert.equal(outcome?.criticalEvidence.retainedEvidence.balancedAcceptDeclineWithoutFirstLayerSettings, true);
   assert.match(outcome?.limitation ?? "", /Accept and Decline controls were observed on the first-layer consent surface/i);
@@ -8003,9 +8016,36 @@ test("limited canonical consent assessment cannot create missing-control finding
   });
 
   assert.equal(outcomes.accept_consent_control?.status, "Observed");
+  assert.match(
+    JSON.stringify(outcomes.accept_consent_control?.criticalEvidence.retainedEvidence.consentControlInventoryConcern),
+    /consent\.control_inventory\.partial_first_layer/,
+  );
   assert.notEqual(outcomes.reject_all_path_availability?.status, "Gap observed");
   assert.notEqual(outcomes.options_settings_preferences_control?.status, "Gap observed");
   assert.notEqual(outcomes.consent_choice_quality?.status, "Gap observed");
+});
+
+test("canonical A/R/O checklist rows fail closed when the normalized inventory concern is missing", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [
+      { actionType: "accept_all", intent: "accept", label: "Accept all" },
+      { actionType: "reject_all", intent: "reject", label: "Decline" },
+      { actionType: "manage_preferences", intent: "options", label: "Cookie settings" },
+    ],
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    ...makeCanonicalConsentPolicyInput(assessment),
+    normalizedConcerns: [],
+    snapshot: { cookie_banner_present: true },
+  });
+
+  assert.equal(outcomes.accept_consent_control?.status, "Not confirmed");
+  assert.equal(outcomes.reject_all_path_availability?.status, "Not confirmed");
+  assert.equal(outcomes.options_settings_preferences_control?.status, "Not confirmed");
+  assert.equal(outcomes.consent_choice_quality?.status, "Not confirmed");
+  assert.match(outcomes.accept_consent_control?.limitation ?? "", /normalized control-inventory concern/i);
+  assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /normalized control-inventory concern/i);
 });
 
 test("complete dismiss-only assessment projects reject as a partial concern", () => {

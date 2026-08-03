@@ -2381,7 +2381,7 @@ function getConsentControlInventoryChecklistEligibility(input: {
   rawEvidence: Record<string, unknown> | null | undefined;
 }): NormalizedConcernRegulatoryChecklistEligibility | null {
   if (
-    input.originKey !== "consent.control_inventory.complete_first_layer" ||
+    !input.originKey.startsWith("consent.control_inventory.") ||
     input.rawEvidence?.consentControlInventoryEvidence !== true
   ) {
     return null;
