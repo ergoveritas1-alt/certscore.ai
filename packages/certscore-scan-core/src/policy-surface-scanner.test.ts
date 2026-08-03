@@ -1023,6 +1023,47 @@ test("policy candidate publication still fails closed when no document was fetch
   assert.deepEqual(result, { status: "timed_out" });
 });
 
+test("policy candidate publication preserves retained evidence after parent cancellation", async () => {
+  const controller = new AbortController();
+  let retentionStarted = false;
+  const processingPromise = new Promise<string>((resolve) => {
+    setTimeout(() => {
+      retentionStarted = true;
+      controller.abort(new Error("Parent scan handoff deadline reached."));
+      setTimeout(() => resolve("retained-evidence-published"), 10);
+    }, 10);
+  });
+
+  const result = await settlePolicyCandidateProcessingBeforeDeadline({
+    processingPromise,
+    shouldAwaitPublication: () => retentionStarted,
+    signal: controller.signal,
+    processingTimeoutMs: 100,
+    publicationGraceMs: 100,
+  });
+
+  assert.deepEqual(result, {
+    status: "completed",
+    value: "retained-evidence-published",
+  });
+});
+
+test("policy candidate publication stops immediately on parent cancellation before retention", async () => {
+  const controller = new AbortController();
+  const processingPromise = new Promise<string>((resolve) => setTimeout(() => resolve("late"), 100));
+  setTimeout(() => controller.abort(new Error("Parent scan handoff deadline reached.")), 10);
+
+  const result = await settlePolicyCandidateProcessingBeforeDeadline({
+    processingPromise,
+    shouldAwaitPublication: () => false,
+    signal: controller.signal,
+    processingTimeoutMs: 100,
+    publicationGraceMs: 100,
+  });
+
+  assert.deepEqual(result, { status: "aborted" });
+});
+
 test("policySurfaceScanner preserves an exact privacy notice when Nano ranks commerce URL noise", async () => {
   const requestCounts = new Map<string, number>();
   const policyText = Array.from({ length: 28 }, () =>

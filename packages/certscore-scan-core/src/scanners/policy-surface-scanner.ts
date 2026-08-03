@@ -1611,25 +1611,37 @@ export async function settlePolicyCandidateProcessingBeforeDeadline<T>(input: {
       timeoutPromise,
       abortPromise,
     ]);
-    if (initialResult === aborted) return { status: "aborted" };
-    if (initialResult !== timedOut) return initialResult;
-    if (!input.shouldAwaitPublication()) return { status: "timed_out" };
+    if (initialResult === aborted) {
+      if (!input.shouldAwaitPublication()) return { status: "aborted" };
+    } else {
+      if (initialResult !== timedOut) return initialResult;
+      if (!input.shouldAwaitPublication()) return { status: "timed_out" };
+    }
 
     const graceRemainingMs = Math.max(
       0,
       Math.min(publicationGraceMs, deadlineRemainingMs(input.absoluteDeadlineAtMs)),
     );
-    if (graceRemainingMs <= 0) return { status: "timed_out" };
+    if (graceRemainingMs <= 0) {
+      return { status: initialResult === aborted ? "aborted" : "timed_out" };
+    }
     const graceTimedOut = Symbol("policy_candidate_publication_grace_timed_out");
     const graceResult = await Promise.race([
       input.processingPromise.then((value) => ({ status: "completed" as const, value })),
       new Promise<typeof graceTimedOut>((resolve) => {
         timeoutHandle = setTimeout(() => resolve(graceTimedOut), graceRemainingMs);
       }),
-      abortPromise,
+      // Once retained evidence is ready for publication, a parent cancellation
+      // must not win this race a second time and replace it with
+      // `skipped_budget`. Candidate work already observes the aborted signal;
+      // this bounded grace only lets its fail-closed fallback assemble and
+      // return the retained observation.
+      ...(initialResult === aborted ? [] : [abortPromise]),
     ]);
     if (graceResult === aborted) return { status: "aborted" };
-    if (graceResult === graceTimedOut) return { status: "timed_out" };
+    if (graceResult === graceTimedOut) {
+      return { status: initialResult === aborted ? "aborted" : "timed_out" };
+    }
     return graceResult;
   } finally {
     if (timeoutHandle) clearTimeout(timeoutHandle);
