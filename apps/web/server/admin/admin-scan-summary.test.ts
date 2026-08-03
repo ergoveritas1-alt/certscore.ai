@@ -151,16 +151,19 @@ test("Admin activity pagination supports a direct page jump", async () => {
 
 test("Admin Scans and API Activity pagination expose immediate feedback while navigation is pending", async () => {
   const controls = await readFile("apps/web/components/ui/pagination-controls.tsx", "utf8");
+  const navigationButtons = await readFile("apps/web/components/ui/pagination-navigation-buttons.tsx", "utf8");
   const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
   const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
 
-  assert.match(controls, /useTransition/);
-  assert.match(controls, /startPageNavigation/);
-  assert.match(controls, /router\.push\(href\)/);
-  assert.match(controls, /aria-busy=\{isPageNavigationPending/);
-  assert.match(controls, /\? "Loading…" : "Previous"/);
-  assert.match(controls, /\? "Loading…" : "Next"/);
-  assert.match(controls, /prefetch=\{false\}/);
+  assert.doesNotMatch(controls, /"use client"/);
+  assert.match(controls, /PaginationNavigationButtons/);
+  assert.match(navigationButtons, /useTransition/);
+  assert.match(navigationButtons, /startPageNavigation/);
+  assert.match(navigationButtons, /router\.push\(href\)/);
+  assert.match(navigationButtons, /aria-busy=\{isPageNavigationPending/);
+  assert.match(navigationButtons, /\? "Loading…" : "Previous"/);
+  assert.match(navigationButtons, /\? "Loading…" : "Next"/);
+  assert.match(navigationButtons, /prefetch=\{false\}/);
   assert.match(scansPage, /<PaginationControls/);
   assert.match(scansPage, /basePath="\/app\/admin\/scans"/);
   assert.match(pulsePage, /<PaginationControls/);

@@ -1,10 +1,5 @@
-"use client";
-
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@website-signal-risk-scanner/ui";
-import type { MouseEvent } from "react";
-import { useState, useTransition } from "react";
+import { PaginationNavigationButtons } from "./pagination-navigation-buttons";
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 export const DEFAULT_PAGE_SIZE = 10;
@@ -75,9 +70,6 @@ export function PaginationControls({
   totalCount,
   visibleCount
 }: PaginationControlsProps) {
-  const router = useRouter();
-  const [isPageNavigationPending, startPageNavigation] = useTransition();
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const normalizedPageCount = pageCount ?? null;
   const resolvedHasNext = typeof hasNext === "boolean" ? hasNext : normalizedPageCount !== null ? page < normalizedPageCount : visibleCount >= pageSize;
   const pageStart = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -89,29 +81,6 @@ export function PaginationControls({
   const nextHref = resolvedHasNext
     ? buildHref({ basePath, page: page + 1, pageParamName, pageSize, perPageParamName, searchParams })
     : null;
-
-  function handlePageNavigation(event: MouseEvent<HTMLAnchorElement>, href: string) {
-    if (
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-    if (isPageNavigationPending) {
-      return;
-    }
-
-    setPendingHref(href);
-    startPageNavigation(() => {
-      router.push(href);
-    });
-  }
 
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
@@ -165,40 +134,7 @@ export function PaginationControls({
             <Button size="sm" type="submit" variant="secondary">Go</Button>
           </form>
         ) : null}
-        <Button asChild disabled={previousHref === null || isPageNavigationPending} size="sm" variant="secondary">
-          {previousHref === null ? (
-            <span className="cursor-not-allowed text-slate-400">Previous</span>
-          ) : (
-            <Link
-              aria-busy={isPageNavigationPending && pendingHref === previousHref}
-              aria-disabled={isPageNavigationPending}
-              className={isPageNavigationPending ? "cursor-wait text-slate-500" : undefined}
-              href={previousHref}
-              onClick={(event) => handlePageNavigation(event, previousHref)}
-              prefetch={false}
-              tabIndex={isPageNavigationPending ? -1 : undefined}
-            >
-              {isPageNavigationPending && pendingHref === previousHref ? "Loading…" : "Previous"}
-            </Link>
-          )}
-        </Button>
-        <Button asChild disabled={nextHref === null || isPageNavigationPending} size="sm" variant="secondary">
-          {nextHref === null ? (
-            <span className="cursor-not-allowed text-slate-400">Next</span>
-          ) : (
-            <Link
-              aria-busy={isPageNavigationPending && pendingHref === nextHref}
-              aria-disabled={isPageNavigationPending}
-              className={isPageNavigationPending ? "cursor-wait text-slate-500" : undefined}
-              href={nextHref}
-              onClick={(event) => handlePageNavigation(event, nextHref)}
-              prefetch={false}
-              tabIndex={isPageNavigationPending ? -1 : undefined}
-            >
-              {isPageNavigationPending && pendingHref === nextHref ? "Loading…" : "Next"}
-            </Link>
-          )}
-        </Button>
+        <PaginationNavigationButtons nextHref={nextHref} previousHref={previousHref} />
       </div>
     </div>
   );
