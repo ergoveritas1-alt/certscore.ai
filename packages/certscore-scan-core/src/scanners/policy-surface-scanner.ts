@@ -755,11 +755,18 @@ export async function policySurfaceScanner(
       !fastStaticCoverage &&
       commonPathCandidates.length > 0 &&
       deterministicFetchFallback(staticCandidates).length === 0;
-    const speculativeStaticFetchCandidates = input.discoveryMode === "fast" && !fastStaticCoverage
+    const deterministicStaticFetchCandidates = input.discoveryMode === "fast" && !fastStaticCoverage
       ? deterministicFetchFallback(staticCandidates)
         .filter((candidate) => candidate.fetchable && !candidate.observationOnly)
-        .slice(0, POLICY_FETCH_CONCURRENCY)
       : [];
+    const observedStaticFetchCandidates = deterministicStaticFetchCandidates.filter((candidate) =>
+      policyCandidateDiscoveryPriority(candidate) === 0
+    );
+    const speculativeStaticFetchCandidates = (
+      observedStaticFetchCandidates.length > 0
+        ? observedStaticFetchCandidates
+        : deterministicStaticFetchCandidates
+    ).slice(0, POLICY_FETCH_CONCURRENCY);
     const speculativeStaticFetchPromise = speculativeStaticFetchCandidates.length > 0
       ? recordPolicyTiming(
         timingBreakdown,
@@ -1539,9 +1546,9 @@ function prioritizePolicyCandidateEvaluation(
     .map((candidate, originalIndex) => ({ candidate, originalIndex }))
     .sort((left, right) =>
       surfacePriority(left.candidate.deterministicSurfaceType) - surfacePriority(right.candidate.deterministicSurfaceType) ||
+      policyCandidateDiscoveryPriority(left.candidate) - policyCandidateDiscoveryPriority(right.candidate) ||
       policyCandidateProtectionPriority(left.candidate) - policyCandidateProtectionPriority(right.candidate) ||
       policyDocumentScopePriority(left.candidate) - policyDocumentScopePriority(right.candidate) ||
-      policyCandidateDiscoveryPriority(left.candidate) - policyCandidateDiscoveryPriority(right.candidate) ||
       policyCandidateQualityScore(right.candidate) - policyCandidateQualityScore(left.candidate) ||
       right.candidate.deterministicScore - left.candidate.deterministicScore ||
       left.originalIndex - right.originalIndex
@@ -3888,8 +3895,8 @@ function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): Polic
     )
     .sort((left, right) =>
       surfacePriority(left.deterministicSurfaceType) - surfacePriority(right.deterministicSurfaceType) ||
-      policyCandidateProtectionPriority(left) - policyCandidateProtectionPriority(right) ||
       policyCandidateDiscoveryPriority(left) - policyCandidateDiscoveryPriority(right) ||
+      policyCandidateProtectionPriority(left) - policyCandidateProtectionPriority(right) ||
       policyCandidateQualityScore(right) - policyCandidateQualityScore(left) ||
       right.deterministicScore - left.deterministicScore ||
       left.normalizedUrl.localeCompare(right.normalizedUrl),

@@ -10,6 +10,7 @@ import type { Browser } from "playwright";
 import {
   classifyPrivacySurface,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
+  privacySurfacePathsForLocale,
 } from "@certscore/contracts";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
@@ -134,6 +135,76 @@ test("localized consent settings shells are not accepted as substantive privacy 
   assert.doesNotMatch(resolved, /Naloži vse|Naloži samo nujne/);
   assert.equal(assessment.matchesExpectedSurface, false);
   assert.equal(assessment.reasonCode, "consent_settings_shell");
+});
+
+test("canonical Slovenian policy paths include the combined privacy and cookie notice", () => {
+  assert.equal(
+    privacySurfacePathsForLocale("sl").includes("/politika-varstva-zasebnosti-in-piskotkov"),
+    true,
+  );
+});
+
+test("policySurfaceScanner warms an observed privacy link before guessed policy paths", async () => {
+  const requestedPaths: string[] = [];
+  const policyText = Array.from({ length: 12 }, () =>
+    "Curtin University is the data controller and processes personal information for stated purposes. " +
+    "Contact the Privacy Officer. We retain records under defined criteria and provide access, correction, deletion, objection, and complaint rights."
+  ).join(" ");
+  const server = createServer((request, response) => {
+    requestedPaths.push(request.url ?? "");
+    if (request.url === "/") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html><body><footer><a href='/about/governance/privacy/'>Privacy</a></footer></body></html>");
+      return;
+    }
+    if (request.url === "/about/governance/privacy/") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><body><main><h1>Privacy</h1><p>${policyText}</p></main></body></html>`);
+      return;
+    }
+    setTimeout(() => {
+      if (!response.headersSent) {
+        response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      }
+      response.end("Not found");
+    }, 3_000);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-observed-priority-"));
+  try {
+    const startedAt = Date.now();
+    const result = await policySurfaceScanner({
+      url: `${baseUrl}/`,
+      normalizedUrl: `${baseUrl}/`,
+      scanStartedAtMs: startedAt,
+      internalBudgetMs: 2_500,
+      absoluteDeadlineAtMs: startedAt + 2_500,
+      discoveryMode: "fast",
+      artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      policySurfaceSeeds: [
+        { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: `${baseUrl}/privacy-notice` },
+        { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: `${baseUrl}/privacy-policy` },
+        { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: `${baseUrl}/legal/privacy` },
+      ],
+    });
+    const retained = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/about/governance/privacy/` &&
+      observation.status === "fetched"
+    );
+
+    assert.ok(retained, JSON.stringify({ requestedPaths, observations: result.policySurfaceObservations }, null, 2));
+    assert.equal(retained.documentEvaluationState, "usable");
+    assert.ok(requestedPaths.indexOf("/about/governance/privacy/") < requestedPaths.indexOf("/privacy-notice"));
+  } finally {
+    server.close();
+    await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("substantive Slovenian policy text survives consent-shell exclusion", async () => {
