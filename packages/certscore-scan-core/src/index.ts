@@ -1387,7 +1387,10 @@ export {
   consentFlowRuntimeScannerPlaceholder,
   policySurfaceScannerPlaceholder,
 } from "./scanners/placeholders.js";
-export { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
+export {
+  mergePolicySurfaceObservations,
+  policySurfaceScanner,
+} from "./scanners/policy-surface-scanner.js";
 export {
   replayConsentFlowEvidenceCorpus,
   validateConsentFlowReplayCorpus,

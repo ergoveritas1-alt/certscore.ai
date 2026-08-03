@@ -611,9 +611,9 @@ test("pre-consent runtime scanner does not promote a generic product Learn more 
 
     assert.equal(observation?.managePreferencesControlObserved, false);
     assert.equal(
-      observation?.controls.some((control) => control.label === "Learn more"),
+      observation?.controls.some((control) => /^Learn more/i.test(control.label)),
       false,
-      "contextual options labels need an actionable consent peer or a bounded CMP/consent surface",
+      "multiple contextual product links must not create their own consent surface",
     );
   } finally {
     await server.close();

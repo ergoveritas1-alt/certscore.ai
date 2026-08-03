@@ -1382,10 +1382,24 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
   if (options.genericLearnMorePageContext) {
     return `
       <main>
-        <section aria-label="Mobile banking promotion">
-          <h1>Deposit checks with our app</h1>
-          <p>Use your phone camera to deposit a check.</p>
-          <a id="product-learn-more" href="/products/mobile-app">Learn more</a>
+        <div aria-hidden="true" style="height: 1400px"></div>
+        <section aria-label="Membership products">
+          <p>Cookie preferences and privacy choices are described in our site resources.</p>
+          <article>
+            <h1>Core</h1>
+            <p>Build healthy habits with our essential membership.</p>
+            <a id="product-learn-more-core" href="/products/core">Learn more about Core</a>
+          </article>
+          <article>
+            <h2>Core+</h2>
+            <p>Get additional coaching and community support.</p>
+            <a id="product-learn-more-core-plus" href="/products/core-plus">Learn more about Core+</a>
+          </article>
+          <article>
+            <h2>Med+</h2>
+            <p>Explore clinician-supported membership services.</p>
+            <a id="product-learn-more-med-plus" href="/products/med-plus">Learn more about Med+</a>
+          </article>
         </section>
         <section>
           <h2>Privacy resources</h2>

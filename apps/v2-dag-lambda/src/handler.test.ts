@@ -869,6 +869,45 @@ test("sharded bundle merge retains exactly one diagnostic screenshot", () => {
   assert.equal(merged.screenshots[0]?.artifactId, "screenshot_pre_consent_settled");
 });
 
+test("sharded bundle merge keeps the fetched policy observation over its earlier link candidate", () => {
+  const candidate = {
+    observationId: "policy_surface_privacy",
+    surfaceType: "privacy_policy" as const,
+    url: "https://example.com/privacy",
+    normalizedUrl: "https://example.com/privacy",
+    status: "observed" as const,
+    documentFetchState: "not_attempted" as const,
+    confidence: 0.95,
+    directVsInferred: "direct" as const,
+  };
+  const fetched = {
+    ...candidate,
+    status: "fetched" as const,
+    documentFetchState: "fetched" as const,
+    documentEvaluationState: "usable" as const,
+    targetRelationship: "target_controller" as const,
+    textExcerpt: "This privacy policy explains how we process and retain personal information.",
+    artifactRefs: [{
+      artifactId: "policy_surface_text_privacy",
+      artifactType: "other" as const,
+      path: "policy_surface_text_privacy.txt",
+    }],
+  };
+  const merged = mergeLocalV2DagLambdaShardBundles({
+    base: canonicalBundleFixture("scan-local-1", { policySurfaceObservations: [candidate] }),
+    scanId: "scan-local-1",
+    workerBundles: [
+      canonicalBundleFixture("scan-local-1_policy", { policySurfaceObservations: [fetched] }),
+    ],
+  });
+
+  assert.equal(merged.policySurfaceObservations.length, 1);
+  assert.equal(merged.policySurfaceObservations[0]?.status, "fetched");
+  assert.equal(merged.policySurfaceObservations[0]?.documentEvaluationState, "usable");
+  assert.equal(merged.policySurfaceObservations[0]?.artifactRefs.length, 1);
+  assert.equal(merged.policySurfaceObservations[0]?.targetRelationship, "target_controller");
+});
+
 test("artifact uploader returns durable metadata for all v2 JSON artifacts", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "certscore-v2-lambda-test-"));
   const files = {

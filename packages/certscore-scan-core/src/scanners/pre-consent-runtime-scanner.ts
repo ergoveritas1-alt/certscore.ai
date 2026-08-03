@@ -5018,10 +5018,7 @@ async function readConsentUiObservation(
     if (
       control.actionType === "manage_preferences" &&
       (control.matchStrength === "contextual" || control.matchStrength === "weak") &&
-      !hasActionableClassifiedControl &&
-      control.inventorySource !== "full_document_cmp" &&
-      control.inventorySource !== "full_document_consent_surface" &&
-      control.inventorySource !== "same_origin_frame"
+      !hasActionableClassifiedControl
     ) {
       rejectedReasons.add("no_consent_context");
       return false;

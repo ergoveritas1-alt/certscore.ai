@@ -26,6 +26,7 @@ import {
   chromiumLaunchOptions,
   isAwsLambdaRuntime,
   lambdaChromiumSingleProcessEnabled,
+  mergePolicySurfaceObservations,
   runScan,
   type RunScanInput
 } from "@certscore/scan-core";
@@ -1688,7 +1689,10 @@ export function mergeLocalV2DagLambdaShardBundles(input: {
     consentActionCandidates: dedupeByField(bundles.flatMap((bundle) => bundle.consentActionCandidates), "candidateId"),
     consentActionAttempts: dedupeByField(bundles.flatMap((bundle) => bundle.consentActionAttempts), "attemptId"),
     consentFlowComparisons: [] as CanonicalEvidenceBundle["consentFlowComparisons"],
-    policySurfaceObservations: dedupeByField(bundles.flatMap((bundle) => bundle.policySurfaceObservations), "observationId"),
+    policySurfaceObservations: bundles.reduce(
+      (observations, bundle) => mergePolicySurfaceObservations(observations, bundle.policySurfaceObservations),
+      [] as CanonicalEvidenceBundle["policySurfaceObservations"],
+    ),
     cmpRuntimeObservations: dedupeByField(bundles.flatMap((bundle) => bundle.cmpRuntimeObservations), "observationId"),
     screenshots: selectDiagnosticScreenshot(bundles.flatMap((bundle) => bundle.screenshots)),
     domSnapshots: dedupeByArtifactId(bundles.flatMap((bundle) => bundle.domSnapshots)),

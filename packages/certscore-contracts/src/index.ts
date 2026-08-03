@@ -2434,6 +2434,19 @@ export const canonicalEvidenceBundleSchema = z.object({
   artifactRefs: z.array(artifactRefSchema),
   scannerVersion: z.string(),
   schemaVersion: z.string(),
+}).superRefine((bundle, context) => {
+  const policyObservationIds = new Set<string>();
+  bundle.policySurfaceObservations.forEach((observation, index) => {
+    if (policyObservationIds.has(observation.observationId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate policy surface observationId: ${observation.observationId}`,
+        path: ["policySurfaceObservations", index, "observationId"],
+      });
+      return;
+    }
+    policyObservationIds.add(observation.observationId);
+  });
 });
 
 export const endpointEnrichmentOverlayEntrySchema = z.object({

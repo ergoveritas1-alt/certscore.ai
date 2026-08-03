@@ -206,8 +206,14 @@ export function mergePolicySurfaceObservations(
   const merged = new Map<string, PolicySurfaceObservation>();
   for (const observation of [...primary, ...supplemental]) {
     const key = policySurfaceObservationKey(observation);
-    const existing = merged.get(key);
+    const existingById = [...merged.entries()].find(([, candidate]) =>
+      candidate.observationId === observation.observationId
+    );
+    const existing = merged.get(key) ?? existingById?.[1];
     if (!existing || policyObservationRank(observation) > policyObservationRank(existing)) {
+      if (existingById && existingById[0] !== key) {
+        merged.delete(existingById[0]);
+      }
       merged.set(key, observation);
     }
   }
@@ -6692,9 +6698,10 @@ function bestPolicyDocumentText(html: string, fallbackVisibleText: string): stri
     ...extractPolicyBodyCandidateTexts(policyHtml),
     htmlToVisibleText(stripPageChromeHtml(policyHtml)),
     sanitizedFallbackVisibleText,
+    htmlToVisibleText(html),
   ].map(stripConsentSurfacePreambleFromPolicyText).filter((text) => text.length > 0);
   return candidates.reduce((best, candidate) =>
-    shouldAdoptPolicyDocumentText(candidate, best) ? candidate : best,
+    shouldAdoptPolicyDocumentText(candidate, best, { allowTopicDominant: true }) ? candidate : best,
   candidates[0] ?? fallbackVisibleText);
 }
 

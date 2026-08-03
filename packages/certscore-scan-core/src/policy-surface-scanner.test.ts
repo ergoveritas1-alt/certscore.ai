@@ -118,6 +118,29 @@ test("substantive Slovenian policy text survives consent-shell exclusion", async
   assert.equal(assessment.reasonCode, "substantive_topic_match");
 });
 
+test("substantive policy text survives a privacy-choices layout name collision", async () => {
+  const policyText = Array.from({ length: 18 }, () => [
+    "This Privacy Policy explains how we collect and use personal information for specified processing purposes and legal bases.",
+    "We describe service providers and recipients, retention criteria, international transfers, and controller contact information.",
+    "You may exercise rights of access, correction, deletion, portability, restriction, objection, and complain to a supervisory authority.",
+  ].join(" ")).join(" ");
+  const resolved = await resolvePolicyVisibleText({
+    html: `<!doctype html><html><body>
+      <div class="privacy-choices-layout">
+        <main><div class="policy-copy"><h1>Privacy Policy</h1><p>${policyText}</p></div></main>
+      </div>
+    </body></html>`,
+    baseUrl: "https://example.test/privacy/policy",
+    surfaceType: "privacy_policy",
+    timeoutMs: 500,
+  });
+
+  assert.ok(resolved.length >= 2_500);
+  assert.match(resolved, /specified processing purposes and legal bases/);
+  assert.match(resolved, /international transfers/);
+  assert.match(resolved, /supervisory authority/);
+});
+
 test("hidden multilingual policy accordions are not discarded as consent chrome", async () => {
   const accordionText = Array.from({ length: 12 }, () => [
     "Upravljavec osebnih podatkov je univerza, kontakt za varstvo podatkov pa je naveden v tem obvestilu.",
@@ -800,6 +823,32 @@ test("fetched policy evidence outranks a supplemental rendered-link observation"
   assert.equal(merged[0]?.status, "fetched");
   assert.equal(merged[0]?.textExcerpt, "Substantive retained policy text.");
   assert.equal(countRecoveredPolicySurfaceObservations([fetched], [observed]), 0);
+});
+
+test("fetched policy evidence replaces the same observation after a canonical redirect", () => {
+  const observed = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "footer",
+      href: "https://example.com/privacy",
+      linkText: "Privacy Policy",
+      pageUrl: "https://example.com/",
+    }],
+  })[0];
+  assert.ok(observed);
+  const fetched = {
+    ...observed,
+    normalizedUrl: "https://www.example.com/privacy-policy",
+    finalUrl: "https://www.example.com/privacy-policy",
+    status: "fetched" as const,
+    documentFetchState: "fetched" as const,
+    documentEvaluationState: "usable" as const,
+    textExcerpt: "Substantive retained redirected policy text.",
+  };
+
+  const merged = mergePolicySurfaceObservations([observed], [fetched]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]?.status, "fetched");
+  assert.equal(merged[0]?.finalUrl, "https://www.example.com/privacy-policy");
 });
 
 test("rendered-link diagnostics count only surfaces absent from usable dedicated policy evidence", () => {
