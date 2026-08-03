@@ -12,5 +12,10 @@ test("production Admin matrix backfill is bounded, dry-run by default, and uses 
   assert.match(source, /boundedInteger\(args\.get\("concurrency"\), 2, 1, 4\)/);
   assert.match(source, /admin_evidence_matrix is null/);
   assert.match(source, /materializeAdminScanSummary/);
+  assert.match(source, /loadCanonicalMaterializer/);
+  assert.match(source, /waitForTaskStopped/);
+  assert.doesNotMatch(source, /"ecs", "wait", "tasks-stopped"/);
+  assert.doesNotMatch(source, /webpackRuntime\.e\(\d+\)/);
+  assert.match(source, /admin_evidence_matrix\.backfill_audit/);
   assert.doesNotMatch(source, /update public\.scan_snapshots[\s\S]*admin_evidence_matrix/);
 });

@@ -74,6 +74,19 @@ function taskId(taskArn: string) {
   return taskArn.split("/").at(-1) ?? taskArn;
 }
 
+async function waitForTaskStopped(input: { cluster: string; region: string; taskArn: string }) {
+  const deadlineAt = Date.now() + 30 * 60_000;
+  while (Date.now() < deadlineAt) {
+    const described = parseJson<{ tasks?: TaskDescription[] }>(await aws([
+      "ecs", "describe-tasks", "--region", input.region, "--cluster", input.cluster,
+      "--tasks", input.taskArn, "--output", "json"
+    ]));
+    if (described.tasks?.[0]?.lastStatus === "STOPPED") return;
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
+  }
+  throw new Error(`Admin matrix backfill task did not stop within 30 minutes: ${input.taskArn}`);
+}
+
 function remoteProgram() {
   return String.raw`
 const { Client } = require("pg");
@@ -88,6 +101,31 @@ const client = new Client({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_SSL_MODE === "disable" ? false : { rejectUnauthorized: false }
 });
+
+async function loadCanonicalMaterializer() {
+  const fs = require("node:fs");
+  const routePath = "/app/apps/web/.next/server/app/api/scan-status/[scanId]/route.js";
+  const routeSource = fs.readFileSync(routePath, "utf8");
+  const dynamicImport = routeSource.match(
+    /materializeAdminScanSummary:[^}]+}\s*=\s*await Promise\.all\(\[([^\]]+)]\)\.then\((\w+)\.bind\(\2,(\d+)\)\)/
+  );
+  if (!dynamicImport) {
+    throw new Error("Canonical Admin summary materializer import was not discoverable in the production bundle.");
+  }
+  const chunkIds = [...dynamicImport[1].matchAll(/\.e\((\d+)\)/g)].map((match) => Number(match[1]));
+  const moduleId = Number(dynamicImport[3]);
+  if (chunkIds.length === 0 || !Number.isInteger(moduleId)) {
+    throw new Error("Canonical Admin summary materializer bundle metadata was invalid.");
+  }
+  require(routePath);
+  const webpackRuntime = require("/app/apps/web/.next/server/webpack-runtime.js");
+  await Promise.all(chunkIds.map((chunkId) => webpackRuntime.e(chunkId)));
+  const materializerModule = await webpackRuntime(moduleId);
+  if (typeof materializerModule.materializeAdminScanSummary !== "function") {
+    throw new Error("Canonical Admin summary materializer was not available in the production image.");
+  }
+  return materializerModule.materializeAdminScanSummary;
+}
 
 async function main() {
   await client.connect();
@@ -114,14 +152,7 @@ async function main() {
   }));
   if (!apply || candidates.rows.length === 0) return;
 
-  await Promise.resolve(require("/app/apps/web/.next/server/app/api/scan-status/[scanId]/route.js"));
-  const webpackRuntime = require("/app/apps/web/.next/server/webpack-runtime.js");
-  await Promise.all([webpackRuntime.e(8615), webpackRuntime.e(8886)]);
-  const materializerModule = await webpackRuntime(23253);
-  const materializeAdminScanSummary = materializerModule.materializeAdminScanSummary;
-  if (typeof materializeAdminScanSummary !== "function") {
-    throw new Error("Canonical Admin summary materializer was not available in the production image.");
-  }
+  const materializeAdminScanSummary = await loadCanonicalMaterializer();
 
   let nextIndex = 0;
   const outcomes = [];
@@ -156,6 +187,32 @@ async function main() {
     failed: failed.length,
     outcomes,
     projected: outcomes.length - failed.length,
+    selected: candidates.rows.length
+  }));
+  const audit = await client.query(
+    "select s.id, d.hostname, ss.admin_evidence_matrix " +
+    "from public.scans s " +
+    "join public.domains d on d.id = s.domain_id " +
+    "join public.scan_snapshots ss on ss.scan_id = s.id " +
+    "where s.id = any($1::uuid[]) order by s.created_at asc",
+    [candidates.rows.map((row) => row.id)]
+  );
+  console.log(JSON.stringify({
+    event: "admin_evidence_matrix.backfill_audit",
+    rows: audit.rows.map((row) => {
+      const matrix = row.admin_evidence_matrix || {};
+      const results = matrix.transparency?.results || {};
+      return {
+        domain: row.hostname,
+        policyEvidence: matrix.policyEvidence || null,
+        privacyNotice: matrix.privacyConsent?.privacyNotice?.status || null,
+        scanId: row.id,
+        transparency: Object.fromEntries(
+          Object.entries(results).map(([code, result]) => [code, result?.status || null])
+        ),
+        version: matrix.version || null
+      };
+    }),
     selected: candidates.rows.length
   }));
   if (failed.length > 0) process.exitCode = 1;
@@ -236,7 +293,7 @@ async function main() {
   }
   const taskArn = runTask.tasks[0].taskArn;
   console.log(`Started ${apply ? "apply" : "dry-run"} task ${taskArn}`);
-  await aws(["ecs", "wait", "tasks-stopped", "--region", region, "--cluster", cluster, "--tasks", taskArn]);
+  await waitForTaskStopped({ cluster, region, taskArn });
   const described = parseJson<{ tasks?: TaskDescription[] }>(await aws([
     "ecs", "describe-tasks", "--region", region, "--cluster", cluster, "--tasks", taskArn, "--output", "json"
   ]));
