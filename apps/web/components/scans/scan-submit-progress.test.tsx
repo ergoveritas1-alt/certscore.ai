@@ -5,8 +5,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   ScanSubmissionPendingIndicator,
   ScanSubmitProgressBar,
+  SCAN_PROGRESS_HALF_LIFE_MS,
   describeScanProgressPhase,
-  getScanProgressTarget
+  getNextScanProgressValue
 } from "./scan-submit-progress";
 
 test("scan submission remains neutral until the server returns a scan status", () => {
@@ -49,18 +50,42 @@ test("canonical progress milestones override coarse scan status", () => {
   assert.match(reportHtml, /Preparing your report/);
 });
 
-test("scan-stage target advances linearly without asymptotically stalling", () => {
-  assert.equal(getScanProgressTarget({ currentStep: 0, elapsedMs: 0, estimatedDurationMs: 36_000, reportReady: false }), 0);
-  const preparing = getScanProgressTarget({ currentStep: 0, elapsedMs: 5_400, estimatedDurationMs: 36_000, reportReady: false });
-  const early = getScanProgressTarget({ currentStep: 1, elapsedMs: 13_000, estimatedDurationMs: 36_000, reportReady: false });
-  const late = getScanProgressTarget({ currentStep: 1, elapsedMs: 46_000, estimatedDurationMs: 36_000, reportReady: false });
-  assert.ok(preparing > 0 && preparing < 24);
-  assert.ok(early > 25 && early < late);
-  assert.equal(late, 49);
-  assert.equal(getScanProgressTarget({ currentStep: 2, elapsedMs: 46_000, estimatedDurationMs: 36_000, reportReady: false }), 74);
-  const reporting = getScanProgressTarget({ currentStep: 3, elapsedMs: 46_000, estimatedDurationMs: 36_000, reportReady: false });
-  assert.ok(reporting > 75 && reporting < 96);
-  assert.equal(getScanProgressTarget({ currentStep: 3, elapsedMs: 90_000, estimatedDurationMs: 36_000, reportReady: false }), 96);
+test("the full progress bar can begin from the compact submission handoff", () => {
+  const html = renderToStaticMarkup(
+    <ScanSubmitProgressBar
+      active
+      initialProgressValue={12.5}
+      nowMs={12_000}
+      progressStage="scan"
+      scanStatus="running"
+      startedAtMs={0}
+    />
+  );
+
+  assert.match(html, /aria-valuenow="12.5"/);
+  assert.match(html, /width:12.5%/);
+});
+
+test("each scan segment halves its remaining distance on every progress beat", () => {
+  assert.equal(SCAN_PROGRESS_HALF_LIFE_MS, 6_000);
+  const firstBeat = getNextScanProgressValue({ currentStep: 0, currentValue: 0 });
+  const secondBeat = getNextScanProgressValue({ currentStep: 0, currentValue: firstBeat });
+  const thirdBeat = getNextScanProgressValue({ currentStep: 0, currentValue: secondBeat });
+
+  assert.equal(firstBeat, 12.5);
+  assert.equal(secondBeat, 18.75);
+  assert.equal(thirdBeat, 21.875);
+  assert.equal(getNextScanProgressValue({ currentStep: 1, currentValue: 25 }), 37.5);
+  assert.equal(getNextScanProgressValue({ currentStep: 2, currentValue: 50 }), 62.5);
+  assert.equal(getNextScanProgressValue({ currentStep: 3, currentValue: 75 }), 85.5);
+  assert.equal(getNextScanProgressValue({ currentStep: 3, currentValue: 95.9 }), 95.9);
+});
+
+test("normal half-life movement uses the full six-second interval at a linear rate", () => {
+  const html = renderToStaticMarkup(<ScanSubmissionPendingIndicator />);
+
+  assert.match(html, /transition-duration:6000ms/);
+  assert.match(html, /transition-timing-function:linear/);
 });
 
 test("scan progress communicates a conservative milestone estimate", () => {
@@ -73,7 +98,7 @@ test("scan progress communicates a conservative milestone estimate", () => {
     />
   );
 
-  assert.match(html, /aria-valuenow="0"/);
+  assert.match(html, /aria-valuenow="75"/);
   assert.match(html, /Taking longer than usual/);
   assert.match(html, /Scan/);
   assert.match(html, /role="progressbar"/);
@@ -104,27 +129,27 @@ test("estimated timing gives scan capture the longest phase", () => {
   const estimatedDurationMs = 40_000;
 
   assert.equal(
-    describeScanProgressPhase({ elapsedMs: 11_999, estimatedDurationMs }),
+    describeScanProgressPhase({ elapsedMs: 13_599, estimatedDurationMs }),
     "preparing scanner"
   );
   assert.equal(
-    describeScanProgressPhase({ elapsedMs: 12_000, estimatedDurationMs }),
+    describeScanProgressPhase({ elapsedMs: 13_600, estimatedDurationMs }),
     "capturing page evidence"
   );
   assert.equal(
-    describeScanProgressPhase({ elapsedMs: 27_199, estimatedDurationMs }),
+    describeScanProgressPhase({ elapsedMs: 27_999, estimatedDurationMs }),
     "capturing page evidence"
   );
   assert.equal(
-    describeScanProgressPhase({ elapsedMs: 27_200, estimatedDurationMs }),
+    describeScanProgressPhase({ elapsedMs: 28_000, estimatedDurationMs }),
     "checking policies"
   );
   assert.equal(
-    describeScanProgressPhase({ elapsedMs: 33_599, estimatedDurationMs }),
+    describeScanProgressPhase({ elapsedMs: 35_199, estimatedDurationMs }),
     "checking policies"
   );
   assert.equal(
-    describeScanProgressPhase({ elapsedMs: 33_600, estimatedDurationMs }),
+    describeScanProgressPhase({ elapsedMs: 35_200, estimatedDurationMs }),
     "processing retained evidence"
   );
 });

@@ -280,6 +280,27 @@ test("captures Numa-style consentmanager settings and accept without reject", as
   assert.equal(artifact.summary.firstLayerOptions, true);
 });
 
+test("captures RKI-style German select-all and save-selection controls", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-modal="true" aria-label="Hinweis zur Verwendung von Cookies" style="position: fixed; inset: 40px; padding: 24px; background: white;">
+      <h1>Hinweis zur Verwendung von Cookies</h1>
+      <p>Sie können entscheiden, ob Sie neben technisch notwendigen Cookies statistische Cookies erlauben.</p>
+      <label><input type="checkbox"> Statistik-Tracker einschalten</label>
+      <button type="button">Auswahl bestätigen</button>
+      <button type="button">Alle auswählen</button>
+    </section>
+  `);
+
+  const accept = findCandidate(artifact, "Alle auswählen");
+  assert.equal(accept?.actionType, "accept_all");
+  assert.equal(accept?.matchedLocale, "de");
+  assert.equal(accept?.decisionStatus, "confirmed_visible");
+  assert.equal(findCandidate(artifact, "Auswahl bestätigen")?.actionType, "save_preferences");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+});
+
 test("captures OneTrust optional-cookie noun-phrase controls as first-layer accept and reject", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>
@@ -721,7 +742,45 @@ test("captures visible first-layer controls inside a bounded iframe", async () =
   assert.equal(artifact.summary.firstLayerAccept, true);
   assert.equal(artifact.summary.firstLayerReject, true);
   assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.equal(artifact.pageUrl, "about:blank");
   assert.equal(findCandidate(artifact, "Accept all")?.frameContext.frameKind, "child_frame");
+});
+
+test("keeps geometry bound to the top-level document when only a child CMP frame responds", async () => {
+  assert.ok(browser, "browser not initialized");
+  const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
+  try {
+    await page.setContent(`<!doctype html><html><body>
+      <iframe srcdoc='<!doctype html><html><body>
+        <div role="dialog" style="position:fixed;inset:0;background:white">
+          <p>We use cookies and similar technologies.</p>
+          <button>Accept all</button><button>Reject all</button>
+        </div>
+      </body></html>'></iframe>
+    </body></html>`);
+    await page.waitForTimeout(50);
+    Object.defineProperty(page.mainFrame(), "evaluate", {
+      configurable: true,
+      value: async () => {
+        throw new Error("simulated main-frame renderer timeout");
+      },
+    });
+
+    const artifact = await captureConsentControlGeometry(page);
+
+    assert.equal(artifact.pageUrl, "about:blank");
+    assert.deepEqual(artifact.viewport, { width: 0, height: 0 });
+    assert.equal(findCandidate(artifact, "Accept all")?.frameContext.frameKind, "child_frame");
+    assert.equal(artifact.summary.confidence, 0);
+    assert.equal(
+      artifact.summary.limitations.includes(
+        "Main-frame consent geometry was unavailable; child-frame or blank-document geometry cannot establish control absence.",
+      ),
+      true,
+    );
+  } finally {
+    await page.close();
+  }
 });
 
 test("prioritizes known CMP frames when the page contains many unrelated iframes", async () => {
@@ -753,6 +812,41 @@ test("prioritizes known CMP frames when the page contains many unrelated iframes
     assert.equal(artifact.summary.cmpName, "OneTrust");
     assert.equal(artifact.summary.firstLayerAccept, true);
     assert.equal(artifact.summary.firstLayerReject, true);
+    assert.equal(artifact.summary.firstLayerOptions, true);
+  } finally {
+    await page.close();
+  }
+});
+
+test("does not divide the bounded geometry deadline across concurrent frames", async () => {
+  assert.ok(browser, "browser not initialized");
+  const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
+  try {
+    await page.setContent(`<!doctype html><html><body>
+      <section role="dialog" aria-label="Cookie consent" style="position:fixed;inset:80px;background:white">
+        <p>We use cookies and similar technologies.</p>
+        <button>Accept all</button><button>Cookie settings</button>
+      </section>
+      <iframe srcdoc="<p>one</p>"></iframe>
+      <iframe srcdoc="<p>two</p>"></iframe>
+      <iframe srcdoc="<p>three</p>"></iframe>
+    </body></html>`);
+    await page.waitForTimeout(50);
+
+    const mainFrame = page.mainFrame();
+    const originalEvaluate = mainFrame.evaluate;
+    Object.defineProperty(mainFrame, "evaluate", {
+      configurable: true,
+      value: async (...args: unknown[]) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        return Reflect.apply(originalEvaluate, mainFrame, args);
+      },
+    });
+
+    const artifact = await captureConsentControlGeometry(page, { timeoutMs: 900 });
+
+    assert.equal(artifact.viewport.width, 1366);
+    assert.equal(artifact.summary.firstLayerAccept, true);
     assert.equal(artifact.summary.firstLayerOptions, true);
   } finally {
     await page.close();

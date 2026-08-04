@@ -11,7 +11,13 @@ import { getAdminPulseFilterOptions, getAdminPulseOverviewCounts, listAdminPulse
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminReportLink } from "../scans/admin-scan-actions";
 import { AdminScansFilterForm } from "../scans/admin-scans-filter-form";
-import type { AdminEvidenceAggregate, AdminEvidenceResult } from "../../../../lib/scans/admin-evidence-matrix";
+import {
+  adminPolicyEvidenceDiagnosticTitle,
+  adminPolicyEvidenceStageLabel,
+  type AdminEvidenceAggregate,
+  type AdminEvidenceResult,
+  type AdminPolicyEvidenceDiagnostic
+} from "../../../../lib/scans/admin-evidence-matrix";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -114,9 +120,9 @@ function EvidenceCode({ code, label, result }: { code: string; label: string; re
   return <span className={`whitespace-nowrap font-semibold ${presentation.className}`} title={evidenceTitle(label, result)}>{code}{presentation.mark}</span>;
 }
 
-function EvidenceGroupCell({ aggregate, labels, results }: { aggregate: AdminEvidenceAggregate | null; labels: Record<string, string>; results: Record<string, AdminEvidenceResult | null> | null }) {
+function EvidenceGroupCell({ aggregate, labels, policyEvidence, results }: { aggregate: AdminEvidenceAggregate | null; labels: Record<string, string>; policyEvidence?: AdminPolicyEvidenceDiagnostic | null; results: Record<string, AdminEvidenceResult | null> | null }) {
   const summary = aggregate && aggregate.projected > 0 ? `${aggregate.observed}/${aggregate.total} ✓ · ${aggregate.review}△ · ${aggregate.concern}!` : "Not projected";
-  return <><p className="truncate text-[10px] font-medium text-slate-600">{summary}</p><p className="flex items-center gap-1.5 overflow-hidden text-[10px] leading-4">{Object.entries(labels).map(([code, label]) => <EvidenceCode code={code} key={code} label={label} result={results?.[code] ?? null} />)}</p></>;
+  return <><p className="truncate text-[10px] font-medium text-slate-600" title={policyEvidence ? adminPolicyEvidenceDiagnosticTitle(policyEvidence) : undefined}>{policyEvidence ? `${adminPolicyEvidenceStageLabel(policyEvidence.stage)} · ` : ""}{summary}</p><p className="flex items-center gap-1.5 overflow-hidden text-[10px] leading-4">{Object.entries(labels).map(([code, label]) => <EvidenceCode code={code} key={code} label={label} result={results?.[code] ?? null} />)}</p></>;
 }
 
 const TRANSPARENCY_LABELS = { CC: "Controller/contact", LB: "Legal basis", DR: "Data retention", PP: "Processing purposes", RC: "Recipients/categories", DS: "Data-subject rights", IT: "International transfers", PC: "Privacy contact", SA: "Supervisory authority", AD: "Automated decisions/profiling" };
@@ -448,7 +454,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                     <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="Privacy" label="Privacy notice" result={matrix?.privacyConsent.privacyNotice ?? null} /><EvidenceCode code="CMP" label="CMP framework" result={matrix?.privacyConsent.cmp ?? null} /></p><p className="truncate text-[10px] text-slate-500" title={evidenceTitle("Consent mechanism", matrix?.privacyConsent.mechanism ?? null)}>Mechanism {matrix?.privacyConsent.cmpVendorName ?? (matrix?.privacyConsent.mechanism ? EVIDENCE_MARKS[matrix.privacyConsent.mechanism.status].mark : "·")}</p></td>
                     <td className="truncate px-2.5 py-1.5 font-medium text-slate-700" title={request.noGoReason ?? undefined}>{accessLabel(request)}</td>
                     <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="A" label="Accept" result={matrix?.privacyConsent.accept ?? null} /><EvidenceCode code="R" label="Reject" result={matrix?.privacyConsent.reject ?? null} /><EvidenceCode code="O" label="Options" result={matrix?.privacyConsent.options ?? null} /></p><p className="truncate text-[10px] text-slate-400">Canonical controls</p></td>
-                    <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transparency.aggregate ?? null} labels={TRANSPARENCY_LABELS} results={matrix?.transparency.results ?? null} /></td>
+                    <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transparency.aggregate ?? null} labels={TRANSPARENCY_LABELS} policyEvidence={matrix?.policyEvidence} results={matrix?.transparency.results ?? null} /></td>
                     <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transport.aggregate ?? null} labels={TRANSPORT_LABELS} results={matrix?.transport.results ?? null} /></td>
                     <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.runtime.aggregate ?? null} labels={RUNTIME_LABELS} results={matrix?.runtime.results ?? null} /></td>
                     <td className="px-2.5 py-1.5 font-medium text-slate-800">{request.elapsedSeconds !== null ? `${Number.isInteger(Math.round(request.elapsedSeconds * 10) / 10) ? Math.round(request.elapsedSeconds * 10) / 10 : (Math.round(request.elapsedSeconds * 10) / 10).toFixed(1)}s` : "—"}</td>

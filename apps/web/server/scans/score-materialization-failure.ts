@@ -1,8 +1,11 @@
 type MaterializationFailureDisposition = {
-  code: "contract_validation_failed" | "materialization_failed_transient";
+  code: "contract_validation_failed" | "materialization_failed_transient" | "materialization_not_ready";
   diagnostic: string;
+  retryAfterSeconds?: number;
   retryable: boolean;
 };
+
+const MATERIALIZATION_NOT_READY_RETRY_SECONDS = 10;
 
 function errorChain(error: unknown) {
   const chain: unknown[] = [];
@@ -31,8 +34,25 @@ function lifecyclePhase(error: unknown) {
   return match?.[1] ?? null;
 }
 
+function projectionNotReadyReason(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+  const record = error as Record<string, unknown>;
+  if (record.name !== "CanonicalScanReportProjectionNotReadyError") return null;
+  const reason = typeof record.reason === "string" ? record.reason.trim() : "";
+  return /^[a-z0-9_:-]{1,120}$/i.test(reason) ? reason : "unspecified";
+}
+
 export function classifyScoreMaterializationFailure(error: unknown): MaterializationFailureDisposition {
   const chain = errorChain(error);
+  const notReadyReason = chain.map(projectionNotReadyReason).find((value) => value !== null);
+  if (notReadyReason) {
+    return {
+      code: "materialization_not_ready",
+      diagnostic: `materialization_not_ready:${notReadyReason}`,
+      retryAfterSeconds: MATERIALIZATION_NOT_READY_RETRY_SECONDS,
+      retryable: true,
+    };
+  }
   const phase = chain.map(lifecyclePhase).find((value) => value !== null);
   if (chain.some(isSchemaValidationError)) {
     return {

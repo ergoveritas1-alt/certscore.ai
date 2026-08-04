@@ -12,6 +12,10 @@ import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import type { CanonicalEvidenceBundle, ConsentActionAttempt, ConsentFlowObservation, ScreenshotArtifact } from "@certscore/contracts";
 import { parseLocalV2DagLambdaResultMessage } from "../../web/server/scans/local-v2-dag-lambda-dispatch";
 import {
+  LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS,
+  LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS,
+  LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS,
+  LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
@@ -29,6 +33,19 @@ import {
   uploadAuxiliaryArtifactFiles,
   uploadArtifactFiles
 } from "./handler";
+
+test("the default artifact chain preserves at least the full terminal publication reserve", () => {
+  assert.equal(LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS, 30_000);
+  assert.ok(
+    LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS <
+      LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS,
+  );
+  assert.ok(
+    LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS <=
+      LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS -
+        LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS,
+  );
+});
 
 test("early policy handoff packet is typed, hash-bound, and non-projectable", () => {
   const packet = buildVerifiedPolicyEvidencePacket({
@@ -521,6 +538,7 @@ test("handler gives the policy lane an absolute deadline before scanner shutdown
   let policySurfaceDeadlineAtMs: number | undefined;
   let preConsentModuleDeadlineMs: number | undefined;
   let preConsentVisualFallbackDeadlineMs: number | undefined;
+  let preConsentVisualFallbackDeadlineAtMs: number | undefined;
 
   const result = await handler(validPayload(), {
     artifactChainTimeoutMs: 45_000,
@@ -530,6 +548,7 @@ test("handler gives the policy lane an absolute deadline before scanner shutdown
       policySurfaceDeadlineAtMs = options.policySurfaceDeadlineAtMs;
       preConsentModuleDeadlineMs = options.preConsentModuleDeadlineMs;
       preConsentVisualFallbackDeadlineMs = options.preConsentVisualFallbackDeadlineMs;
+      preConsentVisualFallbackDeadlineAtMs = options.preConsentVisualFallbackDeadlineAtMs;
       return {
         artifactMetadata: {},
         artifactPointers: {},
@@ -550,6 +569,11 @@ test("handler gives the policy lane an absolute deadline before scanner shutdown
   assert.ok(policySurfaceDeadlineAtMs <= Date.now() + expectedOffsetMs);
   assert.equal(preConsentModuleDeadlineMs, 30_000);
   assert.equal(preConsentVisualFallbackDeadlineMs, 6_000);
+  const expectedVisualFallbackOffsetMs = 40_000 -
+    LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS - 4_000;
+  assert.ok(preConsentVisualFallbackDeadlineAtMs);
+  assert.ok(preConsentVisualFallbackDeadlineAtMs >= startedAtMs + expectedVisualFallbackOffsetMs);
+  assert.ok(preConsentVisualFallbackDeadlineAtMs <= Date.now() + expectedVisualFallbackOffsetMs);
 });
 
 test("a late partial scan can use artifact handoff reserve after scanner cancellation", async () => {
@@ -856,6 +880,45 @@ test("sharded bundle merge retains exactly one diagnostic screenshot", () => {
 
   assert.equal(merged.screenshots.length, 1);
   assert.equal(merged.screenshots[0]?.artifactId, "screenshot_pre_consent_settled");
+});
+
+test("sharded bundle merge keeps the fetched policy observation over its earlier link candidate", () => {
+  const candidate = {
+    observationId: "policy_surface_privacy",
+    surfaceType: "privacy_policy" as const,
+    url: "https://example.com/privacy",
+    normalizedUrl: "https://example.com/privacy",
+    status: "observed" as const,
+    documentFetchState: "not_attempted" as const,
+    confidence: 0.95,
+    directVsInferred: "direct" as const,
+  };
+  const fetched = {
+    ...candidate,
+    status: "fetched" as const,
+    documentFetchState: "fetched" as const,
+    documentEvaluationState: "usable" as const,
+    targetRelationship: "target_controller" as const,
+    textExcerpt: "This privacy policy explains how we process and retain personal information.",
+    artifactRefs: [{
+      artifactId: "policy_surface_text_privacy",
+      artifactType: "other" as const,
+      path: "policy_surface_text_privacy.txt",
+    }],
+  };
+  const merged = mergeLocalV2DagLambdaShardBundles({
+    base: canonicalBundleFixture("scan-local-1", { policySurfaceObservations: [candidate] }),
+    scanId: "scan-local-1",
+    workerBundles: [
+      canonicalBundleFixture("scan-local-1_policy", { policySurfaceObservations: [fetched] }),
+    ],
+  });
+
+  assert.equal(merged.policySurfaceObservations.length, 1);
+  assert.equal(merged.policySurfaceObservations[0]?.status, "fetched");
+  assert.equal(merged.policySurfaceObservations[0]?.documentEvaluationState, "usable");
+  assert.equal(merged.policySurfaceObservations[0]?.artifactRefs.length, 1);
+  assert.equal(merged.policySurfaceObservations[0]?.targetRelationship, "target_controller");
 });
 
 test("artifact uploader returns durable metadata for all v2 JSON artifacts", async () => {

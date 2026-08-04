@@ -27,6 +27,7 @@ import { persistReportFindingCount } from "../../../../server/scans/persist-repo
 import {
   getPublicScanStatusProjection,
   getOrganizationScanStatusProjection,
+  isCompletedScanStatus,
   isPendingScanStatus
 } from "../../../../server/scans/scan-status-projection";
 import type { ScanStatusProjection } from "../../../../server/scans/scan-status-projection";
@@ -100,7 +101,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     notFound();
   }
   const waitingForReportProjection =
-    (statusProjection.status === "completed" || statusProjection.status === "completed_limited") &&
+    isCompletedScanStatus(statusProjection.status) &&
     statusProjection.reportProjectionRequired &&
     !statusProjection.reportReady;
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
@@ -168,7 +169,11 @@ async function ScanDetailReportContent({
       : Promise.resolve(null),
     getOrganizationSettings(organization.id)
   ]);
-  if (statusProjection.reportProjectionRequired && !localPersistedReportProjection) {
+  if (
+    isCompletedScanStatus(statusProjection.status) &&
+    statusProjection.reportProjectionRequired &&
+    !localPersistedReportProjection
+  ) {
     after(async () => {
       await publishCanonicalScanReportProjection({
         organizationId: statusProjection.organizationId,

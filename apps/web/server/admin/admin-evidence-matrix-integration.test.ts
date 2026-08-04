@@ -23,6 +23,7 @@ test("Admin scan list reads the bounded matrix without report reconstruction or 
   assert.match(list, /parseAdminEvidenceMatrix\(overviewSnapshot\?\.admin_evidence_matrix\)/);
   assert.doesNotMatch(list, /buildPulseProjection|publishCanonicalScanReportProjection|materializeAdminScanSummar/);
   assert.match(page, /scan\.evidenceMatrix/);
+  assert.match(page, /policyEvidence=\{matrix\?\.policyEvidence\}/);
   assert.doesNotMatch(page, /scan\.privacyPolicyPresent|scan\.consentAro|scan\.cmpVendorName/);
   assert.match(page, /\{ label: "Transparency" \}, \{ label: "Transport" \}, \{ label: "Runtime" \}/);
 });

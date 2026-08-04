@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 
-export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v15";
+export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v16";
 export const REPORT_PROJECTION_READY_WARNING_MS = 15_000;
 export const MAX_SCAN_REPORT_PROJECTION_BYTES = 6 * 1024 * 1024;
 
@@ -57,12 +57,69 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
+const RUNTIME_ARTIFACT_CANONICAL_ALIASES = [
+  ["hybrid_runtime_evidence", "hybridRuntimeEvidence"],
+  ["cookie_write_observations", "cookieWriteObservations"],
+  ["policy_disclosure_summary", "policyDisclosureSummary"],
+  ["request_purpose_classification_confidence", "requestPurposeClassificationConfidence"]
+] as const;
+
+function stripReportProjectionFields(record: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(record).filter(([key]) => !key.startsWith("report_projection_"))
+  );
+}
+
+function equivalentForPersistence(left: unknown, right: unknown) {
+  return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
+}
+
+function canonicalizeRuntimeArtifactAliases(runtimeArtifacts: Record<string, unknown>) {
+  const canonical = { ...runtimeArtifacts };
+  for (const [canonicalKey, aliasKey] of RUNTIME_ARTIFACT_CANONICAL_ALIASES) {
+    if (!(aliasKey in canonical)) continue;
+    if (!(canonicalKey in canonical)) {
+      canonical[canonicalKey] = canonical[aliasKey];
+      delete canonical[aliasKey];
+      continue;
+    }
+    if (equivalentForPersistence(canonical[canonicalKey], canonical[aliasKey])) {
+      delete canonical[aliasKey];
+    }
+  }
+  return canonical;
+}
+
 function normalizeProjectionJson(value: unknown) {
-  const transported = JSON.stringify(value);
+  const transported = JSON.stringify(sanitizeJsonbValue(value));
   if (transported === undefined) {
     throw new Error("Scan report projection is not JSON serializable.");
   }
   return canonicalize(JSON.parse(transported) as unknown);
+}
+
+/**
+ * PostgreSQL jsonb rejects U+0000 even when it is validly escaped as `\\u0000`
+ * by JSON.stringify. Retained browser evidence can contain this character in
+ * copied text or script payloads, so sanitize it at the JSONB boundary while
+ * preserving the rest of the evidence unchanged.
+ */
+export function sanitizeJsonbValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.replaceAll("\u0000", "\uFFFD");
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(sanitizeJsonbValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [sanitizeJsonbValue(key), sanitizeJsonbValue(entry)])
+    );
+  }
+  return value;
 }
 
 function serializeProjection(value: unknown) {
@@ -71,14 +128,18 @@ function serializeProjection(value: unknown) {
 
 export function buildPersistedScanReportProjection(scanRecord: ScanDetailResponse) {
   const snapshot = isRecord(scanRecord.snapshot)
-    ? Object.fromEntries(
-        Object.entries(scanRecord.snapshot).filter(([key]) =>
-          !key.startsWith("report_projection_")
-        )
-      )
+    ? stripReportProjectionFields(scanRecord.snapshot)
+    : null;
+  const previousSnapshot = isRecord(scanRecord.previousSnapshot)
+    ? stripReportProjectionFields(scanRecord.previousSnapshot)
+    : null;
+  const runtimeArtifacts = isRecord(scanRecord.runtimeArtifacts)
+    ? canonicalizeRuntimeArtifactAliases(scanRecord.runtimeArtifacts)
     : null;
   const payload = {
     ...scanRecord,
+    previousSnapshot,
+    runtimeArtifacts,
     snapshot
   } satisfies ScanDetailResponse;
   const normalizedPayload = normalizeProjectionJson(payload) as ScanDetailResponse;

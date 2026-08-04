@@ -543,7 +543,19 @@ async function verifyScanners(expectedSha: string) {
       LastUpdateStatus?: string;
       State?: string;
     };
-    if (!payload.ImageUri?.endsWith(`:${expectedSha}`)) {
+    const expectedDigestResult = await run([
+      "aws", "ecr", "describe-images",
+      "--region", region,
+      "--repository-name", "certscore-v2-dag-local-lambda",
+      "--image-ids", `imageTag=${expectedSha}`,
+      "--query", "imageDetails[0].imageDigest",
+      "--output", "text"
+    ], { quiet: true });
+    const expectedDigest = expectedDigestResult.stdout.trim();
+    if (!/^sha256:[a-f0-9]{64}$/.test(expectedDigest)) {
+      throw new Error(`Could not resolve the expected scanner image digest in ${region}.`);
+    }
+    if (!payload.ImageUri?.endsWith(`@${expectedDigest}`)) {
       throw new Error(`${region} Lambda image ${payload.ImageUri ?? "unknown"} does not match ${expectedSha}`);
     }
     if (payload.LastUpdateStatus !== "Successful" || payload.State !== "Active") {

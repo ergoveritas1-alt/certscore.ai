@@ -1152,6 +1152,42 @@ test("matches Japanese and Chinese policy phrases without whitespace and preserv
   }
 });
 
+test("classifies a possessive data-protection-authority complaint right", () => {
+  const result = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "Depending on where you live, you may have the right to complain to your data protection authority.",
+  });
+  const match = result.matches.find((candidate) => candidate.topic === "supervisory_authority");
+
+  assert.ok(match);
+  assert.equal(match.matchedLocale, "en");
+  assert.equal(match.matchStrength, "equivalent");
+  assert.match(match.evidenceExcerpt, /complain to your data protection authority/i);
+});
+
+test("classifies retained publisher privacy-counsel and E.U. complaint contacts", () => {
+  const result = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "Email us at privacy@publisher.example or write to Privacy Counsel. In the European Union, you can lodge a complaint with an E.U. data protection authority.",
+  });
+  const byTopic = new Map(result.matches.map((match) => [match.topic, match]));
+
+  assert.equal(byTopic.get("dpo_contact")?.matchStrength, "equivalent");
+  assert.match(byTopic.get("dpo_contact")?.evidenceExcerpt ?? "", /privacy counsel/i);
+  assert.equal(byTopic.get("supervisory_authority")?.matchStrength, "equivalent");
+  assert.match(byTopic.get("supervisory_authority")?.evidenceExcerpt ?? "", /e\.u\. data protection authority/i);
+});
+
+test("classifies national supervisory-authority complaint language", () => {
+  const classification = classifyGdprTransparencyTopics({
+    text: "You can lodge a complaint with the national supervisory authority.",
+  });
+  const match = classification.matches.find((candidate) => candidate.topic === "supervisory_authority");
+  assert.equal(match?.matchedTerm, "lodge a complaint with the national supervisory authority");
+  assert.equal(match?.matchStrength, "equivalent");
+  assert.equal(match?.matchedLocale, "en");
+});
+
 test("classifies a Japanese publisher privacy policy row by row without inventing GDPR disclosures", () => {
   const result = classifyGdprTransparencyTopics({
     localeHints: ["ja"],

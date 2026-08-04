@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
-import { deriveMaterializedConsentControlAssessment } from "./consent-control-assessment-projector";
+import { deriveMaterializedConsentControlAssessment, deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
 
 function bundle(
   controls: Array<Record<string, unknown>>,
@@ -157,6 +157,189 @@ test("completed typed DOM controls survive an independent accessibility timeout"
   assert.equal(assessment.controls.accept.state, "observed");
   assert.equal(assessment.controls.reject.state, "observed");
   assert.equal(assessment.controls.options.state, "observed");
+});
+
+test("completed empty typed inventory retains first-layer A/R/O absence", () => {
+  const url = "https://non-actionable.example/";
+  const source = bundle([], { url });
+  source.consentUiObservations[0]!.layerInspected = "unknown";
+  source.consentUiObservations[0]!.basis = ["settled_control_inventory_completed"];
+  source.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory", "accessibility_tree"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: {
+      actionableControlObserved: false,
+      consentSurfaceObserved: true,
+      coverageStatus: "limited",
+      evidenceChannels: [
+        { channel: "page_script_inventory", status: "observed" },
+        { channel: "accessibility_tree", status: "observed" },
+      ],
+      inspectionCompleted: false,
+      limitationKeys: ["cmp_runtime_without_actionable_surface"],
+      observedAtMs: 6_500,
+      outcome: "non_actionable_surface_observed",
+    },
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.coverage.status, "complete");
+  assert.equal(assessment.surface.status, "observed_non_actionable");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+});
+
+test("completed no-evidence DOM inventory is a certified first-layer negative without geometry", () => {
+  const url = "https://no-banner.example/";
+  const source = bundle([], {
+    captureStatus: "no_evidence",
+    likelyPresent: false,
+    url,
+  });
+  source.consentUiObservations[0]!.basis = ["settled_control_inventory_completed"];
+  source.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: {
+      actionableControlObserved: false,
+      consentSurfaceObserved: false,
+      coverageStatus: "limited",
+      evidenceChannels: [{ channel: "page_script_inventory", status: "observed" }],
+      inspectionCompleted: false,
+      limitationKeys: ["network_cmp_inspection_incomplete"],
+      observedAtMs: 6_500,
+      outcome: "inspection_incomplete",
+    },
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.coverage.status, "complete");
+  assert.equal(assessment.surface.status, "not_observed");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+});
+
+test("a failed non-inventory channel does not erase completed typed A/R/O controls", () => {
+  const url = "https://typed-controls.example/";
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+    { actionType: "reject_all", label: "Reject", visible: true, layer: "first_layer" },
+    { actionType: "manage_preferences", label: "Options", visible: true, layer: "first_layer" },
+  ], { url });
+  source.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory"],
+    failedChannels: ["network_cmp"],
+    timedOutChannels: [],
+  };
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: null,
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.surface.status, "observed_actionable");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+});
+
+test("complete dismiss-only inventory projects actionable surface with A/R/O not observed", () => {
+  const url = "https://dismiss-only.example/";
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([{
+      actionType: "other",
+      artifactRef: "CanonicalEvidenceBundle.json#dismiss-close",
+      classifierReasonCodes: ["matched_dismiss", "match_strength_direct"],
+      label: "Close",
+      layer: "first_layer",
+      matchStrength: "direct",
+      semanticRole: "dismiss",
+      visible: true,
+    }], { url }),
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.coverage.status, "complete");
+  assert.equal(assessment.surface.status, "observed_actionable");
+  assert.equal(assessment.evidence[0]?.intent, "dismiss");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+});
+
+test("WS01 complete dismiss-only observation projects into ConsentControlAssessment v2", () => {
+  const assessment = deriveWs01ConsentControlAssessment({
+    completedAt: "2026-08-02T21:06:48.000Z",
+    firstLayerConsentChoices: {
+      capturedAtMs: 7_501,
+      capturedBeforeInteraction: true,
+      controlInventoryComplete: true,
+      documentUrl: "https://www.usccb.org/",
+      layerInspected: "first_layer",
+      normalizedChoices: [{ action: "dismiss", label: "Close", sameSurface: true }],
+      sameSurfaceCandidates: true,
+    },
+    requestedUrl: "https://usccb.org/",
+    scanId: "scan-ws01-dismiss-only",
+    scanStatus: "completed",
+  });
+
+  assert.ok(assessment);
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.document.identityStatus, "matched");
+  assert.equal(assessment.surface.status, "observed_actionable");
+  assert.equal(assessment.evidence[0]?.intent, "dismiss");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.equal(assessment.provenance.sourceBundleVersion, "ws01.hybrid_runtime_evidence.v1");
+});
+
+test("WS01 incomplete consent inventory does not create a canonical negative assessment", () => {
+  const assessment = deriveWs01ConsentControlAssessment({
+    firstLayerConsentChoices: {
+      capturedBeforeInteraction: true,
+      controlInventoryComplete: false,
+      documentUrl: "https://www.usccb.org/",
+      layerInspected: "first_layer",
+      normalizedChoices: [{ action: "dismiss", label: "Close", sameSurface: true }],
+      sameSurfaceCandidates: true,
+    },
+    scanId: "scan-ws01-incomplete",
+    scanStatus: "completed",
+  });
+
+  assert.equal(assessment, null);
 });
 
 test("geometry projection retains inline and persistent options presentation", () => {
@@ -413,6 +596,101 @@ test("CNN production artifact binds typed controls to the retained redirected sc
   assert.equal(assessment.controls.options.state, "observed");
   assert.equal(assessment.controls.reject.state, "not_observed");
   assert.equal(assessment.coverage.status, "complete");
+});
+
+test("explicit observation document URL survives a requested-to-final redirect", () => {
+  const requestedUrl = "https://redirect.example/";
+  const finalUrl = "https://redirect.example/gb";
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+    { actionType: "reject_all", label: "Continue without accepting", visible: true, layer: "first_layer" },
+    { actionType: "manage_preferences", label: "Personalise", visible: true, layer: "first_layer" },
+  ], { url: requestedUrl });
+  source.domSnapshots[0]!.url = requestedUrl;
+  source.consentUiObservations[0]!.documentUrl = finalUrl;
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: null,
+    finalUrl,
+    noGo: false,
+    requestedUrl,
+  });
+
+  assert.equal(assessment.document.identityStatus, "matched");
+  assert.deepEqual(assessment.document.observedDocumentIds, [finalUrl]);
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+});
+
+test("earlier redirect-document controls do not poison a later completed final-document inventory", () => {
+  const requestedUrl = "https://redirect-history.example/";
+  const finalUrl = "https://redirect-history.example/gb";
+  const source = bundle([
+    { actionType: "accept_all", label: "Continue", visible: true, layer: "first_layer" },
+  ], { url: requestedUrl });
+  source.consentUiObservations[0]!.observedAtMs = 1_000;
+  source.consentUiObservations[0]!.documentUrl = requestedUrl;
+  source.consentUiObservations.push({
+    ...source.consentUiObservations[0]!,
+    observationId: "consent-ui-final-document",
+    observedAtMs: 2_000,
+    documentUrl: finalUrl,
+    controls: [
+      { actionType: "accept_all", classifierReasonCodes: [], label: "Accept", visible: true, layer: "first_layer" },
+      { actionType: "reject_all", classifierReasonCodes: [], label: "Reject", visible: true, layer: "first_layer" },
+      { actionType: "manage_preferences", classifierReasonCodes: [], label: "Options", visible: true, layer: "first_layer" },
+    ],
+  });
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: null,
+    finalUrl,
+    noGo: false,
+    requestedUrl,
+  });
+
+  assert.equal(assessment.document.identityStatus, "matched");
+  assert.deepEqual(assessment.document.observedDocumentIds, [finalUrl]);
+  assert.equal(assessment.evidence.some((row) => row.label === "Continue"), false);
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+});
+
+test("an explicit conflicting observation document fails closed despite a final-page screenshot", () => {
+  const requestedUrl = "https://redirect.example/";
+  const finalUrl = "https://redirect.example/gb";
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+  ], { url: requestedUrl });
+  source.consentUiObservations[0]!.documentUrl = requestedUrl;
+  source.screenshots = [{
+    artifactId: "final-screenshot",
+    capturedAtMs: 6_400,
+    consentStateAtTime: "pre_consent",
+    pagePhase: "dom_content_loaded",
+    path: "artifacts/final.png",
+    url: finalUrl,
+  }];
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: null,
+    finalUrl,
+    noGo: false,
+    requestedUrl,
+  });
+
+  assert.equal(assessment.document.identityStatus, "mismatched");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
 });
 
 test("complete same-document no-surface coverage produces factual not-observed values", () => {

@@ -87,8 +87,8 @@ function makeMissingBridgePolicyRuntimeEvidence(runtimeOverride: Record<string, 
 
 function makeConsentOptionsAssessment(input: {
   firstLayer?: Array<{
-    actionType: "accept_all" | "reject_all" | "manage_preferences";
-    intent: "accept" | "reject" | "options";
+    actionType: "accept_all" | "reject_all" | "manage_preferences" | "other";
+    intent: "accept" | "reject" | "options" | "dismiss";
     label: string;
     presentationType?: "dedicated_button" | "inline_link" | "unknown";
     placementType?: "action_cluster" | "first_layer_body" | "unknown";
@@ -155,6 +155,28 @@ function makeConsentOptionsAssessment(input: {
     }
   });
 }
+
+test("normalizes complete dismiss-only A/R/O states without promoting them as findings", () => {
+  const assessment = makeConsentOptionsAssessment({
+    firstLayer: [{ actionType: "other", intent: "dismiss", label: "Close" }]
+  });
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: { consentControlAssessment: assessment },
+    validationFindings: []
+  });
+  const inventory = concerns.find((candidate) =>
+    candidate.originKey.startsWith("consent.control_inventory.")
+  );
+
+  assert.ok(inventory);
+  assert.equal(inventory.evidenceBundle.rawEvidence?.firstLayerAcceptState, "not_observed");
+  assert.equal(inventory.evidenceBundle.rawEvidence?.firstLayerRejectState, "not_observed");
+  assert.equal(inventory.evidenceBundle.rawEvidence?.firstLayerOptionsState, "not_observed");
+  assert.equal(inventory.regulatoryChecklistEligibility, "none");
+  assert.equal(inventory.promotionEligibility, "internal_only");
+  assert.equal(inventory.externalSurfacingEligibility, "audit_only");
+});
 
 test("normalizes consent options prominence before concern policy assigns checklist eligibility", () => {
   const cases = [

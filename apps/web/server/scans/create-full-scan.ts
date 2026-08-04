@@ -67,6 +67,7 @@ import {
   type ScanRequesterIpContext
 } from "./requester-ip-context";
 import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
+import { ensureCanonicalScanReportProjectionForReuse } from "./canonical-scan-report-publisher";
 
 export type CreateFullScanActionState = {
   error: string | null;
@@ -281,6 +282,13 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     const recentScan = reuseDecision.eligibility.candidate;
     if (recentScan) {
       try {
+        const projection = await ensureCanonicalScanReportProjectionForReuse({
+          organizationId: recentScan.organizationId ?? null,
+          scanId: recentScan.id
+        });
+        if (!projection.ready) {
+          throw new Error(`Reusable scan report projection is not ready: ${projection.reason}`);
+        }
         await logRequest({
           fulfilledByScanId: recentScan.id,
           requireSuccess:
@@ -306,7 +314,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
           scanId: recentScan.id
         };
       } catch (error) {
-        console.error("[web] cross-workspace recent scan reuse access logging failed; queueing new scan instead", {
+        console.error("[web] recent scan reuse preparation failed; queueing new scan instead", {
           domainId: domainRecord.domain.id,
           error: error instanceof Error ? error.message : String(error),
           sourceScanId: recentScan.id

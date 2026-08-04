@@ -15,6 +15,7 @@ import {
   MAX_SCAN_REPORT_PROJECTION_BYTES,
   readPersistedScanReportProjection,
   REPORT_PROJECTION_READY_WARNING_MS,
+  sanitizeJsonbValue,
   SCAN_REPORT_PROJECTION_VERSION
 } from "./scan-report-projection-contract";
 import type { ScanDetailResponse } from "./get-scan-by-id";
@@ -49,8 +50,8 @@ test("report projection writer and readiness query share one version contract", 
     readFile(statusProjectionPath, "utf8")
   ]);
 
-  assert.equal(SCAN_REPORT_PROJECTION_VERSION, "scan-report-projection-v15");
-  assert.match(contractSource, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v15"/);
+  assert.equal(SCAN_REPORT_PROJECTION_VERSION, "scan-report-projection-v16");
+  assert.match(contractSource, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v16"/);
   assert.match(projectionSource, /from "\.\/scan-report-projection-contract"/);
   assert.match(statusSource, /from "\.\/scan-report-projection-contract"/);
   assert.match(
@@ -65,8 +66,16 @@ test("persisted display projection is bounded, checksum-verified, and scan-bound
   const scanRecord = {
     events: [],
     runtimeArtifacts: {
+      cookieWriteObservations: [{ cookieName: "session" }],
+      cookie_write_observations: [{ cookieName: "session" }],
+      hybridRuntimeEvidence: { consentControlAssessment: { artifactVersion: "consent-control-assessment-v2" } },
+      hybrid_runtime_evidence: { consentControlAssessment: { artifactVersion: "consent-control-assessment-v2" } },
       omittedAtTransport: undefined,
-      observedAt: new Date("2026-07-30T19:22:38.000Z")
+      observedAt: new Date("2026-07-30T19:22:38.000Z"),
+      policyDisclosureSummary: { privacyPolicyPresent: true },
+      policy_disclosure_summary: { privacyPolicyPresent: true },
+      requestPurposeClassificationConfidence: [{ hostname: "metrics.example" }],
+      request_purpose_classification_confidence: [{ hostname: "metrics.example" }]
     },
     scan: {
       completedAt: "2026-07-30T19:22:39.000Z",
@@ -76,6 +85,16 @@ test("persisted display projection is bounded, checksum-verified, and scan-bound
     snapshot: {
       report_projection_payload: { stale: true },
       report_projection_payload_sha256: "stale"
+    },
+    previousSnapshot: {
+      consent_control_assessment: { artifactVersion: "consent-control-assessment-v2" },
+      report_projection_payload: {
+        previousSnapshot: {
+          report_projection_payload: { recursive: true }
+        }
+      },
+      report_projection_payload_sha256: "stale",
+      report_projection_status: "ready"
     }
   } as unknown as ScanDetailResponse;
   const persisted = buildPersistedScanReportProjection(scanRecord);
@@ -85,7 +104,14 @@ test("persisted display projection is bounded, checksum-verified, and scan-bound
     undefined
   );
   assert.deepEqual(persisted.payload.runtimeArtifacts, {
-    observedAt: "2026-07-30T19:22:38.000Z"
+    cookie_write_observations: [{ cookieName: "session" }],
+    hybrid_runtime_evidence: { consentControlAssessment: { artifactVersion: "consent-control-assessment-v2" } },
+    observedAt: "2026-07-30T19:22:38.000Z",
+    policy_disclosure_summary: { privacyPolicyPresent: true },
+    request_purpose_classification_confidence: [{ hostname: "metrics.example" }]
+  });
+  assert.deepEqual(persisted.payload.previousSnapshot, {
+    consent_control_assessment: { artifactVersion: "consent-control-assessment-v2" }
   });
 
   const transportedPayload = JSON.parse(JSON.stringify(persisted.payload)) as Record<string, unknown>;
@@ -114,6 +140,42 @@ test("persisted display projection is bounded, checksum-verified, and scan-bound
       report_projection_version: SCAN_REPORT_PROJECTION_VERSION
     }
   }), null);
+});
+
+test("projection sanitizes NUL characters rejected by PostgreSQL jsonb", () => {
+  const scanRecord = {
+    events: [{ message: "retained\u0000evidence" }],
+    runtimeArtifacts: { policyText: "before\u0000after" },
+    scan: {
+      id: "5eb8e37d-7eac-4c45-bb4b-3c31c239a2df",
+      status: "completed"
+    },
+    snapshot: null
+  } as unknown as ScanDetailResponse;
+
+  const persisted = buildPersistedScanReportProjection(scanRecord);
+  assert.equal((persisted.payload.events[0] as Record<string, unknown>).message, "retained�evidence");
+  assert.equal((persisted.payload.runtimeArtifacts as Record<string, unknown>).policyText, "before�after");
+  assert.equal(JSON.stringify(persisted.payload).includes("\u0000"), false);
+  assert.deepEqual(sanitizeJsonbValue({ nested: ["a\u0000b"] }), { nested: ["a�b"] });
+});
+
+test("persisted projection preserves conflicting runtime aliases instead of dropping evidence", () => {
+  const scanRecord = {
+    events: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: { privacyPolicyPresent: false },
+      policy_disclosure_summary: { privacyPolicyPresent: true }
+    },
+    scan: {
+      id: "5eb8e37d-7eac-4c45-bb4b-3c31c239a2df",
+      status: "completed"
+    },
+    snapshot: null
+  } as unknown as ScanDetailResponse;
+
+  const persisted = buildPersistedScanReportProjection(scanRecord);
+  assert.deepEqual(persisted.payload.runtimeArtifacts, scanRecord.runtimeArtifacts);
 });
 
 test("oversized display projections fail closed instead of truncating evidence", () => {

@@ -4,8 +4,9 @@ import test from "node:test";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
+import { getEvidenceLabel } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
-import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
+import { buildNormalizedConcerns, buildUnifiedFindingCandidatesFromConcerns } from "../../lib/scans/normalized-concerns";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
 import {
@@ -19,7 +20,7 @@ import { withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-pr
 const GENERIC_URL = "https://site-under-test.example/";
 
 type FixtureControl = {
-  actionType: "accept_all" | "reject_all" | "manage_preferences";
+  actionType: "accept_all" | "reject_all" | "manage_preferences" | "other";
   classifierReasonCodes?: string[];
   classifierVariant?: string;
   label: string;
@@ -28,6 +29,7 @@ type FixtureControl = {
   matchStrength?: "direct" | "equivalent" | "contextual";
   presentationType?: "dedicated_button" | "inline_link";
   placementType?: "action_cluster" | "first_layer_body";
+  semanticRole?: "dismiss";
 };
 
 type ConsentFlowFixture = {
@@ -213,6 +215,152 @@ function projectConsentStory(input: ConsentFlowFixture) {
     score
   };
 }
+
+test("completed empty first-layer inventory projects factual A/R/O absence and a reject partial concern", () => {
+  const packet = retainedEvidencePacket({ firstLayerControls: [] });
+  packet.consentUiObservations[0]!.layerInspected = "unknown";
+  packet.consentUiObservations[0]!.basis = ["settled_control_inventory_completed"];
+  packet.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory", "accessibility_tree"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: packet,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: {
+      actionableControlObserved: false,
+      consentSurfaceObserved: true,
+      coverageStatus: "limited",
+      evidenceChannels: [
+        { channel: "page_script_inventory", status: "observed" },
+        { channel: "accessibility_tree", status: "observed" },
+      ],
+      inspectionCompleted: false,
+      limitationKeys: ["cmp_runtime_without_actionable_surface"],
+      observedAtMs: 1_000,
+      outcome: "non_actionable_surface_observed",
+    },
+    finalUrl: GENERIC_URL,
+    noGo: false,
+    requestedUrl: GENERIC_URL,
+  });
+  const runtimeArtifacts = withPersistedFirstLayerConsentEvidence({
+    cmpFrameworkSignalObserved: true,
+    consentControlAssessment: assessment,
+    requestPurposeClassificationConfidence: [{
+      category: "analytics",
+      collectionEndpointObserved: true,
+      confidence: 0.95,
+      essentiality: "non_essential",
+      evidenceRefs: ["CanonicalEvidenceBundle.json#request-1"],
+      firstSeenMs: 400,
+      requestUrl: "https://analytics.example/collect",
+      runtimePhase: "pre_consent",
+      vendorName: "Example Analytics",
+    }],
+  }, { consent_control_assessment: assessment });
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: [],
+  });
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    normalizedConcerns,
+    runtimeArtifacts,
+    scanCompleted: true,
+    snapshot: { cookie_banner_present: true },
+  });
+  const checklist = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+  const byId = (id: string) => {
+    const row = checklist.find((item) => item.id === id);
+    assert.ok(row);
+    return row;
+  };
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.surface.status, "observed_non_actionable");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.ok(normalizedConcerns.some((concern) =>
+    concern.originKey === "consent.control_inventory.complete_first_layer"
+  ));
+  assert.ok(normalizedConcerns.some((concern) =>
+    concern.originKey === "consent.refusal_path.unavailable_before_nonessential_activity"
+  ));
+  assert.equal(byId("accept_consent_control").status, "Not observed");
+  assert.equal(byId("options_settings_preferences_control").status, "Not observed");
+  assert.equal(byId("reject_all_path_availability").status, "Review signal");
+  assert.equal(getEvidenceLabel(byId("reject_all_path_availability")), "Partial concern");
+});
+
+test("completed no-evidence inventory stays binary through assessment, concern policy, and checklist", () => {
+  const packet = retainedEvidencePacket({ firstLayerControls: [] });
+  packet.consentUiObservations[0]!.captureStatus = "no_evidence";
+  packet.consentUiObservations[0]!.likelyPresent = false;
+  packet.consentUiObservations[0]!.basis = ["settled_control_inventory_completed"];
+  packet.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: packet,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: {
+      actionableControlObserved: false,
+      consentSurfaceObserved: false,
+      coverageStatus: "limited",
+      evidenceChannels: [{ channel: "page_script_inventory", status: "observed" }],
+      inspectionCompleted: false,
+      limitationKeys: ["network_cmp_inspection_incomplete"],
+      observedAtMs: 1_000,
+      outcome: "inspection_incomplete",
+    },
+    finalUrl: GENERIC_URL,
+    noGo: false,
+    requestedUrl: GENERIC_URL,
+  });
+  const runtimeArtifacts = withPersistedFirstLayerConsentEvidence(
+    { consentControlAssessment: assessment },
+    { consent_control_assessment: assessment },
+  );
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: [],
+  });
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    normalizedConcerns,
+    runtimeArtifacts,
+    scanCompleted: true,
+    snapshot: { cookie_banner_present: false },
+  });
+  const checklist = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+  const statusFor = (id: string) => checklist.find((row) => row.id === id)?.status;
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.surface.status, "not_observed");
+  assert.ok(normalizedConcerns.some((concern) =>
+    concern.originKey === "consent.operational_surface.not_observed"
+  ));
+  assert.equal(statusFor("accept_consent_control"), "Not observed");
+  assert.equal(statusFor("reject_all_path_availability"), "Not observed");
+  assert.equal(statusFor("options_settings_preferences_control"), "Not observed");
+});
 
 test("canonical consent-control flow preserves site-agnostic prominence and absence semantics", () => {
   const cases = [
@@ -436,6 +584,68 @@ test("canonical consent-control flow consumes Slovenian typed controls without d
     ),
     true,
   );
+});
+
+test("canonical consent-control flow projects UniConsent accept/options evidence and a partial reject concern", () => {
+  const story = projectConsentStory({
+    firstLayerControls: [
+      {
+        actionType: "accept_all",
+        classifierReasonCodes: ["matched_accept", "match_strength_direct"],
+        label: "Agree and proceed",
+        matchedTerm: "agree and proceed",
+      },
+      {
+        actionType: "manage_preferences",
+        classifierReasonCodes: ["matched_options", "match_strength_direct"],
+        label: "Manage Options",
+        matchedTerm: "manage options",
+        presentationType: "dedicated_button",
+      },
+    ],
+  });
+
+  assert.equal(story.assessment.controls.accept.state, "observed");
+  assert.equal(story.assessment.controls.options.state, "observed");
+  assert.equal(story.assessment.controls.reject.state, "not_observed");
+  assert.equal(story.row.status, "Observed");
+  assert.equal(story.rejectRow.status, "Review signal");
+  assert.equal(story.rejectRow.assessmentStatus, "review_signal");
+  assert.equal(getEvidenceLabel(story.rejectRow), "Partial concern");
+  assert.equal(story.rejectScore.score, 45);
+  assert.match(story.rejectRow.limitation ?? "", /no same-layer reject/i);
+});
+
+test("canonical consent-control flow projects dismiss-only evidence through every policy boundary", () => {
+  const story = projectConsentStory({
+    firstLayerControls: [{
+      actionType: "other",
+      classifierReasonCodes: ["matched_dismiss", "match_strength_direct"],
+      label: "Close",
+      matchedTerm: "close",
+      semanticRole: "dismiss",
+    }],
+  });
+  const dismissConcern = story.normalizedConcerns.find((concern) =>
+    concern.originKey === "consent.dismiss_without_reject.complete_first_layer"
+  );
+  const unifiedCandidates = buildUnifiedFindingCandidatesFromConcerns(
+    dismissConcern ? [dismissConcern] : []
+  );
+
+  assert.equal(story.assessment.surface.status, "observed_actionable");
+  assert.equal(story.assessment.evidence[0]?.intent, "dismiss");
+  assert.equal(story.assessment.controls.accept.state, "not_observed");
+  assert.equal(story.assessment.controls.reject.state, "not_observed");
+  assert.equal(story.assessment.controls.options.state, "not_observed");
+  assert.ok(dismissConcern);
+  assert.equal(dismissConcern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(dismissConcern.promotionEligibility, "eligible");
+  assert.equal(
+    unifiedCandidates[0]?.normalizedConcern.suggestedUnifiedFindingId,
+    "dismiss_without_reject"
+  );
+  assert.equal(story.rejectRow.status, "Review signal");
 });
 
 test("canonical consent-control flow projects reject-and-subscribe as a partial concern", () => {

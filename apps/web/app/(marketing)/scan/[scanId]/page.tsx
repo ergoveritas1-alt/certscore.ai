@@ -25,6 +25,7 @@ import { publishCanonicalScanReportProjection } from "../../../../server/scans/c
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import {
   getPublicScanStatusProjection,
+  isCompletedScanStatus,
   isPendingScanStatus
 } from "../../../../server/scans/scan-status-projection";
 
@@ -104,7 +105,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     notFound();
   }
   const waitingForReportProjection =
-    (statusProjection.status === "completed" || statusProjection.status === "completed_limited") &&
+    isCompletedScanStatus(statusProjection.status) &&
     statusProjection.reportProjectionRequired &&
     !statusProjection.reportReady;
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
@@ -129,7 +130,11 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const localPersistedReportProjection = statusProjection.reportReady
     ? await loadPersistedScanReportProjection({ scanId })
     : null;
-  if (statusProjection.reportProjectionRequired && !localPersistedReportProjection) {
+  if (
+    isCompletedScanStatus(statusProjection.status) &&
+    statusProjection.reportProjectionRequired &&
+    !localPersistedReportProjection
+  ) {
     after(async () => {
       await publishCanonicalScanReportProjection({
         organizationId: statusProjection.organizationId,

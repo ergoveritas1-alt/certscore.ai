@@ -18,6 +18,7 @@ test("API Activity keeps the compact detail columns projection-backed", async ()
   assert.match(page, /requestedDateTime\.date/);
   assert.match(page, /requestedDateTime\.time/);
   assert.match(page, /request\.evidenceMatrix/);
+  assert.match(page, /policyEvidence=\{matrix\?\.policyEvidence\}/);
   assert.match(page, /\{ label: "Transparency" \}/);
   assert.match(page, /\{ label: "Transport" \}/);
   assert.match(page, /\{ label: "Runtime" \}/);

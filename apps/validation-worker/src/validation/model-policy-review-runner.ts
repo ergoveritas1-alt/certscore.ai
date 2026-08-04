@@ -202,6 +202,13 @@ async function loadMatchingStaticArtifact(input: {
   });
 }
 
+export async function runConcurrentPolicyReviewJoin<TStatic, TRuntime>(input: {
+  loadStatic: () => Promise<TStatic>;
+  reviewRuntime: () => Promise<TRuntime>;
+}) {
+  return Promise.all([input.loadStatic(), input.reviewRuntime()]);
+}
+
 export async function runParallelPolicyReviewShadow(input: {
   apiKey?: string;
   model: string;
@@ -312,16 +319,18 @@ export async function runPolicyReviewPacket(input: {
   }
 
   if (!artifact && input.reuseEarlyStatic) {
-    const staticArtifact = await loadMatchingStaticArtifact(input);
-    if (staticArtifact) {
-      const runtimeArtifact = await reviewPolicyPacketWithMini({
+    const [staticArtifact, runtimeArtifact] = await runConcurrentPolicyReviewJoin({
+      loadStatic: () => loadMatchingStaticArtifact(input),
+      reviewRuntime: () => reviewPolicyPacketWithMini({
         apiKey: input.apiKey,
         mode: "shadow",
         model: input.model,
         packet: input.packet,
         reviewPhase: "runtime_delta",
         topics: RUNTIME_POLICY_REVIEW_TOPICS,
-      });
+      }),
+    });
+    if (staticArtifact) {
       if (hasExactlyTopics(runtimeArtifact, RUNTIME_POLICY_REVIEW_TOPICS)) {
         parallelJoin = true;
         artifact = composeParallelPolicyArtifact({

@@ -10,12 +10,16 @@ import type { Browser } from "playwright";
 import {
   classifyPrivacySurface,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
+  privacySurfacePathsForLocale,
 } from "@certscore/contracts";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
   assessPolicyDocumentSubstance,
+  boundedPrefetchedPolicyAnalysisText,
   canonicalWwwPolicyUrlVariant,
   classifyPolicyDocumentOwnership,
+  commonPathCandidatesFor,
+  commonPathLocaleHintsForUnavailableHomepage,
   countRecoveredPolicySurfaceObservations,
   extractPolicyCookieDisclosures,
   extractPolicySections,
@@ -24,26 +28,88 @@ import {
   isFetchablePolicyHrefForPolicySurface,
   isFetchablePolicyUrlForPolicySurface,
   isGdprNoticeSupplementLink,
+  isPolicySessionPrimerCompatible,
   mergePolicySurfaceObservations,
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
   policySurfaceObservationsFromRetainedRenderedLinks,
+  prioritizePolicyCandidateEvaluation,
   retainedArticle13SectionEvidenceFromSections,
   recoverPolicyDocumentsFromRetainedRenderedLinks,
+  resolvePrefetchedPolicyVisibleText,
   resolvePolicyVisibleText,
   settlePolicyCandidateProcessingBeforeDeadline,
+  shouldRetryCanonicalPolicyHost,
   shouldUseDirectPolicyDocumentText,
+  shouldUseRenderedLowQualityFallbackSlot,
   stripConsentSurfacePreambleFromPolicyText,
   type PolicyNanoAssistProvider,
   policySurfaceScanner,
   wwwFallbackUrlForPolicyFetch,
 } from "./scanners/policy-surface-scanner.js";
+import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import { startStaticFixtureServer, type StaticFixturePage } from "./test-fixtures/static-server.js";
+
+test("does not render a guessed privacy path when an observed privacy link owns recovery", () => {
+  assert.equal(shouldUseRenderedLowQualityFallbackSlot({
+    candidateIsCommonPath: true,
+    candidateIndex: 1,
+    hasObservedPrivacyPolicyCandidate: true,
+  }), false);
+  assert.equal(shouldUseRenderedLowQualityFallbackSlot({
+    candidateIsCommonPath: false,
+    candidateIndex: 0,
+    hasObservedPrivacyPolicyCandidate: true,
+  }), true);
+  assert.equal(shouldUseRenderedLowQualityFallbackSlot({
+    candidateIsCommonPath: true,
+    candidateIndex: 0,
+    hasObservedPrivacyPolicyCandidate: false,
+  }), true);
+});
 
 test("builds a bounded canonical www retry for policy notices", () => {
   assert.equal(canonicalWwwPolicyUrlVariant("https://publisher.example/legal/privacy-policy"), "https://www.publisher.example/legal/privacy-policy");
   assert.equal(canonicalWwwPolicyUrlVariant("https://edition.cnn.com/privacy"), "https://www.cnn.com/privacy");
   assert.equal(canonicalWwwPolicyUrlVariant("https://www.publisher.example/legal/privacy-policy"), null);
   assert.equal(canonicalWwwPolicyUrlVariant("http://publisher.example/legal/privacy-policy"), null);
+});
+
+test("does not repeat a canonical host retry already attempted by the bounded fetch", () => {
+  const candidateUrl = "https://publisher.example/legal/privacy-policy";
+  assert.equal(shouldRetryCanonicalPolicyHost(candidateUrl, [{ requestedUrl: candidateUrl }]), true);
+  assert.equal(shouldRetryCanonicalPolicyHost(candidateUrl, [
+    { requestedUrl: candidateUrl },
+    { requestedUrl: "https://www.publisher.example/legal/privacy-policy" },
+  ]), false);
+});
+
+test("homepage failure still derives common-path locale hints from the target TLD", () => {
+  assert.deepEqual(
+    commonPathLocaleHintsForUnavailableHomepage("https://uni-lj.si/"),
+    ["sl"],
+  );
+  assert.equal(
+    privacySurfacePathsForLocale("sl").includes("/politika-varstva-zasebnosti-in-piskotkov"),
+    true,
+  );
+});
+
+test("homepage-failed fallback schedules the primary TLD locale policy before generic guesses", () => {
+  const candidates = commonPathCandidatesFor(
+    "https://uni-lj.si/",
+    0,
+    commonPathLocaleHintsForUnavailableHomepage("https://uni-lj.si/"),
+  );
+  const ordered = prioritizePolicyCandidateEvaluation(candidates);
+
+  assert.equal(
+    ordered[0]?.normalizedUrl,
+    "https://www.uni-lj.si/politika-varstva-zasebnosti-in-piskotkov",
+  );
+  assert.equal(
+    ordered[1]?.normalizedUrl,
+    "https://uni-lj.si/politika-varstva-zasebnosti-in-piskotkov",
+  );
 });
 
 test("removes consent-banner preambles before policy topic extraction", () => {
@@ -56,6 +122,66 @@ test("removes consent-banner preambles before policy topic extraction", () => {
     stripConsentSurfacePreambleFromPolicyText("Our Privacy Policy explains how we process personal data and your rights."),
     "Our Privacy Policy explains how we process personal data and your rights."
   );
+});
+
+test("late prefetched policy resolution preserves the full visible policy without script noise", () => {
+  const repeatedNoise = "window.__policyChunk = '<div>not retained script noise</div>';".repeat(6_000);
+  const visibleNoise = "Navigation item ".repeat(8_000);
+  const html = `<!doctype html><html><head><script>${repeatedNoise}</script></head><body>
+    <nav>${visibleNoise}</nav>
+    <main>
+      <h1>Privacy Policy</h1>
+      <p>Example Company is the data controller. Contact privacy@example.test.</p>
+      <p>We process personal data to provide our services based on contract and legitimate interests.</p>
+      <p>Our service providers receive information where necessary.</p>
+      <p>We retain account records for seven years and then delete them.</p>
+      <p>You have the right to access, rectify, erase, restrict, object, and port your personal data.</p>
+      <p>International transfers outside the EEA use standard contractual clauses.</p>
+      <p>You may lodge a complaint with your supervisory authority.</p>
+      <p data-marker="late-policy-marker">This final policy paragraph must remain available to retained evidence.</p>
+    </main>
+  </body></html>`;
+
+  const resolved = resolvePrefetchedPolicyVisibleText(html);
+  const analysisText = boundedPrefetchedPolicyAnalysisText(resolved);
+
+  assert.match(resolved, /Example Company is the data controller/);
+  assert.match(resolved, /retain account records for seven years/);
+  assert.match(resolved, /International transfers outside the EEA/);
+  assert.match(resolved, /final policy paragraph must remain available/);
+  assert.doesNotMatch(resolved, /not retained script noise/);
+  assert.ok(resolved.length > visibleNoise.length, "the late path must not truncate retained visible text");
+  assert.ok(analysisText.length < resolved.length, "late deterministic analysis should use a bounded projection");
+  assert.match(analysisText, /Example Company is the data controller/);
+  assert.match(analysisText, /retain account records for seven years/);
+  assert.match(analysisText, /right to access, rectify, erase, restrict, object, and port/);
+  assert.match(analysisText, /International transfers outside the EEA/);
+  assert.match(analysisText, /lodge a complaint with your supervisory authority/);
+});
+
+test("bounded late-policy analysis preserves every canonical topic when early sections are long", () => {
+  const filler = " Additional retained policy context.".repeat(180);
+  const visibleText = [
+    `Privacy Policy Example Company is the data controller.${filler}`,
+    `Contact our data protection officer at privacy@example.test.${filler}`,
+    `We process personal data to provide our services.${filler}`,
+    `Our legal basis is contract and legitimate interests.${filler}`,
+    `Service providers and other recipients receive information.${filler}`,
+    `We retain account records for seven years and then delete them.${filler}`,
+    `You have the right to access, rectify, erase, restrict, object, and port your personal data.${filler}`,
+    `International transfers outside the EEA use standard contractual clauses.${filler}`,
+    `You may complain to your data protection authority.${filler}`,
+    `We use profiling to personalize advertising.${filler}`,
+  ].join(" ");
+
+  const analysisText = boundedPrefetchedPolicyAnalysisText(visibleText);
+
+  assert.ok(analysisText.length <= 40_000);
+  assert.match(analysisText, /Example Company is the data controller/);
+  assert.match(analysisText, /retain account records for seven years/);
+  assert.match(analysisText, /International transfers outside the EEA/);
+  assert.match(analysisText, /complain to your data protection authority/);
+  assert.match(analysisText, /profiling to personalize advertising/);
 });
 
 test("localized consent settings shells are not accepted as substantive privacy notices", async () => {
@@ -87,6 +213,76 @@ test("localized consent settings shells are not accepted as substantive privacy 
   assert.equal(assessment.reasonCode, "consent_settings_shell");
 });
 
+test("canonical Slovenian policy paths include the combined privacy and cookie notice", () => {
+  assert.equal(
+    privacySurfacePathsForLocale("sl").includes("/politika-varstva-zasebnosti-in-piskotkov"),
+    true,
+  );
+});
+
+test("policySurfaceScanner warms an observed privacy link before guessed policy paths", async () => {
+  const requestedPaths: string[] = [];
+  const policyText = Array.from({ length: 12 }, () =>
+    "Curtin University is the data controller and processes personal information for stated purposes. " +
+    "Contact the Privacy Officer. We retain records under defined criteria and provide access, correction, deletion, objection, and complaint rights."
+  ).join(" ");
+  const server = createServer((request, response) => {
+    requestedPaths.push(request.url ?? "");
+    if (request.url === "/") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html><body><footer><a href='/about/governance/privacy/'>Privacy</a></footer></body></html>");
+      return;
+    }
+    if (request.url === "/about/governance/privacy/") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><body><main><h1>Privacy</h1><p>${policyText}</p></main></body></html>`);
+      return;
+    }
+    setTimeout(() => {
+      if (!response.headersSent) {
+        response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      }
+      response.end("Not found");
+    }, 3_000);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-observed-priority-"));
+  try {
+    const startedAt = Date.now();
+    const result = await policySurfaceScanner({
+      url: `${baseUrl}/`,
+      normalizedUrl: `${baseUrl}/`,
+      scanStartedAtMs: startedAt,
+      internalBudgetMs: 2_500,
+      absoluteDeadlineAtMs: startedAt + 2_500,
+      discoveryMode: "fast",
+      artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      policySurfaceSeeds: [
+        { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: `${baseUrl}/privacy-notice` },
+        { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: `${baseUrl}/privacy-policy` },
+        { confidence: 0.7, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: `${baseUrl}/legal/privacy` },
+      ],
+    });
+    const retained = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/about/governance/privacy/` &&
+      observation.status === "fetched"
+    );
+
+    assert.ok(retained, JSON.stringify({ requestedPaths, observations: result.policySurfaceObservations }, null, 2));
+    assert.equal(retained.documentEvaluationState, "usable");
+    assert.ok(requestedPaths.indexOf("/about/governance/privacy/") < requestedPaths.indexOf("/privacy-notice"));
+  } finally {
+    server.close();
+    await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("substantive Slovenian policy text survives consent-shell exclusion", async () => {
   const substantiveText = Array.from({ length: 18 }, () => [
     "Upravljavec osebnih podatkov objavlja kontaktne podatke upravljavca in pooblaščene osebe za varstvo podatkov.",
@@ -114,6 +310,29 @@ test("substantive Slovenian policy text survives consent-shell exclusion", async
   assert.doesNotMatch(resolved, /Naloži vse|Naloži samo nujne/);
   assert.equal(assessment.matchesExpectedSurface, true);
   assert.equal(assessment.reasonCode, "substantive_topic_match");
+});
+
+test("substantive policy text survives a privacy-choices layout name collision", async () => {
+  const policyText = Array.from({ length: 18 }, () => [
+    "This Privacy Policy explains how we collect and use personal information for specified processing purposes and legal bases.",
+    "We describe service providers and recipients, retention criteria, international transfers, and controller contact information.",
+    "You may exercise rights of access, correction, deletion, portability, restriction, objection, and complain to a supervisory authority.",
+  ].join(" ")).join(" ");
+  const resolved = await resolvePolicyVisibleText({
+    html: `<!doctype html><html><body>
+      <div class="privacy-choices-layout">
+        <main><div class="policy-copy"><h1>Privacy Policy</h1><p>${policyText}</p></div></main>
+      </div>
+    </body></html>`,
+    baseUrl: "https://example.test/privacy/policy",
+    surfaceType: "privacy_policy",
+    timeoutMs: 500,
+  });
+
+  assert.ok(resolved.length >= 2_500);
+  assert.match(resolved, /specified processing purposes and legal bases/);
+  assert.match(resolved, /international transfers/);
+  assert.match(resolved, /supervisory authority/);
 });
 
 test("hidden multilingual policy accordions are not discarded as consent chrome", async () => {
@@ -248,6 +467,105 @@ test("browser-recovered privacy links receive a bounded canonical document fetch
   }
 });
 
+test("browser policy recovery does not start after the parent scanner deadline reserve", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-expired-recovery-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const links = [{
+      domLocation: "footer" as const,
+      href: "https://example.test/privacy",
+      linkText: "Privacy Notice",
+      pageUrl: "https://example.test/",
+    }];
+    const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: "https://example.test/",
+        normalizedUrl: "https://example.test/",
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 6_000,
+        absoluteDeadlineAtMs: Date.now() + 1_000,
+        artifactWriter,
+      },
+      links,
+      existingObservations: policySurfaceObservationsFromRetainedRenderedLinks({ links }),
+    });
+
+    assert.deepEqual(recovered, { artifactRefs: [], observations: [], timingBreakdown: [] });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("browser recovery is not suppressed by a retained service-provider privacy policy", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-provider-recovery-"));
+  try {
+    const homepageUrl = server.urlFor("generic-cdn-noise");
+    const privacyUrl = server.urlFor("policy-article13-long");
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const links = [{
+      domLocation: "footer" as const,
+      href: privacyUrl,
+      linkText: "Privacy Notice",
+      pageUrl: homepageUrl,
+    }];
+    const retainedTargetLinks = policySurfaceObservationsFromRetainedRenderedLinks({ links });
+    const serviceProviderPolicy = {
+      ...retainedTargetLinks[0]!,
+      observationId: "policy_surface_service_provider",
+      url: "https://privacy.vendor.example/policy",
+      normalizedUrl: "https://privacy.vendor.example/policy",
+      status: "fetched" as const,
+      documentFetchState: "fetched" as const,
+      documentEvaluationState: "usable" as const,
+      targetRelationship: "service_provider" as const,
+    };
+    const targetControllerPolicy = {
+      ...serviceProviderPolicy,
+      observationId: "policy_surface_target_controller",
+      url: privacyUrl,
+      normalizedUrl: privacyUrl,
+      targetRelationship: "target_controller" as const,
+    };
+
+    const alreadyCovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: homepageUrl,
+        normalizedUrl: homepageUrl,
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 6_000,
+        artifactWriter,
+        nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      },
+      links,
+      existingObservations: [targetControllerPolicy, ...retainedTargetLinks],
+    });
+    assert.deepEqual(alreadyCovered, { artifactRefs: [], observations: [], timingBreakdown: [] });
+
+    const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: homepageUrl,
+        normalizedUrl: homepageUrl,
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 6_000,
+        artifactWriter,
+        nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      },
+      links,
+      existingObservations: [serviceProviderPolicy, ...retainedTargetLinks],
+    });
+
+    assert.equal(recovered.observations.some((observation) =>
+      observation.status === "fetched" &&
+      observation.documentEvaluationState === "usable" &&
+      observation.normalizedUrl === privacyUrl
+    ), true);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("browser recovery primes the observed same-origin session and prioritizes the general privacy notice", async () => {
   const policyText = Array.from({ length: 12 }, () =>
     "This Privacy Notice explains how we process personal data for specified purposes and legal bases. " +
@@ -321,6 +639,162 @@ test("browser recovery primes the observed same-origin session and prioritizes t
     await once(server, "close");
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("browser recovery reopens the retained session after the original policy page becomes unusable", async () => {
+  const policyText = Array.from({ length: 12 }, () =>
+    "This Privacy Policy explains the controller, contact details, processing purposes, legal bases, recipients, retention criteria, international transfers, and access, deletion, correction, portability, restriction, and objection rights."
+  ).join(" ");
+  const privacyRequests: Array<{ cookie: string; referer: string; secFetchUser: string }> = [];
+  let homepageRequests = 0;
+  const server = createServer((request, response) => {
+    if (request.url === "/") {
+      const browserNavigation = request.headers["sec-fetch-mode"] === "navigate";
+      if (browserNavigation) homepageRequests += 1;
+      const retainedSession = (request.headers.cookie ?? "").includes("certscore_session=retained");
+      if (browserNavigation && homepageRequests > 1 && !retainedSession) {
+        response.writeHead(403, { "content-type": "text/html; charset=utf-8" });
+        response.end("Access denied");
+        return;
+      }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        ...(browserNavigation ? { "set-cookie": "certscore_session=retained; Path=/; SameSite=Lax" } : {}),
+      });
+      response.end("<!doctype html><html><body><div id='cookie-banner' role='dialog' aria-label='Cookie consent'><p>We use cookies to personalize content.</p><button>Reject all</button><button>Accept all</button></div><footer><a id='privacy-link' href='/about/privacy-policy.cfm'>Privacy Policy</a></footer></body></html>");
+      return;
+    }
+    if (request.url === "/about/privacy-policy.cfm") {
+      const referer = request.headers.referer ?? "";
+      const secFetchUser = typeof request.headers["sec-fetch-user"] === "string"
+        ? request.headers["sec-fetch-user"]
+        : "";
+      const cookie = request.headers.cookie ?? "";
+      privacyRequests.push({ cookie, referer, secFetchUser });
+      if (referer.endsWith("/") && cookie.includes("certscore_session=retained")) {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end(`<!doctype html><html><body><main><h1>Privacy Policy</h1><p>${policyText}</p></main></body></html>`);
+        return;
+      }
+      response.writeHead(403, { "content-type": "text/html; charset=utf-8" });
+      response.end("Access denied");
+      return;
+    }
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("Not found");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const homepageUrl = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-click-recovery-"));
+  let recoveryBrowser: Browser | undefined;
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const preConsent = await preConsentRuntimeScanner({
+      url: homepageUrl,
+      normalizedUrl: homepageUrl,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 6_000,
+      artifactWriter,
+      screenshotMode: "never",
+      waitMode: "fast",
+      retainRenderedPolicyRecoverySession: true,
+    });
+    const links = preConsent.renderedPolicyLinks.map((link) => ({
+      ...link,
+      // Reproduce the runtime inventory shape that can combine textContent,
+      // aria-label, and title into a label unlike the accessible name.
+      linkText: `${link.linkText} Privacy Policy`,
+    }));
+    recoveryBrowser = preConsent.renderedPolicyRecoveryBrowser;
+    assert.ok(
+      recoveryBrowser?.isConnected(),
+      JSON.stringify({
+        errors: preConsent.moduleRun.errors,
+        homepageRequests,
+        links: preConsent.renderedPolicyLinks,
+        status: preConsent.moduleRun.status,
+      }, null, 2),
+    );
+    assert.equal(preConsent.renderedPolicyRecoveryPage?.isClosed(), false);
+    // Reproduce a late visual renderer failure after the typed consent and
+    // rendered-link inventories have already been retained. Recovery must
+    // reopen inside this context, not create an unrelated browser session.
+    await preConsent.renderedPolicyRecoveryPage?.close();
+    const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: homepageUrl,
+        normalizedUrl: homepageUrl,
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 6_000,
+        artifactWriter,
+        browser: recoveryBrowser,
+        renderedRecoveryPage: preConsent.renderedPolicyRecoveryPage,
+        nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      },
+      links,
+      existingObservations: policySurfaceObservationsFromRetainedRenderedLinks({ links }),
+    });
+    const privacy = recovered.observations.find((observation) =>
+      observation.surfaceType === "privacy_policy"
+    );
+    const diagnosticsRef = recovered.artifactRefs.find((artifact) =>
+      artifact.artifactId === "policy_rendered_link_recovery_diagnostics"
+    );
+    assert.ok(diagnosticsRef?.path);
+    const diagnostics = JSON.parse(await readFile(diagnosticsRef.path, "utf8")) as {
+      successfulFetches: Array<{
+        attempts: Array<{ navigationMethod?: string }>;
+      }>;
+    };
+
+    assert.equal(
+      privacy?.status,
+      "fetched",
+      JSON.stringify({ diagnostics, homepageRequests, privacyRequests }, null, 2),
+    );
+    assert.equal(privacy?.documentEvaluationState, "usable");
+    assert.equal(privacyRequests.some((request) => request.referer === ""), true);
+    assert.equal(privacyRequests.some((request) => request.referer === homepageUrl), true);
+    assert.equal(homepageRequests, 2);
+    assert.equal(
+      diagnostics.successfulFetches.some((fetch) =>
+        fetch.attempts.some((attempt) => attempt.navigationMethod === "observed_link_click")
+      ),
+      true,
+    );
+  } finally {
+    await recoveryBrowser?.close();
+    server.close();
+    await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("browser recovery accepts a secure www redirect as the same policy session site", () => {
+  assert.equal(
+    isPolicySessionPrimerCompatible(
+      "https://usccb.org/",
+      "https://www.usccb.org/about/privacy-policy.cfm",
+    ),
+    true,
+  );
+  assert.equal(
+    isPolicySessionPrimerCompatible(
+      "https://usccb.org/",
+      "https://privacy.example.org/policy",
+    ),
+    false,
+  );
+  assert.equal(
+    isPolicySessionPrimerCompatible(
+      "http://usccb.org/",
+      "https://www.usccb.org/about/privacy-policy.cfm",
+    ),
+    false,
+  );
 });
 
 test("policySurfaceScanner decodes compressed policy HTML before topic extraction", async () => {
@@ -644,6 +1118,32 @@ test("fetched policy evidence outranks a supplemental rendered-link observation"
   assert.equal(countRecoveredPolicySurfaceObservations([fetched], [observed]), 0);
 });
 
+test("fetched policy evidence replaces the same observation after a canonical redirect", () => {
+  const observed = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "footer",
+      href: "https://example.com/privacy",
+      linkText: "Privacy Policy",
+      pageUrl: "https://example.com/",
+    }],
+  })[0];
+  assert.ok(observed);
+  const fetched = {
+    ...observed,
+    normalizedUrl: "https://www.example.com/privacy-policy",
+    finalUrl: "https://www.example.com/privacy-policy",
+    status: "fetched" as const,
+    documentFetchState: "fetched" as const,
+    documentEvaluationState: "usable" as const,
+    textExcerpt: "Substantive retained redirected policy text.",
+  };
+
+  const merged = mergePolicySurfaceObservations([observed], [fetched]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]?.status, "fetched");
+  assert.equal(merged[0]?.finalUrl, "https://www.example.com/privacy-policy");
+});
+
 test("rendered-link diagnostics count only surfaces absent from usable dedicated policy evidence", () => {
   const rendered = policySurfaceObservationsFromRetainedRenderedLinks({
     links: [{
@@ -744,6 +1244,47 @@ test("policy candidate publication still fails closed when no document was fetch
   });
 
   assert.deepEqual(result, { status: "timed_out" });
+});
+
+test("policy candidate publication preserves retained evidence after parent cancellation", async () => {
+  const controller = new AbortController();
+  let retentionStarted = false;
+  const processingPromise = new Promise<string>((resolve) => {
+    setTimeout(() => {
+      retentionStarted = true;
+      controller.abort(new Error("Parent scan handoff deadline reached."));
+      setTimeout(() => resolve("retained-evidence-published"), 10);
+    }, 10);
+  });
+
+  const result = await settlePolicyCandidateProcessingBeforeDeadline({
+    processingPromise,
+    shouldAwaitPublication: () => retentionStarted,
+    signal: controller.signal,
+    processingTimeoutMs: 100,
+    publicationGraceMs: 100,
+  });
+
+  assert.deepEqual(result, {
+    status: "completed",
+    value: "retained-evidence-published",
+  });
+});
+
+test("policy candidate publication stops immediately on parent cancellation before retention", async () => {
+  const controller = new AbortController();
+  const processingPromise = new Promise<string>((resolve) => setTimeout(() => resolve("late"), 100));
+  setTimeout(() => controller.abort(new Error("Parent scan handoff deadline reached.")), 10);
+
+  const result = await settlePolicyCandidateProcessingBeforeDeadline({
+    processingPromise,
+    shouldAwaitPublication: () => false,
+    signal: controller.signal,
+    processingTimeoutMs: 100,
+    publicationGraceMs: 100,
+  });
+
+  assert.deepEqual(result, { status: "aborted" });
 });
 
 test("policySurfaceScanner preserves an exact privacy notice when Nano ranks commerce URL noise", async () => {
@@ -1001,6 +1542,13 @@ test("policySurfaceScanner fast mode stops stalled rendered discovery at the sof
 
     assert.equal(privacy?.status, "fetched");
     assert.ok(Date.now() - startedAtMs < 4_000);
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) =>
+        timing.label === "policy fetch group" &&
+        timing.detail.includes("sequentially until one fetched document is retained")
+      ),
+      true,
+    );
   }, {
     browser: stalledBrowser,
     discoveryMode: "fast",
@@ -3564,6 +4112,23 @@ test("retained policy sections prefer the governing controller and retain passiv
   assert.equal(transfers?.signalObserved, "observed");
   assert.match(transfers?.selectedPolicySectionExcerpt ?? "", /Art\. 45 GDPR|Art\. 46 GDPR/i);
   assert.doesNotMatch(transfers?.selectedPolicySectionExcerpt ?? "", /vendor\.example/i);
+});
+
+test("retained policy sections prefer a substantive transfer sentence after a navigation heading", () => {
+  const sourceUrl = "https://www.publisher.example/privacy?intake=publisher";
+  const evidence = retainedArticle13SectionEvidenceFromSections([{
+    sourceUrl,
+    heading: "International Transfers",
+    textExcerpt: "International Transfers. Privacy Policy. We may transfer your information to related companies, service providers, and other third parties located outside of your country of residence, including in the United States. Data privacy laws vary from country to country, and we use reasonable safeguards and data transfer agreements.",
+    charStart: 40_000,
+    charEnd: 40_340,
+    quality: "strong",
+  }], sourceUrl);
+  const transfer = evidence.find((row) => row.coverageArea === "international_transfers");
+
+  assert.equal(transfer?.signalObserved, "observed", JSON.stringify(transfer));
+  assert.equal(transfer?.selectedEvidenceStrength, "strong");
+  assert.match(transfer?.selectedPolicySectionExcerpt ?? "", /transfer your information.*outside of your country of residence/i);
 });
 
 test("retained US-policy sections confirm direct recipients, transfers, controller contact, and privacy contact without inventing a DPO", () => {

@@ -41,6 +41,7 @@ import {
   type ScanRequesterIpContext
 } from "./requester-ip-context";
 import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
+import { ensureCanonicalScanReportProjectionForReuse } from "./canonical-scan-report-publisher";
 
 type ScanQueueProvenance = {
   githubActor?: string | null;
@@ -99,36 +100,53 @@ export async function createAnonymousFullScan(input: {
   if (reuseDecision?.action === "reuse") {
     const recentScan = reuseDecision.eligibility.candidate;
     if (recentScan) {
-      await recordScanRequest({
-        fulfilledByScanId: recentScan.id,
-        normalizedDomain: input.hostname,
-        normalizedUrl: input.normalizedUrl,
+      const projection = await ensureCanonicalScanReportProjectionForReuse({
         organizationId: null,
-        requestChannel: input.provenance?.source ?? "marketing-anonymous-full-scan",
-        requestedBy: { anonymous: true },
-        requestedUrl: input.normalizedUrl,
-        requestContext: {
-          bypassRecentScanReuse,
-          coveragePlanCode,
-          ipHash: requesterIpContext.ipHash,
-          localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
-          minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
-          provenance: input.provenance ?? null,
-          scanFrom,
-          sourceIp: requesterIpContext.sourceIp
-        },
-        resolutionMode: "reused_existing_scan",
-        reusedCompletedAt: recentScan.completedAt,
-        reuseWindowHours: RECENT_SCAN_REUSE_WINDOW_HOURS,
-        scanId: recentScan.id,
-        status: "reused_recent_scan"
-      }).catch((error) => logScanRequestFailure("anonymous_recent_scan_reuse", error));
+        scanId: recentScan.id
+      }).catch((error) => {
+        console.error("[web] anonymous reusable scan report projection preparation failed", {
+          error: error instanceof Error ? error.message : String(error),
+          sourceScanId: recentScan.id
+        });
+        return { ready: false, reason: "projection_preparation_failed" } as const;
+      });
+      if (!projection.ready) {
+        console.warn("[web] anonymous recent scan is not report-ready; queueing a new scan", {
+          reason: projection.reason,
+          sourceScanId: recentScan.id
+        });
+      } else {
+        await recordScanRequest({
+          fulfilledByScanId: recentScan.id,
+          normalizedDomain: input.hostname,
+          normalizedUrl: input.normalizedUrl,
+          organizationId: null,
+          requestChannel: input.provenance?.source ?? "marketing-anonymous-full-scan",
+          requestedBy: { anonymous: true },
+          requestedUrl: input.normalizedUrl,
+          requestContext: {
+            bypassRecentScanReuse,
+            coveragePlanCode,
+            ipHash: requesterIpContext.ipHash,
+            localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
+            minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
+            provenance: input.provenance ?? null,
+            scanFrom,
+            sourceIp: requesterIpContext.sourceIp
+          },
+          resolutionMode: "reused_existing_scan",
+          reusedCompletedAt: recentScan.completedAt,
+          reuseWindowHours: RECENT_SCAN_REUSE_WINDOW_HOURS,
+          scanId: recentScan.id,
+          status: "reused_recent_scan"
+        }).catch((error) => logScanRequestFailure("anonymous_recent_scan_reuse", error));
 
-      return {
-        domain,
-        reusedExistingScan: true as const,
-        scan: { id: recentScan.id }
-      };
+        return {
+          domain,
+          reusedExistingScan: true as const,
+          scan: { id: recentScan.id }
+        };
+      }
     }
   }
 

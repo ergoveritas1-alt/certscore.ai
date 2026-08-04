@@ -2,7 +2,10 @@ import "server-only";
 
 import { queryOne } from "@website-signal-risk-scanner/db";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
-import { SCAN_REPORT_PROJECTION_VERSION } from "./scan-report-projection-contract";
+import {
+  MAX_SCAN_REPORT_PROJECTION_BYTES,
+  SCAN_REPORT_PROJECTION_VERSION
+} from "./scan-report-projection-contract";
 
 export type ScanStatusProjection = {
   completedAt: string | null;
@@ -117,7 +120,7 @@ const PROJECTION_SQL = `select s.id,
                 and projection.report_projection_source_hash ~ '^[0-9a-f]{64}$'
                 and projection.report_projection_payload is not null
                 and projection.report_projection_payload_sha256 ~ '^[0-9a-f]{64}$'
-                and projection.report_projection_payload_size_bytes between 1 and 6291456
+                and projection.report_projection_payload_size_bytes between 1 and ${MAX_SCAN_REPORT_PROJECTION_BYTES}
            )
            else exists (
              select 1 from scan_events ready
@@ -222,6 +225,10 @@ export async function getViewerAccessibleScanStatusProjection(input: {
 
 export function isPendingScanStatus(status: string) {
   return status === "queued" || status === "running" || status === "processing";
+}
+
+export function isCompletedScanStatus(status: string) {
+  return status === "completed" || status === "completed_limited";
 }
 
 export function buildLightweightScanStatusResponse(projection: ScanStatusProjection) {

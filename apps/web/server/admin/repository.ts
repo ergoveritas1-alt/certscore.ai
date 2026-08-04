@@ -6,6 +6,7 @@ import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } f
 import { ensureMonitorSiteRequestsTable } from "../monitor-site/monitor-site-request";
 import { ensureScanRequestLogTable } from "../scans/scan-request-log";
 import { adminNoGoSql } from "./admin-no-go";
+import { getAdminUsersOrderBy, type AdminUsersSortDirection, type AdminUsersSortKey } from "./admin-users-sort";
 import { parseAdminActivitySearch } from "../../lib/admin/activity-search";
 
 export type AdminScanQueryRow = {
@@ -1568,7 +1569,12 @@ export async function loadAdminUsersData(): Promise<{
   };
 }
 
-export async function loadAdminUsersPageData(limit: number, offset = 0): Promise<{
+export async function loadAdminUsersPageData(
+  limit: number,
+  offset = 0,
+  sortKey: AdminUsersSortKey = "user",
+  direction: AdminUsersSortDirection = "desc"
+): Promise<{
   totalCount: number;
   users: AdminUserOverviewRow[];
 }> {
@@ -1583,10 +1589,8 @@ export async function loadAdminUsersPageData(limit: number, offset = 0): Promise
     ),
     query<AdminUserOverviewRow>(
       `with selected_users as (
-         select id, email, full_name, auth_provider, created_at, updated_at
+       select id, email, full_name, auth_provider, created_at, updated_at
            from users
-          order by created_at desc
-          limit $1 offset $2
        ),
        selected_memberships as (
          select distinct on (organization_members.user_id)
@@ -1638,7 +1642,8 @@ export async function loadAdminUsersPageData(limit: number, offset = 0): Promise
              from scans
             where scans.submitted_by_user_id = selected_users.id
          ) user_activity on true
-        order by selected_users.created_at desc`,
+        order by ${getAdminUsersOrderBy(sortKey, direction)}
+        limit $1 offset $2`,
       [normalizedLimit, normalizedOffset],
       { readOnly: true }
     ).then((result) => result.rows)

@@ -139,7 +139,7 @@ export type ConsentControlAssessmentObservation = {
 
 export type ConsentControlAssessmentCandidate = {
   evidenceId?: string;
-  intent?: ConsentControlIntent;
+  intent?: ConsentControlAssessmentEvidence["intent"] | "unknown";
   semanticRole?: "explicit_accept" | "ambiguous_acknowledgment" | "reject" | "necessary_only" | "preferences" | "dismiss" | "unknown";
   actionType?: "accept_all" | "reject_all" | "manage_preferences" | "save_preferences" | "do_not_sell_share" | "other";
   controlVariant?: "reject_with_subscription" | "reject_with_payment" | null;
@@ -260,6 +260,7 @@ function candidateIntent(candidate: ConsentControlAssessmentCandidate): ConsentC
   if (candidate.actionType === "reject_all" || candidate.semanticRole === "reject" || candidate.semanticRole === "necessary_only") return "reject";
   if (candidate.actionType === "manage_preferences" || candidate.actionType === "save_preferences" || candidate.semanticRole === "preferences") return "options";
   if (candidate.actionType === "do_not_sell_share") return "privacy_opt_out";
+  if (candidate.semanticRole === "dismiss") return "dismiss";
   return null;
 }
 

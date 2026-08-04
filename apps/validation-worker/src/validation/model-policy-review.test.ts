@@ -1222,6 +1222,41 @@ test("generic retention and preference opt-outs cannot become substantive retent
   );
 });
 
+test("telecom data rollover cannot become personal-data retention credit", async () => {
+  const packet = buildFixturePacket(
+    "Unused monthly data can be rolled over to the next month. The maximum amount of data you can rollover at any time is equal to the monthly data included in your plan. Product storage period is up to 12 months."
+  );
+  const rows = completeRows({
+    data_retention: {
+      status: "observed",
+      confidence: 0.96,
+      sourceDocumentIds: [packet.documents[0]!.documentId],
+      sourceUrls: [packet.documents[0]!.canonicalUrl],
+      evidenceExcerpts: [
+        "The maximum amount of data you can rollover at any time is equal to the monthly data included in your plan."
+      ],
+      reasonCodes: ["retention_period_criteria"],
+      rationale: "A data period was retained."
+    }
+  });
+
+  const artifact = await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async () => new Response(JSON.stringify({
+      model: "gpt-5.4-mini",
+      choices: [{ message: { content: JSON.stringify({ rows }) } }]
+    }), { status: 200 }),
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet
+  });
+
+  const retention = artifact.rows.find((row) => row.topic === "data_retention");
+  assert.equal(retention?.status, "ambiguous");
+  assert.ok(retention?.reasonCodes.includes("retention_excerpt_not_topic_relevant"));
+  assert.deepEqual(retention?.evidenceExcerpts, []);
+});
+
 test("a retained right to request access or deletion remains observed with incomplete document coverage", async () => {
   const packet = buildFixturePacket(
     "What Information Can I Access in My Account? You can access your information, including your profile and account history. Depending on your data choices, you may have the right to request access to or delete your personal information."

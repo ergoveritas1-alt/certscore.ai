@@ -2973,7 +2973,10 @@ export const REPORT_UNIFIED_FINDINGS = [
     label: "Dismiss without reject",
     owner: "choice_symmetry_dark_pattern_indicators",
     overlays: ["choice_architecture_dark_patterns", "opt_out_choice_design_dark_pattern_risk"],
-    signalMappings: [{ source: "snapshot_signal", key: "privacy.dark_pattern_dismiss_without_reject" }]
+    signalMappings: [
+      { source: "snapshot_signal", key: "privacy.dark_pattern_dismiss_without_reject" },
+      { source: "runtime_artifact_signal", key: "privacy.dark_pattern_dismiss_without_reject" }
+    ]
   }),
   defineReportUnifiedFinding({
     id: "consent_control_not_reopenable",

@@ -115,7 +115,7 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
 
   assert.match(pageSource, /\{ label: "Requester IP" \}, \{ label: "Requested" \}/);
   assert.match(pageSource, /\{ label: "Scan ID" \}, \{ label: "Scanner egress" \},/);
-  assert.match(pageSource, /\{ label: "Scanner egress" \}, \{ label: "Open"/);
+  assert.match(pageSource, /\{ label: "Scanner egress" \},\s+\{ label: "Open"/);
   assert.match(pageSource, /formatRequestedDateTime/);
   assert.match(pageSource, /requestedDateTime\.date/);
   assert.match(pageSource, /requestedDateTime\.time/);
@@ -124,6 +124,17 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
   assert.match(listSource, /scannerEgressId: scannerEgress\.id/);
   assert.match(listSource, /shouldUseLocalV2DagScanTool\(\)/);
   assert.match(repositorySource, /scan_outcome,\s+stop_reason_code,\s+stop_reason_detail,\s+stop_reason_label,\s+egress_id,\s+egress_type,/);
+});
+
+test("Admin Scans gives access outcomes room for at most two visible lines", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+
+  assert.match(pageSource, /w-\[2828px\] min-w-\[2828px\] table-fixed/);
+  assert.match(pageSource, /<col style=\{\{ width: "240px" \}\}/);
+  assert.match(pageSource, /\{ label: "Language" \}, \{ label: "Access" \}, \{ label: "Industry" \}/);
+  assert.match(pageSource, /width: "80px" \}\} \/><col style=\{\{ width: "240px" \}\} \/><col style=\{\{ width: "160px"/);
+  assert.match(pageSource, /line-clamp-2 leading-4/);
+  assert.match(pageSource, /title=\{accessLabel\}/);
 });
 
 test("Admin activity pagination supports a direct page jump", async () => {
@@ -136,6 +147,27 @@ test("Admin activity pagination supports a direct page jump", async () => {
   assert.match(controls, /max=\{Math\.max\(1, normalizedPageCount\)\}/);
   assert.match(scansPage, /showPageJump/);
   assert.match(pulsePage, /showPageJump/);
+});
+
+test("Admin Scans and API Activity pagination expose immediate feedback while navigation is pending", async () => {
+  const controls = await readFile("apps/web/components/ui/pagination-controls.tsx", "utf8");
+  const navigationButtons = await readFile("apps/web/components/ui/pagination-navigation-buttons.tsx", "utf8");
+  const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const pulsePage = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+
+  assert.doesNotMatch(controls, /"use client"/);
+  assert.match(controls, /PaginationNavigationButtons/);
+  assert.match(navigationButtons, /const isPageNavigationPending = pendingHref !== null/);
+  assert.doesNotMatch(navigationButtons, /useRouter|router\.push|useTransition/);
+  assert.doesNotMatch(navigationButtons, /event\.preventDefault\(\);\n    if \(isPageNavigationPending\)/);
+  assert.match(navigationButtons, /<a/);
+  assert.match(navigationButtons, /aria-busy=\{isPageNavigationPending/);
+  assert.match(navigationButtons, /\? "Loading…" : "Previous"/);
+  assert.match(navigationButtons, /\? "Loading…" : "Next"/);
+  assert.match(scansPage, /<PaginationControls/);
+  assert.match(scansPage, /basePath="\/app\/admin\/scans"/);
+  assert.match(pulsePage, /<PaginationControls/);
+  assert.match(pulsePage, /basePath="\/app\/admin\/pulse"/);
 });
 
 test("API activity presents a persisted clear-access summary consistently with its access filter", async () => {
@@ -171,7 +203,8 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   assert.match(scansSource, /const scoreAssessment = noGo\.isNoGo \? null : legacyScoreAssessmentMap\.get\(scan\.id\) \?\? null/);
   assert.match(pulseSource, /SCAN_NO_GO_SNAPSHOT_OUTCOMES/);
   assert.match(pulseSource, /PULSE_NO_GO_SQL/);
-  assert.match(pulseSource, /const score = noGo\.isNoGo \? null : retainedScore/);
+  assert.match(pulseSource, /const canonicalSummary = projectCanonicalSurfaceSummary/);
+  assert.match(pulseSource, /const score = canonicalSummary\.score/);
   assert.match(pulseSource, /if \(item\.noGoFlag\)/);
   assert.match(repositorySource, /scan_no_go_assessment/);
   assert.match(repositorySource, /visual_access_review/);

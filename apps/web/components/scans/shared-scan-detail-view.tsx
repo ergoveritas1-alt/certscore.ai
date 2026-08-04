@@ -175,7 +175,7 @@ import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-epr
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
 import {
   buildChecklistConcernTopFindings,
-  mergeCanonicalHighPriorityFindings
+  selectCanonicalHighPriorityFindings
 } from "../../lib/scans/checklist-concern-top-findings";
 import {
   formatCollectionEndpointType,
@@ -7629,10 +7629,7 @@ export async function SharedScanDetailView({
       ];
   const topExecutiveFindings = executiveAccessLimitationNotice
     ? [executiveAccessLimitationNotice.finding]
-    : mergeCanonicalHighPriorityFindings({
-        checklistFindings: regulatoryGapTopFindings,
-        executiveFindings: executiveFindingsProjection.topFindings
-      });
+    : selectCanonicalHighPriorityFindings(regulatoryGapTopFindings);
   const scanCalibrationSummary = buildScanCalibrationSummary({
     accessLimitationNotice: executiveAccessNoticeCardProps,
     beforeConsentCookieCount: cookiesBeforeConsentCount,

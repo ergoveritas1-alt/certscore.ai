@@ -1,4 +1,4 @@
-import { Pool, type PoolConfig, type QueryResult, type QueryResultRow } from "pg";
+import { Pool, type PoolClient, type PoolConfig, type QueryResult, type QueryResultRow } from "pg";
 import { getDatabaseEnv } from "./env";
 
 let writePool: Pool | null = null;
@@ -64,6 +64,23 @@ export function getReadPool() {
   }
 
   return readPool;
+}
+
+export async function withWriteTransaction<T>(callback: (client: PoolClient) => Promise<T>) {
+  const client = await getWritePool().connect();
+  try {
+    await client.query("begin");
+    await client.query("set local lock_timeout = '5000ms'");
+    await client.query("set local statement_timeout = '30000ms'");
+    const result = await callback(client);
+    await client.query("commit");
+    return result;
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function query<T extends QueryResultRow = QueryResultRow>(

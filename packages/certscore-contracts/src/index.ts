@@ -442,6 +442,10 @@ export const iframeEventSchema = runtimeEvidenceEventSchema.extend({
 export const consentUiObservationSchema = z.object({
   observationId: z.string(),
   observedAtMs: z.number().int().nonnegative(),
+  // Main-frame document that produced this observation. New scanner output
+  // should always retain it so ordinary redirects cannot detach typed
+  // controls from the document on which they were actually observed.
+  documentUrl: z.string().max(500).optional(),
   // Explicitly distinguishes a completed negative from an incomplete capture.
   // Older bundles may omit these fields and continue using basis/timing data.
   captureStatus: z.enum(["observed", "no_evidence", "incomplete"]).optional(),
@@ -2168,6 +2172,7 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
           control.semanticRole === "reject" ||
           control.semanticRole === "necessary_only" ||
           control.semanticRole === "preferences" ||
+          control.semanticRole === "dismiss" ||
           (
             !control.semanticRole &&
             ["accept_all", "reject_all", "manage_preferences", "save_preferences"].includes(control.actionType)
@@ -2433,6 +2438,19 @@ export const canonicalEvidenceBundleSchema = z.object({
   artifactRefs: z.array(artifactRefSchema),
   scannerVersion: z.string(),
   schemaVersion: z.string(),
+}).superRefine((bundle, context) => {
+  const policyObservationIds = new Set<string>();
+  bundle.policySurfaceObservations.forEach((observation, index) => {
+    if (policyObservationIds.has(observation.observationId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate policy surface observationId: ${observation.observationId}`,
+        path: ["policySurfaceObservations", index, "observationId"],
+      });
+      return;
+    }
+    policyObservationIds.add(observation.observationId);
+  });
 });
 
 export const endpointEnrichmentOverlayEntrySchema = z.object({

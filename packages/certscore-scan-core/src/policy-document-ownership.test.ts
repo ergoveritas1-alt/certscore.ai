@@ -39,6 +39,68 @@ test("retains a cross-site first-party notice only when the target brand is name
   assert.ok((result.ownershipConfidence ?? 0) >= 0.75);
 });
 
+test("attributes a corporate policy when the target is an enumerated subsidiary in the policy scope", () => {
+  const result = classifyPolicyDocumentOwnership({
+    documentTitle: "Privacy Policy - PAR Technology",
+    documentUrl: "https://partech.com/privacy-policy/",
+    targetUrl: "https://punchh.com/",
+    text: [
+      "ParTech, Inc. and its subsidiaries PAR Payment Services, LLC, AccSys, LLC, and Punchh, Inc. are collectively referred to as PAR, us, we, or our.",
+      "The websites and mobile applications covered by this notice are operated by us."
+    ].join(" ")
+  });
+
+  assert.equal(result.targetRelationship, "first_party_brand");
+  assert.equal(result.ownershipConfidence, 0.86);
+  assert.deepEqual(result.ownershipReasonCodes, [
+    "cross_site_document",
+    "target_brand_named_in_corporate_family",
+    "corporate_policy_scope_applies_to_operated_sites"
+  ]);
+});
+
+test("does not attribute a cross-site policy from a bare target-brand mention", () => {
+  const result = classifyPolicyDocumentOwnership({
+    documentTitle: "Example Vendor Privacy Policy",
+    documentUrl: "https://vendor.example/privacy/",
+    targetUrl: "https://punchh.com/",
+    text: "Our customers include Punchh. This policy describes Example Vendor services."
+  });
+
+  assert.notEqual(result.targetRelationship, "first_party_brand");
+});
+
+test("attributes a corporate privacy center explicitly routed to the target brand", () => {
+  const result = classifyPolicyDocumentOwnership({
+    documentTitle: "Privacy Policy | NBCUniversal Media",
+    documentUrl: "https://www.nbcuniversalprivacy.com/privacy?intake=NBC_News",
+    targetUrl: "https://www.nbcnews.com/",
+    text: [
+      "This Privacy Policy applies to NBCUniversal Services throughout the world.",
+      "The data controller of your personal information will be the NBCUniversal company which provides services to you."
+    ].join(" ")
+  });
+
+  assert.equal(result.targetRelationship, "first_party_brand");
+  assert.equal(result.ownershipConfidence, 0.86);
+  assert.deepEqual(result.ownershipReasonCodes, [
+    "cross_site_document",
+    "target_brand_exact_policy_route_binding",
+    "corporate_policy_controller_language"
+  ]);
+});
+
+test("does not treat an arbitrary customer query parameter as policy ownership", () => {
+  const result = classifyPolicyDocumentOwnership({
+    documentTitle: "Example Vendor Privacy Policy",
+    documentUrl: "https://vendor.example/privacy?customer=punchh",
+    targetUrl: "https://punchh.com/",
+    text: "Example Vendor is the data controller responsible for this privacy policy."
+  });
+
+  assert.notEqual(result.targetRelationship, "first_party_brand");
+});
+
 test("rejects marketing/navigation copy misrouted as a privacy policy", () => {
   assert.equal(policyDocumentMatchesExpectedSurface({
     surfaceType: "privacy_policy",

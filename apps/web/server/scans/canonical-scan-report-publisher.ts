@@ -12,6 +12,7 @@ import {
   getCanonicalScanReportPublicationReadiness,
   getScanReportProjectionGeneration
 } from "./scan-report-projection-generation";
+import { getPublicScanStatusProjection } from "./scan-status-projection";
 
 export type CanonicalScanReportPublicationResult = {
   eventCount: number | null;
@@ -112,4 +113,27 @@ export function publishCanonicalScanReportProjection(input: {
   });
   publicationPromises.set(key, pending);
   return pending;
+}
+
+export async function ensureCanonicalScanReportProjectionForReuse(input: {
+  organizationId: string | null;
+  scanId: string;
+}) {
+  const current = await getPublicScanStatusProjection(input.scanId);
+  if (!current) {
+    return { ready: false, reason: "scan_not_found" } as const;
+  }
+  if (!current.reportProjectionRequired || current.reportReady) {
+    return { ready: true, reason: "already_ready" } as const;
+  }
+
+  const publication = await publishCanonicalScanReportProjection(input);
+  if (publication.status !== "ready") {
+    return { ready: false, reason: publication.reason } as const;
+  }
+
+  const refreshed = await getPublicScanStatusProjection(input.scanId);
+  return refreshed?.reportReady
+    ? { ready: true, reason: "published" } as const
+    : { ready: false, reason: "projection_not_ready_after_publish" } as const;
 }

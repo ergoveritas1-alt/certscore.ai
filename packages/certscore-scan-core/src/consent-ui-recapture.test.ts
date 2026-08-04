@@ -5,6 +5,7 @@ import type { Page } from "playwright";
 import {
   detectConsentUi,
   reconcileConsentUiRecapture,
+  reconcilePostSettleConsentUiObservation,
   shouldCaptureSettledPreConsentScreenshot,
   shouldRecaptureConsentUiAfterTimeout,
 } from "./scanners/pre-consent-runtime-scanner.js";
@@ -82,6 +83,67 @@ test("a failed inventory probe cannot replace an earlier incomplete capture as a
   assert.equal(result.observation, current);
 });
 
+test("completed post-settle DOM inventory is retained before later page evidence can time out", () => {
+  const result = reconcilePostSettleConsentUiObservation({
+    current: observation({
+      captureStatus: "no_evidence",
+      captureDiagnostics: {
+        completedChannels: ["dom_inventory"],
+        timedOutChannels: [],
+        failedChannels: [],
+      },
+      documentUrl: "https://example.test/",
+      layerInspected: "first_layer",
+      observedAtMs: 1_000,
+    }),
+    candidate: observation({
+      captureStatus: "no_evidence",
+      captureDiagnostics: {
+        completedChannels: ["dom_inventory"],
+        timedOutChannels: [],
+        failedChannels: [],
+      },
+      documentUrl: "https://example.test/",
+      layerInspected: "first_layer",
+      observedAtMs: 2_500,
+    }),
+  });
+
+  assert.equal(result.observedAtMs, 2_500);
+  assert.equal(result.captureStatus, "no_evidence");
+  assert.equal(result.basis.includes("settled_control_inventory_completed"), true);
+  assert.equal(result.basis.includes("recapture:post_settle_dom_inventory"), true);
+});
+
+test("incomplete post-settle inventory cannot promote an early empty inventory to absence", () => {
+  const current = observation({
+    captureStatus: "no_evidence",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    documentUrl: "https://example.test/",
+    layerInspected: "first_layer",
+  });
+  const result = reconcilePostSettleConsentUiObservation({
+    current,
+    candidate: observation({
+      captureStatus: "incomplete",
+      captureDiagnostics: {
+        completedChannels: [],
+        timedOutChannels: ["dom_inventory"],
+        failedChannels: [],
+      },
+      basis: ["inventory:rapid_dom_timed_out"],
+      layerInspected: "unknown",
+    }),
+  });
+
+  assert.equal(result.basis.includes("settled_control_inventory_completed"), false);
+  assert.equal(result.basis.includes("recapture:post_settle_inventory_incomplete"), true);
+});
+
 test("a newly retained options control strengthens an existing accept and reject inventory", () => {
   const current = observation({
     likelyPresent: true,
@@ -151,6 +213,7 @@ test("rapid DOM inventory retains complete first-layer controls before accessibi
       accessibilityAttempted = true;
       throw new Error("accessibility should not be attempted after complete rapid evidence");
     },
+    url: () => "https://example.test/",
   } as unknown as Page;
 
   const result = await detectConsentUi(page, Date.now(), 0, {
@@ -167,6 +230,70 @@ test("rapid DOM inventory retains complete first-layer controls before accessibi
   assert.deepEqual(result.captureDiagnostics?.timedOutChannels, []);
   assert.equal(
     result.inventoryDiagnostics?.timingMarkers.includes("rapid_inventory_initial_completed"),
+    true,
+  );
+});
+
+test("rapid initial snapshot returns a completed empty DOM inventory without slower semantic channels", async () => {
+  let evaluateCallCount = 0;
+  let accessibilityAttempted = false;
+  const page = {
+    evaluate: async (_pageFunction: unknown, argument?: unknown) => {
+      evaluateCallCount += 1;
+      if (argument !== undefined) return rapidInventorySnapshot(false);
+      return true;
+    },
+    context: () => {
+      accessibilityAttempted = true;
+      throw new Error("accessibility should remain a later recovery channel");
+    },
+    url: () => "https://example.test/",
+  } as unknown as Page;
+
+  const result = await detectConsentUi(page, Date.now(), 3_500, {
+    rapidInventoryTimeoutMs: 100,
+    returnAfterRapidSnapshot: true,
+    waitForCompleteChoiceControls: true,
+  });
+
+  assert.equal(accessibilityAttempted, false);
+  assert.equal(result.captureStatus, "no_evidence");
+  assert.deepEqual(result.captureDiagnostics?.completedChannels, ["dom_inventory"]);
+  assert.equal(
+    result.inventoryDiagnostics?.timingMarkers.includes("rapid_snapshot"),
+    true,
+  );
+  assert.equal(evaluateCallCount, 2);
+});
+
+test("rapid initial snapshot returns a timed-out DOM inventory as incomplete without waiting for accessibility", async () => {
+  let evaluateCallCount = 0;
+  let accessibilityAttempted = false;
+  const page = {
+    evaluate: async (_pageFunction: unknown, argument?: unknown) => {
+      evaluateCallCount += 1;
+      if (argument === undefined) return true;
+      return await new Promise<never>(() => undefined);
+    },
+    context: () => {
+      accessibilityAttempted = true;
+      throw new Error("accessibility should remain a later recovery channel");
+    },
+    url: () => "https://example.test/",
+  } as unknown as Page;
+
+  const result = await detectConsentUi(page, Date.now(), 3_500, {
+    rapidInventoryTimeoutMs: 100,
+    returnAfterRapidSnapshot: true,
+    waitForCompleteChoiceControls: true,
+  });
+
+  assert.equal(evaluateCallCount, 2);
+  assert.equal(accessibilityAttempted, false);
+  assert.equal(result.captureStatus, "incomplete");
+  assert.deepEqual(result.captureDiagnostics?.timedOutChannels, ["dom_inventory"]);
+  assert.equal(
+    result.inventoryDiagnostics?.timingMarkers.includes("rapid_inventory_initial_timed_out"),
     true,
   );
 });
@@ -191,6 +318,7 @@ test("post-accessibility rapid retry preserves typed controls and records the in
         };
       },
     }),
+    url: () => "https://example.test/",
   } as unknown as Page;
 
   const result = await detectConsentUi(page, Date.now(), 0, {

@@ -23,18 +23,21 @@ import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/exec
 import { filterVisibleExecutiveTopFindings } from "../../lib/scans/executive-top-finding-visibility";
 import {
   buildChecklistConcernTopFindings,
-  mergeCanonicalHighPriorityFindings
+  selectCanonicalHighPriorityFindings
 } from "../../lib/scans/checklist-concern-top-findings";
 import {
   buildPersistedFirstLayerConsentEvidence,
-  projectFirstLayerConsentChoices
+  projectFirstLayerConsentChoices,
+  withPersistedFirstLayerConsentEvidence
 } from "./scan-report-consent-projection";
+import { deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
 import {
   buildPersistedScanReportProjection,
   completionToReportProjectionMs,
   isCurrentScanReportProjectionReady,
   readPersistedScanReportProjection,
   REPORT_PROJECTION_READY_WARNING_MS,
+  sanitizeJsonbValue,
   SCAN_REPORT_PROJECTION_VERSION
 } from "./scan-report-projection-contract";
 import { getScanReportProjectionGeneration } from "./scan-report-projection-generation";
@@ -236,7 +239,15 @@ function canonicalConsentAssessment(scanRecord: ScanDetailResponse): ConsentCont
     const parsed = consentControlAssessmentSchema.safeParse(candidate);
     if (parsed.success && parsed.data.scan.scanId === scanRecord.scan.id) return parsed.data;
   }
-  return null;
+  const scanConfig = record(scanRecord.scan.scanConfigJson);
+  if (scanConfig?.processor === LOCAL_V2_DAG_SCAN_PROCESSOR) return null;
+  return deriveWs01ConsentControlAssessment({
+    completedAt: scanRecord.scan.completedAt,
+    firstLayerConsentChoices: rawFirstLayerConsentChoices(scanRecord) ?? null,
+    requestedUrl: scanRecord.scan.scanFromValue,
+    scanId: scanRecord.scan.id,
+    scanStatus: scanRecord.scan.status,
+  });
 }
 
 function assertCanonicalConsentProjectionInput(
@@ -378,15 +389,31 @@ export async function deriveScanReportProjectionValue(
 ): Promise<ProjectionValue> {
   const snapshot = record(scanRecord.snapshot);
   const sourceSnapshot = record(source.snapshot) ?? snapshot;
-  const runtimeArtifacts = record(scanRecord.runtimeArtifacts);
-  const reportState = debugBuildScanReportUnifiedFindingStateForScan(scanRecord as unknown as Record<string, unknown>);
+  const assessment = canonicalConsentAssessment(scanRecord);
+  const canonicalRuntimeArtifacts = assessment
+    ? withPersistedFirstLayerConsentEvidence(
+        record(scanRecord.runtimeArtifacts) ?? {},
+        { consent_control_assessment: assessment }
+      )
+    : scanRecord.runtimeArtifacts;
+  const projectionScanRecord: ScanDetailResponse = canonicalRuntimeArtifacts === scanRecord.runtimeArtifacts
+    ? scanRecord
+    : {
+        ...scanRecord,
+        runtimeArtifacts: canonicalRuntimeArtifacts,
+        snapshot: {
+          ...(scanRecord.snapshot ?? {}),
+          consent_control_assessment: assessment,
+        },
+      };
+  const reportState = debugBuildScanReportUnifiedFindingStateForScan(projectionScanRecord as unknown as Record<string, unknown>);
   const executiveFindingsProjection = projectExecutiveFindingsFromUnifiedPackets(
     reportState.globalUnifiedFindings
   );
   const runtimeCookieRows = buildRuntimeCookieInventory({
-    runtimeArtifacts: scanRecord.runtimeArtifacts
+    runtimeArtifacts: projectionScanRecord.runtimeArtifacts
   }).rows;
-  const presentationSummary = deriveCertScoreFindings(scanRecord);
+  const presentationSummary = deriveCertScoreFindings(projectionScanRecord);
   const runtimeTrackerPriorityRows = buildTrackerInventoryGroupRows(
     buildTrackerInventoryRows({
       domains: scanRecord.trackerVendors.flatMap((vendor) => vendor.scriptHost ? [vendor.scriptHost] : []),
@@ -410,29 +437,27 @@ export async function deriveScanReportProjectionValue(
   }));
   const checklist = deriveSharedScanDetailGdprEprivacyCoverageChecklist({
     coverageLimited: false,
-    events: scanRecord.events,
+    events: projectionScanRecord.events,
     normalizedConcerns: reportState.normalizedConcerns,
-    policyEnrichmentCount: scanRecord.policyEnrichment.length,
+    policyEnrichmentCount: projectionScanRecord.policyEnrichment.length,
     projectedFindings: executiveFindingsProjection.findings,
-    runtimeArtifacts: scanRecord.runtimeArtifacts,
+    runtimeArtifacts: projectionScanRecord.runtimeArtifacts,
     runtimeCookieRows,
     runtimeTrackerPriorityRows,
-    scanCompleted: scanRecord.scan.status === "completed",
-    snapshot: scanRecord.snapshot,
+    scanCompleted: projectionScanRecord.scan.status === "completed",
+    snapshot: projectionScanRecord.snapshot,
     unifiedFindings: reportState.globalUnifiedFindings
   });
-  const canonicalScore = scanRecord.scan.status === "completed"
+  const canonicalScore = projectionScanRecord.scan.status === "completed"
     ? deriveCanonicalOverallScoreForReport({
         checklistRows: checklist,
         unifiedFindings: reportState.globalUnifiedFindings
       })
     : null;
-  const canonicalHighPriorityFindings = mergeCanonicalHighPriorityFindings({
-    checklistFindings: buildChecklistConcernTopFindings(checklist),
-    executiveFindings: executiveFindingsProjection.topFindings
-  });
-  const choices = firstLayerConsentChoices(scanRecord);
-  const assessment = canonicalConsentAssessment(scanRecord);
+  const canonicalHighPriorityFindings = selectCanonicalHighPriorityFindings(
+    buildChecklistConcernTopFindings(checklist)
+  );
+  const choices = firstLayerConsentChoices(projectionScanRecord);
   assertCanonicalConsentProjectionInput(scanRecord, assessment);
   const trancoFromConfig = trancoRankFromScanConfig(scanRecord.scan.scanConfigJson);
   const trancoMetadata = await lookupTrancoRankMetadata({
@@ -634,19 +659,19 @@ export async function persistScanReportProjection(
       value.consentRejectObserved,
       value.consentOptionsObserved,
       value.consentEvidenceStatus,
-      consentControlEvidence ? JSON.stringify(consentControlEvidence) : null,
-      scanNoGoAssessment ? JSON.stringify(scanNoGoAssessment) : null,
-      visualAccessReview ? JSON.stringify(visualAccessReview) : null,
+      consentControlEvidence ? JSON.stringify(sanitizeJsonbValue(consentControlEvidence)) : null,
+      scanNoGoAssessment ? JSON.stringify(sanitizeJsonbValue(scanNoGoAssessment)) : null,
+      visualAccessReview ? JSON.stringify(sanitizeJsonbValue(visualAccessReview)) : null,
       SCAN_REPORT_PROJECTION_VERSION,
       hash,
-      assessment ? JSON.stringify(assessment) : null,
+      assessment ? JSON.stringify(sanitizeJsonbValue(assessment)) : null,
       assessment?.artifactVersion ?? null,
       assessment?.assessmentStatus ?? null,
       assessment?.provenance.computedAt ?? null,
       assessment?.provenance.sourceHash ?? null,
       assessment?.coverage.status ?? null,
       assessment?.surface.status ?? null,
-      JSON.stringify(persistedProjection.payload),
+      JSON.stringify(sanitizeJsonbValue(persistedProjection.payload)),
       persistedProjection.sha256,
       persistedProjection.sizeBytes,
       generation.eventCount,

@@ -611,9 +611,9 @@ test("pre-consent runtime scanner does not promote a generic product Learn more 
 
     assert.equal(observation?.managePreferencesControlObserved, false);
     assert.equal(
-      observation?.controls.some((control) => control.label === "Learn more"),
+      observation?.controls.some((control) => /^Learn more/i.test(control.label)),
       false,
-      "contextual options labels need an actionable consent peer or a bounded CMP/consent surface",
+      "multiple contextual product links must not create their own consent surface",
     );
   } finally {
     await server.close();
@@ -1640,16 +1640,26 @@ test("pre-consent runtime scanner attempts structured recovery before broad page
     );
     const observation = bundle.consentUiObservations[0];
     const timingLabels = bundle.modulesRun[0]?.timingBreakdown?.map((entry) => entry.label) ?? [];
-    const recoveryIndex = timingLabels.indexOf("page evidence: immediate consent timeout recovery");
+    const immediateRecoveryIndex = timingLabels.indexOf("page evidence: immediate consent timeout recovery");
+    const postSettleRecoveryIndex = timingLabels.indexOf("page evidence: post-settle consent inventory");
+    const recoveryIndex = immediateRecoveryIndex >= 0 ? immediateRecoveryIndex : postSettleRecoveryIndex;
     const broadEvidenceIndex = timingLabels.indexOf("page evidence capture");
+    const earlyGeometryIndex = timingLabels.indexOf("early consent control geometry");
 
     assert.equal(observation?.acceptControlObserved, true);
     assert.equal(observation?.rejectControlObserved, true);
     assert.equal(observation?.managePreferencesControlObserved, true);
-    assert.ok(recoveryIndex >= 0, "an incomplete initial inventory should trigger immediate structured recovery");
+    assert.ok(
+      recoveryIndex >= 0,
+      "delayed controls should be retained by a bounded structured inventory before broad page evidence",
+    );
     assert.ok(
       broadEvidenceIndex < 0 || recoveryIndex < broadEvidenceIndex,
       "consent recovery must run before broad page-evidence capture",
+    );
+    assert.ok(
+      earlyGeometryIndex >= 0,
+      "an empty initial inventory should start bounded typed geometry while the consent document is still live",
     );
   } finally {
     await server.close();
@@ -1966,6 +1976,11 @@ test("pre-consent runtime scanner returns retained partial evidence at its soft 
       result.networkEvents.length > 0 || result.networkResponseEvents.length > 0 || result.screenshots.length > 0,
       "soft deadline should retain evidence observed before cancellation",
     );
+    assert.ok(
+      result.consentUiObservations.length > 0,
+      "soft deadline should retain the typed initial consent observation instead of dropping the inspection result",
+    );
+    assert.equal(result.consentUiObservations[0]?.documentUrl, url);
     assert.equal(
       result.renderedPolicyLinks.some((link) =>
         link.linkText === "Privacy policy" &&
@@ -2206,6 +2221,41 @@ test("pre-consent runtime scanner retains a context-confirmed off-viewport appro
   }
 });
 
+test("pre-consent runtime scanner retains a dismiss-only first-layer consent control", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-dismiss-only-"));
+  try {
+    const url = server.urlFor("consent-dismiss-only");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      routeFulfillers,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      waitMode: "fast",
+    });
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.layerInspected, "first_layer");
+    assert.equal(observation?.acceptControlObserved, false);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.equal(observation?.managePreferencesControlObserved, false);
+    assert.deepEqual(observation?.visibleChoiceLabels, ["Close"]);
+    assert.equal(observation?.controls[0]?.actionType, "other");
+    assert.equal(observation?.controls[0]?.semanticRole, "dismiss");
+    assert.equal(observation?.controls[0]?.classifierReasonCodes.includes("matched_dismiss"), true);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner inventories open shadow-root consent controls without interaction", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-shadow-context-controls-"));
@@ -2328,6 +2378,18 @@ test("pre-consent runtime scanner does not treat off-viewport footer settings as
       true,
       "diagnostics should explain that the rejected Cookie Settings control lived in ordinary page chrome",
     );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((entry) =>
+        entry.label === "page evidence: post-settle consent inventory"
+      ),
+      true,
+      "the direct-CMP passive wait must preserve budget for a settled typed inventory",
+    );
+    assert.equal(
+      observation?.basis.includes("settled_control_inventory_completed"),
+      true,
+      "CMP presence without visible controls should resolve from a completed settled inventory rather than timing out unknown",
+    );
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -2405,7 +2467,7 @@ test("pre-consent runtime scanner does not classify bare generic choice controls
   }
 });
 
-test("pre-consent runtime scanner retains first-layer accept-only consent surface as no reject observed", async () => {
+test("pre-consent runtime scanner retains UniConsent-style accept and options controls as no reject observed", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-no-reject-"));
   try {
@@ -2420,11 +2482,17 @@ test("pre-consent runtime scanner retains first-layer accept-only consent surfac
     assert.equal(observation?.likelyPresent, true);
     assert.equal(observation?.layerInspected, "first_layer");
     assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
     assert.equal(observation?.rejectControlObserved, false);
     assert.equal(
-      observation?.visibleChoiceLabels.some((label) => /\baccept all\b/i.test(label)),
+      observation?.visibleChoiceLabels.includes("Agree and proceed"),
       true,
-      "scanner should retain visible first-layer accept label",
+      "scanner should retain the canonical UniConsent accept label before classification",
+    );
+    assert.equal(
+      observation?.visibleChoiceLabels.includes("Manage Options"),
+      true,
+      "scanner should retain the visible first-layer options label",
     );
     assert.equal(
       observation?.visibleChoiceLabels.some((label) => /\b(?:reject|decline|refuse)\b/i.test(label)),
@@ -2460,10 +2528,18 @@ test("planned pre-consent baseline skips screenshots when no consent surface is 
 
     assert.equal(result.moduleRun.status, "completed");
     assert.equal(result.consentUiObservations[0]?.likelyPresent, false);
+    assert.equal(result.consentUiObservations[0]?.documentUrl, url);
     assert.equal(
       result.consentUiObservations[0]?.basis.includes("settled_control_inventory_completed"),
       true,
       "a completed no-banner inspection must retain the settled inventory marker",
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((entry) =>
+        entry.label === "page evidence: post-settle consent inventory"
+      ),
+      true,
+      "the settled inventory must complete before consolidated page evidence",
     );
     assert.equal(result.cmpRuntimeObservations.length, 0);
     assert.equal(result.screenshots.length, 0);

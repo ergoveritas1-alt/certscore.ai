@@ -8,6 +8,7 @@ export type ActiveScanSession = {
   campaignAttribution?: CampaignAttribution;
   destination: string;
   domain: string;
+  progressValue?: number;
   scanId: string;
   startedAtMs: number;
 };
@@ -41,6 +42,12 @@ export function readActiveScanSession(nowMs = Date.now()): ActiveScanSession | n
       typeof parsed.destination !== "string" ||
       typeof parsed.domain !== "string" ||
       typeof parsed.scanId !== "string" ||
+      (parsed.progressValue !== undefined && (
+        typeof parsed.progressValue !== "number" ||
+        !Number.isFinite(parsed.progressValue) ||
+        parsed.progressValue < 0 ||
+        parsed.progressValue > 100
+      )) ||
       typeof parsed.startedAtMs !== "number" ||
       !Number.isFinite(parsed.startedAtMs) ||
       nowMs - parsed.startedAtMs > ACTIVE_SCAN_SESSION_MAX_AGE_MS

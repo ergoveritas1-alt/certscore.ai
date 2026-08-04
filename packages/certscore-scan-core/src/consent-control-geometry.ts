@@ -325,8 +325,12 @@ export async function captureConsentControlGeometry(
       return cmpFramePriority(right.url()) - cmpFramePriority(left.url());
     })
     .slice(0, 12);
+  // Frame captures run concurrently, so dividing the deadline by the number
+  // of frames unnecessarily starves the canonical document on frame-heavy
+  // pages. Keep every read bounded by the caller's wall-clock allowance while
+  // allowing the main frame and a late-rendering CMP frame the full window.
   const frameTimeoutMs = options.timeoutMs
-    ? Math.max(250, Math.floor(options.timeoutMs / Math.max(frames.length, 1)))
+    ? Math.max(250, options.timeoutMs)
     : undefined;
   const cookieNamesPromise = page.context().cookies(page.url())
     .then((cookies) => cookies.map((cookie) => cookie.name))
@@ -347,7 +351,8 @@ export async function captureConsentControlGeometry(
   );
   const mainFrameCapture = successfulCaptures.find((result) => result.frameIndex === 0)?.capture;
   const captures = successfulCaptures.map((result) => result.capture);
-  const raw = mergeRawGeometryCaptures(captures, page.url(), frameInput);
+  const expectedPageUrl = page.url();
+  const raw = mergeRawGeometryCaptures(captures, expectedPageUrl, frameInput);
   const cookieNames = await cookieNamesPromise ?? raw.cookieNames;
   const cmp = buildCmpEvidence({ ...raw, cookieNames });
   const containers = raw.containers.map((container, index): ConsentControlContainerEvidence => ({
@@ -355,13 +360,12 @@ export async function captureConsentControlGeometry(
     ...container,
   }));
   const candidates = raw.candidates.map((candidate, index) =>
-    buildCandidateEvidence(candidate, index, raw.pageUrl, options.screenshotArtifactRef, containers)
+    buildCandidateEvidence(candidate, index, expectedPageUrl, options.screenshotArtifactRef, containers)
   );
   reconcileActionableVisualProxies(candidates);
   reconcileConfirmedConsentModalClusters(candidates, containers);
   classifyConsentControlPlacements(candidates, containers);
   const summary = summarizeConsentControlGeometry(candidates, cmp);
-  const expectedPageUrl = page.url();
   const mainFrameUnavailable = !mainFrameCapture ||
     mainFrameCapture.pageUrl === "about:blank" ||
     mainFrameCapture.viewport.width <= 0 ||
@@ -377,9 +381,13 @@ export async function captureConsentControlGeometry(
   return {
     artifactVersion: "consent_control_geometry.v1",
     sourceScanner: "consent_control_geometry_diagnostic",
-    pageUrl: raw.pageUrl === "about:blank" ? expectedPageUrl : raw.pageUrl,
+    // Child-frame evidence retains its own frame URL on each candidate, but
+    // the geometry packet itself is always bound to the canonical top-level
+    // document. If the main-frame evaluation times out, a successful CMP
+    // child frame must not replace the document identity of the scan.
+    pageUrl: expectedPageUrl,
     capturedAt: new Date().toISOString(),
-    viewport: raw.viewport,
+    viewport: mainFrameCapture?.viewport ?? { width: 0, height: 0 },
     screenshotArtifactRef: options.screenshotArtifactRef,
     cmp,
     containers,

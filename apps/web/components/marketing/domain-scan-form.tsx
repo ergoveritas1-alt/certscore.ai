@@ -388,6 +388,7 @@ export function DomainScanForm({
   const [recentScanReusedFromUrl, setRecentScanReusedFromUrl] = useState(false);
   const staticPlaceholder = inputPlaceholder ?? HERO_IDLE_PLACEHOLDER;
   const isSubmittingRef = useRef(false);
+  const submissionProgressValueRef = useRef(0);
   const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
   const scanButtonArmed = isValidScanTarget(effectiveSubmitDomain);
   const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
@@ -808,6 +809,7 @@ export function DomainScanForm({
           campaignAttribution: campaignAttribution ?? undefined,
           destination: nextDestination,
           domain: submittedDomain,
+          progressValue: submissionProgressValueRef.current,
           scanId: payload.scanId,
           startedAtMs: Date.now()
         });
@@ -938,7 +940,13 @@ export function DomainScanForm({
         <p className="text-sm font-medium text-slate-600" role="status">Opening the recent completed report…</p>
       ) : null}
       {isSubmitting && scanFrom !== "local_extension" && !expectsRecentScanReuse ? (
-        <ScanSubmissionPendingIndicator compact={compact} profileValue={localV2ScanProfile} />
+        <ScanSubmissionPendingIndicator
+          compact={compact}
+          onProgressValueChange={(value) => {
+            submissionProgressValueRef.current = value;
+          }}
+          profileValue={localV2ScanProfile}
+        />
       ) : null}
       {sampleDomains.length > 0 ? (
         <div className="relative z-0 overflow-hidden rounded-[1.25rem] border border-slate-800 bg-slate-950 shadow-[0_24px_60px_rgba(2,6,23,0.22)]">

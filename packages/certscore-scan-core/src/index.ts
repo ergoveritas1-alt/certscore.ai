@@ -78,6 +78,7 @@ type ConsentFlowRuntimeInput = Parameters<ConsentFlowRuntimeScanner>[0];
 type ConsentFlowRuntimeResult = Awaited<ReturnType<ConsentFlowRuntimeScanner>>;
 const MAX_MODULE_TIMING_BREAKDOWN_ENTRIES = 40;
 const PRE_CONSENT_DEADLINE_SETTLE_GRACE_MS = 250;
+const MIN_PRE_CONSENT_VISUAL_FALLBACK_START_BUDGET_MS = 1_000;
 
 export {
   chromiumLaunchArgs,
@@ -139,6 +140,8 @@ export interface RunScanInput {
   preConsentScreenshotMode?: "always" | "selective" | "never";
   preConsentScreenshotTimeoutMs?: number;
   preConsentVisualFallbackDeadlineMs?: number;
+  /** Absolute deadline for optional visual recovery, preserving time to finalize retained scan output. */
+  preConsentVisualFallbackDeadlineAtMs?: number;
   /** Internal/test override that may shorten, but never extend, the profile module budget. */
   preConsentModuleDeadlineMs?: number;
   consentFlowScreenshotMode?: "auto" | "none";
@@ -291,6 +294,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   await phaseRecorder.record("artifact_writer", "completed", { outDir });
   const useSingleBrowser = input.browserReuseMode === "single" && (preConsentEnabled || policySurfaceEnabled);
   let sharedBrowser: Browser | undefined;
+  const policySurfaceAbortController = new AbortController();
   if (useSingleBrowser) {
     await phaseRecorder.record("shared_browser", "started", {
       mode: "single_chromium_process",
@@ -327,6 +331,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         softDeadlineSignal,
         waitMode: leanPreConsent ? "fast" : "full",
+        retainRenderedPolicyRecoverySession: true,
         signal: input.signal,
       }),
     })
@@ -343,7 +348,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       nanoAssistProvider: nanoPolicyAssistProvider,
       policySurfaceSeeds: input.policySurfaceSeeds,
       discoveryMode: input.scenarioPlanningMode === "planned_parallel" ? "fast" : "full",
-      signal: input.signal,
+      signal: input.signal
+        ? AbortSignal.any([input.signal, policySurfaceAbortController.signal])
+        : policySurfaceAbortController.signal,
     }).then(
       (value) => {
         const normalizedValue = normalizePolicySurfaceResultForEarlyHandoff(value);
@@ -398,6 +405,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotMode: input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always"),
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         waitMode: leanPreConsent ? "fast" : "full",
+        retainRenderedPolicyRecoverySession: true,
       });
       preConsentResult = {
         ...headedRetryResult,
@@ -419,7 +427,15 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     shouldAttemptIncompleteConsentVisualFallback(preConsentResult, input.preConsentScreenshotMode);
   const shouldCaptureScreenshotOnlyFallback = preConsentEnabled &&
     shouldAttemptScreenshotOnlyFallback(preConsentResult, input.preConsentScreenshotMode);
-  if (shouldCaptureScreenshotOnlyFallback || shouldCaptureIncompleteConsentVisualFallback) {
+  const visualFallbackDeadlineMs = boundedPreConsentVisualFallbackDeadlineMs({
+    absoluteDeadlineAtMs:
+      input.preConsentVisualFallbackDeadlineAtMs ?? input.policySurfaceDeadlineAtMs,
+    configuredDeadlineMs: input.preConsentVisualFallbackDeadlineMs,
+  });
+  if (
+    (shouldCaptureScreenshotOnlyFallback || shouldCaptureIncompleteConsentVisualFallback) &&
+    visualFallbackDeadlineMs !== null
+  ) {
     await phaseRecorder.record("pre_consent_screenshot_only_fallback", "started", {
       reason: shouldCaptureIncompleteConsentVisualFallback
         ? "incomplete_consent_inspection"
@@ -432,7 +448,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         ? [normalizedUrl, ...navigationTransportRecoveryUrls(normalizedUrl)]
         : [normalizedUrl],
       scanStartedAtMs: startedAtMs,
-      fallbackDeadlineMs: input.preConsentVisualFallbackDeadlineMs,
+      fallbackDeadlineMs: visualFallbackDeadlineMs,
       screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
       captureMode: shouldCaptureIncompleteConsentVisualFallback ? "full_page" : "viewport",
       recoverConsentEvidence: shouldCaptureIncompleteConsentVisualFallback,
@@ -539,7 +555,12 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     }
   } else {
     await phaseRecorder.record("pre_consent_screenshot_only_fallback", "skipped", {
-      reason: preConsentEnabled ? "not_needed" : "pre_consent_runtime_disabled",
+      reason: !preConsentEnabled
+        ? "pre_consent_runtime_disabled"
+        : (shouldCaptureScreenshotOnlyFallback || shouldCaptureIncompleteConsentVisualFallback) &&
+            visualFallbackDeadlineMs === null
+          ? "insufficient_scan_deadline"
+          : "not_needed",
     });
   }
   const earlyScanNoGoEvidence = input.captureReplay === true
@@ -641,6 +662,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     plannedParallel,
     policySurfaceEnabled,
   });
+  let policySurfaceOutputDeadlineExpired = false;
   if (earlyConfirmedNoGo && policySurfaceEnabled && !policySurfaceSettled) {
     const noGoPolicyGraceMs = Math.min(5_000, Math.max(0, scanProfile.internalBudgetMs - (Date.now() - startedAtMs) - 750));
     await phaseRecorder.record("policy_surface_no_go_diagnostic_grace", noGoPolicyGraceMs > 0 ? "started" : "skipped", {
@@ -651,11 +673,38 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       "policy_surface_no_go_diagnostic_grace",
       policySurfaceSettled?.status === "fulfilled" ? "completed" : "skipped",
     );
+    if (!policySurfaceSettled) {
+      await phaseRecorder.record("policy_surface_no_go_cancellation", "started", {
+        reason: "policy_output_not_required_after_confirmed_no_go",
+      });
+      policySurfaceAbortController.abort(
+        new Error("Policy-surface work canceled after the confirmed no-go diagnostic grace window."),
+      );
+      await policySurfaceResultPromise;
+      await phaseRecorder.record("policy_surface_no_go_cancellation", "completed");
+    }
   }
   throwIfAborted(input.signal);
   await phaseRecorder.record("policy_surface_for_output", policyRequiredForOutput ? "started" : "skipped");
   if (policyRequiredForOutput) {
-    policySurfaceSettled ??= await policySurfaceResultPromise;
+    if (input.policySurfaceDeadlineAtMs === undefined) {
+      policySurfaceSettled ??= await policySurfaceResultPromise;
+    } else {
+      const remainingPolicyOutputWaitMs = Math.max(
+        0,
+        input.policySurfaceDeadlineAtMs - Date.now(),
+      );
+      policySurfaceSettled ??= await settlePolicySurfaceBeforeDeadline(
+        policySurfaceResultPromise,
+        remainingPolicyOutputWaitMs,
+      );
+      if (!policySurfaceSettled) {
+        policySurfaceOutputDeadlineExpired = true;
+        policySurfaceAbortController.abort(
+          new Error("Policy-surface output deadline expired; retained rendered-link evidence will be used when available."),
+        );
+      }
+    }
   } else if (policySurfaceEnabled && !earlyConfirmedNoGo) {
     const policyOutputGraceMs = input.policyOutputGraceMs ?? 0;
     await phaseRecorder.record("policy_surface_output_grace", policyOutputGraceMs > 0 ? "started" : "skipped", {
@@ -698,22 +747,28 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       policySurfaceResult.policySurfaceObservations,
       retainedRenderedPolicyObservations,
     );
-    const renderedDocumentRecovery = await recoverPolicyDocumentsFromRetainedRenderedLinks({
-      scannerInput: {
-        url: input.url,
-        normalizedUrl,
-        scanStartedAtMs: startedAtMs,
-        internalBudgetMs: 6_000,
-        artifactWriter,
-        browser: sharedBrowser,
-        nanoAssistProvider: nanoPolicyAssistProvider,
-        discoveryMode: "fast",
-        signal: input.signal,
-      },
-      links: preConsentResult.renderedPolicyLinks,
-      existingObservations: policySurfaceResult.policySurfaceObservations,
-      evidenceRef: renderedPolicyEvidenceRef,
-    });
+    let renderedDocumentRecovery: Awaited<ReturnType<typeof recoverPolicyDocumentsFromRetainedRenderedLinks>>;
+    try {
+      renderedDocumentRecovery = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+        scannerInput: {
+          url: input.url,
+          normalizedUrl,
+          scanStartedAtMs: startedAtMs,
+          internalBudgetMs: 6_000,
+          artifactWriter,
+          browser: preConsentResult.renderedPolicyRecoveryBrowser ?? sharedBrowser,
+          renderedRecoveryPage: preConsentResult.renderedPolicyRecoveryPage,
+          nanoAssistProvider: nanoPolicyAssistProvider,
+          discoveryMode: "fast",
+          signal: input.signal,
+        },
+        links: preConsentResult.renderedPolicyLinks,
+        existingObservations: policySurfaceResult.policySurfaceObservations,
+        evidenceRef: renderedPolicyEvidenceRef,
+      });
+    } finally {
+      await preConsentResult.renderedPolicyRecoveryBrowser?.close().catch(() => undefined);
+    }
     if (renderedDocumentRecovery.observations.length > 0) {
       policySurfaceResult.policySurfaceObservations = mergePolicySurfaceObservations(
         policySurfaceResult.policySurfaceObservations,
@@ -762,10 +817,15 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       }
     }
     await phaseRecorder.record("policy_surface_for_output", "completed", {
+      deadlineFallbackUsed: policySurfaceOutputDeadlineExpired,
       durationMs: policySurfaceResult.moduleRun.durationMs,
       recoveredRenderedPolicyLinks: recoveredPolicySurfaceCount,
       retainedRenderedPolicyLinks: retainedRenderedPolicyObservations.length,
       status: policySurfaceResult.moduleRun.status,
+    });
+  } else if (policySurfaceOutputDeadlineExpired) {
+    await phaseRecorder.record("policy_surface_for_output", "skipped", {
+      reason: "policy_surface_deadline_expired_before_output",
     });
   }
 
@@ -1054,6 +1114,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   });
   return bundle;
   } finally {
+    policySurfaceAbortController.abort(
+      new Error("Policy-surface work canceled because the scan core is closing."),
+    );
     if (sharedBrowser) {
       await phaseRecorder.record("shared_browser_close", "started");
       await sharedBrowser.close().catch(() => undefined);
@@ -1363,7 +1426,10 @@ export {
   consentFlowRuntimeScannerPlaceholder,
   policySurfaceScannerPlaceholder,
 } from "./scanners/placeholders.js";
-export { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
+export {
+  mergePolicySurfaceObservations,
+  policySurfaceScanner,
+} from "./scanners/policy-surface-scanner.js";
 export {
   replayConsentFlowEvidenceCorpus,
   validateConsentFlowReplayCorpus,
@@ -2494,6 +2560,25 @@ export function shouldAttemptScreenshotOnlyFallback(
     ...(result.moduleRun.errors ?? []),
   ].join("\n");
   return /page_closed|target page, context or browser has been closed|page\.goto|page\/context closed/i.test(errorText);
+}
+
+export function boundedPreConsentVisualFallbackDeadlineMs(input: {
+  absoluteDeadlineAtMs?: number;
+  configuredDeadlineMs?: number;
+  nowMs?: number;
+}): number | null {
+  const configuredDeadlineMs = Math.max(
+    MIN_PRE_CONSENT_VISUAL_FALLBACK_START_BUDGET_MS,
+    input.configuredDeadlineMs ?? 15_000,
+  );
+  if (input.absoluteDeadlineAtMs === undefined) {
+    return configuredDeadlineMs;
+  }
+  const remainingMs = input.absoluteDeadlineAtMs - (input.nowMs ?? Date.now());
+  if (remainingMs < MIN_PRE_CONSENT_VISUAL_FALLBACK_START_BUDGET_MS) {
+    return null;
+  }
+  return Math.min(configuredDeadlineMs, remainingMs);
 }
 
 function shouldAttemptIncompleteConsentVisualFallback(

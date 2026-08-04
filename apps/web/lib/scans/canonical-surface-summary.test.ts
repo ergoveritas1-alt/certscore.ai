@@ -61,3 +61,28 @@ test("canonical summary fails closed for no-go and withheld scans", () => {
   assert.equal(withheld.score, null);
   assert.equal(withheld.topFindingCount, null);
 });
+
+test("compact A/R/O is not projected when no consent surface was confirmed", () => {
+  const noSurface = projectCanonicalSurfaceSummary({
+    noGo: false,
+    snapshot: {
+      ...canonicalPersistedFixture,
+      consent_accept_observed: null,
+      consent_evidence_status: "not_observed",
+      consent_options_observed: null,
+      consent_reject_observed: null,
+      consent_surface_status: "not_observed"
+    }
+  });
+  assert.equal(noSurface.consentAro, null);
+
+  const incompleteSurface = projectCanonicalSurfaceSummary({
+    noGo: false,
+    snapshot: {
+      ...canonicalPersistedFixture,
+      consent_evidence_status: "unknown",
+      consent_surface_status: "unknown"
+    }
+  });
+  assert.equal(incompleteSurface.consentAro, null);
+});

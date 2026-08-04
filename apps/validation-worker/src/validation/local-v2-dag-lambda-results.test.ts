@@ -254,8 +254,13 @@ test("validation worker Lambda result poller retains leases and bounds result co
 
   assert.match(source, /ChangeMessageVisibilityCommand/);
   assert.match(source, /VisibilityTimeout:\s*0/);
-  assert.match(source, /RESULT_VISIBILITY_TIMEOUT_SECONDS\s*=\s*180/);
+  assert.match(source, /RESULT_VISIBILITY_TIMEOUT_SECONDS\s*=\s*240/);
+  assert.match(source, /MATERIALIZATION_FINALIZING_WAIT_MS\s*=\s*150_000/);
+  assert.match(source, /failure\?\.code === "materialization_not_ready"/);
+  assert.match(source, /await sleep\(retrySeconds \* 1_000\)/);
   assert.match(source, /RESULT_BATCH_CONCURRENCY\s*=\s*3/);
+  assert.match(source, /RESULT_QUEUE_POLL_CONCURRENCY\s*=\s*2/);
+  assert.match(source, /RESULT_FINALIZATION_BACKGROUND_CONCURRENCY\s*=\s*8/);
   assert.match(source, /MaxNumberOfMessages:\s*RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /mapWithConcurrency\(messages, RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /classifyV2DagLambdaResultDisposition\(rawMessage\)/);
@@ -263,7 +268,27 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /rejected invalid v2 DAG Lambda result identity/);
   assert.match(source, /async function loopQueue\(queueUrl: string\)/);
   assert.match(source, /for \(const queueUrl of queueUrls\)/);
+  assert.match(source, /pollIndex < RESULT_QUEUE_POLL_CONCURRENCY/);
+  assert.match(source, /startCompletedResultFinalization/);
+  assert.match(source, /resultFinalizationBackgroundTasks/);
   assert.doesNotMatch(source, /Promise\.all\(queueUrls\.map/);
+});
+
+test("validation worker frees result poll capacity after retaining the terminal result", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+  const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult");
+  const finalizationStartIndex = source.indexOf("startCompletedResultFinalization", resultIndex);
+  const finalizationBodyIndex = source.indexOf("function startCompletedResultFinalization", finalizationStartIndex);
+  const policyIndex = source.indexOf("await processEmbeddedPolicyEvidenceBeforeScoreMaterialization", finalizationBodyIndex);
+  const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted", policyIndex);
+  const deleteIndex = source.indexOf("new DeleteMessageCommand", scoreIndex);
+
+  assert.ok(resultIndex >= 0, "expected terminal result retention");
+  assert.ok(finalizationStartIndex > resultIndex, "slow downstream work must start after terminal retention");
+  assert.ok(finalizationBodyIndex > finalizationStartIndex, "expected bounded background finalization");
+  assert.ok(policyIndex > finalizationBodyIndex, "policy evidence remains ahead of score materialization");
+  assert.ok(scoreIndex > policyIndex, "score materialization remains canonical downstream work");
+  assert.ok(deleteIndex > scoreIndex, "SQS acknowledgement must follow background finalization");
 });
 
 test("validation worker runtime overlays the current policy evidence contract and terminates malformed packets", async () => {
@@ -305,16 +330,18 @@ test("validation worker persists completion scores before acknowledging a Lambda
   assert.match(source, /terminal score materialization failure acknowledged/);
 });
 
-test("validation worker consumes embedded policy evidence before terminal score materialization", async () => {
+test("validation worker records terminal completion before consuming embedded policy evidence", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
-  const fallbackIndex = source.indexOf("await processEmbeddedPolicyEvidenceBeforeTerminalMaterialization");
-  const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult", fallbackIndex);
-  const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted", resultIndex);
+  const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult");
+  const fallbackIndex = source.indexOf("await processEmbeddedPolicyEvidenceBeforeScoreMaterialization", resultIndex);
+  const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted", fallbackIndex);
 
   assert.ok(fallbackIndex >= 0, "expected terminal message policy-evidence fallback");
-  assert.ok(resultIndex > fallbackIndex, "verified policy evidence must be processed before terminal retention");
-  assert.ok(scoreIndex > resultIndex, "static review must be available before canonical score materialization");
+  assert.ok(fallbackIndex > resultIndex, "terminal retention must not wait for semantic review");
+  assert.ok(scoreIndex > fallbackIndex, "static review must be available before canonical score materialization");
   assert.match(source, /policyEvidenceProcessingInFlight/);
+  assert.match(source, /policyEvidenceBackgroundTasks/);
+  assert.match(source, /POLICY_EVIDENCE_BACKGROUND_CONCURRENCY\s*=\s*2/);
 });
 
 test("validation worker synchronizes linked API activity before acknowledging a Lambda result", async () => {
@@ -334,8 +361,8 @@ test("validation worker continuously reconciles accepted scans without terminal 
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
   assert.match(source, /ORPHAN_RECONCILIATION_INTERVAL_MS\s*=\s*10_000/);
-  assert.match(source, /ORPHAN_RECONCILIATION_AGE_MS\s*=\s*75_000/);
-  assert.match(source, /within 75 seconds/);
+  assert.match(source, /ORPHAN_RECONCILIATION_AGE_MS\s*=\s*45_000/);
+  assert.match(source, /within 45 seconds/);
   assert.match(source, /for update of s skip locked/);
   assert.match(source, /lambda_terminal_result_absent/);
   assert.match(source, /void loopReconciliation\(\)/);

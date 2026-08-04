@@ -73,6 +73,7 @@
     "ops:monitor:prod:aws": "pnpm exec tsx ./scripts/run-prod-ops-monitor-ecs.ts",
     "ops:monitoring:sweep": "pnpm --filter @website-signal-risk-scanner/web monitoring:sweep",
     "ops:prod-db:audit": "pnpm exec tsx ./scripts/run-prod-db-audit-ecs.ts",
+    "ops:prod-db:admin-matrix-backfill": "pnpm exec tsx ./scripts/backfill-admin-evidence-matrix-ecs.ts",
     "ops:prod-preconsent-rerun": "pnpm exec tsx ./scripts/run-prod-preconsent-rerun-ecs.ts",
     "ops:scan-acceleration:audit": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/audit-prior-scan-acceleration.ts",
     "ops:scan-acceleration:benchmark": "pnpm exec tsx ./scripts/run-prior-scan-benchmark.ts",

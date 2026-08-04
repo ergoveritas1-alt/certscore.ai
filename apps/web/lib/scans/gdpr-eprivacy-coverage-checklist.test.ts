@@ -1037,7 +1037,7 @@ test("deriveGdprEprivacyCoverageChecklist maps Article 13 disclosure findings in
   assert.equal(byId(items, "legal_basis_disclosure_observed").status, "Observed");
   assert.equal(byId(items, "retention_disclosure_observed").status, "Observed");
   assert.equal(byId(items, "supervisory_authority_complaint_disclosure").status, "Observed");
-  assert.equal(items.some((item) => item.id === "automated_decision_making_profiling_disclosure"), false);
+  assert.equal(byId(items, "automated_decision_making_profiling_disclosure").status, "Not testable");
 });
 
 test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session replay as observed", () => {
@@ -3490,5 +3490,5 @@ test("deriveGdprEprivacyReviewSummary excludes invalid 404 and footer excerpts f
   });
 
   const summary = deriveGdprEprivacyReviewSummary(items);
-  assert.match(summary.coverageText, /^35 of 37 in-scope rows had usable automated evidence\./);
+  assert.match(summary.coverageText, /^35 of 38 in-scope rows had usable automated evidence\./);
 });

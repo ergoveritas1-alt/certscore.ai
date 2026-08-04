@@ -3031,7 +3031,8 @@ function buildConsentNoSurfaceConcerns(
     assessment.coverage.status !== "complete" ||
     assessment.document.identityStatus !== "matched" ||
     assessment.scan.noGo !== false ||
-    assessment.surface.status !== "not_observed"
+    assessment.surface.status !== "not_observed" &&
+    assessment.surface.status !== "observed_non_actionable"
   ) {
     return [];
   }
@@ -3074,7 +3075,7 @@ function buildConsentNoSurfaceConcerns(
     consentSurfaceStatus: assessment.surface.status,
     runtimeEvidenceArtifacts
   };
-  const concerns = [
+  const concerns = assessment.surface.status === "not_observed" ? [
     buildConcernFromSharedInput({
       categoryId: "privacy",
       description:
@@ -3092,7 +3093,7 @@ function buildConsentNoSurfaceConcerns(
       sourceType: "signal",
       title: "Operational consent surface not observed"
     })
-  ];
+  ] : [];
 
   const storageAssessment = buildPreConsentStorageAssessment({ runtimeArtifacts });
   const consentTimeline =
@@ -3114,7 +3115,9 @@ function buildConsentNoSurfaceConcerns(
     concerns.push(buildConcernFromSharedInput({
       categoryId: "privacy",
       description:
-        "Classified non-essential pre-consent activity was retained, while the complete consent-control assessment retained no observable refusal path.",
+        assessment.surface.status === "observed_non_actionable"
+          ? "Classified non-essential pre-consent activity was retained, while the complete first-layer inventory retained a non-actionable consent surface and no observable refusal path."
+          : "Classified non-essential pre-consent activity was retained, while the complete consent-control assessment retained no observable refusal path.",
       domainContext,
       evidence: uniqueStrings([
         ...runtimeEvidenceArtifacts,
@@ -3243,6 +3246,166 @@ function buildConsentOptionsControlProminenceConcerns(
       sourceType: "signal",
       title: "Consent options control prominence"
     })
+  ];
+}
+
+function buildConsentControlInventoryConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  if (
+    !assessment ||
+    assessment.document.identityStatus !== "matched" ||
+    assessment.scan.noGo !== false ||
+    assessment.surface.status !== "observed_actionable" &&
+    assessment.surface.status !== "observed_non_actionable"
+  ) {
+    return [];
+  }
+
+  const inventoryComplete =
+    assessment.assessmentStatus === "complete" &&
+    assessment.coverage.status === "complete";
+  const projectControlState = (state: typeof assessment.controls.accept.state) =>
+    state === "observed" || inventoryComplete ? state : "unknown";
+  const acceptState = projectControlState(assessment.controls.accept.state);
+  const rejectState = projectControlState(assessment.controls.reject.state);
+  const optionsState = projectControlState(assessment.controls.options.state);
+
+  const runtimeEvidenceArtifacts = uniqueStrings([
+    ...assessment.surface.evidenceRefs,
+    ...assessment.controls.accept.evidenceRefs,
+    ...assessment.controls.reject.evidenceRefs,
+    ...assessment.controls.options.evidenceRefs,
+    "scan_runtime_artifacts.consent_control_assessment"
+  ]).slice(0, 16);
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "A complete, same-document first-layer consent-control inventory retained factual Accept, Reject, and Options observation states.",
+      domainContext,
+      evidence: runtimeEvidenceArtifacts,
+      observedValue: [
+        `accept:${acceptState}`,
+        `reject:${rejectState}`,
+        `options:${optionsState}`
+      ].join("|"),
+      originKey: inventoryComplete
+        ? "consent.control_inventory.complete_first_layer"
+        : "consent.control_inventory.partial_first_layer",
+      originType: "runtime_artifact",
+      rawEvidence: {
+        consentControlAssessmentContractVersion: assessment.artifactVersion,
+        consentControlAssessmentSourceHash: assessment.provenance.sourceHash,
+        consentControlAssessmentStatus: assessment.assessmentStatus,
+        consentControlCoverageStatus: assessment.coverage.status,
+        consentControlInventoryEvidence: true,
+        consentControlInventoryComplete: inventoryComplete,
+        consentSurfaceStatus: assessment.surface.status,
+        firstLayerAcceptState: acceptState,
+        firstLayerOptionsState: optionsState,
+        firstLayerRejectState: rejectState,
+        runtimeEvidenceArtifacts
+      },
+      severity: "low",
+      signalKey: "privacy.consent_control_inventory",
+      signalLabel: "Consent control inventory",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Consent control inventory"
+    })
+  ];
+}
+
+function buildConsentDismissWithoutRejectConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  if (
+    !assessment ||
+    assessment.assessmentStatus !== "complete" ||
+    assessment.coverage.status !== "complete" ||
+    assessment.document.identityStatus !== "matched" ||
+    assessment.scan.noGo !== false ||
+    assessment.surface.status !== "observed_actionable" ||
+    assessment.controls.reject.state !== "not_observed"
+  ) {
+    return [];
+  }
+
+  const retainedDismissControls = assessment.evidence
+    .filter((evidence) =>
+      evidence.intent === "dismiss" &&
+      evidence.layer === "first_layer" &&
+      evidence.visible === true &&
+      evidence.actionable === true
+    )
+    .slice(0, 8)
+    .map((evidence) => ({
+      artifactRefs: evidence.artifactRefs.slice(0, 8),
+      evidenceId: evidence.evidenceId,
+      label: evidence.label,
+      observedAtMs: evidence.observedAtMs,
+    }));
+  if (retainedDismissControls.length === 0) {
+    return [];
+  }
+
+  const runtimeEvidenceArtifacts = uniqueStrings([
+    ...assessment.surface.evidenceRefs,
+    ...retainedDismissControls.flatMap((control) => [control.evidenceId, ...control.artifactRefs]),
+    "scan_runtime_artifacts.consent_control_assessment",
+  ]).slice(0, 16);
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "A complete, same-document first-layer consent inventory retained a dismissal control but no reject, decline, necessary-only, or equivalent refusal control.",
+      domainContext,
+      evidence: retainedDismissControls
+        .map((control) => control.label)
+        .filter((label): label is string => Boolean(label)),
+      observedValue: "dismiss_without_reject",
+      originKey: "consent.dismiss_without_reject.complete_first_layer",
+      originType: "runtime_artifact",
+      rawEvidence: {
+        consentControlAssessmentContractVersion: assessment.artifactVersion,
+        consentControlAssessmentSourceHash: assessment.provenance.sourceHash,
+        consentControlAssessmentStatus: assessment.assessmentStatus,
+        consentControlCoverageStatus: assessment.coverage.status,
+        consentDismissWithoutRejectEvidence: true,
+        consentSurfaceObserved: true,
+        consentSurfaceDiagnostics: {
+          consentSurfaceDecisionStates: ["consent_surface_observed", "reject_absent_first_layer"],
+          preChoiceState: true,
+          sameSurfaceCandidates: true,
+          stableRenderedState: true,
+          visibleInViewport: true,
+        },
+        consentUiPathEvidence: {
+          firstLayerCookieConsentBannerObserved: true,
+          gdprEprivacyConsentSurfaceObserved: "confirmed",
+          layerInspected: "first_layer",
+        },
+        dismiss_without_reject: true,
+        firstLayerAcceptState: assessment.controls.accept.state,
+        firstLayerOptionsState: assessment.controls.options.state,
+        firstLayerRejectState: assessment.controls.reject.state,
+        retainedDismissControls,
+        runtimeEvidenceArtifacts,
+      },
+      severity: "medium",
+      signalKey: "privacy.dark_pattern_dismiss_without_reject",
+      signalLabel: "Dismiss without reject",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Dismiss without reject",
+    }),
   ];
 }
 
@@ -3383,6 +3546,8 @@ export function buildNormalizedConcerns(input: {
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentNoSurfaceConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildConsentControlInventoryConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildConsentDismissWithoutRejectConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPreConsentStorageAssessmentConcerns(input.runtimeArtifacts, input.domainContext),

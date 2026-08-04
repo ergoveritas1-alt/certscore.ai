@@ -54,6 +54,22 @@ test("canonical bundle retention caps module timing breakdowns before schema val
   assert.equal(timingBreakdown[39]?.durationMs, 255);
 });
 
+test("canonical evidence rejects duplicate policy observation identities", () => {
+  const bundle = oversizedGoogleLikeBundle();
+  const privacyPolicy = bundle.policySurfaceObservations.find((observation) =>
+    observation.surfaceType === "privacy_policy"
+  );
+  assert.ok(privacyPolicy);
+
+  assert.throws(
+    () => canonicalEvidenceBundleSchema.parse({
+      ...bundle,
+      policySurfaceObservations: [privacyPolicy, { ...privacyPolicy }],
+    }),
+    /Duplicate policy surface observationId/,
+  );
+});
+
 function oversizedGoogleLikeBundle(): CanonicalEvidenceBundle {
   const startedAt = "2026-06-22T16:15:13.179Z";
   const networkEvents = Array.from({ length: 180 }, (_, index) => networkEvent(index));

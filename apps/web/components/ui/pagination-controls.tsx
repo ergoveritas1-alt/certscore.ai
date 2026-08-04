@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { Button } from "@website-signal-risk-scanner/ui";
+import { PaginationNavigationButtons } from "./pagination-navigation-buttons";
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 export const DEFAULT_PAGE_SIZE = 10;
@@ -75,6 +75,12 @@ export function PaginationControls({
   const pageStart = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
   const pageEnd = totalCount === undefined ? (visibleCount === 0 ? 0 : pageStart + visibleCount - 1) : Math.min(pageStart + visibleCount - 1, totalCount);
   const countLabel = totalCount === 0 ? `Showing 0 ${itemLabel}` : `Showing ${pageStart}-${pageEnd} of ${totalCount} ${itemLabel}`;
+  const previousHref = page > 1
+    ? buildHref({ basePath, page: page - 1, pageParamName, pageSize, perPageParamName, searchParams })
+    : null;
+  const nextHref = resolvedHasNext
+    ? buildHref({ basePath, page: page + 1, pageParamName, pageSize, perPageParamName, searchParams })
+    : null;
 
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
@@ -128,20 +134,7 @@ export function PaginationControls({
             <Button size="sm" type="submit" variant="secondary">Go</Button>
           </form>
         ) : null}
-        <Button asChild disabled={page <= 1} size="sm" variant="secondary">
-          {page <= 1 ? (
-            <span className="cursor-not-allowed text-slate-400">Previous</span>
-          ) : (
-            <Link href={buildHref({ basePath, page: page - 1, pageParamName, pageSize, perPageParamName, searchParams })} prefetch={false}>Previous</Link>
-          )}
-        </Button>
-        <Button asChild disabled={!resolvedHasNext} size="sm" variant="secondary">
-          {!resolvedHasNext ? (
-            <span className="cursor-not-allowed text-slate-400">Next</span>
-          ) : (
-            <Link href={buildHref({ basePath, page: page + 1, pageParamName, pageSize, perPageParamName, searchParams })} prefetch={false}>Next</Link>
-          )}
-        </Button>
+        <PaginationNavigationButtons nextHref={nextHref} previousHref={previousHref} />
       </div>
     </div>
   );
