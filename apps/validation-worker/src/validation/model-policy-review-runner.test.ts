@@ -7,6 +7,7 @@ import {
 import { summarizePolicyReviewArtifact } from "./model-policy-review";
 import {
   finalizeArtifactProjectionMode,
+  runConcurrentPolicyReviewJoin,
   waitForUsableStaticReview,
 } from "./model-policy-review-runner";
 
@@ -116,6 +117,30 @@ test("terminal join remains bounded and falls back when static review never beco
 
   assert.equal(result, null);
   assert.equal(loads, 3);
+});
+
+test("terminal runtime review starts while the static review is still pending", async () => {
+  let releaseStatic!: () => void;
+  const staticPending = new Promise<void>((resolve) => {
+    releaseStatic = resolve;
+  });
+  let runtimeStarted = false;
+
+  const joined = runConcurrentPolicyReviewJoin({
+    loadStatic: async () => {
+      await staticPending;
+      return "static";
+    },
+    reviewRuntime: async () => {
+      runtimeStarted = true;
+      return "runtime";
+    },
+  });
+
+  await Promise.resolve();
+  assert.equal(runtimeStarted, true);
+  releaseStatic();
+  assert.deepEqual(await joined, ["static", "runtime"]);
 });
 
 test("same-scan static review join uses the primary database connection", async () => {
