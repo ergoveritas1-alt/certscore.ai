@@ -149,6 +149,7 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("international_transfers", "standard contractual clauses for personal data transfers"),
     direct("supervisory_authority", "right to lodge a complaint with a supervisory authority"),
     direct("supervisory_authority", "lodge a complaint with a supervisory authority"),
+    equivalent("supervisory_authority", "lodge a complaint with the national supervisory authority"),
     equivalent("supervisory_authority", "right to complain to your data protection authority"),
     equivalent("supervisory_authority", "complain to your data protection authority"),
     equivalent("supervisory_authority", "lodge a complaint with an e.u. data protection authority"),

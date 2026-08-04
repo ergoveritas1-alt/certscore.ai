@@ -1178,6 +1178,16 @@ test("classifies retained publisher privacy-counsel and E.U. complaint contacts"
   assert.match(byTopic.get("supervisory_authority")?.evidenceExcerpt ?? "", /e\.u\. data protection authority/i);
 });
 
+test("classifies national supervisory-authority complaint language", () => {
+  const classification = classifyGdprTransparencyTopics({
+    text: "You can lodge a complaint with the national supervisory authority.",
+  });
+  const match = classification.matches.find((candidate) => candidate.topic === "supervisory_authority");
+  assert.equal(match?.matchedTerm, "lodge a complaint with the national supervisory authority");
+  assert.equal(match?.matchStrength, "equivalent");
+  assert.equal(match?.matchedLocale, "en");
+});
+
 test("classifies a Japanese publisher privacy policy row by row without inventing GDPR disclosures", () => {
   const result = classifyGdprTransparencyTopics({
     localeHints: ["ja"],
