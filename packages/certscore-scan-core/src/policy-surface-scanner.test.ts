@@ -18,6 +18,7 @@ import {
   boundedPrefetchedPolicyAnalysisText,
   canonicalWwwPolicyUrlVariant,
   classifyPolicyDocumentOwnership,
+  commonPathCandidatesFor,
   commonPathLocaleHintsForUnavailableHomepage,
   countRecoveredPolicySurfaceObservations,
   extractPolicyCookieDisclosures,
@@ -31,6 +32,7 @@ import {
   mergePolicySurfaceObservations,
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
   policySurfaceObservationsFromRetainedRenderedLinks,
+  prioritizePolicyCandidateEvaluation,
   retainedArticle13SectionEvidenceFromSections,
   recoverPolicyDocumentsFromRetainedRenderedLinks,
   resolvePrefetchedPolicyVisibleText,
@@ -70,6 +72,20 @@ test("homepage failure still derives common-path locale hints from the target TL
   assert.equal(
     privacySurfacePathsForLocale("sl").includes("/politika-varstva-zasebnosti-in-piskotkov"),
     true,
+  );
+});
+
+test("homepage-failed fallback schedules the primary TLD locale policy before generic guesses", () => {
+  const candidates = commonPathCandidatesFor(
+    "https://uni-lj.si/",
+    0,
+    commonPathLocaleHintsForUnavailableHomepage("https://uni-lj.si/"),
+  );
+  const ordered = prioritizePolicyCandidateEvaluation(candidates);
+
+  assert.equal(
+    ordered[0]?.normalizedUrl,
+    "https://uni-lj.si/politika-varstva-zasebnosti-in-piskotkov",
   );
 });
 

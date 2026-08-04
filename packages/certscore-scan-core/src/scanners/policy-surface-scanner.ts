@@ -1541,7 +1541,7 @@ async function processLatePrefetchedPolicyCandidates(input: {
   return results;
 }
 
-function prioritizePolicyCandidateEvaluation(
+export function prioritizePolicyCandidateEvaluation(
   rankedCandidates: PolicySurfaceCandidate[],
 ): PolicySurfaceCandidate[] {
   const seen = new Set<string>();
@@ -1551,6 +1551,7 @@ function prioritizePolicyCandidateEvaluation(
     .sort((left, right) =>
       surfacePriority(left.candidate.deterministicSurfaceType) - surfacePriority(right.candidate.deterministicSurfaceType) ||
       policyCandidateDiscoveryPriority(left.candidate) - policyCandidateDiscoveryPriority(right.candidate) ||
+      commonPathEvaluationPriority(left.candidate) - commonPathEvaluationPriority(right.candidate) ||
       policyCandidateProtectionPriority(left.candidate) - policyCandidateProtectionPriority(right.candidate) ||
       policyDocumentScopePriority(left.candidate) - policyDocumentScopePriority(right.candidate) ||
       policyCandidateQualityScore(right.candidate) - policyCandidateQualityScore(left.candidate) ||
@@ -1564,6 +1565,10 @@ function prioritizePolicyCandidateEvaluation(
       seen.add(key);
       return true;
     });
+}
+
+function commonPathEvaluationPriority(candidate: PolicySurfaceCandidate): number {
+  return isCommonPathFallbackCandidate(candidate) ? commonPathPriority(candidate) : 0;
 }
 
 function policyDocumentScopePriority(candidate: PolicySurfaceCandidate): number {
@@ -3646,7 +3651,7 @@ async function waitForRenderedPolicySurfaceCandidate(
   }).catch(() => undefined);
 }
 
-function commonPathCandidatesFor(
+export function commonPathCandidatesFor(
   baseUrl: string,
   startIndex: number,
   localeHints: SupportedPrivacyEvidenceLocale[] = [],
