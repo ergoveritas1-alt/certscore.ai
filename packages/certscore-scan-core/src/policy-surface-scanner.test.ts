@@ -4095,6 +4095,23 @@ test("retained policy sections prefer the governing controller and retain passiv
   assert.doesNotMatch(transfers?.selectedPolicySectionExcerpt ?? "", /vendor\.example/i);
 });
 
+test("retained policy sections prefer a substantive transfer sentence after a navigation heading", () => {
+  const sourceUrl = "https://www.publisher.example/privacy?intake=publisher";
+  const evidence = retainedArticle13SectionEvidenceFromSections([{
+    sourceUrl,
+    heading: "International Transfers",
+    textExcerpt: "International Transfers. Privacy Policy. We may transfer your information to related companies, service providers, and other third parties located outside of your country of residence, including in the United States. Data privacy laws vary from country to country, and we use reasonable safeguards and data transfer agreements.",
+    charStart: 40_000,
+    charEnd: 40_340,
+    quality: "strong",
+  }], sourceUrl);
+  const transfer = evidence.find((row) => row.coverageArea === "international_transfers");
+
+  assert.equal(transfer?.signalObserved, "observed", JSON.stringify(transfer));
+  assert.equal(transfer?.selectedEvidenceStrength, "strong");
+  assert.match(transfer?.selectedPolicySectionExcerpt ?? "", /transfer your information.*outside of your country of residence/i);
+});
+
 test("retained US-policy sections confirm direct recipients, transfers, controller contact, and privacy contact without inventing a DPO", () => {
   const sourceUrl = "https://studio.example/privacy";
   const evidence = retainedArticle13SectionEvidenceFromSections([

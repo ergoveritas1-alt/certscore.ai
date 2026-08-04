@@ -1152,6 +1152,19 @@ test("matches Japanese and Chinese policy phrases without whitespace and preserv
   }
 });
 
+test("classifies a possessive data-protection-authority complaint right", () => {
+  const result = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "Depending on where you live, you may have the right to complain to your data protection authority.",
+  });
+  const match = result.matches.find((candidate) => candidate.topic === "supervisory_authority");
+
+  assert.ok(match);
+  assert.equal(match.matchedLocale, "en");
+  assert.equal(match.matchStrength, "equivalent");
+  assert.match(match.evidenceExcerpt, /complain to your data protection authority/i);
+});
+
 test("classifies a Japanese publisher privacy policy row by row without inventing GDPR disclosures", () => {
   const result = classifyGdprTransparencyTopics({
     localeHints: ["ja"],
