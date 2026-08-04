@@ -3,9 +3,11 @@ import test from "node:test";
 import type { ConsentUiObservation } from "@certscore/contracts";
 import type { Page } from "playwright";
 import {
+  canMarkSettledConsentInventoryCompleted,
   detectConsentUi,
   reconcileConsentUiRecapture,
   reconcilePostSettleConsentUiObservation,
+  shouldRunImmediateStructuredConsentRecovery,
   shouldCaptureSettledPreConsentScreenshot,
   shouldRecaptureConsentUiAfterTimeout,
 } from "./scanners/pre-consent-runtime-scanner.js";
@@ -142,6 +144,45 @@ test("incomplete post-settle inventory cannot promote an early empty inventory t
 
   assert.equal(result.basis.includes("settled_control_inventory_completed"), false);
   assert.equal(result.basis.includes("recapture:post_settle_inventory_incomplete"), true);
+});
+
+test("rapid DOM timeout triggers immediate structured recovery", () => {
+  assert.equal(shouldRunImmediateStructuredConsentRecovery(observation({
+    captureStatus: "incomplete",
+    captureDiagnostics: {
+      completedChannels: [],
+      timedOutChannels: ["dom_inventory"],
+      failedChannels: [],
+    },
+    basis: ["inventory:rapid_dom_timed_out"],
+  })), true);
+});
+
+test("a completed accessibility inventory closes a timed-out rapid DOM channel", () => {
+  assert.equal(shouldRunImmediateStructuredConsentRecovery(observation({
+    captureStatus: "no_evidence",
+    captureDiagnostics: {
+      completedChannels: ["accessibility_tree"],
+      timedOutChannels: ["dom_inventory"],
+      failedChannels: [],
+    },
+    basis: ["inventory:rapid_dom_timed_out", "inventory:accessibility_tree"],
+  })), false);
+});
+
+test("an early completed channel cannot mask an incomplete post-settle inventory", () => {
+  assert.equal(canMarkSettledConsentInventoryCompleted(observation({
+    captureStatus: "no_evidence",
+    captureDiagnostics: {
+      completedChannels: ["accessibility_tree"],
+      timedOutChannels: ["dom_inventory"],
+      failedChannels: [],
+    },
+    basis: [
+      "inventory:accessibility_tree",
+      "recapture:post_settle_inventory_incomplete",
+    ],
+  })), false);
 });
 
 test("a newly retained options control strengthens an existing accept and reject inventory", () => {

@@ -1434,12 +1434,7 @@ export async function preConsentRuntimeScanner(
     // A page with no consent-language keywords may not trigger either
     // recapture path. Preserve that the bounded control inventory completed so
     // a clean absence is not downgraded to incomplete coverage.
-    if (
-      !consentObservation.basis.includes("settled_control_inventory_completed") &&
-      !consentObservation.basis.includes("bounded_capture_timeout_or_failure") &&
-      !consentObservation.basis.includes("inventory:probe_failed") &&
-      !consentObservation.basis.includes("geometry_capture_unavailable")
-    ) {
+    if (canMarkSettledConsentInventoryCompleted(consentObservation)) {
       consentObservation = annotateConsentUiObservation(
         consentObservation,
         "settled_control_inventory_completed",
@@ -2830,8 +2825,37 @@ function emptyConsentUiObservation(scanStartedAtMs: number, documentUrl: string)
 }
 
 function isIncompleteConsentUiCapture(observation: ConsentUiObservation): boolean {
-  return observation.basis.includes("bounded_capture_timeout_or_failure") ||
-    observation.basis.includes("inventory:probe_failed");
+  const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
+  const timedOutChannels = observation.captureDiagnostics?.timedOutChannels ?? [];
+  const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
+  const completedTypedInventory = completedChannels.some((channel) =>
+    channel === "dom_inventory" || channel === "accessibility_tree"
+  );
+  const typedInventoryIncomplete = !completedTypedInventory && (
+    timedOutChannels.some((channel) => channel === "dom_inventory" || channel === "accessibility_tree") ||
+    failedChannels.some((channel) => channel === "dom_inventory" || channel === "accessibility_tree")
+  );
+
+  const retainedIncompleteBasis = observation.basis.some((basis) =>
+    basis === "bounded_capture_timeout_or_failure" ||
+    basis === "inventory:probe_failed" ||
+    basis === "inventory:rapid_dom_timed_out" ||
+    basis === "inventory:rapid_dom_failed" ||
+    basis === "recapture:post_settle_inventory_incomplete"
+  );
+
+  return (observation.captureStatus === "incomplete" && !completedTypedInventory) ||
+    typedInventoryIncomplete ||
+    (!completedTypedInventory && retainedIncompleteBasis);
+}
+
+export function canMarkSettledConsentInventoryCompleted(
+  observation: ConsentUiObservation,
+): boolean {
+  return !observation.basis.includes("settled_control_inventory_completed") &&
+    !observation.basis.includes("recapture:post_settle_inventory_incomplete") &&
+    !observation.basis.includes("geometry_capture_unavailable") &&
+    !isIncompleteConsentUiCapture(observation);
 }
 
 export function shouldRunImmediateStructuredConsentRecovery(
