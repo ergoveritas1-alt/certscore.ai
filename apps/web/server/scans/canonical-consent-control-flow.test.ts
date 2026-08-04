@@ -301,6 +301,67 @@ test("completed empty first-layer inventory projects factual A/R/O absence and a
   assert.equal(getEvidenceLabel(byId("reject_all_path_availability")), "Partial concern");
 });
 
+test("completed no-evidence inventory stays binary through assessment, concern policy, and checklist", () => {
+  const packet = retainedEvidencePacket({ firstLayerControls: [] });
+  packet.consentUiObservations[0]!.captureStatus = "no_evidence";
+  packet.consentUiObservations[0]!.likelyPresent = false;
+  packet.consentUiObservations[0]!.basis = ["settled_control_inventory_completed"];
+  packet.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: packet,
+    consentControlGeometryEvidence: null,
+    consentSurfaceInspection: {
+      actionableControlObserved: false,
+      consentSurfaceObserved: false,
+      coverageStatus: "limited",
+      evidenceChannels: [{ channel: "page_script_inventory", status: "observed" }],
+      inspectionCompleted: false,
+      limitationKeys: ["network_cmp_inspection_incomplete"],
+      observedAtMs: 1_000,
+      outcome: "inspection_incomplete",
+    },
+    finalUrl: GENERIC_URL,
+    noGo: false,
+    requestedUrl: GENERIC_URL,
+  });
+  const runtimeArtifacts = withPersistedFirstLayerConsentEvidence(
+    { consentControlAssessment: assessment },
+    { consent_control_assessment: assessment },
+  );
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: [],
+  });
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    normalizedConcerns,
+    runtimeArtifacts,
+    scanCompleted: true,
+    snapshot: { cookie_banner_present: false },
+  });
+  const checklist = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+  const statusFor = (id: string) => checklist.find((row) => row.id === id)?.status;
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.surface.status, "not_observed");
+  assert.ok(normalizedConcerns.some((concern) =>
+    concern.originKey === "consent.operational_surface.not_observed"
+  ));
+  assert.equal(statusFor("accept_consent_control"), "Not observed");
+  assert.equal(statusFor("reject_all_path_availability"), "Not observed");
+  assert.equal(statusFor("options_settings_preferences_control"), "Not observed");
+});
+
 test("canonical consent-control flow preserves site-agnostic prominence and absence semantics", () => {
   const cases = [
     {

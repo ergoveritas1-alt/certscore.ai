@@ -193,7 +193,18 @@ export function deriveMaterializedConsentControlAssessment(input: {
       snapshot.documentId !== null
     )
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs);
-  const typedFirstLayerInventoryObservation = (input.bundle.consentUiObservations ?? []).find((observation) => {
+  const retainedVisualDocumentArtifacts = (input.bundle.screenshots ?? [])
+    .map((screenshot) => ({
+      capturedAtMs: screenshot.capturedAtMs,
+      documentId: normalizedDocumentId(screenshot.url),
+    }))
+    .filter((artifact): artifact is { capturedAtMs: number; documentId: string } =>
+      artifact.documentId !== null
+    )
+    .sort((left, right) => left.capturedAtMs - right.capturedAtMs);
+  const isCompletedTypedFirstLayerInventory = (
+    observation: CanonicalEvidenceBundle["consentUiObservations"][number],
+  ) => {
     const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
     const timedOutChannels = observation.captureDiagnostics?.timedOutChannels ?? [];
     const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
@@ -212,52 +223,69 @@ export function deriveMaterializedConsentControlAssessment(input: {
     const completedEmptyFirstLayerInventory =
       observation.controls.length === 0 &&
       (observation.basis ?? []).includes("settled_control_inventory_completed") &&
-      timedOutChannels.length === 0 &&
-      failedChannels.length === 0;
-    return observation.captureStatus === "observed" &&
+      completedTypedChannel;
+    const completedPositiveFirstLayerInventory =
+      observation.captureStatus === "observed" &&
       observation.likelyPresent === true &&
-      (observation.layerInspected === "first_layer" || completedEmptyFirstLayerInventory) &&
-      (completedTypedChannel || legacyTypedChannelComplete) &&
-      observation.controls.every((control) =>
-        control.visible === true &&
-        (
-          control.actionType !== "other" ||
-          control.semanticRole === "dismiss" ||
-          retainedControlVariant(control.classifierReasonCodes) !== null
-        ) &&
-        (control.layer ?? observation.layerInspected) === "first_layer"
-      );
-  });
-  const hasTypedFirstLayerInventory = Boolean(typedFirstLayerInventoryObservation);
+      observation.layerInspected === "first_layer" &&
+      observation.controls.length > 0 &&
+      (completedTypedChannel || legacyTypedChannelComplete);
+    return (
+      completedPositiveFirstLayerInventory ||
+      (
+        completedEmptyFirstLayerInventory &&
+        (observation.captureStatus === "observed" || observation.captureStatus === "no_evidence")
+      )
+    ) && observation.controls.every((control) =>
+      control.visible === true &&
+      (
+        control.actionType !== "other" ||
+        control.semanticRole === "dismiss" ||
+        retainedControlVariant(control.classifierReasonCodes) !== null
+      ) &&
+      (control.layer ?? observation.layerInspected) === "first_layer"
+    );
+  };
+  const typedFirstLayerInventoryIndexes = (input.bundle.consentUiObservations ?? [])
+    .map((observation, index) => ({ index, observation }))
+    .filter(({ observation }) => isCompletedTypedFirstLayerInventory(observation))
+    .sort((left, right) => observationTimestamp(right.observation) - observationTimestamp(left.observation))
+    .map(({ index }) => index);
+  const hasTypedFirstLayerInventory = typedFirstLayerInventoryIndexes.length > 0;
   // A consent UI observation can be retained without a DOM snapshot. When
   // every retained pre-consent visual artifact points at the same document,
   // use that URL only to bind the already-typed control inventory to the
   // redirected document. Do not classify controls from the screenshot.
-  const retainedVisualDocumentIds = hasTypedFirstLayerInventory ? unique((input.bundle.screenshots ?? [])
-    .map((screenshot) => normalizedDocumentId(screenshot.url))
-    .filter((value): value is string => Boolean(value))) : [];
+  const retainedVisualDocumentIds = hasTypedFirstLayerInventory
+    ? unique(retainedVisualDocumentArtifacts.map((artifact) => artifact.documentId))
+    : [];
   const singleRetainedVisualDocumentId = retainedVisualDocumentIds.length === 1
     ? retainedVisualDocumentIds[0] ?? null
     : null;
   const geometry = geometryInput(input.consentControlGeometryEvidence, canonicalDocumentId);
   const observations: ConsentControlAssessmentInput["observations"] = (input.bundle.consentUiObservations ?? []).map((observation) => {
+    const explicitObservationDocumentUrlRetained = typeof observation.documentUrl === "string";
+    const explicitObservationDocumentId = normalizedDocumentId(observation.documentUrl);
+    const closestPriorDocumentArtifact = [
+      ...retainedDocumentSnapshots,
+      ...retainedVisualDocumentArtifacts,
+    ]
+      .filter((artifact) => artifact.capturedAtMs <= observationTimestamp(observation))
+      .sort((left, right) => left.capturedAtMs - right.capturedAtMs)
+      .at(-1)?.documentId ?? null;
     const observationDocumentId =
-      retainedDocumentSnapshots
-        .filter((snapshot) => snapshot.capturedAtMs <= observationTimestamp(observation))
-        .at(-1)?.documentId ??
-      (retainedDocumentSnapshots.length === 1 ? retainedDocumentSnapshots[0]?.documentId : null) ??
-      singleRetainedVisualDocumentId ??
-      null;
+      explicitObservationDocumentUrlRetained
+        ? explicitObservationDocumentId
+        : singleRetainedVisualDocumentId ??
+          closestPriorDocumentArtifact ??
+          (retainedDocumentSnapshots.length === 1 ? retainedDocumentSnapshots[0]?.documentId : null) ??
+          null;
     const completedEmptyFirstLayerInventory =
-      observation.captureStatus === "observed" &&
-      observation.likelyPresent === true &&
       observation.controls.length === 0 &&
       (observation.basis ?? []).includes("settled_control_inventory_completed") &&
       (observation.captureDiagnostics?.completedChannels ?? []).some((channel) =>
         channel === "dom_inventory" || channel === "accessibility_tree"
-      ) &&
-      (observation.captureDiagnostics?.timedOutChannels.length ?? 0) === 0 &&
-      (observation.captureDiagnostics?.failedChannels.length ?? 0) === 0;
+      );
     const retainedLayer = observation.layerInspected === "first_layer" || completedEmptyFirstLayerInventory
       ? "first_layer" as const
       : observation.layerInspected;
@@ -326,10 +354,29 @@ export function deriveMaterializedConsentControlAssessment(input: {
       }),
     };
   });
+  const typedFirstLayerInventoryIndex =
+    typedFirstLayerInventoryIndexes.find((index) =>
+      Boolean(canonicalDocumentId && observations[index]?.documentId === canonicalDocumentId)
+    ) ??
+    typedFirstLayerInventoryIndexes[0] ??
+    null;
+  const typedFirstLayerInventoryObservation = typedFirstLayerInventoryIndex === null
+    ? null
+    : input.bundle.consentUiObservations[typedFirstLayerInventoryIndex] ?? null;
+  const typedFirstLayerProjectedObservation = typedFirstLayerInventoryIndex === null
+    ? null
+    : observations[typedFirstLayerInventoryIndex] ?? null;
+  // Once a completed inventory is explicitly attributable to the canonical
+  // final document, earlier redirect-document observations are historical
+  // context, not contradictory evidence about the final page.
+  const assessmentObservations =
+    canonicalDocumentId && typedFirstLayerProjectedObservation?.documentId === canonicalDocumentId
+      ? observations.filter((observation) => observation.documentId === canonicalDocumentId)
+      : observations;
   const inspection = input.consentSurfaceInspection ?? input.bundle.consentSurfaceInspection ?? null;
   const inspectionChannels = inspection?.evidenceChannels ?? [];
   const completedChannels = unique([
-    ...observations.flatMap((observation) => observation.completedChannels ?? []),
+    ...assessmentObservations.flatMap((observation) => observation.completedChannels ?? []),
     ...inspectionChannels
       .filter((channel) => channel.status === "observed")
       .map((channel) => inspectionChannel(channel.channel))
@@ -337,7 +384,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
     ...(geometry?.assessmentStatus === "complete" ? ["geometry" as const] : []),
   ]);
   const incompleteChannels = unique([
-    ...observations.flatMap((observation) => observation.incompleteChannels ?? []),
+    ...assessmentObservations.flatMap((observation) => observation.incompleteChannels ?? []),
     ...inspectionChannels
       .filter((channel) => channel.status === "inspection_incomplete")
       .map((channel) => inspectionChannel(channel.channel))
@@ -345,9 +392,16 @@ export function deriveMaterializedConsentControlAssessment(input: {
     ...(geometry?.assessmentStatus === "incomplete" ? ["geometry" as const] : []),
   ]);
   const observedDocumentIds = unique([
-    ...retainedDocumentSnapshots.map((snapshot) => snapshot.documentId),
-    ...retainedVisualDocumentIds,
-    ...observations.map((observation) => observation.documentId).filter((value): value is string => Boolean(value)),
+    ...assessmentObservations
+      .filter((observation) =>
+        observation.controls.length > 0 ||
+        (
+          observation.observationId === typedFirstLayerProjectedObservation?.observationId &&
+          observation.observedAtMs === typedFirstLayerProjectedObservation.observedAtMs
+        )
+      )
+      .map((observation) => observation.documentId)
+      .filter((value): value is string => Boolean(value)),
     // An incomplete geometry diagnostic can retain the requested page URL
     // without retaining any control evidence. It must not make a separately
     // typed first-layer inventory look cross-document.
@@ -395,6 +449,14 @@ export function deriveMaterializedConsentControlAssessment(input: {
         ? "observed_non_actionable"
         : inspection?.outcome === "no_surface_observed_complete_coverage"
           ? "not_observed"
+          : typedFirstLayerInventoryComplete && (typedFirstLayerInventoryObservation?.controls.length ?? 0) > 0
+            ? "observed_actionable"
+            : typedFirstLayerInventoryComplete && typedFirstLayerInventoryObservation?.likelyPresent === true
+              ? "observed_non_actionable"
+              : typedFirstLayerInventoryComplete &&
+                  typedFirstLayerInventoryObservation?.captureStatus === "no_evidence" &&
+                  typedFirstLayerInventoryObservation.likelyPresent === false
+                ? "not_observed"
           : "unknown";
 
   return deriveConsentControlAssessment({
@@ -411,7 +473,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       observedDocumentIds,
       identityStatus: documentIdentityStatus,
     },
-    observations,
+    observations: assessmentObservations,
     geometry,
     surface: {
       status: surfaceStatus,

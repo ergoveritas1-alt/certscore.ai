@@ -625,6 +625,7 @@ export async function preConsentRuntimeScanner(
   let retainedCookieSnapshot: CookieSnapshot | undefined;
   let retainedStorageSnapshot: StorageSnapshot | undefined;
   let retainedConsentUiObservation: ConsentUiObservation | undefined;
+  let consentUiInspectionAttempted = false;
   let retainedCollectionSurfaceObservations: CollectionSurfaceObservation[] = [];
   let retainedCmpRuntimeObservations: CmpRuntimeObservation[] = [];
   let retainedTransportSecurityObservation: TransportSecurityObservation | undefined;
@@ -644,9 +645,22 @@ export async function preConsentRuntimeScanner(
     const errorMessage = deadlineReason instanceof Error
       ? deadlineReason.message
       : "Pre-consent runtime reached its module deadline.";
+    const deadlineConsentUiObservation = consentUiInspectionAttempted &&
+        !retainedConsentUiObservation &&
+        fallbackConsentUiObservations.length === 0
+      ? annotateConsentUiObservation(
+          emptyConsentUiObservation(
+            input.scanStartedAtMs,
+            safePageUrl(page, effectiveNavigationUrl),
+          ),
+          "pre_consent_soft_deadline_before_observation_retained",
+        )
+      : undefined;
     const retainedConsentUiObservations = retainedConsentUiObservation
       ? [retainedConsentUiObservation, ...fallbackConsentUiObservations]
-      : [...fallbackConsentUiObservations];
+      : deadlineConsentUiObservation
+        ? [deadlineConsentUiObservation]
+        : [...fallbackConsentUiObservations];
     const retainedEvidence =
       networkEvents.length > 0 ||
       networkResponseEvents.length > 0 ||
@@ -951,9 +965,6 @@ export async function preConsentRuntimeScanner(
     // bounded but realistic native-inventory window in fast Lambda runs;
     // evidence quality is more important than shaving a few seconds here.
     const consentUiCaptureTimeoutMs = fastWait ? 7_000 : 8_000;
-    const directCmpNetworkEvidenceAtInitialCapture = hasHighConfidenceDirectCmpRuntimeEvidence(
-      buildCmpRuntimeObservations(vendorResolverInputs, input.scanStartedAtMs),
-    );
     const earlyScreenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
     // Start the first visual capture before consent inspection. A slow CMP
     // probe must never prevent us from retaining the page a visitor saw.
@@ -969,21 +980,29 @@ export async function preConsentRuntimeScanner(
         }),
       )
       : null;
-    const captureInitialConsentUiObservation = () => recordBoundedTiming(
-      timingBreakdown,
-      "page evidence: consent UI",
-      "First-layer consent surface/control inventory captured immediately after the retained viewport screenshot, avoiding CDP screenshot/inventory contention.",
-      consentUiCaptureTimeoutMs,
-      () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs, {
-        deferBrowserProbeUntilCmpOrScreenshot: directCmpNetworkEvidenceAtInitialCapture,
-        returnAfterRapidAndCheapSnapshot: true,
-        waitForCompleteChoiceControls: true,
-      }),
-      () => emptyConsentUiObservation(input.scanStartedAtMs),
-    );
-    const consentUiObservationPromise = earlyScreenshotCapturePromise
+    const captureInitialConsentUiObservation = () => {
+      consentUiInspectionAttempted = true;
+      return recordBoundedTiming(
+        timingBreakdown,
+        "page evidence: consent UI",
+        "First-layer consent surface/control inventory captured immediately after the retained viewport screenshot, avoiding CDP screenshot/inventory contention.",
+        consentUiCaptureTimeoutMs,
+        () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs, {
+          returnAfterRapidSnapshot: true,
+          waitForCompleteChoiceControls: true,
+        }),
+        () => emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
+      );
+    };
+    const consentUiObservationPromise = (earlyScreenshotCapturePromise
       ? earlyScreenshotCapturePromise.then(captureInitialConsentUiObservation)
-      : captureInitialConsentUiObservation();
+      : captureInitialConsentUiObservation()).then((observation) => {
+        // Retain the first typed result at the moment it settles. Subsequent
+        // passive CMP waits can consume the module budget, but must not leave
+        // the final evidence packet without the observation already obtained.
+        retainedConsentUiObservation = observation;
+        return observation;
+      });
     const networkIdlePromise = recordTiming(
       timingBreakdown,
       "network idle wait",
@@ -1231,6 +1250,7 @@ export async function preConsentRuntimeScanner(
     ) {
       consentObservation = buildConsentUiObservationFromEvidence({
         scanStartedAtMs: input.scanStartedAtMs,
+        documentUrl: page.url(),
         text: domText,
         controls: [],
         fallbackBasis: ["bounded_capture_timeout_or_failure", "dom_text_fallback_after_consent_ui_timeout"],
@@ -2676,10 +2696,11 @@ function emptyStorageSnapshot(scanStartedAtMs: number, url: string): StorageSnap
   };
 }
 
-function emptyConsentUiObservation(scanStartedAtMs: number): ConsentUiObservation {
+function emptyConsentUiObservation(scanStartedAtMs: number, documentUrl: string): ConsentUiObservation {
   return {
     observationId: "consent_ui_pre_consent",
     observedAtMs: elapsed(scanStartedAtMs),
+    documentUrl,
     captureStatus: "incomplete",
     captureDiagnostics: {
       completedChannels: [],
@@ -4063,32 +4084,14 @@ export async function detectConsentUi(
     accessibilityOnly?: boolean;
     accessibilityTimeoutMs?: number;
     allowFullDocumentCmpControls?: boolean;
-    deferBrowserProbeUntilCmpOrScreenshot?: boolean;
     rapidInventoryTimeoutMs?: number;
     waitForActionableChoiceControls?: boolean;
     waitForCompleteChoiceControls?: boolean;
     waitForControlsOnTextOnlySurface?: boolean;
     returnAfterCheapNoEvidence?: boolean;
-    returnAfterRapidAndCheapSnapshot?: boolean;
+    returnAfterRapidSnapshot?: boolean;
   } = {},
 ): Promise<ConsentUiObservation> {
-  if (options.deferBrowserProbeUntilCmpOrScreenshot === true) {
-    const deferredObservation = emptyConsentUiObservation(scanStartedAtMs);
-    return {
-      ...deferredObservation,
-      basis: ["browser_probe_deferred_until_cmp_or_screenshot"],
-      confidence: 0.2,
-      inventoryDiagnostics: {
-        candidateContainerCount: 0,
-        candidateControlCount: 0,
-        retainedControlCount: 0,
-        inventorySources: [],
-        candidateLabels: [],
-        rejectionReasons: [],
-        timingMarkers: ["browser_probe_deferred_until_cmp_or_screenshot"],
-      },
-    };
-  }
   if (options.accessibilityOnly === true) {
     const accessibilityInventory = await readAccessibilityConsentInventory(
       page,
@@ -4098,6 +4101,7 @@ export async function detectConsentUi(
       consentUiObservationFromAccessibilityInventory(
         accessibilityInventory,
         scanStartedAtMs,
+        page.url(),
       ),
       ["accessibility_tree_bounded_retry"],
     );
@@ -4128,6 +4132,23 @@ export async function detectConsentUi(
     ]);
   }
 
+  if (
+    options.returnAfterRapidSnapshot === true &&
+    !rapidInventoryHasPotentialToggle
+  ) {
+    // The initial capture is deliberately bounded to the rapid DOM channel.
+    // A completed empty inventory remains factual, while an incomplete
+    // inventory is returned immediately and remains unknown. Post-settle DOM
+    // text and later recovery passes retain the slower semantic channels
+    // without promoting generic page text into an initial consent surface.
+    return annotateConsentInventoryTimingMarkers(
+      rapidObservation,
+      rapidObservation.controls.length > 0
+        ? ["rapid_snapshot", "early_exit_controls_found"]
+        : ["rapid_snapshot"],
+    );
+  }
+
   // Accessibility remains an independent fallback and augmentation channel.
   // Its timeout is bounded so a post-accessibility rapid retry still has an
   // opportunity to inspect the rendered document.
@@ -4138,6 +4159,7 @@ export async function detectConsentUi(
   const earlyAccessibilityObservation = consentUiObservationFromAccessibilityInventory(
     earlyAccessibilityInventory,
     scanStartedAtMs,
+    page.url(),
   );
   let earlyChannelObservation = mergeConsentUiObservations(
     earlyAccessibilityObservation,
@@ -4191,25 +4213,6 @@ export async function detectConsentUi(
   const cheapTextObservation = earlyChannelObservation.controls.length === 0
     ? await readCheapConsentTextObservation(page, scanStartedAtMs)
     : undefined;
-  if (
-    options.returnAfterRapidAndCheapSnapshot === true &&
-    !rapidInventoryHasPotentialToggle &&
-    earlyChannelObservation.controls.length > 0
-  ) {
-    const rapidAndCheapObservation = cheapTextObservation
-      ? mergeConsentUiObservations(
-          cheapTextObservation,
-          earlyChannelObservation,
-          "inventory:rapid_first_layer_snapshot",
-        )
-      : earlyChannelObservation;
-    return annotateConsentInventoryTimingMarkers(
-      rapidAndCheapObservation,
-      rapidAndCheapObservation.controls.length > 0
-        ? ["rapid_cheap_snapshot", "early_exit_controls_found"]
-        : ["rapid_cheap_snapshot"],
-    );
-  }
   const immediateDomObservation = earlyChannelObservation.controls.length > 0 || cheapTextObservation?.likelyPresent
     ? await readConsentUiObservation(page, scanStartedAtMs, {
         allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
@@ -4371,6 +4374,7 @@ async function readCheapConsentTextObservation(
   ).catch(() => "");
   const observation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
+    documentUrl: page.url(),
     text,
     controls: [],
     fallbackBasis: ["inventory:cheap_text_prefilter"],
@@ -4493,6 +4497,7 @@ async function readDirectCmpSemanticConsentUiObservation(
   });
   return buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
+    documentUrl: page.url(),
     text: snapshot.controls.map((control) => control.label).join(" "),
     controls,
     fallbackBasis: controls.length > 0 ? ["inventory:direct_cmp_semantic_controls"] : [],
@@ -4544,7 +4549,7 @@ export async function readRapidFirstLayerConsentUiObservation(
       new Promise<ConsentUiObservation>((resolve) => {
         timer = setTimeout(() => {
           resolve({
-            ...emptyConsentUiObservation(scanStartedAtMs),
+            ...emptyConsentUiObservation(scanStartedAtMs, page.url()),
             captureDiagnostics: {
               completedChannels: [],
               timedOutChannels: ["dom_inventory"],
@@ -4566,7 +4571,7 @@ export async function readRapidFirstLayerConsentUiObservation(
     ]);
   } catch {
     return {
-      ...emptyConsentUiObservation(scanStartedAtMs),
+      ...emptyConsentUiObservation(scanStartedAtMs, page.url()),
       captureDiagnostics: {
         completedChannels: [],
         timedOutChannels: [],
@@ -4771,7 +4776,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   })()`).then(() => true).catch(() => false);
   if (!installed) {
     return {
-      ...emptyConsentUiObservation(scanStartedAtMs),
+      ...emptyConsentUiObservation(scanStartedAtMs, page.url()),
       captureDiagnostics: {
         completedChannels: [],
         timedOutChannels: [],
@@ -4840,6 +4845,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   });
   const observation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
+    documentUrl: page.url(),
     text: snapshot.contextText,
     controls,
     fallbackBasis: controls.length > 0 ? ["inventory:rapid_first_layer_controls"] : [],
@@ -5107,6 +5113,7 @@ async function readConsentUiObservation(
   };
   const observation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
+    documentUrl: page.url(),
     text: combinedText,
     controls: enrichedControls,
     defaultToggleEvidence,
@@ -5656,6 +5663,7 @@ async function filterAccessibilityTreeToFirstLayer(
 function consentUiObservationFromAccessibilityInventory(
   inventory: AccessibilityConsentInventory,
   scanStartedAtMs: number,
+  documentUrl: string,
 ): ConsentUiObservation {
   const contextText = inventory.textExcerpts.join(" ").slice(0, 12_000);
   const classifiedControls = inventory.controls.flatMap((control) => {
@@ -5701,6 +5709,7 @@ function consentUiObservationFromAccessibilityInventory(
   });
   const observation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
+    documentUrl,
     text: contextText,
     controls,
     fallbackBasis: [
@@ -6461,12 +6470,13 @@ function isPaidDeclineVariant(variant: string | null | undefined): boolean {
 function buildConsentUiObservationFromEvidence(input: {
   controls: ConsentUiObservation["controls"];
   defaultToggleEvidence?: ConsentDefaultToggleEvidence;
+  documentUrl: string;
   fallbackBasis?: string[];
   inventoryDiagnostics?: ConsentUiObservation["inventoryDiagnostics"];
   scanStartedAtMs: number;
   text: string;
 }): ConsentUiObservation {
-  const { controls, defaultToggleEvidence, fallbackBasis = [], inventoryDiagnostics, scanStartedAtMs, text } = input;
+  const { controls, defaultToggleEvidence, documentUrl, fallbackBasis = [], inventoryDiagnostics, scanStartedAtMs, text } = input;
   const canonicalSurfaceText = classifyConsentSurfaceText({ text });
   const visibleChoiceLabels = controls.map((control) => control.label);
   const acceptControlObserved = controls.some((control) => control.actionType === "accept_all");
@@ -6487,6 +6497,7 @@ function buildConsentUiObservationFromEvidence(input: {
   return {
     observationId: "consent_ui_pre_consent",
     observedAtMs: elapsed(scanStartedAtMs),
+    documentUrl,
     captureStatus: incomplete ? "incomplete" : likelyPresent ? "observed" : "no_evidence",
     captureDiagnostics: {
       completedChannels: inventoryDiagnostics?.inventorySources?.includes("accessibility_tree")
@@ -6771,7 +6782,7 @@ function isStrongerConsentUiObservation(
   return !current.likelyPresent && candidate.likelyPresent;
 }
 
-function mergeConsentUiObservations(
+export function mergeConsentUiObservations(
   current: ConsentUiObservation,
   candidate: ConsentUiObservation,
   basis: string,
@@ -6797,10 +6808,16 @@ function mergeConsentUiObservations(
     ...(current.captureDiagnostics?.failedChannels ?? []),
     ...(candidate.captureDiagnostics?.failedChannels ?? []),
   ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["failedChannels"];
+  const completedTypedInventoryRetained = completedChannels.some((channel) =>
+    channel === "dom_inventory" || channel === "accessibility_tree"
+  );
   return {
     ...candidate,
     captureStatus: current.captureStatus === "observed" || candidate.captureStatus === "observed"
       ? "observed"
+      : completedTypedInventoryRetained &&
+          (current.captureStatus === "no_evidence" || candidate.captureStatus === "no_evidence")
+        ? "no_evidence"
       : current.captureStatus === "incomplete" || candidate.captureStatus === "incomplete"
         ? "incomplete"
         : candidate.captureStatus ?? current.captureStatus,
@@ -9014,6 +9031,7 @@ export function consentUiObservationFromConfirmedGeometryControls(input: {
 
   const observation = buildConsentUiObservationFromEvidence({
     controls,
+    documentUrl: input.geometry.pageUrl,
     fallbackBasis: ["geometry:confirmed_first_layer_controls"],
     scanStartedAtMs: input.scanStartedAtMs,
     text: [

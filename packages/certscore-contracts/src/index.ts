@@ -442,6 +442,10 @@ export const iframeEventSchema = runtimeEvidenceEventSchema.extend({
 export const consentUiObservationSchema = z.object({
   observationId: z.string(),
   observedAtMs: z.number().int().nonnegative(),
+  // Main-frame document that produced this observation. New scanner output
+  // should always retain it so ordinary redirects cannot detach typed
+  // controls from the document on which they were actually observed.
+  documentUrl: z.string().max(500).optional(),
   // Explicitly distinguishes a completed negative from an incomplete capture.
   // Older bundles may omit these fields and continue using basis/timing data.
   captureStatus: z.enum(["observed", "no_evidence", "incomplete"]).optional(),

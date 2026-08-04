@@ -7,6 +7,7 @@ import test from "node:test";
 import { createArtifactWriter } from "./artifact-writer.js";
 import type { ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 import {
+  mergeConsentUiObservations,
   preConsentRuntimeScanner,
   reconcileConsentUiObservationWithCompletedGeometry,
 } from "./scanners/pre-consent-runtime-scanner.js";
@@ -66,6 +67,48 @@ const rapidOxfamStyleObservation = {
   evidenceRefs: [],
   confidence: 0.86,
 };
+
+test("completed DOM negative survives an independent accessibility failure", () => {
+  const domNegative = {
+    ...rapidOxfamStyleObservation,
+    documentUrl: "https://inventory.example/",
+    captureStatus: "no_evidence" as const,
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory" as const],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    likelyPresent: false,
+    basis: ["settled_control_inventory_completed"],
+    textExcerpt: "",
+    visibleChoiceLabels: [],
+    acceptControlObserved: false,
+    rejectControlObserved: false,
+    managePreferencesControlObserved: false,
+    controls: [],
+  };
+  const accessibilityFailure = {
+    ...domNegative,
+    captureStatus: "incomplete" as const,
+    captureDiagnostics: {
+      completedChannels: [],
+      timedOutChannels: [],
+      failedChannels: ["accessibility_tree" as const],
+    },
+    basis: ["inventory:accessibility_tree_failed"],
+  };
+
+  const merged = mergeConsentUiObservations(
+    domNegative,
+    accessibilityFailure,
+    "inventory:independent_channels",
+  );
+
+  assert.equal(merged.captureStatus, "no_evidence");
+  assert.deepEqual(merged.captureDiagnostics?.completedChannels, ["dom_inventory"]);
+  assert.deepEqual(merged.captureDiagnostics?.failedChannels, ["accessibility_tree"]);
+  assert.ok(merged.basis.includes("settled_control_inventory_completed"));
+});
 
 function oxfamStyleGeometry(): ConsentControlGeometryArtifact {
   return {
@@ -196,6 +239,7 @@ test("non-rendered script consent words do not create a visible consent surface"
 
     const observation = result.consentUiObservations[0];
     assert.ok(observation);
+    assert.equal(observation.documentUrl, server.url);
     assert.equal(observation.likelyPresent, false);
     assert.equal(observation.controls.length, 0);
     assert.equal(observation.acceptControlObserved, false);

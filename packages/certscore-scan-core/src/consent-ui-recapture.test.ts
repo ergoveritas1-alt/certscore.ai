@@ -151,6 +151,7 @@ test("rapid DOM inventory retains complete first-layer controls before accessibi
       accessibilityAttempted = true;
       throw new Error("accessibility should not be attempted after complete rapid evidence");
     },
+    url: () => "https://example.test/",
   } as unknown as Page;
 
   const result = await detectConsentUi(page, Date.now(), 0, {
@@ -167,6 +168,70 @@ test("rapid DOM inventory retains complete first-layer controls before accessibi
   assert.deepEqual(result.captureDiagnostics?.timedOutChannels, []);
   assert.equal(
     result.inventoryDiagnostics?.timingMarkers.includes("rapid_inventory_initial_completed"),
+    true,
+  );
+});
+
+test("rapid initial snapshot returns a completed empty DOM inventory without slower semantic channels", async () => {
+  let evaluateCallCount = 0;
+  let accessibilityAttempted = false;
+  const page = {
+    evaluate: async (_pageFunction: unknown, argument?: unknown) => {
+      evaluateCallCount += 1;
+      if (argument !== undefined) return rapidInventorySnapshot(false);
+      return true;
+    },
+    context: () => {
+      accessibilityAttempted = true;
+      throw new Error("accessibility should remain a later recovery channel");
+    },
+    url: () => "https://example.test/",
+  } as unknown as Page;
+
+  const result = await detectConsentUi(page, Date.now(), 3_500, {
+    rapidInventoryTimeoutMs: 100,
+    returnAfterRapidSnapshot: true,
+    waitForCompleteChoiceControls: true,
+  });
+
+  assert.equal(accessibilityAttempted, false);
+  assert.equal(result.captureStatus, "no_evidence");
+  assert.deepEqual(result.captureDiagnostics?.completedChannels, ["dom_inventory"]);
+  assert.equal(
+    result.inventoryDiagnostics?.timingMarkers.includes("rapid_snapshot"),
+    true,
+  );
+  assert.equal(evaluateCallCount, 2);
+});
+
+test("rapid initial snapshot returns a timed-out DOM inventory as incomplete without waiting for accessibility", async () => {
+  let evaluateCallCount = 0;
+  let accessibilityAttempted = false;
+  const page = {
+    evaluate: async (_pageFunction: unknown, argument?: unknown) => {
+      evaluateCallCount += 1;
+      if (argument === undefined) return true;
+      return await new Promise<never>(() => undefined);
+    },
+    context: () => {
+      accessibilityAttempted = true;
+      throw new Error("accessibility should remain a later recovery channel");
+    },
+    url: () => "https://example.test/",
+  } as unknown as Page;
+
+  const result = await detectConsentUi(page, Date.now(), 3_500, {
+    rapidInventoryTimeoutMs: 100,
+    returnAfterRapidSnapshot: true,
+    waitForCompleteChoiceControls: true,
+  });
+
+  assert.equal(evaluateCallCount, 2);
+  assert.equal(accessibilityAttempted, false);
+  assert.equal(result.captureStatus, "incomplete");
+  assert.deepEqual(result.captureDiagnostics?.timedOutChannels, ["dom_inventory"]);
+  assert.equal(
+    result.inventoryDiagnostics?.timingMarkers.includes("rapid_inventory_initial_timed_out"),
     true,
   );
 });
@@ -191,6 +256,7 @@ test("post-accessibility rapid retry preserves typed controls and records the in
         };
       },
     }),
+    url: () => "https://example.test/",
   } as unknown as Page;
 
   const result = await detectConsentUi(page, Date.now(), 0, {

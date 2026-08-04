@@ -1966,6 +1966,11 @@ test("pre-consent runtime scanner returns retained partial evidence at its soft 
       result.networkEvents.length > 0 || result.networkResponseEvents.length > 0 || result.screenshots.length > 0,
       "soft deadline should retain evidence observed before cancellation",
     );
+    assert.ok(
+      result.consentUiObservations.length > 0,
+      "soft deadline should retain the typed initial consent observation instead of dropping the inspection result",
+    );
+    assert.equal(result.consentUiObservations[0]?.documentUrl, url);
     assert.equal(
       result.renderedPolicyLinks.some((link) =>
         link.linkText === "Privacy policy" &&
@@ -2501,6 +2506,7 @@ test("planned pre-consent baseline skips screenshots when no consent surface is 
 
     assert.equal(result.moduleRun.status, "completed");
     assert.equal(result.consentUiObservations[0]?.likelyPresent, false);
+    assert.equal(result.consentUiObservations[0]?.documentUrl, url);
     assert.equal(
       result.consentUiObservations[0]?.basis.includes("settled_control_inventory_completed"),
       true,
