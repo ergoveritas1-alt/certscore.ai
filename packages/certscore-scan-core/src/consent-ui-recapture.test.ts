@@ -5,6 +5,7 @@ import type { Page } from "playwright";
 import {
   detectConsentUi,
   reconcileConsentUiRecapture,
+  reconcilePostSettleConsentUiObservation,
   shouldCaptureSettledPreConsentScreenshot,
   shouldRecaptureConsentUiAfterTimeout,
 } from "./scanners/pre-consent-runtime-scanner.js";
@@ -80,6 +81,67 @@ test("a failed inventory probe cannot replace an earlier incomplete capture as a
 
   assert.equal(result.completedNegativeRetained, false);
   assert.equal(result.observation, current);
+});
+
+test("completed post-settle DOM inventory is retained before later page evidence can time out", () => {
+  const result = reconcilePostSettleConsentUiObservation({
+    current: observation({
+      captureStatus: "no_evidence",
+      captureDiagnostics: {
+        completedChannels: ["dom_inventory"],
+        timedOutChannels: [],
+        failedChannels: [],
+      },
+      documentUrl: "https://example.test/",
+      layerInspected: "first_layer",
+      observedAtMs: 1_000,
+    }),
+    candidate: observation({
+      captureStatus: "no_evidence",
+      captureDiagnostics: {
+        completedChannels: ["dom_inventory"],
+        timedOutChannels: [],
+        failedChannels: [],
+      },
+      documentUrl: "https://example.test/",
+      layerInspected: "first_layer",
+      observedAtMs: 2_500,
+    }),
+  });
+
+  assert.equal(result.observedAtMs, 2_500);
+  assert.equal(result.captureStatus, "no_evidence");
+  assert.equal(result.basis.includes("settled_control_inventory_completed"), true);
+  assert.equal(result.basis.includes("recapture:post_settle_dom_inventory"), true);
+});
+
+test("incomplete post-settle inventory cannot promote an early empty inventory to absence", () => {
+  const current = observation({
+    captureStatus: "no_evidence",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    documentUrl: "https://example.test/",
+    layerInspected: "first_layer",
+  });
+  const result = reconcilePostSettleConsentUiObservation({
+    current,
+    candidate: observation({
+      captureStatus: "incomplete",
+      captureDiagnostics: {
+        completedChannels: [],
+        timedOutChannels: ["dom_inventory"],
+        failedChannels: [],
+      },
+      basis: ["inventory:rapid_dom_timed_out"],
+      layerInspected: "unknown",
+    }),
+  });
+
+  assert.equal(result.basis.includes("settled_control_inventory_completed"), false);
+  assert.equal(result.basis.includes("recapture:post_settle_inventory_incomplete"), true);
 });
 
 test("a newly retained options control strengthens an existing accept and reject inventory", () => {

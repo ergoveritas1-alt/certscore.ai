@@ -1640,13 +1640,18 @@ test("pre-consent runtime scanner attempts structured recovery before broad page
     );
     const observation = bundle.consentUiObservations[0];
     const timingLabels = bundle.modulesRun[0]?.timingBreakdown?.map((entry) => entry.label) ?? [];
-    const recoveryIndex = timingLabels.indexOf("page evidence: immediate consent timeout recovery");
+    const immediateRecoveryIndex = timingLabels.indexOf("page evidence: immediate consent timeout recovery");
+    const postSettleRecoveryIndex = timingLabels.indexOf("page evidence: post-settle consent inventory");
+    const recoveryIndex = immediateRecoveryIndex >= 0 ? immediateRecoveryIndex : postSettleRecoveryIndex;
     const broadEvidenceIndex = timingLabels.indexOf("page evidence capture");
 
     assert.equal(observation?.acceptControlObserved, true);
     assert.equal(observation?.rejectControlObserved, true);
     assert.equal(observation?.managePreferencesControlObserved, true);
-    assert.ok(recoveryIndex >= 0, "an incomplete initial inventory should trigger immediate structured recovery");
+    assert.ok(
+      recoveryIndex >= 0,
+      "delayed controls should be retained by a bounded structured inventory before broad page evidence",
+    );
     assert.ok(
       broadEvidenceIndex < 0 || recoveryIndex < broadEvidenceIndex,
       "consent recovery must run before broad page-evidence capture",
@@ -2368,6 +2373,18 @@ test("pre-consent runtime scanner does not treat off-viewport footer settings as
       true,
       "diagnostics should explain that the rejected Cookie Settings control lived in ordinary page chrome",
     );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((entry) =>
+        entry.label === "page evidence: post-settle consent inventory"
+      ),
+      true,
+      "the direct-CMP passive wait must preserve budget for a settled typed inventory",
+    );
+    assert.equal(
+      observation?.basis.includes("settled_control_inventory_completed"),
+      true,
+      "CMP presence without visible controls should resolve from a completed settled inventory rather than timing out unknown",
+    );
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -2511,6 +2528,13 @@ test("planned pre-consent baseline skips screenshots when no consent surface is 
       result.consentUiObservations[0]?.basis.includes("settled_control_inventory_completed"),
       true,
       "a completed no-banner inspection must retain the settled inventory marker",
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((entry) =>
+        entry.label === "page evidence: post-settle consent inventory"
+      ),
+      true,
+      "the settled inventory must complete before consolidated page evidence",
     );
     assert.equal(result.cmpRuntimeObservations.length, 0);
     assert.equal(result.screenshots.length, 0);

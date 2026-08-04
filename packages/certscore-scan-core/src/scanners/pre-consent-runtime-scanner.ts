@@ -959,6 +959,8 @@ export async function preConsentRuntimeScanner(
     const fastWait = input.waitMode === "fast";
     const networkIdleTimeoutMs = fastWait ? 1_500 : 5_000;
     const settleWaitMs = fastWait ? 350 : 1_000;
+    const postSettleInventoryMaxMs = fastWait ? 1_000 : 1_500;
+    const postSettleInventoryReserveMs = 500;
     const consentUiWaitTimeoutMs = fastWait ? 1_800 : 3_500;
     // Regional commerce pages can paint a complete consent surface before
     // their renderer answers structured DOM/accessibility reads. Preserve a
@@ -1069,7 +1071,8 @@ export async function preConsentRuntimeScanner(
         }
         retainedCmpRuntimeObservations = earlyCmpRuntimeObservations;
         if (hasHighConfidenceDirectCmpRuntimeEvidence(earlyCmpRuntimeObservations)) {
-          const evidenceFinalizationReserveMs = 750;
+          const evidenceFinalizationReserveMs =
+            settleWaitMs + postSettleInventoryMaxMs + postSettleInventoryReserveMs;
           const cmpGatedWaitMs = Math.min(
             fastWait ? 10_000 : 12_000,
             Math.max(0, remainingModuleBudgetMs() - evidenceFinalizationReserveMs),
@@ -1175,6 +1178,41 @@ export async function preConsentRuntimeScanner(
       "network capture",
       `Captured ${networkEvents.length} request events and ${networkResponseEvents.length} response events during navigation, network-idle, and settle windows.`,
     );
+
+    // Retain one cheap, explicitly post-settle inventory before the atomic
+    // page snapshot can consume the remaining module budget. The initial
+    // rapid inventory is useful positive evidence, but an empty result cannot
+    // establish absence until the passive render window has elapsed.
+    const postSettleBaseObservation = preScreenshotConsentObservation ?? await consentUiObservationPromise;
+    const postSettleInventoryBudgetMs = Math.min(
+      postSettleInventoryMaxMs,
+      Math.max(0, remainingModuleBudgetMs() - postSettleInventoryReserveMs),
+    );
+    if (postSettleInventoryBudgetMs >= 250) {
+      const postSettleInventory = await recordBoundedTiming(
+        timingBreakdown,
+        "page evidence: post-settle consent inventory",
+        "Bounded canonical first-layer DOM inventory retained before consolidated page evidence can exhaust the module budget.",
+        postSettleInventoryBudgetMs,
+        () => readRapidFirstLayerConsentUiObservation(
+          page,
+          input.scanStartedAtMs,
+          postSettleInventoryBudgetMs,
+          "post_settle",
+        ),
+        () => emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
+      );
+      preScreenshotConsentObservation = reconcilePostSettleConsentUiObservation({
+        current: postSettleBaseObservation,
+        candidate: postSettleInventory,
+      });
+    } else {
+      preScreenshotConsentObservation = annotateConsentUiObservation(
+        postSettleBaseObservation,
+        "recapture:post_settle_inventory_budget_unavailable",
+      );
+    }
+    retainedConsentUiObservation = preScreenshotConsentObservation;
 
     const lateAccessibilityRetryEligible =
       earlyScreenshotCaptured &&
@@ -2825,6 +2863,34 @@ export function reconcileConsentUiRecapture(input: {
     strongerEvidenceRetained: false,
     completedNegativeRetained: false,
   };
+}
+
+export function reconcilePostSettleConsentUiObservation(input: {
+  current: ConsentUiObservation;
+  candidate: ConsentUiObservation;
+}): ConsentUiObservation {
+  const completedChannels = input.candidate.captureDiagnostics?.completedChannels ?? [];
+  const timedOutChannels = input.candidate.captureDiagnostics?.timedOutChannels ?? [];
+  const failedChannels = input.candidate.captureDiagnostics?.failedChannels ?? [];
+  const completedTypedInventory = (["dom_inventory", "accessibility_tree"] as const).some((channel) =>
+    completedChannels.includes(channel) &&
+    !timedOutChannels.includes(channel) &&
+    !failedChannels.includes(channel)
+  );
+  if (!completedTypedInventory) {
+    return annotateConsentUiObservation(
+      input.current,
+      "recapture:post_settle_inventory_incomplete",
+    );
+  }
+  return annotateConsentUiObservation(
+    mergeConsentUiObservations(
+      input.current,
+      input.candidate,
+      "recapture:post_settle_dom_inventory",
+    ),
+    "settled_control_inventory_completed",
+  );
 }
 
 function resolverInputForEvent(
@@ -4539,7 +4605,7 @@ export async function readRapidFirstLayerConsentUiObservation(
   page: Page,
   scanStartedAtMs: number,
   timeoutMs = 750,
-  phase: "initial" | "post_accessibility" | "retry" = "retry",
+  phase: "initial" | "post_accessibility" | "post_settle" | "retry" = "retry",
 ): Promise<ConsentUiObservation> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const boundedTimeoutMs = Math.max(100, Math.min(timeoutMs, 1_500));
@@ -4598,7 +4664,7 @@ export async function readRapidFirstLayerConsentUiObservation(
 async function readRapidFirstLayerConsentUiObservationUnbounded(
   page: Page,
   scanStartedAtMs: number,
-  phase: "initial" | "post_accessibility" | "retry",
+  phase: "initial" | "post_accessibility" | "post_settle" | "retry",
 ): Promise<ConsentUiObservation> {
   type RapidConsentInventory = {
     controls: Array<{
