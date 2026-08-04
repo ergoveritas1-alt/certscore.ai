@@ -1413,6 +1413,7 @@ interface ProcessPolicyCandidateInput {
   fetchCaches: PolicyDocumentFetchCaches;
   processingProgress?: PolicyCandidateProcessingProgress;
   prefetchedOnly?: boolean;
+  suppressCommonPathRenderedRecovery?: boolean;
 }
 
 interface PolicyCandidateProcessingProgress {
@@ -1476,6 +1477,11 @@ async function fetchPolicyCandidateGroup(input: {
 }): Promise<{ observations: PolicySurfaceObservation[]; artifactRefs: ArtifactRef[]; secondaryCandidates: PolicySurfaceCandidate[] }> {
   const toFetch = prioritizePolicyCandidateEvaluation(input.rankedCandidates)
     .slice(0, candidateGroupFetchLimit(input.rankedCandidates));
+  const hasObservedPrivacyPolicyCandidate = toFetch.some((candidate) =>
+    candidate.deterministicSurfaceType === "privacy_policy" &&
+    !isCommonPathFallbackCandidate(candidate) &&
+    candidate.clickable === true
+  );
   const policyResults = await recordPolicyTiming(
     input.timingBreakdown,
     `${input.labelPrefix} fetch group`,
@@ -1496,6 +1502,7 @@ async function fetchPolicyCandidateGroup(input: {
             candidateIndex,
             policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
             prefetchedOnly: input.prefetchedOnly,
+            suppressCommonPathRenderedRecovery: hasObservedPrivacyPolicyCandidate,
           }),
         ),
   );
@@ -1744,6 +1751,7 @@ async function processPolicyCandidate({
   fetchCaches,
   processingProgress,
   prefetchedOnly,
+  suppressCommonPathRenderedRecovery,
 }: ProcessPolicyCandidateInput): Promise<ProcessPolicyCandidateResult> {
   if (candidate.observationOnly) {
     return {
@@ -1952,9 +1960,11 @@ async function processPolicyCandidate({
     title = titleFromHtml(fetchedHtml);
     visibleText = urlOnlyStubResolution.visibleText;
   }
-  const renderedLowQualityFallbackWithinBudget =
-    !isCommonPathFallbackCandidate(effectiveCandidate) ||
-    candidateIndex < MAX_RENDERED_COMMON_PATH_LOW_QUALITY_FALLBACKS;
+  const renderedLowQualityFallbackWithinBudget = shouldUseRenderedLowQualityFallbackSlot({
+    candidateIsCommonPath: isCommonPathFallbackCandidate(effectiveCandidate),
+    candidateIndex,
+    hasObservedPrivacyPolicyCandidate: suppressCommonPathRenderedRecovery === true,
+  });
   if (renderedLowQualityFallbackWithinBudget && shouldTryRenderedPolicyDocumentTextFallback({
     candidate: effectiveCandidate,
     documentFormat: fetched.documentFormat,
@@ -2258,6 +2268,16 @@ async function processPolicyCandidate({
       childSelection.observedChildCandidates,
     ),
   };
+}
+
+export function shouldUseRenderedLowQualityFallbackSlot(input: {
+  candidateIsCommonPath: boolean;
+  candidateIndex: number;
+  hasObservedPrivacyPolicyCandidate: boolean;
+}): boolean {
+  if (!input.candidateIsCommonPath) return true;
+  return !input.hasObservedPrivacyPolicyCandidate &&
+    input.candidateIndex < MAX_RENDERED_COMMON_PATH_LOW_QUALITY_FALLBACKS;
 }
 
 export function policyDocumentMatchesExpectedSurface(input: {

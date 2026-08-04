@@ -40,6 +40,7 @@ import {
   settlePolicyCandidateProcessingBeforeDeadline,
   shouldRetryCanonicalPolicyHost,
   shouldUseDirectPolicyDocumentText,
+  shouldUseRenderedLowQualityFallbackSlot,
   stripConsentSurfacePreambleFromPolicyText,
   type PolicyNanoAssistProvider,
   policySurfaceScanner,
@@ -47,6 +48,24 @@ import {
 } from "./scanners/policy-surface-scanner.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import { startStaticFixtureServer, type StaticFixturePage } from "./test-fixtures/static-server.js";
+
+test("does not render a guessed privacy path when an observed privacy link owns recovery", () => {
+  assert.equal(shouldUseRenderedLowQualityFallbackSlot({
+    candidateIsCommonPath: true,
+    candidateIndex: 1,
+    hasObservedPrivacyPolicyCandidate: true,
+  }), false);
+  assert.equal(shouldUseRenderedLowQualityFallbackSlot({
+    candidateIsCommonPath: false,
+    candidateIndex: 0,
+    hasObservedPrivacyPolicyCandidate: true,
+  }), true);
+  assert.equal(shouldUseRenderedLowQualityFallbackSlot({
+    candidateIsCommonPath: true,
+    candidateIndex: 0,
+    hasObservedPrivacyPolicyCandidate: false,
+  }), true);
+});
 
 test("builds a bounded canonical www retry for policy notices", () => {
   assert.equal(canonicalWwwPolicyUrlVariant("https://publisher.example/legal/privacy-policy"), "https://www.publisher.example/legal/privacy-policy");
