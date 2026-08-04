@@ -4960,6 +4960,25 @@ export function classifyPolicyDocumentOwnership(input: {
   const corporatePolicyScope =
     /\b(?:privacy )?(?:policy|notice)\b.{0,160}\bappl(?:y|ies) to\b.{0,180}\b(?:websites?|sites?|applications?|services?)\b.{0,120}\b(?:we|our (?:group|companies|entities|affiliates?))\b.{0,80}\b(?:operate|own|provide|control)|\b(?:websites?|sites?|applications?|services?)\b.{0,120}\b(?:operated|owned|provided|controlled) by\b.{0,100}\b(?:us|our (?:group|companies|entities|affiliates?))\b/i
       .test(ownershipExcerpt);
+  const targetBrandRouteBound = (() => {
+    if (!targetBrand) {
+      return false;
+    }
+    const targetToken = targetBrand.replace(/[^a-z0-9]+/gi, "").toLowerCase();
+    if (targetToken.length < 4) {
+      return false;
+    }
+    try {
+      const documentUrl = new URL(input.documentUrl);
+      return ["brand", "intake", "product", "service", "site"].some((key) =>
+        documentUrl.searchParams.getAll(key).some((value) =>
+          value.replace(/[^a-z0-9]+/gi, "").toLowerCase() === targetToken
+        )
+      );
+    } catch {
+      return false;
+    }
+  })();
 
   if (targetNamed && controllerLanguage) {
     return {
@@ -4982,6 +5001,19 @@ export function classifyPolicyDocumentOwnership(input: {
         "cross_site_document",
         "target_brand_named_in_corporate_family",
         "corporate_policy_scope_applies_to_operated_sites",
+      ],
+    };
+  }
+
+  if (targetBrandRouteBound && controllerLanguage) {
+    return {
+      documentOwnerEntity: documentEntity ?? documentSite ?? undefined,
+      targetRelationship: "first_party_brand",
+      ownershipConfidence: 0.86,
+      ownershipReasonCodes: [
+        "cross_site_document",
+        "target_brand_exact_policy_route_binding",
+        "corporate_policy_controller_language",
       ],
     };
   }
