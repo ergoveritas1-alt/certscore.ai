@@ -579,7 +579,11 @@ export async function policySurfaceScanner(
     if (!homepage.ok) {
       const fallbackCandidates = dedupeCandidates([
         ...seededCandidates,
-        ...commonPathCandidatesFor(input.normalizedUrl, seededCandidates.length),
+        ...commonPathCandidatesFor(
+          input.normalizedUrl,
+          seededCandidates.length,
+          commonPathLocaleHintsForUnavailableHomepage(input.normalizedUrl),
+        ),
       ]);
       const speculativeCommonPathNanoAbortController = new AbortController();
       const speculativeCommonPathNanoRankingPromise = recordPolicyTiming(
@@ -3860,6 +3864,12 @@ function commonPathLocaleHints(
     if (directLocaleSignal) add(entry.locale);
   }
   return hints;
+}
+
+export function commonPathLocaleHintsForUnavailableHomepage(
+  baseUrl: string,
+): SupportedPrivacyEvidenceLocale[] {
+  return commonPathLocaleHints(baseUrl, "", "");
 }
 
 function classifyCommonPathSurface(path: string, normalizedUrl: string): ReturnType<typeof classifySurface> {

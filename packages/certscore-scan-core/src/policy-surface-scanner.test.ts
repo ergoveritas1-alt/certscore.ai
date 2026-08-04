@@ -18,6 +18,7 @@ import {
   boundedPrefetchedPolicyAnalysisText,
   canonicalWwwPolicyUrlVariant,
   classifyPolicyDocumentOwnership,
+  commonPathLocaleHintsForUnavailableHomepage,
   countRecoveredPolicySurfaceObservations,
   extractPolicyCookieDisclosures,
   extractPolicySections,
@@ -59,6 +60,17 @@ test("does not repeat a canonical host retry already attempted by the bounded fe
     { requestedUrl: candidateUrl },
     { requestedUrl: "https://www.publisher.example/legal/privacy-policy" },
   ]), false);
+});
+
+test("homepage failure still derives common-path locale hints from the target TLD", () => {
+  assert.deepEqual(
+    commonPathLocaleHintsForUnavailableHomepage("https://uni-lj.si/"),
+    ["sl"],
+  );
+  assert.equal(
+    privacySurfacePathsForLocale("sl").includes("/politika-varstva-zasebnosti-in-piskotkov"),
+    true,
+  );
 });
 
 test("removes consent-banner preambles before policy topic extraction", () => {
