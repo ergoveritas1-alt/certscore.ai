@@ -420,6 +420,24 @@ test("Article 13 rejection contract accepts complaint-to-authority language", ()
   }
 });
 
+test("Article 13 rejection contract accepts bounded privacy-counsel and E.U. authority contacts", () => {
+  const privacyCounsel = "If you have questions about this privacy policy, email us at privacy@example.test or write to Privacy Counsel at our postal address.";
+  const complaint = "In the European Union, you can lodge a complaint with an E.U. data protection authority about our processing of personal data.";
+
+  for (const mode of rejectionModes) {
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(privacyCounsel, "dpo_contact", { mode }),
+      true,
+      `${mode} should accept a directly contactable privacy counsel without claiming a formal DPO designation`,
+    );
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(complaint, "supervisory_authority", { mode }),
+      true,
+      `${mode} should accept the punctuated E.U. complaint-authority wording`,
+    );
+  }
+});
+
 test("Article 13 rejection contract rejects footer language, generic disclaimers, and cookie definitions", () => {
   for (const mode of ["scan_core", "retained_report"] satisfies Article13DisclosureRejectionMode[]) {
     assert.equal(
