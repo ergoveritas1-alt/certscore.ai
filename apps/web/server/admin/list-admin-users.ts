@@ -1,6 +1,7 @@
 "use server";
 
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
+import type { AdminUsersSortDirection, AdminUsersSortKey } from "./admin-users-sort";
 import {
   loadAdminUserOverviewData,
   loadAdminUsersPageData,
@@ -124,12 +125,17 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
   });
 }
 
-export async function listAdminUsersPage(limit = 25, offset = 0): Promise<{
+export async function listAdminUsersPage(
+  limit = 25,
+  offset = 0,
+  sortKey: AdminUsersSortKey = "user",
+  direction: AdminUsersSortDirection = "desc"
+): Promise<{
   items: AdminUserListItem[];
   totalCount: number;
 }> {
   await requirePlatformAdminContext();
-  const page = await loadAdminUsersPageData(limit, offset);
+  const page = await loadAdminUsersPageData(limit, offset, sortKey, direction);
   return {
     items: page.users.map(mapAdminUserOverviewRow),
     totalCount: page.totalCount
