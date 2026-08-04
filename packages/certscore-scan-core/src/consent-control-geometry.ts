@@ -325,8 +325,12 @@ export async function captureConsentControlGeometry(
       return cmpFramePriority(right.url()) - cmpFramePriority(left.url());
     })
     .slice(0, 12);
+  // Frame captures run concurrently, so dividing the deadline by the number
+  // of frames unnecessarily starves the canonical document on frame-heavy
+  // pages. Keep every read bounded by the caller's wall-clock allowance while
+  // allowing the main frame and a late-rendering CMP frame the full window.
   const frameTimeoutMs = options.timeoutMs
-    ? Math.max(250, Math.floor(options.timeoutMs / Math.max(frames.length, 1)))
+    ? Math.max(250, options.timeoutMs)
     : undefined;
   const cookieNamesPromise = page.context().cookies(page.url())
     .then((cookies) => cookies.map((cookie) => cookie.name))

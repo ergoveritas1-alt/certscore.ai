@@ -797,6 +797,41 @@ test("prioritizes known CMP frames when the page contains many unrelated iframes
   }
 });
 
+test("does not divide the bounded geometry deadline across concurrent frames", async () => {
+  assert.ok(browser, "browser not initialized");
+  const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
+  try {
+    await page.setContent(`<!doctype html><html><body>
+      <section role="dialog" aria-label="Cookie consent" style="position:fixed;inset:80px;background:white">
+        <p>We use cookies and similar technologies.</p>
+        <button>Accept all</button><button>Cookie settings</button>
+      </section>
+      <iframe srcdoc="<p>one</p>"></iframe>
+      <iframe srcdoc="<p>two</p>"></iframe>
+      <iframe srcdoc="<p>three</p>"></iframe>
+    </body></html>`);
+    await page.waitForTimeout(50);
+
+    const mainFrame = page.mainFrame();
+    const originalEvaluate = mainFrame.evaluate;
+    Object.defineProperty(mainFrame, "evaluate", {
+      configurable: true,
+      value: async (...args: unknown[]) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        return Reflect.apply(originalEvaluate, mainFrame, args);
+      },
+    });
+
+    const artifact = await captureConsentControlGeometry(page, { timeoutMs: 900 });
+
+    assert.equal(artifact.viewport.width, 1366);
+    assert.equal(artifact.summary.firstLayerAccept, true);
+    assert.equal(artifact.summary.firstLayerOptions, true);
+  } finally {
+    await page.close();
+  }
+});
+
 test("does not count French privacy-policy links as first-layer options", async () => {
   const artifact = await captureFixture(`
     <div role="dialog" style="position: fixed; left: 100px; top: 100px; width: 520px; padding: 20px; background: white;">
