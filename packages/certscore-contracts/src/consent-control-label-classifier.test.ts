@@ -49,6 +49,7 @@ test("classifies bounded implied-consent language canonically", () => {
 test("classifies direct consent controls across English, German, and French", () => {
   assert.equal(classifyConsentControlLabel({ label: "Accept all" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Alle akzeptieren" }).intent, "accept");
+  assert.equal(classifyConsentControlLabel({ label: "Alle auswählen" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Tout accepter" }).intent, "accept");
 
   assert.equal(classifyConsentControlLabel({ label: "Reject all" }).intent, "reject");
@@ -165,6 +166,7 @@ test("classifies direct accept controls across English, German, and French", () 
     ["Agree and proceed", "en"],
     ["Akzeptieren", "de"],
     ["Alle akzeptieren", "de"],
+    ["Alle auswählen", "de"],
     ["Zustimmen", "de"],
     ["Annehmen", "de"],
     ["Alle zulassen", "de"],

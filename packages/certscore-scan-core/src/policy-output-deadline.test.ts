@@ -50,6 +50,19 @@ test("confirmed no-go scans cancel and settle unused policy work before returnin
   assert.ok(cancellationSettle > cancellationAbort);
 });
 
+test("production policy output is bounded by its absolute deadline before final artifact publication", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const outputStart = source.indexOf('phaseRecorder.record("policy_surface_for_output"');
+  const boundedWait = source.indexOf("settlePolicySurfaceBeforeDeadline(\n        policySurfaceResultPromise", outputStart);
+  const deadlineAbort = source.indexOf("policySurfaceAbortController.abort(", boundedWait);
+  const renderedFallback = source.indexOf("buildRetainedRenderedPolicyFallbackResult", deadlineAbort);
+
+  assert.ok(outputStart >= 0);
+  assert.ok(boundedWait > outputStart);
+  assert.ok(deadlineAbort > boundedWait);
+  assert.ok(renderedFallback > deadlineAbort);
+});
+
 test("unsettled policy output retains typed rendered-link evidence as a partial module result", () => {
   const result = buildRetainedRenderedPolicyFallbackResult({
     completedAtMs: 2_500,

@@ -55,7 +55,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
   locale("de", {
     privacyPolicyLabels: ["datenschutzerklärung", "datenschutzinformation"], privacyPolicyPathSlugs: ["datenschutz", "datenschutzerklaerung"], cookiePolicyLabels: ["cookie-richtlinie", "cookie-hinweis"], cookiePolicyPathSlugs: ["cookie-richtlinie"],
     cookieSettingsLabels: ["cookie-einstellungen", "datenschutzeinstellungen"], termsLabels: ["nutzungsbedingungen", "allgemeine geschäftsbedingungen"], termsPathSlugs: ["nutzungsbedingungen", "agb"], contextHints: ["datenschutz", "personenbezogene daten", "cookies", "einwilligung"], tldHints: [".de", ".at"],
-    consentControls: { accept: ["alle akzeptieren", "alles akzeptieren"], reject: ["alle ablehnen", "alles ablehnen"], options: ["cookie-einstellungen", "einstellungen verwalten", "einwilligungs-einstellungen"], necessaryOnly: ["nur notwendige cookies", "nur erforderliche cookies"] },
+    consentControls: { accept: ["alle akzeptieren", "alles akzeptieren", "alle auswählen"], reject: ["alle ablehnen", "alles ablehnen"], options: ["cookie-einstellungen", "einstellungen verwalten", "einwilligungs-einstellungen"], necessaryOnly: ["nur notwendige cookies", "nur erforderliche cookies"] },
   }),
   locale("ja", {
     privacyPolicyLabels: ["プライバシーポリシー", "個人情報保護方針"], privacyPolicyPathSlugs: ["privacy-policy", "kojin-joho"], cookiePolicyLabels: ["クッキーポリシー"], cookiePolicyPathSlugs: ["cookie-policy", "ja/cookies"], cookieSettingsLabels: ["Cookie設定"],

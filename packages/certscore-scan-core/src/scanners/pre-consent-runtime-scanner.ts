@@ -923,28 +923,12 @@ export async function preConsentRuntimeScanner(
     // evidence quality is more important than shaving a few seconds here.
     const consentUiCaptureTimeoutMs = fastWait ? 7_000 : 8_000;
     const earlyScreenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
-    // Start consent evidence immediately after DOMContentLoaded. Secondary
-    // policy and transport reads may be slow on frame-heavy pages, but must
-    // not consume the complete module budget before the visitor-visible state
-    // and its typed control inventory have begun capture.
-    const earlyScreenshotCapturePromise = (input.screenshotMode ?? "always") === "always"
-      ? recordTiming(
-        timingBreakdown,
-        "early screenshot capture",
-        "Early pre-consent viewport screenshot starts immediately after DOMContentLoaded and runs independently of secondary page evidence.",
-        () => capturePreConsentScreenshot(page, earlyScreenshotPath, {
-          captureMode: "viewport_first",
-          screenshotErrors,
-          timeoutMs: Math.min(input.screenshotTimeoutMs ?? 5_000, 3_000),
-        }),
-      )
-      : null;
     const captureInitialConsentUiObservation = () => {
       consentUiInspectionAttempted = true;
       return recordBoundedTiming(
         timingBreakdown,
         "page evidence: consent UI",
-        "First-layer consent surface/control inventory captured immediately after the retained viewport screenshot, avoiding CDP screenshot/inventory contention.",
+        "First-layer consent surface/control inventory starts immediately after DOMContentLoaded alongside visual capture, so a slow screenshot cannot consume the structured-evidence window.",
         consentUiCaptureTimeoutMs,
         () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs, {
           returnAfterRapidSnapshot: true,
@@ -953,15 +937,29 @@ export async function preConsentRuntimeScanner(
         () => emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
       );
     };
-    const consentUiObservationPromise = (earlyScreenshotCapturePromise
-      ? earlyScreenshotCapturePromise.then(captureInitialConsentUiObservation)
-      : captureInitialConsentUiObservation()).then((observation) => {
+    // Start typed inventory before launching the independent screenshot lane.
+    // Both remain passive and bounded; ordering the promise creation here
+    // guarantees that screenshot latency cannot prevent inventory from
+    // beginning on the live pre-consent document.
+    const consentUiObservationPromise = captureInitialConsentUiObservation().then((observation) => {
         // Retain the first typed result at the moment it settles. Subsequent
         // passive CMP waits can consume the module budget, but must not leave
         // the final evidence packet without the observation already obtained.
         retainedConsentUiObservation = observation;
         return observation;
       });
+    const earlyScreenshotCapturePromise = (input.screenshotMode ?? "always") === "always"
+      ? recordTiming(
+        timingBreakdown,
+        "early screenshot capture",
+        "Early pre-consent viewport screenshot starts immediately after DOMContentLoaded alongside the already-started typed control inventory.",
+        () => capturePreConsentScreenshot(page, earlyScreenshotPath, {
+          captureMode: "viewport_first",
+          screenshotErrors,
+          timeoutMs: Math.min(input.screenshotTimeoutMs ?? 5_000, 3_000),
+        }),
+      )
+      : null;
     const earlyConsentGeometryPromise = (input.screenshotMode ?? "always") === "always"
       ? consentUiObservationPromise.then((observation) => {
           if (hasSufficientFirstLayerConsentControls(observation)) {
@@ -1054,9 +1052,8 @@ export async function preConsentRuntimeScanner(
         earlyScreenshotCaptured = true;
         visualCapture = visualCaptureFromScreenshotSummary(earlyScreenshotCapture, earlyScreenshotPath);
       }
-      // Retain the first typed control inventory before any browser screenshot
-      // can monopolize the page/CDP session. The screenshot is already safely
-      // retained above, so a slow consent probe cannot remove visual evidence.
+      // Both lanes started immediately. Await them together before later
+      // recovery work so neither visual nor structured evidence is discarded.
       [preScreenshotConsentObservation] = await Promise.all([
         consentUiObservationPromise,
         networkIdlePromise,

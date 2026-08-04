@@ -314,13 +314,32 @@ export function projectAdminEvidenceMatrix(input: {
   const transparency = projectResults(TRANSPARENCY_ROWS, byId);
   const transport = projectResults(TRANSPORT_ROWS, byId);
   const runtime = projectResults(RUNTIME_ROWS, byId);
+  const projectedPrivacyConsent = projectResults(PRIVACY_CONSENT_ROWS, byId);
+  // A/R/O describes controls on an observed consent surface. In the compact
+  // admin matrix, do not render three unknown/absent control marks when the
+  // canonical checklist retained no surface. Preserve an independently
+  // projected reject concern when pre-consent activity made the missing
+  // refusal opportunity meaningful. The full checklist remains unchanged.
+  const privacyConsent: ResultMap<typeof PRIVACY_CONSENT_ROWS> =
+    projectedPrivacyConsent.mechanism?.status === "not_observed"
+      ? {
+          ...projectedPrivacyConsent,
+          accept: null,
+          options: null,
+          reject:
+            projectedPrivacyConsent.reject?.status === "gap_observed" ||
+            projectedPrivacyConsent.reject?.status === "review_signal"
+              ? projectedPrivacyConsent.reject
+              : null
+        }
+      : projectedPrivacyConsent;
   return {
     version: ADMIN_EVIDENCE_MATRIX_VERSION,
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     policyEvidence: projectPolicyEvidenceDiagnostic(input.checklistRows, byId, input.policyDisclosureSummary),
     sourceProjectionVersion: input.sourceProjectionVersion,
     privacyConsent: {
-      ...projectResults(PRIVACY_CONSENT_ROWS, byId),
+      ...privacyConsent,
       cmpVendorName: input.cmpVendorName
     },
     transparency: { aggregate: aggregate(transparency, 10), results: transparency },

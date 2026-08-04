@@ -53,8 +53,13 @@ export function projectCanonicalSurfaceSummary(input: {
 
   const snapshotScore = numberValue(input.snapshot, "certscore_overall");
   const score = snapshotScore ?? input.fallbackScoreAssessment?.scoreValue ?? null;
+  const consentSurfaceStatus = stringValue(input.snapshot, "consent_surface_status");
+  const consentSurfaceAllowsCompactControls = consentSurfaceStatus === null ||
+    consentSurfaceStatus === "observed_actionable" ||
+    consentSurfaceStatus === "observed_non_actionable";
   const hasConsentProjection = input.snapshot?.consent_evidence_status !== null &&
-    input.snapshot?.consent_evidence_status !== undefined;
+    input.snapshot?.consent_evidence_status !== undefined &&
+    consentSurfaceAllowsCompactControls;
 
   return {
     cmpVendorName: stringValue(input.snapshot, "cmp_vendor_name"),

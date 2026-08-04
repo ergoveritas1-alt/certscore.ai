@@ -538,6 +538,7 @@ test("handler gives the policy lane an absolute deadline before scanner shutdown
   let policySurfaceDeadlineAtMs: number | undefined;
   let preConsentModuleDeadlineMs: number | undefined;
   let preConsentVisualFallbackDeadlineMs: number | undefined;
+  let preConsentVisualFallbackDeadlineAtMs: number | undefined;
 
   const result = await handler(validPayload(), {
     artifactChainTimeoutMs: 45_000,
@@ -547,6 +548,7 @@ test("handler gives the policy lane an absolute deadline before scanner shutdown
       policySurfaceDeadlineAtMs = options.policySurfaceDeadlineAtMs;
       preConsentModuleDeadlineMs = options.preConsentModuleDeadlineMs;
       preConsentVisualFallbackDeadlineMs = options.preConsentVisualFallbackDeadlineMs;
+      preConsentVisualFallbackDeadlineAtMs = options.preConsentVisualFallbackDeadlineAtMs;
       return {
         artifactMetadata: {},
         artifactPointers: {},
@@ -567,6 +569,11 @@ test("handler gives the policy lane an absolute deadline before scanner shutdown
   assert.ok(policySurfaceDeadlineAtMs <= Date.now() + expectedOffsetMs);
   assert.equal(preConsentModuleDeadlineMs, 30_000);
   assert.equal(preConsentVisualFallbackDeadlineMs, 6_000);
+  const expectedVisualFallbackOffsetMs = 40_000 -
+    LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS - 4_000;
+  assert.ok(preConsentVisualFallbackDeadlineAtMs);
+  assert.ok(preConsentVisualFallbackDeadlineAtMs >= startedAtMs + expectedVisualFallbackOffsetMs);
+  assert.ok(preConsentVisualFallbackDeadlineAtMs <= Date.now() + expectedVisualFallbackOffsetMs);
 });
 
 test("a late partial scan can use artifact handoff reserve after scanner cancellation", async () => {

@@ -280,6 +280,27 @@ test("captures Numa-style consentmanager settings and accept without reject", as
   assert.equal(artifact.summary.firstLayerOptions, true);
 });
 
+test("captures RKI-style German select-all and save-selection controls", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-modal="true" aria-label="Hinweis zur Verwendung von Cookies" style="position: fixed; inset: 40px; padding: 24px; background: white;">
+      <h1>Hinweis zur Verwendung von Cookies</h1>
+      <p>Sie können entscheiden, ob Sie neben technisch notwendigen Cookies statistische Cookies erlauben.</p>
+      <label><input type="checkbox"> Statistik-Tracker einschalten</label>
+      <button type="button">Auswahl bestätigen</button>
+      <button type="button">Alle auswählen</button>
+    </section>
+  `);
+
+  const accept = findCandidate(artifact, "Alle auswählen");
+  assert.equal(accept?.actionType, "accept_all");
+  assert.equal(accept?.matchedLocale, "de");
+  assert.equal(accept?.decisionStatus, "confirmed_visible");
+  assert.equal(findCandidate(artifact, "Auswahl bestätigen")?.actionType, "save_preferences");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+});
+
 test("captures OneTrust optional-cookie noun-phrase controls as first-layer accept and reject", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>

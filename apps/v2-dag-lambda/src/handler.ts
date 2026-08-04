@@ -290,6 +290,7 @@ type HandlerOptions = {
     policySurfaceDeadlineAtMs?: number;
     preConsentModuleDeadlineMs?: number;
     preConsentVisualFallbackDeadlineMs?: number;
+    preConsentVisualFallbackDeadlineAtMs?: number;
     signal?: AbortSignal;
   }) => Promise<ArtifactChainResult>;
   scannerWorkTimeoutMs?: number;
@@ -729,6 +730,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     policySurfaceDeadlineAtMs?: number;
     preConsentModuleDeadlineMs?: number;
     preConsentVisualFallbackDeadlineMs?: number;
+    preConsentVisualFallbackDeadlineAtMs?: number;
     s3Client?: S3PutClient;
     signal?: AbortSignal;
     workspaceRoot?: string;
@@ -756,6 +758,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     preConsentScreenshotMode: options.preConsentScreenshotMode ?? scanTuning.preConsentScreenshotMode,
     preConsentModuleDeadlineMs: options.preConsentModuleDeadlineMs,
     preConsentVisualFallbackDeadlineMs: options.preConsentVisualFallbackDeadlineMs,
+    preConsentVisualFallbackDeadlineAtMs: options.preConsentVisualFallbackDeadlineAtMs,
     onScanCoreComplete: options.onScanCoreComplete,
     onPolicySurfaceComplete: options.onPolicySurfaceComplete,
     scanTuning,
@@ -794,6 +797,7 @@ async function runLocalV2DagLambdaScanBundle(
     policySurfaceDeadlineAtMs?: number;
     preConsentModuleDeadlineMs?: number;
     preConsentVisualFallbackDeadlineMs?: number;
+    preConsentVisualFallbackDeadlineAtMs?: number;
     scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
     signal?: AbortSignal;
   }
@@ -815,6 +819,7 @@ async function runLocalV2DagLambdaScanBundle(
         preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
         preConsentVisualFallbackDeadlineMs:
           options.preConsentVisualFallbackDeadlineMs ?? options.scanTuning.preConsentVisualFallbackDeadlineMs,
+        preConsentVisualFallbackDeadlineAtMs: options.preConsentVisualFallbackDeadlineAtMs,
         profile: payload.profile,
         scenarioPlanningMode: "planned_parallel",
         scenarioResourceMode: effectiveScenarioResourceMode(payload, options.scanTuning),
@@ -2781,6 +2786,10 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
               LOCAL_V2_DAG_LAMBDA_POST_FALLBACK_RESERVE_MS,
           ),
         ),
+        preConsentVisualFallbackDeadlineAtMs:
+          handlerStartedAtMs + scannerWorkTimeoutMs -
+          LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS -
+          LOCAL_V2_DAG_LAMBDA_POST_FALLBACK_RESERVE_MS,
         signal: scannerAbortController.signal,
       }),
       artifactChainTimeoutMs,

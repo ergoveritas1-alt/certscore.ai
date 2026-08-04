@@ -332,6 +332,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "akzeptieren"),
     ...direct("accept", "alle akzeptieren"),
     ...direct("accept", "alles akzeptieren"),
+    ...direct("accept", "alle auswählen"),
     ...direct("accept", "zustimmen"),
     ...direct("accept", "annehmen"),
     ...direct("accept", "alle annehmen"),

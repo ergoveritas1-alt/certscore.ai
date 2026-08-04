@@ -54,6 +54,8 @@ test("projects bounded Admin evidence only from canonical checklist rows", () =>
   assert.equal(matrix.version, "admin_evidence_matrix.v2");
   assert.equal(matrix.privacyConsent.reject?.status, "review_signal");
   assert.equal(matrix.privacyConsent.mechanism?.status, "not_observed");
+  assert.equal(matrix.privacyConsent.accept, null);
+  assert.equal(matrix.privacyConsent.options, null);
   assert.equal(matrix.transparency.results.CC?.status, "observed");
   assert.equal(matrix.transparency.results.LB, null);
   assert.deepEqual(matrix.transparency.aggregate, { concern: 0, observed: 1, projected: 1, review: 0, total: 10, unresolved: 0 });
@@ -61,6 +63,24 @@ test("projects bounded Admin evidence only from canonical checklist rows", () =>
   assert.equal(matrix.runtime.results.SR?.status, "not_confirmed");
   assert.equal(matrix.runtime.aggregate.concern, 0);
   assert.equal(parseAdminEvidenceMatrix(matrix)?.privacyConsent.cmpVendorName, "Example CMP");
+});
+
+test("does not render compact A/R/O unknowns when the canonical checklist retained no consent surface", () => {
+  const matrix = projectAdminEvidenceMatrix({
+    checklistRows: [
+      row("consent_surface_observed", "Not observed", "No operational consent surface was retained."),
+      row("accept_consent_control", "Not confirmed", "No confirmed surface on which to evaluate Accept."),
+      row("reject_all_path_availability", "Not testable", "No confirmed surface on which to evaluate Reject."),
+      row("options_settings_preferences_control", "Not confirmed", "No confirmed surface on which to evaluate Options.")
+    ],
+    cmpVendorName: null,
+    sourceProjectionVersion: "scan_report_display_projection.v1"
+  });
+
+  assert.equal(matrix.privacyConsent.accept, null);
+  assert.equal(matrix.privacyConsent.reject, null);
+  assert.equal(matrix.privacyConsent.options, null);
+  assert.equal(matrix.privacyConsent.mechanism?.status, "not_observed");
 });
 
 test("bounds descriptors and rejects malformed persisted projections", () => {
