@@ -408,6 +408,15 @@ test("Article 13 rejection contract accepts complaint-to-authority language", ()
       true,
       `${mode} should accept row-specific complaint authority wording`,
     );
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(
+        "If you have unresolved concerns, you may have the right to complain to your data protection authority.",
+        "supervisory_authority",
+        { mode },
+      ),
+      true,
+      `${mode} should accept possessive complaint-to-authority wording`,
+    );
   }
 });
 

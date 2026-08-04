@@ -140,6 +140,31 @@ test("late prefetched policy resolution preserves the full visible policy withou
   assert.match(analysisText, /lodge a complaint with your supervisory authority/);
 });
 
+test("bounded late-policy analysis preserves every canonical topic when early sections are long", () => {
+  const filler = " Additional retained policy context.".repeat(180);
+  const visibleText = [
+    `Privacy Policy Example Company is the data controller.${filler}`,
+    `Contact our data protection officer at privacy@example.test.${filler}`,
+    `We process personal data to provide our services.${filler}`,
+    `Our legal basis is contract and legitimate interests.${filler}`,
+    `Service providers and other recipients receive information.${filler}`,
+    `We retain account records for seven years and then delete them.${filler}`,
+    `You have the right to access, rectify, erase, restrict, object, and port your personal data.${filler}`,
+    `International transfers outside the EEA use standard contractual clauses.${filler}`,
+    `You may complain to your data protection authority.${filler}`,
+    `We use profiling to personalize advertising.${filler}`,
+  ].join(" ");
+
+  const analysisText = boundedPrefetchedPolicyAnalysisText(visibleText);
+
+  assert.ok(analysisText.length <= 40_000);
+  assert.match(analysisText, /Example Company is the data controller/);
+  assert.match(analysisText, /retain account records for seven years/);
+  assert.match(analysisText, /International transfers outside the EEA/);
+  assert.match(analysisText, /complain to your data protection authority/);
+  assert.match(analysisText, /profiling to personalize advertising/);
+});
+
 test("localized consent settings shells are not accepted as substantive privacy notices", async () => {
   const html = `<!doctype html>
     <html lang="sl">

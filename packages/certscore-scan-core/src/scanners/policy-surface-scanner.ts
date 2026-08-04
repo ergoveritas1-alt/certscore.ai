@@ -64,6 +64,8 @@ const MAX_RENDERED_POLICY_DISCOVERY_TEXT_CHARS = 100_000;
 export const POLICY_HOMEPAGE_FETCH_TIMEOUT_MS = 5_000;
 const MAX_EXCERPT_CHARS = 6_000;
 const MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS = 40_000;
+const MAX_POLICY_ANALYSIS_OPENING_CHARS = 4_000;
+const MAX_POLICY_ANALYSIS_TOPIC_CHARS = 3_200;
 const MIN_SUBSTANTIVE_POLICY_TEXT_CHARS = 2_500;
 const MAX_CONSENT_SETTINGS_SHELL_TEXT_CHARS = 120;
 const MAX_CANONICAL_POLICY_LINK_FETCHES = 2;
@@ -6825,9 +6827,14 @@ function boundedPolicyAnalysisExcerpt(text: string): string {
   ];
 
   const chunks: string[] = [];
-  addPolicyAnalysisChunk(chunks, "policy_opening", normalized.slice(0, 6_000));
+  addPolicyAnalysisChunk(
+    chunks,
+    "policy_opening",
+    normalized.slice(0, MAX_POLICY_ANALYSIS_OPENING_CHARS),
+  );
   for (const section of sections) {
-    const chunk = boundedMatchedExcerptForPatterns(normalized, section.patterns)?.slice(0, 4_000);
+    const chunk = boundedMatchedExcerptForPatterns(normalized, section.patterns)
+      ?.slice(0, MAX_POLICY_ANALYSIS_TOPIC_CHARS);
     if (chunk) {
       addPolicyAnalysisChunk(chunks, section.label, chunk);
     }
