@@ -85,6 +85,10 @@ test("homepage-failed fallback schedules the primary TLD locale policy before ge
 
   assert.equal(
     ordered[0]?.normalizedUrl,
+    "https://www.uni-lj.si/politika-varstva-zasebnosti-in-piskotkov",
+  );
+  assert.equal(
+    ordered[1]?.normalizedUrl,
     "https://uni-lj.si/politika-varstva-zasebnosti-in-piskotkov",
   );
 });

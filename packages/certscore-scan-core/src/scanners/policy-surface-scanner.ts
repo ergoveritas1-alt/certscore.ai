@@ -3661,7 +3661,7 @@ export function commonPathCandidatesFor(
   const primaryLocalePrivacyPaths = new Set(localeHints.flatMap((locale) =>
     privacySurfacePathsForLocale(locale).slice(0, 1)
   ));
-  return paths.map((path, offset) => {
+  const candidates = paths.map((path, offset) => {
     const normalizedUrl = normalizeUrl(path, baseUrl) ?? baseUrl;
     const linkText = commonPolicyPathLabel(path);
     const deterministic = classifyCommonPathSurface(linkText, normalizedUrl);
@@ -3689,6 +3689,25 @@ export function commonPathCandidatesFor(
       discoveryMethod: "guessed_common_path" as const,
     };
   }).filter((candidate) => candidate.deterministicScore > 0.2);
+  return candidates.flatMap((candidate) => {
+    if (!candidate.deterministicClassifierReasonCodes.includes("common_path_primary_locale_privacy")) {
+      return [candidate];
+    }
+    const canonicalWwwUrl = canonicalWwwPolicyUrlVariant(candidate.normalizedUrl);
+    if (!canonicalWwwUrl) {
+      return [candidate];
+    }
+    return [{
+      ...candidate,
+      candidateId: `${candidate.candidateId}_canonical_www`,
+      url: canonicalWwwUrl,
+      normalizedUrl: canonicalWwwUrl,
+      deterministicClassifierReasonCodes: uniqueStrings([
+        ...candidate.deterministicClassifierReasonCodes,
+        "common_path_primary_locale_privacy_canonical_www",
+      ]),
+    }, candidate];
+  });
 }
 
 function policySurfaceSeedCandidatesFor(input: PolicySurfaceScannerInput): PolicySurfaceCandidate[] {
@@ -3995,6 +4014,9 @@ function commonPathCandidateKey(value: string): string {
 
 function commonPathPriority(candidate: PolicySurfaceCandidate): number {
   const path = safeUrlPath(candidate.normalizedUrl);
+  if (candidate.deterministicClassifierReasonCodes.includes("common_path_primary_locale_privacy_canonical_www")) {
+    return -1;
+  }
   if (candidate.deterministicClassifierReasonCodes.includes("common_path_primary_locale_privacy")) {
     return 0;
   }
