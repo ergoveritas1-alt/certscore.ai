@@ -916,6 +916,14 @@ export async function preConsentRuntimeScanner(
     const settleWaitMs = fastWait ? 350 : 1_000;
     const postSettleInventoryMaxMs = fastWait ? 1_000 : 1_500;
     const postSettleInventoryReserveMs = 500;
+    const settledVisualCheckpointScreenshotMaxMs = fastWait ? 1_500 : 2_000;
+    const settledVisualCheckpointInventoryMaxMs = fastWait ? 750 : 1_000;
+    const settledVisualCheckpointReserveMs =
+      settleWaitMs +
+      postSettleInventoryMaxMs +
+      settledVisualCheckpointScreenshotMaxMs +
+      settledVisualCheckpointInventoryMaxMs +
+      250;
     const consentUiWaitTimeoutMs = fastWait ? 1_800 : 3_500;
     // Regional commerce pages can paint a complete consent surface before
     // their renderer answers structured DOM/accessibility reads. Preserve a
@@ -1171,7 +1179,10 @@ export async function preConsentRuntimeScanner(
         }
       }
       if (shouldRunImmediateStructuredConsentRecovery(preScreenshotConsentObservation)) {
-        const evidenceFinalizationReserveMs = 1_500;
+        // Protect the synchronized late visual/typed checkpoint. Structured
+        // recovery is valuable, but it must not consume the only opportunity
+        // to retain a representative frame after a delayed CMP has rendered.
+        const evidenceFinalizationReserveMs = settledVisualCheckpointReserveMs;
         const requestedRecoveryBudgetMs = Math.min(
           fastWait ? 3_000 : 4_000,
           Math.max(0, remainingModuleBudgetMs() - evidenceFinalizationReserveMs),
@@ -1269,6 +1280,90 @@ export async function preConsentRuntimeScanner(
       );
     }
     retainedConsentUiObservation = preScreenshotConsentObservation;
+
+    // Capture the representative pre-consent frame before consolidated page
+    // evidence can consume the module deadline. The typed inventory is read
+    // immediately after the screenshot from the same live, untouched page;
+    // screenshot pixels never create or upgrade a control observation.
+    if (earlyScreenshotCaptured) {
+      const settledScreenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-settled.png");
+      const settledCapture = await recordTiming(
+        timingBreakdown,
+        "protected settled consent screenshot",
+        "Protected passive viewport checkpoint after the render wait and canonical post-settle inventory, before lower-priority consolidated page extraction.",
+        () => capturePreConsentScreenshot(page, settledScreenshotPath, {
+          captureMode: "viewport_first",
+          screenshotErrors,
+          timeoutMs: Math.min(
+            input.screenshotTimeoutMs ?? 5_000,
+            settledVisualCheckpointScreenshotMaxMs,
+          ),
+        }),
+      );
+      if (settledCapture.status === "available") {
+        const settledScreenshot: ScreenshotArtifact = {
+          artifactId: "screenshot_pre_consent_settled",
+          capturedAtMs: elapsed(input.scanStartedAtMs),
+          captureMethod: settledCapture.captureMethod,
+          path: settledScreenshotPath,
+          url: page.url(),
+          pagePhase: "network_idle",
+          consentStateAtTime: "pre_consent",
+        };
+        screenshots.unshift(settledScreenshot);
+        const settledVisualCapture = visualCaptureFromScreenshotSummary(
+          settledCapture,
+          settledScreenshotPath,
+          settledScreenshot.artifactId,
+        );
+        visualCapture = {
+          ...settledVisualCapture,
+          artifactRefs: uniqueEvidenceRefs([
+            ...settledVisualCapture.artifactRefs,
+            ...visualCapture.artifactRefs,
+          ]),
+          notes: unique([
+            ...settledVisualCapture.notes,
+            ...visualCapture.notes,
+            "A protected settled pre-consent frame was paired with an immediate typed control inventory before consolidated page extraction.",
+          ]),
+        };
+
+        const pairedObservation = await recordBoundedTiming(
+          timingBreakdown,
+          "paired settled-frame consent inventory",
+          "Immediate canonical typed control inventory paired to the protected settled visual frame; remains read-only and does not infer from screenshot pixels.",
+          settledVisualCheckpointInventoryMaxMs,
+          () => detectConsentUi(page, input.scanStartedAtMs, 0, {
+            allowFullDocumentCmpControls: true,
+          }),
+          () => annotateConsentUiObservation(
+            emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
+            "recapture:paired_settled_frame_inventory_incomplete",
+          ),
+        );
+        const pairedResolution = reconcileConsentUiRecapture({
+          current: preScreenshotConsentObservation,
+          candidate: pairedObservation,
+          strongerBasis: "recapture:paired_settled_frame_typed_controls",
+          completedWithoutControlsBasis: "recapture:paired_settled_frame_completed_without_first_layer_controls",
+        });
+        if (pairedResolution.strongerEvidenceRetained || pairedResolution.completedNegativeRetained) {
+          preScreenshotConsentObservation = pairedResolution.observation;
+        } else if (isIncompleteConsentUiCapture(pairedObservation)) {
+          preScreenshotConsentObservation = annotateConsentUiObservation(
+            preScreenshotConsentObservation,
+            "recapture:paired_settled_frame_inventory_incomplete",
+          );
+        } else {
+          preScreenshotConsentObservation = annotateConsentUiObservation(
+            preScreenshotConsentObservation,
+            "inventory:paired_settled_frame_completed",
+          );
+        }
+        retainedConsentUiObservation = preScreenshotConsentObservation;
+      }
+    }
 
     const lateAccessibilityRetryEligible =
       earlyScreenshotCaptured &&
@@ -1429,94 +1524,6 @@ export async function preConsentRuntimeScanner(
         );
       }
       retainedConsentUiObservation = consentObservation;
-    }
-
-    if (
-      earlyScreenshotCaptured &&
-      shouldCaptureSettledPreConsentScreenshot({
-        settledBodyText: domText,
-      })
-    ) {
-      const settledScreenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-settled.png");
-      const settledCapture = await recordTiming(
-        timingBreakdown,
-        "settled screenshot recapture",
-        "Targeted viewport recapture after the early DOMContentLoaded frame remained sparse while the settled DOM became substantive.",
-        () => capturePreConsentScreenshot(page, settledScreenshotPath, {
-          captureMode: "viewport_first",
-          screenshotErrors,
-          timeoutMs: Math.min(input.screenshotTimeoutMs ?? 5_000, fastWait ? 2_000 : 3_000),
-        }),
-      );
-      if (settledCapture.status === "available") {
-        const settledScreenshot: ScreenshotArtifact = {
-          artifactId: "screenshot_pre_consent_settled",
-          capturedAtMs: elapsed(input.scanStartedAtMs),
-          captureMethod: settledCapture.captureMethod,
-          path: settledScreenshotPath,
-          url: page.url(),
-          pagePhase: "network_idle",
-          consentStateAtTime: "pre_consent",
-        };
-        screenshots.unshift(settledScreenshot);
-        const settledVisualCapture = visualCaptureFromScreenshotSummary(
-          settledCapture,
-          settledScreenshotPath,
-          settledScreenshot.artifactId,
-        );
-        visualCapture = {
-          ...settledVisualCapture,
-          artifactRefs: uniqueEvidenceRefs([
-            ...settledVisualCapture.artifactRefs,
-            ...visualCapture.artifactRefs,
-          ]),
-          notes: unique([
-            ...settledVisualCapture.notes,
-            ...visualCapture.notes,
-            "Settled pre-consent viewport recaptured because the early frame was not representative of the rendered page.",
-          ]),
-        };
-        if (consentObservation.controls.length === 0) {
-          // The settled screenshot is the last authoritative visual frame. A
-          // consent surface can render in the short gap between the ordinary
-          // post-settle inventory and this capture, so reserve one bounded
-          // typed read even when the module's soft evidence budget has been
-          // consumed. This is observation only and remains subject to the
-          // parent scan cancellation and Lambda hard deadline.
-          const postSettledScreenshotInventoryBudgetMs = fastWait ? 1_250 : 1_500;
-          const postSettledScreenshotObservation = await recordBoundedTiming(
-            timingBreakdown,
-            "consent UI immediate post-settled-screenshot inventory",
-            "Run one immediate typed consent-control inventory against the exact settled DOM retained in visual evidence.",
-            postSettledScreenshotInventoryBudgetMs,
-            () => detectConsentUi(page, input.scanStartedAtMs, 0, {
-              allowFullDocumentCmpControls: true,
-            }),
-            () => annotateConsentUiObservation(
-              emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
-              "recapture:post_settled_screenshot_inventory_incomplete",
-            ),
-          );
-          const postSettledScreenshotResolution = reconcileConsentUiRecapture({
-            current: consentObservation,
-            candidate: postSettledScreenshotObservation,
-            strongerBasis: "recapture:post_settled_screenshot_typed_controls",
-            completedWithoutControlsBasis: "recapture:post_settled_screenshot_completed_without_first_layer_controls",
-          });
-          if (
-            postSettledScreenshotResolution.strongerEvidenceRetained ||
-            postSettledScreenshotResolution.completedNegativeRetained
-          ) {
-            consentObservation = postSettledScreenshotResolution.observation;
-          } else if (isIncompleteConsentUiCapture(postSettledScreenshotObservation)) {
-            consentObservation = annotateConsentUiObservation(
-              consentObservation,
-              "recapture:post_settled_screenshot_inventory_incomplete",
-            );
-          }
-          retainedConsentUiObservation = consentObservation;
-        }
-      }
     }
 
     // Mark absence complete only after the final visual frame has had its

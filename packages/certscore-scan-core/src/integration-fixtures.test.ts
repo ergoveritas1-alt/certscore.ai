@@ -1600,6 +1600,50 @@ test("pre-consent runtime scanner recaptures late CMP choice controls when no in
   }
 });
 
+test("pre-consent runtime scanner protects a settled screenshot paired with delayed consent controls", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-paired-settled-frame-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-late-cmp-choice-controls"),
+      path.join(tempRoot, "consent-late-cmp-choice-controls"),
+      "fast",
+      "always",
+      "viewport_first",
+      9_000,
+    );
+    const observation = bundle.consentUiObservations[0];
+    const settledScreenshot = bundle.screenshots.find((screenshot) =>
+      screenshot.artifactId === "screenshot_pre_consent_settled"
+    );
+    const timingLabels = bundle.modulesRun[0]?.timingBreakdown?.map((entry) => entry.label) ?? [];
+
+    assert.ok(settledScreenshot, "a usable settled pre-consent screenshot should be retained");
+    assert.ok(
+      (await readFile(settledScreenshot.path)).byteLength > 1_000,
+      "the settled screenshot must be a substantive image rather than a placeholder",
+    );
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.basis.includes("inventory:paired_settled_frame_completed") ||
+        observation?.basis.includes("recapture:paired_settled_frame_typed_controls"),
+      true,
+      "typed control evidence should be paired to the protected settled frame",
+    );
+    assert.equal(timingLabels.includes("protected settled consent screenshot"), true);
+    assert.equal(timingLabels.includes("paired settled-frame consent inventory"), true);
+    assert.ok(
+      timingLabels.indexOf("protected settled consent screenshot") < timingLabels.indexOf("page evidence capture"),
+      "the representative screenshot must run before consolidated page extraction",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner retains hit-testable transparent consent input overlays", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-transparent-input-overlays-"));
