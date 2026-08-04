@@ -911,51 +911,6 @@ export async function preConsentRuntimeScanner(
     });
     firstPartyHostname = finalDocumentParty.firstPartyHostname ?? firstPartyHostname;
     firstPartyDomain = finalDocumentParty.firstPartyDomain ?? firstPartyDomain;
-    retainedRenderedPolicyLinkEvidence = await recordBoundedTiming(
-      timingBreakdown,
-      "page evidence: early rendered policy links",
-      "Capture canonical privacy, cookie, and privacy-choice links immediately after DOMContentLoaded, before visual and consent work can contend with the renderer.",
-      Math.min(1_000, remainingModuleBudgetMs()),
-      () => captureRenderedPolicyLinks(page),
-      () => [],
-    );
-    const earlyTransportNetworkProbes = await transportNetworkProbesPromise;
-    timingBreakdown.push({
-      label: "transport security network probes",
-      detail: "HTTP redirect and strict TLS probes overlapped browser launch and initial navigation.",
-      durationMs: earlyTransportNetworkProbes.durationMs,
-    });
-    const earlyTransportFallback = () => ({
-      observation: availableTransportSecurityObservation({
-        networkProbes: earlyTransportNetworkProbes,
-        normalizedUrl: input.normalizedUrl,
-        pageUrl: safePageUrl(page, effectiveNavigationUrl),
-        requestedUrl: input.url,
-        scanStartedAtMs: input.scanStartedAtMs,
-      }),
-      artifactRef: undefined,
-    });
-    const earlyTransportCapture = await recordBoundedTiming(
-      timingBreakdown,
-      "page evidence: early transport security",
-      "Capture HTTPS, TLS, redirect, mixed-content, and form transport evidence before optional visual and consent work can exhaust the module budget.",
-      Math.min(2_500, Math.max(1_000, remainingModuleBudgetMs())),
-      () => captureTransportSecurityObservation({
-        collectionSurfaceObservations: [],
-        failedHttpRequests,
-        mixedContentConsoleMessages,
-        networkEvents,
-        normalizedUrl: input.normalizedUrl,
-        networkProbes: earlyTransportNetworkProbes,
-        page,
-        requestedUrl: input.url,
-        scanStartedAtMs: input.scanStartedAtMs,
-        artifactWriter: input.artifactWriter,
-      }),
-      earlyTransportFallback,
-    );
-    retainedTransportSecurityObservation = earlyTransportCapture.observation;
-    retainedTransportSecurityArtifactRef = earlyTransportCapture.artifactRef;
     const fastWait = input.waitMode === "fast";
     const networkIdleTimeoutMs = fastWait ? 1_500 : 5_000;
     const settleWaitMs = fastWait ? 350 : 1_000;
@@ -968,13 +923,15 @@ export async function preConsentRuntimeScanner(
     // evidence quality is more important than shaving a few seconds here.
     const consentUiCaptureTimeoutMs = fastWait ? 7_000 : 8_000;
     const earlyScreenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
-    // Start the first visual capture before consent inspection. A slow CMP
-    // probe must never prevent us from retaining the page a visitor saw.
+    // Start consent evidence immediately after DOMContentLoaded. Secondary
+    // policy and transport reads may be slow on frame-heavy pages, but must
+    // not consume the complete module budget before the visitor-visible state
+    // and its typed control inventory have begun capture.
     const earlyScreenshotCapturePromise = (input.screenshotMode ?? "always") === "always"
       ? recordTiming(
         timingBreakdown,
         "early screenshot capture",
-        "Early pre-consent viewport screenshot starts immediately after DOMContentLoaded and runs independently of consent inspection.",
+        "Early pre-consent viewport screenshot starts immediately after DOMContentLoaded and runs independently of secondary page evidence.",
         () => capturePreConsentScreenshot(page, earlyScreenshotPath, {
           captureMode: "viewport_first",
           screenshotErrors,
@@ -1005,6 +962,70 @@ export async function preConsentRuntimeScanner(
         retainedConsentUiObservation = observation;
         return observation;
       });
+    const earlyConsentGeometryPromise = (input.screenshotMode ?? "always") === "always"
+      ? consentUiObservationPromise.then((observation) => {
+          if (hasSufficientFirstLayerConsentControls(observation)) {
+            return null;
+          }
+          const timeoutMs = Math.min(2_000, Math.max(250, remainingModuleBudgetMs()));
+          return recordBoundedTiming<ConsentControlGeometryArtifact | null>(
+            timingBreakdown,
+            "early consent control geometry",
+            "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
+            timeoutMs,
+            () => captureConsentControlGeometry(page, {
+              screenshotArtifactRef: earlyScreenshotPath,
+              timeoutMs,
+            }),
+            () => null,
+          );
+        })
+      : Promise.resolve(null);
+    retainedRenderedPolicyLinkEvidence = await recordBoundedTiming(
+      timingBreakdown,
+      "page evidence: early rendered policy links",
+      "Capture canonical privacy, cookie, and privacy-choice links while the already-started consent evidence lane runs independently.",
+      Math.min(1_000, remainingModuleBudgetMs()),
+      () => captureRenderedPolicyLinks(page),
+      () => [],
+    );
+    const earlyTransportNetworkProbes = await transportNetworkProbesPromise;
+    timingBreakdown.push({
+      label: "transport security network probes",
+      detail: "HTTP redirect and strict TLS probes overlapped browser launch and initial navigation.",
+      durationMs: earlyTransportNetworkProbes.durationMs,
+    });
+    const earlyTransportFallback = () => ({
+      observation: availableTransportSecurityObservation({
+        networkProbes: earlyTransportNetworkProbes,
+        normalizedUrl: input.normalizedUrl,
+        pageUrl: safePageUrl(page, effectiveNavigationUrl),
+        requestedUrl: input.url,
+        scanStartedAtMs: input.scanStartedAtMs,
+      }),
+      artifactRef: undefined,
+    });
+    const earlyTransportCapture = await recordBoundedTiming(
+      timingBreakdown,
+      "page evidence: early transport security",
+      "Capture HTTPS, TLS, redirect, mixed-content, and form transport evidence while the already-started consent evidence lane runs independently.",
+      Math.min(2_500, Math.max(1_000, remainingModuleBudgetMs())),
+      () => captureTransportSecurityObservation({
+        collectionSurfaceObservations: [],
+        failedHttpRequests,
+        mixedContentConsoleMessages,
+        networkEvents,
+        normalizedUrl: input.normalizedUrl,
+        networkProbes: earlyTransportNetworkProbes,
+        page,
+        requestedUrl: input.url,
+        scanStartedAtMs: input.scanStartedAtMs,
+        artifactWriter: input.artifactWriter,
+      }),
+      earlyTransportFallback,
+    );
+    retainedTransportSecurityObservation = earlyTransportCapture.observation;
+    retainedTransportSecurityArtifactRef = earlyTransportCapture.artifactRef;
     const networkIdlePromise = recordTiming(
       timingBreakdown,
       "network idle wait",
@@ -1040,6 +1061,44 @@ export async function preConsentRuntimeScanner(
         consentUiObservationPromise,
         networkIdlePromise,
       ]);
+      const earlyConsentGeometry = await earlyConsentGeometryPromise;
+      if (
+        earlyConsentGeometry &&
+        hasConfirmedFirstLayerGeometryControls(earlyConsentGeometry) &&
+        earlyConsentGeometry.pageUrl !== "about:blank" &&
+        earlyConsentGeometry.viewport.width > 0 &&
+        earlyConsentGeometry.viewport.height > 0
+      ) {
+        const earlyGeometryAccess = await collectConsentGeometryPageAccess(
+          page,
+          initialNavigationHttpStatus,
+          {
+            frameTextTimeoutMs: 250,
+            supplementalBodyText: preScreenshotConsentObservation.textExcerpt,
+          },
+        );
+        const earlyGeometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
+          "ConsentControlGeometryEvidence.json",
+          {
+            ...earlyConsentGeometry,
+            access: earlyGeometryAccess,
+            egress: buildConsentGeometryEgressDiagnostic(),
+            artifactOnly: true,
+            productionFindingIntegration: false,
+          },
+        );
+        consentGeometryDiagnosticWritten = true;
+        preScreenshotConsentObservation = reconcileConsentUiObservationWithCompletedGeometry({
+          artifactPath: earlyGeometryArtifactPath,
+          current: preScreenshotConsentObservation,
+          geometry: earlyConsentGeometry,
+          geometryAccessLoaded: earlyGeometryAccess.status === "loaded",
+          pageUrl: safePageUrl(page, effectiveNavigationUrl),
+          scanStartedAtMs: input.scanStartedAtMs,
+          text: preScreenshotConsentObservation.textExcerpt,
+        });
+        retainedConsentUiObservation = preScreenshotConsentObservation;
+      }
       if (!hasSufficientFirstLayerConsentControls(preScreenshotConsentObservation)) {
         let earlyCmpRuntimeObservations = buildCmpRuntimeObservations(
           vendorResolverInputs,
@@ -1978,7 +2037,7 @@ export async function preConsentRuntimeScanner(
     const geometryBudgetCushionMs = input.internalBudgetMs <= 10_000
       ? structuredFirstLayerControlsConfirmed ? 1_000 : 2_500
       : input.waitMode === "fast" ? 8_000 : 10_000;
-    if (remainingModuleBudgetMs() >= geometryBudgetCushionMs) {
+    if (!consentGeometryDiagnosticWritten && remainingModuleBudgetMs() >= geometryBudgetCushionMs) {
       await recordTiming(
         timingBreakdown,
         "consent control geometry diagnostic",

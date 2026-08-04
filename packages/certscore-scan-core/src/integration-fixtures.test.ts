@@ -1644,6 +1644,7 @@ test("pre-consent runtime scanner attempts structured recovery before broad page
     const postSettleRecoveryIndex = timingLabels.indexOf("page evidence: post-settle consent inventory");
     const recoveryIndex = immediateRecoveryIndex >= 0 ? immediateRecoveryIndex : postSettleRecoveryIndex;
     const broadEvidenceIndex = timingLabels.indexOf("page evidence capture");
+    const earlyGeometryIndex = timingLabels.indexOf("early consent control geometry");
 
     assert.equal(observation?.acceptControlObserved, true);
     assert.equal(observation?.rejectControlObserved, true);
@@ -1655,6 +1656,10 @@ test("pre-consent runtime scanner attempts structured recovery before broad page
     assert.ok(
       broadEvidenceIndex < 0 || recoveryIndex < broadEvidenceIndex,
       "consent recovery must run before broad page-evidence capture",
+    );
+    assert.ok(
+      earlyGeometryIndex >= 0,
+      "an empty initial inventory should start bounded typed geometry while the consent document is still live",
     );
   } finally {
     await server.close();
