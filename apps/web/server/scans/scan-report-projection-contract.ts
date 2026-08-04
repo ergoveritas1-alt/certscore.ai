@@ -91,11 +91,35 @@ function canonicalizeRuntimeArtifactAliases(runtimeArtifacts: Record<string, unk
 }
 
 function normalizeProjectionJson(value: unknown) {
-  const transported = JSON.stringify(value);
+  const transported = JSON.stringify(sanitizeJsonbValue(value));
   if (transported === undefined) {
     throw new Error("Scan report projection is not JSON serializable.");
   }
   return canonicalize(JSON.parse(transported) as unknown);
+}
+
+/**
+ * PostgreSQL jsonb rejects U+0000 even when it is validly escaped as `\\u0000`
+ * by JSON.stringify. Retained browser evidence can contain this character in
+ * copied text or script payloads, so sanitize it at the JSONB boundary while
+ * preserving the rest of the evidence unchanged.
+ */
+export function sanitizeJsonbValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.replaceAll("\u0000", "\uFFFD");
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(sanitizeJsonbValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [sanitizeJsonbValue(key), sanitizeJsonbValue(entry)])
+    );
+  }
+  return value;
 }
 
 function serializeProjection(value: unknown) {

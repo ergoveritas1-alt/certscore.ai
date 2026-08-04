@@ -15,6 +15,7 @@ import {
   MAX_SCAN_REPORT_PROJECTION_BYTES,
   readPersistedScanReportProjection,
   REPORT_PROJECTION_READY_WARNING_MS,
+  sanitizeJsonbValue,
   SCAN_REPORT_PROJECTION_VERSION
 } from "./scan-report-projection-contract";
 import type { ScanDetailResponse } from "./get-scan-by-id";
@@ -139,6 +140,24 @@ test("persisted display projection is bounded, checksum-verified, and scan-bound
       report_projection_version: SCAN_REPORT_PROJECTION_VERSION
     }
   }), null);
+});
+
+test("projection sanitizes NUL characters rejected by PostgreSQL jsonb", () => {
+  const scanRecord = {
+    events: [{ message: "retained\u0000evidence" }],
+    runtimeArtifacts: { policyText: "before\u0000after" },
+    scan: {
+      id: "5eb8e37d-7eac-4c45-bb4b-3c31c239a2df",
+      status: "completed"
+    },
+    snapshot: null
+  } as unknown as ScanDetailResponse;
+
+  const persisted = buildPersistedScanReportProjection(scanRecord);
+  assert.equal((persisted.payload.events[0] as Record<string, unknown>).message, "retained�evidence");
+  assert.equal((persisted.payload.runtimeArtifacts as Record<string, unknown>).policyText, "before�after");
+  assert.equal(JSON.stringify(persisted.payload).includes("\u0000"), false);
+  assert.deepEqual(sanitizeJsonbValue({ nested: ["a\u0000b"] }), { nested: ["a�b"] });
 });
 
 test("persisted projection preserves conflicting runtime aliases instead of dropping evidence", () => {

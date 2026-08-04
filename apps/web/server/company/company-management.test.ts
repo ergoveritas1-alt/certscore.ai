@@ -62,6 +62,8 @@ test("workspace management navigation is limited to platform admins", async () =
 test("admin user deletion is protected and removes auth plus app records", async () => {
   const action = await readFile("apps/web/server/admin/delete-user.ts", "utf8");
   const page = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
+  const postgres = await readFile("packages/db/src/postgres.ts", "utf8");
+  const migration = await readFile("packages/db/migrations/0168_user_delete_foreign_key_indexes.sql", "utf8");
 
   assert.match(action, /requirePlatformAdminContext/);
   assert.match(action, /userId === user\.id/);
@@ -69,8 +71,25 @@ test("admin user deletion is protected and removes auth plus app records", async
   assert.match(action, /advanced_member_count/);
   assert.match(action, /delete from better_auth_users/);
   assert.match(action, /delete from users/);
+  assert.match(action, /withWriteTransaction/);
+  assert.match(action, /admin\.user_delete\.completed/);
+  assert.match(action, /admin\.user_delete\.failed/);
+  assert.match(postgres, /set local lock_timeout = '5000ms'/);
+  assert.match(postgres, /set local statement_timeout = '30000ms'/);
+  assert.match(migration, /scans_submitted_by_user_id_idx/);
+  assert.match(migration, /policy_review_queue_assigned_to_idx/);
+  assert.match(migration, /validation_runs_triggered_by_user_id_idx/);
   assert.match(page, /DeleteUserButton/);
   assert.match(page, /deleteAdminUserFormAction/);
+  assert.match(page, /sortKey="user"/);
+  assert.match(page, /sortKey="activity"/);
+  assert.match(page, /sortKey="lastLogin"/);
+  assert.match(page, /sortKey="lastScan"/);
+  assert.match(page, /sortKey="access"/);
+  assert.match(page, /sortKey="assign"/);
+  assert.match(page, /sortKey="plan"/);
+  assert.match(page, /searchParams=\{\{ dir: direction, sort: sortKey \}\}/);
+  assert.doesNotMatch(page, />Last active<\/th>/);
 });
 
 test("platform admins can assign unassigned users to a workspace", async () => {
