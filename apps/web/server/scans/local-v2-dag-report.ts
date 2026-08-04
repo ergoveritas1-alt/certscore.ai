@@ -35,6 +35,7 @@ import {
   type GdprTransparencyTopicEvidenceAdapterResult
 } from "../../lib/scans/gdpr-transparency-topic-evidence-adapter";
 import {
+  GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
   gdprTransparencyProductionEvidenceProfileEnabled,
   normalizeGdprTransparencyProductionEvidenceProfile,
   type GdprTransparencyProductionEvidenceProfile
@@ -1302,7 +1303,12 @@ function policyDisclosureRowScore(row: Record<string, unknown>) {
     ? row.confidence
     : 0;
   const excerpt = firstString(row.selectedPolicySectionExcerpt, row.evidenceText) ?? "";
-  return article13StatusScore(status) +
+  const approvedProductionCredit =
+    row.productionCredit === true &&
+    row.productionCreditProfile === GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE &&
+    row.classifierProvenance === "gdpr_transparency_topic_classifier.v1";
+  return (approvedProductionCredit ? 1_000 : 0) +
+    article13StatusScore(status) +
     article13EvidenceStrengthScore(strength) +
     confidence +
     Math.min(excerpt.length / 1_000, 5);

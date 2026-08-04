@@ -4199,6 +4199,54 @@ test("summarizePolicySurfaces uses multilingual policy quality by default for GD
   ), true);
 });
 
+test("summarizePolicySurfaces retains approved production provenance when a stronger legacy signal overlaps", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const authorityEvidence = "In the European Union, you can lodge a complaint with an E.U. data protection authority.";
+  const policyText = [
+    "Privacy Policy. This policy describes how we process personal information and the rights available to individuals.",
+    authorityEvidence,
+    "Contact our privacy team with questions about this policy and the exercise of your privacy rights.",
+  ].join(" ");
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "publisher-privacy",
+    surfaceType: "privacy_policy",
+    url: "https://publisher.example/privacy",
+    normalizedUrl: "https://publisher.example/privacy",
+    confidence: 0.96,
+    status: "fetched",
+    textExcerpt: policyText,
+    observedTopics: ["supervisory_authority"],
+    article13DisclosureSignals: [{
+      disclosureType: "supervisory_authority",
+      status: "observed",
+      evidenceText: authorityEvidence,
+      confidence: 0.9,
+      source: "deterministic",
+      selectedEvidenceStrength: "strong",
+    }],
+    gdprTransparencyTopicCandidates: [{
+      topic: "supervisory_authority",
+      status: "diagnostic_only",
+      evidenceText: authorityEvidence,
+      confidence: 0.82,
+      classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+      matchedLocale: "en",
+      matchedTerm: "lodge a complaint with an e.u. data protection authority",
+      matchStrength: "equivalent",
+      classifierReasonCodes: ["matched_supervisory_authority", "match_strength_equivalent"],
+      productionCredit: false,
+    }],
+  }] as never, "https://publisher.example/");
+
+  const summary = summarizePolicySurfaces(surfaces, "publisher.example");
+  const signal = (summary.article13DisclosureSignals as Array<Record<string, unknown>>)
+    .find((row) => row.disclosureType === "supervisory_authority");
+  assert.equal(signal?.productionCredit, true);
+  assert.equal(signal?.productionCreditProfile, "gdpr_transparency_multilingual_article13_v1");
+  assert.equal(signal?.classifierProvenance, "gdpr_transparency_topic_classifier.v1");
+  assert.equal(summary.gdprTransparencyProductionEvidenceDiagnostics.productionCreditSignalCount, 1);
+});
+
 test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile metadata from scan config", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
