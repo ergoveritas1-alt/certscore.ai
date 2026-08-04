@@ -185,6 +185,21 @@ test("an early completed channel cannot mask an incomplete post-settle inventory
   })), false);
 });
 
+test("an incomplete inventory after the settled screenshot cannot be marked complete", () => {
+  assert.equal(canMarkSettledConsentInventoryCompleted(observation({
+    captureStatus: "no_evidence",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "accessibility_tree"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    basis: [
+      "recapture:post_settle_dom_inventory",
+      "recapture:post_settled_screenshot_inventory_incomplete",
+    ],
+  })), false);
+});
+
 test("a newly retained options control strengthens an existing accept and reject inventory", () => {
   const current = observation({
     likelyPresent: true,

@@ -1431,17 +1431,6 @@ export async function preConsentRuntimeScanner(
       retainedConsentUiObservation = consentObservation;
     }
 
-    // A page with no consent-language keywords may not trigger either
-    // recapture path. Preserve that the bounded control inventory completed so
-    // a clean absence is not downgraded to incomplete coverage.
-    if (canMarkSettledConsentInventoryCompleted(consentObservation)) {
-      consentObservation = annotateConsentUiObservation(
-        consentObservation,
-        "settled_control_inventory_completed",
-      );
-      retainedConsentUiObservation = consentObservation;
-    }
-
     if (
       earlyScreenshotCaptured &&
       shouldCaptureSettledPreConsentScreenshot({
@@ -1487,27 +1476,58 @@ export async function preConsentRuntimeScanner(
             "Settled pre-consent viewport recaptured because the early frame was not representative of the rendered page.",
           ]),
         };
-        if (consentObservation.controls.length === 0 && remainingModuleBudgetMs() >= 750) {
+        if (consentObservation.controls.length === 0) {
+          // The settled screenshot is the last authoritative visual frame. A
+          // consent surface can render in the short gap between the ordinary
+          // post-settle inventory and this capture, so reserve one bounded
+          // typed read even when the module's soft evidence budget has been
+          // consumed. This is observation only and remains subject to the
+          // parent scan cancellation and Lambda hard deadline.
+          const postSettledScreenshotInventoryBudgetMs = fastWait ? 1_250 : 1_500;
           const postSettledScreenshotObservation = await recordBoundedTiming(
             timingBreakdown,
             "consent UI immediate post-settled-screenshot inventory",
             "Run one immediate typed consent-control inventory against the exact settled DOM retained in visual evidence.",
-            Math.min(1_250, remainingModuleBudgetMs()),
+            postSettledScreenshotInventoryBudgetMs,
             () => detectConsentUi(page, input.scanStartedAtMs, 0, {
               allowFullDocumentCmpControls: true,
             }),
-            () => consentObservation,
+            () => annotateConsentUiObservation(
+              emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
+              "recapture:post_settled_screenshot_inventory_incomplete",
+            ),
           );
-          if (isStrongerConsentUiObservation(postSettledScreenshotObservation, consentObservation)) {
-            consentObservation = mergeConsentUiObservations(
+          const postSettledScreenshotResolution = reconcileConsentUiRecapture({
+            current: consentObservation,
+            candidate: postSettledScreenshotObservation,
+            strongerBasis: "recapture:post_settled_screenshot_typed_controls",
+            completedWithoutControlsBasis: "recapture:post_settled_screenshot_completed_without_first_layer_controls",
+          });
+          if (
+            postSettledScreenshotResolution.strongerEvidenceRetained ||
+            postSettledScreenshotResolution.completedNegativeRetained
+          ) {
+            consentObservation = postSettledScreenshotResolution.observation;
+          } else if (isIncompleteConsentUiCapture(postSettledScreenshotObservation)) {
+            consentObservation = annotateConsentUiObservation(
               consentObservation,
-              postSettledScreenshotObservation,
-              "recapture:post_settled_screenshot_typed_controls",
+              "recapture:post_settled_screenshot_inventory_incomplete",
             );
-            retainedConsentUiObservation = consentObservation;
           }
+          retainedConsentUiObservation = consentObservation;
         }
       }
+    }
+
+    // Mark absence complete only after the final visual frame has had its
+    // corresponding typed inventory. This prevents an earlier empty DOM read
+    // from masking a consent surface that appeared during settled capture.
+    if (canMarkSettledConsentInventoryCompleted(consentObservation)) {
+      consentObservation = annotateConsentUiObservation(
+        consentObservation,
+        "settled_control_inventory_completed",
+      );
+      retainedConsentUiObservation = consentObservation;
     }
 
     for (const script of scripts) {
@@ -2841,7 +2861,8 @@ function isIncompleteConsentUiCapture(observation: ConsentUiObservation): boolea
     basis === "inventory:probe_failed" ||
     basis === "inventory:rapid_dom_timed_out" ||
     basis === "inventory:rapid_dom_failed" ||
-    basis === "recapture:post_settle_inventory_incomplete"
+    basis === "recapture:post_settle_inventory_incomplete" ||
+    basis === "recapture:post_settled_screenshot_inventory_incomplete"
   );
 
   return (observation.captureStatus === "incomplete" && !completedTypedInventory) ||
@@ -2854,6 +2875,7 @@ export function canMarkSettledConsentInventoryCompleted(
 ): boolean {
   return !observation.basis.includes("settled_control_inventory_completed") &&
     !observation.basis.includes("recapture:post_settle_inventory_incomplete") &&
+    !observation.basis.includes("recapture:post_settled_screenshot_inventory_incomplete") &&
     !observation.basis.includes("geometry_capture_unavailable") &&
     !isIncompleteConsentUiCapture(observation);
 }
