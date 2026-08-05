@@ -49,7 +49,7 @@ const [path, expectedLocale, expectedAcceptLanguage, expectedTimezone] = process
 const fn = JSON.parse(readFileSync(path, "utf8"));
 const env = fn.Configuration?.Environment?.Variables ?? {};
 const checks = [
-  ["memory", fn.Configuration?.MemorySize, 4096],
+  ["memory", fn.Configuration?.MemorySize, 3008],
   ["timeout", fn.Configuration?.Timeout, 900],
   ["architecture", fn.Configuration?.Architectures?.[0], "x86_64"],
   ["ephemeral storage", fn.Configuration?.EphemeralStorage?.Size, 512],

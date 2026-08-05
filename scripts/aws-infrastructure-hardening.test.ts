@@ -91,7 +91,7 @@ test("routine scanner deploys promote immutable digests without recreating infra
   assert.doesNotMatch(deployFunction, /setup-dev-aws-image\.sh/);
   assert.match(source, /"lambda", "update-function-configuration"/);
   assert.match(source, /"--memory-size", String\(SCANNER_MEMORY_SIZE\)/);
-  assert.match(source, /const SCANNER_MEMORY_SIZE = 4096/);
+  assert.match(source, /const SCANNER_MEMORY_SIZE = 3008/);
   assert.match(verifyFunction, /imageTag=\$\{expectedSha\}/);
   assert.match(verifyFunction, /endsWith\(`@\$\{expectedDigest\}`\)/);
   assert.match(verifyFunction, /payload\.MemorySize !== SCANNER_MEMORY_SIZE/);

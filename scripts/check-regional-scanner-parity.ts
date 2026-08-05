@@ -105,7 +105,7 @@ const observed = REGIONS.map((region) => {
   const env = config.Environment?.Variables ?? {};
   const context = EXPECTED_CONTEXT[region];
   const required = [
-    ["memory", config.MemorySize, 4096],
+    ["memory", config.MemorySize, 3008],
     ["timeout", config.Timeout, 900],
     ["architecture", config.Architectures?.[0], "x86_64"],
     ["ephemeral storage", config.EphemeralStorage?.Size, 512],
