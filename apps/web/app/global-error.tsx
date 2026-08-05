@@ -1,13 +1,51 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import {
+  getChunkLoadRecoveryKey,
+  isChunkLoadError
+} from "../lib/errors/chunk-load-recovery";
 
 type GlobalErrorProps = {
   error: Error & { digest?: string };
   reset: () => void;
 };
 
-export default function GlobalError({ reset }: GlobalErrorProps) {
+export default function GlobalError({ error, reset }: GlobalErrorProps) {
+  const staleBundle = isChunkLoadError(error);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (!staleBundle) {
+      return;
+    }
+
+    const recoveryKey = getChunkLoadRecoveryKey(error, window.location.pathname);
+    try {
+      if (window.sessionStorage.getItem(recoveryKey)) {
+        return;
+      }
+      window.sessionStorage.setItem(recoveryKey, "1");
+    } catch {
+      // If storage is unavailable, keep the manual hard-refresh action below
+      // instead of risking an automatic reload loop.
+      return;
+    }
+
+    setRefreshing(true);
+    window.location.reload();
+  }, [error, staleBundle]);
+
+  const retry = () => {
+    if (staleBundle) {
+      setRefreshing(true);
+      window.location.reload();
+      return;
+    }
+    reset();
+  };
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
@@ -21,10 +59,11 @@ export default function GlobalError({ reset }: GlobalErrorProps) {
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <button
                 type="button"
-                onClick={reset}
+                disabled={refreshing}
+                onClick={retry}
                 className="rounded-full bg-slate-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
               >
-                Try again
+                {refreshing ? "Refreshing…" : staleBundle ? "Refresh page" : "Try again"}
               </button>
               <Link
                 href="/"
