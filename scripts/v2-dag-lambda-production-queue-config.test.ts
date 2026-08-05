@@ -15,3 +15,13 @@ for (const filePath of ["infra/aws/web-ecs/main.tf", "infra/aws/validation/main.
     );
   });
 }
+
+test("validation worker may release and retry retained production results", () => {
+  const source = readFileSync("infra/aws/validation/main.tf", "utf8");
+  const policyStart = source.indexOf('Sid    = "PollRegionalV2DagLambdaResults"');
+  const policyEnd = source.indexOf("ReadRegionalV2DagLambdaArtifacts", policyStart);
+  const resultQueuePolicy = source.slice(policyStart, policyEnd);
+
+  assert.match(resultQueuePolicy, /"sqs:ChangeMessageVisibility"/);
+  assert.match(resultQueuePolicy, /certscore-v2-dag-local-production-results/);
+});
