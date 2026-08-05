@@ -12,7 +12,16 @@ export async function getPublicScanRecord(scanId: string, options: { logPrefix?:
 
   const persistedReportProjection = getPersistedScanReportProjection(scanRecord);
   if (persistedReportProjection) {
-    return persistedReportProjection;
+    return {
+      ...persistedReportProjection,
+      snapshot: {
+        ...persistedReportProjection.snapshot,
+        report_projection_computed_at: scanRecord.snapshot?.report_projection_computed_at,
+        report_projection_source_hash: scanRecord.snapshot?.report_projection_source_hash,
+        report_projection_status: scanRecord.snapshot?.report_projection_status,
+        report_projection_version: scanRecord.snapshot?.report_projection_version
+      }
+    };
   }
 
   return materializeLocalV2DagScanDetail(scanRecord).catch((error) => {

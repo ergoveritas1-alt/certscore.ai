@@ -42,7 +42,7 @@ test("public API reads use the same persisted report projection as report pages"
   );
   assert.match(
     source.slice(persistedProjection, liveMaterialization),
-    /if \(persistedReportProjection\) \{\s*return persistedReportProjection;/,
+    /if \(persistedReportProjection\) \{[\s\S]*return \{[\s\S]*report_projection_status: scanRecord\.snapshot\?\.report_projection_status/,
     "public APIs must return the verified persisted projection before rematerializing live evidence"
   );
 });
