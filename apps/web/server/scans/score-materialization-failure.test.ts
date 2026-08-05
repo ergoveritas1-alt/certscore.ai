@@ -40,7 +40,7 @@ test("canonical projection finalization requests a bounded fast retry", () => {
   assert.deepEqual(classifyScoreMaterializationFailure(error), {
     code: "materialization_not_ready",
     diagnostic: "materialization_not_ready:canonical_findings_not_ready",
-    retryAfterSeconds: 10,
+    retryAfterSeconds: 1,
     retryable: true,
   });
 });
@@ -54,7 +54,7 @@ test("canonical projection retry diagnostics discard unbounded reasons", () => {
   assert.deepEqual(classifyScoreMaterializationFailure(error), {
     code: "materialization_not_ready",
     diagnostic: "materialization_not_ready:unspecified",
-    retryAfterSeconds: 10,
+    retryAfterSeconds: 1,
     retryable: true,
   });
 });

@@ -29,3 +29,20 @@ test("signed-in and anonymous creation return reused scans only after projection
     assert.ok(reusedReturn > prepareProjection, `${file} must not return a reused scan before projection preparation`);
   }
 });
+
+test("public API reads use the same persisted report projection as report pages", async () => {
+  const source = await readFile("apps/web/server/scans/get-public-scan-record.ts", "utf8");
+  const persistedProjection = source.indexOf("getPersistedScanReportProjection(scanRecord)");
+  const liveMaterialization = source.indexOf("materializeLocalV2DagScanDetail(scanRecord)");
+
+  assert.ok(persistedProjection >= 0, "public scan reads must inspect the persisted report projection");
+  assert.ok(
+    liveMaterialization > persistedProjection,
+    "live bundle materialization must only be a fallback when no verified persisted projection exists"
+  );
+  assert.match(
+    source.slice(persistedProjection, liveMaterialization),
+    /if \(persistedReportProjection\) \{[\s\S]*return \{[\s\S]*report_projection_status: scanRecord\.snapshot\?\.report_projection_status/,
+    "public APIs must return the verified persisted projection before rematerializing live evidence"
+  );
+});

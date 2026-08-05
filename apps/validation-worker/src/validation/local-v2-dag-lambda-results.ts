@@ -41,8 +41,8 @@ const RESULT_FINALIZATION_BACKGROUND_CONCURRENCY = 8;
 const POLICY_EVIDENCE_BACKGROUND_CONCURRENCY = 2;
 const RESULT_VISIBILITY_TIMEOUT_SECONDS = 240;
 const MATERIALIZATION_FINALIZING_WAIT_MS = 150_000;
-const MATERIALIZATION_RETRY_SECONDS_MIN = 2;
-const MATERIALIZATION_RETRY_SECONDS_MAX = 15;
+const MATERIALIZATION_INPUT_POLL_MS = 250;
+const MATERIALIZATION_RETRY_MS = 500;
 // The production scanner has a 30s terminal-result envelope. Keep a small SQS
 // delivery margin, but do not classify materially slower scans as healthy.
 const ORPHAN_RECONCILIATION_INTERVAL_MS = 10_000;
@@ -146,6 +146,32 @@ async function completedScoreMaterializationExists(scanId: string) {
   return row?.materialization_complete === true;
 }
 
+async function canonicalReportInputsReady(scanId: string) {
+  const row = await queryOne<{ report_inputs_ready: boolean }>(
+    `select exists (
+              select 1
+                from public.scan_events merged
+               where merged.scan_id = $1::uuid
+                 and merged.event_type = 'signals.merge_completed'
+            ) and exists (
+              select 1
+                from public.scan_events findings
+               where findings.scan_id = $1::uuid
+                 and findings.event_type = 'findings.unified_derivation_completed'
+            ) as report_inputs_ready`,
+    [scanId]
+  );
+  return row?.report_inputs_ready === true;
+}
+
+async function waitForCanonicalReportInputs(scanId: string, deadlineMs: number) {
+  while (Date.now() < deadlineMs) {
+    if (await canonicalReportInputsReady(scanId)) return;
+    await sleep(Math.min(MATERIALIZATION_INPUT_POLL_MS, Math.max(1, deadlineMs - Date.now())));
+  }
+  throw new Error("Canonical report inputs were not ready before the materialization deadline.");
+}
+
 export async function ensureCompletedScanScoresPersisted(input: {
   fetchImpl?: typeof fetch;
   scanId: string;
@@ -153,6 +179,8 @@ export async function ensureCompletedScanScoresPersisted(input: {
   webBaseUrl?: string;
 }) {
   if (await completedScoreMaterializationExists(input.scanId)) return { alreadyPersisted: true };
+  const finalizingDeadline = Date.now() + MATERIALIZATION_FINALIZING_WAIT_MS;
+  await waitForCanonicalReportInputs(input.scanId, finalizingDeadline);
   const token = randomBytes(32).toString("base64url");
   const tokenSha256 = createHash("sha256").update(token).digest("hex");
   await query(
@@ -176,7 +204,6 @@ export async function ensureCompletedScanScoresPersisted(input: {
   const fetchMaterialization = input.fetchImpl ?? fetch;
   const materializationUrl = new URL("/api/internal/scan-score-materialization", baseUrl);
   const materializationBody = JSON.stringify({ scanId: input.scanId, token });
-  const finalizingDeadline = Date.now() + MATERIALIZATION_FINALIZING_WAIT_MS;
   let finalizingAttempt = 0;
   while (true) {
     finalizingAttempt += 1;
@@ -201,20 +228,14 @@ export async function ensureCompletedScanScoresPersisted(input: {
         return { alreadyPersisted: false, terminalFailure: true as const };
       }
       if (response.status === 503 && failure?.code === "materialization_not_ready" && failure.retryable === true) {
-        const requestedRetrySeconds = typeof failure.retryAfterSeconds === "number" && Number.isFinite(failure.retryAfterSeconds)
-          ? Math.trunc(failure.retryAfterSeconds)
-          : MATERIALIZATION_RETRY_SECONDS_MAX;
-        const retrySeconds = Math.min(
-          MATERIALIZATION_RETRY_SECONDS_MAX,
-          Math.max(MATERIALIZATION_RETRY_SECONDS_MIN, requestedRetrySeconds),
-        );
-        if (Date.now() + retrySeconds * 1_000 < finalizingDeadline) {
+        if (Date.now() + MATERIALIZATION_RETRY_MS < finalizingDeadline) {
           console.info("[validation-worker] score materialization still finalizing", {
             attempt: finalizingAttempt,
-            retrySeconds,
+            retryMs: MATERIALIZATION_RETRY_MS,
             scanId: input.scanId,
           });
-          await sleep(retrySeconds * 1_000);
+          await waitForCanonicalReportInputs(input.scanId, finalizingDeadline);
+          await sleep(MATERIALIZATION_RETRY_MS);
           continue;
         }
       }

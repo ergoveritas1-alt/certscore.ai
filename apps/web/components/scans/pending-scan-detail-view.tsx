@@ -44,6 +44,21 @@ export function getProgressTransitionSchedule(
   });
 }
 
+export function getProgressHandoffStage(input: {
+  hasSubmissionHandoff: boolean;
+  serverStage: PolledScanProgress["stage"];
+}) {
+  // A fresh scan submission already started in Prepare on the form. When the
+  // destination route mounts, the server commonly reports `running` before
+  // the browser can restore that submission progress. Preserve the opening
+  // phase long enough to render it instead of making the UI appear to start
+  // with Prepare already complete. Direct loads and reloads have no handoff
+  // value, so they continue to reflect the authoritative server stage.
+  return input.hasSubmissionHandoff && input.serverStage === "scan"
+    ? "prepare"
+    : input.serverStage;
+}
+
 export function PendingScanDetailView({
   createdAt,
   domainHostname,
@@ -77,18 +92,10 @@ export function PendingScanDetailView({
   const latestProgressRef = useRef(progress);
   const scheduledTargetRef = useRef<PolledScanProgress["stage"] | null>(null);
   const transitionTimersRef = useRef<number[]>([]);
+  const handoffScanIdRef = useRef<string | null>(null);
   useEffect(() => () => {
     transitionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
   }, []);
-  useEffect(() => {
-    const activeScanSession = readActiveScanSession();
-    setProgressHandoff({
-      loaded: true,
-      value: activeScanSession?.scanId === scanId && typeof activeScanSession.progressValue === "number"
-        ? activeScanSession.progressValue
-        : null
-    });
-  }, [scanId]);
   const handleProgress = useCallback((nextProgress: PolledScanProgress) => {
     latestProgressRef.current = nextProgress;
     if (shouldRapidlyCompleteProgress(nextProgress)) {
@@ -135,6 +142,40 @@ export function PendingScanDetailView({
       setProgress(nextProgress);
     }
   }, []);
+  useEffect(() => {
+    if (handoffScanIdRef.current === scanId) {
+      return;
+    }
+    handoffScanIdRef.current = scanId;
+
+    const activeScanSession = readActiveScanSession();
+    const handoffValue = activeScanSession?.scanId === scanId && typeof activeScanSession.progressValue === "number"
+      ? activeScanSession.progressValue
+      : null;
+    const handoffStage = getProgressHandoffStage({
+      hasSubmissionHandoff: handoffValue !== null,
+      serverStage: initialStage
+    });
+
+    if (handoffStage !== progressRef.current.stage) {
+      const handoffProgress = {
+        ...progressRef.current,
+        stage: handoffStage
+      };
+      progressRef.current = handoffProgress;
+      latestProgressRef.current = handoffProgress;
+      setProgress(handoffProgress);
+    }
+    setProgressHandoff({ loaded: true, value: handoffValue });
+
+    if (handoffStage !== initialStage) {
+      handleProgress({
+        reportReady: false,
+        stage: initialStage,
+        status
+      });
+    }
+  }, [handleProgress, initialStage, scanId, status]);
 
   return (
     <div className="space-y-8">

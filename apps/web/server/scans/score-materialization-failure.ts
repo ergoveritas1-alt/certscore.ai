@@ -5,7 +5,7 @@ type MaterializationFailureDisposition = {
   retryable: boolean;
 };
 
-const MATERIALIZATION_NOT_READY_RETRY_SECONDS = 10;
+const MATERIALIZATION_NOT_READY_RETRY_SECONDS = 1;
 
 function errorChain(error: unknown) {
   const chain: unknown[] = [];

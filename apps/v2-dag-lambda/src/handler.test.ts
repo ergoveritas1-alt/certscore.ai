@@ -18,6 +18,7 @@ import {
   LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES,
+  LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS,
   LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   artifactPointersFromS3Keys,
@@ -95,6 +96,32 @@ test("the default artifact chain preserves at least the full terminal publicatio
       LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS -
         LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS,
   );
+});
+
+test("dedicated evidence workers preserve the standard profile module budget", async () => {
+  let preConsentModuleDeadlineMs: number | undefined;
+  const result = await handler(validPayload({
+    orchestrationMode: "worker",
+    profile: "standard",
+    workerLane: "runtime_evidence",
+  }), {
+    runArtifactChain: async (_payload, options) => {
+      preConsentModuleDeadlineMs = options.preConsentModuleDeadlineMs;
+      return {
+        artifactMetadata: {},
+        artifactPointers: {},
+        phaseTimings: [],
+      };
+    },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(
+    preConsentModuleDeadlineMs,
+    LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS -
+      LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
+  );
+  assert.equal(preConsentModuleDeadlineMs, 35_000);
 });
 
 test("early policy handoff packet is typed, hash-bound, and non-projectable", () => {
@@ -1030,6 +1057,22 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
         relatedEventIds: [],
         sensitivity: "safe",
       }],
+      networkEvents: [{
+        eventId: "network_onetrust_stub",
+        eventType: "network_request",
+        timestampMs: 10,
+        sourceScanner: "pre_consent_runtime",
+        scenario: "fresh_pre_consent",
+        consentStateAtTime: "pre_consent",
+        pagePhase: "initial_navigation",
+        evidenceRefs: [],
+        confidence: 0.95,
+        directVsInferred: "direct",
+        requestId: "request_onetrust_stub",
+        method: "GET",
+        requestUrl: "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+        path: "/scripttemplates/otSDKStub.js",
+      }] as CanonicalEvidenceBundle["networkEvents"],
       runtimeCoverage,
       derivedRuntimeSignals: {
         preConsentTrackingObserved: true,
@@ -1056,6 +1099,7 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
   assert.equal(merged.derivedRuntimeSignals.consentBannerLikelyPresent, true);
   assert.equal(merged.derivedRuntimeSignals.preConsentTrackingObserved, true);
   assert.equal(merged.runtimeCoverage?.coverageStatus, "usable");
+  assert.equal(merged.networkEvents[0]?.path, "/scripttemplates/otSDKStub.js");
   assert.equal(merged.policySurfaceObservations[0]?.observationId, "policy_surface_privacy");
   assert.equal(merged.scanEvidenceLaneAssessment?.lanes.homepageRuntime, "usable");
   assert.equal(
