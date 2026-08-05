@@ -48,6 +48,9 @@ export const LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS = 30_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS = 23_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS = 28_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS = 2_000;
+export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_HANDLER_SAFETY_TIMEOUT_MS = 45_000;
+export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS = 37_000;
+export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_ARTIFACT_CHAIN_TIMEOUT_MS = 43_000;
 export const LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS = 2_000;
 const LOCAL_V2_DAG_LAMBDA_PRECONSENT_SHUTDOWN_RESERVE_MS = 10_000;
 const LOCAL_V2_DAG_LAMBDA_POST_FALLBACK_RESERVE_MS = 4_000;
@@ -1825,24 +1828,34 @@ function rewriteEvidenceLaneArtifactPaths<T>(
   value: T,
   workerLane: LocalV2DagLambdaWorkerLane,
   artifactRoot: string,
+  ancestors: string[] = [],
 ): T {
   if (Array.isArray(value)) {
-    return value.map((entry) => rewriteEvidenceLaneArtifactPaths(entry, workerLane, artifactRoot)) as T;
+    return value.map((entry) => rewriteEvidenceLaneArtifactPaths(entry, workerLane, artifactRoot, ancestors)) as T;
   }
   if (!value || typeof value !== "object") {
     return value;
   }
   const rewritten = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => {
-    if (key === "path" && typeof entry === "string") {
+    if (key === "path" && typeof entry === "string" && isTypedEvidenceArtifactPath(ancestors)) {
       const fileName = path.basename(entry);
       const mirroredFileName = shouldPromoteEvidenceLaneArtifact(workerLane, fileName)
         ? safeAuxiliaryFileName(fileName)
         : safeAuxiliaryFileName(`worker-${workerLane}-${fileName}`);
       return [key, path.join(artifactRoot, mirroredFileName)];
     }
-    return [key, rewriteEvidenceLaneArtifactPaths(entry, workerLane, artifactRoot)];
+    return [key, rewriteEvidenceLaneArtifactPaths(entry, workerLane, artifactRoot, [...ancestors, key])];
   }));
   return rewritten as T;
+}
+
+function isTypedEvidenceArtifactPath(ancestors: string[]) {
+  return ancestors.some((key) =>
+    key === "artifactRefs" ||
+    key === "evidenceRefs" ||
+    key === "screenshots" ||
+    key === "domSnapshots"
+  );
 }
 
 function selectDiagnosticScreenshot(screenshots: ScreenshotArtifact[]): ScreenshotArtifact[] {
@@ -2856,20 +2869,41 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
           }));
     artifactChainStartedAt = now();
     const evidenceCoordinator = payload.orchestrationMode === "sharded";
+    const evidenceWorker = payload.orchestrationMode === "worker" && (
+      payload.workerLane === "consent_proof" ||
+      payload.workerLane === "runtime_evidence" ||
+      payload.workerLane === "policy_evidence"
+    );
     const configuredHandlerSafetyTimeoutMs = options.handlerSafetyTimeoutMs ?? (
       Number(process.env.CERTSCORE_V2_DAG_LAMBDA_HANDLER_SAFETY_TIMEOUT_MS) ||
-      (evidenceCoordinator ? 75_000 : LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS)
+      (evidenceCoordinator
+        ? 75_000
+        : evidenceWorker
+          ? LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_HANDLER_SAFETY_TIMEOUT_MS
+          : LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS)
     );
     handlerSafetyTimeoutMs = Math.max(
       options.handlerSafetyTimeoutMs === undefined ? 5_000 : 10,
       Math.min(configuredHandlerSafetyTimeoutMs, 75_000)
     );
     scannerWorkTimeoutMs = Math.max(10, Math.min(
-      options.scannerWorkTimeoutMs ?? (evidenceCoordinator ? 60_000 : LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS),
+      options.scannerWorkTimeoutMs ?? (
+        evidenceCoordinator
+          ? 60_000
+          : evidenceWorker
+            ? LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS
+            : LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS
+      ),
       Math.max(10, handlerSafetyTimeoutMs - 7_000)
     ));
     artifactChainTimeoutMs = Math.max(scannerWorkTimeoutMs, Math.min(
-      options.artifactChainTimeoutMs ?? (evidenceCoordinator ? 70_000 : LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS),
+      options.artifactChainTimeoutMs ?? (
+        evidenceCoordinator
+          ? 70_000
+          : evidenceWorker
+            ? LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_ARTIFACT_CHAIN_TIMEOUT_MS
+            : LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS
+      ),
       Math.max(scannerWorkTimeoutMs, handlerSafetyTimeoutMs - 2_000)
     ));
     resultPublishTimeoutMs = Math.max(10, Math.min(
