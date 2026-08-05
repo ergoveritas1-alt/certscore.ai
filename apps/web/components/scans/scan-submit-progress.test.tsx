@@ -3,6 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  clampScanProgressHandoffValue,
   ScanSubmissionPendingIndicator,
   ScanSubmitProgressBar,
   SCAN_PROGRESS_HALF_LIFE_MS,
@@ -64,6 +65,12 @@ test("the full progress bar can begin from the compact submission handoff", () =
 
   assert.match(html, /aria-valuenow="12.5"/);
   assert.match(html, /width:12.5%/);
+});
+
+test("submission handoff remains inside Prepare instead of snapping to the Scan boundary", () => {
+  assert.equal(clampScanProgressHandoffValue({ currentStep: 0, reportReady: false, value: 12.5 }), 12.5);
+  assert.equal(clampScanProgressHandoffValue({ currentStep: 0, reportReady: false, value: 40 }), 25);
+  assert.equal(clampScanProgressHandoffValue({ currentStep: 1, reportReady: false, value: 12.5 }), 12.5);
 });
 
 test("each scan segment halves its remaining distance on every progress beat", () => {

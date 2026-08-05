@@ -3,6 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  getProgressHandoffStage,
   getProgressTransitionSchedule,
   getProgressTransitionStages,
   PendingScanDetailView,
@@ -34,6 +35,12 @@ test("catch-up pacing holds the opening and finishing milestones long enough to 
     { delayMs: 3_000, stage: "report" },
     { delayMs: 5_500, stage: "complete" }
   ]);
+});
+
+test("fresh submission handoff visibly starts in Prepare before catching up to running", () => {
+  assert.equal(getProgressHandoffStage({ hasSubmissionHandoff: true, serverStage: "scan" }), "prepare");
+  assert.equal(getProgressHandoffStage({ hasSubmissionHandoff: false, serverStage: "scan" }), "scan");
+  assert.equal(getProgressHandoffStage({ hasSubmissionHandoff: true, serverStage: "review" }), "review");
 });
 
 test("authoritative report readiness rapidly completes the bar before navigation", () => {

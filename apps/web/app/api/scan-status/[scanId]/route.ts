@@ -6,7 +6,6 @@ import {
   buildLightweightScanStatusResponse,
   getPublicScanStatusProjection
 } from "../../../../server/scans/scan-status-projection";
-import { publishCanonicalScanReportProjection } from "../../../../server/scans/canonical-scan-report-publisher";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -34,7 +33,7 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
     );
   }
 
-  let projection = await getPublicScanStatusProjection(scanId);
+  const projection = await getPublicScanStatusProjection(scanId);
   if (!projection) {
     return NextResponse.json(
       { code: "scan_not_found", error: "Scan not found." },
@@ -48,39 +47,6 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
       scanId,
       status: projection.status
     }));
-    if (
-      projection.reportProjectionRequired &&
-      projection.reportInputsReady &&
-      !projection.reportReady &&
-      (projection.status === "completed" || projection.status === "completed_limited")
-    ) {
-      const projectionOrganizationId = projection.organizationId;
-      await publishCanonicalScanReportProjection({
-        organizationId: projectionOrganizationId,
-        scanId
-      }).then(async (publication) => {
-        console.info(JSON.stringify({
-          event: "scan.report_projection.status_recovery",
-          reason: publication.reason,
-          scanId,
-          status: publication.status
-        }));
-        if (publication.status === "ready") {
-          const { materializeAdminScanSummary } = await import("../../../../server/admin/admin-scan-summary");
-          const adminSummary = await materializeAdminScanSummary(scanId, projectionOrganizationId);
-          if (!adminSummary?.adminEvidenceMatrix) {
-            throw new Error("Canonical Admin evidence matrix persistence was incomplete.");
-          }
-          projection = await getPublicScanStatusProjection(scanId) ?? projection;
-        }
-      }).catch((error) => {
-        console.error(JSON.stringify({
-          error: error instanceof Error ? error.message : String(error),
-          event: "scan.report_projection.status_recovery_failed",
-          scanId
-        }));
-      });
-    }
     return NextResponse.json(buildLightweightScanStatusResponse(projection), {
       headers: { "Cache-Control": "no-store" }
     });

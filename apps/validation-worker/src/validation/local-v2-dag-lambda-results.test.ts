@@ -256,8 +256,12 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /VisibilityTimeout:\s*0/);
   assert.match(source, /RESULT_VISIBILITY_TIMEOUT_SECONDS\s*=\s*240/);
   assert.match(source, /MATERIALIZATION_FINALIZING_WAIT_MS\s*=\s*150_000/);
+  assert.match(source, /MATERIALIZATION_INPUT_POLL_MS\s*=\s*250/);
+  assert.match(source, /await waitForCanonicalReportInputs\(input\.scanId, finalizingDeadline\)/);
+  assert.match(source, /signals\.merge_completed/);
+  assert.match(source, /findings\.unified_derivation_completed/);
   assert.match(source, /failure\?\.code === "materialization_not_ready"/);
-  assert.match(source, /await sleep\(retrySeconds \* 1_000\)/);
+  assert.match(source, /await sleep\(MATERIALIZATION_RETRY_MS\)/);
   assert.match(source, /RESULT_BATCH_CONCURRENCY\s*=\s*3/);
   assert.match(source, /RESULT_QUEUE_POLL_CONCURRENCY\s*=\s*2/);
   assert.match(source, /RESULT_FINALIZATION_BACKGROUND_CONCURRENCY\s*=\s*8/);
@@ -314,9 +318,15 @@ test("validation worker runtime overlays the current policy evidence contract an
 
 test("validation worker persists completion scores before acknowledging a Lambda result", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+  const readinessIndex = source.indexOf("await waitForCanonicalReportInputs(input.scanId, finalizingDeadline)");
+  const tokenIndex = source.indexOf("const token = randomBytes(32)", readinessIndex);
+  const requestIndex = source.indexOf("insert into public.scan_score_materialization_requests", tokenIndex);
   const ensureIndex = source.indexOf("await ensureCompletedScanScoresPersisted");
   const deleteIndex = source.indexOf("new DeleteMessageCommand", ensureIndex);
 
+  assert.ok(readinessIndex >= 0, "expected canonical report-input readiness gating");
+  assert.ok(tokenIndex > readinessIndex, "materialization authorization must follow canonical input readiness");
+  assert.ok(requestIndex > tokenIndex, "materialization requests must not be created before canonical input readiness");
   assert.ok(ensureIndex >= 0, "expected completion-time score persistence");
   assert.ok(deleteIndex > ensureIndex, "SQS acknowledgement must follow score persistence");
   assert.match(source, /randomBytes\(32\)/);

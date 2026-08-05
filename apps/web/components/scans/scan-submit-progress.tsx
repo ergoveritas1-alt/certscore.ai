@@ -144,8 +144,13 @@ export function ScanSubmitProgressBar({
 
     handoffAppliedRef.current = true;
     const currentStepStart = reportReady ? 100 : getScanProgressStepStart(progressDisplay.currentStep);
-    const handoffValue = Math.min(Math.max(initialProgressValue, 0), currentStepStart);
+    const handoffValue = clampScanProgressHandoffValue({
+      currentStep: progressDisplay.currentStep,
+      reportReady,
+      value: initialProgressValue
+    });
     setProgressMotion("snap");
+    displayedStepRef.current = progressDisplay.currentStep;
     displayedProgressValueRef.current = handoffValue;
     setDisplayedProgressValue(handoffValue);
     if (handoffValue < currentStepStart) {
@@ -169,7 +174,11 @@ export function ScanSubmitProgressBar({
       const currentStepStart = reportReady ? 100 : getScanProgressStepStart(progressDisplay.currentStep);
       const handoffValue = initialProgressValue === null || initialProgressValue === undefined
         ? currentStepStart
-        : Math.min(Math.max(initialProgressValue, 0), currentStepStart);
+        : clampScanProgressHandoffValue({
+          currentStep: progressDisplay.currentStep,
+          reportReady,
+          value: initialProgressValue
+        });
       displayedStepRef.current = progressDisplay.currentStep;
       setProgressMotion(handoffValue < currentStepStart ? "snap" : "steady");
       displayedProgressValueRef.current = handoffValue;
@@ -301,6 +310,15 @@ function getScanProgressStepEnd(stepIndex: number) {
     return 96;
   }
   return getScanProgressStepStart(stepIndex + 1);
+}
+
+export function clampScanProgressHandoffValue(input: {
+  currentStep: number;
+  reportReady: boolean;
+  value: number;
+}) {
+  const stepEnd = input.reportReady ? 100 : getScanProgressStepEnd(input.currentStep);
+  return Math.min(Math.max(input.value, 0), stepEnd);
 }
 
 export function getNextScanProgressValue(input: {
