@@ -264,7 +264,7 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /await sleep\(MATERIALIZATION_RETRY_MS\)/);
   assert.match(source, /RESULT_BATCH_CONCURRENCY\s*=\s*3/);
   assert.match(source, /RESULT_QUEUE_POLL_CONCURRENCY\s*=\s*2/);
-  assert.match(source, /RESULT_FINALIZATION_BACKGROUND_CONCURRENCY\s*=\s*8/);
+  assert.match(source, /RESULT_FINALIZATION_BACKGROUND_CONCURRENCY\s*=\s*2/);
   assert.match(source, /MaxNumberOfMessages:\s*RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /mapWithConcurrency\(messages, RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /classifyV2DagLambdaResultDisposition\(rawMessage\)/);
@@ -335,6 +335,8 @@ test("validation worker persists completion scores before acknowledging a Lambda
   assert.match(source, /result\.complete !== true/);
   assert.match(source, /completedScoreMaterializationExists/);
   assert.match(source, /status = 'completed'/);
+  assert.match(source, /for \(const mode of \["publish_report", "finalize"\] as const\)/);
+  assert.match(source, /result\.reportReady !== true/);
   assert.doesNotMatch(source, /async function completedScoreMaterializationExists[\s\S]*?scan_score_assessments/);
   assert.match(source, /response\.status === 422 && failure\?\.retryable === false/);
   assert.match(source, /terminal score materialization failure acknowledged/);

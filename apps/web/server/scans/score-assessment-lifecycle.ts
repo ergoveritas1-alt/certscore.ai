@@ -19,17 +19,33 @@ function scoreLifecyclePhaseError(phase: string, error: unknown) {
   return new Error(`Score lifecycle ${phase} failed: ${message}`, { cause: error });
 }
 
-async function runScoreLifecyclePhase<T>(phase: string, operation: () => Promise<T>): Promise<T> {
+async function runScoreLifecyclePhase<T>(scanId: string, phase: string, operation: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
   try {
-    return await operation();
+    const result = await operation();
+    console.info(JSON.stringify({
+      durationMs: Date.now() - startedAt,
+      event: "scan.score_materialization.phase",
+      phase,
+      scanId,
+    }));
+    return result;
   } catch (error) {
     throw scoreLifecyclePhaseError(phase, error);
   }
 }
 
-function runSynchronousScoreLifecyclePhase<T>(phase: string, operation: () => T): T {
+function runSynchronousScoreLifecyclePhase<T>(scanId: string, phase: string, operation: () => T): T {
+  const startedAt = Date.now();
   try {
-    return operation();
+    const result = operation();
+    console.info(JSON.stringify({
+      durationMs: Date.now() - startedAt,
+      event: "scan.score_materialization.phase",
+      phase,
+      scanId,
+    }));
+    return result;
   } catch (error) {
     throw scoreLifecyclePhaseError(phase, error);
   }
@@ -50,14 +66,14 @@ export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
       return { inserted: false, reason: "score_time_missing_or_invalid" as const };
     }
   }
-  const legacyAlreadyPersisted = await runScoreLifecyclePhase("legacy-existence-check", () =>
+  const legacyAlreadyPersisted = await runScoreLifecyclePhase(input.scanId, "legacy-existence-check", () =>
     hasVersionedScoreAssessment({
       scanId: input.scanId,
       scoreKind: "gdpr_eprivacy_evidence",
       scoreVersion: LEGACY_GDPR_EPRIVACY_SCORE_VERSION
     })
   );
-  const rawRecord = input.scanRecord ?? await runScoreLifecyclePhase("scan-load", () => input.organizationId
+  const rawRecord = input.scanRecord ?? await runScoreLifecyclePhase(input.scanId, "scan-load", () => input.organizationId
     ? getScanById({ organizationId: input.organizationId, scanId: input.scanId })
     : getAnonymousScanById(input.scanId));
   if (!rawRecord || rawRecord.scan.status !== "completed") {
@@ -76,15 +92,15 @@ export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
     return { inserted: false, reason: "score_time_missing_or_invalid" as const };
   }
 
-  const scanRecord = input.scanRecord ?? await runScoreLifecyclePhase("scan-materialization", () =>
+  const scanRecord = input.scanRecord ?? await runScoreLifecyclePhase(input.scanId, "scan-materialization", () =>
     materializeLocalV2DagScanDetail(rawRecord)
   );
-  const projection = runSynchronousScoreLifecyclePhase("canonical-projection", () =>
+  const projection = runSynchronousScoreLifecyclePhase(input.scanId, "canonical-projection", () =>
     buildCanonicalGdprEprivacyShadowProjection(scanRecord)
   );
   const persisted = legacyAlreadyPersisted
     ? { createdAt: null, id: null, inserted: false }
-    : await runScoreLifecyclePhase("legacy-persistence", () =>
+    : await runScoreLifecyclePhase(input.scanId, "legacy-persistence", () =>
         persistVersionedScoreAssessment(buildLegacyGdprEprivacyVersionedAssessmentInput({
           assessment: projection.legacyScoreAssessment,
           checklistRows: projection.checklistRows,

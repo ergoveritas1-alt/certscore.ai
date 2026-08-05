@@ -233,6 +233,16 @@ export const responseSizeSchema = z.object({
   responseHeadersSize: z.number().int().nonnegative().optional(),
 });
 
+export const siteResourceSizeSummarySchema = z.object({
+  measurementScope: z.literal("pre_consent_initial_navigation"),
+  responseCount: z.number().int().nonnegative(),
+  responsesWithSize: z.number().int().nonnegative(),
+  responseBodyBytes: z.number().int().nonnegative(),
+  responseHeaderBytes: z.number().int().nonnegative(),
+  totalTransferBytes: z.number().int().nonnegative(),
+  completeness: z.enum(["complete", "partial", "unavailable"]),
+});
+
 export const networkDestinationSchema = z.object({
   ip: z.string().max(64),
   country: z.string().length(2).optional(),
@@ -1387,6 +1397,8 @@ export const policySurfaceObservationSchema = z.object({
   documentRole: z.enum(["policy_document", "policy_index", "unknown"]).optional(),
   documentFormat: z.enum(["html", "pdf", "text", "unknown"]).optional(),
   contentType: z.string().max(160).optional(),
+  compressedSizeBytes: z.number().int().nonnegative().optional(),
+  decompressedSizeBytes: z.number().int().nonnegative().optional(),
   documentOwnerEntity: z.string().max(240).optional(),
   targetRelationship: z.enum([
     "target_controller",
@@ -2405,6 +2417,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
   networkEvents: z.array(networkEventSchema),
   networkResponseEvents: z.array(networkResponseEventSchema).default([]),
+  siteResourceSizeSummary: siteResourceSizeSummarySchema.optional(),
   cookieEvents: z.array(cookieEventSchema),
   cookieSnapshots: z.array(cookieSnapshotSchema),
   storageSnapshots: z.array(storageSnapshotSchema),

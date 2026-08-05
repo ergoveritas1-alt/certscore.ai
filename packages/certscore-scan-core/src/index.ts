@@ -1075,6 +1075,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     ],
     networkEvents,
     networkResponseEvents,
+    siteResourceSizeSummary: summarizeSiteResourceSizes(networkResponseEvents),
     cookieEvents,
     cookieSnapshots,
     storageSnapshots: preConsentResult.storageSnapshots,
@@ -1330,6 +1331,38 @@ function stripNetworkResponseDiagnostics(event: NetworkResponseEvent): NetworkRe
     ...retained,
     cacheHeaders: {},
     accessControlHeaders: {},
+  };
+}
+
+export function summarizeSiteResourceSizes(networkResponseEvents: NetworkResponseEvent[]) {
+  const measuredResponses = networkResponseEvents.filter((event) =>
+    event.consentStateAtTime === "pre_consent" &&
+    event.pagePhase === "initial_navigation"
+  );
+  const responsesWithSize = measuredResponses.filter((event) =>
+    event.sizes?.responseBodySize !== undefined ||
+    event.sizes?.responseHeadersSize !== undefined
+  );
+  const responseBodyBytes = responsesWithSize.reduce(
+    (total, event) => total + (event.sizes?.responseBodySize ?? 0),
+    0,
+  );
+  const responseHeaderBytes = responsesWithSize.reduce(
+    (total, event) => total + (event.sizes?.responseHeadersSize ?? 0),
+    0,
+  );
+  return {
+    measurementScope: "pre_consent_initial_navigation" as const,
+    responseCount: measuredResponses.length,
+    responsesWithSize: responsesWithSize.length,
+    responseBodyBytes,
+    responseHeaderBytes,
+    totalTransferBytes: responseBodyBytes + responseHeaderBytes,
+    completeness: measuredResponses.length === 0 || responsesWithSize.length === 0
+      ? "unavailable" as const
+      : responsesWithSize.length === measuredResponses.length
+        ? "complete" as const
+        : "partial" as const,
   };
 }
 

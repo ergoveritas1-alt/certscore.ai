@@ -8,7 +8,7 @@ import {
   SCHEMA_VERSION,
   canonicalEvidenceBundleSchema,
 } from "@certscore/contracts";
-import { compactCanonicalEvidenceBundleForRetention } from "./index.js";
+import { compactCanonicalEvidenceBundleForRetention, summarizeSiteResourceSizes } from "./index.js";
 import { getScanProfile } from "./profiles.js";
 
 test("canonical bundle retention keeps report-critical evidence under 400 KB excluding screenshots", () => {
@@ -52,6 +52,18 @@ test("canonical bundle retention caps module timing breakdowns before schema val
   assert.equal(timingBreakdown[39]?.label, "timing entries truncated");
   assert.match(timingBreakdown[39]?.detail ?? "", /6 timing breakdown entries omitted/);
   assert.equal(timingBreakdown[39]?.durationMs, 255);
+});
+
+test("retains the full pre-consent transfer total after response diagnostics are compacted", () => {
+  const bundle = oversizedGoogleLikeBundle();
+  bundle.siteResourceSizeSummary = summarizeSiteResourceSizes(bundle.networkResponseEvents);
+
+  const compacted = compactCanonicalEvidenceBundleForRetention(bundle);
+
+  assert.equal(bundle.siteResourceSizeSummary.responseCount, 180);
+  assert.equal(bundle.siteResourceSizeSummary.totalTransferBytes, 180 * 24_600);
+  assert.deepEqual(compacted.siteResourceSizeSummary, bundle.siteResourceSizeSummary);
+  assert.equal(compacted.networkResponseEvents.every((event) => event.sizes === undefined), true);
 });
 
 test("canonical evidence rejects duplicate policy observation identities", () => {

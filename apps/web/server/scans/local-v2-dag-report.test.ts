@@ -9,6 +9,7 @@ import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
+import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { buildCanonicalGdprEprivacyShadowProjection } from "../../lib/pulse/projection";
 import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
@@ -634,7 +635,7 @@ test("Oxfam-style completed geometry prevents rapid-DOM controls from reaching G
   });
 
   assert.equal(outcomes.cmp_framework_signal_observed?.status, "Observed");
-  assert.equal(outcomes.consent_surface_observed?.status, "Not observed");
+  assert.equal(outcomes.consent_surface_observed?.status, "Not confirmed");
   assert.equal(
     outcomes.accept_consent_control?.status,
     "Not observed",
@@ -3438,6 +3439,8 @@ test("summarizePolicySurfaces uses a fetched child document instead of its priva
     status: "fetched",
     documentRole: "policy_document",
     documentFormat: "pdf",
+    compressedSizeBytes: 51_200,
+    decompressedSizeBytes: 51_200,
     traversalDepth: 1,
     parentObservationId: "privacy-index",
     parentSurfaceUrl: "https://example.test/privacy",
@@ -3449,6 +3452,14 @@ test("summarizePolicySurfaces uses a fetched child document instead of its priva
   assert.deepEqual(summary.privacyPolicyUrls, ["https://example.test/docs/privacy-current.pdf"]);
   assert.equal(summary.article13DisclosureTypesObserved.includes("legal_basis"), false);
   assert.equal(summary.policyTextEvidenceProjection.documents[0]?.documentRole, "policy_document");
+  assert.deepEqual(summary.privacyPolicySize, {
+    measurementScope: "selected_usable_privacy_policy",
+    url: "https://example.test/docs/privacy-current.pdf",
+    documentFormat: "pdf",
+    compressedBytes: 51_200,
+    decompressedBytes: 51_200,
+    completeness: "complete",
+  });
 });
 
 test("summarizePolicySurfaces preserves an empty retained policy-text failure", async () => {
@@ -3866,7 +3877,7 @@ test("summarizePolicySurfaces accepts GDPR Transparency candidates by default", 
   assert.deepEqual(summary.observedTopics, ["legal_basis"]);
   assert.deepEqual(
     summary.article13DisclosureSignals.map((signal) => signal.evidenceText),
-    [legacySignalText]
+    [candidateText]
   );
   assert.deepEqual(summary.article13DisclosureTypesObserved, ["legal_basis"]);
   assert.deepEqual(summary.gdprTransparencyProductionEvidenceDiagnostics, {
@@ -6622,6 +6633,11 @@ test("materializeLocalV2DagScanDetail withholds missing controls and score when 
     const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
       coverageLimited: false,
       events: detail.events,
+      normalizedConcerns: buildNormalizedConcerns({
+        reviewFindingCandidates: [],
+        runtimeArtifacts: detail.runtimeArtifacts,
+        validationFindings: [],
+      }),
       runtimeArtifacts: detail.runtimeArtifacts,
       scanCompleted: true,
       snapshot: detail.snapshot
@@ -6637,11 +6653,11 @@ test("materializeLocalV2DagScanDetail withholds missing controls and score when 
 
     assert.equal(rejectPathArtifact?.firstLayerCookieConsentBannerObserved, false);
     assert.equal(rejectPathArtifact?.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
-    assert.equal(rejectPath?.status, "Not testable");
+    assert.equal(rejectPath?.status, "Not confirmed");
     assert.equal(rejectPath?.evidenceState, "not_testable");
     assert.match(
       rejectPath?.limitation ?? "",
-      /reject or equivalent refusal control availability cannot be determined/i
+      /reject or equivalent refusal control was not established.*assessment is incomplete/i
     );
   } finally {
     if (previousAppUrl === undefined) {
@@ -7427,6 +7443,11 @@ test("materializeLocalV2DagScanDetail withholds consent choice quality when fall
     const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
       coverageLimited: false,
       events: detail.events,
+      normalizedConcerns: buildNormalizedConcerns({
+        reviewFindingCandidates: [],
+        runtimeArtifacts: detail.runtimeArtifacts,
+        validationFindings: [],
+      }),
       runtimeArtifacts: detail.runtimeArtifacts,
       scanCompleted: true,
       snapshot: detail.snapshot

@@ -224,7 +224,7 @@ function projectConsentStory(input: ConsentFlowFixture) {
   };
 }
 
-test("completed empty first-layer inventory projects factual A/R/O absence and a reject partial concern", () => {
+test("limited empty first-layer inventory remains unknown through every canonical boundary", () => {
   const packet = retainedEvidencePacket({ firstLayerControls: [] });
   packet.consentUiObservations[0]!.layerInspected = "unknown";
   packet.consentUiObservations[0]!.basis = ["settled_control_inventory_completed"];
@@ -292,24 +292,25 @@ test("completed empty first-layer inventory projects factual A/R/O absence and a
     return row;
   };
 
-  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.assessmentStatus, "limited");
   assert.equal(assessment.surface.status, "observed_non_actionable");
-  assert.equal(assessment.controls.accept.state, "not_observed");
-  assert.equal(assessment.controls.reject.state, "not_observed");
-  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
   assert.ok(normalizedConcerns.some((concern) =>
-    concern.originKey === "consent.control_inventory.complete_first_layer"
+    concern.originKey === "consent.control_inventory.partial_first_layer"
   ));
-  assert.ok(normalizedConcerns.some((concern) =>
+  assert.ok(!normalizedConcerns.some((concern) =>
     concern.originKey === "consent.refusal_path.unavailable_before_nonessential_activity"
   ));
-  assert.equal(byId("accept_consent_control").status, "Not observed");
-  assert.equal(byId("options_settings_preferences_control").status, "Not observed");
-  assert.equal(byId("reject_all_path_availability").status, "Review signal");
-  assert.equal(getEvidenceLabel(byId("reject_all_path_availability")), "Partial concern");
+  assert.equal(byId("accept_consent_control").status, "Not confirmed");
+  assert.equal(byId("options_settings_preferences_control").status, "Not confirmed");
+  assert.equal(byId("reject_all_path_availability").status, "Not confirmed");
+  assert.equal(byId("reject_all_path_availability").evidenceState, "not_testable");
+  assert.equal(getEvidenceLabel(byId("reject_all_path_availability")), "Not testable");
 });
 
-test("completed no-evidence inventory stays binary through assessment, concern policy, and checklist", () => {
+test("limited no-evidence inventory stays unknown through assessment, concern policy, and checklist", () => {
   const packet = retainedEvidencePacket({ firstLayerControls: [] });
   packet.consentUiObservations[0]!.captureStatus = "no_evidence";
   packet.consentUiObservations[0]!.likelyPresent = false;
@@ -360,14 +361,14 @@ test("completed no-evidence inventory stays binary through assessment, concern p
   });
   const statusFor = (id: string) => checklist.find((row) => row.id === id)?.status;
 
-  assert.equal(assessment.assessmentStatus, "complete");
-  assert.equal(assessment.surface.status, "not_observed");
-  assert.ok(normalizedConcerns.some((concern) =>
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.surface.status, "unknown");
+  assert.ok(!normalizedConcerns.some((concern) =>
     concern.originKey === "consent.operational_surface.not_observed"
   ));
-  assert.equal(statusFor("accept_consent_control"), "Not observed");
-  assert.equal(statusFor("reject_all_path_availability"), "Not observed");
-  assert.equal(statusFor("options_settings_preferences_control"), "Not observed");
+  assert.equal(statusFor("accept_consent_control"), "Not confirmed");
+  assert.equal(statusFor("reject_all_path_availability"), "Not testable");
+  assert.equal(statusFor("options_settings_preferences_control"), "Not confirmed");
 });
 
 test("canonical consent-control flow preserves site-agnostic prominence and absence semantics", () => {

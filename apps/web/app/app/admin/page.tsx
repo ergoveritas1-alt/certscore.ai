@@ -117,7 +117,13 @@ export default async function AdminOverviewPage() {
                 </p>
               </div>
             ))}
-            <PendingButtonLink href="/app/admin/users" idleContent="Open user admin" pendingContent="Opening..." prefetch={false} variant="secondary" />
+            <PendingButtonLink
+              href="/app/admin/users?dir=desc&sort=lastScan"
+              idleContent="Open user admin"
+              pendingContent="Opening..."
+              prefetch={false}
+              variant="secondary"
+            />
           </CardContent>
         </Card>
 

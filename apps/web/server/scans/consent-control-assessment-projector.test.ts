@@ -108,7 +108,7 @@ test("Oxfam A/R/O remains observed when a later same-document state is collapsed
   assert.equal(assessment.controls.options.state, "observed");
 });
 
-test("completed typed DOM controls survive an independent accessibility timeout", () => {
+test("limited coordinator coverage preserves observed controls without certifying the inventory", () => {
   const url = "https://site-under-test.example/";
   const source = bundle([
     { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
@@ -151,15 +151,16 @@ test("completed typed DOM controls survive an independent accessibility timeout"
     requestedUrl: url,
   });
 
-  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.assessmentStatus, "limited");
   assert.equal(assessment.document.identityStatus, "matched");
-  assert.deepEqual(assessment.coverage.requiredChannels, ["dom_inventory"]);
+  assert.deepEqual(assessment.coverage.requiredChannels, ["dom_inventory", "geometry"]);
+  assert.equal(assessment.coverage.status, "limited");
   assert.equal(assessment.controls.accept.state, "observed");
   assert.equal(assessment.controls.reject.state, "observed");
   assert.equal(assessment.controls.options.state, "observed");
 });
 
-test("completed empty typed inventory retains first-layer A/R/O absence", () => {
+test("limited coordinator coverage keeps an empty first-layer inventory unknown", () => {
   const url = "https://non-actionable.example/";
   const source = bundle([], { url });
   source.consentUiObservations[0]!.layerInspected = "unknown";
@@ -191,12 +192,12 @@ test("completed empty typed inventory retains first-layer A/R/O absence", () => 
     requestedUrl: url,
   });
 
-  assert.equal(assessment.assessmentStatus, "complete");
-  assert.equal(assessment.coverage.status, "complete");
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.coverage.status, "limited");
   assert.equal(assessment.surface.status, "observed_non_actionable");
-  assert.equal(assessment.controls.accept.state, "not_observed");
-  assert.equal(assessment.controls.reject.state, "not_observed");
-  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
 });
 
 test("an incomplete inventory paired to the final settled frame invalidates an earlier empty inventory", () => {
@@ -245,7 +246,7 @@ test("an incomplete inventory paired to the final settled frame invalidates an e
   assert.equal(assessment.controls.options.state, "unknown");
 });
 
-test("completed no-evidence DOM inventory is a certified first-layer negative without geometry", () => {
+test("limited no-evidence DOM inventory does not certify first-layer negatives", () => {
   const url = "https://no-banner.example/";
   const source = bundle([], {
     captureStatus: "no_evidence",
@@ -277,12 +278,12 @@ test("completed no-evidence DOM inventory is a certified first-layer negative wi
     requestedUrl: url,
   });
 
-  assert.equal(assessment.assessmentStatus, "complete");
-  assert.equal(assessment.coverage.status, "complete");
-  assert.equal(assessment.surface.status, "not_observed");
-  assert.equal(assessment.controls.accept.state, "not_observed");
-  assert.equal(assessment.controls.reject.state, "not_observed");
-  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.coverage.status, "limited");
+  assert.equal(assessment.surface.status, "unknown");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
 });
 
 test("a failed non-inventory channel does not erase completed typed A/R/O controls", () => {
@@ -634,14 +635,14 @@ test("CNN production artifact binds typed controls to the retained redirected sc
     requestedUrl: "https://cnn.com/",
   });
 
-  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.coverage.status, "limited");
+  assert.equal(assessment.assessmentStatus, "limited");
   assert.equal(assessment.document.identityStatus, "matched");
   assert.deepEqual(assessment.document.observedDocumentIds, ["https://edition.cnn.com/"]);
   assert.equal(assessment.surface.status, "observed_actionable");
   assert.equal(assessment.controls.accept.state, "observed");
   assert.equal(assessment.controls.options.state, "observed");
-  assert.equal(assessment.controls.reject.state, "not_observed");
-  assert.equal(assessment.coverage.status, "complete");
+  assert.equal(assessment.controls.reject.state, "unknown");
 });
 
 test("explicit observation document URL survives a requested-to-final redirect", () => {

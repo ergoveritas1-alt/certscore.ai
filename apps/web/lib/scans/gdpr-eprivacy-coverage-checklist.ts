@@ -1376,7 +1376,22 @@ function buildChecklistItem(input: {
     input.id === "pre_consent_third_party_tracking" &&
     input.status === "Not confirmed" &&
     getStringValue(trackingEvidenceAssessment?.scoreEffect ?? trackingEvidenceAssessment?.score_effect) === "none";
-  const neutralEvidenceLimitation = neutralPolicyRetrievalLimitation || neutralTrackingInventoryLimitation;
+  const consentControlCoverageStatus = getStringValue(
+    input.criticalEvidence.retainedEvidence.consentControlCoverageStatus ??
+    input.criticalEvidence.retainedEvidence.consent_control_coverage_status
+  );
+  const incompleteConsentControlAssessment =
+    input.status === "Not confirmed" &&
+    [
+      "accept_consent_control",
+      "reject_all_path_availability",
+      "options_settings_preferences_control"
+    ].includes(input.id) &&
+    Boolean(consentControlCoverageStatus && consentControlCoverageStatus !== "complete");
+  const neutralEvidenceLimitation =
+    neutralPolicyRetrievalLimitation ||
+    neutralTrackingInventoryLimitation ||
+    incompleteConsentControlAssessment;
   const assessmentStatus = neutralEvidenceLimitation
     ? "coverage_limitation"
     : input.id === "consent_choice_quality" && input.status === "Not confirmed"

@@ -37,7 +37,10 @@ const RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
 const RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
 const RESULT_BATCH_CONCURRENCY = 3;
 const RESULT_QUEUE_POLL_CONCURRENCY = 2;
-const RESULT_FINALIZATION_BACKGROUND_CONCURRENCY = 8;
+// Canonical report publication performs CPU-heavy projection and bounded
+// database writes in the public web task. Keep only two finalizations active
+// so a burst of completed scanners cannot starve report-status reads.
+const RESULT_FINALIZATION_BACKGROUND_CONCURRENCY = 2;
 const POLICY_EVIDENCE_BACKGROUND_CONCURRENCY = 2;
 const RESULT_VISIBILITY_TIMEOUT_SECONDS = 240;
 const MATERIALIZATION_FINALIZING_WAIT_MS = 150_000;
@@ -203,49 +206,56 @@ export async function ensureCompletedScanScoresPersisted(input: {
     (input.targetEnvironment === "production" ? "https://certscore.ai" : "http://localhost:3000");
   const fetchMaterialization = input.fetchImpl ?? fetch;
   const materializationUrl = new URL("/api/internal/scan-score-materialization", baseUrl);
-  const materializationBody = JSON.stringify({ scanId: input.scanId, token });
   let finalizingAttempt = 0;
-  while (true) {
-    finalizingAttempt += 1;
-    const remainingMs = Math.max(1_000, finalizingDeadline - Date.now());
-    const response = await fetchMaterialization(materializationUrl, {
-      body: materializationBody,
-      headers: { "content-type": "application/json" },
-      method: "POST",
-      signal: AbortSignal.timeout(remainingMs)
-    });
-    if (!response.ok) {
-      const failure = await response.json().catch(() => null) as {
-        code?: unknown;
-        retryAfterSeconds?: unknown;
-        retryable?: unknown;
-      } | null;
-      if (response.status === 422 && failure?.retryable === false) {
-        console.error("[validation-worker] terminal score materialization failure acknowledged", {
-          code: typeof failure.code === "string" ? failure.code.slice(0, 120) : "contract_validation_failed",
-          scanId: input.scanId,
-        });
-        return { alreadyPersisted: false, terminalFailure: true as const };
-      }
-      if (response.status === 503 && failure?.code === "materialization_not_ready" && failure.retryable === true) {
-        if (Date.now() + MATERIALIZATION_RETRY_MS < finalizingDeadline) {
-          console.info("[validation-worker] score materialization still finalizing", {
-            attempt: finalizingAttempt,
-            retryMs: MATERIALIZATION_RETRY_MS,
+  for (const mode of ["publish_report", "finalize"] as const) {
+    while (true) {
+      finalizingAttempt += 1;
+      const remainingMs = Math.max(1_000, finalizingDeadline - Date.now());
+      const response = await fetchMaterialization(materializationUrl, {
+        body: JSON.stringify({ mode, scanId: input.scanId, token }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+        signal: AbortSignal.timeout(remainingMs)
+      });
+      if (!response.ok) {
+        const failure = await response.json().catch(() => null) as {
+          code?: unknown;
+          retryAfterSeconds?: unknown;
+          retryable?: unknown;
+        } | null;
+        if (response.status === 422 && failure?.retryable === false) {
+          console.error("[validation-worker] terminal score materialization failure acknowledged", {
+            code: typeof failure.code === "string" ? failure.code.slice(0, 120) : "contract_validation_failed",
             scanId: input.scanId,
           });
-          await waitForCanonicalReportInputs(input.scanId, finalizingDeadline);
-          await sleep(MATERIALIZATION_RETRY_MS);
-          continue;
+          return { alreadyPersisted: false, terminalFailure: true as const };
         }
+        if (response.status === 503 && failure?.code === "materialization_not_ready" && failure.retryable === true) {
+          if (Date.now() + MATERIALIZATION_RETRY_MS < finalizingDeadline) {
+            console.info("[validation-worker] score materialization still finalizing", {
+              attempt: finalizingAttempt,
+              retryMs: MATERIALIZATION_RETRY_MS,
+              scanId: input.scanId,
+            });
+            await waitForCanonicalReportInputs(input.scanId, finalizingDeadline);
+            await sleep(MATERIALIZATION_RETRY_MS);
+            continue;
+          }
+        }
+        throw new Error(`Score materialization endpoint returned HTTP ${response.status}.`);
       }
-      throw new Error(`Score materialization endpoint returned HTTP ${response.status}.`);
+      const result = await response.json() as { complete?: unknown; reportReady?: unknown };
+      if (mode === "publish_report") {
+        if (result.reportReady !== true) {
+          throw new Error("Report materialization endpoint did not confirm canonical report readiness.");
+        }
+        break;
+      }
+      if (result.complete !== true || !(await completedScoreMaterializationExists(input.scanId))) {
+        throw new Error("Score materialization endpoint did not confirm canonical materialization completion.");
+      }
+      break;
     }
-    const result = await response.json() as { complete?: unknown };
-    if (result.complete !== true || !(await completedScoreMaterializationExists(input.scanId))) {
-      throw new Error("Score materialization endpoint did not confirm canonical materialization completion.");
-    }
-    break;
   }
   return { alreadyPersisted: false, terminalFailure: false as const };
 }

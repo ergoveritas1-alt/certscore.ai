@@ -65,6 +65,44 @@ test("projects bounded Admin evidence only from canonical checklist rows", () =>
   assert.equal(parseAdminEvidenceMatrix(matrix)?.privacyConsent.cmpVendorName, "Example CMP");
 });
 
+test("retains canonical website and privacy-policy byte measurements", () => {
+  const matrix = projectAdminEvidenceMatrix({
+    checklistRows: [],
+    cmpVendorName: null,
+    generatedAt: "2026-08-05T12:00:00.000Z",
+    sourceProjectionVersion: "scan_report_display_projection.v1",
+    sizeMetrics: {
+      website: {
+        measurementScope: "pre_consent_initial_navigation",
+        completeness: "complete",
+        responseCount: 4,
+        responsesWithSize: 4,
+        responseBodyBytes: 1_048_000,
+        responseHeaderBytes: 576,
+        totalBytes: 1_048_576,
+        megabytes: 1,
+      },
+      privacyPolicy: {
+        measurementScope: "selected_usable_privacy_policy",
+        completeness: "complete",
+        url: "https://example.com/privacy",
+        documentFormat: "text",
+        compressedBytes: 51_200,
+        compressedKilobytes: 50,
+        decompressedBytes: 102_400,
+        decompressedKilobytes: 100,
+      },
+    },
+  });
+
+  assert.equal(parseAdminEvidenceMatrix(matrix)?.sizeMetrics?.website?.megabytes, 1);
+  assert.equal(parseAdminEvidenceMatrix(matrix)?.sizeMetrics?.privacyPolicy?.compressedKilobytes, 50);
+  assert.equal(parseAdminEvidenceMatrix({
+    ...matrix,
+    sizeMetrics: { ...matrix.sizeMetrics, website: { ...matrix.sizeMetrics?.website, totalBytes: -1 } },
+  }), null);
+});
+
 test("does not render compact A/R/O unknowns when the canonical checklist retained no consent surface", () => {
   const matrix = projectAdminEvidenceMatrix({
     checklistRows: [

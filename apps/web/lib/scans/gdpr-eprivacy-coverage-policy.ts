@@ -5654,6 +5654,27 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
     );
   }
 
+  if (
+    consentControlAssessment &&
+    (
+      consentControlAssessment.assessmentStatus !== "complete" ||
+      consentControlAssessment.coverage.status !== "complete"
+    )
+  ) {
+    return makeOutcome(
+      "consent_choice_quality",
+      "Not confirmed",
+      `The first-layer control inventory was incomplete, so consent choice quality and dark-pattern characteristics were not confirmed.${visibleChoicePhrase}`,
+      [...evidenceRefs, "Evidence limitation: complete first-layer control inventory not retained"],
+      {
+        retainedEvidence: {
+          ...retainedEvidence,
+          selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "limited"
+        }
+      }
+    );
+  }
+
   const directGapReasons = [
     evidence.acceptControlObserved === true && evidence.sameLayerRejectObserved !== true ? "accept_without_same_layer_reject" : null,
     evidence.rejectClickDepth !== null && evidence.rejectClickDepth > 1 ? "reject_buried_behind_additional_clicks" : null,

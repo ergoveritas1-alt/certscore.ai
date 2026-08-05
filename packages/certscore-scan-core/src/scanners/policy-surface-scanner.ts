@@ -2230,6 +2230,7 @@ async function processPolicyCandidate({
       redirectChain: policyFetchRedirectChain(fetched),
       documentFormat: fetched.documentFormat === "pdf" ? "pdf" : "text",
       contentType: successfulPolicyFetchContentType(fetched),
+      ...successfulPolicyFetchSizes(fetched),
       title,
       textExcerpt: excerpt,
       boundedTextExcerptIds: [excerptId],
@@ -2605,9 +2606,13 @@ async function fetchRenderedPolicyDocumentText(input: {
       };
     }
     const ok = Boolean(response?.ok());
+    const responseSizes = response
+      ? normalizeRenderedPolicyResponseSizes(await response.request().sizes().catch(() => undefined))
+      : {};
     return {
       attempts: [{
         ...attemptBase,
+        ...responseSizes,
         outcome: ok
           ? "fetched"
           : response
@@ -2670,6 +2675,14 @@ async function fetchRenderedPolicyDocumentText(input: {
     await sameContextRecoveryPage?.close().catch(() => undefined);
     await context?.close().catch(() => undefined);
   }
+}
+
+function normalizeRenderedPolicyResponseSizes(
+  sizes: { responseBodySize: number } | undefined,
+) {
+  return sizes && sizes.responseBodySize >= 0
+    ? { compressedSizeBytes: sizes.responseBodySize }
+    : {};
 }
 
 async function clickObservedPolicyLink(
@@ -4880,6 +4893,8 @@ function observationFromCandidate(
     redirectChain: input.redirectChain ?? [],
     documentFormat: input.documentFormat,
     contentType: input.contentType,
+    compressedSizeBytes: input.compressedSizeBytes,
+    decompressedSizeBytes: input.decompressedSizeBytes,
     fetchFailureReason: input.fetchFailureReason,
     matchedLocale: candidate.deterministicMatchedLocale,
     classifierProvenance: candidate.deterministicClassifierProvenance,
@@ -6048,6 +6063,16 @@ function successfulPolicyFetchContentType(result: FetchTextResult): string | und
     ?.contentType;
 }
 
+function successfulPolicyFetchSizes(result: FetchTextResult) {
+  const attempt = [...(result.attempts ?? [])]
+    .reverse()
+    .find((candidate) => candidate.outcome === "fetched");
+  return {
+    compressedSizeBytes: attempt?.compressedSizeBytes,
+    decompressedSizeBytes: attempt?.decompressedSizeBytes,
+  };
+}
+
 type PdfParseConstructor = new (input: { data: Uint8Array }) => {
   destroy(): Promise<void>;
   getText(input: {
@@ -6236,7 +6261,13 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
         };
       }
       return {
-        attempts: [{ ...attemptBase, outcome: "fetched" }],
+        attempts: [{
+          ...attemptBase,
+          compressedSizeBytes: body.byteLength,
+          decompressedSizeBytes: body.byteLength,
+          decodingOutcome: "identity",
+          outcome: "fetched",
+        }],
         documentFormat: "pdf",
         ok: true,
         status: response.status,

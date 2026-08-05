@@ -2643,6 +2643,12 @@ export function summarizePolicySurfaces(
       row.surface.documentEvaluationState === "usable"
     )
     .sort((left, right) => right.surface.confidence - left.surface.confidence)[0] ?? null;
+  const selectedPrivacyPolicySizeDocument = article13Surfaces
+    .filter((row) =>
+      row.surface.documentRole !== "policy_index" &&
+      row.surface.documentEvaluationState === "usable"
+    )
+    .sort((left, right) => right.surface.confidence - left.surface.confidence)[0] ?? null;
   const privacyPolicyEvidencePaths = article13Surfaces
     .filter((row) => row.surface.traversalDepth === 1)
     .map((row) => ({
@@ -2666,6 +2672,21 @@ export function summarizePolicySurfaces(
   const missingExpectedPolicySections = expectedPolicySectionHeadings.filter((heading) =>
     !retainedPolicySectionHeadings.some((retainedHeading) => retainedHeading.toLowerCase().includes(heading.toLowerCase()))
   );
+  const selectedPrivacyPolicySize = selectedPrivacyPolicySizeDocument
+    ? {
+        measurementScope: "selected_usable_privacy_policy" as const,
+        url: selectedPrivacyPolicySizeDocument.pageUrl ??
+          selectedPrivacyPolicySizeDocument.surface.finalUrl ??
+          selectedPrivacyPolicySizeDocument.surface.normalizedUrl ??
+          selectedPrivacyPolicySizeDocument.surface.url,
+        documentFormat: selectedPrivacyPolicySizeDocument.surface.documentFormat ?? "unknown",
+        compressedBytes: selectedPrivacyPolicySizeDocument.surface.compressedSizeBytes ?? null,
+        decompressedBytes: selectedPrivacyPolicySizeDocument.surface.decompressedSizeBytes ?? null,
+        completeness: selectedPrivacyPolicySizeDocument.surface.compressedSizeBytes !== undefined
+          ? "complete" as const
+          : "unavailable" as const,
+      }
+    : null;
   return {
     article13DisclosureSignals: dedupedArticle13DisclosureSignals,
     article13DisclosureTypesObserved: uniqueStrings(dedupedArticle13DisclosureSignals
@@ -2691,6 +2712,7 @@ export function summarizePolicySurfaces(
     policyTextCoverageMode: retainedPolicySections.length > 1 ? "section_targeted" : text.length > 0 ? "front_loaded" : "none",
     retainedPolicySectionHeadings,
     policySurfaceCount: policySurfaces.length,
+    privacyPolicySize: selectedPrivacyPolicySize,
     policyLastUpdatedTexts,
     policyDocumentProvenance,
     policyEvidenceProvenanceContractVersion: "certscore.policy-evidence-provenance.v1",
@@ -5015,6 +5037,7 @@ function buildMaterializedLocalV2Detail(
     rtb_cookie_sync_observations: rtbCookieSyncObservations,
     networkSummary: {
       metricBasis: "retained_unique_request_events",
+      siteResourceSizeSummary: bundle.siteResourceSizeSummary ?? null,
       observedRawRequestEventCount: runtimeObservationCounts?.networkEvents ?? null,
       preConsentRequestCount: networkEvents.filter((event) => event.consentStateAtTime === "pre_consent").length,
       preConsentThirdPartyRequestCount: countCanonicalNetworkEvents(preconsentRequests),

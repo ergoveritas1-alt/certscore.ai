@@ -205,6 +205,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
   const isCompletedTypedFirstLayerInventory = (
     observation: CanonicalEvidenceBundle["consentUiObservations"][number],
   ) => {
+    const controls = observation.controls ?? [];
     const finalInventoryIncomplete = (observation.basis ?? []).some((basis) =>
       basis === "recapture:paired_settled_frame_inventory_incomplete" ||
       basis === "recapture:post_settle_inventory_incomplete" ||
@@ -229,14 +230,14 @@ export function deriveMaterializedConsentControlAssessment(input: {
         /(?:^|:)(?:rapid|first_layer|accessibility_tree|dom_inventory|viewport)/i.test(basis)
       );
     const completedEmptyFirstLayerInventory =
-      observation.controls.length === 0 &&
+      controls.length === 0 &&
       (observation.basis ?? []).includes("settled_control_inventory_completed") &&
       completedTypedChannel;
     const completedPositiveFirstLayerInventory =
       observation.captureStatus === "observed" &&
       observation.likelyPresent === true &&
       observation.layerInspected === "first_layer" &&
-      observation.controls.length > 0 &&
+      controls.length > 0 &&
       (completedTypedChannel || legacyTypedChannelComplete);
     return (
       completedPositiveFirstLayerInventory ||
@@ -244,7 +245,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
         completedEmptyFirstLayerInventory &&
         (observation.captureStatus === "observed" || observation.captureStatus === "no_evidence")
       )
-    ) && observation.controls.every((control) =>
+    ) && controls.every((control) =>
       control.visible === true &&
       (
         control.actionType !== "other" ||
@@ -289,7 +290,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           (retainedDocumentSnapshots.length === 1 ? retainedDocumentSnapshots[0]?.documentId : null) ??
           null;
     const completedEmptyFirstLayerInventory =
-      observation.controls.length === 0 &&
+      (observation.controls?.length ?? 0) === 0 &&
       (observation.basis ?? []).includes("settled_control_inventory_completed") &&
       (observation.captureDiagnostics?.completedChannels ?? []).some((channel) =>
         channel === "dom_inventory" || channel === "accessibility_tree"
@@ -402,7 +403,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
   const observedDocumentIds = unique([
     ...assessmentObservations
       .filter((observation) =>
-        observation.controls.length > 0 ||
+        (observation.controls?.length ?? 0) > 0 ||
         (
           observation.observationId === typedFirstLayerProjectedObservation?.observationId &&
           observation.observedAtMs === typedFirstLayerProjectedObservation.observedAtMs
@@ -430,7 +431,17 @@ export function deriveMaterializedConsentControlAssessment(input: {
       : canonicalDocumentId && observedDocumentIds.length > 0
         ? "matched"
         : "unknown";
-  const typedFirstLayerInventoryComplete = hasTypedFirstLayerInventory;
+  // The coordinator's inspection result is authoritative for negative
+  // first-layer conclusions. A typed observation may retain directly
+  // observed controls even when another required channel is limited, but it
+  // must not turn an explicitly limited inspection into a complete inventory
+  // or convert missing controls to `not_observed`.
+  const coordinatorInspectionComplete = !inspection || (
+    inspection.inspectionCompleted === true &&
+    inspection.coverageStatus === "complete"
+  );
+  const typedFirstLayerInventoryComplete =
+    hasTypedFirstLayerInventory && coordinatorInspectionComplete;
   const explicitlyCompletedTypedInventoryChannels = (typedFirstLayerInventoryObservation?.captureDiagnostics?.completedChannels ?? [])
     .filter((channel): channel is "dom_inventory" | "accessibility_tree" =>
       channel === "dom_inventory" || channel === "accessibility_tree"

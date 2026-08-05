@@ -358,7 +358,7 @@ test("deeper-layer controls do not become first-layer A/R/O", () => {
   assert.equal(assessment.evidence.length, 0);
 });
 
-test("partial unrelated runtime coverage does not erase a complete first-layer control inventory", () => {
+test("explicitly limited coverage preserves observed controls without creating negative states", () => {
   const input = baseInput();
   input.observations = [{
     observationId: "cnn-first-layer",
@@ -388,11 +388,11 @@ test("partial unrelated runtime coverage does not erase a complete first-layer c
 
   const assessment = deriveConsentControlAssessment(input);
 
-  assert.equal(assessment.assessmentStatus, "complete");
-  assert.equal(assessment.coverage.status, "complete");
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.coverage.status, "limited");
   assert.equal(assessment.controls.accept.state, "observed");
   assert.equal(assessment.controls.options.state, "observed");
-  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "unknown");
 });
 
 test("geometry document mismatch does not erase bundle evidence", () => {

@@ -84,18 +84,35 @@ test("API activity derives terminal state and score from canonical scan records"
 test("completion materialization persists the canonical projection before score and acknowledgement", async () => {
   const source = await readFile("apps/web/app/api/internal/scan-score-materialization/route.ts", "utf8");
   const routeStart = source.indexOf("export async function POST");
-  const summaryIndex = source.indexOf("await persistAdminScanSummaryForRecord", routeStart);
+  const projectionIndex = source.indexOf('await timedMaterializationPhase(authorizedScanId, "report_projection"', routeStart);
+  const verificationIndex = source.indexOf('"projection_verification"', projectionIndex);
+  const reportReadyIndex = source.indexOf('reportReady: true', verificationIndex);
+  const summaryIndex = source.indexOf("await persistAdminScanSummaryForPublishedRecord", verificationIndex);
   const scoreIndex = source.indexOf("await timedMaterializationPhase(authorizedScanId, \"score_persistence\"", summaryIndex);
   const completeIndex = source.indexOf("await completeScoreMaterializationRequest", scoreIndex);
 
-  assert.ok(summaryIndex >= 0);
+  assert.ok(projectionIndex >= 0);
+  assert.ok(verificationIndex > projectionIndex);
+  assert.ok(reportReadyIndex > verificationIndex);
+  assert.ok(summaryIndex > reportReadyIndex);
   assert.ok(scoreIndex > summaryIndex);
-  assert.ok(completeIndex > summaryIndex);
   assert.ok(completeIndex > scoreIndex);
   assert.match(source, /Admin scan summary persistence was incomplete/);
-  assert.match(source, /scanRecord/);
+  assert.match(source, /canonicalScanRecord/);
+  assert.match(source, /persistScanReportProjection/);
+  assert.match(source, /loadPersistedScanReportProjection/);
   assert.match(source, /classifyScoreMaterializationFailure/);
   assert.match(source, /status: disposition\.retryable \? 503 : 422/);
+});
+
+test("completion materialization reuses the verified persisted report for admin and score projection", async () => {
+  const routeSource = await readFile("apps/web/app/api/internal/scan-score-materialization/route.ts", "utf8");
+  const adminSource = await readFile("apps/web/server/admin/admin-scan-summary.ts", "utf8");
+
+  assert.match(routeSource, /persistAdminScanSummaryForPublishedRecord\(canonicalScanRecord\)/);
+  assert.match(routeSource, /scanRecord: canonicalScanRecord/);
+  assert.match(adminSource, /export async function persistAdminScanSummaryForPublishedRecord/);
+  assert.match(adminSource, /return persistAdminScanSummaryForPublishedRecord\(canonicalScanRecord\)/);
 });
 
 test("Admin Scans navigation is read-only and Score Shadow has no admin surface", async () => {
@@ -129,7 +146,10 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
 test("Admin Scans gives access outcomes room for at most two visible lines", async () => {
   const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
 
-  assert.match(pageSource, /w-\[2828px\] min-w-\[2828px\] table-fixed/);
+  assert.match(pageSource, /w-\[2958px\] min-w-\[2958px\] table-fixed/);
+  assert.match(pageSource, /<ScanSizeCell matrix=\{matrix\} \/>/);
+  assert.match(pageSource, /Site load \{website \? `\$\{website\.megabytes\.toFixed\(2\)\} MB` : "—"\}/);
+  assert.match(pageSource, /Policy \{policy\?\.compressedKilobytes/);
   assert.match(pageSource, /<col style=\{\{ width: "240px" \}\}/);
   assert.match(pageSource, /\{ label: "Language" \}, \{ label: "Access" \}, \{ label: "Industry" \}/);
   assert.match(pageSource, /width: "80px" \}\} \/><col style=\{\{ width: "240px" \}\} \/><col style=\{\{ width: "160px"/);

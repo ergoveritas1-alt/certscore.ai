@@ -62,6 +62,29 @@ export type AdminPolicyEvidenceDiagnostic = {
   };
 };
 
+export type AdminScanSizeMetrics = {
+  website: {
+    measurementScope: "pre_consent_initial_navigation";
+    completeness: "complete" | "partial" | "unavailable";
+    responseCount: number;
+    responsesWithSize: number;
+    responseBodyBytes: number;
+    responseHeaderBytes: number;
+    totalBytes: number;
+    megabytes: number;
+  } | null;
+  privacyPolicy: {
+    measurementScope: "selected_usable_privacy_policy";
+    completeness: "complete" | "unavailable";
+    url: string;
+    documentFormat: string;
+    compressedBytes: number | null;
+    compressedKilobytes: number | null;
+    decompressedBytes: number | null;
+    decompressedKilobytes: number | null;
+  } | null;
+};
+
 export function adminPolicyEvidenceStageLabel(stage: AdminPolicyEvidenceStage) {
   return ({
     topic_evidence_projected: "Topics projected",
@@ -138,6 +161,7 @@ export type AdminEvidenceMatrix = {
   policyEvidence?: AdminPolicyEvidenceDiagnostic | null;
   privacyConsent: ResultMap<typeof PRIVACY_CONSENT_ROWS> & { cmpVendorName: string | null };
   runtime: { aggregate: AdminEvidenceAggregate; results: ResultMap<typeof RUNTIME_ROWS> };
+  sizeMetrics?: AdminScanSizeMetrics | null;
   sourceProjectionVersion: string | null;
   transparency: { aggregate: AdminEvidenceAggregate; results: ResultMap<typeof TRANSPARENCY_ROWS> };
   transport: { aggregate: AdminEvidenceAggregate; results: ResultMap<typeof TRANSPORT_ROWS> };
@@ -309,6 +333,7 @@ export function projectAdminEvidenceMatrix(input: {
   generatedAt?: string;
   policyDisclosureSummary?: Record<string, unknown> | null;
   sourceProjectionVersion: string | null;
+  sizeMetrics?: AdminScanSizeMetrics | null;
 }): AdminEvidenceMatrix {
   const byId = new Map(input.checklistRows.map((row) => [row.id, row]));
   const transparency = projectResults(TRANSPARENCY_ROWS, byId);
@@ -338,6 +363,7 @@ export function projectAdminEvidenceMatrix(input: {
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     policyEvidence: projectPolicyEvidenceDiagnostic(input.checklistRows, byId, input.policyDisclosureSummary),
     sourceProjectionVersion: input.sourceProjectionVersion,
+    sizeMetrics: input.sizeMetrics ?? null,
     privacyConsent: {
       ...privacyConsent,
       cmpVendorName: input.cmpVendorName
@@ -394,12 +420,44 @@ function isPolicyEvidenceDiagnostic(value: unknown): value is AdminPolicyEvidenc
   );
 }
 
+function isNonnegativeFiniteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isScanSizeMetrics(value: unknown): value is AdminScanSizeMetrics | null | undefined {
+  if (value === null || value === undefined) return true;
+  const metrics = record(value);
+  const website = record(metrics?.website);
+  const privacyPolicy = record(metrics?.privacyPolicy);
+  const websiteValid = metrics?.website === null || Boolean(
+    website &&
+    website.measurementScope === "pre_consent_initial_navigation" &&
+    ["complete", "partial", "unavailable"].includes(String(website.completeness)) &&
+    ["responseCount", "responsesWithSize", "responseBodyBytes", "responseHeaderBytes", "totalBytes", "megabytes"]
+      .every((key) => isNonnegativeFiniteNumber(website[key]))
+  );
+  const nullableSize = (size: unknown) => size === null || isNonnegativeFiniteNumber(size);
+  const privacyPolicyValid = metrics?.privacyPolicy === null || Boolean(
+    privacyPolicy &&
+    privacyPolicy.measurementScope === "selected_usable_privacy_policy" &&
+    ["complete", "unavailable"].includes(String(privacyPolicy.completeness)) &&
+    typeof privacyPolicy.url === "string" && privacyPolicy.url.length <= 500 &&
+    typeof privacyPolicy.documentFormat === "string" && privacyPolicy.documentFormat.length <= 40 &&
+    nullableSize(privacyPolicy.compressedBytes) &&
+    nullableSize(privacyPolicy.compressedKilobytes) &&
+    nullableSize(privacyPolicy.decompressedBytes) &&
+    nullableSize(privacyPolicy.decompressedKilobytes)
+  );
+  return websiteValid && privacyPolicyValid;
+}
+
 export function parseAdminEvidenceMatrix(value: unknown): AdminEvidenceMatrix | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const matrix = value as Record<string, unknown>;
   if (typeof matrix.version !== "string" || !VALID_ADMIN_EVIDENCE_MATRIX_VERSIONS.has(matrix.version) || typeof matrix.generatedAt !== "string" || matrix.generatedAt.length > 64) return null;
   if (matrix.sourceProjectionVersion !== null && typeof matrix.sourceProjectionVersion !== "string") return null;
   if (!isPolicyEvidenceDiagnostic(matrix.policyEvidence)) return null;
+  if (!isScanSizeMetrics(matrix.sizeMetrics)) return null;
   const privacyConsent = matrix.privacyConsent as Record<string, unknown> | null;
   const transparency = matrix.transparency as Record<string, unknown> | null;
   const transport = matrix.transport as Record<string, unknown> | null;

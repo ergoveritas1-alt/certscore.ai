@@ -6,9 +6,13 @@ import {
   recordScoreMaterializationRequestError
 } from "../../../../server/scans/score-materialization-request-repository";
 import { persistCompletedLegacyGdprEprivacyAssessment } from "../../../../server/scans/score-assessment-lifecycle";
-import { persistAdminScanSummaryForRecord } from "../../../../server/admin/admin-scan-summary";
+import { persistAdminScanSummaryForPublishedRecord } from "../../../../server/admin/admin-scan-summary";
 import { getAnonymousScanById, getScanById } from "../../../../server/scans/get-scan-by-id";
 import { materializeLocalV2DagScanDetail } from "../../../../server/scans/local-v2-dag-report";
+import {
+  loadPersistedScanReportProjection,
+  persistScanReportProjection,
+} from "../../../../server/scans/scan-report-projection";
 import { classifyScoreMaterializationFailure } from "../../../../server/scans/score-materialization-failure";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +26,7 @@ function complete(result: {
 
 async function timedMaterializationPhase<T>(
   scanId: string,
-  phase: "scan_materialization" | "score_persistence",
+  phase: "projection_verification" | "report_projection" | "scan_materialization" | "score_persistence",
   operation: () => Promise<T>,
 ) {
   const startedAt = Date.now();
@@ -48,9 +52,12 @@ async function timedMaterializationPhase<T>(
 export async function POST(request: Request) {
   let scanId: string | null = null;
   try {
-    const body = await request.json() as { scanId?: unknown; token?: unknown };
+    const body = await request.json() as { mode?: unknown; scanId?: unknown; token?: unknown };
     scanId = typeof body.scanId === "string" ? body.scanId : null;
     const token = typeof body.token === "string" ? body.token : null;
+    const mode = body.mode === "publish_report" || body.mode === "finalize"
+      ? body.mode
+      : "publish_and_finalize";
     if (!scanId || !/^[0-9a-f-]{36}$/i.test(scanId) || !token || !/^[A-Za-z0-9_-]{40,80}$/.test(token)) {
       return NextResponse.json({ error: "Invalid materialization request." }, { status: 400 });
     }
@@ -59,24 +66,57 @@ export async function POST(request: Request) {
     if (!authorization) {
       return NextResponse.json({ error: "Materialization request is not authorized." }, { status: 401 });
     }
-    const rawRecord = authorization.organizationId
-      ? await getScanById({ organizationId: authorization.organizationId, scanId: authorizedScanId })
-      : await getAnonymousScanById(authorizedScanId);
-    if (!rawRecord) {
-      throw new Error("Completed scan record was not available for materialization.");
+    let canonicalScanRecord = mode === "finalize"
+      ? await timedMaterializationPhase(
+        authorizedScanId,
+        "projection_verification",
+        () => loadPersistedScanReportProjection({
+          organizationId: authorization.organizationId,
+          scanId: authorizedScanId,
+        })
+      )
+      : null;
+    if (mode !== "finalize") {
+      const rawRecord = authorization.organizationId
+        ? await getScanById({ organizationId: authorization.organizationId, scanId: authorizedScanId })
+        : await getAnonymousScanById(authorizedScanId);
+      if (!rawRecord) {
+        throw new Error("Completed scan record was not available for materialization.");
+      }
+      const scanRecord = await timedMaterializationPhase(authorizedScanId, "scan_materialization", () =>
+        materializeLocalV2DagScanDetail(rawRecord)
+      );
+      // Report publication is the customer-visible readiness boundary. Keep
+      // it canonical and verified, then yield the HTTP request before trailing
+      // Admin and legacy-score persistence so status polling is not starved.
+      await timedMaterializationPhase(authorizedScanId, "report_projection", () =>
+        persistScanReportProjection(scanRecord, {
+          runtimeArtifacts: scanRecord.runtimeArtifacts,
+          snapshot: scanRecord.snapshot,
+        })
+      );
+      canonicalScanRecord = await timedMaterializationPhase(
+        authorizedScanId,
+        "projection_verification",
+        () => loadPersistedScanReportProjection({
+          organizationId: authorization.organizationId,
+          scanId: authorizedScanId,
+        })
+      );
     }
-    const scanRecord = await timedMaterializationPhase(authorizedScanId, "scan_materialization", () =>
-      materializeLocalV2DagScanDetail(rawRecord)
-    );
-    // Publish the canonical typed assessment/evidence projection before any
-    // score is persisted. If normalized concerns or unified findings are not
-    // ready yet, the request remains pending and the worker retries the whole
-    // canonical boundary instead of mistaking a partial score write for
-    // materialization completion.
-    const adminSummary = await persistAdminScanSummaryForRecord(scanRecord, {
-      runtimeArtifacts: rawRecord.runtimeArtifacts,
-      snapshot: rawRecord.snapshot,
-    });
+    if (!canonicalScanRecord) {
+      throw new Error("Canonical report projection could not be verified after publication.");
+    }
+    if (mode === "publish_report") {
+      return NextResponse.json({
+        complete: false,
+        reportReady: true,
+      });
+    }
+    // Trailing persistence consumes the verified canonical projection. It may
+    // finish after the report becomes visible, but the SQS result remains
+    // leased until both writes are durably acknowledged.
+    const adminSummary = await persistAdminScanSummaryForPublishedRecord(canonicalScanRecord);
     if (!adminSummary) {
       throw new Error("Admin scan summary persistence was incomplete.");
     }
@@ -84,7 +124,7 @@ export async function POST(request: Request) {
       persistCompletedLegacyGdprEprivacyAssessment({
         organizationId: authorization.organizationId,
         scanId: authorizedScanId,
-        scanRecord,
+        scanRecord: canonicalScanRecord,
       })
     );
     if (!complete(result)) {

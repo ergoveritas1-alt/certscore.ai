@@ -442,7 +442,10 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
       )
     )
   );
+  const explicitCoverageAllowsCompleteness =
+    input.coverage?.status === undefined || input.coverage.status === "complete";
   const consentEvidenceCoverageComplete =
+    explicitCoverageAllowsCompleteness &&
     !noGo &&
     documentStatus === "matched" &&
     (geometryComplete || firstLayerObservationComplete) &&
@@ -460,9 +463,9 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     firstLayerObservationRetained &&
     bundleEvidence.length > 0;
   const completeConsentInventory = consentEvidenceCoverageComplete || typedInventoryCoverageComplete;
-  // Consent-control completeness is about the retained first-layer consent
-  // inventory. A partial unrelated runtime lane must not erase a factual
-  // not-observed result when the consent inventory and geometry are complete.
+  // Explicit coordinator coverage is authoritative. Directly observed
+  // controls remain observed under limited coverage, but an incomplete
+  // inventory cannot be upgraded into factual negative control states.
   const effectiveCoverageStatus = consentEvidenceCoverageComplete ? "complete" : coverageStatus;
   const effectiveCompletedChannels = unique([
     ...completedChannels,

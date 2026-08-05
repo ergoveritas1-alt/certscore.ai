@@ -4,7 +4,8 @@ import { queryOne } from "@website-signal-risk-scanner/db";
 import { buildPulseProjection } from "../../lib/pulse/projection";
 import {
   projectAdminEvidenceMatrix,
-  type AdminEvidenceMatrix
+  type AdminEvidenceMatrix,
+  type AdminScanSizeMetrics
 } from "../../lib/scans/admin-evidence-matrix";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { getAnonymousScanById, getScanById } from "../scans/get-scan-by-id";
@@ -86,36 +87,60 @@ function recordObject(record: Record<string, unknown> | null, key: string) {
     : null;
 }
 
-export async function persistAdminScanSummaryForRecord(
+function nonnegativeInteger(record: Record<string, unknown> | null, key: string) {
+  const value = recordNumber(record, key);
+  return value !== null && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function projectAdminScanSizeMetrics(input: {
+  networkSummary: Record<string, unknown> | null;
+  policyDisclosureSummary: Record<string, unknown> | null;
+}): AdminScanSizeMetrics {
+  const websiteSource = recordObject(input.networkSummary, "siteResourceSizeSummary");
+  const websiteTotalBytes = nonnegativeInteger(websiteSource, "totalTransferBytes");
+  const websiteCompleteness = recordString(websiteSource, "completeness");
+  const website = websiteSource && websiteTotalBytes !== null &&
+    ["complete", "partial", "unavailable"].includes(websiteCompleteness ?? "")
+    ? {
+        measurementScope: "pre_consent_initial_navigation" as const,
+        completeness: websiteCompleteness as "complete" | "partial" | "unavailable",
+        responseCount: nonnegativeInteger(websiteSource, "responseCount") ?? 0,
+        responsesWithSize: nonnegativeInteger(websiteSource, "responsesWithSize") ?? 0,
+        responseBodyBytes: nonnegativeInteger(websiteSource, "responseBodyBytes") ?? 0,
+        responseHeaderBytes: nonnegativeInteger(websiteSource, "responseHeaderBytes") ?? 0,
+        totalBytes: websiteTotalBytes,
+        megabytes: Math.round((websiteTotalBytes / (1024 * 1024)) * 1000) / 1000,
+      }
+    : null;
+  const policySource = recordObject(input.policyDisclosureSummary, "privacyPolicySize");
+  const compressedBytes = nonnegativeInteger(policySource, "compressedBytes");
+  const decompressedBytes = nonnegativeInteger(policySource, "decompressedBytes");
+  const policyUrl = recordString(policySource, "url");
+  const policyCompleteness = recordString(policySource, "completeness");
+  const privacyPolicy = policySource && policyUrl && policyUrl.length <= 500 &&
+    ["complete", "unavailable"].includes(policyCompleteness ?? "")
+    ? {
+        measurementScope: "selected_usable_privacy_policy" as const,
+        completeness: policyCompleteness as "complete" | "unavailable",
+        url: policyUrl,
+        documentFormat: (recordString(policySource, "documentFormat") ?? "unknown").slice(0, 40),
+        compressedBytes,
+        compressedKilobytes: compressedBytes === null ? null : Math.round((compressedBytes / 1024) * 100) / 100,
+        decompressedBytes,
+        decompressedKilobytes: decompressedBytes === null ? null : Math.round((decompressedBytes / 1024) * 100) / 100,
+      }
+    : null;
+  return { website, privacyPolicy };
+}
+
+export async function persistAdminScanSummaryForPublishedRecord(
   scanRecord: PublicScanRecord,
-  _source: { snapshot?: unknown; runtimeArtifacts?: unknown } = {}
 ): Promise<AdminScanSummary | null> {
   if (!scanRecord || scanRecord.scan.status !== "completed") {
     return null;
   }
   const scanId = scanRecord.scan.id;
-  const organizationId = (await queryOne<{ organization_id: string | null }>(
-    "select organization_id::text from scans where id = $1::uuid limit 1",
-    [scanId],
-    { readOnly: true }
-  ))?.organization_id ?? null;
-  const publication = await timedAdminPersistencePhase(scanId, "report_projection", () =>
-    publishCanonicalScanReportProjection({
-      organizationId,
-      scanId
-    })
-  );
-  if (publication.status !== "ready") {
-    throw new CanonicalScanReportProjectionNotReadyError(publication.reason);
-  }
-  const canonicalScanRecord = await loadPersistedScanReportProjection({
-    organizationId,
-    scanId
-  });
-  if (!canonicalScanRecord) {
-    throw new Error("Canonical report projection could not be verified after publication.");
-  }
-
+  const canonicalScanRecord = scanRecord;
   const reportProjection = buildPulseProjection({
     detail: "evidence",
     format: "json",
@@ -164,10 +189,12 @@ export async function persistAdminScanSummaryForRecord(
   const cmpVendorName = noGo.isNoGo ? null : recordString(snapshot, "cmp_vendor_name");
   const policyDisclosureSummary = recordObject(runtimeArtifacts, "policyDisclosureSummary") ??
     recordObject(runtimeArtifacts, "policy_disclosure_summary");
+  const networkSummary = recordObject(runtimeArtifacts, "networkSummary");
   const adminEvidenceMatrix = projectAdminEvidenceMatrix({
     checklistRows,
     cmpVendorName,
     policyDisclosureSummary,
+    sizeMetrics: projectAdminScanSizeMetrics({ networkSummary, policyDisclosureSummary }),
     sourceProjectionVersion: recordString(snapshot, "report_projection_version")
   });
   const summary: AdminScanSummary = {
@@ -200,6 +227,38 @@ export async function persistAdminScanSummaryForRecord(
     score: summary.score,
     topFindingCount: summary.topFindingCount
   };
+}
+
+export async function persistAdminScanSummaryForRecord(
+  scanRecord: PublicScanRecord,
+  _source: { snapshot?: unknown; runtimeArtifacts?: unknown } = {}
+): Promise<AdminScanSummary | null> {
+  if (!scanRecord || scanRecord.scan.status !== "completed") {
+    return null;
+  }
+  const scanId = scanRecord.scan.id;
+  const organizationId = (await queryOne<{ organization_id: string | null }>(
+    "select organization_id::text from scans where id = $1::uuid limit 1",
+    [scanId],
+    { readOnly: true }
+  ))?.organization_id ?? null;
+  const publication = await timedAdminPersistencePhase(scanId, "report_projection", () =>
+    publishCanonicalScanReportProjection({
+      organizationId,
+      scanId
+    })
+  );
+  if (publication.status !== "ready") {
+    throw new CanonicalScanReportProjectionNotReadyError(publication.reason);
+  }
+  const canonicalScanRecord = await loadPersistedScanReportProjection({
+    organizationId,
+    scanId
+  });
+  if (!canonicalScanRecord) {
+    throw new Error("Canonical report projection could not be verified after publication.");
+  }
+  return persistAdminScanSummaryForPublishedRecord(canonicalScanRecord);
 }
 
 async function buildAndPersistAdminScanSummary(scanId: string, organizationId: string | null): Promise<AdminScanSummary | null> {
