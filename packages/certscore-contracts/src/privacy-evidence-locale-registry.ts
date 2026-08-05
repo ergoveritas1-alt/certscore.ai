@@ -81,7 +81,8 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
   }),
   locale("tr", {
     privacyPolicyLabels: ["gizlilik politikası", "kişisel verilerin korunması"], privacyPolicyPathSlugs: ["gizlilik-politikasi", "kvkk"], cookiePolicyLabels: ["çerez politikası"], cookiePolicyPathSlugs: ["cerez-politikasi"], cookieSettingsLabels: ["çerez ayarları"], termsLabels: ["kullanım koşulları"], termsPathSlugs: ["kullanim-kosullari"], contextHints: ["gizlilik", "kişisel veri", "çerez", "rıza"], tldHints: [".tr"],
-    consentControls: { accept: ["tümünü kabul et", "hepsini kabul et"], reject: ["tümünü reddet", "hepsini reddet"], options: ["çerez ayarları", "tercihleri yönet"], necessaryOnly: ["yalnızca gerekli çerezler", "sadece gerekli çerezler"] },
+    consentControls: { accept: ["tümünü kabul et", "hepsini kabul et"], reject: ["tümünü reddet", "hepsini reddet"], options: ["çerez ayarları", "tercihleri yönet", "seçenekleri yönetin"], necessaryOnly: ["yalnızca gerekli çerezler", "sadece gerekli çerezler"] },
+    contextualConsentControls: { accept: ["izin ver"] },
   }),
   locale("zh", {
     privacyPolicyLabels: ["隐私政策", "隐私声明"], privacyPolicyPathSlugs: ["privacy-policy", "yinsi-zhengce"], cookiePolicyLabels: ["Cookie 政策", "饼干政策"], cookiePolicyPathSlugs: ["cookie-policy"], cookieSettingsLabels: ["Cookie 设置", "饼干设置"], termsLabels: ["使用条款"], termsPathSlugs: ["terms"], contextHints: ["隐私", "个人信息", "Cookie", "同意"], tldHints: [".cn"],
@@ -117,7 +118,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
   }),
   locale("sv", {
     privacyPolicyLabels: ["integritetspolicy", "sekretesspolicy", "dataskydd"], privacyPolicyPathSlugs: ["integritetspolicy", "dataskydd"], cookiePolicyLabels: ["cookiepolicy"], cookiePolicyPathSlugs: ["cookiepolicy"], cookieSettingsLabels: ["cookieinställningar"], termsLabels: ["användarvillkor"], termsPathSlugs: ["anvandarvillkor"], contextHints: ["integritet", "personuppgifter", "cookies", "samtycke"], tldHints: [".se"],
-    consentControls: { accept: ["acceptera alla", "godkänn alla"], reject: ["avvisa alla", "neka alla"], options: ["cookieinställningar", "hantera inställningar"], necessaryOnly: ["endast nödvändiga", "endast nödvändiga cookies"] },
+    consentControls: { accept: ["acceptera alla", "godkänn alla"], reject: ["avvisa alla", "neka alla"], options: ["cookieinställningar", "hantera inställningar", "hantera eller avvisa"], necessaryOnly: ["endast nödvändiga", "endast nödvändiga cookies"] },
   }),
   locale("uk", {
     privacyPolicyLabels: ["політика конфіденційності"], privacyPolicyPathSlugs: ["polityka-konfidentsiynosti"], cookiePolicyLabels: ["політика cookie"], cookiePolicyPathSlugs: ["polityka-cookie"], cookieSettingsLabels: ["налаштування cookie"], termsLabels: ["умови використання"], termsPathSlugs: ["umovy-vykorystannya"], contextHints: ["конфіденційність", "персональні дані", "cookie", "згода"], tldHints: [".ua"],
@@ -169,7 +170,8 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
   }),
   locale("hr", {
     privacyPolicyLabels: ["politika privatnosti", "pravila privatnosti", "zaštita podataka"], privacyPolicyPathSlugs: ["politika-privatnosti", "zastita-podataka"], cookiePolicyLabels: ["politika kolačića"], cookiePolicyPathSlugs: ["politika-kolacica"], cookieSettingsLabels: ["postavke kolačića"], termsLabels: ["uvjeti korištenja"], termsPathSlugs: ["uvjeti-koristenja"], contextHints: ["privatnost", "osobni podaci", "kolačići", "privola"], tldHints: [".hr"],
-    consentControls: { accept: ["prihvati sve", "dopusti sve"], reject: ["odbij sve", "odbaci sve"], options: ["postavke kolačića", "upravljaj postavkama"], necessaryOnly: ["prihvati samo obavezne kolačiće", "samo nužni", "samo nužni kolačići"] },
+    consentControls: { accept: ["prihvati sve", "dopusti sve", "prihvati i zatvori"], reject: ["odbij sve", "odbaci sve"], options: ["postavke kolačića", "upravljaj postavkama"], necessaryOnly: ["prihvati samo obavezne kolačiće", "samo nužni", "samo nužni kolačići"] },
+    contextualConsentControls: { options: ["konfigurirajte svoje privole"] },
   }),
   locale("lt", {
     privacyPolicyLabels: ["privatumo politika", "duomenų apsauga"], privacyPolicyPathSlugs: ["privatumo-politika", "duomenu-apsauga"], cookiePolicyLabels: ["slapukų politika"], cookiePolicyPathSlugs: ["slapuku-politika"], cookieSettingsLabels: ["slapukų nustatymai"], termsLabels: ["naudojimo sąlygos"], termsPathSlugs: ["naudojimo-salygos"], contextHints: ["privatumas", "asmens duomenys", "slapukai", "sutikimas"], tldHints: [".lt"],

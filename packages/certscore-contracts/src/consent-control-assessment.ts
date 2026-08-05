@@ -469,7 +469,9 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     ...(firstLayerObservationRetained ? ["dom_inventory" as const] : []),
     ...(geometryComplete ? ["geometry" as const] : []),
   ]);
-  const effectiveIncompleteChannels = completeConsentInventory ? [] : incompleteChannels;
+  const effectiveIncompleteChannels = completeConsentInventory
+    ? []
+    : incompleteChannels.filter((channel) => requiredChannels.includes(channel));
   const completeInventory = completeConsentInventory || (
     coverageStatus === "complete" &&
     requiredChannels.every((channel) => effectiveCompletedChannels.includes(channel)) &&
@@ -518,6 +520,11 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
       result.reasonCodes = ["assessment_blocked", ...reasons].slice(0, 16);
     }
   }
+  const containsUnknownControl = Object.values(firstLayerResults).some((result) => result.state === "unknown");
+  const assessmentComplete = !assessmentBlocked &&
+    effectiveCoverageStatus === "complete" &&
+    completeInventory &&
+    !containsUnknownControl;
 
   const firstObservedAtMs = observations.find((observation) => observation.likelyPresent)?.observedAtMs ?? null;
   const lastObservedAtMs = observations.at(-1)?.observedAtMs ?? input.geometry?.observedAtMs ?? null;
@@ -532,7 +539,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   return consentControlAssessmentSchema.parse({
     artifactType: "consent_control_assessment",
     artifactVersion: "2.0",
-    assessmentStatus: assessmentBlocked || effectiveCoverageStatus !== "complete" ? "limited" : "complete",
+    assessmentStatus: assessmentComplete ? "complete" : "limited",
     scan: {
       scanId: input.scan.scanId,
       requestedUrl: boundedIdentityText(input.scan.requestedUrl, 500),
@@ -554,7 +561,11 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     },
     controls: firstLayerResults,
     coverage: {
-      status: assessmentBlocked ? "none" : effectiveCoverageStatus,
+      status: assessmentBlocked
+        ? "none"
+        : assessmentComplete
+          ? "complete"
+          : "limited",
       requiredChannels,
       completedChannels: effectiveCompletedChannels,
       incompleteChannels: effectiveIncompleteChannels,

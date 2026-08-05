@@ -117,6 +117,8 @@ export interface PreConsentRuntimeScannerInput {
   scanStartedAtMs: number;
   internalBudgetMs: number;
   artifactWriter: ArtifactWriter;
+  /** Selects the evidence domain retained by a dedicated Lambda lane. */
+  captureScope?: "combined" | "consent_proof" | "runtime_evidence";
   browser?: Browser;
   browserMode?: "headless" | "headed";
   stubHeavyResources?: boolean;
@@ -333,6 +335,8 @@ export async function preConsentRuntimeScanner(
   const moduleStartedAt = new Date(moduleStartedAtMs).toISOString();
   const remainingModuleBudgetMs = () => Math.max(0, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
   const timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
+  const captureScope = input.captureScope ?? "combined";
+  const captureRuntimeEvidence = captureScope !== "consent_proof";
   let firstPartyHostname = getHostname(input.normalizedUrl) ?? undefined;
   let firstPartyDomain = getRegistrableDomainFromUrl(input.normalizedUrl) ?? undefined;
   const networkEvents: NetworkEvent[] = [];
@@ -358,11 +362,13 @@ export async function preConsentRuntimeScanner(
     artifactRefs: [],
     notes: input.screenshotMode === "never" ? ["Pre-consent screenshot capture disabled by scan mode."] : [],
   };
-  const transportNetworkProbesPromise = startTransportNetworkProbes(
-    input.normalizedUrl,
-    input.signal,
-    moduleDeadlineAtMs,
-  );
+  const transportNetworkProbesPromise = captureRuntimeEvidence
+    ? startTransportNetworkProbes(
+      input.normalizedUrl,
+      input.signal,
+      moduleDeadlineAtMs,
+    )
+    : Promise.resolve<TransportNetworkProbes | null>(null);
 
   const browserMode = input.browserMode ?? "headless";
   const ownsBrowser = !input.browser;
@@ -918,12 +924,6 @@ export async function preConsentRuntimeScanner(
     const postSettleInventoryReserveMs = 500;
     const settledVisualCheckpointScreenshotMaxMs = fastWait ? 1_500 : 2_000;
     const settledVisualCheckpointInventoryMaxMs = fastWait ? 750 : 1_000;
-    const settledVisualCheckpointReserveMs =
-      settleWaitMs +
-      postSettleInventoryMaxMs +
-      settledVisualCheckpointScreenshotMaxMs +
-      settledVisualCheckpointInventoryMaxMs +
-      250;
     const consentUiWaitTimeoutMs = fastWait ? 1_800 : 3_500;
     // Regional commerce pages can paint a complete consent surface before
     // their renderer answers structured DOM/accessibility reads. Preserve a
@@ -987,23 +987,40 @@ export async function preConsentRuntimeScanner(
           );
         })
       : Promise.resolve(null);
-    retainedRenderedPolicyLinkEvidence = await recordBoundedTiming(
-      timingBreakdown,
-      "page evidence: early rendered policy links",
-      "Capture canonical privacy, cookie, and privacy-choice links while the already-started consent evidence lane runs independently.",
-      Math.min(1_000, remainingModuleBudgetMs()),
-      () => captureRenderedPolicyLinks(page),
-      () => [],
-    );
+    retainedRenderedPolicyLinkEvidence = captureRuntimeEvidence
+      ? await recordBoundedTiming(
+        timingBreakdown,
+        "page evidence: early rendered policy links",
+        "Capture canonical privacy, cookie, and privacy-choice links while the already-started consent evidence lane runs independently.",
+        Math.min(1_000, remainingModuleBudgetMs()),
+        () => captureRenderedPolicyLinks(page),
+        () => [],
+      )
+      : [];
+    if (!captureRuntimeEvidence) {
+      recordInstantTiming(
+        timingBreakdown,
+        "page evidence: early rendered policy links skipped",
+        "Dedicated consent-proof lane leaves policy discovery to the parallel policy-evidence Lambda.",
+      );
+    }
     const earlyTransportNetworkProbes = await transportNetworkProbesPromise;
-    timingBreakdown.push({
-      label: "transport security network probes",
-      detail: "HTTP redirect and strict TLS probes overlapped browser launch and initial navigation.",
-      durationMs: earlyTransportNetworkProbes.durationMs,
-    });
+    if (earlyTransportNetworkProbes) {
+      timingBreakdown.push({
+        label: "transport security network probes",
+        detail: "HTTP redirect and strict TLS probes overlapped browser launch and initial navigation.",
+        durationMs: earlyTransportNetworkProbes.durationMs,
+      });
+    } else {
+      recordInstantTiming(
+        timingBreakdown,
+        "transport security network probes skipped",
+        "Dedicated consent-proof lane leaves transport evidence to the parallel runtime-evidence Lambda.",
+      );
+    }
     const earlyTransportFallback = () => ({
       observation: availableTransportSecurityObservation({
-        networkProbes: earlyTransportNetworkProbes,
+        networkProbes: earlyTransportNetworkProbes!,
         normalizedUrl: input.normalizedUrl,
         pageUrl: safePageUrl(page, effectiveNavigationUrl),
         requestedUrl: input.url,
@@ -1011,27 +1028,35 @@ export async function preConsentRuntimeScanner(
       }),
       artifactRef: undefined,
     });
-    const earlyTransportCapture = await recordBoundedTiming(
-      timingBreakdown,
-      "page evidence: early transport security",
-      "Capture HTTPS, TLS, redirect, mixed-content, and form transport evidence while the already-started consent evidence lane runs independently.",
-      Math.min(2_500, Math.max(1_000, remainingModuleBudgetMs())),
-      () => captureTransportSecurityObservation({
-        collectionSurfaceObservations: [],
-        failedHttpRequests,
-        mixedContentConsoleMessages,
-        networkEvents,
-        normalizedUrl: input.normalizedUrl,
-        networkProbes: earlyTransportNetworkProbes,
-        page,
-        requestedUrl: input.url,
-        scanStartedAtMs: input.scanStartedAtMs,
-        artifactWriter: input.artifactWriter,
-      }),
-      earlyTransportFallback,
-    );
-    retainedTransportSecurityObservation = earlyTransportCapture.observation;
-    retainedTransportSecurityArtifactRef = earlyTransportCapture.artifactRef;
+    if (earlyTransportNetworkProbes) {
+      const earlyTransportCapture = await recordBoundedTiming(
+        timingBreakdown,
+        "page evidence: early transport security",
+        "Capture HTTPS, TLS, redirect, mixed-content, and form transport evidence while the already-started consent evidence lane runs independently.",
+        Math.min(2_500, Math.max(1_000, remainingModuleBudgetMs())),
+        () => captureTransportSecurityObservation({
+          collectionSurfaceObservations: [],
+          failedHttpRequests,
+          mixedContentConsoleMessages,
+          networkEvents,
+          normalizedUrl: input.normalizedUrl,
+          networkProbes: earlyTransportNetworkProbes,
+          page,
+          requestedUrl: input.url,
+          scanStartedAtMs: input.scanStartedAtMs,
+          artifactWriter: input.artifactWriter,
+        }),
+        earlyTransportFallback,
+      );
+      retainedTransportSecurityObservation = earlyTransportCapture.observation;
+      retainedTransportSecurityArtifactRef = earlyTransportCapture.artifactRef;
+    } else {
+      recordInstantTiming(
+        timingBreakdown,
+        "page evidence: early transport security skipped",
+        "Dedicated consent-proof lane does not duplicate runtime transport capture.",
+      );
+    }
     const networkIdlePromise = recordTiming(
       timingBreakdown,
       "network idle wait",
@@ -1179,10 +1204,11 @@ export async function preConsentRuntimeScanner(
         }
       }
       if (shouldRunImmediateStructuredConsentRecovery(preScreenshotConsentObservation)) {
-        // Protect the synchronized late visual/typed checkpoint. Structured
-        // recovery is valuable, but it must not consume the only opportunity
-        // to retain a representative frame after a delayed CMP has rendered.
-        const evidenceFinalizationReserveMs = settledVisualCheckpointReserveMs;
+        // Typed recovery is authoritative and must retain priority over an
+        // optional settled screenshot. The screenshot checkpoint below runs
+        // only when retained evidence shows that the early frame may no longer
+        // represent the live consent state.
+        const evidenceFinalizationReserveMs = 1_500;
         const requestedRecoveryBudgetMs = Math.min(
           fastWait ? 3_000 : 4_000,
           Math.max(0, remainingModuleBudgetMs() - evidenceFinalizationReserveMs),
@@ -1285,7 +1311,17 @@ export async function preConsentRuntimeScanner(
     // evidence can consume the module deadline. The typed inventory is read
     // immediately after the screenshot from the same live, untouched page;
     // screenshot pixels never create or upgrade a control observation.
-    if (earlyScreenshotCaptured) {
+    const settledVisualCheckpointNeeded = earlyScreenshotCaptured &&
+      remainingModuleBudgetMs() >= settledVisualCheckpointScreenshotMaxMs + 250 &&
+      (
+        hasSufficientFirstLayerConsentControls(preScreenshotConsentObservation) ||
+        hasHighConfidenceDirectCmpRuntimeEvidence(retainedCmpRuntimeObservations) ||
+        isIncompleteConsentUiCapture(preScreenshotConsentObservation) ||
+        shouldCaptureSettledPreConsentScreenshot({
+          settledBodyText: preScreenshotConsentObservation.textExcerpt ?? "",
+        })
+      );
+    if (settledVisualCheckpointNeeded) {
       const settledScreenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-settled.png");
       const settledCapture = await recordTiming(
         timingBreakdown,
@@ -1334,9 +1370,12 @@ export async function preConsentRuntimeScanner(
           "paired settled-frame consent inventory",
           "Immediate canonical typed control inventory paired to the protected settled visual frame; remains read-only and does not infer from screenshot pixels.",
           settledVisualCheckpointInventoryMaxMs,
-          () => detectConsentUi(page, input.scanStartedAtMs, 0, {
-            allowFullDocumentCmpControls: true,
-          }),
+          () => readRapidFirstLayerConsentUiObservation(
+            page,
+            input.scanStartedAtMs,
+            settledVisualCheckpointInventoryMaxMs,
+            "retry",
+          ),
           () => annotateConsentUiObservation(
             emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
             "recapture:paired_settled_frame_inventory_incomplete",
@@ -1396,14 +1435,21 @@ export async function preConsentRuntimeScanner(
       timingBreakdown,
       "page evidence capture",
       "Atomic read-only storage, scripts, iframes, browser API, collection surface, and DOM text snapshot after the first structured consent inventory is retained.",
-      () => Promise.all([capturePostSettlePageEvidence({
-          firstPartyHostname,
-          normalizedUrl: input.normalizedUrl,
-          page,
-          scanStartedAtMs: input.scanStartedAtMs,
-          skipLegacyFallbackAfterAtomicTimeout: fastWait,
-          timingBreakdown,
-        }), preScreenshotConsentObservation
+      () => Promise.all([captureRuntimeEvidence
+        ? capturePostSettlePageEvidence({
+            firstPartyHostname,
+            normalizedUrl: input.normalizedUrl,
+            page,
+            scanStartedAtMs: input.scanStartedAtMs,
+            skipLegacyFallbackAfterAtomicTimeout: fastWait,
+            timingBreakdown,
+          })
+        : captureConsentProofPageEvidence({
+            normalizedUrl: input.normalizedUrl,
+            page,
+            scanStartedAtMs: input.scanStartedAtMs,
+            timingBreakdown,
+          }), preScreenshotConsentObservation
           ? Promise.resolve(preScreenshotConsentObservation)
           : consentUiObservationPromise,
         lateAccessibilityObservationPromise]),
@@ -1933,6 +1979,46 @@ export async function preConsentRuntimeScanner(
       visualCapture = visualCaptureFromScreenshotSummary(screenshotCapture, screenshotPath);
     }
     if (shouldCaptureScreenshot) {
+      // A late-rendering surface can appear in the short interval between the
+      // last completed DOM inventory and the retained screenshot. Always run
+      // the bounded canonical rapid inventory once against that exact live
+      // page state when no controls are retained. This remains structured DOM
+      // evidence; screenshot pixels never create or upgrade observations.
+      if (
+        consentObservation.controls.length === 0 &&
+        (visualCapture.status === "available" || screenshots.length > 0)
+      ) {
+        const postScreenshotRapidObservation = await recordBoundedTiming(
+          timingBreakdown,
+          "rapid consent inventory after visual capture",
+          "Immediate canonical rapid DOM inventory after the retained pre-consent frame, including surfaces that appeared after an earlier completed empty inventory.",
+          fastWait ? 1_000 : 1_500,
+          () => readRapidFirstLayerConsentUiObservation(
+            page,
+            input.scanStartedAtMs,
+            fastWait ? 1_000 : 1_500,
+            "retry",
+          ),
+          () => annotateConsentUiObservation(
+            emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
+            "recapture:post_visual_rapid_inventory_incomplete",
+          ),
+        );
+        if (isStrongerConsentUiObservation(postScreenshotRapidObservation, consentObservation)) {
+          consentObservation = mergeConsentUiObservations(
+            consentObservation,
+            postScreenshotRapidObservation,
+            "recapture:post_visual_rapid_typed_controls",
+          );
+          retainedConsentUiObservation = consentObservation;
+        } else if (isIncompleteConsentUiCapture(postScreenshotRapidObservation)) {
+          consentObservation = annotateConsentUiObservation(
+            consentObservation,
+            "recapture:post_visual_rapid_inventory_incomplete",
+          );
+          retainedConsentUiObservation = consentObservation;
+        }
+      }
       if (shouldRecaptureConsentUiAfterScreenshot(consentObservation, domText, {
         fastWait,
         visualCaptureAvailable: visualCapture.status === "available" || screenshots.length > 0,
@@ -2316,7 +2402,7 @@ export async function preConsentRuntimeScanner(
     throwIfAborted(input.signal);
     const transportSecurityRemainingMs = remainingModuleBudgetMs();
     const { observation: transportSecurityObservation, artifactRef: transportSecurityArtifactRef } =
-      transportSecurityRemainingMs >= 1_000
+      transportNetworkProbes && transportSecurityRemainingMs >= 1_000
         ? await recordBoundedTiming(
           timingBreakdown,
           "page evidence: transport security",
@@ -2345,16 +2431,18 @@ export async function preConsentRuntimeScanner(
           recordInstantTiming(
             timingBreakdown,
             "page evidence: transport security skipped",
-            "Skipped bounded transport security observation because the pre-consent module budget was exhausted.",
+            transportNetworkProbes
+              ? "Skipped bounded transport security observation because the pre-consent module budget was exhausted."
+              : "Dedicated consent-proof lane leaves transport evidence to the parallel runtime-evidence Lambda.",
           );
           return retainedTransportSecurityObservation
             ? {
                 observation: retainedTransportSecurityObservation,
                 artifactRef: retainedTransportSecurityArtifactRef,
               }
-            : fallbackTransportSecurityObservation();
+            : { observation: null, artifactRef: undefined };
         })();
-    retainedTransportSecurityObservation = transportSecurityObservation;
+    retainedTransportSecurityObservation = transportSecurityObservation ?? undefined;
     retainedTransportSecurityArtifactRef = transportSecurityArtifactRef;
 
     if (navigationNotes.length > 0) {
@@ -2397,7 +2485,7 @@ export async function preConsentRuntimeScanner(
       consentUiObservations: [consentObservation],
       collectionSurfaceObservations,
       cmpRuntimeObservations,
-      transportSecurityObservations: [transportSecurityObservation],
+      transportSecurityObservations: transportSecurityObservation ? [transportSecurityObservation] : [],
       screenshots,
       visualCapture,
       domSnapshots: [domSnapshot],
@@ -3229,6 +3317,44 @@ type ConsolidatedPageEvidenceSnapshot = {
   scripts: Array<{ async: boolean; defer: boolean; src?: string }>;
   sessionStorageEntries: Record<string, string>;
 };
+
+async function captureConsentProofPageEvidence(input: {
+  normalizedUrl: string;
+  page: Page;
+  scanStartedAtMs: number;
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
+}): Promise<{
+  apiAccesses: RuntimeEvidenceEvent[];
+  collectionSurfaceObservations: CollectionSurfaceObservation[];
+  domText: string;
+  frames: IframeEvent[];
+  scripts: ScriptEvent[];
+  storageSnapshot: StorageSnapshot;
+  renderedPolicyLinks: RetainedRenderedPolicyLink[];
+}> {
+  const domText = await recordBoundedTiming(
+    input.timingBreakdown,
+    "page evidence: consent-proof text snapshot",
+    "One bounded visible-text read supports consent-surface reconciliation without running the broader runtime inventory.",
+    1_000,
+    () => input.page.locator("body").innerText({ timeout: 900 }),
+    () => "",
+  );
+  recordInstantTiming(
+    input.timingBreakdown,
+    "page evidence: non-consent inventory skipped",
+    "Dedicated consent-proof lane leaves storage, script, iframe, browser-API, collection-surface, and policy-link capture to parallel evidence lanes.",
+  );
+  return {
+    apiAccesses: [],
+    collectionSurfaceObservations: [],
+    domText,
+    frames: [],
+    scripts: [],
+    storageSnapshot: emptyStorageSnapshot(input.scanStartedAtMs, input.normalizedUrl),
+    renderedPolicyLinks: [],
+  };
+}
 
 async function capturePostSettlePageEvidence(input: {
   firstPartyHostname: string | undefined;
@@ -4592,7 +4718,7 @@ async function readDirectCmpSemanticConsentUiObservation(
   }>((input) => {
     const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
     const canonicalLabels = new Set(
-      input.canonicalConsentInventoryLabels.map((value) => normalize(value).toLowerCase()),
+      input.canonicalConsentInventoryLabels.map((value) => normalize(value).toLowerCase().replace(/\u0307/g, "")),
     );
     const embeddedLabels = [...canonicalLabels].filter((value) => value.length >= 8);
     const semanticControls = document.querySelectorAll<HTMLElement>(
@@ -4610,7 +4736,7 @@ async function readDirectCmpSemanticConsentUiObservation(
         (element instanceof HTMLInputElement ? element.value : "") ||
         element.textContent,
       ).slice(0, 120);
-      const normalizedLabel = label.toLowerCase();
+      const normalizedLabel = label.toLowerCase().replace(/\u0307/g, "");
       if (!label || !(
         canonicalLabels.has(normalizedLabel) ||
         embeddedLabels.some((phrase) => normalizedLabel.length <= 80 && normalizedLabel.includes(phrase))
@@ -4799,7 +4925,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   const installed = alreadyInstalled || await page.evaluate(String.raw`(() => {
     window.__certscoreRapidConsentInventory = (input) => {
     const normalize = (value) => (value ?? "").replace(/\s+/g, " ").trim();
-    const canonicalLabels = new Set(input.canonicalConsentInventoryLabels.map((value) => normalize(value).toLowerCase()));
+    const canonicalLabels = new Set(input.canonicalConsentInventoryLabels.map((value) => normalize(value).toLowerCase().replace(/\u0307/g, "")));
     const embeddedLabels = [...canonicalLabels].filter((value) => value.length >= 8);
     const contextHints = input.canonicalConsentContextHints.map((value) => normalize(value).toLowerCase());
     const contextPattern = /cookie|cookies|privacy|consent|preference|preferences|tracking|analytics|marketing|data protection/i;
@@ -4911,7 +5037,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       visitedCandidates += 1;
       if (visitedCandidates > 5_000) break;
       const label = labelFor(element).slice(0, 120);
-      const normalizedLabel = label.toLowerCase();
+      const normalizedLabel = label.toLowerCase().replace(/\u0307/g, "");
       if (!label || label.length > 120 || !(
         canonicalLabels.has(normalizedLabel) ||
         embeddedLabels.some((phrase) => normalizedLabel.length <= 80 && normalizedLabel.includes(phrase))
@@ -5038,13 +5164,138 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       ],
     },
   });
-  return {
+  const mainFrameObservation: ConsentUiObservation = {
     ...observation,
     captureDiagnostics: {
       completedChannels: ["dom_inventory"],
       timedOutChannels: [],
       failedChannels: [],
     },
+  };
+  if (controls.length > 0 || page.frames().length <= 1) {
+    return mainFrameObservation;
+  }
+
+  // A retained browser frame can paint a cross-origin CMP surface into the
+  // screenshot while remaining absent from the top-level document. Keep this
+  // recovery structured and passive: inspect a bounded set of child frames and
+  // classify only their visible DOM controls through the canonical registry.
+  const frameInventory = await readRapidChildFrameConsentInventory(page);
+  const frameContextText = frameInventory.textExcerpts.join(" ").slice(0, 12_000);
+  const frameControls = frameInventory.controls.flatMap((control) => {
+    if (hasMultipleCanonicalConsentIntents(control.label)) return [];
+    const classification = classifyConsentControlLabel({
+      label: control.label,
+      contextText: frameContextText,
+      hasConsentContext: true,
+    });
+    const actionType = consentUiControlActionTypeFromClassification(classification);
+    if (!actionType || (actionType === "other" && !isPaidDeclineClassification(classification))) return [];
+    return [{
+      ...control,
+      actionType,
+      matchedTerm: classification.matchedTerm,
+      matchedLocale: classification.matchedLocale,
+      matchStrength: classification.matchStrength,
+      classifierReasonCodes: classification.reasonCodes,
+      classifierVariant: classification.variant,
+    }];
+  });
+  const frameObservation = buildConsentUiObservationFromEvidence({
+    scanStartedAtMs,
+    documentUrl: page.url(),
+    text: frameContextText,
+    controls: frameControls,
+    fallbackBasis: frameControls.length > 0
+      ? ["inventory:same_origin_frame_controls", "inventory:rapid_child_frame_controls"]
+      : [],
+    inventoryDiagnostics: {
+      candidateContainerCount: frameControls.length > 0 ? 1 : 0,
+      candidateControlCount: frameInventory.controls.length,
+      retainedControlCount: frameControls.length,
+      inventorySources: frameControls.length > 0 ? ["same_origin_frame"] : [],
+      candidateLabels: frameInventory.controls.map((control) => control.label),
+      rejectionReasons: frameInventory.frameInaccessibleCount > 0 ? ["frame_inaccessible"] : [],
+      timingMarkers: [
+        `rapid_inventory_${phase}_child_frames_completed`,
+        ...(frameControls.length > 0 ? ["rapid_child_frame_inventory"] : []),
+      ],
+    },
+  });
+  return mergeConsentUiObservations(
+    mainFrameObservation,
+    {
+      ...frameObservation,
+      captureDiagnostics: {
+        completedChannels: ["dom_inventory"],
+        timedOutChannels: [],
+        failedChannels: [],
+      },
+    },
+    frameControls.length > 0
+      ? "inventory:rapid_child_frame_controls"
+      : "inventory:rapid_child_frames_checked",
+  );
+}
+
+async function readRapidChildFrameConsentInventory(
+  page: Page,
+): Promise<{
+  controls: ConsentUiInventoryControl[];
+  frameInaccessibleCount: number;
+  textExcerpts: string[];
+}> {
+  const frames = page.frames()
+    .filter((frame) => frame !== page.mainFrame())
+    .slice(0, 8);
+  const rows = await Promise.all(frames.map(async (frame) => {
+    const installed = await frame.evaluate(CONSENT_INVENTORY_PROBE_SCRIPT)
+      .then(() => true)
+      .catch(() => false);
+    if (!installed) return null;
+    const row = await frame.evaluate<{
+      controls: ConsentUiInventoryControl[];
+      textExcerpt: string;
+    }, {
+      canonicalConsentInventoryLabels: string[];
+      canonicalConsentContextHints: string[];
+    }>((input) => {
+      const scope = window as typeof window & {
+        __certscoreConsentInventory: (
+          allowFullDocumentCmpControls: boolean,
+          canonicalConsentInventoryLabels?: string[],
+          canonicalConsentContextHints?: string[],
+        ) => { controls: ConsentUiInventoryControl[] };
+      };
+      return {
+        controls: scope.__certscoreConsentInventory(
+          true,
+          input.canonicalConsentInventoryLabels,
+          input.canonicalConsentContextHints,
+        ).controls,
+        textExcerpt: (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 2_000),
+      };
+    }, {
+      canonicalConsentInventoryLabels: CANONICAL_CONSENT_INVENTORY_LABELS,
+      canonicalConsentContextHints: CANONICAL_CONSENT_CONTEXT_HINTS,
+    }).catch(() => null);
+    if (!row) return null;
+    return {
+      ...row,
+      controls: row.controls.map((control) => ({
+        ...control,
+        frameUrl: frame.url(),
+        inventoryContainerKey: `same_origin_frame:${frame.url()}`,
+        inventoryRootSource: "document" as const,
+        inventorySource: "same_origin_frame" as const,
+      })),
+    };
+  }));
+  const completed = rows.filter((row): row is NonNullable<typeof row> => row !== null);
+  return {
+    controls: completed.flatMap((row) => row.controls).slice(0, 12),
+    frameInaccessibleCount: rows.length - completed.length,
+    textExcerpts: completed.map((row) => row.textExcerpt).filter(Boolean),
   };
 }
 
@@ -5131,6 +5382,7 @@ async function readConsentUiObservation(
       label: control.label,
       contextText: combinedText,
       hasConsentContext: true,
+      hasPreferenceContext: defaultToggleEvidence.defaultToggleStatesObserved === true,
     });
     const actionType = consentUiControlActionTypeFromClassification(classification);
     return {
@@ -5399,7 +5651,7 @@ function isCompositeConsentInventoryControl(control: ConsentUiInventoryControl):
 }
 
 function hasMultipleCanonicalConsentIntents(label: string): boolean {
-  const normalizedLabel = label.replace(/\s+/g, " ").trim().toLowerCase();
+  const normalizedLabel = label.replace(/\s+/g, " ").trim().toLowerCase().replace(/\u0307/g, "");
   if (!normalizedLabel || normalizedLabel.length > 160) {
     return false;
   }
@@ -5460,6 +5712,28 @@ const CONSENT_DEFAULT_TOGGLE_PROBE_SCRIPT = String.raw`(() => {
     const rect = element.getBoundingClientRect();
     return rect.top <= window.innerHeight + 200 && rect.bottom >= -200;
   };
+  const isWithinVisibleScrollableConsentSurface = (element) => {
+    let current = element?.parentElement ?? null;
+    for (let depth = 0; current && depth < 10; depth += 1) {
+      if (current === document.body || current === document.documentElement) break;
+      const style = window.getComputedStyle(current);
+      const rect = current.getBoundingClientRect();
+      const intersectsViewport = rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight;
+      const scrollable = current.scrollHeight > current.clientHeight + 4 && /auto|scroll/.test(style.overflowY);
+      const context = normalize([
+        current.getAttribute("aria-label"),
+        current.getAttribute("id"),
+        current.getAttribute("class"),
+        current.getAttribute("role"),
+        current.textContent,
+      ].filter(Boolean).join(" ")).slice(0, 4_000);
+      if (intersectsViewport && scrollable && /cookie|cookies|privacy|consent|preference|preferences|cmp|onetrust|usercentrics/i.test(context)) {
+        return true;
+      }
+      current = current.parentElement;
+    }
+    return false;
+  };
   const labeledByText = (element) => {
     const ids = normalize(element.getAttribute("aria-labelledby")).split(/\s+/).filter(Boolean);
     return ids.map((id) => normalize(document.getElementById(id)?.textContent)).filter(Boolean).join(" ");
@@ -5474,16 +5748,28 @@ const CONSENT_DEFAULT_TOGGLE_PROBE_SCRIPT = String.raw`(() => {
     element;
   const labelFor = (element) => {
     const context = contextElementFor(element);
+    const purposeLabel = element.parentElement?.querySelector("label,strong,b,h1,h2,h3,h4,h5,h6,[class*='label' i],[class*='title' i]");
+    const ancestorText = [];
+    let current = element.parentElement;
+    for (let depth = 0; current && depth < 6; depth += 1) {
+      if (current === document.body || current === document.documentElement) break;
+      const text = normalize(current.textContent);
+      if (text && text.length <= 300) ancestorText.push(text);
+      current = current.parentElement;
+    }
     const values = [
       element.getAttribute("aria-label"),
       labeledByText(element),
       labelElementFor(element)?.textContent,
       element.closest("label")?.textContent,
+      purposeLabel && purposeLabel !== element ? purposeLabel.textContent : null,
       context?.textContent,
+      ...ancestorText,
       element.getAttribute("title"),
       element.textContent,
     ].map(normalize).filter(Boolean);
-    return normalize(values[0]).slice(0, 120);
+    const meaningful = values.find((value) => !/^(?:on|off|enabled|disabled|true|false|yes|no|0|1)$/i.test(value));
+    return normalize(meaningful ?? values[0]).slice(0, 120);
   };
   const hasConsentContext = (element) => {
     let current = contextElementFor(element);
@@ -5519,7 +5805,7 @@ const CONSENT_DEFAULT_TOGGLE_PROBE_SCRIPT = String.raw`(() => {
     return null;
   };
   const nonEssentialLabel = (label) => {
-    const optional = /\b(?:optional|non[-\s]?essential|analytics?|statistics?|measurement|advertis(?:e|ing|ement)?|ads?|marketing|target(?:ed|ing)?|personal(?:ized|ised|ization|isation)?|social|tracking|profil(?:e|ing)|remarketing|sale|share|partners?|vendors?|third[-\s]?party)\b/i.test(label);
+    const optional = /\b(?:optional|non[-\s]?essential|analytics?|statistics?|measurement|performance|functional|advertis(?:e|ing|ement)?|ads?|marketing|target(?:ed|ing)?|personal(?:ized|ised|ization|isation)?|social|tracking|profil(?:e|ing)|remarketing|sale|share|partners?|vendors?|third[-\s]?party)\b/i.test(label);
     const necessaryOnly = /\b(?:strictly necessary|always active|always on|required|security|authentication|essential cookies?|necessary cookies?)\b/i.test(label) &&
       !/\b(?:optional|non[-\s]?essential)\b/i.test(label);
     return optional && !necessaryOnly;
@@ -5544,7 +5830,7 @@ const CONSENT_DEFAULT_TOGGLE_PROBE_SCRIPT = String.raw`(() => {
     if (checked === null) return [];
     const context = contextElementFor(element);
     const visible = isVisible(element) || isVisible(labelElementFor(element)) || isVisible(context);
-    const firstLayer = isFirstLayerPosition(element) || isFirstLayerPosition(context);
+    const firstLayer = isFirstLayerPosition(element) || isFirstLayerPosition(context) || isWithinVisibleScrollableConsentSurface(element);
     if (!visible || !firstLayer || !hasConsentContext(element)) return [];
     const label = labelFor(element);
     if (!label || !nonEssentialLabel(label)) return [];
@@ -5964,7 +6250,7 @@ export function consentControlsFromAccessibilityTree(
     if (!label || label.length > 120) {
       continue;
     }
-    const normalizedLabel = label.toLowerCase();
+    const normalizedLabel = label.toLowerCase().replace(/\u0307/g, "");
     const isCanonicalConsentCandidate = CANONICAL_CONSENT_INVENTORY_LABELS.some(
       (candidate) => normalizedLabel === candidate || (candidate.length >= 6 && normalizedLabel.includes(candidate)),
     );
@@ -6155,7 +6441,8 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           .replace(/[‘’]/g, "'")
           .replace(/\s+/g, " ")
           .trim()
-          .toLowerCase();
+          .toLowerCase()
+          .replace(/\u0307/g, "");
       const canonicalActionLabelSet = new Set(
         Array.isArray(canonicalConsentInventoryLabels)
           ? canonicalConsentInventoryLabels
@@ -8834,7 +9121,9 @@ async function capturePreConsentScreenshot(
   },
 ): Promise<VisualCaptureSummary> {
   const viewportTimeoutMs = Math.max(1_500, Math.min(options.timeoutMs, 4_000));
+  const deferredViewportAttemptErrors: string[] = [];
   if (options.captureMode === "viewport_first") {
+    let cdpViewportFailure: string | undefined;
     try {
       await captureViewportScreenshotWithCdp(page, screenshotPath, viewportTimeoutMs);
       return {
@@ -8845,8 +9134,9 @@ async function capturePreConsentScreenshot(
       };
     } catch (error) {
       const errorMessage = errorMessageFromUnknown(error);
-      options.screenshotErrors.push(`CDP viewport screenshot failed: ${errorMessage}`);
+      cdpViewportFailure = `CDP viewport screenshot failed: ${errorMessage}`;
       if (isTerminalScreenshotTargetFailure(errorMessage)) {
+        options.screenshotErrors.push(cdpViewportFailure);
         return retainScreenshotPlaceholder({
           failureReason: classifyVisualCaptureFailureReason(errorMessage),
           notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during CDP capture."],
@@ -8863,12 +9153,21 @@ async function capturePreConsentScreenshot(
         status: "available",
         captureMethod: captureMethods.viewportPrimary,
         artifactRefs: [],
-        notes: ["Viewport pre-consent screenshot retained for fast planned-DAG evidence capture."],
+        notes: [
+          "Viewport pre-consent screenshot retained for fast planned-DAG evidence capture.",
+          ...(cdpViewportFailure
+            ? ["The compatible viewport capture recovered an earlier low-latency capture timeout."]
+            : []),
+        ],
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      options.screenshotErrors.push(`Viewport screenshot failed: ${errorMessage}`);
+      if (cdpViewportFailure) {
+        deferredViewportAttemptErrors.push(cdpViewportFailure);
+      }
+      deferredViewportAttemptErrors.push(`Viewport screenshot failed: ${errorMessage}`);
       if (isTerminalScreenshotTargetFailure(errorMessage)) {
+        options.screenshotErrors.push(...deferredViewportAttemptErrors);
         return retainScreenshotPlaceholder({
           failureReason: classifyVisualCaptureFailureReason(errorMessage),
           notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during viewport capture."],
@@ -8889,8 +9188,16 @@ async function capturePreConsentScreenshot(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    options.screenshotErrors.push(`Full-page screenshot failed: ${errorMessage}`);
+    const fullPageFailure = `Full-page screenshot failed: ${errorMessage}`;
+    if (options.captureMode === "viewport_first") {
+      deferredViewportAttemptErrors.push(fullPageFailure);
+    } else {
+      options.screenshotErrors.push(fullPageFailure);
+    }
     if (isTerminalScreenshotTargetFailure(errorMessage)) {
+      if (options.captureMode === "viewport_first") {
+        options.screenshotErrors.push(...deferredViewportAttemptErrors);
+      }
       return retainScreenshotPlaceholder({
         failureReason: classifyVisualCaptureFailureReason(errorMessage),
         notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during full-page capture."],
@@ -8902,15 +9209,25 @@ async function capturePreConsentScreenshot(
   }
   try {
     await page.screenshot({ path: screenshotPath, fullPage: false, timeout: viewportTimeoutMs });
-    options.screenshotErrors.push("Viewport screenshot fallback used after full-page screenshot failure.");
+    if (options.captureMode === "full_page_first") {
+      options.screenshotErrors.push("Viewport screenshot fallback used after full-page screenshot failure.");
+    }
     return {
       status: "available",
       captureMethod: captureMethods.viewportFallback,
       artifactRefs: [],
-      notes: ["Viewport pre-consent screenshot retained after full-page screenshot failure."],
+      notes: [
+        "Viewport pre-consent screenshot retained after full-page screenshot failure.",
+        ...(options.captureMode === "viewport_first" && deferredViewportAttemptErrors.length > 0
+          ? ["The requested viewport artifact was retained after bounded capture-method retries."]
+          : []),
+      ],
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    if (options.captureMode === "viewport_first") {
+      options.screenshotErrors.push(...deferredViewportAttemptErrors);
+    }
     options.screenshotErrors.push(`Viewport screenshot fallback failed: ${errorMessage}`);
   }
   return retainScreenshotPlaceholder({

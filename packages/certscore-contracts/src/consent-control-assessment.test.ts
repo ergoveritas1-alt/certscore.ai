@@ -107,6 +107,44 @@ test("incomplete evidence remains unknown instead of becoming a negative", () =>
   assert.equal(assessment.controls.options.state, "unknown");
 });
 
+test("a complete assessment can never retain unknown A/R/O controls", () => {
+  const input = baseInput();
+  input.coverage = {
+    status: "complete",
+    requiredChannels: ["dom_inventory", "geometry"],
+    completedChannels: ["dom_inventory"],
+    incompleteChannels: ["geometry"],
+  };
+  input.surface = { status: "unknown" };
+
+  const assessment = deriveConsentControlAssessment(input);
+
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.coverage.status, "limited");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
+});
+
+test("an incomplete non-required channel does not erase a completed typed absence", () => {
+  const input = baseInput();
+  input.coverage = {
+    status: "complete",
+    requiredChannels: ["dom_inventory"],
+    completedChannels: ["dom_inventory"],
+    incompleteChannels: ["geometry"],
+  };
+  input.surface = { status: "not_observed" };
+
+  const assessment = deriveConsentControlAssessment(input);
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.coverage.status, "complete");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+});
+
 test("complete no-surface inspection produces factual not-observed A/R/O", () => {
   const input = baseInput();
   input.surface = { status: "not_observed" };

@@ -157,6 +157,11 @@ export interface RunScanInput {
   postConsentFlowsEnabled?: boolean;
   browserReuseMode?: "per_module" | "single";
   /**
+   * Isolates independently mergeable evidence work for Lambda fan-out. The
+   * default preserves the existing single-process scan behavior.
+   */
+  evidenceLane?: "combined" | "consent_proof" | "runtime_evidence" | "policy_evidence";
+  /**
    * Non-blocking policy-lane handoff. Consumers may retain or review this
    * evidence early, but must not project it until it matches the terminal
    * CanonicalEvidenceBundle.
@@ -248,6 +253,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const startedAtMs = Date.now();
   const startedAt = new Date(startedAtMs).toISOString();
   const scanProfile = getScanProfile(input.profile ?? "tiny");
+  const evidenceLane = input.evidenceLane ?? "combined";
   const normalizedUrl = normalizeUrl(input.url);
   const scanId = `scan_${startedAtMs}_${safeHostname(normalizedUrl)}`;
   const outDir = input.outDir ?? path.join(process.cwd(), "artifacts", scanId);
@@ -264,14 +270,30 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     scenarioPlanningMode: input.scenarioPlanningMode ?? "legacy_sequential",
   });
 
-  const preConsentEnabled = scanProfile.enabledModules.includes("preConsentRuntimeScanner");
-  const policySurfaceEnabled = scanProfile.enabledModules.includes("policySurfaceScanner");
-  const profileConsentFlowEnabled = scanProfile.enabledModules.includes("consentFlowRuntimeScanner");
+  const preConsentEnabled = evidenceLane === "consent_proof" ||
+    evidenceLane === "runtime_evidence" ||
+    (evidenceLane === "combined" && scanProfile.enabledModules.includes("preConsentRuntimeScanner"));
+  const policySurfaceEnabled = evidenceLane === "policy_evidence" ||
+    (evidenceLane === "combined" && scanProfile.enabledModules.includes("policySurfaceScanner"));
+  const effectiveEnabledModules = [
+    ...(preConsentEnabled ? ["preConsentRuntimeScanner" as const] : []),
+    ...(policySurfaceEnabled ? ["policySurfaceScanner" as const] : []),
+  ];
+  const effectiveScanProfile = {
+    ...scanProfile,
+    enabledModules: effectiveEnabledModules,
+    label: evidenceLane === "combined" ? scanProfile.label : `${scanProfile.label} (${evidenceLane} lane)`,
+  };
+  const profileConsentFlowEnabled = evidenceLane === "combined" &&
+    scanProfile.enabledModules.includes("consentFlowRuntimeScanner");
   const consentFlowEnabled = false;
   const plannedParallel = input.scenarioPlanningMode === "planned_parallel";
   const leanPreConsent = input.scenarioResourceMode === "lean" ||
     input.scenarioResourceMode === "cmp_safe" ||
     input.captureReplay === true;
+  const effectivePreConsentScreenshotMode = evidenceLane === "runtime_evidence" || evidenceLane === "policy_evidence"
+    ? "never"
+    : input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always");
   const nanoPolicyAssistProvider = policySurfaceEnabled ? createOpenAiNanoPolicyAssistProviderFromEnv() : undefined;
   const nanoConsentUiAssistProvider = consentFlowEnabled
     ? (await import("./nano-consent-ui-assist-provider.js")).createOpenAiNanoConsentUiAssistProviderFromEnv()
@@ -309,6 +331,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     postConsentFlowsDeferred: profileConsentFlowEnabled && !consentFlowEnabled,
     policySurfaceEnabled,
     preConsentEnabled,
+    evidenceLane,
   });
   const preConsentModuleDeadlineMs = Math.max(
     1_000,
@@ -324,14 +347,19 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         scanStartedAtMs: startedAtMs,
         internalBudgetMs: scanProfile.internalBudgetMs,
         artifactWriter,
+        captureScope: evidenceLane === "consent_proof"
+          ? "consent_proof"
+          : evidenceLane === "runtime_evidence"
+            ? "runtime_evidence"
+            : "combined",
         browser: sharedBrowser,
         stubHeavyResources: input.captureReplay,
         screenshotCaptureMode: "viewport_first",
-        screenshotMode: input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always"),
+        screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         softDeadlineSignal,
         waitMode: leanPreConsent ? "fast" : "full",
-        retainRenderedPolicyRecoverySession: true,
+        retainRenderedPolicyRecoverySession: evidenceLane === "combined",
         signal: input.signal,
       }),
     })
@@ -399,13 +427,18 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         scanStartedAtMs: startedAtMs,
         internalBudgetMs: scanProfile.internalBudgetMs,
         artifactWriter,
+        captureScope: evidenceLane === "consent_proof"
+          ? "consent_proof"
+          : evidenceLane === "runtime_evidence"
+            ? "runtime_evidence"
+            : "combined",
         browserMode: "headed",
         stubHeavyResources: input.captureReplay,
         screenshotCaptureMode: "viewport_first",
-        screenshotMode: input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always"),
+        screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         waitMode: leanPreConsent ? "fast" : "full",
-        retainRenderedPolicyRecoverySession: true,
+        retainRenderedPolicyRecoverySession: evidenceLane === "combined",
       });
       preConsentResult = {
         ...headedRetryResult,
@@ -424,9 +457,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     }
   }
   const shouldCaptureIncompleteConsentVisualFallback = preConsentEnabled &&
-    shouldAttemptIncompleteConsentVisualFallback(preConsentResult, input.preConsentScreenshotMode);
+    shouldAttemptIncompleteConsentVisualFallback(preConsentResult, effectivePreConsentScreenshotMode);
   const shouldCaptureScreenshotOnlyFallback = preConsentEnabled &&
-    shouldAttemptScreenshotOnlyFallback(preConsentResult, input.preConsentScreenshotMode);
+    shouldAttemptScreenshotOnlyFallback(preConsentResult, effectivePreConsentScreenshotMode);
   const visualFallbackDeadlineMs = boundedPreConsentVisualFallbackDeadlineMs({
     absoluteDeadlineAtMs:
       input.preConsentVisualFallbackDeadlineAtMs ?? input.policySurfaceDeadlineAtMs,
@@ -563,7 +596,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
           : "not_needed",
     });
   }
-  const earlyScanNoGoEvidence = input.captureReplay === true
+  const earlyScanNoGoEvidence = !preConsentEnabled || input.captureReplay === true
     ? null
     : buildScanNoGoAssessment({
       consentUiObservations: preConsentResult.consentUiObservations,
@@ -941,7 +974,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const baseRuntimeCoverage = withLocalRegionalEgressLimitation(deriveRuntimeCoverageSummary({
     cookieEvents,
     cookieSnapshots,
-    enabledModules: scanProfile.enabledModules,
+    enabledModules: effectiveEnabledModules,
   modulesRun,
   networkEvents,
   normalizedVendorObservations,
@@ -1034,7 +1067,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     startedAt,
     completedAt: new Date().toISOString(),
     region: input.region ?? "local",
-    scanProfile,
+    scanProfile: effectiveScanProfile,
     modulesRun: boundedModulesRun,
     runtimeTimeline: [
       ...preConsentResult.runtimeTimeline,
@@ -2581,10 +2614,13 @@ export function boundedPreConsentVisualFallbackDeadlineMs(input: {
   return Math.min(configuredDeadlineMs, remainingMs);
 }
 
-function shouldAttemptIncompleteConsentVisualFallback(
+export function shouldAttemptIncompleteConsentVisualFallback(
   result: Awaited<ReturnType<typeof preConsentRuntimeScanner>>,
   screenshotMode: RunScanInput["preConsentScreenshotMode"],
 ) {
+  if (screenshotMode === "never") {
+    return false;
+  }
   const typedInspectionIncomplete = consentInspectionNeedsRecovery({
     moduleStatus: result.moduleRun.status,
     observations: result.consentUiObservations,
@@ -2592,7 +2628,7 @@ function shouldAttemptIncompleteConsentVisualFallback(
   if (typedInspectionIncomplete) {
     return true;
   }
-  if (screenshotMode === "never" || result.screenshots.length === 0) {
+  if (result.screenshots.length === 0) {
     return false;
   }
   const errorText = [

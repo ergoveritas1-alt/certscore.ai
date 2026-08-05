@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -22,6 +23,7 @@ export type ConsentHumanReviewComparisonRow = {
   eligible: boolean;
   eligibilityReasons: string[];
   proofScreenshot: string | null;
+  proofScreenshotSha256: string | null;
   assessmentStatus: ConsentControlAssessment["assessmentStatus"] | null;
   documentIdentityStatus: ConsentControlAssessment["document"]["identityStatus"] | null;
   surfaceStatus: ConsentControlAssessment["surface"]["status"] | null;
@@ -125,6 +127,20 @@ function state(value: ConsentControlAssessment["controls"][Field]["state"]): Sta
   return value;
 }
 
+export function parseConsentCalibrationBundle(raw: unknown) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return canonicalEvidenceBundleSchema.parse(raw);
+  }
+  // Policy-surface observations are outside this A/R/O verification lane.
+  // Older retained bundles can contain colliding policy observation IDs,
+  // which must not prevent consent evidence in the same immutable bundle
+  // from being assessed. The source artifact is not changed.
+  return canonicalEvidenceBundleSchema.parse({
+    ...raw,
+    policySurfaceObservations: [],
+  });
+}
+
 async function firstExisting(paths: string[]) {
   for (const candidate of paths) {
     try {
@@ -135,6 +151,11 @@ async function firstExisting(paths: string[]) {
     }
   }
   return null;
+}
+
+async function sha256File(filePath: string | null) {
+  if (!filePath) return null;
+  return createHash("sha256").update(await readFile(filePath)).digest("hex");
 }
 
 async function compareRow(
@@ -149,8 +170,9 @@ async function compareRow(
     path.join(artifactDir, "screenshot-pre-consent-cmp-controls.png"),
     path.join(artifactDir, "screenshot-pre-consent.png"),
   ]);
+  const proofScreenshotSha256 = await sha256File(proofScreenshot);
   try {
-    const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(await readFile(bundlePath, "utf8")));
+    const bundle = parseConsentCalibrationBundle(JSON.parse(await readFile(bundlePath, "utf8")));
     const geometry = JSON.parse(await readFile(geometryPath, "utf8")) as Record<string, unknown>;
     const assessment = deriveMaterializedConsentControlAssessment({
       bundle,
@@ -186,6 +208,7 @@ async function compareRow(
       eligible: eligibilityReasons.length === 0,
       eligibilityReasons,
       proofScreenshot,
+      proofScreenshotSha256,
       assessmentStatus: assessment.assessmentStatus,
       documentIdentityStatus: assessment.document.identityStatus,
       surfaceStatus: assessment.surface.status,
@@ -202,6 +225,7 @@ async function compareRow(
       eligible: false,
       eligibilityReasons: ["artifact_read_or_projection_failed"],
       proofScreenshot,
+      proofScreenshotSha256,
       assessmentStatus: null,
       documentIdentityStatus: null,
       surfaceStatus: null,
@@ -250,6 +274,7 @@ async function main() {
       independentlyReviewed: corpus.independentlyReviewed,
       evidenceOnlyReview: corpus.evidenceOnlyReview,
       artifactsRoot: path.relative(process.cwd(), artifactsRoot),
+      ignoredNonConsentBundleFields: ["policySurfaceObservations"],
     },
     thresholds: {
       minRows: args.minRows,

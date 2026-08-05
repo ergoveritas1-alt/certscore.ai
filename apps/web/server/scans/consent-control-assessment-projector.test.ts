@@ -199,6 +199,52 @@ test("completed empty typed inventory retains first-layer A/R/O absence", () => 
   assert.equal(assessment.controls.options.state, "not_observed");
 });
 
+test("an incomplete inventory paired to the final settled frame invalidates an earlier empty inventory", () => {
+  const url = "https://settled-frame-incomplete.example/";
+  const source = bundle([], {
+    captureStatus: "no_evidence",
+    likelyPresent: false,
+    url,
+  });
+  source.consentUiObservations[0]!.basis = [
+    "settled_control_inventory_completed",
+    "recapture:paired_settled_frame_inventory_incomplete",
+  ];
+  source.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory", "accessibility_tree"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: {
+      artifactVersion: "consent_control_geometry.v1",
+      pageUrl: url,
+      summary: {
+        firstLayerAccept: false,
+        firstLayerReject: false,
+        firstLayerOptions: false,
+        cmpDetected: false,
+        confidence: 0,
+        limitations: ["Main-frame consent geometry was unavailable."],
+      },
+      viewport: { width: 0, height: 0 },
+      candidates: [],
+    },
+    consentSurfaceInspection: null,
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.coverage.status, "limited");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
+});
+
 test("completed no-evidence DOM inventory is a certified first-layer negative without geometry", () => {
   const url = "https://no-banner.example/";
   const source = bundle([], {

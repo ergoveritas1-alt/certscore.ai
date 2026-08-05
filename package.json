@@ -111,6 +111,7 @@
     "v2:consent-assessment-review-worksheet": "node --import tsx ./scripts/export-consent-assessment-review-worksheet.ts",
     "v2:consent-assessment-review-validate": "node --import tsx ./scripts/validate-consent-assessment-review-worksheet.ts",
     "v2:consent-assessment-human-calibrate": "node --import tsx ./scripts/calibrate-consent-control-review.ts",
+    "v2:aro-likelihood-human-review": "node --import tsx ./scripts/build-aro-likelihood-human-review.ts",
     "v2:consent-geometry-human-verify": "node --import tsx ./scripts/verify-consent-geometry-human-review.ts",
     "v2:consent-assessment-backfill-plan": "node --import tsx ./scripts/plan-consent-assessment-backfill.ts",
     "v2:consent-assessment-backfill-verify": "node --import tsx ./scripts/verify-consent-assessment-backfill-plan.ts",

@@ -205,6 +205,14 @@ export function deriveMaterializedConsentControlAssessment(input: {
   const isCompletedTypedFirstLayerInventory = (
     observation: CanonicalEvidenceBundle["consentUiObservations"][number],
   ) => {
+    const finalInventoryIncomplete = (observation.basis ?? []).some((basis) =>
+      basis === "recapture:paired_settled_frame_inventory_incomplete" ||
+      basis === "recapture:post_settle_inventory_incomplete" ||
+      basis === "recapture:post_settled_screenshot_inventory_incomplete" ||
+      basis === "recapture:post_settle_inventory_budget_unavailable" ||
+      basis === "recapture:immediate_timeout_recovery_budget_unavailable"
+    );
+    if (finalInventoryIncomplete) return false;
     const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
     const timedOutChannels = observation.captureDiagnostics?.timedOutChannels ?? [];
     const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
@@ -217,7 +225,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       completedChannels.length === 0 &&
       timedOutChannels.length === 0 &&
       failedChannels.length === 0 &&
-      observation.basis.some((basis) =>
+      (observation.basis ?? []).some((basis) =>
         /(?:^|:)(?:rapid|first_layer|accessibility_tree|dom_inventory|viewport)/i.test(basis)
       );
     const completedEmptyFirstLayerInventory =
@@ -402,6 +410,12 @@ export function deriveMaterializedConsentControlAssessment(input: {
       )
       .map((observation) => observation.documentId)
       .filter((value): value is string => Boolean(value)),
+    ...retainedDocumentSnapshots
+      .map((snapshot) => snapshot.documentId)
+      .filter((documentId) => documentId === canonicalDocumentId),
+    ...retainedVisualDocumentArtifacts
+      .map((artifact) => artifact.documentId)
+      .filter((documentId) => documentId === canonicalDocumentId),
     // An incomplete geometry diagnostic can retain the requested page URL
     // without retaining any control evidence. It must not make a separately
     // typed first-layer inventory look cross-document.
@@ -424,7 +438,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
   const retainedTypedInventoryChannels =
     explicitlyCompletedTypedInventoryChannels.length > 0
       ? explicitlyCompletedTypedInventoryChannels
-      : typedFirstLayerInventoryObservation?.basis.some((basis) => /accessibility_tree/i.test(basis))
+      : typedFirstLayerInventoryObservation?.basis?.some((basis) => /accessibility_tree/i.test(basis))
         ? ["accessibility_tree" as const]
         : ["dom_inventory" as const];
   const requiredChannels = typedFirstLayerInventoryComplete

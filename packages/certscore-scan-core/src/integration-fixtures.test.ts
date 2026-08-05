@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { chromium } from "playwright";
 import {
   type CanonicalEvidenceBundle,
   type ReviewResult,
@@ -24,6 +25,7 @@ import {
   consentUiObservationFromConfirmedGeometryControls,
   consentControlsFromAccessibilityTree,
   preConsentRuntimeScanner,
+  readRapidFirstLayerConsentUiObservation,
   shouldRunImmediateStructuredConsentRecovery,
 } from "./scanners/pre-consent-runtime-scanner.js";
 import type { ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
@@ -587,6 +589,12 @@ test("pre-consent runtime scanner recognizes Osano deny non-essential as reject 
     assert.equal(observation?.rejectControlObserved, true);
     assert.equal(
       observation?.controls.some((control) =>
+        control.label === "Accept Non-Essential" && control.actionType === "accept_all"
+      ),
+      true,
+    );
+    assert.equal(
+      observation?.controls.some((control) =>
         control.label === "Deny Non-Essential" && control.actionType === "reject_all"
       ),
       true,
@@ -936,7 +944,7 @@ test("pre-consent runtime scanner does not retain generic confirmed geometry con
   assert.equal(observation, null);
 });
 
-test("pre-consent runtime scanner inventories German and French first-layer controls through the canonical classifier", async () => {
+test("pre-consent runtime scanner inventories multilingual first-layer controls through the canonical classifier", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-localized-controls-"));
   try {
@@ -986,6 +994,56 @@ test("pre-consent runtime scanner inventories German and French first-layer cont
       true,
       "scanner should classify French options controls through the canonical registry",
     );
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "manage_preferences" &&
+        control.label === "Hantera eller avvisa" &&
+        control.matchedLocale === "sv"
+      ),
+      true,
+      "scanner should retain the Swedish combined manage-or-reject path as options without claiming a direct reject control",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner inventories observed multilingual inflected controls", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-spanish-inflected-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-spanish-inflected-controls"),
+      path.join(tempRoot, "consent-spanish-inflected-controls"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(observation?.controls.some((control) =>
+      control.label === "Acepto" && control.actionType === "accept_all" && control.matchedLocale === "es"
+    ), true);
+    assert.equal(observation?.controls.some((control) =>
+      control.label === "Rechazarlas todas" && control.actionType === "reject_all" && control.matchedLocale === "es"
+    ), true);
+    assert.equal(observation?.controls.some((control) =>
+      control.label === "İzin ver" && control.actionType === "accept_all" && control.matchedLocale === "tr"
+    ), true);
+    assert.equal(observation?.controls.some((control) =>
+      control.label === "Seçenekleri yönetin" && control.actionType === "manage_preferences" && control.matchedLocale === "tr"
+    ), true);
+    assert.equal(observation?.controls.some((control) =>
+      control.label.startsWith("Prihvati i zatvori") && control.actionType === "accept_all" && control.matchedLocale === "hr"
+    ), true);
+    assert.equal(observation?.controls.some((control) =>
+      control.label.startsWith("Saznaj više: Konfigurirajte svoje privole") &&
+      control.actionType === "manage_preferences" &&
+      control.matchedLocale === "hr"
+    ), true);
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -1355,6 +1413,35 @@ test("pre-consent runtime scanner captures first-layer optional toggles defaulte
   }
 });
 
+test("pre-consent runtime scanner retains defaults-off toggles and save inside an internally scrollable consent panel", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-internal-scroll-defaults-off-"));
+  try {
+    const result = await scanFixturePage(
+      server.urlFor("consent-first-layer-internal-scroll-defaults-off"),
+      path.join(tempRoot, "consent-first-layer-internal-scroll-defaults-off"),
+      "fast",
+      "always",
+      "viewport_first",
+    );
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(observation?.defaultToggleStatesObserved, true);
+    assert.equal(observation?.nonEssentialDefaultsOff, true);
+    assert.equal(observation?.precheckedOptionalPurposeCount, 0);
+    assert.deepEqual(observation?.defaultTogglePurposeLabels, ["Functional cookies", "Performance cookies"]);
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.label === "Save settings and proceed" && control.actionType === "save_preferences"
+      ),
+      true,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner does not treat necessary-only checked controls as optional defaults", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-toggle-necessary-"));
@@ -1638,6 +1725,39 @@ test("pre-consent runtime scanner protects a settled screenshot paired with dela
       timingLabels.indexOf("protected settled consent screenshot") < timingLabels.indexOf("page evidence capture"),
       "the representative screenshot must run before consolidated page extraction",
     );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("dedicated consent-proof capture retains same-session A/R/O evidence without non-consent lane work", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-consent-proof-lane-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-late-cmp-choice-controls"),
+      path.join(tempRoot, "consent-proof"),
+      "fast",
+      "always",
+      "viewport_first",
+      12_000,
+      "consent_proof",
+    );
+    const observation = bundle.consentUiObservations[0];
+    const timingLabels = bundle.modulesRun[0]?.timingBreakdown?.map((entry) => entry.label) ?? [];
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.ok(bundle.screenshots.some((screenshot) =>
+      screenshot.artifactId === "screenshot_pre_consent_settled" ||
+      screenshot.artifactId === "screenshot_pre_consent_cmp_controls"
+    ));
+    assert.equal(timingLabels.includes("page evidence: early rendered policy links"), false);
+    assert.equal(timingLabels.includes("page evidence: early transport security"), false);
+    assert.equal(timingLabels.includes("page evidence: consent-proof text snapshot"), true);
+    assert.equal(bundle.transportSecurityObservations.length, 0);
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -2379,6 +2499,40 @@ test("pre-consent runtime scanner inventories same-origin iframe consent control
   }
 });
 
+test("rapid first-layer inventory retains typed controls from a child CMP frame", async () => {
+  const server = await startStaticFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    await page.goto(server.urlFor("consent-iframe-reject"), {
+      waitUntil: "domcontentloaded",
+    });
+    await page.locator("#cmp-frame").waitFor({ state: "visible" });
+    const observation = await readRapidFirstLayerConsentUiObservation(
+      page,
+      Date.now(),
+      1_500,
+      "retry",
+    );
+
+    assert.equal(observation.acceptControlObserved, true);
+    assert.equal(observation.rejectControlObserved, true);
+    assert.deepEqual(observation.visibleChoiceLabels, ["Reject All", "Accept All"]);
+    assert.equal(
+      observation.basis.includes("inventory:rapid_child_frame_controls"),
+      true,
+      "rapid recovery should retain child-frame provenance without relying on screenshot pixels",
+    );
+    assert.equal(
+      observation.controls.every((control) => control.frameUrl?.includes("/frames/consent-reject")),
+      true,
+    );
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
 test("pre-consent runtime scanner does not treat off-viewport footer settings as CMP control proof", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-offscreen-footer-settings-"));
@@ -2974,6 +3128,7 @@ async function scanFixturePage(
   screenshotMode: "always" | "selective" | "never" = "always",
   screenshotCaptureMode?: "full_page_first" | "viewport_first",
   internalBudgetMs?: number,
+  captureScope?: "combined" | "consent_proof" | "runtime_evidence",
 ): Promise<CanonicalEvidenceBundle> {
   const startedAtMs = Date.now();
   const scanProfile = getScanProfile("quick");
@@ -2984,6 +3139,7 @@ async function scanFixturePage(
     scanStartedAtMs: startedAtMs,
     internalBudgetMs: internalBudgetMs ?? (waitMode === "fast" ? 6_000 : scanProfile.internalBudgetMs),
     artifactWriter,
+    captureScope,
     routeFulfillers,
     screenshotCaptureMode,
     waitMode,

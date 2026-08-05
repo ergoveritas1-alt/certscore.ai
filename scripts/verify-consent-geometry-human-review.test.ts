@@ -21,6 +21,7 @@ function row(
     eligible,
     eligibilityReasons: eligible ? [] : ["retained_proof_screenshot_missing"],
     proofScreenshot: eligible ? "/tmp/proof.png" : null,
+    proofScreenshotSha256: eligible ? "a".repeat(64) : null,
     assessmentStatus: "complete",
     documentIdentityStatus: "matched",
     surfaceStatus: "observed_actionable",
