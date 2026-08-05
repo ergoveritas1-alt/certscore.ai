@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeAdminActivityFilter, parseAdminActivitySearch } from "./activity-search";
+import { normalizeAdminActivityFilter, normalizeAdminExactHostname, normalizeAdminExactScanId, parseAdminActivitySearch } from "./activity-search";
 
 test("normalizes Any filter sentinels to no server-side filter", () => {
   assert.equal(normalizeAdminActivityFilter("any", ["any"]), null);
@@ -74,4 +74,19 @@ test("supports multiple exclusions and only enables source exclusion for scan ad
     }
   );
   assert.equal(parseAdminActivitySearch("source!=sdk").query, "source!=sdk");
+});
+
+test("normalizes only exact hostname searches for the indexed Admin path", () => {
+  assert.equal(normalizeAdminExactHostname("cnn.com"), "cnn.com");
+  assert.equal(normalizeAdminExactHostname("https://www.CNN.com/"), "cnn.com");
+  assert.equal(normalizeAdminExactHostname("cnn.com/path"), null);
+  assert.equal(normalizeAdminExactHostname("cnn.com:8443"), null);
+  assert.equal(normalizeAdminExactHostname("*.cnn.com"), null);
+  assert.equal(normalizeAdminExactHostname("cnn"), null);
+});
+
+test("normalizes only complete scan UUID searches for the indexed Admin path", () => {
+  assert.equal(normalizeAdminExactScanId("C066A9C7-703B-4051-9420-EB5F3DA9A4A8"), "c066a9c7-703b-4051-9420-eb5f3da9a4a8");
+  assert.equal(normalizeAdminExactScanId("c066a9c7"), null);
+  assert.equal(normalizeAdminExactScanId("not-a-scan-id"), null);
 });

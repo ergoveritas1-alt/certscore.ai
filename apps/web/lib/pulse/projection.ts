@@ -40,6 +40,7 @@ import {
 import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
 import { meaningfulPolicySurfaceTitle, prioritizePublicPolicySurfaces } from "../scans/policy-enrichment-row";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
 import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
 import { withPersistedFirstLayerConsentEvidence } from "../../server/scans/scan-report-consent-projection";
 import {
@@ -48,7 +49,10 @@ import {
   projectExternalScanNoGo,
   type ExternalScanNoGoResult
 } from "@website-signal-risk-scanner/shared";
-import { buildScanReportUnifiedFindingsForScan as buildScanReportUnifiedFindings } from "../scans/scan-report-unified-findings";
+import {
+  buildScanReportUnifiedFindingsForScan as buildScanReportUnifiedFindings,
+  filterContradictoryPositiveSurfaceFindings
+} from "../scans/scan-report-unified-findings";
 import { absoluteUrl } from "../seo";
 import {
   PULSE_API_VERSION,
@@ -329,7 +333,12 @@ function buildPulseReportSurface(input: {
   unifiedFindingPackets?: ReturnType<typeof buildScanReportUnifiedFindings>;
 }) {
   const scanRecord = input.scanRecord;
-  const unifiedFindingPackets = input.unifiedFindingPackets ?? buildScanReportUnifiedFindings(scanRecord);
+  const persistedCanonicalProjection = getPersistedCanonicalReportProjection(scanRecord);
+  const unifiedFindingPackets = input.unifiedFindingPackets ??
+    (persistedCanonicalProjection
+      ? filterContradictoryPositiveSurfaceFindings(persistedCanonicalProjection.ownerUnifiedFindings)
+      : null) ??
+    buildScanReportUnifiedFindings(scanRecord);
   const executive = projectExecutiveFindingsFromUnifiedPackets(unifiedFindingPackets);
   const presentationSummary = deriveCertScoreFindings(scanRecord);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(scanRecord.runtimeArtifacts);
@@ -357,29 +366,31 @@ function buildPulseReportSurface(input: {
     regulatoryRelevance: row.regulatoryRelevance,
     vendor: row.vendor
   }));
-  const runtimeArtifactNormalizedConcerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: scanRecord.runtimeArtifacts,
-    validationFindings: []
-  });
-  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    coverageLimited: input.coverageLimited,
-    events: scanRecord.events,
-    normalizedConcerns: runtimeArtifactNormalizedConcerns,
-    policyEnrichmentCount: scanRecord.policyEnrichment.length,
-    runtimeArtifacts: scanRecord.runtimeArtifacts,
-    scanCompleted: scanRecord.scan.status === "completed",
-    snapshot: scanRecord.snapshot
-  });
-  const gdprEprivacyChecklist = deriveGdprEprivacyCoverageChecklist({
-    coverageLimited: input.coverageLimited,
-    coverageOutcomes,
-    projectedFindings: executive.findings,
-    runtimeCookieRows,
-    runtimeTrackerPriorityRows,
-    scanCompleted: scanRecord.scan.status === "completed",
-    unifiedFindings: unifiedFindingPackets
-  });
+  const gdprEprivacyChecklist = persistedCanonicalProjection?.checklistRows ?? (() => {
+    const runtimeArtifactNormalizedConcerns = buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts: scanRecord.runtimeArtifacts,
+      validationFindings: []
+    });
+    const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      coverageLimited: input.coverageLimited,
+      events: scanRecord.events,
+      normalizedConcerns: runtimeArtifactNormalizedConcerns,
+      policyEnrichmentCount: scanRecord.policyEnrichment.length,
+      runtimeArtifacts: scanRecord.runtimeArtifacts,
+      scanCompleted: scanRecord.scan.status === "completed",
+      snapshot: scanRecord.snapshot
+    });
+    return deriveGdprEprivacyCoverageChecklist({
+      coverageLimited: input.coverageLimited,
+      coverageOutcomes,
+      projectedFindings: executive.findings,
+      runtimeCookieRows,
+      runtimeTrackerPriorityRows,
+      scanCompleted: scanRecord.scan.status === "completed",
+      unifiedFindings: unifiedFindingPackets
+    });
+  })();
   const reportableGdprRows = getReportableGdprEprivacyCoverageItems(gdprEprivacyChecklist).map((item) => {
     const statusBasis = deriveGdprEprivacyCoverageChecklistRowRationale(item);
     return {
@@ -2045,7 +2056,11 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const effectiveScanStatus = pulseNoGoState?.scanStatus ?? scan.status;
   const coverage = deriveCoverage(hydratedScanRecord);
   const quality = assessPulseScanRecordQuality(hydratedScanRecord);
-  const packets = buildScanReportUnifiedFindings(hydratedScanRecord);
+  const persistedCanonicalProjection = getPersistedCanonicalReportProjection(hydratedScanRecord);
+  const packets = (persistedCanonicalProjection
+    ? filterContradictoryPositiveSurfaceFindings(persistedCanonicalProjection.ownerUnifiedFindings)
+    : null) ??
+    buildScanReportUnifiedFindings(hydratedScanRecord);
   const reportSurface = buildPulseReportSurface({
     coverageLimited: coverage.status !== "complete",
     scanRecord: hydratedScanRecord,

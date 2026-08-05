@@ -250,6 +250,37 @@ test("Admin Scans filters and counts the complete retained activity set in SQL",
   assert.match(pageSource, /scanPage\.totalCount/);
 });
 
+test("Admin Scans uses bounded indexed paths for exact domains and scan IDs", async () => {
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(repositorySource, /normalizeAdminExactHostname/);
+  assert.match(repositorySource, /normalizeAdminExactScanId/);
+  assert.match(repositorySource, /canUseExactIdentityPath/);
+  assert.match(repositorySource, /lower\(d\.hostname\) = any\(\$2::text\[\]\)/);
+  assert.match(repositorySource, /sr\.normalized_domain = any\(\$2::text\[\]\)/);
+  assert.match(repositorySource, /s\.id = \$3::uuid/);
+  assert.ok(repositorySource.indexOf("if (canUseExactIdentityPath)") < repositorySource.indexOf("const baseSql = adminScanActivityBaseSql()"));
+});
+
+test("Admin Scans streams a route-local result skeleton instead of blocking the Admin shell", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+
+  assert.match(pageSource, /import \{ Suspense \} from "react"/);
+  assert.match(pageSource, /function AdminScansContentFallback/);
+  assert.match(pageSource, /<Suspense fallback=\{<AdminScansContentFallback \/>\}>/);
+  assert.match(pageSource, /<AdminScansContent resolvedSearchParams=\{resolvedSearchParams\} \/>/);
+});
+
+test("authenticated route loading fallbacks do not nest main landmarks", async () => {
+  const appLoadingSource = await readFile("apps/web/app/app/loading.tsx", "utf8");
+  const adminLoadingSource = await readFile("apps/web/app/app/admin/loading.tsx", "utf8");
+
+  assert.doesNotMatch(appLoadingSource, /<main/);
+  assert.doesNotMatch(adminLoadingSource, /<main/);
+  assert.match(appLoadingSource, /<section/);
+  assert.match(adminLoadingSource, /<section/);
+});
+
 test("Admin Scans exposes server-side freshness, metadata, origin, and time-span filters", async () => {
   const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
   const listSource = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");

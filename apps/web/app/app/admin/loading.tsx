@@ -1,6 +1,6 @@
 export default function AdminLoading() {
   return (
-    <main className="space-y-6" aria-label="Loading admin page" aria-busy="true">
+    <section className="space-y-6" aria-label="Loading admin page" aria-busy="true">
       <div className="space-y-2">
         <div className="h-9 w-48 animate-pulse rounded-lg bg-slate-200" />
         <div className="h-4 w-96 max-w-full animate-pulse rounded bg-slate-200" />
@@ -20,6 +20,6 @@ export default function AdminLoading() {
           <div className="h-4 w-4/5 rounded bg-slate-100" />
         </div>
       </section>
-    </main>
+    </section>
   );
 }

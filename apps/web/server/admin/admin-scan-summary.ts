@@ -13,6 +13,7 @@ import type { PublicScanRecord } from "../scans/get-public-scan-record";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
 import { publishCanonicalScanReportProjection } from "../scans/canonical-scan-report-publisher";
 import { loadPersistedScanReportProjection } from "../scans/scan-report-projection";
+import { getPersistedCanonicalReportProjection } from "../scans/persisted-canonical-report-projection";
 import { projectAdminNoGo } from "./admin-no-go";
 import { persistAdminScanSummary } from "./repository";
 
@@ -141,34 +142,39 @@ export async function persistAdminScanSummaryForPublishedRecord(
   }
   const scanId = scanRecord.scan.id;
   const canonicalScanRecord = scanRecord;
-  const reportProjection = buildPulseProjection({
-    detail: "evidence",
-    format: "json",
-    freshnessMode: "latest",
-    pulseRequestId: `admin:${scanId}`,
-    requestedUrl: canonicalScanRecord.scan.domainHostname ? `https://${canonicalScanRecord.scan.domainHostname}` : null,
-    resolutionMode: "admin_projection",
-    scanRecord: canonicalScanRecord,
-    waitSeconds: 0
-  });
-  const reportProjectionRecord = reportProjection as unknown as Record<string, unknown>;
-  const reportSummary = reportProjectionRecord.summary && typeof reportProjectionRecord.summary === "object"
-    ? reportProjectionRecord.summary as Record<string, unknown>
-    : null;
-  const surfacedResults = recordObject(reportProjectionRecord, "surfacedResults");
-  const reportTopFindings = Array.isArray(surfacedResults?.gdprEprivacyFindings)
-    ? surfacedResults.gdprEprivacyFindings
-    : [];
-  const checklistPacket = recordObject(reportProjectionRecord, "gdprEprivacyChecklistRows");
-  const checklistRows = Array.isArray(checklistPacket?.items)
-    ? checklistPacket.items.filter((row): row is GdprEprivacyCoverageChecklistItem => Boolean(row && typeof row === "object" && !Array.isArray(row)))
-    : [];
-  const resultDisposition = recordString(reportProjectionRecord, "resultDisposition");
-  const topFindingIds = reportTopFindings.flatMap((finding) => {
-    if (!finding || typeof finding !== "object" || Array.isArray(finding)) return [];
-    const id = (finding as Record<string, unknown>).id;
-    return typeof id === "string" && id.trim() ? [id.trim()] : [];
-  });
+  const persistedCanonicalProjection = getPersistedCanonicalReportProjection(canonicalScanRecord);
+  let reportSummary: Record<string, unknown> | null = null;
+  let resultDisposition: string | null = null;
+  let checklistRows: GdprEprivacyCoverageChecklistItem[] = persistedCanonicalProjection?.checklistRows ?? [];
+  let topFindingIds = persistedCanonicalProjection?.topFindingIds ?? [];
+  if (!persistedCanonicalProjection) {
+    const reportProjection = buildPulseProjection({
+      detail: "evidence",
+      format: "json",
+      freshnessMode: "latest",
+      pulseRequestId: `admin:${scanId}`,
+      requestedUrl: canonicalScanRecord.scan.domainHostname ? `https://${canonicalScanRecord.scan.domainHostname}` : null,
+      resolutionMode: "admin_projection",
+      scanRecord: canonicalScanRecord,
+      waitSeconds: 0
+    });
+    const reportProjectionRecord = reportProjection as unknown as Record<string, unknown>;
+    reportSummary = recordObject(reportProjectionRecord, "summary");
+    const surfacedResults = recordObject(reportProjectionRecord, "surfacedResults");
+    const reportTopFindings = Array.isArray(surfacedResults?.gdprEprivacyFindings)
+      ? surfacedResults.gdprEprivacyFindings
+      : [];
+    const checklistPacket = recordObject(reportProjectionRecord, "gdprEprivacyChecklistRows");
+    checklistRows = Array.isArray(checklistPacket?.items)
+      ? checklistPacket.items.filter((row): row is GdprEprivacyCoverageChecklistItem => Boolean(row && typeof row === "object" && !Array.isArray(row)))
+      : [];
+    resultDisposition = recordString(reportProjectionRecord, "resultDisposition");
+    topFindingIds = reportTopFindings.flatMap((finding) => {
+      if (!finding || typeof finding !== "object" || Array.isArray(finding)) return [];
+      const id = (finding as Record<string, unknown>).id;
+      return typeof id === "string" && id.trim() ? [id.trim()] : [];
+    });
+  }
   const snapshot = canonicalScanRecord.snapshot;
   const runtimeArtifacts = canonicalScanRecord.runtimeArtifacts;
   const scanNoGoAssessment = recordObject(runtimeArtifacts, "scan_no_go_assessment") ??
