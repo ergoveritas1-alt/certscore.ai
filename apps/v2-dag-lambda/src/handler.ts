@@ -24,6 +24,7 @@ import {
   chromiumContextOptions,
   chromiumLaunchArgs,
   chromiumLaunchOptions,
+  buildScanEvidenceLaneAssessment,
   isAwsLambdaRuntime,
   lambdaChromiumSingleProcessEnabled,
   mergePolicySurfaceObservations,
@@ -200,7 +201,20 @@ type LocalV2DagLambdaHandlerTiming = {
   scanPhaseLabel?: string;
   scanPhaseStartedAt?: string;
 };
-type LocalV2DagLambdaWorkerLane = "coordinator" | "consent_flows" | "accept_gpc" | "accept_only" | "reject_manage";
+type LocalV2DagLambdaWorkerLane =
+  | "coordinator"
+  | "consent_proof"
+  | "runtime_evidence"
+  | "policy_evidence"
+  | "consent_flows"
+  | "accept_gpc"
+  | "accept_only"
+  | "reject_manage";
+export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES = [
+  "consent_proof",
+  "runtime_evidence",
+  "policy_evidence",
+] as const satisfies readonly LocalV2DagLambdaWorkerLane[];
 type LocalV2DagLambdaDebugOverrides = {
   actionFinalSettleMs?: number;
   actionSearchDeadlineMs?: number;
@@ -599,7 +613,14 @@ function parsePolicySurfaceSeeds(value: unknown): NonNullable<LocalV2DagLambdaDi
 }
 
 function isWorkerLane(value: unknown): value is LocalV2DagLambdaWorkerLane {
-  return value === "coordinator" || value === "consent_flows" || value === "accept_gpc" || value === "accept_only" || value === "reject_manage";
+  return value === "coordinator" ||
+    value === "consent_proof" ||
+    value === "runtime_evidence" ||
+    value === "policy_evidence" ||
+    value === "consent_flows" ||
+    value === "accept_gpc" ||
+    value === "accept_only" ||
+    value === "reject_manage";
 }
 
 function parseCoordinatorPlanSummary(value: unknown): LocalV2DagLambdaCoordinatorPlanSummary | undefined {
@@ -804,9 +825,18 @@ async function runLocalV2DagLambdaScanBundle(
 ) {
   return timeLambdaPhase(options.phaseTimings, phaseLabel(options.phaseLabelPrefix, "scan"), async () => {
     const resourceSampler = startRuntimeResourceSampler();
+    const evidenceLane: NonNullable<RunScanInput["evidenceLane"]> =
+      payload.workerLane === "consent_proof"
+        ? "consent_proof"
+        : payload.workerLane === "runtime_evidence"
+          ? "runtime_evidence"
+          : payload.workerLane === "policy_evidence"
+            ? "policy_evidence"
+            : "combined";
     try {
       const bundle = await runScan({
         browserReuseMode: "per_module",
+        evidenceLane,
         outDir: options.artifactRoot,
         onPolicySurfaceComplete: options.onPolicySurfaceComplete,
         policyOutputGraceMs: 1_000,
@@ -815,7 +845,9 @@ async function runLocalV2DagLambdaScanBundle(
         policySurfaceSeeds: payload.policySurfaceSeeds,
         postConsentFlowsEnabled: false,
         preConsentModuleDeadlineMs: options.preConsentModuleDeadlineMs,
-        preConsentScreenshotMode: options.preConsentScreenshotMode,
+        preConsentScreenshotMode: evidenceLane === "runtime_evidence" || evidenceLane === "policy_evidence"
+          ? "never"
+          : options.preConsentScreenshotMode,
         preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
         preConsentVisualFallbackDeadlineMs:
           options.preConsentVisualFallbackDeadlineMs ?? options.scanTuning.preConsentVisualFallbackDeadlineMs,
@@ -1142,10 +1174,12 @@ async function fetchEgressProbeThroughProxy(
 export async function runLocalV2DagLambdaShardedArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
+    artifactSignal?: AbortSignal;
     artifactRoot: string;
     lambdaClient?: LambdaInvokeClient;
     s3Client?: S3PutClient;
     s3GetClient?: S3GetClient;
+    signal?: AbortSignal;
     workspaceRoot?: string;
   }
 ): Promise<{
@@ -1158,64 +1192,13 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
-  const egressPreflightPromise = timeLambdaPhase(
-    phaseTimings,
-    "egress_preflight",
-    () => writeEgressPreflightArtifact(artifactRoot, { allowBrowserFallback: false }),
-  );
-  const strongWebMdMode = isStrongWebMdEvidenceMode(payload, scanTuning);
-  const coordinatorBundlePromise = runLocalV2DagLambdaScanBundle(payload, {
-    artifactRoot,
-    phaseLabelPrefix: "coordinator",
-    phaseTimings,
-    preConsentScreenshotMode: scanTuning.preConsentScreenshotMode,
-    scanTuning
-  });
-  const [egressAvailable, coordinatorBundle] = await Promise.all([
-    egressPreflightPromise,
-    coordinatorBundlePromise,
-  ]);
-  if (!egressAvailable) {
-    await timeLambdaPhase(
-      phaseTimings,
-      "egress_preflight_browser_fallback",
-      () => writeEgressPreflightArtifact(artifactRoot, { allowBrowserFallback: true, skipLightweightProbe: true }),
-    );
-  }
-  if (!POST_CONSENT_FLOW_SCANNING_ENABLED) {
-    phaseTimings.push(skippedLambdaPhaseTiming("worker_invocations"));
-    await writeJson(path.join(artifactRoot, "LocalV2DagLambdaShardSummary.json"), {
-      artifactOnly: true,
-      generatedAt: new Date().toISOString(),
-      productionFindingIntegration: false,
-      scanId: payload.scanId,
-      skippedReason: "post_consent_flow_scanning_deferred_from_production_scanner",
-      workerResults: []
-    });
-
-    return writeAndUploadLocalV2DagLambdaArtifacts({
-      artifactRoot,
-      bundle: coordinatorBundle,
-      payload,
-      phaseTimings,
-      s3Client: options.s3Client,
-      scanTuning
-    });
-  }
-  const coordinatorPlanSummary = await readCoordinatorPlanSummary(
-    artifactRoot,
-    payload.debugOverrides?.expectedConsentScenarios
-  );
-  if (coordinatorPlanSummary) {
-    await writeJson(path.join(artifactRoot, "LocalV2DagLambdaCoordinatorPlanSummary.json"), coordinatorPlanSummary);
-  }
+  const evidenceWorkerLanes = LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES;
   const workerResults = await timeLambdaPhase(phaseTimings, "worker_invocations", () =>
     invokeLocalV2DagLambdaWorkers({
-      coordinatorPlanSummary,
       lambdaClient: options.lambdaClient,
-      parentPayload: strongWebMdMode ? { ...payload, strongEvidenceMode: "webmd" } : payload,
+      parentPayload: payload,
       parentScanId: payload.scanId,
-      workerLanes: strongWebMdMode ? ["accept_only", "reject_manage"] : ["accept_gpc", "reject_manage"]
+      workerLanes: evidenceWorkerLanes,
     })
   );
   const workerBundles = await timeLambdaPhase(phaseTimings, "worker_bundle_download", () =>
@@ -1231,19 +1214,32 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       workerResults
     })
   );
-  const bundle = await timeLambdaPhase(phaseTimings, "shard_bundle_merge", async () =>
-    mergeLocalV2DagLambdaShardBundles({
-      base: coordinatorBundle,
+  const bundlesByLane = new Map(workerResults.map((result, index) => [
+    result.workerLane,
+    workerBundles[index],
+  ]));
+  const consentProofBundle = bundlesByLane.get("consent_proof");
+  const runtimeEvidenceBundle = bundlesByLane.get("runtime_evidence");
+  const policyEvidenceBundle = bundlesByLane.get("policy_evidence");
+  if (!consentProofBundle || !runtimeEvidenceBundle || !policyEvidenceBundle) {
+    throw new Error("Three-lane Lambda evidence merge requires consent, runtime, and policy worker bundles.");
+  }
+  const bundle = await timeLambdaPhase(phaseTimings, "evidence_lane_bundle_merge", async () =>
+    mergeLocalV2DagLambdaEvidenceLaneBundles({
+      artifactRoot,
+      consentProof: consentProofBundle,
+      policyEvidence: policyEvidenceBundle,
+      runtimeEvidence: runtimeEvidenceBundle,
       scanId: payload.scanId,
-      workerBundles
     })
   );
   await writeJson(path.join(artifactRoot, "LocalV2DagLambdaShardSummary.json"), {
     artifactOnly: true,
+    artifactVersion: "certscore.v2.lambda.evidence-lane-summary.v1",
     generatedAt: new Date().toISOString(),
     productionFindingIntegration: false,
     scanId: payload.scanId,
-    coordinatorPlanSummary,
+    workerLanes: evidenceWorkerLanes,
     workerResults: workerResults.map((result) => ({
       artifactPointers: result.artifactPointers,
       phaseTimings: result.phaseTimings ?? [],
@@ -1256,10 +1252,11 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   return writeAndUploadLocalV2DagLambdaArtifacts({
     artifactRoot,
     bundle,
-    payload: coordinatorPlanSummary ? { ...payload, coordinatorPlanSummary } : payload,
+    payload,
     phaseTimings,
     s3Client: options.s3Client,
-    scanTuning
+    scanTuning,
+    signal: options.artifactSignal ?? options.signal,
   });
 }
 
@@ -1435,12 +1432,12 @@ function skippedLambdaPhaseTiming(label: string): LocalV2DagLambdaPhaseTiming {
   };
 }
 
-async function invokeLocalV2DagLambdaWorkers(input: {
+export async function invokeLocalV2DagLambdaWorkers(input: {
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
   lambdaClient?: LambdaInvokeClient;
   parentPayload: LocalV2DagLambdaDispatchPayload;
   parentScanId: string;
-  workerLanes: LocalV2DagLambdaWorkerLane[];
+  workerLanes: readonly LocalV2DagLambdaWorkerLane[];
 }): Promise<LocalV2DagLambdaShardResult[]> {
   const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion });
   return Promise.all(input.workerLanes.map(async (workerLane) => {
@@ -1449,7 +1446,7 @@ async function invokeLocalV2DagLambdaWorkers(input: {
       callbackCorrelationId: input.parentScanId,
       ...(input.coordinatorPlanSummary ? { coordinatorPlanSummary: input.coordinatorPlanSummary } : {}),
       orchestrationMode: "worker",
-      scanId: `${input.parentScanId}_${workerLane}`,
+      scanId: input.parentScanId,
       workerLane
     };
     const response = await lambdaClient.send(new InvokeCommand({
@@ -1621,9 +1618,31 @@ export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
         }
         const workerFileName = safeAuxiliaryFileName(`worker-${result.workerLane}-${fileName}`);
         await writeFile(path.join(input.artifactRoot, workerFileName), body);
+        if (shouldPromoteEvidenceLaneArtifact(result.workerLane, fileName)) {
+          await writeFile(path.join(input.artifactRoot, safeAuxiliaryFileName(fileName)), body);
+        }
       }];
     }).map((mirror) => mirror()));
   }));
+}
+
+function shouldPromoteEvidenceLaneArtifact(
+  workerLane: LocalV2DagLambdaWorkerLane,
+  fileName: string,
+) {
+  if (workerLane === "consent_proof") {
+    return fileName === "ConsentControlGeometryEvidence.json" ||
+      fileName === "dom-text-pre-consent.txt" ||
+      /^screenshot-pre-consent(?:-[a-z0-9-]+)?\.(?:png|jpe?g)$/i.test(fileName);
+  }
+  if (workerLane === "runtime_evidence") {
+    return fileName === "TransportSecurityObservation.json";
+  }
+  if (workerLane === "policy_evidence") {
+    return fileName === "PolicySurfaceCaptureDiagnostics.json" ||
+      /^policy_(?:excerpt|surface_text)_[a-z0-9_-]+\.txt$/i.test(fileName);
+  }
+  return false;
 }
 
 async function readS3ObjectBody(uri: string, s3Client: S3GetClient) {
@@ -1709,6 +1728,121 @@ export function mergeLocalV2DagLambdaShardBundles(input: {
   };
   merged.consentFlowComparisons = mergeShardConsentFlowComparisons(bundles);
   return canonicalEvidenceBundleSchema.parse(merged);
+}
+
+export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
+  artifactRoot: string;
+  consentProof: CanonicalEvidenceBundle;
+  policyEvidence: CanonicalEvidenceBundle;
+  runtimeEvidence: CanonicalEvidenceBundle;
+  scanId: string;
+}): CanonicalEvidenceBundle {
+  const consentProof = rewriteEvidenceLaneArtifactPaths(input.consentProof, "consent_proof", input.artifactRoot);
+  const runtimeEvidence = rewriteEvidenceLaneArtifactPaths(input.runtimeEvidence, "runtime_evidence", input.artifactRoot);
+  const policyEvidence = rewriteEvidenceLaneArtifactPaths(input.policyEvidence, "policy_evidence", input.artifactRoot);
+  const scanNoGoAssessment = consentProof.scanNoGoAssessment ?? runtimeEvidence.scanNoGoAssessment;
+  const runtimeCoverage = runtimeEvidence.runtimeCoverage;
+  if (!runtimeCoverage) {
+    throw new Error("Three-lane Lambda evidence merge requires typed runtime coverage from the runtime-evidence lane.");
+  }
+  const policySurfaceObservations = policyEvidence.policySurfaceObservations;
+  const transportSecurityObservations = runtimeEvidence.transportSecurityObservations ?? [];
+  const scanEvidenceLaneAssessment = buildScanEvidenceLaneAssessment({
+    normalizedUrl: consentProof.normalizedUrl,
+    policySurfaceObservations,
+    runtimeCoverage,
+    scanNoGoAssessment: scanNoGoAssessment ?? null,
+    transportSecurityObservationCount: transportSecurityObservations.length,
+  });
+  const artifactRefs = dedupeByField([
+    ...consentProof.artifactRefs,
+    ...runtimeEvidence.artifactRefs,
+    ...policyEvidence.artifactRefs,
+  ], "artifactId");
+  const modulesRun = dedupeByJson([
+    ...consentProof.modulesRun,
+    ...runtimeEvidence.modulesRun,
+    ...policyEvidence.modulesRun,
+  ]);
+  const merged = {
+    ...consentProof,
+    scanId: input.scanId,
+    completedAt: new Date().toISOString(),
+    scanProfile: {
+      ...consentProof.scanProfile,
+      enabledModules: ["preConsentRuntimeScanner", "policySurfaceScanner"],
+      label: "Three-lane consent, runtime, and policy scan",
+    },
+    modulesRun,
+    runtimeTimeline: runtimeEvidence.runtimeTimeline,
+    networkEvents: runtimeEvidence.networkEvents,
+    networkResponseEvents: runtimeEvidence.networkResponseEvents,
+    cookieEvents: runtimeEvidence.cookieEvents,
+    cookieSnapshots: runtimeEvidence.cookieSnapshots,
+    storageSnapshots: runtimeEvidence.storageSnapshots,
+    scriptEvents: runtimeEvidence.scriptEvents,
+    iframeEvents: runtimeEvidence.iframeEvents,
+    collectionSurfaceObservations: runtimeEvidence.collectionSurfaceObservations ?? [],
+    consentUiObservations: consentProof.consentUiObservations,
+    consentInteractionEvents: consentProof.consentInteractionEvents,
+    consentFlowObservations: consentProof.consentFlowObservations,
+    consentActionCandidates: consentProof.consentActionCandidates,
+    consentActionAttempts: consentProof.consentActionAttempts,
+    consentFlowComparisons: consentProof.consentFlowComparisons,
+    cmpRuntimeObservations: consentProof.cmpRuntimeObservations,
+    policySurfaceObservations,
+    transportSecurityObservations,
+    screenshots: consentProof.screenshots,
+    domSnapshots: consentProof.domSnapshots,
+    normalizedVendorObservations: runtimeEvidence.normalizedVendorObservations,
+    observedJourneys: runtimeEvidence.observedJourneys,
+    artifactRefs,
+    derivedRuntimeSignals: {
+      ...runtimeEvidence.derivedRuntimeSignals,
+      consentBannerLikelyPresent: consentProof.derivedRuntimeSignals.consentBannerLikelyPresent,
+      notes: uniqueStrings([
+        ...(runtimeEvidence.derivedRuntimeSignals.notes ?? []),
+        "Consent, runtime, and policy evidence were captured by independent bounded Lambda lanes.",
+      ]),
+    },
+    runtimeCoverage,
+    consentSurfaceInspection: consentProof.consentSurfaceInspection,
+    policySurfaceInspection: policyEvidence.policySurfaceInspection,
+    visualCapture: consentProof.visualCapture,
+    ...(scanNoGoAssessment
+      ? {
+          scanNoGoAssessment,
+          scan_no_go_assessment: scanNoGoAssessment,
+        }
+      : {}),
+    scanEvidenceLaneAssessment,
+    scan_evidence_lane_assessment: scanEvidenceLaneAssessment,
+  };
+  return canonicalEvidenceBundleSchema.parse(merged);
+}
+
+function rewriteEvidenceLaneArtifactPaths<T>(
+  value: T,
+  workerLane: LocalV2DagLambdaWorkerLane,
+  artifactRoot: string,
+): T {
+  if (Array.isArray(value)) {
+    return value.map((entry) => rewriteEvidenceLaneArtifactPaths(entry, workerLane, artifactRoot)) as T;
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const rewritten = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => {
+    if (key === "path" && typeof entry === "string") {
+      const fileName = path.basename(entry);
+      const mirroredFileName = shouldPromoteEvidenceLaneArtifact(workerLane, fileName)
+        ? safeAuxiliaryFileName(fileName)
+        : safeAuxiliaryFileName(`worker-${workerLane}-${fileName}`);
+      return [key, path.join(artifactRoot, mirroredFileName)];
+    }
+    return [key, rewriteEvidenceLaneArtifactPaths(entry, workerLane, artifactRoot)];
+  }));
+  return rewritten as T;
 }
 
 function selectDiagnosticScreenshot(screenshots: ScreenshotArtifact[]): ScreenshotArtifact[] {
@@ -2060,7 +2194,10 @@ function requireArtifactBucket() {
 
 function artifactKeyPrefix(payload: LocalV2DagLambdaDispatchPayload) {
   const prefix = compactString(process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX) ?? "v2-dag-lambda/local";
-  return `${prefix.replace(/^\/+|\/+$/g, "")}/${payload.scanId}`;
+  const scanPrefix = `${prefix.replace(/^\/+|\/+$/g, "")}/${payload.scanId}`;
+  return payload.orchestrationMode === "worker" && payload.workerLane
+    ? `${scanPrefix}/lanes/${payload.workerLane}`
+    : scanPrefix;
 }
 
 function s3Uri(bucket: string, key: string) {
@@ -2701,26 +2838,38 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       scanId: payload.scanId,
       workspaceRoot
     });
-    if (payload.orchestrationMode === "worker") {
-      throw new Error("Post-consent consent-flow Lambda worker scanning is disabled for the GDPR/ePrivacy core scanner.");
-    }
     const runArtifactChain = options.runArtifactChain ?? ((dispatchPayload, runOptions) =>
-      runLocalV2DagLambdaArtifactChain(dispatchPayload, { ...runOptions, s3Client: options.s3Client, workspaceRoot }));
+      dispatchPayload.orchestrationMode === "sharded"
+        ? runLocalV2DagLambdaShardedArtifactChain(dispatchPayload, {
+            artifactRoot: runOptions.artifactRoot,
+            artifactSignal: runOptions.artifactSignal,
+            lambdaClient: options.lambdaClient,
+            s3Client: options.s3Client,
+            s3GetClient: options.s3GetClient,
+            signal: runOptions.signal,
+            workspaceRoot,
+          })
+        : runLocalV2DagLambdaArtifactChain(dispatchPayload, {
+            ...runOptions,
+            s3Client: options.s3Client,
+            workspaceRoot,
+          }));
     artifactChainStartedAt = now();
+    const evidenceCoordinator = payload.orchestrationMode === "sharded";
     const configuredHandlerSafetyTimeoutMs = options.handlerSafetyTimeoutMs ?? (
       Number(process.env.CERTSCORE_V2_DAG_LAMBDA_HANDLER_SAFETY_TIMEOUT_MS) ||
-      LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS
+      (evidenceCoordinator ? 75_000 : LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS)
     );
     handlerSafetyTimeoutMs = Math.max(
       options.handlerSafetyTimeoutMs === undefined ? 5_000 : 10,
       Math.min(configuredHandlerSafetyTimeoutMs, 75_000)
     );
     scannerWorkTimeoutMs = Math.max(10, Math.min(
-      options.scannerWorkTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS,
+      options.scannerWorkTimeoutMs ?? (evidenceCoordinator ? 60_000 : LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS),
       Math.max(10, handlerSafetyTimeoutMs - 7_000)
     ));
     artifactChainTimeoutMs = Math.max(scannerWorkTimeoutMs, Math.min(
-      options.artifactChainTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS,
+      options.artifactChainTimeoutMs ?? (evidenceCoordinator ? 70_000 : LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS),
       Math.max(scannerWorkTimeoutMs, handlerSafetyTimeoutMs - 2_000)
     ));
     resultPublishTimeoutMs = Math.max(10, Math.min(
@@ -2750,6 +2899,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
           });
         },
         onPolicySurfaceComplete: (result) => {
+          if (payload?.orchestrationMode === "worker" && payload.workerLane !== "policy_evidence") return;
           if (policyEvidenceHandoff) return;
           try {
             const packet = buildVerifiedPolicyEvidencePacket({ payload: payload!, result });
@@ -2776,7 +2926,11 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
           handlerStartedAtMs + scannerWorkTimeoutMs - LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
         preConsentModuleDeadlineMs: Math.max(
           1_000,
-          scannerWorkTimeoutMs - LOCAL_V2_DAG_LAMBDA_PRECONSENT_SHUTDOWN_RESERVE_MS,
+          scannerWorkTimeoutMs - (
+            payload.workerLane === "consent_proof" || payload.workerLane === "runtime_evidence"
+              ? LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS
+              : LOCAL_V2_DAG_LAMBDA_PRECONSENT_SHUTDOWN_RESERVE_MS
+          ),
         ),
         preConsentVisualFallbackDeadlineMs: Math.max(
           1_000,
@@ -2802,6 +2956,20 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     clearTimeout(scannerDeadlineTimer);
     scannerDeadlineTimer = undefined;
     artifactChainCompletedAt = now();
+    if (payload.orchestrationMode === "worker") {
+      // The dedicated policy worker preserves the existing early, verified
+      // policy handoff. Await it before returning so Lambda freeze cannot drop
+      // the S3 packet or its non-terminal SQS notification.
+      await policyEvidenceHandoff;
+      return {
+        artifactMetadata: artifactResult.artifactMetadata,
+        artifactPointers: artifactResult.artifactPointers,
+        phaseTimings: artifactResult.phaseTimings,
+        scanId: payload.scanId,
+        status: "completed" as const,
+        workerLane: payload.workerLane ?? "coordinator",
+      };
+    }
     const policyEvidence = await policyEvidenceHandoff;
     phaseTimings = artifactResult.phaseTimings;
     const completedAt = now();
@@ -2960,6 +3128,9 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
 function consentScenariosForWorkerLane(workerLane: LocalV2DagLambdaWorkerLane): ConsentFlowScenario[] {
   switch (workerLane) {
     case "coordinator":
+    case "consent_proof":
+    case "runtime_evidence":
+    case "policy_evidence":
       return [];
     case "consent_flows":
       return ["accept_all_flow", "gpc_enabled", "reject_all_flow", "privacy_opt_out_flow"];

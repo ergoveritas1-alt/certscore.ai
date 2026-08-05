@@ -35,10 +35,12 @@ export type StaticFixturePage =
   | "consent-first-layer-necessary-toggle-only"
   | "consent-first-layer-optional-toggle-off"
   | "consent-first-layer-optional-toggle-on"
+  | "consent-first-layer-internal-scroll-defaults-off"
   | "consent-analytics-category-controls"
   | "consent-iframe-reject"
   | "consent-lean-guarded-image-cookie"
   | "consent-localized-controls"
+  | "consent-spanish-inflected-controls"
   | "consent-slovenian-load-controls"
   | "consent-navigation-timeout"
   | "consent-focused-privacy-opt-out"
@@ -221,10 +223,12 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-first-layer-necessary-toggle-only": "consent-first-layer-necessary-toggle-only",
   "consent-first-layer-optional-toggle-off": "consent-first-layer-optional-toggle-off",
   "consent-first-layer-optional-toggle-on": "consent-first-layer-optional-toggle-on",
+  "consent-first-layer-internal-scroll-defaults-off": "consent-first-layer-internal-scroll-defaults-off",
   "consent-analytics-category-controls": "consent-analytics-category-controls",
   "consent-iframe-reject": "consent-iframe-reject",
   "consent-lean-guarded-image-cookie": "consent-lean-guarded-image-cookie",
   "consent-localized-controls": "consent-localized-controls",
+  "consent-spanish-inflected-controls": "consent-spanish-inflected-controls",
   "consent-slovenian-load-controls": "consent-slovenian-load-controls",
   "consent-navigation-timeout": "consent-navigation-timeout",
   "consent-focused-privacy-opt-out": "consent-focused-privacy-opt-out",
@@ -1356,6 +1360,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     firstLayerNecessaryToggleOnly: caseName === "consent-first-layer-necessary-toggle-only",
     firstLayerOptionalToggleOff: caseName === "consent-first-layer-optional-toggle-off",
     firstLayerOptionalToggleOn: caseName === "consent-first-layer-optional-toggle-on",
+    firstLayerInternalScrollDefaultsOff: caseName === "consent-first-layer-internal-scroll-defaults-off",
     preferenceAmbiguous: caseName === "consent-preference-center-ambiguous",
     preferenceConfirmSave: caseName === "consent-preference-center-confirm-save",
     postChoiceReopen: caseName === "consent-post-choice-reopen-control",
@@ -1374,6 +1379,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     statefulClick: caseName === "consent-banner-stateful-click",
     iframeReject: caseName === "consent-iframe-reject",
     localizedControls: caseName === "consent-localized-controls",
+    spanishInflectedControls: caseName === "consent-spanish-inflected-controls",
     slovenianLoadControls: caseName === "consent-slovenian-load-controls",
     privacyChoiceSurfaceRejectSuccess: caseName === "consent-privacy-choice-surface-reject-success",
     leanGuardedImageCookie: caseName === "consent-lean-guarded-image-cookie",
@@ -1482,6 +1488,24 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
         <button id="accept-all" type="button">Alle akzeptieren</button>
         <button id="reject-all" type="button">Tout refuser</button>
         <button id="settings" type="button">Paramètres des cookies</button>
+        <button id="manage-or-reject" type="button">Hantera eller avvisa</button>
+      </div>
+    `;
+  }
+  if (options.spanishInflectedControls) {
+    return `
+      <section>
+        <p>Fixture page with observed Spanish first-layer cookie consent controls.</p>
+      </section>
+      <div id="onetrust-banner-sdk" role="dialog" aria-label="Privacidad y cookies">
+        <p>Nos preocupamos por tu privacidad. Usamos cookies y datos personales para publicidad y medición.</p>
+        <button id="onetrust-accept-btn-handler" type="button">Acepto</button>
+        <button id="onetrust-reject-all-handler" type="button">Rechazarlas todas</button>
+        <button id="onetrust-pc-btn-handler" type="button" aria-label="Mostrar los propósitos, Abre el cuadro de diálogo del centro de preferencias.">Mostrar los propósitos</button>
+        <button id="turkish-accept" type="button">İzin ver</button>
+        <button id="turkish-options" type="button">Seçenekleri yönetin</button>
+        <button id="croatian-accept" type="button" aria-label="Prihvati i zatvori: Prihvatite našu obradu podataka i zatvorite">Prihvati i zatvori</button>
+        <button id="croatian-options" type="button" aria-label="Saznaj više: Konfigurirajte svoje privole">Saznaj više</button>
       </div>
     `;
   }
@@ -1860,6 +1884,19 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
       </div>
     `;
   }
+  if (options.firstLayerInternalScrollDefaultsOff) {
+    return `
+      <section><p>Audi-style internal-scroll consent fixture.</p></section>
+      <div id="cookie-settings" role="dialog" aria-label="Cookie settings" style="position:fixed;inset:40px;overflow-y:auto;max-height:260px;background:white;padding:24px;">
+        <p>Manage your cookie consent preferences.</p>
+        <button id="save-settings" type="button">Save settings and proceed</button>
+        <button id="accept-all" type="button">Accept all</button>
+        <div style="height:1200px">Cookie settings information</div>
+        <div class="purpose-row"><strong>Functional cookies</strong><button role="switch" aria-checked="false" aria-label="off">off</button></div>
+        <div class="purpose-row"><strong>Performance cookies</strong><button role="switch" aria-checked="false" aria-label="off">off</button></div>
+      </div>
+    `;
+  }
   if (options.firstLayerOptionalToggleOn || options.firstLayerOptionalToggleOff || options.firstLayerNecessaryToggleOnly) {
     const optionalToggle = options.firstLayerNecessaryToggleOnly
       ? ""
@@ -1893,6 +1930,8 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     : "";
   const acceptButton = options.acceptEssential
     ? `<button id="accept-essential" type="button">Accept Essential</button>`
+    : options.denyNonEssential
+    ? `<button id="accept-all" type="button">Accept Non-Essential</button>`
     : options.ambiguous
     ? `<button id="continue" type="button">Continue</button>`
     : options.noReject

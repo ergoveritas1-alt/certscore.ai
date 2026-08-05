@@ -64,6 +64,27 @@ Missing, malformed, stale, or unverifiable evidence must fail closed to an unkno
 
 If a downstream result is incorrect, trace the first broken stage in this sequence and fix it there. Do not add surface-specific fallbacks.
 
+### Three-lane production Lambda evidence capture
+
+Production v2 DAG Lambda scans fan out into exactly three independent, bounded browser-session lanes, then merge into one canonical evidence bundle before WC01 assessment or projection:
+
+```text
+consent-proof lane: typed first-layer A/R/O inventory + geometry + representative screenshot
+runtime-evidence lane: network, cookies/storage, scripts/iframes/forms, vendors, journeys, and transport
+policy-evidence lane: policy discovery, ownership, retrieval, retained text/excerpts, and policy diagnostics
+→ coordinator verifies and merges lane-owned evidence
+→ CanonicalEvidenceBundle
+→ ConsentControlAssessment v2 and the canonical downstream flow
+```
+
+The consent-proof lane must capture typed A/R/O, geometry, and the representative pre-consent screenshot from the same browser session. It may use bounded same-session settling and recapture, but it must not click consent controls. The runtime lane must not spend its budget on consent screenshots or screenshot recovery. The policy lane owns policy-surface work and must not depend on spare time left by consent or runtime capture.
+
+Keep lane ownership strict when merging. Consent evidence and visuals come from consent-proof; runtime facts come from runtime-evidence; policy observations come from policy-evidence. Do not let one lane synthesize, infer, or overwrite another lane's evidence. Preserve lane artifact provenance, verify retained pointers, and publish only the merged canonical bundle through the existing persistence path.
+
+The coordinator is orchestration only: it must not run a fourth browser scan. Worker artifacts use isolated lane prefixes while retaining the parent scan identity. A failed or unverifiable required lane must fail closed or remain explicitly limited; it must not be filled from display context or another lane's absence.
+
+A `complete` `ConsentControlAssessment v2` must contain binary A/R/O states (`observed` or `not_observed`). If any required first-layer inventory is incomplete, stale, document-mismatched, or unbound to the representative evidence, the assessment remains `limited` with the affected controls `unknown`. Unknown reduction must come from better upstream evidence capture, never from probabilistic or display-layer conversion to absence.
+
 ### Finding-domain classification
 
 Classify changes by the finding type they produce:

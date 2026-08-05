@@ -15,6 +15,7 @@ import type {
 import {
   buildScanEvidenceLaneAssessment,
   buildScanNoGoAssessment,
+  shouldAttemptIncompleteConsentVisualFallback,
   shouldAttemptScreenshotOnlyFallback,
 } from "./index.js";
 
@@ -108,6 +109,27 @@ test("a placeholder-only visual capture remains eligible for independent screens
 
   assert.equal(shouldAttemptScreenshotOnlyFallback(placeholderResult as never, "always"), true);
   assert.equal(shouldAttemptScreenshotOnlyFallback(placeholderResult as never, "never"), false);
+});
+
+test("a runtime-only lane never starts consent visual recovery for an incomplete inventory", () => {
+  const incompleteResult = {
+    collectionSurfaceObservations: [],
+    consentUiObservations: [{ captureStatus: "incomplete", controls: [] }],
+    cookieEvents: [],
+    moduleRun: { errors: ["consent_ui_capture_timed_out"] },
+    networkEvents: [],
+    networkResponseEvents: [],
+    screenshots: [],
+    vendorResolverInputs: [],
+    visualCapture: {
+      status: "unavailable",
+      failureReason: "consent_ui_capture_timed_out",
+      notes: [],
+    },
+  };
+
+  assert.equal(shouldAttemptIncompleteConsentVisualFallback(incompleteResult as never, "never"), false);
+  assert.equal(shouldAttemptIncompleteConsentVisualFallback(incompleteResult as never, "always"), true);
 });
 
 test("a 1x1 placeholder cannot corroborate sparse-page or visual no-go evidence", async () => {

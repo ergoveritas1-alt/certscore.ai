@@ -200,6 +200,44 @@ test("classifies British spelling choice controls as options", () => {
   assert.equal(classification.matchedTerm, "customise my choices");
 });
 
+test("classifies the observed Swedish combined manage-or-reject path as options", () => {
+  const classification = classifyConsentControlLabel({
+    label: "Hantera eller avvisa",
+    contextText: "Vi använder cookies och samtycke för personuppgifter.",
+  });
+  assert.equal(classification.intent, "options");
+  assert.equal(classification.matchedLocale, "sv");
+  assert.equal(classification.matchedTerm, "hantera eller avvisa");
+  assert.equal(classification.matchStrength, "contextual");
+});
+
+test("classifies observed Turkish and Croatian consent variants with bounded context", () => {
+  const turkishAccept = classifyConsentControlLabel({
+    label: "İzin ver",
+    contextText: "Kişisel veriler ve çerezler için izin seçenekleri.",
+    hasConsentContext: true,
+  });
+  assert.equal(turkishAccept.intent, "accept");
+  assert.equal(turkishAccept.matchedLocale, "tr");
+  assert.equal(turkishAccept.matchStrength, "contextual");
+  assert.equal(classifyConsentControlLabel({
+    label: "Seçenekleri yönetin",
+    contextText: "Kişisel veriler ve çerezler için izin seçenekleri.",
+    hasConsentContext: true,
+  }).intent, "options");
+
+  const croatianAccept = classifyConsentControlLabel({ label: "Prihvati i zatvori" });
+  assert.equal(croatianAccept.intent, "accept");
+  assert.equal(croatianAccept.matchedLocale, "hr");
+  const croatianOptions = classifyConsentControlLabel({
+    label: "Saznaj više: Konfigurirajte svoje privole",
+    contextText: "Politika privatnosti, kolačići i privola.",
+    hasConsentContext: true,
+  });
+  assert.equal(croatianOptions.intent, "options");
+  assert.equal(croatianOptions.matchedTerm, "konfigurirajte svoje privole");
+});
+
 test("classifies observed English options labels", () => {
   assert.equal(classifyConsentControlLabel({ label: "I Accept" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Accept", ariaLabel: "Accept" }).intent, "accept");
@@ -207,6 +245,10 @@ test("classifies observed English options labels", () => {
   assert.equal(optionalAccept.intent, "accept");
   assert.equal(optionalAccept.matchedTerm, "accept optional cookies");
   assert.equal(optionalAccept.matchStrength, "direct");
+  const nonEssentialAccept = classifyConsentControlLabel({ label: "Accept Non-Essential" });
+  assert.equal(nonEssentialAccept.intent, "accept");
+  assert.equal(nonEssentialAccept.matchedTerm, "accept non-essential");
+  assert.equal(nonEssentialAccept.matchStrength, "direct");
   assert.equal(classifyConsentControlLabel({ label: "Accept Non-Essential Cookies" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Allow Optional Cookies" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Optional Cookies" }).intent, "unknown");
@@ -291,8 +333,10 @@ test("classifies consent-contextual approval wording without broadening generic 
 
 test("classifies observed Spanish and Italian consent labels", () => {
   assert.equal(classifyConsentControlLabel({ label: "Aceptar" }).matchedLocale, "es");
+  assert.equal(classifyConsentControlLabel({ label: "Acepto" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Aceptar y continuar" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Rechazar todo" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "Rechazarlas todas" }).intent, "reject");
   assert.equal(classifyConsentControlLabel({
     label: "Configurar",
     contextText: "Usamos cookies para publicidad y medicion.",
@@ -811,6 +855,14 @@ test("handles contextual and weak terms without turning them into reject proof",
   });
   assert.equal(saveWithPreferenceContext.intent, "options");
   assert.equal(saveWithPreferenceContext.variant, "save_preferences");
+
+  const audiStyleSave = classifyConsentControlLabel({
+    label: "Save settings and proceed",
+    hasConsentContext: true,
+    hasPreferenceContext: true,
+  });
+  assert.equal(audiStyleSave.intent, "options");
+  assert.equal(audiStyleSave.variant, "save_preferences");
 });
 
 test("rejects common false-positive labels", () => {

@@ -20,7 +20,7 @@ import { withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-pr
 const GENERIC_URL = "https://site-under-test.example/";
 
 type FixtureControl = {
-  actionType: "accept_all" | "reject_all" | "manage_preferences" | "other";
+  actionType: "accept_all" | "reject_all" | "manage_preferences" | "save_preferences" | "other";
   classifierReasonCodes?: string[];
   classifierVariant?: string;
   label: string;
@@ -34,9 +34,12 @@ type FixtureControl = {
 
 type ConsentFlowFixture = {
   complete?: boolean;
+  defaultToggleStatesObserved?: boolean;
   firstLayerControls: readonly FixtureControl[];
   independentAccessibilityTimeout?: boolean;
+  nonEssentialDefaultsOff?: boolean;
   persistentOptions?: boolean;
+  precheckedOptionalPurposeCount?: number;
 };
 
 function retainedEvidencePacket(input: ConsentFlowFixture): CanonicalEvidenceBundle {
@@ -68,6 +71,9 @@ function retainedEvidencePacket(input: ConsentFlowFixture): CanonicalEvidenceBun
           ? ["accessibility_tree"]
           : complete ? [] : ["geometry"]
       },
+      defaultToggleStatesObserved: input.defaultToggleStatesObserved ?? null,
+      nonEssentialDefaultsOff: input.nonEssentialDefaultsOff ?? null,
+      precheckedOptionalPurposeCount: input.precheckedOptionalPurposeCount ?? 0,
       controls: input.firstLayerControls.map((control, index) => ({
         ...control,
         artifactRef: `CanonicalEvidenceBundle.json#control-${index}`,
@@ -87,7 +93,9 @@ function geometryEvidence(input: ConsentFlowFixture) {
   const complete = input.complete !== false;
   const firstLayerAccept = input.firstLayerControls.some((control) => control.actionType === "accept_all");
   const firstLayerReject = input.firstLayerControls.some((control) => control.actionType === "reject_all");
-  const firstLayerOptions = input.firstLayerControls.some((control) => control.actionType === "manage_preferences");
+  const firstLayerOptions = input.firstLayerControls.some((control) =>
+    control.actionType === "manage_preferences" || control.actionType === "save_preferences"
+  );
   return {
     artifactVersion: "consent_control_geometry.v1",
     observedAtMs: 1_050,
@@ -378,6 +386,29 @@ test("canonical consent-control flow preserves site-agnostic prominence and abse
       },
       expectedAssessmentOptions: "observed",
       expectedAssessmentReject: "not_observed",
+      expectedChecklistEligibility: "observed",
+      expectedGapFinding: false,
+      expectedRowStatus: "Observed",
+      expectedScore: 100,
+      expectedState: "dedicated_button"
+    },
+    {
+      name: "defaults-off preference panel with a first-layer save action",
+      fixture: {
+        defaultToggleStatesObserved: true,
+        firstLayerControls: [
+          { actionType: "accept_all", label: "Accept all" },
+          {
+            actionType: "save_preferences",
+            label: "Save settings and proceed",
+            presentationType: "dedicated_button"
+          }
+        ],
+        nonEssentialDefaultsOff: true,
+        precheckedOptionalPurposeCount: 0
+      },
+      expectedAssessmentOptions: "observed",
+      expectedAssessmentReject: "observed",
       expectedChecklistEligibility: "observed",
       expectedGapFinding: false,
       expectedRowStatus: "Observed",

@@ -129,6 +129,8 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "accept all cookies"),
     ...direct("accept", "accept optional"),
     ...direct("accept", "accept optional cookies"),
+    ...direct("accept", "accept non-essential"),
+    ...direct("accept", "accept non essential"),
     ...direct("accept", "accept non-essential cookies"),
     ...direct("accept", "accept non essential cookies"),
     ...direct("accept", "allow cookies"),
@@ -290,6 +292,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     contextual("options", "view options", { requiresConsentContext: true }),
     contextual("options", "show purposes", { requiresConsentContext: true }),
     contextual("options", "options", { requiresConsentContext: true }),
+    contextual("options", "save settings and proceed", { requiresPreferenceContext: true, variant: "save_preferences" }),
     contextual("options", "settings", { requiresConsentContext: true }),
     contextual("options", "configure", { requiresConsentContext: true }),
     contextual("options", "choose", { requiresConsentContext: true }),
@@ -575,6 +578,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
   ]),
   ...es([
     ...direct("accept", "aceptar"),
+    ...direct("accept", "acepto"),
     ...direct("accept", "aceptar todo"),
     ...direct("accept", "aceptar todos"),
     ...direct("accept", "aceptar y continuar"),
@@ -591,6 +595,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("reject", "rechazar"),
     ...direct("reject", "rechazar todo"),
     ...direct("reject", "rechazar todos"),
+    ...direct("reject", "rechazarlas todas"),
     ...direct("reject", "rechazar cookies"),
     ...direct("reject", "rechazar todas las cookies"),
     equivalent("reject", "continuar sin aceptar"),
@@ -1084,7 +1089,8 @@ export function normalizeConsentControlText(value: string | null | undefined): s
     .replace(/[.,;:!?()[\]{}]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/\u0307/g, "");
 }
 
 export function isProductionCreditworthySupplementalConsentControlClassification(

@@ -17,6 +17,7 @@ import {
   LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS,
   LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
+  LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES,
   LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   artifactPointersFromS3Keys,
@@ -26,6 +27,8 @@ import {
   buildScannerRuntimeProvenance,
   buildLocalV2DagLambdaScanTuning,
   handler,
+  invokeLocalV2DagLambdaWorkers,
+  mergeLocalV2DagLambdaEvidenceLaneBundles,
   mergeLocalV2DagLambdaShardBundles,
   mirrorWorkerArtifactsIntoFinalArtifactRoot,
   parseLocalV2DagLambdaDispatchPayload,
@@ -33,6 +36,53 @@ import {
   uploadAuxiliaryArtifactFiles,
   uploadArtifactFiles
 } from "./handler";
+
+test("sharded orchestration fans out exactly one consent, runtime, and policy evidence lane", () => {
+  assert.deepEqual(LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES, [
+    "consent_proof",
+    "runtime_evidence",
+    "policy_evidence",
+  ]);
+});
+
+test("evidence workers start concurrently and retain the parent scan identity", async () => {
+  const seenPayloads: Array<Record<string, unknown>> = [];
+  let activeInvocations = 0;
+  let maximumConcurrentInvocations = 0;
+  const parentPayload = parseLocalV2DagLambdaDispatchPayload(validPayload({ orchestrationMode: "sharded" }));
+
+  const results = await invokeLocalV2DagLambdaWorkers({
+    parentPayload,
+    parentScanId: parentPayload.scanId,
+    workerLanes: LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES,
+    lambdaClient: {
+      async send(command) {
+        const workerPayload = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8")) as Record<string, unknown>;
+        seenPayloads.push(workerPayload);
+        activeInvocations += 1;
+        maximumConcurrentInvocations = Math.max(maximumConcurrentInvocations, activeInvocations);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        activeInvocations -= 1;
+        return {
+          StatusCode: 200,
+          Payload: Buffer.from(JSON.stringify({
+            artifactPointers: {
+              scanArtifactUri: `s3://test-bucket/v2/${String(workerPayload.workerLane)}/CanonicalEvidenceBundle.json`,
+            },
+            scanId: workerPayload.scanId,
+            status: "completed",
+            workerLane: workerPayload.workerLane,
+          })),
+        };
+      },
+    },
+  });
+
+  assert.equal(maximumConcurrentInvocations, 3);
+  assert.deepEqual(seenPayloads.map((payload) => payload.workerLane), LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES);
+  assert.equal(seenPayloads.every((payload) => payload.scanId === parentPayload.scanId), true);
+  assert.equal(results.every((result) => result.scanId === parentPayload.scanId), true);
+});
 
 test("the default artifact chain preserves at least the full terminal publication reserve", () => {
   assert.equal(LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS, 30_000);
@@ -782,16 +832,21 @@ test("terminal SQS publication retries a stalled send within its total deadline"
   assert.equal(sends, 2);
 });
 
-test("handler worker mode fails closed while post-consent flow scanning is disabled", async () => {
+test("handler evidence worker returns verified artifact pointers without publishing a terminal result", async () => {
   let sentMessages = 0;
   const result = await handler(validPayload({
     orchestrationMode: "worker",
-    scanId: "scan-local-1_accept_gpc",
-    workerLane: "accept_gpc"
+    workerLane: "consent_proof"
   }), {
-    runArtifactChain: async () => {
-      throw new Error("worker artifact chain should not run");
-    },
+    runArtifactChain: async () => ({
+      artifactMetadata: {
+        scanArtifactUri: { sha256: "a".repeat(64), sizeBytes: 123 },
+      },
+      artifactPointers: {
+        scanArtifactUri: "s3://certscore-v2-local-artifacts/v2/scan-local-1/lanes/consent_proof/CanonicalEvidenceBundle.json",
+      },
+      phaseTimings: [],
+    }),
     sqsClient: {
       async send() {
         sentMessages += 1;
@@ -800,10 +855,74 @@ test("handler worker mode fails closed while post-consent flow scanning is disab
     }
   });
 
-  assert.equal(result.status, "failed");
-  assert.equal(result.workerLane, "accept_gpc");
-  assert.match(result.error?.message ?? "", /disabled for the GDPR\/ePrivacy core scanner/);
+  assert.equal(result.status, "completed");
+  assert.equal(result.workerLane, "consent_proof");
+  assert.equal(result.artifactPointers?.scanArtifactUri?.includes("consent_proof"), true);
   assert.equal(sentMessages, 0);
+});
+
+test("policy evidence worker completes the verified early handoff without publishing a terminal result", async () => {
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "certscore-test-artifacts";
+  const sentMessages: string[] = [];
+  let uploadedObjects = 0;
+  try {
+    const result = await handler(validPayload({
+      orchestrationMode: "worker",
+      workerLane: "policy_evidence",
+    }), {
+      runArtifactChain: async (_payload, runOptions) => {
+        runOptions.onPolicySurfaceComplete?.({
+          artifactRefs: [],
+          moduleRun: {
+            moduleName: "policySurfaceScanner",
+            status: "completed",
+            startedAt: "2026-08-04T20:00:00.000Z",
+            completedAt: "2026-08-04T20:00:01.000Z",
+            durationMs: 1_000,
+            evidenceRefs: [],
+            errors: [],
+          },
+          policySurfaceObservations: [],
+        });
+        return {
+          artifactMetadata: {
+            scanArtifactUri: { sha256: "a".repeat(64), sizeBytes: 123 },
+          },
+          artifactPointers: {
+            scanArtifactUri: "s3://certscore-test-artifacts/v2/scan-local-1/lanes/policy_evidence/CanonicalEvidenceBundle.json",
+          },
+          phaseTimings: [],
+        };
+      },
+      s3Client: {
+        async send() {
+          uploadedObjects += 1;
+          return { $metadata: {} };
+        },
+      },
+      sqsClient: {
+        async send(command: SendMessageCommand) {
+          sentMessages.push(String(command.input.MessageBody));
+          return { $metadata: {} };
+        },
+      },
+    });
+
+    assert.equal(result.status, "completed");
+    assert.equal(result.workerLane, "policy_evidence");
+    assert.equal(uploadedObjects, 1);
+    assert.equal(sentMessages.length, 1);
+    const message = JSON.parse(sentMessages[0] ?? "{}") as Record<string, unknown>;
+    assert.equal(message.messageKind, "policy_evidence_ready");
+    assert.equal(String(message.artifactPointer).includes("/lanes/policy_evidence/"), true);
+  } finally {
+    if (previousBucket === undefined) {
+      delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    } else {
+      process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+    }
+  }
 });
 
 test("sharded bundle merge preserves existing consent comparisons without synthesizing new ones", () => {
@@ -857,6 +976,96 @@ test("sharded bundle merge preserves existing consent comparisons without synthe
   assert.equal(comparison.comparisonId, "consent_comparison_existing");
   assert.equal(comparison.comparableMeasurement?.comparable, false);
   assert.equal(comparison.comparableMeasurement?.reason, "worker_comparison_retained");
+});
+
+test("three-lane merge keeps consent visuals, runtime coverage, and policy evidence in their canonical domains", () => {
+  const artifactRoot = "/tmp/certscore-three-lane-test";
+  const runtimeCoverage = {
+    coverageStatus: "usable" as const,
+    fallbackModesUsed: [],
+    limitationKeys: [],
+    notes: [],
+    observationCounts: {
+      cookieEvents: 0,
+      cookiesBeforeConsent: 0,
+      networkEvents: 0,
+      normalizedVendors: 0,
+      observedJourneys: 0,
+      thirdPartyRequests: 0,
+    },
+    silentEmpty: false,
+  };
+  const policyObservation = {
+    observationId: "policy_surface_privacy",
+    surfaceType: "privacy_policy" as const,
+    url: "https://example.com/privacy",
+    normalizedUrl: "https://example.com/privacy",
+    status: "observed" as const,
+    documentFetchState: "not_attempted" as const,
+    confidence: 0.95,
+    directVsInferred: "direct" as const,
+  };
+  const merged = mergeLocalV2DagLambdaEvidenceLaneBundles({
+    artifactRoot,
+    scanId: "scan-local-1",
+    consentProof: canonicalBundleFixture("scan-local-1", {
+      screenshots: [screenshotArtifact(
+        "screenshot_pre_consent_settled",
+        "/tmp/worker-consent/screenshot-pre-consent-settled.png",
+      )],
+      derivedRuntimeSignals: {
+        preConsentTrackingObserved: false,
+        sessionReplayOrBehavioralAnalyticsObserved: false,
+        thirdPartyCookiesPreConsentObserved: false,
+        thirdPartyVendorsObserved: false,
+        consentBannerLikelyPresent: true,
+      },
+    }),
+    runtimeEvidence: canonicalBundleFixture("scan-local-1", {
+      artifactRefs: [{
+        artifactId: "runtime_debug",
+        artifactType: "json",
+        path: "/tmp/worker-runtime/runtime-evidence.json",
+        redactionStatus: "not_needed",
+        relatedEventIds: [],
+        sensitivity: "safe",
+      }],
+      runtimeCoverage,
+      derivedRuntimeSignals: {
+        preConsentTrackingObserved: true,
+        sessionReplayOrBehavioralAnalyticsObserved: false,
+        thirdPartyCookiesPreConsentObserved: false,
+        thirdPartyVendorsObserved: true,
+      },
+    }),
+    policyEvidence: canonicalBundleFixture("scan-local-1", {
+      artifactRefs: [{
+        artifactId: "policy_surface_text_privacy",
+        artifactType: "other",
+        path: "/tmp/worker-policy/policy_surface_text_privacy.txt",
+        redactionStatus: "not_needed",
+        relatedEventIds: [],
+        sensitivity: "safe",
+      }],
+      policySurfaceObservations: [policyObservation],
+    }),
+  });
+
+  assert.equal(merged.scanProfile.label, "Three-lane consent, runtime, and policy scan");
+  assert.equal(merged.screenshots[0]?.path, path.join(artifactRoot, "screenshot-pre-consent-settled.png"));
+  assert.equal(merged.derivedRuntimeSignals.consentBannerLikelyPresent, true);
+  assert.equal(merged.derivedRuntimeSignals.preConsentTrackingObserved, true);
+  assert.equal(merged.runtimeCoverage?.coverageStatus, "usable");
+  assert.equal(merged.policySurfaceObservations[0]?.observationId, "policy_surface_privacy");
+  assert.equal(merged.scanEvidenceLaneAssessment?.lanes.homepageRuntime, "usable");
+  assert.equal(
+    merged.artifactRefs.find((reference) => reference.artifactId === "runtime_debug")?.path,
+    path.join(artifactRoot, "worker-runtime_evidence-runtime-evidence.json"),
+  );
+  assert.equal(
+    merged.artifactRefs.find((reference) => reference.artifactId === "policy_surface_text_privacy")?.path,
+    path.join(artifactRoot, "policy_surface_text_privacy.txt"),
+  );
 });
 
 test("sharded bundle merge retains exactly one diagnostic screenshot", () => {
