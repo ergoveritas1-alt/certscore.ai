@@ -10,7 +10,7 @@ role_name="${CERTSCORE_V2_DAG_LAMBDA_ROLE_NAME:-${prefix}-role}"
 image_uri="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_URI:-${1:-}}"
 artifact_bucket="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET:-}"
 artifact_prefix="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX:-v2-dag-lambda/local}"
-memory_size="${CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE:-3008}"
+memory_size="${CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE:-4096}"
 
 case "$region" in
   eu-central-1) location_env_prefix="EU_DE" ;;

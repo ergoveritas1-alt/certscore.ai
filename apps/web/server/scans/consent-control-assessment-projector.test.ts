@@ -389,6 +389,48 @@ test("WS01 incomplete consent inventory does not create a canonical negative ass
   assert.equal(assessment, null);
 });
 
+test("WS01 complete empty first-layer inventory projects binary not-observed controls", () => {
+  const assessment = deriveWs01ConsentControlAssessment({
+    completedAt: "2026-08-05T22:00:00.000Z",
+    firstLayerConsentChoices: {
+      capturedAtMs: 8_000,
+      capturedBeforeInteraction: true,
+      controlInventoryComplete: true,
+      documentUrl: "https://example.test/",
+      layerInspected: "first_layer",
+      normalizedChoices: [],
+      sameSurfaceCandidates: true,
+    },
+    requestedUrl: "https://example.test/",
+    scanId: "scan-ws01-complete-empty",
+    scanStatus: "completed",
+  });
+
+  assert.ok(assessment);
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.surface.status, "not_observed");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+});
+
+test("WS01 malformed non-empty inventory fails closed instead of becoming complete empty", () => {
+  const assessment = deriveWs01ConsentControlAssessment({
+    firstLayerConsentChoices: {
+      capturedBeforeInteraction: true,
+      controlInventoryComplete: true,
+      documentUrl: "https://example.test/",
+      layerInspected: "first_layer",
+      normalizedChoices: [{ action: "accept", label: "", sameSurface: true }],
+      sameSurfaceCandidates: true,
+    },
+    scanId: "scan-ws01-malformed-inventory",
+    scanStatus: "completed",
+  });
+
+  assert.equal(assessment, null);
+});
+
 test("geometry projection retains inline and persistent options presentation", () => {
   const assessment = deriveMaterializedConsentControlAssessment({
     bundle: bundle([

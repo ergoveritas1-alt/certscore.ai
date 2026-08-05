@@ -1,16 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ConsentUiObservation } from "@certscore/contracts";
+import { classifyConsentControlLabel, type ConsentUiObservation } from "@certscore/contracts";
 import type { Page } from "playwright";
 import {
   canMarkSettledConsentInventoryCompleted,
   detectConsentUi,
+  isDirectCmpSemanticControlClassificationEligible,
   reconcileConsentUiRecapture,
   reconcilePostSettleConsentUiObservation,
   shouldRunImmediateStructuredConsentRecovery,
   shouldCaptureSettledPreConsentScreenshot,
   shouldRecaptureConsentUiAfterTimeout,
 } from "./scanners/pre-consent-runtime-scanner.js";
+
+test("direct CMP semantic capture rejects generic profile settings without local consent context", () => {
+  const classification = classifyConsentControlLabel({
+    label: "View your notifications and profile settings",
+    contextText: "Account profile and notification controls",
+    hasConsentContext: false,
+  });
+
+  assert.equal(classification.intent, "unknown");
+  assert.equal(classification.contextSatisfied, false);
+  assert.equal(isDirectCmpSemanticControlClassificationEligible(classification), false);
+});
 
 function observation(overrides: Partial<ConsentUiObservation> = {}): ConsentUiObservation {
   return {
@@ -303,6 +316,7 @@ test("rapid initial snapshot returns a completed empty DOM inventory without slo
       accessibilityAttempted = true;
       throw new Error("accessibility should remain a later recovery channel");
     },
+    frames: () => [{}],
     url: () => "https://example.test/",
   } as unknown as Page;
 

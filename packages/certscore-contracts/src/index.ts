@@ -459,6 +459,20 @@ export const consentUiObservationSchema = z.object({
   // Explicitly distinguishes a completed negative from an incomplete capture.
   // Older bundles may omit these fields and continue using basis/timing data.
   captureStatus: z.enum(["observed", "no_evidence", "incomplete"]).optional(),
+  // Typed outcome of the bounded first-layer inventory itself. This is kept
+  // separate from the eventual WC01 assessment because geometry, document
+  // binding, and coordinator verification still govern whether an empty
+  // inventory can become a factual `not_observed` result.
+  inventoryOutcome: z.enum([
+    "complete_with_controls",
+    "complete_empty",
+    "partial",
+    "timed_out",
+    "frame_inaccessible",
+    "document_mismatch",
+    "geometry_unavailable",
+    "no_go",
+  ]).optional(),
   captureDiagnostics: z.object({
     completedChannels: z.array(z.enum([
       "screenshot",
@@ -2044,6 +2058,23 @@ function hasVerifiedPositiveConsentCapture(
   );
 }
 
+function hasVerifiedNegativeConsentCapture(
+  observations: z.infer<typeof consentUiObservationSchema>[],
+): boolean {
+  return observations.some((observation) =>
+    observation.inventoryOutcome === "complete_empty" &&
+    observation.captureStatus === "no_evidence" &&
+    observation.likelyPresent === false &&
+    observation.layerInspected === "first_layer" &&
+    observation.controls.length === 0 &&
+    observation.captureDiagnostics?.completedChannels.includes("dom_inventory") === true &&
+    observation.captureDiagnostics.completedChannels.includes("geometry") &&
+    observation.captureDiagnostics.timedOutChannels.length === 0 &&
+    observation.captureDiagnostics.failedChannels.length === 0 &&
+    observation.basis.includes("settled_control_inventory_completed")
+  );
+}
+
 function deriveConsentEvidenceChannels(input: {
   cmpRuntimeObservations: z.infer<typeof cmpRuntimeObservationSchema>[];
   consentUiObservations: z.infer<typeof consentUiObservationSchema>[];
@@ -2062,7 +2093,8 @@ function deriveConsentEvidenceChannels(input: {
     observation.captureDiagnostics.completedChannels.includes("geometry")
   );
   const verifiedPositiveCaptureCompleted = hasVerifiedPositiveConsentCapture(observations);
-  const consentLaneCompleted = independentRecoveryCompleted || verifiedPositiveCaptureCompleted;
+  const verifiedNegativeCaptureCompleted = hasVerifiedNegativeConsentCapture(observations);
+  const consentLaneCompleted = independentRecoveryCompleted || verifiedPositiveCaptureCompleted || verifiedNegativeCaptureCompleted;
   const runtimeIncomplete = preConsentRun?.status !== "completed" && !consentLaneCompleted;
   const hasObservationBasis = (pattern: RegExp) => observations.some((observation) =>
     observation.basis.some((basis) => pattern.test(basis))
@@ -2206,7 +2238,8 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     observation.captureDiagnostics.completedChannels.includes("geometry")
   );
   const verifiedPositiveCaptureCompleted = hasVerifiedPositiveConsentCapture(observations);
-  const consentLaneCompleted = independentRecoveryCompleted || verifiedPositiveCaptureCompleted;
+  const verifiedNegativeCaptureCompleted = hasVerifiedNegativeConsentCapture(observations);
+  const consentLaneCompleted = independentRecoveryCompleted || verifiedPositiveCaptureCompleted || verifiedNegativeCaptureCompleted;
   const observationFailed = observations.length === 0 || !consentLaneCompleted && observations.some((observation) =>
     observation.captureStatus === "incomplete" ||
     (
@@ -2229,6 +2262,10 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     "consent_ui_capture_timed_out",
     "consent_control_inventory_probe_failed",
     "consent_control_geometry_unavailable",
+    // These remain available as runtime diagnostics. Once the consent-proof
+    // lane independently retained a verified same-document negative packet,
+    // they do not invalidate consent-surface coverage.
+    "cmp_runtime_without_actionable_surface",
   ]);
   const materialLimitationKeys = (input.runtimeCoverage?.limitationKeys ?? []).filter(
     (key) => key !== "post_consent_flow_runtime_disabled" &&

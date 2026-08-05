@@ -105,7 +105,7 @@ const observed = REGIONS.map((region) => {
   const env = config.Environment?.Variables ?? {};
   const context = EXPECTED_CONTEXT[region];
   const required = [
-    ["memory", config.MemorySize, 3008],
+    ["memory", config.MemorySize, 4096],
     ["timeout", config.Timeout, 900],
     ["architecture", config.Architectures?.[0], "x86_64"],
     ["ephemeral storage", config.EphemeralStorage?.Size, 512],
@@ -184,4 +184,3 @@ if (errors.length > 0) {
 }
 
 console.log(`Regional scanner parity passed for ${REGIONS.join(", ")}.`);
-

@@ -137,6 +137,7 @@ const TARGETS: Target[] = [
     matches: (file) =>
       isGlobalBuildInput(file) ||
       file.startsWith("apps/v2-dag-lambda/") ||
+      file.startsWith("infra/aws/v2-dag-lambda/") ||
       file.startsWith("packages/certscore-contracts/") ||
       file.startsWith("packages/certscore-scan-core/") ||
       file.startsWith("packages/certscore-vendor-resolver/") ||

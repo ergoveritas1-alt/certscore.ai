@@ -18,6 +18,13 @@ Routine `deploy:scanners` releases update Lambda code with a digest-qualified
 regional image. Terraform deliberately ignores only `image_uri`; it remains
 authoritative for runtime configuration and infrastructure.
 
+Before building or promoting a scanner image, `deploy:scanners` applies the
+Terraform-authoritative 4096 MB memory setting with a scoped Lambda
+configuration update in all three regions. It waits for each function to become
+active and verifies the configured memory before any `update-function-code`
+call. The scoped update intentionally preserves each region's existing VPC,
+proxy, environment, and retained-evidence configuration.
+
 The imported result and async-failure queues currently use AWS's 1 MiB message
 limit. AWS provider v5 still validates the historical 256 KiB maximum, so this
 stack temporarily ignores `max_message_size` on those two imported queues. The

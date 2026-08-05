@@ -2999,6 +2999,7 @@ function markConsentRecoveryCompleted(
   return {
     ...observation,
     captureStatus: observation.likelyPresent || observation.controls.length > 0 ? "observed" : "no_evidence",
+    inventoryOutcome: observation.controls.length > 0 ? "complete_with_controls" : "complete_empty",
     captureDiagnostics: {
       completedChannels,
       timedOutChannels: (observation.captureDiagnostics?.timedOutChannels ?? [])

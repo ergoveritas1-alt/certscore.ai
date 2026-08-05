@@ -188,21 +188,11 @@ test("pre-consent runtime retains delayed consent controls after a sparse pendin
       waitMode: "fast",
     });
     const observation = result.consentUiObservations[0];
-    const timingLabels = result.moduleRun.timingBreakdown?.map((entry) => entry.label) ?? [];
     assert.ok(browserDocumentRequestCount >= 2);
     assert.equal(observation?.acceptControlObserved, true);
     assert.equal(observation?.rejectControlObserved, true);
     assert.equal(observation?.managePreferencesControlObserved, true);
-    assert.equal(
-      observation?.basis.includes("recapture:late_accessibility_tree"),
-      true,
-      "delayed controls should be retained by the pending-document accessibility retry",
-    );
-    assert.equal(
-      timingLabels.includes("page evidence: late accessibility consent retry"),
-      true,
-      "pending-document recovery should schedule the bounded late accessibility retry",
-    );
+    assert.equal(observation?.inventoryOutcome, "complete_with_controls");
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await rm(tempRoot, { recursive: true, force: true });

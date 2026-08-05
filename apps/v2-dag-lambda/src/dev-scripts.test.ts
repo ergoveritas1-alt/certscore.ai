@@ -98,7 +98,7 @@ test("dev image setup uses local names and refuses non-dev resource names", asyn
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE/);
-  assert.match(setupScript, /memory_size="\$\{CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE:-3008\}"/);
+  assert.match(setupScript, /memory_size="\$\{CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE:-4096\}"/);
   assert.match(setupScript, /between 512 and 10240 MB/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS/);

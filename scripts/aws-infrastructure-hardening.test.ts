@@ -78,12 +78,22 @@ test("scanner Lambda infrastructure is bounded and failure-aware", async () => {
 
 test("routine scanner deploys promote immutable digests without recreating infrastructure", async () => {
   const source = await readFile("scripts/deploy-fast.ts", "utf8");
-  const deployFunction = source.match(/async function deployScanners[\s\S]*?\n}\n\nasync function verifyScanners/)?.[0] ?? "";
+  const deployFunction = source.match(/async function deployScanners[\s\S]*?\n}\n\nasync function applyScannerMemoryConfiguration/)?.[0] ?? "";
   const verifyFunction = source.match(/async function verifyScanners[\s\S]*?\n}\n\nasync function ensureWorkflowRun/)?.[0] ?? "";
   assert.match(deployFunction, /imageDetails\[0\]\.imageDigest/);
+  assert.match(deployFunction, /await applyScannerMemoryConfiguration\(\)/);
   assert.match(deployFunction, /"lambda", "update-function-code"/);
+  assert.ok(
+    deployFunction.indexOf("await applyScannerMemoryConfiguration()") <
+      deployFunction.indexOf('"lambda", "update-function-code"'),
+    "scanner memory configuration must converge before image promotion"
+  );
   assert.doesNotMatch(deployFunction, /setup-dev-aws-image\.sh/);
+  assert.match(source, /"lambda", "update-function-configuration"/);
+  assert.match(source, /"--memory-size", String\(SCANNER_MEMORY_SIZE\)/);
+  assert.match(source, /const SCANNER_MEMORY_SIZE = 4096/);
   assert.match(verifyFunction, /imageTag=\$\{expectedSha\}/);
   assert.match(verifyFunction, /endsWith\(`@\$\{expectedDigest\}`\)/);
+  assert.match(verifyFunction, /payload\.MemorySize !== SCANNER_MEMORY_SIZE/);
   assert.doesNotMatch(verifyFunction, /endsWith\(`:\$\{expectedSha\}`\)/);
 });

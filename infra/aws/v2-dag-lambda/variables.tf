@@ -23,7 +23,7 @@ variable "image_uris" {
 variable "memory_size" {
   description = "Memory allocated to each regional scanner function."
   type        = number
-  default     = 3008
+  default     = 4096
 
   validation {
     condition     = var.memory_size >= 512 && var.memory_size <= 10240
