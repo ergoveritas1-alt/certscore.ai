@@ -48,6 +48,13 @@ test("validation deploy assumes its dedicated AWS role", async () => {
   assert.match(terraform, /"logs:FilterLogEvents"/);
 });
 
+test("retired validation ops web service stays absent", async () => {
+  const source = await readFile(validationTerraformPath, "utf8");
+  assert.doesNotMatch(source, /resource "aws_ecs_service" "web"/);
+  assert.match(source, /resource "aws_ecs_task_definition" "web"/);
+  assert.match(source, /resource "aws_ecs_service" "worker"/);
+});
+
 test("Terraform stacks use a partial remote S3 backend", async () => {
   for (const path of [
     "infra/aws/web-ecs/versions.tf",

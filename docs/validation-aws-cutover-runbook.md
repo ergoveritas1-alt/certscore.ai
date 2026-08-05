@@ -2,6 +2,11 @@
 
 This runbook defines the active AWS validation runtime lane under [infra/aws/validation](/Users/benmasek/WC01/infra/aws/validation).
 
+> This cutover is complete and the validation ops-web surface is now retired.
+> Do not recreate its ECS service or use the historical web-service steps below.
+> Follow [validation-retirement-plan.md](/Users/benmasek/WC01/docs/validation-retirement-plan.md)
+> for the current production decision.
+
 ## 1. Prepare AWS infrastructure
 
 1. Fill out [infra/aws/validation/terraform.tfvars.example](/Users/benmasek/WC01/infra/aws/validation/terraform.tfvars.example) as `terraform.tfvars`.

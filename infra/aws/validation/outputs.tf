@@ -13,11 +13,6 @@ output "ecs_cluster_name" {
   value       = aws_ecs_cluster.validation.name
 }
 
-output "ecs_web_service_name" {
-  description = "Validation ops web ECS service name."
-  value       = aws_ecs_service.web.name
-}
-
 output "ecs_worker_service_name" {
   description = "Validation worker ECS service name."
   value       = aws_ecs_service.worker.name
