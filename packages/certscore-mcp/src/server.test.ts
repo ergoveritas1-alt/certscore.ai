@@ -192,13 +192,24 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
       tools.tools.map((tool) => tool.name).sort(),
       ["get_scan_bundle", "get_scan_status", "scan_site"]
     );
+    const scanSiteTool = tools.tools.find((tool) => tool.name === "scan_site");
+    assert.ok(scanSiteTool?.outputSchema?.required?.includes("error"));
+    assert.ok(scanSiteTool?.outputSchema?.required?.includes("recommendedNextAction"));
     const statusTool = tools.tools.find((tool) => tool.name === "get_scan_status");
     assert.deepEqual(statusTool?.inputSchema.required, ["scanId"]);
     assert.equal(statusTool?.inputSchema.additionalProperties, false);
+    assert.ok(statusTool?.outputSchema?.required?.includes("error"));
+    assert.ok(statusTool?.outputSchema?.required?.includes("recommendedNextAction"));
     const bundleTool = tools.tools.find((tool) => tool.name === "get_scan_bundle");
     assert.equal(bundleTool?.inputSchema.additionalProperties, false);
     assert.deepEqual((bundleTool?.inputSchema.properties?.detail as { enum?: string[] })?.enum, ["summary", "findings", "evidence", "full"]);
     assert.equal((bundleTool?.inputSchema.properties?.maxBytes as { minimum?: number })?.minimum, 5_000);
+    assert.ok(bundleTool?.outputSchema?.required?.includes("detail"));
+    assert.ok(bundleTool?.outputSchema?.required?.includes("error"));
+    const metadataSchema = bundleTool?.outputSchema?.properties?.mcpMetadata as { required?: string[] } | undefined;
+    for (const field of ["requestedMaxBytes", "actualBytes", "truncated", "truncationReason", "omittedSections", "nextRecommendedMaxBytes", "omittedContentAvailableViaUrl", "contentUrls"]) {
+      assert.ok(metadataSchema?.required?.includes(field), `mcpMetadata.${field} must be required`);
+    }
   }, { toolProfile: "light" });
 });
 
@@ -529,8 +540,34 @@ test("get_scan_status requires the stable scanId", async () => {
     const missing = await client.callTool({ name: "get_scan_status", arguments: {} });
 
     assert.equal(missing.isError, true);
-    assert.match(JSON.stringify(missing), /Input validation error/);
+    const payload = parseToolJson(missing);
+    assert.deepEqual(payload.error, {
+      code: "invalid_arguments",
+      message: "The scanId field is required.",
+      field: "scanId",
+      retryable: false,
+      retryAfterSeconds: null,
+      recommendedNextAction: "Provide the stable scanId returned by scan_site.",
+      mcpCode: -32602
+    });
   });
+});
+
+test("scan_site returns typed validation details when url is missing", async () => {
+  await withMcpClient(async (client) => {
+    const missing = await client.callTool({ name: "scan_site", arguments: {} });
+    assert.equal(missing.isError, true);
+    const payload = parseToolJson(missing);
+    assert.deepEqual(payload.error, {
+      code: "invalid_arguments",
+      message: "The url field is required.",
+      field: "url",
+      retryable: false,
+      retryAfterSeconds: null,
+      recommendedNextAction: "Provide a public URL or domain.",
+      mcpCode: -32602
+    });
+  }, { toolProfile: "light" });
 });
 
 test("get_scan_status supports API v2 scanId status with timing fields", async () => {
@@ -628,10 +665,50 @@ test("get_scan_status hydrates terminal API v2 status with completed-limited no-
       assert.equal(result.status, "completed_limited");
       assert.equal(result.resultDisposition, "no_go");
       assert.equal((result.noGo as Record<string, unknown>).reasonCode, "parked_or_placeholder");
+      assert.equal((result.error as Record<string, unknown>).code, "parked_or_placeholder");
+      assert.equal((result.error as Record<string, unknown>).retryable, false);
+      assert.equal((result.error as Record<string, unknown>).retryAfterSeconds, null);
+      assert.equal((result.error as Record<string, unknown>).recommendedNextAction, "Publish the intended site.");
+      assert.match(String(result.observationOnlyDisclaimer), /not proof of compliance/i);
       assert.equal(result.scanTimeSeconds, 3);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/scan_123\/status$/);
       assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123$/);
     });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("get_scan_status returns complete errors for failed, expired, and rate-limited scans", async () => {
+  const statuses = ["failed", "expired", "rate_limited"] as const;
+  const mock = installFetch(statuses.map((status) => ({
+    status: 200,
+    body: {
+      type: "certscore_scan_job",
+      jobId: `scan_${status}`,
+      scanId: `scan_${status}`,
+      status,
+      ...(status === "rate_limited" ? { retryAfterSeconds: 45 } : {})
+    }
+  })));
+  try {
+    await withMcpClient(async (client) => {
+      for (const status of statuses) {
+        const result = parseToolJson(await client.callTool({
+          name: "get_scan_status",
+          arguments: { scanId: `scan_${status}` }
+        }));
+        const error = result.error as Record<string, unknown>;
+        assert.equal(result.status, status);
+        assert.equal(result.recommendedNextTool, null);
+        assert.equal(typeof error.code, "string");
+        assert.equal(typeof error.message, "string");
+        assert.equal(error.retryable, true);
+        assert.equal(typeof error.retryAfterSeconds, "number");
+        assert.equal(typeof error.recommendedNextAction, "string");
+      }
+      assert.equal(mock.calls.length, 3);
+    }, { toolProfile: "light" });
   } finally {
     mock.restore();
   }
@@ -695,7 +772,9 @@ test("get_scan_bundle returns a compact canonical summary by default", async () 
       assert.equal(bundle.scanId, "scan_123");
       assert.equal(bundle.status, "completed");
       assert.equal(bundle.score, 72);
-      assert.equal((bundle.findings as unknown[]).length, 1);
+      assert.equal((bundle.findings as unknown[]).length, 0);
+      assert.equal(bundle.detail, "summary");
+      assert.ok(((bundle.mcpMetadata as Record<string, unknown>).omittedSections as string[]).includes("findings"));
       assert.equal(bundle.evidenceSummary, undefined);
       assert.equal(bundle.preConsentCookiesTrackers, undefined);
       assert.equal(bundle.recommendedNextTool, null);
@@ -753,7 +832,9 @@ test("get_scan_bundle returns the canonical no-go result when the Pulse report i
       assert.equal(bundle.resultDisposition, "no_go");
       assert.equal(bundle.recommendedNextAction, recommendedNextAction);
       assert.deepEqual(bundle.findings, []);
-      assert.deepEqual((bundle.evidenceSummary as Record<string, unknown>).projectedFindings, []);
+      assert.deepEqual((bundle.evidenceSummary as Record<string, unknown>).digests, []);
+      assert.equal(bundle.error && (bundle.error as Record<string, unknown>).code, "parked_or_placeholder");
+      assert.match(String(bundle.observationOnlyDisclaimer), /not proof of compliance/i);
       assert.equal(mock.calls.length, 1);
     });
   } finally {
@@ -794,16 +875,14 @@ test("completed Light tools preserve one final canonical score and metadata", as
       const status = parseToolJson(await client.callTool({ name: "get_scan_status", arguments: { scanId: "scan_123" } }));
       const bundle = parseToolJson(await client.callTool({ name: "get_scan_bundle", arguments: { scanId: "scan_123" } }));
 
-      for (const result of [created, status, bundle]) {
-        assert.equal(result.score, 71);
-        assert.equal(result.scoreStatus, "final");
-        assert.equal(result.scoreVersion, "overall-score.v2");
-        assert.equal(result.scoreUpdatedAt, "2026-08-05T20:00:30.000Z");
-        assert.equal(result.riskLevel, "review_recommended");
-        assert.deepEqual(result.coverage, { status: "complete" });
+      for (const key of [
+        "status", "score", "scoreStatus", "scoreVersion", "scoreUpdatedAt", "riskLevel", "coverage",
+        "createdAt", "startedAt", "completedAt", "scanTimeSeconds"
+      ] as const) {
+        assert.deepEqual(created[key], canonicalScan[key], `scan_site ${key}`);
+        assert.deepEqual(status[key], canonicalScan[key], `get_scan_status ${key}`);
+        assert.deepEqual(bundle[key], canonicalScan[key], `get_scan_bundle ${key}`);
       }
-      assert.equal(created.createdAt, "2026-08-05T19:59:58.000Z");
-      assert.equal(status.createdAt, "2026-08-05T19:59:58.000Z");
       assert.equal((bundle.timing as Record<string, unknown>).createdAt, "2026-08-05T19:59:58.000Z");
       assert.equal(created.url, "https://example.com");
       assert.equal(status.url, "https://example.com");
@@ -1036,8 +1115,11 @@ test("tool errors are returned as structured JSON", async () => {
       const error = result.error as Record<string, unknown>;
       assert.equal(error.name, "InvalidUrlError");
       assert.equal(error.code, "invalid_url");
+      assert.equal(error.retryable, false);
+      assert.equal(error.retryAfterSeconds, null);
+      assert.equal(typeof error.recommendedNextAction, "string");
       assert.equal(raw.isError, true);
-      assert.equal(raw.structuredContent, undefined);
+      assert.deepEqual(raw.structuredContent, result);
     });
   } finally {
     mock.restore();
@@ -1056,8 +1138,10 @@ test("get_scan returns an MCP error while a scan resource is not ready", async (
       const raw = await client.callTool({ name: "get_scan", arguments: { scanId: "scan_running" } });
       const result = parseToolJson(raw);
       assert.equal(raw.isError, true);
-      assert.equal(raw.structuredContent, undefined);
+      assert.deepEqual(raw.structuredContent, result);
       assert.equal((result.error as Record<string, unknown>).code, "scan_not_ready");
+      assert.equal((result.error as Record<string, unknown>).retryable, false);
+      assert.equal(typeof (result.error as Record<string, unknown>).recommendedNextAction, "string");
     });
   } finally {
     mock.restore();

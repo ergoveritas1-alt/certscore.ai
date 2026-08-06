@@ -29,7 +29,7 @@ export default function DeveloperExamplesPage() {
             </div>
             <div className="space-y-3">
               <h3 className="font-semibold text-slate-950">Prompt for MCP agents</h3>
-              <CodeBlock>{`Scan these public URLs with CertScore.ai. For each one, wait for completion when possible. If a scan remains active, poll get_scan_status with the returned scanId. For completed scans, call get_scan_bundle with detail=summary. Report score, risk level, coverage status, top findings, limitations, report URL, and whether quota was consumed. Never treat no-go, not-detected, or insufficient-evidence results as proof of compliance.`}</CodeBlock>
+              <CodeBlock>{`Scan these public URLs with CertScore.ai. For each one, wait for completion when possible. If a scan remains active, poll get_scan_status with the returned scanId. For completed scans, call get_scan_bundle with detail=findings. If truncated, follow recommendedNextAction or increase maxBytes. Report score, risk level, coverage status, findings, limitations, report URL, and whether quota was consumed. Never treat no-go, not-detected, or insufficient-evidence results as proof of compliance.`}</CodeBlock>
             </div>
           </div>
         </Section>

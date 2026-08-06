@@ -6,6 +6,17 @@ export const MAX_EVIDENCE_PACKET_CHARS = 250_000;
 const EVIDENCE_STRING_CHARS = 4_000;
 const EVIDENCE_ARRAY_ITEMS = 40;
 const EVIDENCE_OBJECT_KEYS = 80;
+const OBSERVATION_ONLY_DISCLAIMER = "Observation only: no-go, not-observed, and limited-coverage results are not proof of compliance.";
+
+type ActionableError = {
+  code: string;
+  message: string;
+  retryable: boolean;
+  retryAfterSeconds: number | null;
+  recommendedNextAction: string;
+  field?: string;
+  mcpCode?: number;
+};
 
 function toolResultSummary(payload: unknown) {
   if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
@@ -41,32 +52,152 @@ export function toToolError(error: unknown): CallToolResult {
   const terminalError = responseRecord?.error && typeof responseRecord.error === "object" && !Array.isArray(responseRecord.error)
     ? responseRecord.error as Record<string, unknown>
     : null;
-  const payload = error instanceof CertScoreError
-    ? {
-        error: {
-          name: error.name,
-          message: error.message,
-          status: error.status,
-          code: error.code,
-          retryAfterSeconds: "retryAfterSeconds" in error ? error.retryAfterSeconds : undefined,
-          retryable: typeof terminalError?.retryable === "boolean" ? terminalError.retryable : undefined,
-          recommendedNextAction: typeof terminalError?.recommendedNextAction === "string" ? terminalError.recommendedNextAction : undefined,
-          responseBody: truncateErrorResponseBody(error.responseBody)
-        }
-      }
-    : {
-        error: {
-          name: error instanceof Error ? error.name : "Error",
-          message: error instanceof Error ? error.message : "Unknown CertScore MCP error."
-        }
-      };
+  const status = error instanceof CertScoreError ? error.status : undefined;
+  const retryable = typeof terminalError?.retryable === "boolean"
+    ? terminalError.retryable
+    : status === 429 || (typeof status === "number" && status >= 500);
+  const retryAfterSeconds = typeof terminalError?.retryAfterSeconds === "number"
+    ? terminalError.retryAfterSeconds
+    : error instanceof CertScoreError && "retryAfterSeconds" in error && typeof error.retryAfterSeconds === "number"
+      ? error.retryAfterSeconds
+      : retryable
+        ? 30
+        : null;
+  const code = error instanceof CertScoreError ? error.code : "internal_error";
+  const message = error instanceof Error ? error.message : "Unknown CertScore MCP error.";
+  const recommendedNextAction = typeof terminalError?.recommendedNextAction === "string"
+    ? terminalError.recommendedNextAction
+    : retryable
+      ? `Wait ${retryAfterSeconds ?? 30} seconds, then retry the same request. Stop and contact CertScore support if the error repeats.`
+      : "Correct the request using the error details, then retry only if the requested operation is still appropriate.";
+  const payload = {
+    error: {
+      code,
+      message,
+      retryable,
+      retryAfterSeconds,
+      recommendedNextAction,
+      ...(error instanceof CertScoreError ? {
+        name: error.name,
+        status: error.status,
+        responseBody: truncateErrorResponseBody(error.responseBody)
+      } : {})
+    }
+  };
 
-  // MCP validates structuredContent against the tool's success output schema,
-  // including for isError results. Keep errors in text content so a bounded
-  // error envelope cannot be rejected as an invalid success resource.
   return {
     content: [{ type: "text", text: JSON.stringify(payload) }],
+    structuredContent: payload,
     isError: true
+  };
+}
+
+export function toInvalidArgumentsToolError(errorMessage: string): CallToolResult {
+  const tool = errorMessage.match(/tool ([a-z_]+)/i)?.[1] ?? null;
+  const field = errorMessage.match(/\bat ([a-zA-Z0-9_.-]+)/)?.[1]
+    ?? (errorMessage.includes("url") ? "url" : errorMessage.includes("scanId") ? "scanId" : null);
+  const missing = /required|expected string, received undefined/i.test(errorMessage);
+  const message = field
+    ? missing
+      ? `The ${field} field is required.`
+      : `The ${field} field is invalid.`
+    : `The arguments for ${tool ?? "this tool"} are invalid.`;
+  const recommendedNextAction = field === "url"
+    ? "Provide a public URL or domain."
+    : field === "scanId"
+      ? "Provide the stable scanId returned by scan_site."
+      : "Correct the named fields using the tool input schema, then retry.";
+  const error: ActionableError = {
+    code: "invalid_arguments",
+    message,
+    ...(field ? { field } : {}),
+    retryable: false,
+    retryAfterSeconds: null,
+    recommendedNextAction,
+    mcpCode: -32602
+  };
+  const payload = { error };
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload) }],
+    structuredContent: payload,
+    isError: true
+  };
+}
+
+function terminalErrorForResult(value: Record<string, any>): ActionableError | null {
+  const existing = value.error && typeof value.error === "object" && !Array.isArray(value.error)
+    ? value.error as Record<string, unknown>
+    : null;
+  if (existing) {
+    const retryable = existing.retryable === true;
+    return {
+      code: typeof existing.code === "string" ? existing.code : String(value.status ?? "scan_failed"),
+      message: typeof existing.message === "string" ? existing.message : "The scan did not produce a canonical result.",
+      retryable,
+      retryAfterSeconds: typeof existing.retryAfterSeconds === "number" ? existing.retryAfterSeconds : retryable ? 30 : null,
+      recommendedNextAction: typeof existing.recommendedNextAction === "string"
+        ? existing.recommendedNextAction
+        : retryable
+          ? "Wait for the recommended delay, then retry scan_site with freshness=refresh."
+          : "Stop and review the scan limitations before deciding whether to change the URL."
+    };
+  }
+  if (value.status === "completed_limited" && value.noGo) {
+    const retryable = value.noGo.retryLikelyToHelp === true;
+    return {
+      code: typeof value.noGo.reasonCode === "string" ? value.noGo.reasonCode : "completed_limited",
+      message: typeof value.noGo.explanation === "string" ? value.noGo.explanation : "The scan completed with a no-go limitation.",
+      retryable,
+      retryAfterSeconds: retryable ? 30 : null,
+      recommendedNextAction: typeof value.noGo.recommendedNextAction === "string"
+        ? value.noGo.recommendedNextAction
+        : "Review the retained limitation and change the URL or site state before retrying."
+    };
+  }
+  const fallback: Record<string, ActionableError> = {
+    failed: {
+      code: "scanner_runtime_failure",
+      message: "The scan ended before a canonical result could be produced.",
+      retryable: true,
+      retryAfterSeconds: 30,
+      recommendedNextAction: "Wait 30 seconds, then retry scan_site with freshness=refresh. Stop if the failure repeats."
+    },
+    expired: {
+      code: "scan_expired",
+      message: "The scan expired before a canonical result was available.",
+      retryable: true,
+      retryAfterSeconds: 30,
+      recommendedNextAction: "Wait 30 seconds, then retry scan_site with freshness=refresh."
+    },
+    rate_limited: {
+      code: "rate_limited",
+      message: "The scan is rate limited.",
+      retryable: true,
+      retryAfterSeconds: typeof value.retryAfterSeconds === "number" ? value.retryAfterSeconds : 30,
+      recommendedNextAction: "Wait for the recommended delay, then retry the same scan_site request."
+    }
+  };
+  return fallback[String(value.status)] ?? null;
+}
+
+export function withMcpAgentGuidance<T extends Record<string, any>>(value: T): T & {
+  error: ActionableError | null;
+  observationOnlyDisclaimer: string;
+} {
+  const status = String(value.status ?? "");
+  const active = status === "queued" || status === "running" || status === "finalizing";
+  const usable = status === "completed" || status === "completed_limited";
+  const error = terminalErrorForResult(value);
+  return {
+    ...value,
+    error,
+    recommendedNextTool: active ? "get_scan_status" : usable ? "get_scan_bundle" : null,
+    recommendedNextAction: error?.recommendedNextAction ?? value.recommendedNextAction ?? (active
+      ? `Poll get_scan_status with scanId ${value.scanId ?? value.jobId} after the recommended delay.`
+      : usable
+        ? `Call get_scan_bundle with scanId ${value.scanId ?? value.jobId} for the canonical findings and limitations.`
+        : "Review the result and retained limitations."),
+    observationOnlyDisclaimer: OBSERVATION_ONLY_DISCLAIMER
   };
 }
 
@@ -134,20 +265,97 @@ function updateBundleActualBytes(bundle: Record<string, any>) {
   return bundle.mcpMetadata.actualBytes as number;
 }
 
+function boundedText(value: unknown, maxChars: number) {
+  if (typeof value !== "string") {
+    return value;
+  }
+  return value.length > maxChars ? `${value.slice(0, maxChars)}…[truncated]` : value;
+}
+
 function compactBundleFinding(finding: Record<string, any>) {
   const evidence = finding.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)
     ? finding.evidence as Record<string, unknown>
-    : null;
+    : {};
   return {
-    ...finding,
-    ...(evidence ? {
-      evidence: {
-        ...evidence,
-        examples: undefined,
-        projectionWarnings: undefined
-      }
-    } : {}),
-    detail: undefined
+    type: finding.type,
+    id: finding.id,
+    scanId: finding.scanId,
+    label: boundedText(finding.label, 180),
+    criticality: finding.criticality,
+    confidence: finding.confidence,
+    plainEnglish: boundedText(finding.plainEnglish, 420),
+    ...(finding.resultDisposition ? { resultDisposition: finding.resultDisposition } : {}),
+    ...(finding.noGo ? { noGo: finding.noGo } : {}),
+    reviewLenses: Array.isArray(finding.reviewLenses) ? finding.reviewLenses.slice(0, 4) : [],
+    evidence: {
+      basis: evidence.basis,
+      summary: boundedText(evidence.summary, 420),
+      ...(evidence.phase !== undefined ? { phase: evidence.phase } : {}),
+      exampleCount: evidence.exampleCount,
+      examplesShown: evidence.examplesShown,
+      ...(evidence.examplesAvailable !== undefined ? { examplesAvailable: evidence.examplesAvailable } : {}),
+      ...(evidence.authRequiredForExamples !== undefined ? { authRequiredForExamples: evidence.authRequiredForExamples } : {}),
+      ...(evidence.hasTimingAnchor !== undefined ? { hasTimingAnchor: evidence.hasTimingAnchor } : {}),
+      ...(evidence.hasVendorAnchor !== undefined ? { hasVendorAnchor: evidence.hasVendorAnchor } : {}),
+      ...(evidence.hasConsentContext !== undefined ? { hasConsentContext: evidence.hasConsentContext } : {}),
+      ...(evidence.hasPolicyAnchor !== undefined ? { hasPolicyAnchor: evidence.hasPolicyAnchor } : {})
+    },
+    ...(finding.nextStep !== undefined ? { nextStep: boundedText(finding.nextStep, 260) } : {}),
+    ...(finding.links ? { links: Object.fromEntries(Object.entries(finding.links).filter(([key]) => ["self", "report", "findings", "pulse"].includes(key))) } : {})
+  };
+}
+
+function bundleEvidenceSummary(
+  evidence: Record<string, unknown>,
+  findings: Record<string, any>[],
+  links: Record<string, unknown>,
+  includeDiagnostics: boolean
+) {
+  const digests = findings.slice(0, 3).map((finding) => {
+    const findingEvidence = finding.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)
+      ? finding.evidence as Record<string, unknown>
+      : {};
+    return {
+      findingId: finding.id,
+      basis: findingEvidence.basis ?? null,
+      summary: boundedText(findingEvidence.summary, 500) ?? null,
+      phase: findingEvidence.phase ?? null,
+      evidenceUrl: findingEvidence.excerpt && typeof findingEvidence.excerpt === "object" && !Array.isArray(findingEvidence.excerpt)
+        ? (findingEvidence.excerpt as Record<string, unknown>).evidenceUrl ?? null
+        : typeof links.findings === "string"
+          ? links.findings
+          : typeof links.report === "string"
+            ? links.report
+            : null
+    };
+  });
+  return {
+    digests,
+    evidenceAvailable: digests.length > 0 || Object.keys(evidence).length > 0,
+    evidenceSafetyNotes: Array.isArray(evidence.evidenceSafetyNotes)
+      ? evidence.evidenceSafetyNotes.slice(0, 3).map((note) => boundedText(note, 300))
+      : [],
+    references: Object.fromEntries(Object.entries(links).filter(([key, value]) => ["findings", "pulse", "report", "preConsentCookiesTrackers"].includes(key) && typeof value === "string")),
+    ...(includeDiagnostics ? {
+      projectionDiagnostics: compactEvidenceValue(evidence.projectionDiagnostics ?? null, {
+        arrayItems: 12,
+        depth: 4,
+        objectKeys: 24,
+        stringChars: 600
+      }),
+      coverageDiagnostics: compactEvidenceValue(evidence.coverageDiagnostics ?? null, {
+        arrayItems: 12,
+        depth: 4,
+        objectKeys: 24,
+        stringChars: 600
+      }),
+      policySurfaceCoverage: compactEvidenceValue(evidence.policySurfaceCoverage ?? null, {
+        arrayItems: 12,
+        depth: 4,
+        objectKeys: 24,
+        stringChars: 600
+      })
+    } : {})
   };
 }
 
@@ -400,20 +608,32 @@ export function buildScanBundle(input: {
   const maxPreConsentRows = Math.min(50, Math.max(1, input.maxPreConsentRows ?? 20));
   const evidence = (input.evidence ?? {}) as Record<string, unknown>;
   const report = (input.report ?? {}) as Record<string, unknown>;
-  const findings = Array.isArray(input.findings.findings)
-    ? input.findings.findings.slice(0, maxFindings).map((finding) => detail === "summary" ? compactBundleFinding(finding) : finding)
-    : [];
+  const allFindings = Array.isArray(input.findings.findings) ? input.findings.findings : [];
+  const findings = detail === "summary"
+    ? []
+    : allFindings.slice(0, maxFindings).map((finding) => detail === "full" ? finding : compactBundleFinding(finding));
   const preConsentRows = Array.isArray(input.preConsentCookiesTrackers?.rows)
     ? input.preConsentCookiesTrackers.rows.slice(0, maxPreConsentRows)
     : [];
-  const links = {
+  const links: Record<string, unknown> = {
     ...(input.scan.links ?? {}),
     ...(report.links && typeof report.links === "object" && !Array.isArray(report.links) ? report.links : {})
   };
-
   const maxBytes = Math.min(200_000, Math.max(5_000, input.maxBytes ?? 50_000));
+  const contentUrls = Object.fromEntries(Object.entries({
+    report: input.scan.links?.report ?? links.report,
+    findings: links.findings,
+    evidence: links.pulse,
+    preConsentCookiesTrackers: links.preConsentCookiesTrackers
+  }).filter(([, value]) => typeof value === "string"));
+  const intentionallyOmitted = new Set<string>();
+  if (detail === "summary" && allFindings.length > 0) intentionallyOmitted.add("findings");
+  if ((detail === "summary" || detail === "findings") && (Object.keys(evidence).length > 0 || allFindings.length > 0)) intentionallyOmitted.add("evidence");
+  if (detail !== "full" && Object.keys(report).length > 0) intentionallyOmitted.add("fullReport");
+  const guidedScan = withMcpAgentGuidance(input.scan as unknown as Record<string, any>);
   const bundle: Record<string, any> = {
     type: "certscore_scan_bundle",
+    detail,
     scanId: input.scan.scanId,
     domain: input.scan.domain,
     url: input.scan.url ?? null,
@@ -426,6 +646,10 @@ export function buildScanBundle(input: {
     resultDisposition: input.scan.resultDisposition ?? null,
     noGo: input.scan.noGo ?? null,
     coverage: input.scan.coverage ?? null,
+    createdAt: input.scan.createdAt ?? null,
+    startedAt: input.scan.startedAt ?? null,
+    completedAt: input.scan.completedAt ?? null,
+    scanTimeSeconds: input.scan.scanTimeSeconds ?? null,
     timing: {
       createdAt: input.scan.createdAt ?? null,
       startedAt: input.scan.startedAt ?? null,
@@ -443,31 +667,12 @@ export function buildScanBundle(input: {
     findings,
     findingsMetadata: {
       shown: findings.length,
-      total: Array.isArray(input.findings.findings) ? input.findings.findings.length : 0,
-      truncated: Array.isArray(input.findings.findings) && input.findings.findings.length > findings.length
+      total: allFindings.length,
+      truncated: allFindings.length > findings.length
     },
-    ...(detail === "evidence" || detail === "full" ? { evidenceSummary: {
-      evidenceSafetyNotes: evidence.evidenceSafetyNotes ?? null,
-      projectionDiagnostics: evidence.projectionDiagnostics ?? null,
-      projectedFindings: compactEvidenceValue(evidence.projectedFindings ?? [], {
-        arrayItems: maxFindings,
-        depth: 5,
-        objectKeys: 40,
-        stringChars: 1_000
-      }),
-      coverageDiagnostics: compactEvidenceValue(evidence.coverageDiagnostics ?? null, {
-        arrayItems: 20,
-        depth: 5,
-        objectKeys: 40,
-        stringChars: 1_000
-      }),
-      policySurfaceCoverage: compactEvidenceValue(evidence.policySurfaceCoverage ?? null, {
-        arrayItems: 20,
-        depth: 5,
-        objectKeys: 40,
-        stringChars: 1_000
-      })
-    } } : {}),
+    ...(detail === "evidence" || detail === "full"
+      ? { evidenceSummary: bundleEvidenceSummary(evidence, allFindings, links, detail === "full") }
+      : {}),
     ...(detail === "full" ? {
       fullReport: compactEvidenceValue(report, {
         arrayItems: 50,
@@ -486,84 +691,118 @@ export function buildScanBundle(input: {
     links,
     reportUrl: input.scan.links?.report ?? (typeof links.report === "string" ? links.report : null),
     recommendedNextTool: null,
-    recommendedNextAction: input.scan.noGo?.recommendedNextAction ?? (findings.length > 0
-      ? "Review the returned findings and follow their evidence links. Use detail=evidence only when deeper retained context is needed."
-      : "Review coverage and limitations before interpreting the absence of findings."),
+    recommendedNextAction: guidedScan.error?.recommendedNextAction ?? (detail === "summary" && allFindings.length > 0
+      ? "Review this overview, then request detail=findings for bounded finding objects or open the report URL."
+      : findings.length > 0
+        ? "Review the returned findings and follow their evidence references. Use detail=evidence only when deeper retained context is needed."
+        : "Review coverage and limitations before interpreting the absence of findings."),
+    error: guidedScan.error,
     mcpMetadata: {
       detail,
       heavyEvidenceIncluded: detail === "evidence" || detail === "full",
-      findingsTruncated: Array.isArray(input.findings.findings) && input.findings.findings.length > findings.length,
+      findingsTruncated: allFindings.length > findings.length,
       requestedMaxBytes: maxBytes,
       actualBytes: 0,
       truncated: false,
-      truncationReason: null
+      truncationReason: null,
+      omittedSections: [...intentionallyOmitted],
+      nextRecommendedMaxBytes: null,
+      omittedContentAvailableViaUrl: intentionallyOmitted.size > 0 && Object.keys(contentUrls).length > 0,
+      contentUrls
     },
-    disclaimer: input.scan.disclaimer ?? input.report?.disclaimer ?? null
+    observationOnlyDisclaimer: OBSERVATION_ONLY_DISCLAIMER,
+    disclaimer: input.scan.disclaimer ?? input.report?.disclaimer ?? OBSERVATION_ONLY_DISCLAIMER
   };
 
-  updateBundleActualBytes(bundle);
+  const recommendationCandidates: number[] = [];
+  const markBudgetOmitted = (section: string, reason: string, requiredBytes = bundle.mcpMetadata.actualBytes) => {
+    bundle.mcpMetadata.truncated = true;
+    bundle.mcpMetadata.truncationReason ??= reason;
+    if (!bundle.mcpMetadata.omittedSections.includes(section)) {
+      bundle.mcpMetadata.omittedSections.push(section);
+    }
+    recommendationCandidates.push(requiredBytes);
+    bundle.mcpMetadata.omittedContentAvailableViaUrl = Object.keys(contentUrls).length > 0;
+  };
+  const refresh = () => updateBundleActualBytes(bundle);
+
+  refresh();
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.fullReport) {
+    markBudgetOmitted("fullReport", "full_report_omitted_to_byte_limit");
+    delete bundle.fullReport;
+    refresh();
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && detail === "full" && bundle.evidenceSummary) {
+    const compactSummary = bundleEvidenceSummary(evidence, allFindings, links, false);
+    markBudgetOmitted("evidenceDiagnostics", "evidence_diagnostics_omitted_to_byte_limit");
+    bundle.evidenceSummary = compactSummary;
+    refresh();
+  }
+  const inventoryRows = bundle.preConsentCookiesTrackers?.rows;
+  while (bundle.mcpMetadata.actualBytes > maxBytes && Array.isArray(inventoryRows) && inventoryRows.length > 0) {
+    markBudgetOmitted("preConsentCookiesTrackers", "evidence_inventory_reduced_to_byte_limit");
+    inventoryRows.pop();
+    bundle.preConsentCookiesTrackers.shown = inventoryRows.length;
+    bundle.preConsentCookiesTrackers.truncated = true;
+    refresh();
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.preConsentCookiesTrackers) {
+    markBudgetOmitted("preConsentCookiesTrackers", "evidence_inventory_omitted_to_byte_limit");
+    delete bundle.preConsentCookiesTrackers;
+    refresh();
+  }
   while (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 1) {
+    markBudgetOmitted("additionalFindings", "findings_reduced_to_byte_limit");
     bundle.findings.pop();
     bundle.findingsMetadata.shown = bundle.findings.length;
     bundle.findingsMetadata.truncated = true;
     bundle.mcpMetadata.findingsTruncated = true;
-    bundle.mcpMetadata.truncated = true;
-    bundle.mcpMetadata.truncationReason = "findings_reduced_to_byte_limit";
-    updateBundleActualBytes(bundle);
-  }
-  const inventoryRows = bundle.preConsentCookiesTrackers?.rows;
-  while (bundle.mcpMetadata.actualBytes > maxBytes && Array.isArray(inventoryRows) && inventoryRows.length > 0) {
-    inventoryRows.pop();
-    bundle.preConsentCookiesTrackers.shown = inventoryRows.length;
-    bundle.preConsentCookiesTrackers.truncated = true;
-    bundle.mcpMetadata.truncated = true;
-    bundle.mcpMetadata.truncationReason = "evidence_inventory_reduced_to_byte_limit";
-    updateBundleActualBytes(bundle);
-  }
-  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.fullReport) {
-    delete bundle.fullReport;
-    bundle.mcpMetadata.truncated = true;
-    bundle.mcpMetadata.truncationReason = "full_report_omitted_to_byte_limit";
-    updateBundleActualBytes(bundle);
-  }
-  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.evidenceSummary) {
-    delete bundle.evidenceSummary;
-    bundle.mcpMetadata.heavyEvidenceIncluded = false;
-    bundle.mcpMetadata.truncated = true;
-    bundle.mcpMetadata.truncationReason = "evidence_summary_omitted_to_byte_limit";
-    updateBundleActualBytes(bundle);
+    refresh();
   }
   if (bundle.mcpMetadata.actualBytes > maxBytes) {
-    bundle.summary = compactEvidenceValue(bundle.summary, {
-      arrayItems: 8,
-      depth: 4,
-      objectKeys: 20,
-      stringChars: 500
+    markBudgetOmitted("summaryDetail", "summary_compacted_to_byte_limit");
+    bundle.summary = {
+      headline: boundedText(bundle.summary?.headline, 240) ?? null,
+      executiveSummary: null,
+      counts: bundle.summary?.counts ?? null,
+      agentInterpretation: null
+    };
+    refresh();
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes) {
+    markBudgetOmitted("coverageDetail", "coverage_compacted_to_byte_limit");
+    bundle.coverage = compactEvidenceValue(bundle.coverage, {
+      arrayItems: 3,
+      depth: 3,
+      objectKeys: 8,
+      stringChars: 240
     });
-    bundle.mcpMetadata.truncated = true;
-    bundle.mcpMetadata.truncationReason = "summary_compacted_to_byte_limit";
-    updateBundleActualBytes(bundle);
+    refresh();
   }
-  if (bundle.mcpMetadata.actualBytes > maxBytes) {
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 0) {
+    markBudgetOmitted("findings", "finding_omitted_to_byte_limit");
     bundle.findings = [];
     bundle.findingsMetadata.shown = 0;
     bundle.findingsMetadata.truncated = bundle.findingsMetadata.total > 0;
-    delete bundle.preConsentCookiesTrackers;
-    bundle.coverage = compactEvidenceValue(bundle.coverage, {
-      arrayItems: 4,
-      depth: 3,
-      objectKeys: 12,
-      stringChars: 300
-    });
     bundle.mcpMetadata.findingsTruncated = bundle.findingsMetadata.total > 0;
-    bundle.mcpMetadata.truncated = true;
-    bundle.mcpMetadata.truncationReason = "findings_and_inventory_omitted_to_byte_limit";
-    updateBundleActualBytes(bundle);
+    refresh();
   }
-  updateBundleActualBytes(bundle);
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.evidenceSummary) {
+    markBudgetOmitted("evidence", "evidence_digest_omitted_to_byte_limit");
+    delete bundle.evidenceSummary;
+    bundle.mcpMetadata.heavyEvidenceIncluded = false;
+    refresh();
+  }
+  if (bundle.mcpMetadata.truncated) {
+    const required = Math.min(...recommendationCandidates.filter((value) => Number.isFinite(value) && value > maxBytes));
+    bundle.mcpMetadata.nextRecommendedMaxBytes = Math.min(200_000, Math.max(maxBytes + 1_000, Math.ceil((Number.isFinite(required) ? required : maxBytes + 1_000) / 1_000) * 1_000));
+    bundle.recommendedNextAction = `Retry with maxBytes=${bundle.mcpMetadata.nextRecommendedMaxBytes} or open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`;
+    refresh();
+  }
   if (bundle.mcpMetadata.actualBytes > maxBytes) {
     const minimal: Record<string, any> = {
       type: bundle.type,
+      detail: bundle.detail,
       scanId: bundle.scanId,
       domain: bundle.domain,
       url: bundle.url,
@@ -576,6 +815,10 @@ export function buildScanBundle(input: {
       resultDisposition: bundle.resultDisposition,
       noGo: bundle.noGo,
       coverage: null,
+      createdAt: bundle.createdAt,
+      startedAt: bundle.startedAt,
+      completedAt: bundle.completedAt,
+      scanTimeSeconds: bundle.scanTimeSeconds,
       timing: bundle.timing,
       summary: {
         headline: bundle.summary?.headline ?? null,
@@ -592,7 +835,8 @@ export function buildScanBundle(input: {
       links: Object.fromEntries(Object.entries(bundle.links ?? {}).filter(([key]) => ["docs", "report", "self"].includes(key))),
       reportUrl: bundle.reportUrl,
       recommendedNextTool: null,
-      recommendedNextAction: "The response reached the requested byte limit. Increase maxBytes or follow the report link for more detail.",
+      recommendedNextAction: bundle.recommendedNextAction,
+      error: bundle.error,
       mcpMetadata: {
         detail,
         heavyEvidenceIncluded: false,
@@ -600,8 +844,13 @@ export function buildScanBundle(input: {
         requestedMaxBytes: maxBytes,
         actualBytes: 0,
         truncated: true,
-        truncationReason: "minimal_canonical_result_returned_to_byte_limit"
+        truncationReason: "minimal_canonical_result_returned_to_byte_limit",
+        omittedSections: [...new Set([...bundle.mcpMetadata.omittedSections, "summaryDetail", "findings", "evidence"])],
+        nextRecommendedMaxBytes: bundle.mcpMetadata.nextRecommendedMaxBytes ?? Math.min(200_000, maxBytes + 1_000),
+        omittedContentAvailableViaUrl: Object.keys(contentUrls).length > 0,
+        contentUrls
       },
+      observationOnlyDisclaimer: bundle.observationOnlyDisclaimer,
       disclaimer: bundle.disclaimer
     };
     updateBundleActualBytes(minimal);

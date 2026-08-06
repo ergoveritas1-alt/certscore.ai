@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CertScoreError, type PulseResult } from "@certscore/sdk";
-import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, toToolError, toToolResult } from "./tools.js";
+import { mcpScanBundleOutputSchema } from "@certscore/api-contracts";
+import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, toToolError, toToolResult, withMcpAgentGuidance } from "./tools.js";
 
 const report = {
   type: "certscore_pulse",
@@ -36,6 +37,33 @@ const report = {
   },
   disclaimer: "Automated public-web observations for review."
 } satisfies PulseResult;
+
+function publicFinding(id: string, text = "Observed evidence.") {
+  return {
+    type: "certscore_finding",
+    id,
+    scanId: "scan_123",
+    label: `Finding ${id}`,
+    criticality: "high",
+    confidence: "good",
+    plainEnglish: text,
+    reviewLenses: ["GDPR / ePrivacy"],
+    evidence: {
+      basis: "runtime_observation",
+      summary: text,
+      phase: "pre_consent",
+      exampleCount: 1,
+      examplesShown: 1,
+      examplesAvailable: 1,
+      hasTimingAnchor: true
+    },
+    nextStep: "Review the retained evidence.",
+    links: {
+      self: `https://certscore.ai/api/v2/scans/scan_123/findings/${id}`,
+      report: "https://certscore.ai/scan/scan_123"
+    }
+  };
+}
 
 test("exportFindings returns structured finding payloads", () => {
   const exported = exportFindings(report);
@@ -185,14 +213,129 @@ test("buildScanBundle implements materially distinct detail modes", () => {
   const evidence = buildScanBundle({ ...common, detail: "evidence" });
   const full = buildScanBundle({ ...common, detail: "full" });
 
-  assert.equal(summary.findings.length, 5);
-  assert.equal(summary.findings[0]?.detail, undefined);
+  assert.equal(summary.detail, "summary");
+  assert.equal(summary.findings.length, 0);
+  assert.ok(summary.mcpMetadata.omittedSections.includes("findings"));
+  assert.equal(findings.detail, "findings");
   assert.equal(findings.findings.length, 8);
-  assert.ok(findings.findings[0]?.detail);
+  assert.equal(findings.findings[0]?.detail, undefined);
+  assert.equal(evidence.detail, "evidence");
   assert.equal(evidence.evidenceSummary !== undefined, true);
+  assert.ok(Array.isArray(evidence.evidenceSummary.digests));
   assert.equal(evidence.fullReport, undefined);
+  assert.equal(full.detail, "full");
   assert.equal(full.evidenceSummary !== undefined, true);
   assert.equal(full.fullReport !== undefined, true);
+});
+
+test("findings and evidence modes preserve useful content at the 5000-byte minimum", () => {
+  const common = {
+    evidence: { ...report, evidenceSafetyNotes: ["Public-safe retained evidence only."] },
+    findings: {
+      type: "certscore_finding_list",
+      scanId: "scan_123",
+      findings: [publicFinding("finding_1", "x".repeat(1_200))]
+    },
+    maxBytes: 5_000,
+    preConsentCookiesTrackers: null,
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      url: "https://example.com",
+      status: "completed",
+      score: 72,
+      scoreStatus: "final",
+      links: {
+        report: "https://certscore.ai/scan/scan_123",
+        findings: "https://certscore.ai/api/v2/scans/scan_123/findings",
+        pulse: "https://certscore.ai/api/v2/scans/scan_123/pulse"
+      }
+    }
+  } as any;
+
+  const findings = buildScanBundle({ ...common, detail: "findings" });
+  const evidence = buildScanBundle({ ...common, detail: "evidence" });
+
+  assert.equal(findings.findings.length, 1);
+  assert.equal(findings.findings[0]?.id, "finding_1");
+  assert.ok(findings.mcpMetadata.actualBytes <= 5_000);
+  assert.equal(evidence.findings.length, 1);
+  assert.equal(evidence.evidenceSummary.digests[0]?.findingId, "finding_1");
+  assert.equal(typeof evidence.evidenceSummary.digests[0]?.evidenceUrl, "string");
+  assert.ok(evidence.mcpMetadata.actualBytes <= 5_000);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(findings));
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(evidence));
+});
+
+test("byte-budget truncation explains omissions and the next useful limit", () => {
+  const bundle = buildScanBundle({
+    detail: "full",
+    evidence: { ...report, evidenceSafetyNotes: ["x".repeat(15_000)] },
+    findings: {
+      type: "certscore_finding_list",
+      scanId: "scan_123",
+      findings: Array.from({ length: 10 }, (_, index) => publicFinding(`finding_${index}`, "y".repeat(2_000)))
+    },
+    maxBytes: 5_000,
+    preConsentCookiesTrackers: null,
+    report: { ...report, executiveSummary: { narrative: "z".repeat(10_000) } },
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      status: "completed",
+      links: {
+        report: "https://certscore.ai/scan/scan_123",
+        findings: "https://certscore.ai/api/v2/scans/scan_123/findings",
+        pulse: "https://certscore.ai/api/v2/scans/scan_123/pulse"
+      }
+    }
+  } as any);
+
+  assert.equal(bundle.mcpMetadata.truncated, true);
+  assert.ok(bundle.mcpMetadata.omittedSections.length > 0);
+  assert.ok(bundle.mcpMetadata.nextRecommendedMaxBytes > 5_000);
+  assert.equal(bundle.mcpMetadata.omittedContentAvailableViaUrl, true);
+  assert.equal(typeof bundle.mcpMetadata.contentUrls.report, "string");
+  assert.match(bundle.recommendedNextAction, /Retry with maxBytes=/);
+  assert.ok(bundle.mcpMetadata.actualBytes <= 5_000);
+});
+
+test("terminal status guidance always includes a complete actionable error", () => {
+  for (const status of ["failed", "expired", "rate_limited"] as const) {
+    const result = withMcpAgentGuidance({
+      type: "certscore_scan_job",
+      scanId: `scan_${status}`,
+      status,
+      ...(status === "rate_limited" ? { retryAfterSeconds: 45 } : {})
+    });
+    assert.equal(result.recommendedNextTool, null);
+    assert.equal(typeof result.error?.code, "string");
+    assert.equal(typeof result.error?.message, "string");
+    assert.equal(result.error?.retryable, true);
+    assert.equal(typeof result.error?.retryAfterSeconds, "number");
+    assert.equal(typeof result.error?.recommendedNextAction, "string");
+  }
+
+  const noGo = withMcpAgentGuidance({
+    type: "certscore_scan",
+    scanId: "scan_no_go",
+    status: "completed_limited",
+    resultDisposition: "no_go",
+    noGo: {
+      reasonCode: "parked_or_placeholder",
+      explanation: "A placeholder page was retained.",
+      retryLikelyToHelp: false,
+      recommendedNextAction: "Publish the intended site, then retry."
+    }
+  });
+  assert.equal(noGo.recommendedNextTool, "get_scan_bundle");
+  assert.equal(noGo.error?.code, "parked_or_placeholder");
+  assert.equal(noGo.error?.retryable, false);
+  assert.equal(noGo.error?.retryAfterSeconds, null);
+  assert.match(noGo.observationOnlyDisclaimer, /not proof of compliance/i);
 });
 
 test("toToolError marks CertScoreError results as MCP errors and truncates response bodies", () => {
@@ -207,7 +350,7 @@ test("toToolError marks CertScoreError results as MCP errors and truncates respo
   };
 
   assert.equal(result.isError, true);
-  assert.equal(result.structuredContent, undefined);
+  assert.deepEqual(result.structuredContent, payload);
   assert.equal(payload.error?.responseBody?.length, 2_012);
   assert.match(payload.error?.responseBody ?? "", /…\[truncated\]$/);
 });
@@ -215,13 +358,15 @@ test("toToolError marks CertScoreError results as MCP errors and truncates respo
 test("toToolError marks generic errors as MCP errors", () => {
   const result = toToolError(new Error("Boom"));
   const payload = JSON.parse(result.content[0]?.type === "text" ? result.content[0].text : "{}") as {
-    error?: { message?: string; name?: string };
+    error?: { code?: string; message?: string; recommendedNextAction?: string; retryable?: boolean };
   };
 
   assert.equal(result.isError, true);
-  assert.equal(result.structuredContent, undefined);
-  assert.equal(payload.error?.name, "Error");
+  assert.deepEqual(result.structuredContent, payload);
+  assert.equal(payload.error?.code, "internal_error");
   assert.equal(payload.error?.message, "Boom");
+  assert.equal(payload.error?.retryable, false);
+  assert.equal(typeof payload.error?.recommendedNextAction, "string");
 });
 
 test("paginateFindingList applies MCP-side limit and offset", () => {

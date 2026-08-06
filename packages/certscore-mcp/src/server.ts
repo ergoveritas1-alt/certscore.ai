@@ -2,7 +2,7 @@ import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
 import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
-import { boundEvidencePacket, buildScanBundle, exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, toToolError, toToolResult } from "./tools.js";
+import { boundEvidencePacket, buildScanBundle, exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, toInvalidArgumentsToolError, toToolError, toToolResult, withMcpAgentGuidance } from "./tools.js";
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
@@ -99,6 +99,10 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     name: "certscore",
     version: CERTSCORE_MCP_VERSION
   });
+  const sdkCreateToolError = (server as any).createToolError.bind(server) as (message: string) => ReturnType<typeof toInvalidArgumentsToolError>;
+  (server as any).createToolError = (message: string) => message.includes("Input validation error:")
+    ? toInvalidArgumentsToolError(message)
+    : sdkCreateToolError(message);
   const lightTools = new Set<CertScoreMcpToolName>(["scan_site", "get_scan_status", "get_scan_bundle"]);
   const registerMcpTool = server.registerTool.bind(server) as any;
   const registerTool = (name: CertScoreMcpToolName, contract: unknown, handler: unknown) => {
@@ -156,30 +160,28 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           scanFrom: input.scanFrom
         });
         if (input.waitForCompletion === false || created.type === "certscore_scan") {
-          return toToolResult(created);
+          return toToolResult(withMcpAgentGuidance(created as unknown as Record<string, any>));
         }
         try {
           const completed = await client.scans.wait(created, {
             maxWaitMs: Math.min(input.maxWaitSeconds ? input.maxWaitSeconds * 1_000 : DEFAULT_MCP_SCAN_WAIT_MS, DEFAULT_MCP_SCAN_WAIT_MS)
           });
-          return toToolResult({
+          return toToolResult(withMcpAgentGuidance({
             ...completed,
-            ...scanCreationMetadata(created as unknown as Record<string, unknown>),
-            recommendedNextTool: "get_scan_bundle"
-          });
+            ...scanCreationMetadata(created as unknown as Record<string, unknown>)
+          }));
         } catch (error) {
           if (!(error instanceof CertScoreTimeoutError)) {
             throw error;
           }
           const scanId = created.scanId ?? created.scan_id;
           if (scanId) {
-            return toToolResult({
+            return toToolResult(withMcpAgentGuidance({
               ...(await client.scans.status(scanId)),
-              ...scanCreationMetadata(created as unknown as Record<string, unknown>),
-              recommendedNextTool: "get_scan_status"
-            });
+              ...scanCreationMetadata(created as unknown as Record<string, unknown>)
+            }));
           }
-          return toToolResult(created);
+          return toToolResult(withMcpAgentGuidance(created as unknown as Record<string, any>));
         }
       } catch (error) {
         return toToolError(error);
@@ -209,7 +211,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
         if (needsTerminalHydration) {
           try {
             const scan = await client.scans.get(scanId);
-            return toToolResult({
+            return toToolResult(withMcpAgentGuidance({
               ...status,
               type: "certscore_scan_job",
               status: scan.status,
@@ -228,16 +230,14 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
               riskLevel: scan.riskLevel ?? null,
               coverage: scan.coverage ?? null,
               reportUrl: scan.links?.report ?? status.reportUrl ?? null,
-              links: { ...status.links, ...scan.links },
-              recommendedNextAction: scan.noGo?.recommendedNextAction ?? `Call get_scan_bundle with scanId ${scanId} for the canonical findings and limitations.`,
-              recommendedNextTool: "get_scan_bundle"
-            });
+              links: { ...status.links, ...scan.links }
+            }));
           } catch {
             // Preserve the API status response if the terminal scan resource is
             // briefly unavailable during eventual-consistency windows.
           }
         }
-        return toToolResult(status);
+        return toToolResult(withMcpAgentGuidance(status as unknown as Record<string, any>));
       } catch (error) {
         return toToolError(error);
       }

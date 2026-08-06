@@ -1,5 +1,13 @@
 # certscore-mcp
 
+## 0.2.14
+
+- Reserve a compact finding in `findings` mode and a bounded evidence digest/reference in `evidence` mode when the requested byte budget permits.
+- Add selected detail, omitted sections, next recommended byte limit, and report/evidence retrieval URLs to bundle metadata.
+- Return machine-readable `invalid_arguments` details alongside MCP `-32602` validation errors.
+- Require complete actionable error objects for failed, expired, rate-limited, and completed-limited no-go results.
+- Add top-level canonical timing fields and contract coverage proving all three Light result tools remain immutable and consistent.
+
 ## 0.2.13
 
 - Gate Light completion on one persisted canonical result and expose matching score, risk, coverage, timestamps, version metadata, and report links across all three Light tools.
