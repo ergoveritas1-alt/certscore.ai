@@ -2,7 +2,7 @@ import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
 import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
-import { boundEvidencePacket, buildScanBundle, exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, scanIdFromStatus, toToolError, toToolResult } from "./tools.js";
+import { boundEvidencePacket, buildScanBundle, exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, toToolError, toToolResult } from "./tools.js";
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
@@ -23,11 +23,17 @@ type CreateScanInput = {
   waitForCompletion?: boolean;
   maxWaitSeconds?: number;
 };
-type GetScanStatusInput = { jobId?: string; scanId?: string };
+type GetScanStatusInput = { scanId: string };
 type GetScanInput = { scanId: string };
 type GetReportInput = { scanId: string; detail?: "tiny" | "quick" | "standard" | "full" | "summary" | "evidence"; format?: "json" | "markdown" };
 type GetEvidenceInput = { scanId: string };
-type GetScanBundleInput = { scanId: string; maxFindings?: number; maxPreConsentRows?: number };
+type GetScanBundleInput = {
+  scanId: string;
+  detail?: "summary" | "findings" | "evidence" | "full";
+  maxBytes?: number;
+  maxFindings?: number;
+  maxPreConsentRows?: number;
+};
 type ExportFindingsInput = { scanId: string };
 type ListFindingsInput = { limit?: number; offset?: number; scanId: string };
 type GetPreConsentCookiesTrackersInput = { maxRows?: number; scanId: string };
@@ -37,6 +43,18 @@ type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?:
 
 let createScanDeprecationWarningPrinted = false;
 const DEFAULT_MCP_SCAN_WAIT_MS = 45_000;
+
+async function retryTransientOriginFailure<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    const retryable = error instanceof Error && "status" in error && [502, 503, 504].includes(Number((error as { status?: unknown }).status));
+    if (!retryable) {
+      throw error;
+    }
+    return operation();
+  }
+}
 
 function scanCreationMetadata(value: Record<string, unknown>) {
   return {
@@ -184,46 +202,42 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "get_scan_status",
     toolContract("get_scan_status"),
-    async ({ jobId, scanId }: GetScanStatusInput) => {
+    async ({ scanId }: GetScanStatusInput) => {
       try {
-        if (scanId) {
-          const status = await client.scans.status(scanId);
-          const needsTerminalHydration = status.status === "completed" || status.status === "completed_limited";
-          if (needsTerminalHydration) {
-            try {
-              const scan = await client.scans.get(scanId);
-              return toToolResult({
-                ...status,
-                type: "certscore_scan_job",
-                status: scan.status,
-                domain: scan.domain,
-                resultDisposition: scan.resultDisposition,
-                noGo: scan.noGo,
-                startedAt: scan.startedAt,
-                completedAt: scan.completedAt,
-                scanTimeSeconds: scan.scanTimeSeconds,
-                recommendedNextTool: "get_scan_bundle"
-              });
-            } catch {
-              // Preserve the API status response if the terminal scan resource is
-              // briefly unavailable during eventual-consistency windows.
-            }
+        const status = await client.scans.status(scanId);
+        const needsTerminalHydration = status.status === "completed" || status.status === "completed_limited";
+        if (needsTerminalHydration) {
+          try {
+            const scan = await client.scans.get(scanId);
+            return toToolResult({
+              ...status,
+              type: "certscore_scan_job",
+              status: scan.status,
+              domain: scan.domain,
+              url: scan.url ?? null,
+              resultDisposition: scan.resultDisposition,
+              noGo: scan.noGo,
+              createdAt: scan.createdAt ?? null,
+              startedAt: scan.startedAt,
+              completedAt: scan.completedAt,
+              scanTimeSeconds: scan.scanTimeSeconds,
+              score: scan.score ?? null,
+              scoreStatus: scan.scoreStatus,
+              scoreVersion: scan.scoreVersion ?? null,
+              scoreUpdatedAt: scan.scoreUpdatedAt ?? null,
+              riskLevel: scan.riskLevel ?? null,
+              coverage: scan.coverage ?? null,
+              reportUrl: scan.links?.report ?? status.reportUrl ?? null,
+              links: { ...status.links, ...scan.links },
+              recommendedNextAction: scan.noGo?.recommendedNextAction ?? `Call get_scan_bundle with scanId ${scanId} for the canonical findings and limitations.`,
+              recommendedNextTool: "get_scan_bundle"
+            });
+          } catch {
+            // Preserve the API status response if the terminal scan resource is
+            // briefly unavailable during eventual-consistency windows.
           }
-          return toToolResult(status);
         }
-        if (!jobId) {
-          return toToolResult({
-            error: {
-              name: "InvalidToolInput",
-              message: "Provide either scanId for API v2 scan status or jobId for Pulse job status."
-            }
-          });
-        }
-        const status = await client.getJobStatus(jobId);
-        return toToolResult({
-          ...status,
-          scanId: scanIdFromStatus(status)
-        });
+        return toToolResult(status);
       } catch (error) {
         return toToolError(error);
       }
@@ -268,18 +282,25 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "get_scan_bundle",
     toolContract("get_scan_bundle"),
-    async ({ scanId, maxFindings, maxPreConsentRows }: GetScanBundleInput) => {
+    async ({ scanId, detail = "summary", maxBytes, maxFindings, maxPreConsentRows }: GetScanBundleInput) => {
       try {
-        const [scan, report, evidence, findings, preConsentCookiesTrackers] = await Promise.all([
-          client.scans.get(scanId),
-          client.getScan(scanId, { detail: "summary", format: "json" }),
-          client.getScan(scanId, { detail: "evidence", format: "json" }),
-          client.findings.list(scanId),
-          client.scans.preConsentCookiesTrackers(scanId)
+        const includeEvidence = detail === "evidence" || detail === "full";
+        const [scan, report, findings, evidence, preConsentCookiesTrackers] = await Promise.all([
+          retryTransientOriginFailure(() => client.scans.get(scanId)),
+          retryTransientOriginFailure(() => client.getScan(scanId, { detail: detail === "full" ? "full" : "summary", format: "json" })),
+          retryTransientOriginFailure(() => client.findings.list(scanId)),
+          includeEvidence
+            ? retryTransientOriginFailure(() => client.getScan(scanId, { detail: "evidence", format: "json" }))
+            : Promise.resolve(null),
+          includeEvidence
+            ? retryTransientOriginFailure(() => client.scans.preConsentCookiesTrackers(scanId))
+            : Promise.resolve(null)
         ]);
         return toToolResult(buildScanBundle({
+          detail,
           evidence,
           findings,
+          maxBytes,
           maxFindings,
           maxPreConsentRows,
           preConsentCookiesTrackers,

@@ -16,8 +16,10 @@ test("access control defaults allow public authentication", () => {
   assert.equal(isAllowedAuthEmail("bmasek@gmail.com", env), true);
   assert.equal(isAllowedAuthEmail("demo@certscore.ai", env), true);
   assert.equal(isAllowedAuthEmail("xlprep@gmail.com", env), true);
-  assert.equal(isAllowedAuthEmail("ben@ergoveritas.com", env), true);
+  assert.equal(isAllowedAuthEmail("mcp_demo@certscore.ai", env), true);
   assert.equal(isAllowedAuthEmail("someone@example.com", env), true);
+  assert.equal(getAllowedAuthEmails(env).has("mcp_demo@certscore.ai"), true);
+  assert.equal(getAllowedAuthEmails(env).has("ben@ergoveritas.com"), false);
 });
 
 test("access control allows env allowlist overrides", () => {

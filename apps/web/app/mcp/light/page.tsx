@@ -8,7 +8,7 @@ import { CodeBlock } from "../../developers/developer-pages";
 import { createPageMetadata } from "../../../lib/seo";
 
 const endpoint = "https://mcp.certscore.ai/mcp/light";
-const agentPrompt = `Use CertScore Light to scan https://example.com. Call scan_site with freshness \"latest\". If the result is not terminal, check get_scan_status until it is. Then call get_scan_bundle and summarize the observed privacy, cookie, tracker, consent, policy, and disclosure risk signals. Clearly distinguish completed-limited or no-go coverage from a full scan, and do not make legal conclusions.`;
+const agentPrompt = `Scan these public URLs with CertScore Light. For each one, call scan_site. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using only scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For completed or completed_limited scans, call get_scan_bundle with detail \"summary\". Report the canonical score, risk level, coverage, top findings, limitations, report URL, and next action. Never treat no-go, not-observed, or limited coverage as proof of compliance.`;
 
 export const metadata: Metadata = createPageMetadata({
   description: "Connect any MCP agent to CertScore.ai and scan public websites instantly with no account, API key, or OAuth. Includes 20 new scans per day.",
@@ -22,7 +22,7 @@ const clients = [
   ["ChatGPT", "Add the remote MCP server in developer mode and paste the Light endpoint."],
   ["Cursor", "Add a remote Streamable HTTP MCP server using the Light endpoint."],
   ["VS Code", "Add an HTTP MCP server and use the Light endpoint as its URL."],
-  ["Codex", "Add the remote MCP endpoint, then ask the agent to scan a public URL." ]
+  ["Codex", "Add the remote MCP endpoint with authentication set to None. No browser authorization flow is expected." ]
 ] as const;
 
 export default function McpLightPage() {
@@ -46,7 +46,7 @@ export default function McpLightPage() {
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">Remote MCP endpoint</p>
             <code className="break-all text-sm">{endpoint}</code>
             <div className="mt-6 grid gap-3 text-sm">
-              {[["1", "scan_site"], ["2", "get_scan_status when needed"], ["3", "get_scan_bundle"]].map(([step, text]) => <div className="flex gap-3" key={step}><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500 font-semibold text-slate-950">{step}</span><span>{text}</span></div>)}
+              {[["1", "scan_site"], ["2", "get_scan_status when needed"], ["3", "get_scan_bundle with detail summary"]].map(([step, text]) => <div className="flex gap-3" key={step}><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500 font-semibold text-slate-950">{step}</span><span>{text}</span></div>)}
             </div>
           </div>
         </div>
@@ -66,6 +66,11 @@ export default function McpLightPage() {
             {clients.map(([name, instruction]) => <article className="rounded-lg border border-slate-200 bg-white p-5" key={name}><h3 className="font-semibold text-slate-950">{name}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{instruction}</p></article>)}
           </div>
           <CodeBlock>{`Transport: Streamable HTTP\nURL: ${endpoint}\nAuthentication: None`}</CodeBlock>
+          <p className="mt-4 text-sm leading-7 text-slate-600">
+            Bundle detail is explicit: <code>summary</code> returns the compact default, <code>findings</code> adds bounded finding detail,
+            <code>evidence</code> adds retained-evidence summaries and references, and <code>full</code> adds the bounded public report.
+            Use <code>maxBytes</code> to set a 5,000–200,000 byte budget; the response reports requested bytes, actual bytes, and any truncation reason.
+          </p>
           <p className="mt-4 text-sm text-slate-600">
             Prefer a managed directory connection? Find CertScore.ai on{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-800" href="https://smithery.ai/server/ben-qe1c/certscore-ai" rel="noopener" target="_blank">Smithery</a>.

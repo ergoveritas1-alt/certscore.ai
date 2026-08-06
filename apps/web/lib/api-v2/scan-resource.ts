@@ -40,6 +40,7 @@ function absoluteUrl(path: string) {
 
 export const API_V2_SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
 const API_V2_MAX_ACTIVE_SCAN_RETRY_AFTER_SECONDS = 5;
+const API_V2_STALLED_AFTER_MS = 120_000;
 
 type PulseFindingLike = {
   id: string;
@@ -83,6 +84,10 @@ type PulseStatusLike = {
   createdAt?: string;
   startedAt?: string | null;
   lastUpdatedAt?: string | null;
+  phaseStartedAt?: string | null;
+  lastHeartbeatAt?: string | null;
+  progressPercent?: number;
+  stalled?: boolean;
   completedAt?: string | null;
   scanTimeSeconds?: number | null;
   retryAfterSeconds?: number | null;
@@ -90,6 +95,13 @@ type PulseStatusLike = {
   reportUrl?: string | null;
   resultDisposition?: "no_go";
   noGo?: ScanNoGoResult;
+  error?: {
+    code: string;
+    message: string;
+    retryable: boolean;
+    retryAfterSeconds: number | null;
+    recommendedNextAction: string;
+  };
   statusUrl?: string | null;
 };
 type PulseErrorLike = {
@@ -175,6 +187,118 @@ function normalizeScanStatus(value: string | null | undefined) {
     return value;
   }
   return "running";
+}
+
+export function apiV2CanonicalResultState(scanRecord: ScanDetailResponse): "finalizing" | "final" | "failed" {
+  if (projectExternalScanNoGo(scanRecord.runtimeArtifacts)) {
+    return "final";
+  }
+  const scanStatus = normalizeScanStatus(scanRecord.scan.status);
+  if (scanStatus === "failed" || scanStatus === "expired") {
+    return "failed";
+  }
+  if (scanStatus !== "completed" && scanStatus !== "completed_limited") {
+    return "finalizing";
+  }
+  const projectionStatus = stringOrNull(scanRecord.snapshot?.report_projection_status);
+  if (projectionStatus === "failed") {
+    return "failed";
+  }
+  if (projectionStatus === "ready") {
+    return "final";
+  }
+  // Older retained scans predate explicit report-projection status but may
+  // already carry an immutable persisted score.
+  if (!projectionStatus && finiteScore(scanRecord.snapshot?.certscore_overall) !== null) {
+    return "final";
+  }
+  return "finalizing";
+}
+
+function statusProgressPercent(status: ReturnType<typeof normalizeScanStatus>) {
+  if (status === "queued") return 5;
+  if (status === "running") return 35;
+  if (status === "finalizing") return 85;
+  return 100;
+}
+
+function estimatedStatusProgressPercent(
+  status: ReturnType<typeof normalizeScanStatus>,
+  phaseStartedAt: string | null,
+  nowMs = Date.now()
+) {
+  if (status !== "running" && status !== "finalizing") {
+    return statusProgressPercent(status);
+  }
+  const phaseStartedMs = Date.parse(phaseStartedAt ?? "");
+  const elapsedSeconds = Number.isFinite(phaseStartedMs) ? Math.max(0, (nowMs - phaseStartedMs) / 1_000) : 0;
+  if (status === "finalizing") {
+    return Math.min(99, 85 + Math.floor(elapsedSeconds / 5));
+  }
+  return Math.min(80, 20 + Math.floor(elapsedSeconds / 5));
+}
+
+function latestScanHeartbeat(scanRecord: ScanDetailResponse) {
+  const eventTimes = scanRecord.events
+    .map((event) => dateStringOrNull(event.createdAt))
+    .filter((value): value is string => value !== null)
+    .sort((left, right) => Date.parse(right) - Date.parse(left));
+  return eventTimes[0] ?? dateStringOrNull(scanRecord.scan.completedAt) ?? dateStringOrNull(scanRecord.scan.startedAt) ?? dateStringOrNull(scanRecord.scan.createdAt);
+}
+
+function terminalScanFailure(scanRecord: ScanDetailResponse, status: ReturnType<typeof normalizeScanStatus>) {
+  if (status !== "failed" && status !== "expired" && status !== "rate_limited") {
+    return undefined;
+  }
+  if (status === "rate_limited") {
+    return {
+      code: "rate_limited",
+      message: "The scan is rate limited.",
+      retryable: true,
+      retryAfterSeconds: 60,
+      recommendedNextAction: "Wait for the recommended delay, then retry scan_site with the same URL."
+    };
+  }
+  if (status === "expired") {
+    return {
+      code: "scan_expired",
+      message: "The scan expired before a canonical result was available.",
+      retryable: true,
+      retryAfterSeconds: 30,
+      recommendedNextAction: "Retry scan_site with freshness=refresh."
+    };
+  }
+  if (scanRecord.snapshot?.report_projection_status === "failed") {
+    return {
+      code: "report_projection_failed",
+      message: "The scan completed, but its canonical report result could not be finalized.",
+      retryable: true,
+      retryAfterSeconds: 30,
+      recommendedNextAction: "Retry scan_site with freshness=refresh. If the failure repeats, stop and contact CertScore support."
+    };
+  }
+
+  const detail = scanRecord.scan.errorMessage?.toLowerCase() ?? "";
+  const classification =
+    /navigation.*timeout|timeout.*navigation/.test(detail)
+      ? { code: "navigation_timeout", message: "The public site did not finish navigation within the scan budget.", retryable: true }
+      : /dns|enotfound|name.*resol/.test(detail)
+        ? { code: "dns_resolution_failed", message: "The public hostname could not be resolved during the scan.", retryable: true }
+        : /tls|certificate|ssl/.test(detail)
+          ? { code: "tls_connection_failed", message: "A secure connection to the public site could not be established.", retryable: true }
+          : /forbidden|access denied|\b403\b/.test(detail)
+            ? { code: "target_access_denied", message: "The target denied scanner access before usable evidence could be retained.", retryable: false }
+            : /\b5\d\d\b|server error/.test(detail)
+              ? { code: "target_server_error", message: "The target returned a server error during the scan.", retryable: true }
+              : { code: "scanner_runtime_failure", message: "The scan ended before a canonical result could be produced.", retryable: true };
+
+  return {
+    ...classification,
+    retryAfterSeconds: classification.retryable ? 30 : null,
+    recommendedNextAction: classification.retryable
+      ? "Retry scan_site with freshness=refresh after the recommended delay."
+      : "Review the target's access controls or report URL before retrying."
+  };
 }
 
 function normalizeCriticality(value: unknown): ApiV2FindingCriticalityValue {
@@ -325,7 +449,7 @@ function buildApiV2EvidenceExamples(finding: PulseFindingLike) {
   });
 }
 
-function buildApiV2EvidenceSummary(finding: PulseFindingLike) {
+function buildApiV2EvidenceSummary(finding: PulseFindingLike, scanId: string) {
   const examples = buildApiV2EvidenceExamples(finding);
   const exampleCount = finiteInt(finding.evidenceDigest?.exampleCount) ?? examples.length;
   const examplesShown = examples.length;
@@ -335,10 +459,15 @@ function buildApiV2EvidenceSummary(finding: PulseFindingLike) {
   const eventVendorAnchor = sourceEvents.some((event) => eventVendor(event) !== null);
   const firstExamplePhase = examples.map((example) => stringOrNull(example.phase)).find((phase): phase is string => phase !== null);
   const projectionWarnings = boundedStrings([...(finding.evidenceDigest?.projectionWarnings ?? []), ...(finding.evidence?.projectionWarnings ?? [])], 20, 120);
+  const evidenceSummary = finding.evidence?.summary ?? finding.plainEnglish ?? finding.label ?? finding.id;
+  const truncationMarker = evidenceSummary.match(/(?:\.\.\.|…)?\[(?:more in evidence packet|truncated)[^\]]*\]/i)?.[0] ?? null;
+  const sourceUrl = examples
+    .map((example) => example.documentUrl ?? example.scannedPageUrl ?? example.requestUrl ?? null)
+    .find((value): value is string => typeof value === "string") ?? null;
 
   return {
     basis: normalizeEvidenceBasis(finding.evidenceDigest?.basis),
-    summary: finding.evidence?.summary ?? finding.plainEnglish ?? finding.label ?? finding.id,
+    summary: evidenceSummary,
     phase: stringOrNull(finding.evidenceDigest?.phase) ?? firstExamplePhase ?? stringOrNull(finding.evidence?.observedPhase),
     exampleCount,
     examplesShown,
@@ -346,6 +475,13 @@ function buildApiV2EvidenceSummary(finding: PulseFindingLike) {
     authRequiredForExamples: finding.evidenceDigest?.authRequiredForExamples === true,
     ...(examples.length > 0 ? { examples } : {}),
     ...(projectionWarnings.length > 0 ? { projectionWarnings } : {}),
+    excerpt: {
+      excerpt: evidenceSummary,
+      isTruncated: truncationMarker !== null,
+      truncationMarker,
+      sourceUrl,
+      evidenceUrl: absoluteUrl(`/api/v2/scans/${scanId}/findings/${encodeURIComponent(finding.id)}`)
+    },
     hasTimingAnchor: eventTimingAnchor || finding.evidenceDigest?.hasTimingAnchor === true,
     hasVendorAnchor: eventVendorAnchor || finding.evidenceDigest?.hasVendorAnchor === true,
     ...(finding.evidenceDigest?.hasConsentContext !== undefined ? { hasConsentContext: finding.evidenceDigest.hasConsentContext } : {}),
@@ -406,12 +542,22 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
   const score = derivePulseReportScore({ scanRecord });
   const scanTimeSeconds = scanTimeSecondsFromTimestamps(scan.startedAt, scan.completedAt);
   const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
+  const canonicalResultState = apiV2CanonicalResultState(scanRecord);
+  const scoreStatus = canonicalResultState === "final" ? "final" : "provisional";
+  const scoreVersion = stringOrNull(scanRecord.snapshot?.score_version) ?? "gdpr-eprivacy-evidence.legacy-v1";
+  const scoreUpdatedAt = dateStringOrNull(scanRecord.snapshot?.score_scored_at ?? scan.completedAt);
   const resource = {
     type: "certscore_scan",
     scanId: scan.id,
     domain,
     url: domain === "unknown" ? null : `https://${domain}`,
-    status: noGoProjection ? "completed_limited" : "completed",
+    status: noGoProjection
+      ? "completed_limited"
+      : canonicalResultState === "failed"
+        ? "failed"
+        : canonicalResultState === "finalizing"
+          ? "finalizing"
+          : "completed",
     ...(noGoProjection ?? {}),
     scanFrom: publicScanFrom(scan.scanFromValue),
     createdAt: dateStringOrNull(scan.createdAt),
@@ -419,6 +565,9 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
     completedAt: dateStringOrNull(scan.completedAt),
     scanTimeSeconds,
     score: noGoProjection ? null : score,
+    scoreStatus,
+    scoreVersion,
+    scoreUpdatedAt,
     riskLevel: noGoProjection ? null : riskLevelFromScore(score),
     coverage: deriveCoverage(scanRecord),
     links: {
@@ -519,36 +668,89 @@ export function buildApiV2ScanDiagnostics(scanRecord: ScanDetailResponse): ApiV2
   });
 }
 
-export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse): ApiV2ScanJob {
+export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse, options: { nowMs?: number } = {}): ApiV2ScanJob {
   const scan = scanRecord.scan;
   const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
-  const status = noGoProjection && scan.status === "completed" ? "completed_limited" : normalizeScanStatus(scan.status);
-  const retryAfterSeconds = status === "completed" || status === "completed_limited" || status === "failed" || status === "expired"
-    ? null
-    : apiV2ActiveScanRetryAfterSeconds({
+  const normalizedScanStatus = normalizeScanStatus(scan.status);
+  const canonicalResultState = apiV2CanonicalResultState(scanRecord);
+  const status = noGoProjection && scan.status === "completed"
+    ? "completed_limited"
+    : canonicalResultState === "failed"
+      ? "failed"
+      : normalizedScanStatus === "completed" && canonicalResultState === "finalizing"
+        ? "finalizing"
+        : normalizedScanStatus;
+  const failure = terminalScanFailure(scanRecord, status);
+  const retryAfterSeconds = failure?.retryAfterSeconds ?? (
+    status === "completed" || status === "completed_limited" || status === "failed" || status === "expired"
+      ? null
+      : apiV2ActiveScanRetryAfterSeconds({
       createdAt: scan.createdAt,
       startedAt: scan.startedAt,
-    });
+    })
+  );
   const scanTimeSeconds = scanTimeSecondsFromTimestamps(scan.startedAt, scan.completedAt);
+  const terminal = status === "completed" || status === "completed_limited" || status === "failed" || status === "expired" || status === "rate_limited";
+  const lastHeartbeatAt = terminal ? dateStringOrNull(scan.completedAt) : latestScanHeartbeat(scanRecord);
+  const heartbeatMs = lastHeartbeatAt ? Date.parse(lastHeartbeatAt) : Number.NaN;
+  const stalled = !terminal && Number.isFinite(heartbeatMs) && (options.nowMs ?? Date.now()) - heartbeatMs > API_V2_STALLED_AFTER_MS;
+  const canonicalScan = buildApiV2ScanResource(scanRecord);
+  const phaseStartedAt = status === "queued"
+    ? dateStringOrNull(scan.createdAt)
+    : status === "finalizing"
+      ? dateStringOrNull(scan.completedAt ?? scan.startedAt)
+      : dateStringOrNull(scan.startedAt);
+  const reportUrl = absoluteUrl(`/scan/${scan.id}`);
+  const recommendedNextAction = failure?.recommendedNextAction ?? noGoProjection?.noGo.recommendedNextAction ?? (
+    terminal
+      ? `Call get_scan_bundle with scanId ${scan.id} for the canonical findings and limitations.`
+      : `Poll get_scan_status with scanId ${scan.id} after the recommended delay.`
+  );
   const resource = {
     type: "certscore_scan_job",
     jobId: scan.id,
     scanId: scan.id,
     domain: scan.domainHostname ?? null,
+    url: canonicalScan.url ?? null,
     status,
     ...(noGoProjection ?? {}),
-    phase: status === "completed" || status === "completed_limited" ? "completed" : status === "failed" ? "failed" : "runtime_observation",
+    phase: status === "completed" || status === "completed_limited"
+      ? "completed"
+      : status === "failed"
+        ? "failed"
+        : status === "expired" || status === "rate_limited"
+          ? status
+          : status === "finalizing"
+            ? "report_finalization"
+            : status === "queued"
+              ? "queued"
+              : "runtime_observation",
     createdAt: dateStringOrNull(scan.createdAt) ?? undefined,
     startedAt: dateStringOrNull(scan.startedAt),
     completedAt: dateStringOrNull(scan.completedAt),
     scanTimeSeconds,
-    lastUpdatedAt: dateStringOrNull(scan.completedAt ?? scan.startedAt ?? scan.createdAt) ?? undefined,
+    score: canonicalScan.score ?? null,
+    scoreStatus: canonicalScan.scoreStatus,
+    scoreVersion: canonicalScan.scoreVersion ?? null,
+    scoreUpdatedAt: canonicalScan.scoreUpdatedAt ?? null,
+    riskLevel: canonicalScan.riskLevel ?? null,
+    coverage: canonicalScan.coverage ?? null,
+    lastUpdatedAt: lastHeartbeatAt ?? undefined,
+    phaseStartedAt,
+    lastHeartbeatAt,
+    progressPercent: estimatedStatusProgressPercent(status, phaseStartedAt, options.nowMs),
+    progressIsEstimate: !terminal,
+    estimatedRemainingSeconds: null,
+    stalled,
     retryAfterSeconds,
+    ...(failure ? { error: failure } : {}),
+    reportUrl,
+    recommendedNextAction,
     links: {
       self: absoluteUrl(`/api/v2/scans/${scan.id}/status`),
       ...(status === "completed" || status === "completed_limited" ? { findings: absoluteUrl(`/api/v2/scans/${scan.id}/findings`) } : {}),
       ...(status === "completed" || status === "completed_limited" ? { pulse: absoluteUrl(`/api/v2/scans/${scan.id}/pulse`) } : {}),
-      ...(status === "completed" || status === "completed_limited" ? { report: absoluteUrl(`/scan/${scan.id}`) } : {}),
+      ...(status === "completed" || status === "completed_limited" ? { report: reportUrl } : {}),
       docs: absoluteUrl("/api/v2/openapi.json")
     },
     disclaimer: apiV2Disclaimer
@@ -560,35 +762,87 @@ export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse): ApiV2ScanJ
 export function buildApiV2ScanJobFromPulseStatus(status: PulseStatusLike): ApiV2ScanJob {
   const scanId = status.scanId ?? status.scan_id ?? null;
   const normalizedStatus = normalizeScanStatus(status.status);
-  const terminal = normalizedStatus === "completed" || normalizedStatus === "completed_limited" || normalizedStatus === "failed" || normalizedStatus === "expired";
+  const terminal = normalizedStatus === "completed" || normalizedStatus === "completed_limited" || normalizedStatus === "failed" || normalizedStatus === "expired" || normalizedStatus === "rate_limited";
+  const terminalError = status.error ?? (
+    normalizedStatus === "rate_limited"
+      ? {
+          code: "rate_limited",
+          message: "The scan is rate limited.",
+          retryable: true,
+          retryAfterSeconds: status.retryAfterSeconds ?? 60,
+          recommendedNextAction: "Wait for the recommended delay, then retry scan_site with the same URL."
+        }
+      : normalizedStatus === "expired"
+        ? {
+            code: "scan_expired",
+            message: "The scan expired before a canonical result was available.",
+            retryable: true,
+            retryAfterSeconds: 30,
+            recommendedNextAction: "Retry scan_site with freshness=refresh."
+          }
+        : normalizedStatus === "failed"
+          ? {
+              code: "scanner_runtime_failure",
+              message: "The scan ended before a canonical result could be produced.",
+              retryable: true,
+              retryAfterSeconds: 30,
+              recommendedNextAction: "Retry scan_site with freshness=refresh after the recommended delay."
+            }
+          : undefined
+  );
   const activeRetryAfterSeconds = apiV2ActiveScanRetryAfterSeconds({
     createdAt: status.createdAt,
     startedAt: status.startedAt,
   });
   const scanTimeSeconds = finiteNumber(status.scanTimeSeconds) ?? scanTimeSecondsFromTimestamps(status.startedAt, status.completedAt);
+  const reportUrl = status.reportUrl ?? (scanId ? absoluteUrl(`/scan/${scanId}`) : null);
+  const recommendedNextAction = terminalError?.recommendedNextAction ?? (
+    normalizedStatus === "completed" || normalizedStatus === "completed_limited"
+      ? `Call get_scan_bundle with scanId ${scanId ?? status.jobId} for the canonical findings and limitations.`
+      : `Poll get_scan_status with scanId ${scanId ?? status.jobId} after the recommended delay.`
+  );
   const resource = {
     type: "certscore_scan_job",
     jobId: status.jobId,
     scanId,
     domain: status.domain ?? null,
+    url: status.domain ? `https://${status.domain}` : null,
     status: normalizedStatus,
     ...(status.resultDisposition ? { resultDisposition: status.resultDisposition } : {}),
     ...(status.noGo ? { noGo: status.noGo } : {}),
-    phase: status.phase ?? (normalizedStatus === "completed" || normalizedStatus === "completed_limited" ? "completed" : "queued"),
+    phase: status.phase ?? (
+      normalizedStatus === "completed" || normalizedStatus === "completed_limited"
+        ? "completed"
+        : normalizedStatus === "failed" || normalizedStatus === "expired" || normalizedStatus === "rate_limited"
+          ? normalizedStatus
+          : normalizedStatus === "finalizing"
+            ? "report_finalization"
+            : "queued"
+    ),
     createdAt: dateStringOrNull(status.createdAt) ?? undefined,
     startedAt: dateStringOrNull(status.startedAt),
     completedAt: dateStringOrNull(status.completedAt),
     scanTimeSeconds,
     lastUpdatedAt: dateStringOrNull(status.lastUpdatedAt ?? status.completedAt ?? status.createdAt) ?? undefined,
-    retryAfterSeconds: terminal
+    phaseStartedAt: dateStringOrNull(status.phaseStartedAt ?? status.startedAt ?? status.createdAt),
+    lastHeartbeatAt: dateStringOrNull(status.lastHeartbeatAt ?? status.lastUpdatedAt ?? status.completedAt ?? status.createdAt),
+    progressPercent: finiteInt(status.progressPercent) ?? statusProgressPercent(normalizedStatus),
+    progressIsEstimate: !terminal,
+    estimatedRemainingSeconds: null,
+    stalled: status.stalled === true,
+    retryAfterSeconds: terminalError?.retryAfterSeconds ?? (terminal
       ? null
-      : Math.min(status.retryAfterSeconds ?? activeRetryAfterSeconds, activeRetryAfterSeconds),
+      : Math.min(status.retryAfterSeconds ?? activeRetryAfterSeconds, activeRetryAfterSeconds)
+    ),
+    ...(terminalError ? { error: terminalError } : {}),
+    reportUrl,
+    recommendedNextAction,
     links: {
       self: scanId ? absoluteUrl(`/api/v2/scans/${scanId}/status`) : status.statusUrl ?? undefined,
       status: scanId ? absoluteUrl(`/api/v2/scans/${scanId}/status`) : status.statusUrl ?? undefined,
       findings: scanId && (normalizedStatus === "completed" || normalizedStatus === "completed_limited") ? absoluteUrl(`/api/v2/scans/${scanId}/findings`) : undefined,
       pulse: scanId && (normalizedStatus === "completed" || normalizedStatus === "completed_limited") ? absoluteUrl(`/api/v2/scans/${scanId}/pulse`) : undefined,
-      report: status.reportUrl ?? (scanId ? absoluteUrl(`/scan/${scanId}`) : undefined),
+      report: reportUrl ?? undefined,
       docs: absoluteUrl("/api/v2/openapi.json")
     },
     disclaimer: apiV2Disclaimer
@@ -643,10 +897,12 @@ export function buildApiV2ErrorFromPulse(input: {
   fallbackMessage: string;
   status: number;
 }) {
+  const code = apiV2ErrorCodeFromPulse(input.body.error?.code, input.status);
   return buildApiV2Error({
-    code: apiV2ErrorCodeFromPulse(input.body.error?.code, input.status),
+    code,
     message: input.body.error?.message ?? input.fallbackMessage,
-    retryAfterSeconds: input.body.error?.retryAfterSeconds
+    retryAfterSeconds: input.body.error?.retryAfterSeconds,
+    retryable: code === "rate_limited" || code === "scan_unavailable" || code === "internal_error"
   });
 }
 
@@ -676,14 +932,29 @@ export function buildApiV2DomainLatestScan(input: {
 export function buildApiV2Error(input: {
   code: "invalid_request" | "invalid_url" | "not_found" | "rate_limited" | "unauthorized" | "forbidden" | "scan_unavailable" | "internal_error";
   message: string;
+  retryable?: boolean;
   retryAfterSeconds?: number | null;
+  recommendedNextAction?: string;
 }) {
+  const retryable = input.retryable ?? (input.code === "rate_limited" || input.code === "scan_unavailable" || input.code === "internal_error");
+  const retryAfterSeconds = input.retryAfterSeconds ?? (retryable ? 30 : null);
+  const recommendedNextAction = input.recommendedNextAction ?? (
+    input.code === "rate_limited"
+      ? "Wait for the recommended delay, then retry the same request."
+      : retryable
+        ? "Retry after the recommended delay. If the error repeats, stop and contact CertScore support."
+        : input.code === "invalid_url" || input.code === "invalid_request"
+          ? "Correct the request or public URL before retrying."
+          : "Stop and review the request, access requirements, or target URL before retrying."
+  );
   return {
     type: "certscore_api_error",
     error: {
       code: input.code,
       message: input.message,
-      ...(input.retryAfterSeconds !== undefined ? { retryAfterSeconds: input.retryAfterSeconds } : {})
+      retryable,
+      retryAfterSeconds,
+      recommendedNextAction
     },
     links: {
       docs: absoluteUrl("/api/v2/openapi.json")
@@ -710,7 +981,7 @@ export function buildApiV2FindingSummary(input: {
     ...(input.resultDisposition ? { resultDisposition: input.resultDisposition } : {}),
     ...(input.noGo ? { noGo: input.noGo } : {}),
     reviewLenses: Array.isArray(finding.reviewLenses) ? finding.reviewLenses.filter((lens) => typeof lens === "string" && lens.trim().length > 0) : [],
-    evidence: buildApiV2EvidenceSummary(finding),
+    evidence: buildApiV2EvidenceSummary(finding, input.scanId),
     nextStep: finding.nextStep ?? null,
     links: {
       self: absoluteUrl(`/api/v2/scans/${input.scanId}/findings/${encodeURIComponent(finding.id)}`),

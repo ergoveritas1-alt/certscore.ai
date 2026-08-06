@@ -44,7 +44,7 @@ function json(res: ServerResponse, status: number, body: unknown, headers: Recor
 function publicMetadata() {
   const issuer = env.OAUTH_ISSUER;
   return {
-    resource: env.MCP_PUBLIC_URL,
+    resource: `${env.MCP_PUBLIC_URL}/mcp`,
     authorization_servers: [issuer],
     bearer_methods_supported: ["header"],
     scopes_supported: ["scan:read", "mcp"],
@@ -94,7 +94,7 @@ function unauthorized(
   console.warn(JSON.stringify({ event: "mcp_http.auth_failed", reason, source: "mcp-http" }));
   json(res, 401, { error: "unauthorized", error_description: message }, {
     ...corsHeaders(req),
-    "WWW-Authenticate": `Bearer resource_metadata="${env.MCP_PUBLIC_URL}/.well-known/oauth-protected-resource"`
+    "WWW-Authenticate": `Bearer resource_metadata="${env.MCP_PUBLIC_URL}/.well-known/oauth-protected-resource/mcp"`
   });
 }
 
@@ -260,7 +260,7 @@ const server = createServer(async (req, res) => {
       sessionMaxCount: env.SESSION_MAX_COUNT
     }, corsHeaders(req));
   }
-  if (url.pathname === "/.well-known/oauth-protected-resource" && req.method === "GET") {
+  if (url.pathname === "/.well-known/oauth-protected-resource/mcp" && req.method === "GET") {
     return json(res, 200, publicMetadata(), corsHeaders(req));
   }
   if ((url.pathname === "/mcp" || url.pathname === "/mcp/anonymous" || url.pathname === "/mcp/light") && (req.method === "GET" || req.method === "POST" || req.method === "DELETE")) {

@@ -16,7 +16,11 @@ const scanExample = {
   url: "https://example.com",
   status: "completed",
   score: 82,
+  scoreStatus: "final",
+  scoreVersion: "overall-score.v2",
+  scoreUpdatedAt: "2026-06-30T12:00:10.000Z",
   riskLevel: "review_recommended",
+  coverage: { status: "complete", summary: "Automated public-web scan completed for the observed public surfaces.", limitations: ["Automated public-web scan only."] },
   executionMode: "reused_scan",
   reused: true,
   reusedScanAgeSeconds: 90,
@@ -43,12 +47,21 @@ const scanJobExample = {
   jobId: "pulse_job_123",
   scanId: "00000000-0000-4000-8000-000000000123",
   domain: "example.com",
+  url: "https://example.com",
   status: "running",
-  phase: "scan_running",
+  phase: "runtime_observation",
   startedAt: "2026-06-30T12:00:01.000Z",
   completedAt: null,
   scanTimeSeconds: null,
+  phaseStartedAt: "2026-06-30T12:00:01.000Z",
+  lastHeartbeatAt: "2026-06-30T12:00:06.000Z",
+  progressPercent: 35,
+  progressIsEstimate: true,
+  estimatedRemainingSeconds: null,
+  stalled: false,
   retryAfterSeconds: 2,
+  reportUrl: "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123",
+  recommendedNextAction: "Poll get_scan_status with scanId 00000000-0000-4000-8000-000000000123 after the recommended delay.",
   executionMode: "new_scan",
   reused: false,
   reusedScanAgeSeconds: null,
@@ -84,6 +97,13 @@ const findingExample = {
     examplesShown: 1,
     examplesAvailable: 2,
     authRequiredForExamples: false,
+    excerpt: {
+      excerpt: "Public-safe projected evidence summary from the completed report.",
+      isTruncated: false,
+      truncationMarker: null,
+      sourceUrl: "https://example.com/privacy",
+      evidenceUrl: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings/pre_consent_tracking_detected"
+    },
     examples: [{ type: "request", vendor: "Example Analytics", urlHost: "analytics.example.test", phase: "before_consent" }],
     hasTimingAnchor: true,
     hasVendorAnchor: true,
@@ -224,25 +244,25 @@ const errorContent = {
     examples: {
       invalidRequest: {
         summary: "Invalid request",
-        value: { type: "certscore_api_error", error: { code: "invalid_request", message: "Invalid request." }, disclaimer: apiV2Disclaimer }
+        value: { type: "certscore_api_error", error: { code: "invalid_request", message: "Invalid request.", retryable: false, retryAfterSeconds: null, recommendedNextAction: "Correct the request before retrying." }, disclaimer: apiV2Disclaimer }
       },
       unauthorized: {
         summary: "Missing or invalid API key",
-        value: { type: "certscore_api_error", error: { code: "unauthorized", message: "Missing or invalid API key." }, disclaimer: apiV2Disclaimer }
+        value: { type: "certscore_api_error", error: { code: "unauthorized", message: "Missing or invalid API key.", retryable: false, retryAfterSeconds: null, recommendedNextAction: "Stop and review authentication before retrying." }, disclaimer: apiV2Disclaimer }
       },
       forbidden: {
         summary: "Missing required scope",
-        value: { type: "certscore_api_error", error: { code: "forbidden", message: "API key is missing the required scope." }, disclaimer: apiV2Disclaimer }
+        value: { type: "certscore_api_error", error: { code: "forbidden", message: "API key is missing the required scope.", retryable: false, retryAfterSeconds: null, recommendedNextAction: "Stop and request the required scope before retrying." }, disclaimer: apiV2Disclaimer }
       },
       notFound: {
         summary: "Resource not found",
-        value: { type: "certscore_api_error", error: { code: "not_found", message: "Scan not found." }, disclaimer: apiV2Disclaimer }
+        value: { type: "certscore_api_error", error: { code: "not_found", message: "Scan not found.", retryable: false, retryAfterSeconds: null, recommendedNextAction: "Stop and verify the scan ID." }, disclaimer: apiV2Disclaimer }
       },
       rateLimited: {
         summary: "Rate limited",
         value: {
           type: "certscore_api_error",
-          error: { code: "rate_limited", message: "Rate limit reached. Retry after the recommended delay.", retryAfterSeconds: 60 },
+          error: { code: "rate_limited", message: "Rate limit reached. Retry after the recommended delay.", retryable: true, retryAfterSeconds: 60, recommendedNextAction: "Wait 60 seconds, then retry the same request." },
           disclaimer: apiV2Disclaimer
         }
       },
@@ -250,7 +270,7 @@ const errorContent = {
         summary: "Temporary service error",
         value: {
           type: "certscore_api_error",
-          error: { code: "internal_error", message: "CertScore API v2 is temporarily unavailable. Try again later." },
+          error: { code: "internal_error", message: "CertScore API v2 is temporarily unavailable. Try again later.", retryable: true, retryAfterSeconds: 30, recommendedNextAction: "Retry after 30 seconds. If the error repeats, stop and contact CertScore support." },
           disclaimer: apiV2Disclaimer
         }
       }
@@ -673,6 +693,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             jobId: { type: "string" },
             scanId: { type: ["string", "null"] },
             domain: { type: ["string", "null"] },
+            url: { type: ["string", "null"] },
             status: { type: "string", enum: ["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited"] },
             resultDisposition: { type: "string", enum: ["no_go"] },
             noGo: { type: "object", additionalProperties: true, description: "Reason-specific public no-go presentation; includes reasonCode, title, explanation, summary, limitationKind, recommendedNextAction, retryLikelyToHelp, and a bounded evidenceExcerpt when available." },
@@ -681,8 +702,33 @@ export function buildCertScoreApiV2OpenApiDocument() {
             startedAt: { type: ["string", "null"] },
             completedAt: { type: ["string", "null"] },
             scanTimeSeconds: { type: ["number", "null"] },
+            score: { type: ["integer", "null"], minimum: 0, maximum: 100 },
+            scoreStatus: { type: "string", enum: ["provisional", "final"] },
+            scoreVersion: { type: ["string", "null"] },
+            scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
+            riskLevel: { type: ["string", "null"] },
+            coverage: { type: ["object", "null"], additionalProperties: true },
             lastUpdatedAt: { type: "string" },
+            phaseStartedAt: { type: ["string", "null"] },
+            lastHeartbeatAt: { type: ["string", "null"] },
+            progressPercent: { type: "integer", minimum: 0, maximum: 100 },
+            progressIsEstimate: { type: "boolean" },
+            estimatedRemainingSeconds: { type: ["integer", "null"], minimum: 0 },
+            stalled: { type: "boolean" },
             retryAfterSeconds: { type: ["integer", "null"] },
+            error: {
+              type: "object",
+              required: ["code", "message", "retryable", "retryAfterSeconds", "recommendedNextAction"],
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" },
+                retryable: { type: "boolean" },
+                retryAfterSeconds: { type: ["integer", "null"] },
+                recommendedNextAction: { type: "string" }
+              }
+            },
+            reportUrl: { type: ["string", "null"] },
+            recommendedNextAction: { type: "string" },
             executionMode: { type: "string", enum: ["new_scan", "reused_scan"] },
             reused: { type: "boolean" },
             reusedScanAgeSeconds: { type: ["integer", "null"], minimum: 0 },
@@ -716,6 +762,9 @@ export function buildCertScoreApiV2OpenApiDocument() {
             completedAt: { type: ["string", "null"] },
             scanTimeSeconds: { type: ["number", "null"] },
             score: { type: ["integer", "null"], minimum: 0, maximum: 100 },
+            scoreStatus: { type: "string", enum: ["provisional", "final"] },
+            scoreVersion: { type: ["string", "null"] },
+            scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
             riskLevel: { type: ["string", "null"] },
             coverage: { type: "object", additionalProperties: true },
             executionMode: { type: "string", enum: ["new_scan", "reused_scan"] },
@@ -889,6 +938,18 @@ export function buildCertScoreApiV2OpenApiDocument() {
               items: { type: "string", maxLength: 120 },
               description: "Diagnostic projection warnings for reviewer workflows; they do not affect finding status or severity."
             },
+            excerpt: {
+              type: "object",
+              additionalProperties: false,
+              required: ["excerpt", "isTruncated", "truncationMarker", "sourceUrl", "evidenceUrl"],
+              properties: {
+                excerpt: { type: "string" },
+                isTruncated: { type: "boolean" },
+                truncationMarker: { type: ["string", "null"] },
+                sourceUrl: { type: ["string", "null"], maxLength: 2048 },
+                evidenceUrl: { type: "string", maxLength: 2048 }
+              }
+            },
             hasTimingAnchor: { type: "boolean" },
             hasVendorAnchor: { type: "boolean" },
             hasConsentContext: { type: "boolean" },
@@ -994,12 +1055,14 @@ export function buildCertScoreApiV2OpenApiDocument() {
             type: { type: "string", const: "certscore_api_error" },
             error: {
               type: "object",
-              required: ["code", "message"],
+              required: ["code", "message", "retryable", "retryAfterSeconds", "recommendedNextAction"],
               additionalProperties: true,
               properties: {
                 code: { type: "string" },
                 message: { type: "string" },
-                retryAfterSeconds: { type: ["integer", "null"] }
+                retryable: { type: "boolean" },
+                retryAfterSeconds: { type: ["integer", "null"] },
+                recommendedNextAction: { type: "string" }
               }
             },
             links: { $ref: "#/components/schemas/Links" },

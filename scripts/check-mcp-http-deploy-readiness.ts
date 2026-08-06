@@ -108,7 +108,7 @@ function checkLocalEnv(mcpPublicUrl: string, oauthIssuer: string, requireScanCre
 
 async function checkLive(mcpPublicUrl: string, oauthIssuer: string, requireScanCreate: boolean) {
   const results: CheckResult[] = [];
-  const protectedResourceUrl = `${origin(mcpPublicUrl)}/.well-known/oauth-protected-resource`;
+  const protectedResourceUrl = `${origin(mcpPublicUrl)}/.well-known/oauth-protected-resource/mcp`;
   const authServerUrl = `${origin(oauthIssuer)}/.well-known/oauth-authorization-server`;
   const healthUrl = `${origin(mcpPublicUrl)}/healthz`;
   const mcpUrl = `${origin(mcpPublicUrl)}/mcp`;
@@ -197,7 +197,7 @@ async function checkLive(mcpPublicUrl: string, oauthIssuer: string, requireScanC
       signal: AbortSignal.timeout(15_000)
     });
     results.push(response.status === 401 ? ok("unauthenticated /mcp returns 401") : fail("unauthenticated /mcp returns 401", `${response.status}`));
-    results.push(response.headers.get("www-authenticate")?.includes(".well-known/oauth-protected-resource") ? ok("/mcp WWW-Authenticate metadata") : fail("/mcp WWW-Authenticate metadata"));
+    results.push(response.headers.get("www-authenticate")?.includes(".well-known/oauth-protected-resource/mcp") ? ok("/mcp WWW-Authenticate metadata") : fail("/mcp WWW-Authenticate metadata"));
     results.push(response.headers.get("cache-control")?.includes("no-store") ? ok("/mcp 401 no-store") : fail("/mcp 401 no-store"));
   } catch (error) {
     results.push(fail("unauthenticated /mcp returns 401", error instanceof Error ? error.message : String(error)));

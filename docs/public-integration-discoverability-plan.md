@@ -171,7 +171,7 @@ Current implementation:
 
 - Added SDK resource clients while preserving existing `scan`, `submitScan`, `getScan`, and `getJobStatus` compatibility methods.
 - Added MCP tools `scan_site`, `get_scan`, `list_findings`, and `get_latest_domain_scan`.
-- `get_scan_status` now accepts either a Pulse `jobId` or API v2 `scanId`.
+- `get_scan_status` now requires the stable API v2 `scanId` returned by `scan_site`.
 - `explain_finding` now retrieves the API v2 finding detail shape.
 - Updated SDK and MCP README files to match the current resource client/tool surface.
 - Added README drift tests for SDK resource clients and MCP tools/public docs.
@@ -235,7 +235,7 @@ MCP migration:
 
 - Prefer `scan_site`, `get_scan`, `get_scan_status`, `list_findings`, `explain_finding`, and `get_latest_domain_scan`.
 - `create_scan`, `get_report`, and `export_findings` remain for compatibility and Pulse-specific workflows.
-- `get_scan_status` accepts either a Pulse `jobId` or API v2 `scanId`.
+- `get_scan_status` requires the stable API v2 `scanId` returned by `scan_site`.
 
 Docs and redirects:
 

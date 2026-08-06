@@ -1,5 +1,5 @@
 import { apiV2ScanResourceSchema } from "@certscore/api-contracts";
-import { API_V2_SCAN_ID_PATTERN, apiV2JsonResponse, buildApiV2Error, buildApiV2ScanResource } from "../../../../../lib/api-v2/scan-resource";
+import { API_V2_SCAN_ID_PATTERN, apiV2JsonResponse, buildApiV2Error, buildApiV2ScanResource, buildApiV2ScanStatus } from "../../../../../lib/api-v2/scan-resource";
 import { getPublicScanRecord } from "../../../../../server/scans/get-public-scan-record";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +36,28 @@ export async function GET(request: Request, context: RouteContext) {
         requestId: id,
         route: "api-v2-scan",
         status: 404
+      });
+    }
+    const canonicalStatus = buildApiV2ScanStatus(scanRecord);
+    if (canonicalStatus.status !== "completed" && canonicalStatus.status !== "completed_limited") {
+      const failed = canonicalStatus.status === "failed";
+      const retryAfterSeconds = canonicalStatus.retryAfterSeconds ?? canonicalStatus.error?.retryAfterSeconds ?? (failed ? null : 2);
+      return apiV2JsonResponse({
+        body: buildApiV2Error({
+          code: "scan_unavailable",
+          message: failed
+            ? "The canonical scan result could not be finalized."
+            : "The canonical scan result is still finalizing.",
+          retryable: failed ? canonicalStatus.error?.retryable ?? false : true,
+          retryAfterSeconds,
+          recommendedNextAction: failed
+            ? canonicalStatus.error?.recommendedNextAction ?? `Call get_scan_status with scanId ${scanId} for the terminal failure details.`
+            : `Call get_scan_status with scanId ${scanId}, then retry get_scan_bundle after completion.`
+        }),
+        headers: retryAfterSeconds === null ? undefined : { "Retry-After": String(retryAfterSeconds) },
+        requestId: id,
+        route: "api-v2-scan",
+        status: 409
       });
     }
 

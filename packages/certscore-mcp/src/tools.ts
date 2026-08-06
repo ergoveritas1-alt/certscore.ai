@@ -7,6 +7,18 @@ const EVIDENCE_STRING_CHARS = 4_000;
 const EVIDENCE_ARRAY_ITEMS = 40;
 const EVIDENCE_OBJECT_KEYS = 80;
 
+function toolResultSummary(payload: unknown) {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    return "CertScore tool call completed. Read structuredContent for the result.";
+  }
+  const record = payload as Record<string, unknown>;
+  const type = typeof record.type === "string" ? record.type : "result";
+  const status = typeof record.status === "string" ? `; status=${record.status}` : "";
+  const scanId = typeof record.scanId === "string" ? `; scanId=${record.scanId}` : "";
+  const score = typeof record.score === "number" ? `; score=${record.score}` : "";
+  return `CertScore ${type}${status}${scanId}${score}. Full result is in structuredContent.`;
+}
+
 export function toToolResult(payload: unknown): CallToolResult {
   const structuredContent = payload !== null && typeof payload === "object" && !Array.isArray(payload)
     ? payload as Record<string, unknown>
@@ -16,13 +28,19 @@ export function toToolResult(payload: unknown): CallToolResult {
     content: [
       {
         type: "text",
-        text: JSON.stringify(payload)
+        text: toolResultSummary(payload)
       }
     ]
   };
 }
 
 export function toToolError(error: unknown): CallToolResult {
+  const responseRecord = error instanceof CertScoreError && error.responseBody && typeof error.responseBody === "object" && !Array.isArray(error.responseBody)
+    ? error.responseBody as Record<string, unknown>
+    : null;
+  const terminalError = responseRecord?.error && typeof responseRecord.error === "object" && !Array.isArray(responseRecord.error)
+    ? responseRecord.error as Record<string, unknown>
+    : null;
   const payload = error instanceof CertScoreError
     ? {
         error: {
@@ -31,6 +49,8 @@ export function toToolError(error: unknown): CallToolResult {
           status: error.status,
           code: error.code,
           retryAfterSeconds: "retryAfterSeconds" in error ? error.retryAfterSeconds : undefined,
+          retryable: typeof terminalError?.retryable === "boolean" ? terminalError.retryable : undefined,
+          recommendedNextAction: typeof terminalError?.recommendedNextAction === "string" ? terminalError.recommendedNextAction : undefined,
           responseBody: truncateErrorResponseBody(error.responseBody)
         }
       }
@@ -96,6 +116,39 @@ export function boundEvidencePacket<T>(payload: T, maxSerializedChars = MAX_EVID
 
 function measureSerializedChars(value: unknown): number {
   return JSON.stringify(value)?.length ?? 0;
+}
+
+function measureSerializedBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+}
+
+function updateBundleActualBytes(bundle: Record<string, any>) {
+  bundle.mcpMetadata.actualBytes = 0;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const measured = measureSerializedBytes(bundle);
+    if (bundle.mcpMetadata.actualBytes === measured) {
+      break;
+    }
+    bundle.mcpMetadata.actualBytes = measured;
+  }
+  return bundle.mcpMetadata.actualBytes as number;
+}
+
+function compactBundleFinding(finding: Record<string, any>) {
+  const evidence = finding.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)
+    ? finding.evidence as Record<string, unknown>
+    : null;
+  return {
+    ...finding,
+    ...(evidence ? {
+      evidence: {
+        ...evidence,
+        examples: undefined,
+        projectionWarnings: undefined
+      }
+    } : {}),
+    detail: undefined
+  };
 }
 
 function compactEvidenceValue(
@@ -332,20 +385,25 @@ export function limitPreConsentRows<T extends Record<string, unknown>>(
 }
 
 export function buildScanBundle(input: {
-  evidence: PulseResult;
+  detail?: "summary" | "findings" | "evidence" | "full";
+  evidence?: PulseResult | null;
   findings: FindingList;
   maxFindings?: number;
+  maxBytes?: number;
   maxPreConsentRows?: number;
-  preConsentCookiesTrackers: PreConsentCookiesTrackers;
+  preConsentCookiesTrackers?: PreConsentCookiesTrackers | null;
   report: PulseResult;
   scan: ScanResource;
 }) {
-  const maxFindings = Math.min(50, Math.max(1, input.maxFindings ?? 20));
+  const detail = input.detail ?? "summary";
+  const maxFindings = Math.min(50, Math.max(1, input.maxFindings ?? (detail === "summary" ? 5 : 20)));
   const maxPreConsentRows = Math.min(50, Math.max(1, input.maxPreConsentRows ?? 20));
-  const evidence = input.evidence as Record<string, unknown>;
+  const evidence = (input.evidence ?? {}) as Record<string, unknown>;
   const report = input.report as Record<string, unknown>;
-  const findings = Array.isArray(input.findings.findings) ? input.findings.findings.slice(0, maxFindings) : [];
-  const preConsentRows = Array.isArray(input.preConsentCookiesTrackers.rows)
+  const findings = Array.isArray(input.findings.findings)
+    ? input.findings.findings.slice(0, maxFindings).map((finding) => detail === "summary" ? compactBundleFinding(finding) : finding)
+    : [];
+  const preConsentRows = Array.isArray(input.preConsentCookiesTrackers?.rows)
     ? input.preConsentCookiesTrackers.rows.slice(0, maxPreConsentRows)
     : [];
   const links = {
@@ -353,18 +411,33 @@ export function buildScanBundle(input: {
     ...(report.links && typeof report.links === "object" && !Array.isArray(report.links) ? report.links : {})
   };
 
-  return {
+  const maxBytes = Math.min(200_000, Math.max(5_000, input.maxBytes ?? 50_000));
+  const bundle: Record<string, any> = {
     type: "certscore_scan_bundle",
     scanId: input.scan.scanId,
+    domain: input.scan.domain,
+    url: input.scan.url ?? null,
     status: input.scan.status,
+    score: input.scan.score ?? null,
+    scoreStatus: input.scan.scoreStatus ?? "final",
+    scoreVersion: input.scan.scoreVersion ?? null,
+    scoreUpdatedAt: input.scan.scoreUpdatedAt ?? null,
+    riskLevel: input.scan.riskLevel ?? null,
     resultDisposition: input.scan.resultDisposition ?? null,
     noGo: input.scan.noGo ?? null,
-    scan: input.scan,
+    coverage: input.scan.coverage ?? null,
+    timing: {
+      createdAt: input.scan.createdAt ?? null,
+      startedAt: input.scan.startedAt ?? null,
+      completedAt: input.scan.completedAt ?? null,
+      scanTimeSeconds: input.scan.scanTimeSeconds ?? null
+    },
     summary: {
-      summary: report.summary ?? null,
+      headline: report.summary && typeof report.summary === "object" && !Array.isArray(report.summary)
+        ? (report.summary as Record<string, unknown>).headline ?? null
+        : null,
       executiveSummary: report.executiveSummary ?? null,
       counts: report.counts ?? null,
-      coverage: report.coverage ?? input.scan.coverage ?? null,
       agentInterpretation: report.agentInterpretation ?? null
     },
     findings,
@@ -373,7 +446,7 @@ export function buildScanBundle(input: {
       total: Array.isArray(input.findings.findings) ? input.findings.findings.length : 0,
       truncated: Array.isArray(input.findings.findings) && input.findings.findings.length > findings.length
     },
-    evidenceSummary: {
+    ...(detail === "evidence" || detail === "full" ? { evidenceSummary: {
       evidenceSafetyNotes: evidence.evidenceSafetyNotes ?? null,
       projectionDiagnostics: evidence.projectionDiagnostics ?? null,
       projectedFindings: compactEvidenceValue(evidence.projectedFindings ?? [], {
@@ -394,18 +467,148 @@ export function buildScanBundle(input: {
         objectKeys: 40,
         stringChars: 1_000
       })
-    },
-    preConsentCookiesTrackers: {
+    } } : {}),
+    ...(detail === "full" ? {
+      fullReport: compactEvidenceValue(report, {
+        arrayItems: 50,
+        depth: 8,
+        objectKeys: 100,
+        stringChars: 4_000
+      })
+    } : {}),
+    ...(input.preConsentCookiesTrackers ? { preConsentCookiesTrackers: {
       summary: input.preConsentCookiesTrackers.summary,
       rows: preConsentRows,
       shown: preConsentRows.length,
       total: Array.isArray(input.preConsentCookiesTrackers.rows) ? input.preConsentCookiesTrackers.rows.length : 0,
       truncated: Array.isArray(input.preConsentCookiesTrackers.rows) && input.preConsentCookiesTrackers.rows.length > preConsentRows.length
-    },
+    } } : {}),
     links,
-    recommendedNextTool: findings.length > 0 ? "explain_finding" : null,
+    reportUrl: input.scan.links?.report ?? (typeof links.report === "string" ? links.report : null),
+    recommendedNextTool: null,
+    recommendedNextAction: findings.length > 0
+      ? "Review the returned findings and follow their evidence links. Use detail=evidence only when deeper retained context is needed."
+      : "Review coverage and limitations before interpreting the absence of findings.",
+    mcpMetadata: {
+      detail,
+      heavyEvidenceIncluded: detail === "evidence" || detail === "full",
+      findingsTruncated: Array.isArray(input.findings.findings) && input.findings.findings.length > findings.length,
+      requestedMaxBytes: maxBytes,
+      actualBytes: 0,
+      truncated: false,
+      truncationReason: null
+    },
     disclaimer: input.scan.disclaimer ?? input.report.disclaimer ?? null
   };
+
+  updateBundleActualBytes(bundle);
+  while (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 1) {
+    bundle.findings.pop();
+    bundle.findingsMetadata.shown = bundle.findings.length;
+    bundle.findingsMetadata.truncated = true;
+    bundle.mcpMetadata.findingsTruncated = true;
+    bundle.mcpMetadata.truncated = true;
+    bundle.mcpMetadata.truncationReason = "findings_reduced_to_byte_limit";
+    updateBundleActualBytes(bundle);
+  }
+  const inventoryRows = bundle.preConsentCookiesTrackers?.rows;
+  while (bundle.mcpMetadata.actualBytes > maxBytes && Array.isArray(inventoryRows) && inventoryRows.length > 0) {
+    inventoryRows.pop();
+    bundle.preConsentCookiesTrackers.shown = inventoryRows.length;
+    bundle.preConsentCookiesTrackers.truncated = true;
+    bundle.mcpMetadata.truncated = true;
+    bundle.mcpMetadata.truncationReason = "evidence_inventory_reduced_to_byte_limit";
+    updateBundleActualBytes(bundle);
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.fullReport) {
+    delete bundle.fullReport;
+    bundle.mcpMetadata.truncated = true;
+    bundle.mcpMetadata.truncationReason = "full_report_omitted_to_byte_limit";
+    updateBundleActualBytes(bundle);
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.evidenceSummary) {
+    delete bundle.evidenceSummary;
+    bundle.mcpMetadata.heavyEvidenceIncluded = false;
+    bundle.mcpMetadata.truncated = true;
+    bundle.mcpMetadata.truncationReason = "evidence_summary_omitted_to_byte_limit";
+    updateBundleActualBytes(bundle);
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes) {
+    bundle.summary = compactEvidenceValue(bundle.summary, {
+      arrayItems: 8,
+      depth: 4,
+      objectKeys: 20,
+      stringChars: 500
+    });
+    bundle.mcpMetadata.truncated = true;
+    bundle.mcpMetadata.truncationReason = "summary_compacted_to_byte_limit";
+    updateBundleActualBytes(bundle);
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes) {
+    bundle.findings = [];
+    bundle.findingsMetadata.shown = 0;
+    bundle.findingsMetadata.truncated = bundle.findingsMetadata.total > 0;
+    delete bundle.preConsentCookiesTrackers;
+    bundle.coverage = compactEvidenceValue(bundle.coverage, {
+      arrayItems: 4,
+      depth: 3,
+      objectKeys: 12,
+      stringChars: 300
+    });
+    bundle.mcpMetadata.findingsTruncated = bundle.findingsMetadata.total > 0;
+    bundle.mcpMetadata.truncated = true;
+    bundle.mcpMetadata.truncationReason = "findings_and_inventory_omitted_to_byte_limit";
+    updateBundleActualBytes(bundle);
+  }
+  updateBundleActualBytes(bundle);
+  if (bundle.mcpMetadata.actualBytes > maxBytes) {
+    const minimal: Record<string, any> = {
+      type: bundle.type,
+      scanId: bundle.scanId,
+      domain: bundle.domain,
+      url: bundle.url,
+      status: bundle.status,
+      score: bundle.score,
+      scoreStatus: bundle.scoreStatus,
+      scoreVersion: bundle.scoreVersion,
+      scoreUpdatedAt: bundle.scoreUpdatedAt,
+      riskLevel: bundle.riskLevel,
+      resultDisposition: bundle.resultDisposition,
+      noGo: bundle.noGo,
+      coverage: null,
+      timing: bundle.timing,
+      summary: {
+        headline: bundle.summary?.headline ?? null,
+        executiveSummary: null,
+        counts: bundle.summary?.counts ?? null,
+        agentInterpretation: null
+      },
+      findings: [],
+      findingsMetadata: {
+        shown: 0,
+        total: bundle.findingsMetadata.total,
+        truncated: bundle.findingsMetadata.total > 0
+      },
+      links: Object.fromEntries(Object.entries(bundle.links ?? {}).filter(([key]) => ["docs", "report", "self"].includes(key))),
+      reportUrl: bundle.reportUrl,
+      recommendedNextTool: null,
+      recommendedNextAction: "The response reached the requested byte limit. Increase maxBytes or follow the report link for more detail.",
+      mcpMetadata: {
+        detail,
+        heavyEvidenceIncluded: false,
+        findingsTruncated: bundle.findingsMetadata.total > 0,
+        requestedMaxBytes: maxBytes,
+        actualBytes: 0,
+        truncated: true,
+        truncationReason: "minimal_canonical_result_returned_to_byte_limit"
+      },
+      disclaimer: bundle.disclaimer
+    };
+    updateBundleActualBytes(minimal);
+    return minimal;
+  }
+
+  return bundle;
 }
 
 export function explainFinding(report: PulseResult, findingId: string) {

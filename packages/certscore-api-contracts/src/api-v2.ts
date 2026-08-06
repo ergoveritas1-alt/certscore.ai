@@ -3,7 +3,7 @@ import { pulseResponseSchema } from "./pulse-v1.js";
 import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.4";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.5";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.";
@@ -52,7 +52,9 @@ export const apiV2ErrorSchema = z
       .object({
         code: z.enum(["invalid_request", "invalid_url", "not_found", "rate_limited", "unauthorized", "forbidden", "scan_unavailable", "internal_error"]),
         message: z.string(),
-        retryAfterSeconds: z.number().int().nullable().optional()
+        retryable: z.boolean(),
+        retryAfterSeconds: z.number().int().nullable(),
+        recommendedNextAction: z.string()
       })
       .passthrough(),
     links: apiV2LinksSchema.optional(),
@@ -77,6 +79,7 @@ export const apiV2ScanJobSchema = z
     jobId: z.string(),
     scanId: z.string().nullable().optional(),
     domain: z.string().nullable().optional(),
+    url: z.string().nullable().optional(),
     status: apiV2ScanStatusSchema,
     resultDisposition: scanResultDispositionSchema.optional(),
     noGo: scanNoGoResultSchema.optional(),
@@ -85,8 +88,40 @@ export const apiV2ScanJobSchema = z
     startedAt: z.string().nullable().optional(),
     completedAt: z.string().nullable().optional(),
     scanTimeSeconds: z.number().nullable().optional(),
+    score: z.number().int().min(0).max(100).nullable().optional(),
+    scoreStatus: z.enum(["provisional", "final"]).optional(),
+    scoreVersion: z.string().nullable().optional(),
+    scoreUpdatedAt: z.string().nullable().optional(),
+    riskLevel: z.string().nullable().optional(),
+    coverage: z
+      .object({
+        status: z.string().optional(),
+        summary: z.string().optional(),
+        limitations: z.array(z.string()).optional()
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
     lastUpdatedAt: z.string().optional(),
+    phaseStartedAt: z.string().nullable().optional(),
+    lastHeartbeatAt: z.string().nullable().optional(),
+    progressPercent: z.number().int().min(0).max(100).optional(),
+    progressIsEstimate: z.boolean().optional(),
+    estimatedRemainingSeconds: z.number().int().min(0).nullable().optional(),
+    stalled: z.boolean().optional(),
     retryAfterSeconds: z.number().int().nullable().optional(),
+    error: z
+      .object({
+        code: z.string(),
+        message: z.string(),
+        retryable: z.boolean(),
+        retryAfterSeconds: z.number().int().nullable(),
+        recommendedNextAction: z.string()
+      })
+      .strict()
+      .optional(),
+    reportUrl: z.string().nullable().optional(),
+    recommendedNextAction: z.string().optional(),
     links: apiV2LinksSchema.optional(),
     disclaimer: z.string().optional(),
     ...apiV2ScanCreationMetadataShape
@@ -108,6 +143,9 @@ export const apiV2ScanResourceSchema = z
     completedAt: z.string().nullable().optional(),
     scanTimeSeconds: z.number().nullable().optional(),
     score: z.number().int().min(0).max(100).nullable().optional(),
+    scoreStatus: z.enum(["provisional", "final"]).optional(),
+    scoreVersion: z.string().nullable().optional(),
+    scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
     coverage: z
       .object({
@@ -162,6 +200,16 @@ export const apiV2EvidenceSummarySchema = z
     authRequiredForExamples: z.boolean().optional(),
     examples: z.array(apiV2EvidenceEventSummarySchema).max(5).optional(),
     projectionWarnings: z.array(z.string().max(120)).max(20).optional(),
+    excerpt: z
+      .object({
+        excerpt: z.string(),
+        isTruncated: z.boolean(),
+        truncationMarker: z.string().nullable(),
+        sourceUrl: z.string().max(2048).nullable(),
+        evidenceUrl: z.string().max(2048)
+      })
+      .strict()
+      .optional(),
     hasTimingAnchor: z.boolean().optional(),
     hasVendorAnchor: z.boolean().optional(),
     hasConsentContext: z.boolean().optional(),

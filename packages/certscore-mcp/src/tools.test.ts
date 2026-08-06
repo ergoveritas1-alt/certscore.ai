@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CertScoreError, type PulseResult } from "@certscore/sdk";
-import { boundEvidencePacket, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, toToolError, toToolResult } from "./tools.js";
+import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, toToolError, toToolResult } from "./tools.js";
 
 const report = {
   type: "certscore_pulse",
@@ -115,11 +115,84 @@ test("explainFinding returns available IDs when finding is absent", () => {
   assert.deepEqual(explanation.availableFindingIds, ["pre_consent_tracking_detected"]);
 });
 
-test("toToolResult returns compact JSON text and structured content", () => {
+test("toToolResult returns concise text and structured content without duplicating JSON", () => {
   const result = toToolResult({ type: "fixture", ok: true });
   assert.deepEqual(result.structuredContent, { type: "fixture", ok: true });
   assert.equal(result.content[0]?.type, "text");
-  assert.equal(result.content[0]?.text, "{\"type\":\"fixture\",\"ok\":true}");
+  assert.equal(result.content[0]?.text, "CertScore fixture. Full result is in structuredContent.");
+});
+
+test("buildScanBundle honors the caller's byte budget", () => {
+  const bundle = buildScanBundle({
+    detail: "full",
+    evidence: { ...report, evidenceSafetyNotes: ["x".repeat(20_000)] },
+    findings: {
+      type: "certscore_finding_list",
+      findings: Array.from({ length: 20 }, (_, index) => ({ id: `finding_${index}`, label: "x".repeat(2_000) }))
+    },
+    maxBytes: 8_000,
+    preConsentCookiesTrackers: {
+      type: "certscore_pre_consent_cookies_trackers",
+      rows: Array.from({ length: 20 }, (_, index) => ({ id: `row_${index}`, label: "y".repeat(2_000) })),
+      summary: { rowCount: 20 }
+    },
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      status: "completed",
+      score: 72
+    }
+  } as any);
+
+  assert.ok(new TextEncoder().encode(JSON.stringify(bundle)).byteLength <= 8_000);
+  assert.equal((bundle.mcpMetadata as Record<string, unknown>).requestedMaxBytes, 8_000);
+  assert.equal((bundle.mcpMetadata as Record<string, unknown>).truncated, true);
+  assert.equal((bundle.mcpMetadata as Record<string, unknown>).actualBytes, new TextEncoder().encode(JSON.stringify(bundle)).byteLength);
+  assert.equal(typeof (bundle.mcpMetadata as Record<string, unknown>).truncationReason, "string");
+});
+
+test("buildScanBundle implements materially distinct detail modes", () => {
+  const common = {
+    evidence: { ...report, evidenceSafetyNotes: ["Retained evidence is bounded."] },
+    findings: {
+      type: "certscore_finding_list",
+      findings: Array.from({ length: 8 }, (_, index) => ({
+        id: `finding_${index}`,
+        label: `Finding ${index}`,
+        detail: { caveats: ["Review evidence."] },
+        evidence: { summary: "Observed evidence.", examples: [{ type: "page" }] }
+      }))
+    },
+    preConsentCookiesTrackers: {
+      type: "certscore_pre_consent_cookies_trackers",
+      rows: [{ id: "row_1" }],
+      summary: { rowCount: 1 }
+    },
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      status: "completed",
+      score: 72
+    }
+  } as any;
+
+  const summary = buildScanBundle({ ...common, detail: "summary" });
+  const findings = buildScanBundle({ ...common, detail: "findings" });
+  const evidence = buildScanBundle({ ...common, detail: "evidence" });
+  const full = buildScanBundle({ ...common, detail: "full" });
+
+  assert.equal(summary.findings.length, 5);
+  assert.equal(summary.findings[0]?.detail, undefined);
+  assert.equal(findings.findings.length, 8);
+  assert.ok(findings.findings[0]?.detail);
+  assert.equal(evidence.evidenceSummary !== undefined, true);
+  assert.equal(evidence.fullReport, undefined);
+  assert.equal(full.evidenceSummary !== undefined, true);
+  assert.equal(full.fullReport !== undefined, true);
 });
 
 test("toToolError marks CertScoreError results as MCP errors and truncates response bodies", () => {
