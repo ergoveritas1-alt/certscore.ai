@@ -19,7 +19,7 @@ type CreateScanInput = {
   detail?: "tiny" | "quick" | "standard" | "full" | "summary" | "evidence";
   format?: "json" | "markdown";
   freshness?: "latest" | "refresh";
-  scanFrom?: "eu_ie";
+  scanFrom?: "eu_de" | "eu_ie" | "california";
   waitForCompletion?: boolean;
   maxWaitSeconds?: number;
 };
@@ -38,8 +38,8 @@ type ExportFindingsInput = { scanId: string };
 type ListFindingsInput = { limit?: number; offset?: number; scanId: string };
 type GetPreConsentCookiesTrackersInput = { maxRows?: number; scanId: string };
 type ExplainFindingInput = { scanId: string; findingId: string };
-type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_ie" };
-type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?: number; scanFrom?: "eu_ie" };
+type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_de" | "eu_ie" | "california" };
+type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?: number; scanFrom?: "eu_de" | "eu_ie" | "california" };
 
 let createScanDeprecationWarningPrinted = false;
 const DEFAULT_MCP_SCAN_WAIT_MS = 45_000;

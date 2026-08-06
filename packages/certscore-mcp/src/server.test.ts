@@ -30,10 +30,12 @@ function textResponse(status: number, body: string, headers: Record<string, stri
 
 function installFetch(responses: MockResponse[]) {
   const calls: string[] = [];
+  const requestBodies: Array<string | undefined> = [];
   const requestHeaders: Headers[] = [];
   const previous = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push(String(input));
+    requestBodies.push(typeof init?.body === "string" ? init.body : undefined);
     requestHeaders.push(new Headers(init?.headers));
     const next = responses.shift();
     if (!next) {
@@ -46,6 +48,7 @@ function installFetch(responses: MockResponse[]) {
   }) as typeof fetch;
   return {
     calls,
+    requestBodies,
     requestHeaders,
     restore() {
       globalThis.fetch = previous;
@@ -479,6 +482,21 @@ test("scan_site can return immediately for an explicitly asynchronous workflow",
     });
   } finally {
     mock.restore();
+  }
+});
+
+test("scan_site forwards EU-Germany, EU-Ireland, and California contexts", async () => {
+  for (const scanFrom of ["eu_de", "eu_ie", "california"] as const) {
+    const mock = installFetch([{ status: 202, body: { type: "certscore_scan_job", status: "queued", jobId: `job_${scanFrom}`, scanId: `scan_${scanFrom}` } }]);
+    try {
+      await withMcpClient(async (client) => {
+        const result = parseToolJson(await client.callTool({ name: "scan_site", arguments: { url: "https://example.com", scanFrom, waitForCompletion: false } }));
+        assert.equal(result.status, "queued");
+        assert.equal(JSON.parse(mock.requestBodies[0] ?? "{}").scanFrom, scanFrom);
+      });
+    } finally {
+      mock.restore();
+    }
   }
 });
 

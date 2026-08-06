@@ -112,6 +112,14 @@ test("MCP contracts expose the current scoped tool surface", () => {
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_pre_consent_cookies_trackers")?.inputSchema.maxRows);
 });
 
+test("MCP scan inputs accept every API v2 scanner location", () => {
+  const scanSite = certScoreMcpToolContracts.find((tool) => tool.name === "scan_site");
+  assert.ok(scanSite);
+  for (const scanFrom of ["eu_de", "eu_ie", "california"] as const) {
+    assert.equal(scanSite.inputSchema.scanFrom.parse(scanFrom), scanFrom);
+  }
+});
+
 test("MCP output contracts reuse stable API shapes with bounded MCP metadata", () => {
   assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.outputSchema, mcpScanSiteOutputSchema);
   assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "get_scan")?.outputSchema, apiV2ScanResourceSchema);
