@@ -7,8 +7,8 @@ const description =
 const lightEndpoint = "https://mcp.certscore.ai/mcp/light";
 const authenticatedEndpoint = "https://mcp.certscore.ai/mcp";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
-const firstRunPrompt = "Scan https://example.com. If the scan is still running, poll get_scan_status using the returned scanId. Then call get_scan_bundle with detail=findings and maxBytes=8000. Summarize the score, risk level, findings, evidence links, coverage limitations, and report URL. Treat results as automated public-web observations, not legal conclusions or compliance determinations.";
-const verificationPrompt = "List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://example.com and report whether the result was new or reused.";
+const firstRunPrompt = "Scan https://www.mozilla.org. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
+const verificationPrompt = "List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://www.mozilla.org and report whether the result was new or reused.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
 export const metadata: Metadata = createPageMetadata({
@@ -27,7 +27,7 @@ export default function DeveloperMcpPage() {
       <div className="space-y-12">
         <Section eyebrow="Start here" title="CertScore Light: anonymous, no-auth MCP">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            First-time agents should use the Light endpoint. It uses Streamable HTTP, requires no signup, API key, bearer token, or OAuth,
+            First-time agents should use the Light endpoint. It uses Streamable HTTP and requires no signup, API key, bearer token, browser login, or OAuth,
             and exposes exactly <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">scan_site</code>,
             <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">get_scan_status</code>, and
             <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">get_scan_bundle</code>.
@@ -47,20 +47,30 @@ Tools: scan_site, get_scan_status, get_scan_bundle`}</CodeBlock>
 
         <Section eyebrow="First run" title="Paste one prompt">
           <CodeBlock>{firstRunPrompt}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Mozilla is a real, stable public site suited to demonstrating the complete scan, status, and bundle flow. A documentation
+            placeholder such as <code>example.com</code> may produce a no-go, cached unavailable, or rate-limited result. Users may substitute
+            any public HTTP or HTTPS URL.
+          </p>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
         </Section>
 
         <Section eyebrow="Light workflow" title="The canonical three-tool sequence">
           <ol className="max-w-3xl list-decimal space-y-2 pl-5 text-sm leading-7 text-slate-600">
             <li>Call <code>scan_site</code> with a public URL.</li>
+            <li>If a retryable error has no <code>scanId</code>, wait <code>retryAfterSeconds</code> and retry <code>scan_site</code>.</li>
             <li>If the result is queued, running, or finalizing, retain <code>scanId</code>.</li>
-            <li>Poll <code>get_scan_status</code> using <code>scanId</code>. Do not poll with <code>jobId</code> after <code>scanId</code> is available.</li>
-            <li>Once terminal, call <code>get_scan_bundle</code>.</li>
+            <li>Poll <code>get_scan_status</code> using <code>scanId</code> only. Never poll until <code>scanId</code> exists.</li>
+            <li>Stop polling at a terminal status, then call <code>get_scan_bundle</code>.</li>
             <li>Use <code>detail=findings</code> for a compact finding review.</li>
             <li>Use <code>detail=evidence</code> for evidence digests and references.</li>
             <li>If truncated, follow <code>recommendedNextAction</code> or increase <code>maxBytes</code>.</li>
             <li>Summarize findings together with coverage limitations and the report URL.</li>
           </ol>
+          <CodeBlock>{`scan_site
+→ retry scan_site if a retryable error has no scanId
+→ get_scan_status with scanId if still running
+→ get_scan_bundle after terminal status`}</CodeBlock>
           <CodeBlock>{`Recommended bundle budgets:
 summary   maxBytes=5000
 findings  maxBytes=8000
@@ -70,6 +80,10 @@ full      maxBytes=12000 or higher`}</CodeBlock>
             A 5,000-byte response may intentionally omit optional sections while preserving a compact finding or evidence reference when
             available. Inspect <code>actualBytes</code>, <code>truncated</code>, <code>omittedSections</code>,
             <code>nextRecommendedMaxBytes</code>, and returned report or evidence content URLs.
+          </p>
+          <p className="max-w-3xl text-sm font-semibold leading-7 text-slate-800">
+            Call <code>get_scan_status</code> only after <code>scan_site</code> returns a <code>scanId</code>. A retryable response without
+            one must return to <code>scan_site</code>.
           </p>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
         </Section>

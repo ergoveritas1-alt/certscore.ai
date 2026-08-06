@@ -9,8 +9,8 @@ import { createPageMetadata } from "../../../lib/seo";
 
 const endpoint = "https://mcp.certscore.ai/mcp/light";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
-const firstRunPrompt = "Scan https://example.com. If the scan is still running, poll get_scan_status using the returned scanId. Then call get_scan_bundle with detail=findings and maxBytes=8000. Summarize the score, risk level, findings, evidence links, coverage limitations, and report URL. Treat results as automated public-web observations, not legal conclusions or compliance determinations.";
-const verificationPrompt = "List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://example.com and report whether the result was new or reused.";
+const firstRunPrompt = "Scan https://www.mozilla.org. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
+const verificationPrompt = "List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://www.mozilla.org and report whether the result was new or reused.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
 export const metadata: Metadata = createPageMetadata({
@@ -30,9 +30,10 @@ const clients = [
 
 const workflow = [
   "Call scan_site with a public URL.",
+  "If a retryable error has no scanId, wait retryAfterSeconds and retry scan_site.",
   "If the result is queued, running, or finalizing, retain scanId.",
-  "Poll get_scan_status using scanId. Do not poll with jobId after scanId is available.",
-  "Once terminal, call get_scan_bundle.",
+  "Poll get_scan_status using scanId only. Never poll until scanId exists.",
+  "Stop polling when the scan reaches a terminal status, then call get_scan_bundle.",
   "Use detail=findings for a compact finding review.",
   "Use detail=evidence for evidence digests and references.",
   "If truncated, follow recommendedNextAction or increase maxBytes.",
@@ -48,7 +49,7 @@ export default function McpLightPage() {
           <div className="space-y-6">
             <Badge tone="neutral">Anonymous / no-auth Light MCP</Badge>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Give your agent a URL. Get a website privacy-risk scan.</h1>
-            <p className="max-w-3xl text-lg leading-8 text-slate-600">No signup, API key, or OAuth. Connect once and let an MCP-capable agent scan public websites for privacy, cookie, tracker, consent, policy, and disclosure risk signals.</p>
+            <p className="max-w-3xl text-lg leading-8 text-slate-600">No signup, API key, bearer token, browser login, or OAuth. Connect once and let an MCP-capable agent scan public websites for privacy, cookie, tracker, consent, policy, and disclosure risk signals.</p>
             <div className="flex flex-wrap gap-3">
               <CopyMcpValue label="Codex command" value={codexSetupCommand} />
               <CopyMcpValue label="first-run prompt" value={firstRunPrompt} />
@@ -74,12 +75,17 @@ export default function McpLightPage() {
           <CodeBlock>{codexSetupCommand}</CodeBlock>
           <h3 className="mt-6 font-semibold text-slate-950">First-run prompt</h3>
           <CodeBlock>{firstRunPrompt}</CodeBlock>
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600"><code>www.mozilla.org</code> is a real, stable public site that can demonstrate the complete scan, status, and bundle flow. Documentation placeholders such as <code>example.com</code> may produce a no-go, cached unavailable, or rate-limited result. Substitute your own public URL at any time.</p>
           <p className="mt-4 max-w-4xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Canonical workflow</p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-950">Exactly what the agent should do</h2>
+          <CodeBlock>{`scan_site
+→ retry scan_site if a retryable error has no scanId
+→ get_scan_status with scanId if still running
+→ get_scan_bundle after terminal status`}</CodeBlock>
           <ol className="mt-5 grid gap-3 md:grid-cols-2">
             {workflow.map((step, index) => (
               <li className="flex gap-3 text-sm leading-6 text-slate-700" key={step}>
@@ -89,6 +95,24 @@ export default function McpLightPage() {
             ))}
           </ol>
           <p className="mt-5 text-sm leading-7 text-slate-600">Terminal statuses are <code>completed</code>, <code>completed_limited</code>, <code>failed</code>, <code>expired</code>, and <code>rate_limited</code>. A <code>completed_limited</code> or no-go result is a usable observation with explicit limitations, not a transport failure.</p>
+          <p className="mt-3 text-sm font-semibold text-slate-800"><code>get_scan_status</code> should only be called after <code>scan_site</code> returns a <code>scanId</code>.</p>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold text-slate-950">What can happen?</h2>
+          <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="min-w-full text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">Outcome</th><th className="px-4 py-3 font-semibold">What the agent should do</th></tr></thead>
+              <tbody className="divide-y divide-slate-100 text-slate-600">
+                <tr><td className="px-4 py-3 font-mono">completed</td><td className="px-4 py-3">Call <code>get_scan_bundle</code> and summarize the result.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">reused_scan</td><td className="px-4 py-3">Report that an eligible prior result was reused and quota was not consumed.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">completed_limited / no-go</td><td className="px-4 py-3">Explain the limitation and never treat it as proof of compliance or absence of risk.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">retryable error</td><td className="px-4 py-3">If no <code>scanId</code> exists, wait <code>retryAfterSeconds</code> and retry <code>scan_site</code>.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">invalid URL</td><td className="px-4 py-3">Correct the public HTTP or HTTPS URL, then retry <code>scan_site</code>.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">rate_limited</td><td className="px-4 py-3">Wait for the recommended delay or stop; do not guess a polling action.</td></tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section className="rounded-xl border border-sky-200 bg-sky-50 p-6" id="try">

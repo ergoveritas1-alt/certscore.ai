@@ -23,7 +23,7 @@ Authentication: None
 Tools: scan_site, get_scan_status, get_scan_bundle
 ```
 
-No signup, API key, bearer token, or OAuth is required. Light allows 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
+No signup, API key, bearer token, browser login, or OAuth is required. Light allows 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
 
 Codex setup:
 
@@ -33,24 +33,27 @@ codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
 
 First-run Codex prompt:
 
-> Scan https://example.com. If the scan is still running, poll get_scan_status using the returned scanId. Then call get_scan_bundle with detail=findings and maxBytes=8000. Summarize the score, risk level, findings, evidence links, coverage limitations, and report URL. Treat results as automated public-web observations, not legal conclusions or compliance determinations.
+> Scan https://www.mozilla.org. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
+
+Mozilla is a real, stable public site suited to demonstrating the complete scan, status, and bundle flow. The documentation placeholder `example.com` may produce a no-go, cached unavailable, or rate-limited result. Users may substitute their own public HTTP or HTTPS URL.
 
 Canonical Light workflow:
 
 1. Call `scan_site` with a public URL.
-2. If the result is queued, running, or finalizing, retain `scanId`.
-3. Poll `get_scan_status` using `scanId`. Do not poll with `jobId` after `scanId` is available.
-4. Once terminal, call `get_scan_bundle`.
-5. Use `detail=findings` for a compact finding review.
-6. Use `detail=evidence` for evidence digests and references.
-7. If truncated, follow `recommendedNextAction` or increase `maxBytes`.
-8. Summarize findings together with coverage limitations and the report URL.
+2. If a retryable error has no `scanId`, wait `retryAfterSeconds` and retry `scan_site`.
+3. If the result is queued, running, or finalizing, retain `scanId`.
+4. Poll `get_scan_status` using `scanId` only. Never poll until `scanId` exists.
+5. Stop polling at a terminal status, then call `get_scan_bundle`.
+6. Use `detail=findings` for a compact finding review.
+7. Use `detail=evidence` for evidence digests and references.
+8. If truncated, follow `recommendedNextAction` or increase `maxBytes`.
+9. Summarize findings together with coverage limitations and the report URL.
 
 Recommended bundle budgets are `maxBytes=5000` for `summary`, `maxBytes=8000` for `findings`, `maxBytes=8000` for `evidence`, and `maxBytes=12000` or higher for `full`. A 5,000-byte response may intentionally omit optional sections while still returning a compact finding or evidence reference when available. Inspect `actualBytes`, `truncated`, `omittedSections`, `nextRecommendedMaxBytes`, and returned report or evidence content URLs.
 
 Verification prompt:
 
-> List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://example.com and report whether the result was new or reused.
+> List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://www.mozilla.org and report whether the result was new or reused.
 
 Success means the tool list contains exactly the three Light tools, no authorization page appears, and `scan_site` returns a stable `scanId` plus an explicit new-or-reused decision. An eligible reused result reports that quota was not consumed.
 
@@ -110,10 +113,11 @@ Input-validation errors remain MCP `-32602` errors and also include structured `
 The Light workflow is:
 
 1. Call `scan_site` with a public URL.
-2. If the result is queued, running, or finalizing, retain `scanId` and poll `get_scan_status` with only that ID.
-3. Stop polling at any terminal status. For `completed` or `completed_limited`, call `get_scan_bundle`.
-4. If the bundle is truncated, follow `recommendedNextAction`, increase `maxBytes`, or open a listed content URL.
-5. Summarize the canonical score, risk, findings, coverage, limitations, and report URL without treating no-go, not-observed, or limited coverage as proof of compliance.
+2. If a retryable error has no `scanId`, wait `retryAfterSeconds` and retry `scan_site`; do not poll.
+3. If the result is queued, running, or finalizing, retain `scanId` and poll `get_scan_status` with only that ID.
+4. Stop polling at any terminal status. For `completed` or `completed_limited`, call `get_scan_bundle`.
+5. If the bundle is truncated, follow `recommendedNextAction`, increase `maxBytes`, or open a listed content URL.
+6. Summarize the canonical score, risk, findings, coverage, limitations, and report URL without treating no-go, not-observed, or limited coverage as proof of compliance.
 
 ## Completed-Limited No-Go Results
 

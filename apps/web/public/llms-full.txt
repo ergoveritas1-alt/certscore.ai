@@ -330,7 +330,7 @@ Preferred no-account MCP for new agents:
 
 https://mcp.certscore.ai/mcp/light
 
-CertScore Light uses Streamable HTTP and exposes only scan_site, get_scan_status, and get_scan_bundle. It requires no signup, API key, bearer token, or OAuth and includes 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
+CertScore Light uses Streamable HTTP and exposes only scan_site, get_scan_status, and get_scan_bundle. It requires no signup, API key, bearer token, browser login, or OAuth and includes 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
 
 Codex setup:
 
@@ -338,21 +338,24 @@ codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
 
 First-run prompt:
 
-Scan https://example.com. If the scan is still running, poll get_scan_status using the returned scanId. Then call get_scan_bundle with detail=findings and maxBytes=8000. Summarize the score, risk level, findings, evidence links, coverage limitations, and report URL. Treat results as automated public-web observations, not legal conclusions or compliance determinations.
+Scan https://www.mozilla.org. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
+
+Mozilla is a real, stable public site for demonstrating the complete scan, status, and bundle flow. example.com may produce a no-go, cached unavailable, or rate-limited result. Users may substitute their own public URL.
 
 Light workflow:
 1. Call scan_site with a public URL.
-2. If status is queued, running, or finalizing, retain scanId.
-3. Poll get_scan_status using scanId. Do not poll with jobId after scanId is available.
-4. Once terminal, call get_scan_bundle.
-5. Use detail=findings with maxBytes=8000 for compact findings.
-6. Use detail=evidence with maxBytes=8000 for evidence digests and references.
-7. Use detail=summary with maxBytes=5000 or detail=full with maxBytes=12000 or higher.
-8. If truncated, inspect actualBytes, truncated, omittedSections, nextRecommendedMaxBytes, and content URLs, then follow recommendedNextAction or increase maxBytes.
+2. If a retryable error has no scanId, wait retryAfterSeconds and retry scan_site. Do not call get_scan_status until scanId exists.
+3. If status is queued, running, or finalizing, retain scanId.
+4. Poll get_scan_status using scanId only.
+5. Stop polling at a terminal status, then call get_scan_bundle.
+6. Use detail=findings with maxBytes=8000 for compact findings.
+7. Use detail=evidence with maxBytes=8000 for evidence digests and references.
+8. Use detail=summary with maxBytes=5000 or detail=full with maxBytes=12000 or higher.
+9. If truncated, inspect actualBytes, truncated, omittedSections, nextRecommendedMaxBytes, and content URLs, then follow recommendedNextAction or increase maxBytes.
 
 Verification prompt:
 
-List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://example.com and report whether the result was new or reused.
+List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://www.mozilla.org and report whether the result was new or reused.
 
 CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
 
