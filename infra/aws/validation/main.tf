@@ -608,6 +608,7 @@ resource "aws_iam_role_policy" "task_exec" {
         Action = [
           "sqs:ReceiveMessage",
           "sqs:DeleteMessage",
+          "sqs:ChangeMessageVisibility",
           "sqs:GetQueueAttributes",
           "sqs:GetQueueUrl"
         ]

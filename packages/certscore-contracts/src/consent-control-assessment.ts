@@ -131,6 +131,7 @@ export type ConsentControlAssessmentObservation = {
   layerInspected?: "first_layer" | "unknown";
   documentId?: string | null;
   captureStatus?: "observed" | "no_evidence" | "incomplete";
+  inventoryOutcome?: "complete_with_controls" | "complete_empty" | "partial" | "timed_out" | "frame_inaccessible" | "document_mismatch" | "geometry_unavailable" | "no_go";
   completedChannels?: ConsentControlAssessmentChannel[];
   incompleteChannels?: ConsentControlAssessmentChannel[];
   evidenceRefs?: string[];
@@ -369,6 +370,17 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
         : "matched");
   const noGo = input.scan.noGo === true;
   const geometryMismatch = input.geometry?.assessmentStatus === "document_mismatch";
+  const incompleteInventoryOutcomes = unique(observations
+    .map((observation) => observation.inventoryOutcome)
+    .filter((outcome): outcome is NonNullable<ConsentControlAssessmentObservation["inventoryOutcome"]> =>
+      outcome === "partial" ||
+      outcome === "timed_out" ||
+      outcome === "frame_inaccessible" ||
+      outcome === "document_mismatch" ||
+      outcome === "geometry_unavailable" ||
+      outcome === "no_go"
+    ));
+  const typedInventoryOutcomeIncomplete = incompleteInventoryOutcomes.length > 0;
   const limitations: ConsentControlAssessment["limitations"] = [];
   const identityWasBounded =
     [input.scan.requestedUrl, input.scan.finalUrl]
@@ -391,6 +403,11 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   if (documentStatus === "unknown") limitations.push({ code: "document_identity_unverified", detail: "The retained consent evidence was not explicitly bound to the canonical scanned document.", affectedFields: ["surface", "accept", "reject", "options", "privacy_opt_out"] });
   if (geometryMismatch) limitations.push({ code: "geometry_document_mismatch", detail: "Geometry was retained for a different document identity and cannot erase bundle evidence.", affectedFields: ["surface", "accept", "reject", "options", "privacy_opt_out"] });
   if (identityWasBounded) limitations.push({ code: "document_identity_bounded", detail: "An overlong retained URL or document identity was projected with a stable hash suffix.", affectedFields: ["surface", "accept", "reject", "options", "privacy_opt_out"] });
+  if (typedInventoryOutcomeIncomplete) limitations.push({
+    code: "typed_inventory_incomplete",
+    detail: `The retained first-layer inventory did not complete: ${incompleteInventoryOutcomes.join(", ")}.`,
+    affectedFields: ["surface", "accept", "reject", "options", "privacy_opt_out"],
+  });
 
   const bundleEvidence = observations.flatMap((observation) => observation.controls
     .map((candidate) => eligibleCandidate(candidate, observation.observedAtMs, observation.documentId ?? canonicalId, "bundle"))
@@ -446,6 +463,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     input.coverage?.status === undefined || input.coverage.status === "complete";
   const consentEvidenceCoverageComplete =
     explicitCoverageAllowsCompleteness &&
+    !typedInventoryOutcomeIncomplete &&
     !noGo &&
     documentStatus === "matched" &&
     (geometryComplete || firstLayerObservationComplete) &&
@@ -456,6 +474,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     );
   const typedInventoryCoverageComplete =
     !noGo &&
+    !typedInventoryOutcomeIncomplete &&
     documentStatus === "matched" &&
     coverageStatus === "complete" &&
     requiredChannels.length === 1 &&
@@ -476,6 +495,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     ? []
     : incompleteChannels.filter((channel) => requiredChannels.includes(channel));
   const completeInventory = completeConsentInventory || (
+    !typedInventoryOutcomeIncomplete &&
     coverageStatus === "complete" &&
     requiredChannels.every((channel) => effectiveCompletedChannels.includes(channel)) &&
     effectiveIncompleteChannels.length === 0 &&

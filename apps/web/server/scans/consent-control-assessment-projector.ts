@@ -231,7 +231,10 @@ export function deriveMaterializedConsentControlAssessment(input: {
       );
     const completedEmptyFirstLayerInventory =
       controls.length === 0 &&
-      (observation.basis ?? []).includes("settled_control_inventory_completed") &&
+      (
+        observation.inventoryOutcome === "complete_empty" ||
+        (observation.basis ?? []).includes("settled_control_inventory_completed")
+      ) &&
       completedTypedChannel;
     const completedPositiveFirstLayerInventory =
       observation.captureStatus === "observed" &&
@@ -305,6 +308,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       layerInspected: retainedLayer,
       documentId: observationDocumentId,
       captureStatus: observation.captureStatus,
+      inventoryOutcome: observation.inventoryOutcome,
       completedChannels: observation.captureDiagnostics?.completedChannels,
       incompleteChannels: [
         ...(observation.captureDiagnostics?.timedOutChannels ?? []),
@@ -313,7 +317,9 @@ export function deriveMaterializedConsentControlAssessment(input: {
       evidenceRefs: (observation.evidenceRefs ?? []).map((reference) => reference.refId),
       controls: (observation.controls ?? []).flatMap((control) => {
         const evidenceId = control.artifactRef ?? `${observation.observationId}:${control.label}`;
-        const layer = control.layer ?? retainedLayer;
+        const layer = control.presentationType === "persistent_link" || control.placementType === "persistent_surface"
+          ? "deeper_layer" as const
+          : control.layer ?? retainedLayer;
         const actionType = retainedActionType(control.actionType, control.classifierReasonCodes);
         const controlVariant = retainedControlVariant(control.classifierReasonCodes);
         const candidate: ConsentControlAssessmentCandidate = {
@@ -592,10 +598,17 @@ export function deriveWs01ConsentControlAssessment(input: {
       artifactRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.firstLayerConsentChoices"],
     }];
   });
-  if (controls.length === 0) return null;
-
+  // A complete empty array is meaningful negative evidence. A non-empty array
+  // whose rows cannot be validated is malformed evidence and must fail closed.
+  if (rawChoices.length > 0 && controls.length === 0) return null;
   const requestedUrl = normalizedDocumentId(input.requestedUrl) ?? documentId;
-  const observedAtMs = controls[0]?.observedAtMs ?? 0;
+  const observedAtMs = controls[0]?.observedAtMs ??
+    (typeof choices.capturedAtMs === "number"
+      ? Math.max(0, Math.round(choices.capturedAtMs))
+      : typeof choices.captured_at_ms === "number"
+        ? Math.max(0, Math.round(choices.captured_at_ms))
+        : 0);
+  const completedEmptyInventory = controls.length === 0;
   return deriveConsentControlAssessment({
     scan: {
       scanId: input.scanId,
@@ -612,17 +625,18 @@ export function deriveWs01ConsentControlAssessment(input: {
     observations: [{
       observationId: "ws01-first-layer-consent-choices",
       observedAtMs,
-      likelyPresent: true,
+      likelyPresent: !completedEmptyInventory,
       layerInspected: "first_layer",
       documentId,
-      captureStatus: "observed",
+      captureStatus: completedEmptyInventory ? "no_evidence" : "observed",
+      inventoryOutcome: completedEmptyInventory ? "complete_empty" : "complete_with_controls",
       completedChannels: ["dom_inventory"],
       incompleteChannels: [],
       evidenceRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.firstLayerConsentChoices"],
       controls,
     }],
     surface: {
-      status: "observed_actionable",
+      status: completedEmptyInventory ? "not_observed" : "observed_actionable",
       firstObservedAtMs: observedAtMs,
       lastObservedAtMs: observedAtMs,
       evidenceRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.firstLayerConsentChoices"],

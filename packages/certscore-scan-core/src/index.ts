@@ -337,9 +337,15 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     1_000,
     Math.min(input.preConsentModuleDeadlineMs ?? scanProfile.internalBudgetMs, scanProfile.internalBudgetMs),
   );
+  let latestPreConsentLifecycleCheckpoint: {
+    atMs: number;
+    label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation";
+    status: "started" | "completed";
+  } | undefined;
   const preConsentResultPromise = preConsentEnabled
     ? settlePreConsentRuntimeWithinDeadline({
       deadlineMs: preConsentModuleDeadlineMs,
+      getLatestLifecycleCheckpoint: () => latestPreConsentLifecycleCheckpoint,
       startedAtMs,
       run: (softDeadlineSignal) => preConsentRuntimeScanner({
         url: input.url,
@@ -357,6 +363,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotCaptureMode: "viewport_first",
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
+        onLifecycleCheckpoint: (checkpoint) => {
+          latestPreConsentLifecycleCheckpoint = checkpoint;
+        },
         softDeadlineSignal,
         waitMode: leanPreConsent ? "fast" : "full",
         retainRenderedPolicyRecoverySession: evidenceLane === "combined",
@@ -2212,6 +2221,8 @@ export function buildScanNoGoAssessment(input: {
 }
 
 export function buildScanEvidenceLaneAssessment(input: {
+  consentLaneStatus?: "usable" | "limited" | "not_testable";
+  consentLimitationKeys?: string[];
   normalizedUrl: string;
   policySurfaceObservations: PolicySurfaceObservation[];
   runtimeCoverage: RuntimeCoverageSummary;
@@ -2241,7 +2252,7 @@ export function buildScanEvidenceLaneAssessment(input: {
     outcome,
     lanes: {
       homepageRuntime: runtimeLane,
-      consent: runtimeUsable ? "usable" : runtimeLimited ? "limited" : "not_testable",
+      consent: input.consentLaneStatus ?? (runtimeUsable ? "usable" : runtimeLimited ? "limited" : "not_testable"),
       cookiesTrackers: runtimeUsable ? "usable" : runtimeLimited ? "limited" : "not_testable",
       policyGdpr: policyLane,
       transport: input.transportSecurityObservationCount > 0 ? "usable" : "not_testable",
@@ -2251,6 +2262,7 @@ export function buildScanEvidenceLaneAssessment(input: {
       .slice(0, 8),
     limitationKeys: uniqueStrings([
       ...input.runtimeCoverage.limitationKeys,
+      ...(input.consentLimitationKeys ?? []),
       homepageNoGo ? "homepage_runtime_no_go" : null,
       outcome === "partial_with_diagnostics" ? "partial_policy_evidence_only" : null,
       policyLane !== "usable" ? "verified_policy_surface_unavailable" : null,
@@ -2691,7 +2703,9 @@ export function consentInspectionNeedsRecovery(input: {
   if (verifiedRecoveryCompleted) {
     return false;
   }
-  return input.moduleStatus === "partial" || input.observations.some((observation) =>
+  return ["partial", "failed", "skipped_budget", "not_testable"].includes(input.moduleStatus) ||
+    input.observations.length === 0 ||
+    input.observations.some((observation) =>
     observation.captureStatus === "incomplete" ||
     (observation.captureDiagnostics?.timedOutChannels.length ?? 0) > 0 ||
     (observation.captureDiagnostics?.failedChannels.length ?? 0) > 0 ||
@@ -2999,6 +3013,7 @@ function markConsentRecoveryCompleted(
   return {
     ...observation,
     captureStatus: observation.likelyPresent || observation.controls.length > 0 ? "observed" : "no_evidence",
+    inventoryOutcome: observation.controls.length > 0 ? "complete_with_controls" : "complete_empty",
     captureDiagnostics: {
       completedChannels,
       timedOutChannels: (observation.captureDiagnostics?.timedOutChannels ?? [])
@@ -3185,6 +3200,11 @@ function isCaptureReplayHeadedRetryEnabled() {
 
 export async function settlePreConsentRuntimeWithinDeadline(input: {
   deadlineMs: number;
+  getLatestLifecycleCheckpoint?: () => {
+    atMs: number;
+    label: string;
+    status: "started" | "completed";
+  } | undefined;
   graceMs?: number;
   run: (softDeadlineSignal: AbortSignal) => Promise<PreConsentRuntimeScannerResult>;
   startedAtMs: number;
@@ -3225,6 +3245,7 @@ export async function settlePreConsentRuntimeWithinDeadline(input: {
     return deadlineLimitedPreConsentResult({
       completedAtMs: Date.now(),
       deadlineMs: input.deadlineMs,
+      latestLifecycleCheckpoint: input.getLatestLifecycleCheckpoint?.(),
       startedAtMs: input.startedAtMs,
     });
   } finally {
@@ -3236,12 +3257,20 @@ export async function settlePreConsentRuntimeWithinDeadline(input: {
 function deadlineLimitedPreConsentResult(input: {
   completedAtMs: number;
   deadlineMs: number;
+  latestLifecycleCheckpoint?: {
+    atMs: number;
+    label: string;
+    status: "started" | "completed";
+  };
   startedAtMs: number;
 }): PreConsentRuntimeScannerResult {
   const startedAt = nowIso(input.startedAtMs);
   const completedAt = nowIso(input.completedAtMs);
+  const checkpointDetail = input.latestLifecycleCheckpoint
+    ? ` Last lifecycle checkpoint: ${input.latestLifecycleCheckpoint.label}:${input.latestLifecycleCheckpoint.status}.`
+    : " No lifecycle checkpoint was retained.";
   const limitation =
-    `Pre-consent runtime did not settle after its ${input.deadlineMs}ms module budget; no pre-consent evidence was retained.`;
+    `Pre-consent runtime did not settle after its ${input.deadlineMs}ms module budget; no pre-consent evidence was retained.${checkpointDetail}`;
   return {
     ...emptyPreConsentResult(startedAt),
     moduleRun: {
@@ -3250,6 +3279,13 @@ function deadlineLimitedPreConsentResult(input: {
       startedAt,
       completedAt,
       durationMs: Math.max(0, input.completedAtMs - input.startedAtMs),
+      timingBreakdown: input.latestLifecycleCheckpoint
+        ? [{
+            label: "deadline lifecycle checkpoint",
+            durationMs: Math.max(0, input.latestLifecycleCheckpoint.atMs - input.startedAtMs),
+            detail: `${input.latestLifecycleCheckpoint.label}:${input.latestLifecycleCheckpoint.status}`,
+          }]
+        : [],
       evidenceRefs: [],
       errors: [limitation],
     },

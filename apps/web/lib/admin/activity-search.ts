@@ -39,6 +39,28 @@ export function normalizeAdminActivityFilter(
     : null;
 }
 
+export function normalizeAdminExactHostname(value: string | null | undefined) {
+  if (!value || /\s|[*%_]/.test(value)) return null;
+
+  try {
+    const parsed = new URL(value.includes("://") ? value : `https://${value}`);
+    if (parsed.username || parsed.password || parsed.port || (parsed.pathname !== "/" && parsed.pathname !== "") || parsed.search || parsed.hash) {
+      return null;
+    }
+    const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
+    return hostname.includes(".") && /^[a-z0-9.-]+$/.test(hostname) ? hostname : null;
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeAdminExactScanId(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(normalized)
+    ? normalized
+    : null;
+}
+
 export function parseAdminActivitySearch(
   value: string | null | undefined,
   options: { source?: boolean } = {}

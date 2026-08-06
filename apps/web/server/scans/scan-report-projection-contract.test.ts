@@ -19,6 +19,11 @@ import {
   SCAN_REPORT_PROJECTION_VERSION
 } from "./scan-report-projection-contract";
 import type { ScanDetailResponse } from "./get-scan-by-id";
+import {
+  getPersistedCanonicalReportProjection,
+  PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION,
+  type PersistedCanonicalReportProjection
+} from "./persisted-canonical-report-projection";
 
 const projectionPath = "apps/web/server/scans/scan-report-projection.ts";
 const projectionContractPath = "apps/web/server/scans/scan-report-projection-contract.ts";
@@ -139,6 +144,58 @@ test("persisted display projection is bounded, checksum-verified, and scan-bound
       report_projection_status: "ready",
       report_projection_version: SCAN_REPORT_PROJECTION_VERSION
     }
+  }), null);
+});
+
+test("persisted projection carries one scan-bound canonical output packet", () => {
+  const scanRecord = {
+    events: [],
+    runtimeArtifacts: {},
+    scan: {
+      completedAt: "2026-08-05T18:40:44.000Z",
+      id: "5eb8e37d-7eac-4c45-bb4b-3c31c239a2df",
+      status: "completed"
+    },
+    snapshot: null
+  } as unknown as ScanDetailResponse;
+  const canonicalReportProjection = {
+    artifactVersion: PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION,
+    checklistRows: [],
+    derivedContext: {
+      accessibilityIssueRows: [],
+      accessibilityRuleEvidenceRows: [],
+      consentAuditFindings: [],
+      policyBehaviorContradictions: [],
+      preconsentViolationRows: [],
+      prioritizedAccessibilityRuleRows: [],
+      scanReportReviewIssues: [],
+      taxonomySnapshotSections: []
+    },
+    globalUnifiedFindings: [],
+    legacyScoreAssessmentInput: {
+      coverageConfidence: "insufficient",
+      coverageRatio: 0,
+      inputFindingIds: [],
+      inputProjectionFingerprint: "sha256:" + "0".repeat(64),
+      scanId: scanRecord.scan.id,
+      scoreKind: "gdpr_eprivacy_evidence",
+      scoreSource: "wc01.regulatory-coverage-score",
+      scoreValue: null,
+      scoreVersion: "gdpr-eprivacy-evidence.legacy-v1",
+      scoredAt: scanRecord.scan.completedAt as string,
+      withholdingReason: "legacy_evidence_score_withheld:insufficient"
+    },
+    normalizedConcerns: [],
+    ownerUnifiedFindings: [],
+    topFindingIds: []
+  } satisfies PersistedCanonicalReportProjection;
+
+  const persisted = buildPersistedScanReportProjection(scanRecord, { canonicalReportProjection });
+  const transported = JSON.parse(JSON.stringify(persisted.payload)) as ScanDetailResponse;
+  assert.deepEqual(getPersistedCanonicalReportProjection(transported), canonicalReportProjection);
+  assert.equal(getPersistedCanonicalReportProjection({
+    ...transported,
+    scan: { ...transported.scan, id: "00000000-0000-0000-0000-000000000000" }
   }), null);
 });
 

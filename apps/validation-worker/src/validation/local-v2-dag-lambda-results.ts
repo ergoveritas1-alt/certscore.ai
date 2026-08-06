@@ -46,10 +46,12 @@ const RESULT_VISIBILITY_TIMEOUT_SECONDS = 240;
 const MATERIALIZATION_FINALIZING_WAIT_MS = 150_000;
 const MATERIALIZATION_INPUT_POLL_MS = 250;
 const MATERIALIZATION_RETRY_MS = 500;
-// The production scanner has a 30s terminal-result envelope. Keep a small SQS
-// delivery margin, but do not classify materially slower scans as healthy.
 const ORPHAN_RECONCILIATION_INTERVAL_MS = 10_000;
-const ORPHAN_RECONCILIATION_AGE_MS = 45_000;
+// A missing result at the expected envelope is an operational delay, not
+// evidence that the scanner failed. The hard deadline follows the deployed
+// 900s coordinator timeout plus a bounded delivery allowance.
+const ORPHAN_DELAY_AGE_MS = 45_000;
+const ORPHAN_TERMINAL_AGE_MS = 930_000;
 
 type LambdaResultStatus = "completed" | "failed";
 type LambdaTargetEnvironment = "local" | "production";
@@ -126,6 +128,12 @@ type S3GetClient = {
   send(command: GetObjectCommand): Promise<GetObjectCommandOutput>;
 };
 
+export type VerifiedProductionArtifactChain = {
+  manifest: { sha256: string; sizeBytes: number };
+  scanArtifact: { sha256: string; sizeBytes: number };
+  verifiedAt: string;
+};
+
 export type LocalV2DagLambdaResultPollerOptions = {
   enabled: boolean;
   pollMs: number;
@@ -183,7 +191,9 @@ export async function ensureCompletedScanScoresPersisted(input: {
 }) {
   if (await completedScoreMaterializationExists(input.scanId)) return { alreadyPersisted: true };
   const finalizingDeadline = Date.now() + MATERIALIZATION_FINALIZING_WAIT_MS;
-  await waitForCanonicalReportInputs(input.scanId, finalizingDeadline);
+  if (!(await canonicalReportInputsReady(input.scanId))) {
+    throw new Error("Canonical report inputs are not ready for materialization.");
+  }
   const token = randomBytes(32).toString("base64url");
   const tokenSha256 = createHash("sha256").update(token).digest("hex");
   await query(
@@ -483,6 +493,7 @@ type PolicyEvidenceProcessingResult = Awaited<ReturnType<typeof processPolicyEvi
 const policyEvidenceProcessingInFlight = new Map<string, Promise<PolicyEvidenceProcessingResult>>();
 const policyEvidenceBackgroundTasks = new Set<Promise<void>>();
 const resultFinalizationBackgroundTasks = new Set<Promise<void>>();
+const resultFinalizationScanIds = new Set<string>();
 
 async function processPolicyEvidenceReadyMessage(input: {
   queueRegion: string;
@@ -919,6 +930,85 @@ function inferS3ArtifactRegion(bucket: string) {
   return match?.[1] ?? "eu-central-1";
 }
 
+async function readVerifiedProductionArtifact(input: {
+  expected: Record<string, unknown>;
+  label: "manifest" | "scanArtifact";
+  s3Client?: S3GetClient;
+  uri: string;
+}) {
+  const expectedSha256 = stringValue(input.expected.sha256);
+  const expectedSizeBytes = typeof input.expected.sizeBytes === "number" && Number.isSafeInteger(input.expected.sizeBytes)
+    ? input.expected.sizeBytes
+    : null;
+  if (!expectedSha256 || !/^[a-f0-9]{64}$/i.test(expectedSha256) || expectedSizeBytes === null || expectedSizeBytes <= 0) {
+    throw new Error(`Production ${input.label} verification metadata is invalid.`);
+  }
+  if (expectedSizeBytes > 64 * 1024 * 1024) {
+    throw new Error(`Production ${input.label} exceeds the bounded retained-artifact size.`);
+  }
+  const { bucket, key } = parseS3Uri(input.uri);
+  const s3Client = input.s3Client ?? new S3Client({ region: inferS3ArtifactRegion(bucket) });
+  const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  if (typeof response.ContentLength === "number" && response.ContentLength !== expectedSizeBytes) {
+    throw new Error(`Production ${input.label} content length did not verify.`);
+  }
+  const body = await streamToBuffer(response.Body);
+  const sha256 = createHash("sha256").update(body).digest("hex");
+  if (body.byteLength !== expectedSizeBytes || sha256 !== expectedSha256) {
+    throw new Error(`Production ${input.label} checksum or size did not verify.`);
+  }
+  return { body, sha256, sizeBytes: body.byteLength };
+}
+
+export async function verifyProductionArtifactChain(
+  parsedMessage: LambdaResultMessage,
+  s3Client?: S3GetClient,
+): Promise<VerifiedProductionArtifactChain | null> {
+  if (parsedMessage.status !== "completed" || parsedMessage.targetEnvironment !== "production") return null;
+  const pointers = parsedMessage.artifactPointers ?? {};
+  const metadata = parsedMessage.artifactMetadata ?? {};
+  const manifestUri = stringValue(pointers.manifestUri);
+  const scanArtifactUri = stringValue(pointers.scanArtifactUri);
+  if (!manifestUri || !scanArtifactUri) {
+    throw new Error("Production retained-artifact pointers are incomplete.");
+  }
+  const [manifest, scanArtifact] = await Promise.all([
+    readVerifiedProductionArtifact({
+      expected: asRecord(metadata.manifestUri),
+      label: "manifest",
+      s3Client,
+      uri: manifestUri,
+    }),
+    readVerifiedProductionArtifact({
+      expected: asRecord(metadata.scanArtifactUri),
+      label: "scanArtifact",
+      s3Client,
+      uri: scanArtifactUri,
+    }),
+  ]);
+  let manifestJson: Record<string, unknown>;
+  let scanArtifactJson: Record<string, unknown>;
+  try {
+    manifestJson = asRecord(JSON.parse(manifest.body.toString("utf8")));
+    scanArtifactJson = asRecord(JSON.parse(scanArtifact.body.toString("utf8")));
+  } catch {
+    throw new Error("Production retained artifacts are not valid JSON.");
+  }
+  if (
+    manifestJson.scanId !== parsedMessage.scanId ||
+    manifestJson.processor !== PROCESSOR ||
+    manifestJson.targetEnvironment !== parsedMessage.targetEnvironment ||
+    scanArtifactJson.scanId !== parsedMessage.scanId
+  ) {
+    throw new Error("Production retained-artifact identity did not match the Lambda result.");
+  }
+  return {
+    manifest: { sha256: manifest.sha256, sizeBytes: manifest.sizeBytes },
+    scanArtifact: { sha256: scanArtifact.sha256, sizeBytes: scanArtifact.sizeBytes },
+    verifiedAt: new Date().toISOString(),
+  };
+}
+
 async function streamToBuffer(body: GetObjectCommandOutput["Body"]) {
   if (!body) {
     throw new Error("Lambda artifact object did not include a body.");
@@ -1149,9 +1239,22 @@ async function mirrorLocalV2DagLambdaAuxiliaryArtifacts(input: {
   return input.mirror;
 }
 
+export function isRecoverableLateResultFailure(
+  eventType: string | null,
+  metadata: Record<string, unknown> | null,
+) {
+  if (eventType === "ops.scan_marked_failed") {
+    const reason = stringValue(metadata?.reason);
+    return reason === "lambda_terminal_result_absent" ||
+      reason === "lambda_terminal_result_absent_after_execution_deadline";
+  }
+  return eventType === "v2_lambda_dispatch.failed" && metadata?.dispatchState === "uncertain";
+}
+
 export async function recordLocalV2DagLambdaResult(
   parsedMessage: LambdaResultMessage,
   options: {
+    artifactVerification?: VerifiedProductionArtifactChain | null;
     consumer?: LambdaResultConsumerMetadata;
     s3Client?: S3GetClient;
     workspaceRoot?: string;
@@ -1159,14 +1262,28 @@ export async function recordLocalV2DagLambdaResult(
 ) {
   const context = await queryOne<{
     domainId: string | null;
+    latestFailureEventType: string | null;
+    latestFailureMetadata: Record<string, unknown> | null;
     organizationId: string | null;
     scanConfigJson: Record<string, unknown> | null;
+    scanStatus: string;
   }>(
     `select domain_id as "domainId",
             organization_id as "organizationId",
-            scan_config_json as "scanConfigJson"
+            scan_config_json as "scanConfigJson",
+            status as "scanStatus",
+            latest_failure.event_type as "latestFailureEventType",
+            latest_failure.metadata_json as "latestFailureMetadata"
        from scans
-      where id = $1
+       left join lateral (
+         select event_type, metadata_json
+           from scan_events
+          where scan_id = scans.id
+            and event_type in ('ops.scan_marked_failed', 'v2_lambda_dispatch.failed')
+          order by created_at desc
+          limit 1
+       ) latest_failure on true
+      where scans.id = $1
       limit 1`,
     [parsedMessage.scanId],
     { readOnly: true }
@@ -1174,6 +1291,17 @@ export async function recordLocalV2DagLambdaResult(
   if (!context) {
     throw new Error(`Cannot record Lambda result for unknown scan ${parsedMessage.scanId}.`);
   }
+
+  const lateResultRecoverable = parsedMessage.status === "completed" &&
+    context.scanStatus === "failed" &&
+    (parsedMessage.targetEnvironment === "local" || options.artifactVerification !== null && options.artifactVerification !== undefined) &&
+    isRecoverableLateResultFailure(context.latestFailureEventType, context.latestFailureMetadata);
+  const acceptedForCanonicalProcessing = parsedMessage.status === "completed" && (
+    context.scanStatus === "queued" ||
+    context.scanStatus === "running" ||
+    context.scanStatus === "completed" ||
+    lateResultRecoverable
+  );
 
   const shouldMirrorArtifacts = parsedMessage.targetEnvironment === "local";
   const artifactMirror = shouldMirrorArtifacts
@@ -1225,6 +1353,21 @@ export async function recordLocalV2DagLambdaResult(
   );
   let resultEventId = existingEvent?.id ?? null;
   if (existingEvent) {
+    if (options.artifactVerification || parsedMessage.policyEvidence) {
+      await query(
+        `update scan_events
+            set metadata_json = metadata_json || jsonb_build_object(
+              'artifactVerification', $2::jsonb,
+              'policyEvidence', $3::jsonb
+            )
+          where id = $1`,
+        [
+          existingEvent.id,
+          options.artifactVerification ? JSON.stringify(options.artifactVerification) : null,
+          parsedMessage.policyEvidence ? JSON.stringify(parsedMessage.policyEvidence) : null,
+        ]
+      );
+    }
     if (artifactMirror) {
       await query(
         `update scan_events
@@ -1269,6 +1412,7 @@ export async function recordLocalV2DagLambdaResult(
             productionReadMode: "verified_s3"
           },
           artifactOnly: true,
+          artifactVerification: options.artifactVerification ?? null,
           artifactMetadata: parsedMessage.artifactMetadata ?? {},
           artifactMirror: artifactMirror
             ? {
@@ -1311,6 +1455,7 @@ export async function recordLocalV2DagLambdaResult(
             ? { lambdaHandlerTiming: parsedMessage.handlerTiming }
             : {}),
           processor: PROCESSOR,
+          policyEvidence: parsedMessage.policyEvidence ?? null,
           productionFindingIntegration: false,
           resultStatus: parsedMessage.status,
           ...(parsedMessage.scannerGitSha ? { scannerGitSha: parsedMessage.scannerGitSha } : {}),
@@ -1330,8 +1475,8 @@ export async function recordLocalV2DagLambdaResult(
 
   await query(
     `update scans
-        set completed_at = coalesce(completed_at, $2::timestamptz),
-            error_message = case when $3 = 'failed' then $4 else error_message end,
+        set completed_at = case when $3 = 'completed' then $2::timestamptz else coalesce(completed_at, $2::timestamptz) end,
+            error_message = case when $3 = 'failed' then $4 else null end,
             egress_id = coalesce($5, egress_id),
             egress_provider = coalesce($6, egress_provider),
             scan_config_json = jsonb_set(
@@ -1340,13 +1485,14 @@ export async function recordLocalV2DagLambdaResult(
               coalesce(scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || jsonb_build_object(
                 'completedAt', $2::timestamptz,
                 'dispatchState', case when $3 = 'failed' then 'failed' else 'completed' end,
+                'lateResultRecovered', $8::boolean,
                 'runtimeProvenance', $7::jsonb
               ),
               true
             ),
             status = case when $3 = 'failed' then 'failed' else 'completed' end
       where id = $1
-        and status in ('queued', 'running')`,
+        and (status in ('queued', 'running') or $8::boolean)`,
     [
       parsedMessage.scanId,
       parsedMessage.completedAt,
@@ -1356,9 +1502,32 @@ export async function recordLocalV2DagLambdaResult(
       parsedMessage.scannerRuntimeProvenance?.egressProvider ?? null,
       parsedMessage.scannerRuntimeProvenance
         ? JSON.stringify(parsedMessage.scannerRuntimeProvenance)
-        : null
+        : null,
+      lateResultRecoverable,
     ]
   );
+  if (lateResultRecoverable) {
+    await query(
+      `insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+       values ($1::uuid, $2::uuid, $3::uuid, 'v2_lambda_result.late_reconciled',
+               'A verified late Lambda result recovered a transient scanner-control-plane failure.',
+               jsonb_build_object(
+                 'priorEventType', $4::text,
+                 'priorReason', $5::text,
+                 'artifactVerification', $6::jsonb,
+                 'processor', $7::text
+               ))`,
+      [
+        parsedMessage.scanId,
+        context.domainId,
+        context.organizationId,
+        context.latestFailureEventType,
+        stringValue(context.latestFailureMetadata?.reason) ?? stringValue(context.latestFailureMetadata?.dispatchState),
+        options.artifactVerification ? JSON.stringify(options.artifactVerification) : null,
+        PROCESSOR,
+      ]
+    );
+  }
   if (parsedMessage.scannerRuntimeProvenance) {
     await query(
       `update scan_snapshots
@@ -1380,11 +1549,13 @@ export async function recordLocalV2DagLambdaResult(
     `update pulse_requests
         set status = case when $3 = 'failed' then 'failed' else 'completed' end,
             phase = case when $3 = 'failed' then 'failed' else 'completed' end,
-            completed_at = coalesce(completed_at, $2::timestamptz),
-            elapsed_seconds = greatest(0, extract(epoch from (coalesce(completed_at, $2::timestamptz) - requested_at))::int)
+            completed_at = case when $3 = 'completed' then $2::timestamptz else coalesce(completed_at, $2::timestamptz) end,
+            elapsed_seconds = greatest(0, extract(epoch from (
+              case when $3 = 'completed' then $2::timestamptz else coalesce(completed_at, $2::timestamptz) end - requested_at
+            ))::int)
       where scan_id = $1::uuid
-        and status in ('queued', 'running', 'finalizing')`,
-    [parsedMessage.scanId, parsedMessage.completedAt, parsedMessage.status]
+        and (status in ('queued', 'running', 'finalizing') or $4::boolean)`,
+    [parsedMessage.scanId, parsedMessage.completedAt, parsedMessage.status, lateResultRecoverable]
   );
   if (artifactMirror) {
     await mirrorLocalV2DagLambdaAuxiliaryArtifacts({
@@ -1416,6 +1587,7 @@ export async function recordLocalV2DagLambdaResult(
       );
     }
   }
+  return { acceptedForCanonicalProcessing, lateResultRecoverable };
 }
 
 async function persistScannerRuntimeSnapshot(parsedMessage: LambdaResultMessage) {
@@ -1547,7 +1719,9 @@ async function pollOnce(input: {
     }
     try {
       const parsed = parseLambdaResultMessage(rawMessage, input.targetEnvironment);
-      await recordLocalV2DagLambdaResult(parsed, {
+      const artifactVerification = await verifyProductionArtifactChain(parsed);
+      const retention = await recordLocalV2DagLambdaResult(parsed, {
+        artifactVerification,
         consumer: {
           approximateReceiveCount: parseSqsInteger(message.Attributes?.ApproximateReceiveCount),
           consumerReceivedAt: new Date().toISOString(),
@@ -1556,28 +1730,24 @@ async function pollOnce(input: {
           sqsMessageId: message.MessageId ?? null
         }
       });
-      if (parsed.status === "completed") {
-        const started = startCompletedResultFinalization({
-          client: input.client,
-          message,
-          parsed,
-          queueRegion: input.queueRegion,
-          queueUrl: input.queueUrl,
-          webBaseUrl: input.webBaseUrl,
-        });
-        if (!started) {
-          await input.client.send(new ChangeMessageVisibilityCommand({
-            QueueUrl: input.queueUrl,
-            ReceiptHandle: receiptHandle(message),
-            VisibilityTimeout: 0,
-          }));
-        }
-        return { deleted: 0, failed: 0, handled: 1 };
-      }
       await input.client.send(new DeleteMessageCommand({
         QueueUrl: input.queueUrl,
         ReceiptHandle: receiptHandle(message)
       }));
+      if (parsed.status === "completed" && retention.acceptedForCanonicalProcessing) {
+        const started = await startCompletedResultFinalization({
+          parsed,
+          queueRegion: input.queueRegion,
+          webBaseUrl: input.webBaseUrl,
+        });
+        if (!started) {
+          console.info("[validation-worker] deferred persisted Lambda result finalization", {
+            queueRegion: input.queueRegion,
+            scanId: parsed.scanId,
+          });
+        }
+        return { deleted: 1, failed: 0, handled: 1 };
+      }
       return { deleted: 1, failed: 0, handled: 1 };
     } catch (error) {
       const resultTargetEnvironment = getLambdaResultTargetEnvironment(rawMessage);
@@ -1623,17 +1793,19 @@ async function pollOnce(input: {
   return { deleted, failed, handled, received: messages.length };
 }
 
-function startCompletedResultFinalization(input: {
-  client: SQSClient;
-  message: Message;
+async function startCompletedResultFinalization(input: {
   parsed: LambdaResultMessage;
   queueRegion: string;
-  queueUrl: string;
   webBaseUrl?: string;
 }) {
-  if (resultFinalizationBackgroundTasks.size >= RESULT_FINALIZATION_BACKGROUND_CONCURRENCY) {
+  if (
+    resultFinalizationBackgroundTasks.size >= RESULT_FINALIZATION_BACKGROUND_CONCURRENCY ||
+    resultFinalizationScanIds.has(input.parsed.scanId) ||
+    !(await canonicalReportInputsReady(input.parsed.scanId))
+  ) {
     return false;
   }
+  resultFinalizationScanIds.add(input.parsed.scanId);
   const task = (async () => {
     try {
       if (input.parsed.policyEvidence) {
@@ -1649,40 +1821,23 @@ function startCompletedResultFinalization(input: {
         webBaseUrl: input.webBaseUrl,
       });
       await persistScannerRuntimeSnapshot(input.parsed);
-      await input.client.send(new DeleteMessageCommand({
-        QueueUrl: input.queueUrl,
-        ReceiptHandle: receiptHandle(input.message),
-      }));
     } catch (error) {
-      console.error("[validation-worker] v2 DAG Lambda result finalization failed", {
+      console.error("[validation-worker] persisted v2 DAG Lambda result finalization failed", {
         error: error instanceof Error ? error.message : String(error),
-        messageId: input.message.MessageId ?? null,
         queueRegion: input.queueRegion,
         scanId: input.parsed.scanId,
       });
-      try {
-        await input.client.send(new ChangeMessageVisibilityCommand({
-          QueueUrl: input.queueUrl,
-          ReceiptHandle: receiptHandle(input.message),
-          VisibilityTimeout: 10,
-        }));
-      } catch (visibilityError) {
-        console.error("[validation-worker] failed to release Lambda result after finalization failure", {
-          error: visibilityError instanceof Error ? visibilityError.message : String(visibilityError),
-          messageId: input.message.MessageId ?? null,
-          queueRegion: input.queueRegion,
-          scanId: input.parsed.scanId,
-        });
-      }
     }
   })();
   resultFinalizationBackgroundTasks.add(task);
   void task
-    .finally(() => resultFinalizationBackgroundTasks.delete(task))
+    .finally(() => {
+      resultFinalizationBackgroundTasks.delete(task);
+      resultFinalizationScanIds.delete(input.parsed.scanId);
+    })
     .catch((error) => {
-      console.error("[validation-worker] Lambda result finalization background task failed", {
+      console.error("[validation-worker] persisted Lambda result finalization background task failed", {
         error: error instanceof Error ? error.message : String(error),
-        messageId: input.message.MessageId ?? null,
         queueRegion: input.queueRegion,
         scanId: input.parsed.scanId,
       });
@@ -1711,11 +1866,151 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-export async function reconcileOrphanedLocalV2DagLambdaScans(input: {
-  olderThanMs?: number;
+export async function reconcilePersistedCompletedResultFinalizations(input: {
+  webBaseUrl?: string;
 } = {}) {
-  const olderThanMs = Math.max(30_000, input.olderThanMs ?? ORPHAN_RECONCILIATION_AGE_MS);
-  const result = await query<{ scan_id: string }>(
+  const candidates = await query<{
+    completed_at: string;
+    metadata_json: Record<string, unknown>;
+    scan_id: string;
+  }>(
+    `select distinct on (result.scan_id)
+            result.scan_id::text,
+            result.metadata_json->>'completedAt' as completed_at,
+            result.metadata_json
+       from scan_events result
+       join scans scan on scan.id = result.scan_id
+      where result.event_type = $1
+        and result.metadata_json->>'resultStatus' = 'completed'
+        and result.created_at >= now() - interval '7 days'
+        and scan.status = 'completed'
+        and (
+          result.metadata_json->>'targetEnvironment' = 'local'
+          or result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
+        )
+        and exists (
+          select 1 from scan_events merged
+           where merged.scan_id = result.scan_id
+             and merged.event_type = 'signals.merge_completed'
+        )
+        and exists (
+          select 1 from scan_events findings
+           where findings.scan_id = result.scan_id
+             and findings.event_type = 'findings.unified_derivation_completed'
+        )
+        and not exists (
+          select 1 from scan_score_materialization_requests request
+           where request.scan_id = result.scan_id
+             and request.status in ('completed', 'terminal_failed')
+        )
+      order by result.scan_id, result.created_at desc
+      limit 25`,
+    [RESULT_RECEIVED_EVENT_TYPE],
+  );
+  let started = 0;
+  for (const candidate of candidates.rows) {
+    if (resultFinalizationBackgroundTasks.size >= RESULT_FINALIZATION_BACKGROUND_CONCURRENCY) break;
+    const metadata = asRecord(candidate.metadata_json);
+    const targetEnvironment = metadata.targetEnvironment === "production" ? "production" : "local";
+    const policyEvidence = parseEmbeddedPolicyEvidenceMessage({
+      expectedScanId: candidate.scan_id,
+      expectedTargetEnvironment: targetEnvironment,
+      value: metadata.policyEvidence,
+    });
+    const scannerRuntimeProvenance = parseScannerRuntimeProvenance(metadata.scannerRuntimeProvenance);
+    const sqsConsumer = asRecord(metadata.sqsConsumer);
+    const queueRegion = stringValue(sqsConsumer.queueRegion) ?? scannerRuntimeProvenance?.awsRegion ?? "unknown";
+    const didStart = await startCompletedResultFinalization({
+      parsed: {
+        completedAt: candidate.completed_at,
+        ...(policyEvidence ? { policyEvidence } : {}),
+        scanId: candidate.scan_id,
+        ...(scannerRuntimeProvenance ? { scannerRuntimeProvenance } : {}),
+        status: "completed",
+        targetEnvironment,
+      },
+      queueRegion,
+      webBaseUrl: input.webBaseUrl,
+    });
+    if (didStart) started += 1;
+  }
+  return started;
+}
+
+export async function reconcileOrphanedLocalV2DagLambdaScans(input: {
+  delayOlderThanMs?: number;
+  terminalOlderThanMs?: number;
+} = {}) {
+  const delayOlderThanMs = Math.max(30_000, input.delayOlderThanMs ?? ORPHAN_DELAY_AGE_MS);
+  const terminalOlderThanMs = Math.max(
+    delayOlderThanMs,
+    input.terminalOlderThanMs ?? ORPHAN_TERMINAL_AGE_MS,
+  );
+  const delayed = await query<{ scan_id: string }>(
+    `with stale as (
+       select s.id, s.domain_id, s.organization_id
+         from scans s
+        where s.status in ('queued', 'running')
+          and s.scan_type = 'full'
+          and s.scan_config_json #>> '{execution,v2DagLambda,processor}' = $1
+          and coalesce(
+                nullif(s.scan_config_json #>> '{execution,v2DagLambda,acceptedAt}', '')::timestamptz,
+                s.started_at,
+                s.created_at
+              ) < now() - ($2::int * interval '1 millisecond')
+          and exists (
+            select 1 from scan_events accepted
+             where accepted.scan_id = s.id
+               and accepted.event_type = 'v2_lambda_dispatch.accepted'
+          )
+          and not exists (
+            select 1 from scan_events terminal
+             where terminal.scan_id = s.id
+               and terminal.event_type in (
+                 'v2_lambda_result.received',
+                 'v2_lambda_result.failed',
+                 'v2_lambda_dispatch.failed',
+                 'ops.scan_marked_failed',
+                 'v2_lambda_result.delayed'
+               )
+          )
+        order by coalesce(s.started_at, s.created_at)
+        limit 25
+        for update of s skip locked
+     ), updated as (
+       update scans s
+          set scan_config_json = jsonb_set(
+                s.scan_config_json,
+                '{execution,v2DagLambda}',
+                coalesce(s.scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || jsonb_build_object(
+                  'dispatchState', 'delayed',
+                  'delayedAt', now(),
+                  'delayReason', 'lambda_terminal_result_delayed'
+                ),
+                true
+              ),
+              updated_at = now()
+         from stale
+        where s.id = stale.id
+          and s.status in ('queued', 'running')
+       returning s.id, stale.domain_id, stale.organization_id
+     )
+     insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+     select id,
+            domain_id,
+            organization_id,
+            'v2_lambda_result.delayed',
+            'The scanner result exceeded its expected delivery envelope and remains pending.',
+            jsonb_build_object(
+              'delayAgeMs', $2::int,
+              'reason', 'lambda_terminal_result_delayed',
+              'source', 'validation-worker-result-poller'
+            )
+       from updated
+     returning scan_id::text`,
+    [PROCESSOR, delayOlderThanMs]
+  );
+  const failed = await query<{ scan_id: string }>(
     `with stale as (
        select s.id, s.domain_id, s.organization_id
          from scans s
@@ -1749,14 +2044,14 @@ export async function reconcileOrphanedLocalV2DagLambdaScans(input: {
        update scans s
           set status = 'failed',
               completed_at = coalesce(s.completed_at, now()),
-              error_message = 'The scanner did not return a terminal result within 45 seconds. No result was inferred; start a new scan.',
+              error_message = 'The scanner did not return a terminal result before its execution and delivery deadline. No result was inferred; start a new scan.',
               scan_config_json = jsonb_set(
                 s.scan_config_json,
                 '{execution,v2DagLambda}',
                 coalesce(s.scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || jsonb_build_object(
                   'dispatchState', 'failed',
                   'reconciledAt', now(),
-                  'reconciliationReason', 'lambda_terminal_result_absent'
+                  'reconciliationReason', 'lambda_terminal_result_absent_after_execution_deadline'
                 ),
                 true
               ),
@@ -1771,17 +2066,17 @@ export async function reconcileOrphanedLocalV2DagLambdaScans(input: {
             domain_id,
             organization_id,
             'ops.scan_marked_failed',
-            'Always-on result reconciler marked an orphaned Lambda scan failed.',
+            'The scanner result remained absent after the execution and delivery deadline.',
             jsonb_build_object(
               'maxTerminalAgeMs', $2::int,
-              'reason', 'lambda_terminal_result_absent',
+              'reason', 'lambda_terminal_result_absent_after_execution_deadline',
               'source', 'validation-worker-result-poller'
             )
        from updated
      returning scan_id::text`,
-    [PROCESSOR, olderThanMs]
+    [PROCESSOR, terminalOlderThanMs]
   );
-  return result.rows.length;
+  return { delayed: delayed.rows.length, failed: failed.rows.length };
 }
 
 export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResultPollerOptions) {
@@ -1826,9 +2121,17 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
   async function loopReconciliation() {
     while (!stopped) {
       try {
-        const reconciled = await reconcileOrphanedLocalV2DagLambdaScans();
-        if (reconciled > 0) {
-          console.error("[validation-worker] reconciled orphaned v2 DAG Lambda scans", { reconciled });
+        const orphaned = await reconcileOrphanedLocalV2DagLambdaScans();
+        if (orphaned.delayed > 0 || orphaned.failed > 0) {
+          console.warn("[validation-worker] reconciled delayed v2 DAG Lambda scans", orphaned);
+        }
+        const finalizationsStarted = await reconcilePersistedCompletedResultFinalizations({
+          webBaseUrl: options.webBaseUrl,
+        });
+        if (finalizationsStarted > 0) {
+          console.info("[validation-worker] resumed persisted Lambda result finalizations", {
+            finalizationsStarted,
+          });
         }
       } catch (error) {
         console.error("[validation-worker] v2 DAG Lambda orphan reconciliation failed", {

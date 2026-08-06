@@ -204,6 +204,39 @@ test("completed geometry cannot erase stronger structured A/R/O evidence", () =>
   assert.ok(reconciled.basis.includes("geometry:did_not_corroborate_structured_controls"));
 });
 
+test("same-document empty geometry completes an explicitly empty DOM inventory", () => {
+  const current = {
+    ...rapidOxfamStyleObservation,
+    documentUrl: "https://www.oxfamamerica.org/",
+    captureStatus: "no_evidence" as const,
+    inventoryOutcome: "complete_empty" as const,
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory" as const],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    likelyPresent: false,
+    basis: ["settled_control_inventory_completed"],
+    visibleChoiceLabels: [],
+    acceptControlObserved: false,
+    rejectControlObserved: false,
+    managePreferencesControlObserved: false,
+    controls: [],
+  };
+
+  const reconciled = reconcileConsentUiObservationWithCompletedGeometry({
+    current,
+    geometry: oxfamStyleGeometry(),
+    geometryAccessLoaded: true,
+    pageUrl: "https://www.oxfamamerica.org/",
+    scanStartedAtMs: Date.now() - 10_000,
+  });
+
+  assert.equal(reconciled.inventoryOutcome, "complete_empty");
+  assert.deepEqual(reconciled.captureDiagnostics?.completedChannels, ["dom_inventory", "geometry"]);
+  assert.equal(reconciled.basis.includes("geometry:no_visible_first_layer_controls"), true);
+});
+
 test("non-rendered script consent words do not create a visible consent surface", async () => {
   const server = await startServer(`
     <!doctype html>
@@ -262,6 +295,7 @@ test("geometry from a different final document marks coverage incomplete without
   });
 
   assert.equal(reconciled.captureStatus, "incomplete");
+  assert.equal(reconciled.inventoryOutcome, "document_mismatch");
   assert.equal(reconciled.likelyPresent, true);
   assert.equal(reconciled.controls.length, 4);
   assert.ok(reconciled.basis.includes("geometry:document_mismatch_not_authoritative"));

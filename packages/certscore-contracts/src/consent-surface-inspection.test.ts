@@ -193,6 +193,60 @@ test("independent typed DOM and geometry recovery completes consent inspection w
   assert.equal(outcome.limitationKeys.includes("consent_surface_inspection_runtime_partial"), false);
 });
 
+test("verified complete-empty consent proof is not limited by unrelated runtime diagnostics", () => {
+  const input = baseInput();
+  input.runtimeCoverage = {
+    ...input.runtimeCoverage!,
+    coverageStatus: "limited_partial",
+    limitationKeys: ["cmp_runtime_without_actionable_surface"],
+  };
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    captureStatus: "no_evidence",
+    inventoryOutcome: "complete_empty",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    layerInspected: "first_layer",
+    basis: ["settled_control_inventory_completed", "geometry:captured"],
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "no_surface_observed_complete_coverage");
+  assert.equal(outcome.coverageStatus, "complete");
+  assert.deepEqual(outcome.limitationKeys, []);
+});
+
+test("verified empty consent proof does not erase a no-go limitation", () => {
+  const input = baseInput();
+  input.runtimeCoverage = {
+    ...input.runtimeCoverage!,
+    coverageStatus: "limited_partial",
+    limitationKeys: ["scan_no_go_diagnostics"],
+  };
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    captureStatus: "no_evidence",
+    inventoryOutcome: "complete_empty",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    layerInspected: "first_layer",
+    basis: ["settled_control_inventory_completed", "geometry:captured"],
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "indeterminate_limited_coverage");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.equal(outcome.limitationKeys.includes("scan_no_go_diagnostics"), true);
+});
+
 test("corroborated positive DOM and accessibility capture completes a partial consent lane without requiring geometry", () => {
   const input = baseInput();
   input.modulesRun![0]!.status = "partial";

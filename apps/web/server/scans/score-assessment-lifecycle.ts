@@ -13,6 +13,7 @@ import {
   persistVersionedScoreAssessment
 } from "./score-assessment-repository";
 import { classifyVersionedScoreLifecycleTime } from "./score-assessment-lifecycle-policy";
+import { getPersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
 
 function scoreLifecyclePhaseError(phase: string, error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -73,6 +74,9 @@ export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
       scoreVersion: LEGACY_GDPR_EPRIVACY_SCORE_VERSION
     })
   );
+  if (legacyAlreadyPersisted) {
+    return { inserted: false, reason: "already_persisted" as const };
+  }
   const rawRecord = input.scanRecord ?? await runScoreLifecyclePhase(input.scanId, "scan-load", () => input.organizationId
     ? getScanById({ organizationId: input.organizationId, scanId: input.scanId })
     : getAnonymousScanById(input.scanId));
@@ -95,20 +99,22 @@ export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
   const scanRecord = input.scanRecord ?? await runScoreLifecyclePhase(input.scanId, "scan-materialization", () =>
     materializeLocalV2DagScanDetail(rawRecord)
   );
-  const projection = runSynchronousScoreLifecyclePhase(input.scanId, "canonical-projection", () =>
-    buildCanonicalGdprEprivacyShadowProjection(scanRecord)
-  );
-  const persisted = legacyAlreadyPersisted
-    ? { createdAt: null, id: null, inserted: false }
-    : await runScoreLifecyclePhase(input.scanId, "legacy-persistence", () =>
-        persistVersionedScoreAssessment(buildLegacyGdprEprivacyVersionedAssessmentInput({
+  const persistedCanonicalProjection = getPersistedCanonicalReportProjection(scanRecord);
+  const versionedAssessmentInput = persistedCanonicalProjection
+    ? persistedCanonicalProjection.legacyScoreAssessmentInput
+    : runSynchronousScoreLifecyclePhase(input.scanId, "canonical-projection", () => {
+        const projection = buildCanonicalGdprEprivacyShadowProjection(scanRecord);
+        return buildLegacyGdprEprivacyVersionedAssessmentInput({
           assessment: projection.legacyScoreAssessment,
           checklistRows: projection.checklistRows,
           scanId: input.scanId,
           scoredAt,
           unifiedFindings: projection.unifiedFindings
-        }))
-      );
+        });
+      });
+  const persisted = await runScoreLifecyclePhase(input.scanId, "legacy-persistence", () =>
+    persistVersionedScoreAssessment(versionedAssessmentInput)
+  );
 
   return {
     ...persisted,

@@ -1,6 +1,6 @@
 export default function AppLoading() {
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-8" aria-label="Loading scan view">
+    <section className="min-h-screen bg-slate-50 px-6 py-8" aria-label="Loading scan view">
       <div className="mx-auto max-w-6xl space-y-5 animate-pulse">
         <div className="h-8 w-72 rounded-lg bg-slate-200" />
         <div className="h-4 w-48 rounded bg-slate-200" />
@@ -19,6 +19,6 @@ export default function AppLoading() {
           </div>
         </section>
       </div>
-    </main>
+    </section>
   );
 }

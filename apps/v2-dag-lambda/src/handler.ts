@@ -51,9 +51,13 @@ export const LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS = 2_000;
 export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_HANDLER_SAFETY_TIMEOUT_MS = 45_000;
 export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS = 37_000;
 export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_ARTIFACT_CHAIN_TIMEOUT_MS = 43_000;
+export const LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_HANDLER_SAFETY_TIMEOUT_MS = 55_000;
+export const LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_SCANNER_WORK_TIMEOUT_MS = 47_000;
+export const LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_ARTIFACT_CHAIN_TIMEOUT_MS = 53_000;
 export const LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS = 2_000;
 const LOCAL_V2_DAG_LAMBDA_PRECONSENT_SHUTDOWN_RESERVE_MS = 10_000;
 const LOCAL_V2_DAG_LAMBDA_POST_FALLBACK_RESERVE_MS = 4_000;
+const LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_FALLBACK_BUDGET_MS = 6_000;
 const LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS = 4_000;
 const LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS = 3;
 
@@ -1750,7 +1754,24 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
   }
   const policySurfaceObservations = policyEvidence.policySurfaceObservations;
   const transportSecurityObservations = runtimeEvidence.transportSecurityObservations ?? [];
+  const consentProofVisualUsable = consentProof.visualCapture?.status === "available" &&
+    consentProof.screenshots.some((screenshot) =>
+      screenshot.captureMethod !== "primary_placeholder" &&
+      screenshot.captureMethod !== "fresh_context_placeholder"
+    );
+  const consentProofInspectionUsable = consentProof.consentSurfaceInspection?.inspectionCompleted === true &&
+    consentProof.consentSurfaceInspection.coverageStatus === "complete";
+  const consentLaneStatus = consentProofVisualUsable && consentProofInspectionUsable
+    ? "usable" as const
+    : consentProof.screenshots.length > 0 || consentProof.consentUiObservations.length > 0
+      ? "limited" as const
+      : "not_testable" as const;
   const scanEvidenceLaneAssessment = buildScanEvidenceLaneAssessment({
+    consentLaneStatus,
+    consentLimitationKeys: [
+      ...(!consentProofVisualUsable ? ["representative_pre_consent_screenshot_unavailable"] : []),
+      ...(!consentProofInspectionUsable ? ["consent_control_inventory_incomplete"] : []),
+    ],
     normalizedUrl: consentProof.normalizedUrl,
     policySurfaceObservations,
     runtimeCoverage,
@@ -2874,12 +2895,15 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       payload.workerLane === "runtime_evidence" ||
       payload.workerLane === "policy_evidence"
     );
+    const consentProofWorker = evidenceWorker && payload.workerLane === "consent_proof";
     const configuredHandlerSafetyTimeoutMs = options.handlerSafetyTimeoutMs ?? (
       Number(process.env.CERTSCORE_V2_DAG_LAMBDA_HANDLER_SAFETY_TIMEOUT_MS) ||
       (evidenceCoordinator
         ? 75_000
         : evidenceWorker
-          ? LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_HANDLER_SAFETY_TIMEOUT_MS
+          ? consentProofWorker
+            ? LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_HANDLER_SAFETY_TIMEOUT_MS
+            : LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_HANDLER_SAFETY_TIMEOUT_MS
           : LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS)
     );
     handlerSafetyTimeoutMs = Math.max(
@@ -2891,7 +2915,9 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         evidenceCoordinator
           ? 60_000
           : evidenceWorker
-            ? LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS
+            ? consentProofWorker
+              ? LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_SCANNER_WORK_TIMEOUT_MS
+              : LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS
             : LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS
       ),
       Math.max(10, handlerSafetyTimeoutMs - 7_000)
@@ -2901,7 +2927,9 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         evidenceCoordinator
           ? 70_000
           : evidenceWorker
-            ? LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_ARTIFACT_CHAIN_TIMEOUT_MS
+            ? consentProofWorker
+              ? LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_ARTIFACT_CHAIN_TIMEOUT_MS
+              : LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_ARTIFACT_CHAIN_TIMEOUT_MS
             : LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS
       ),
       Math.max(scannerWorkTimeoutMs, handlerSafetyTimeoutMs - 2_000)
@@ -2960,11 +2988,16 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
           handlerStartedAtMs + scannerWorkTimeoutMs - LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
         preConsentModuleDeadlineMs: Math.max(
           1_000,
-          scannerWorkTimeoutMs - (
-            payload.workerLane === "consent_proof" || payload.workerLane === "runtime_evidence"
-              ? LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS
-              : LOCAL_V2_DAG_LAMBDA_PRECONSENT_SHUTDOWN_RESERVE_MS
-          ),
+          payload.workerLane === "consent_proof"
+            ? scannerWorkTimeoutMs -
+              LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS -
+              LOCAL_V2_DAG_LAMBDA_POST_FALLBACK_RESERVE_MS -
+              LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_FALLBACK_BUDGET_MS
+            : scannerWorkTimeoutMs - (
+              payload.workerLane === "runtime_evidence"
+                ? LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS
+                : LOCAL_V2_DAG_LAMBDA_PRECONSENT_SHUTDOWN_RESERVE_MS
+            ),
         ),
         preConsentVisualFallbackDeadlineMs: Math.max(
           1_000,

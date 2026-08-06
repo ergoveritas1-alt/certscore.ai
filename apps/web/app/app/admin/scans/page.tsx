@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { SCAN_FROM_VALUES, formatScanFromLabel } from "@website-signal-risk-scanner/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/scans/scan-from-icons";
@@ -216,8 +217,25 @@ function requesterIpLabel(scan: Pick<AdminScanListItem, "requesterIp" | "request
   return "IP not recorded";
 }
 
-export default async function AdminScansPage({ searchParams }: AdminScansPageProps) {
-  const resolvedSearchParams = searchParams ? await searchParams : {};
+type AdminScansSearchParams = Awaited<NonNullable<AdminScansPageProps["searchParams"]>>;
+
+function AdminScansContentFallback() {
+  return (
+    <Card aria-busy="true" aria-label="Loading Admin Scans results" className="min-w-0 overflow-hidden border-slate-200 bg-white">
+      <CardHeader className="pb-2">
+        <CardTitle>Scan Admin</CardTitle>
+        <div className="h-4 w-full max-w-3xl animate-pulse rounded bg-slate-100" />
+      </CardHeader>
+      <CardContent className="space-y-3 pt-0">
+        <div className="h-10 w-full animate-pulse rounded-lg bg-slate-100" />
+        <div className="h-5 w-72 animate-pulse rounded bg-slate-100" />
+        <div className="min-h-[18rem] animate-pulse rounded-xl border border-slate-200 bg-slate-50" />
+      </CardContent>
+    </Card>
+  );
+}
+
+async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParams: AdminScansSearchParams }) {
   const currentPage = normalizePage(resolvedSearchParams.page);
   const pageSize = normalizePageSize(resolvedSearchParams.perPage);
   const activeQuery = resolvedSearchParams.q?.trim().slice(0, 160) ?? "";
@@ -375,5 +393,15 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
       </CardContent>
     </Card>
     </AdminNavigationProvider>
+  );
+}
+
+export default async function AdminScansPage({ searchParams }: AdminScansPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+
+  return (
+    <Suspense fallback={<AdminScansContentFallback />}>
+      <AdminScansContent resolvedSearchParams={resolvedSearchParams} />
+    </Suspense>
   );
 }

@@ -184,4 +184,3 @@ if (errors.length > 0) {
 }
 
 console.log(`Regional scanner parity passed for ${REGIONS.join(", ")}.`);
-
