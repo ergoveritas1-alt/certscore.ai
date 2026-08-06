@@ -111,12 +111,12 @@ const detailLevels = [
 
 const mcpTools = [
   ["create_scan", "Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable."],
-  ["scan_site", "Recommended first call. Starts or reuses a public-web scan, reports freshness and anonymous quota decisions, and waits up to 45 seconds by default. If still running, use get_scan_status; otherwise use get_scan_bundle. Completed no-go scans retain completed_limited status and reason-specific guidance."],
+  ["scan_site", "First call. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call get_scan_bundle. No-go and limited coverage are observations, never proof of compliance."],
   ["get_scan", "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available."],
-  ["get_scan_status", "Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available."],
+  ["get_scan_status", "Poll with only the stable scanId returned by scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status."],
   ["get_report", "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet."],
   ["get_evidence", "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values."],
-  ["get_scan_bundle", "Recommended second call after scan_site. Returns the canonical scan state, compact report summary, findings, bounded evidence summary, and pre-consent inventory in one agent-friendly response."],
+  ["get_scan_bundle", "Call after completed or completed_limited status. summary returns the canonical result and compact top findings; findings adds bounded finding detail; evidence adds bounded retained-evidence summaries and references; full adds the bounded public report. maxBytes is enforced with explicit actual-byte and truncation metadata. Never interpret no-go, not-observed, or limited coverage as proof of compliance."],
   ["export_findings", "Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows."],
   ["list_findings", "List API v2 public-safe findings already projected for a scan."],
   ["get_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan."],

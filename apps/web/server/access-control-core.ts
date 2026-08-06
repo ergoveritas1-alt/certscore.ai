@@ -3,7 +3,7 @@ const DEFAULT_ALLOWED_AUTH_EMAILS = [
   "bmasek@gmail.com",
   "demo@certscore.ai",
   "xlprep@gmail.com",
-  "ben@ergoveritas.com"
+  "mcp_demo@certscore.ai"
 ] as const;
 
 type AccessControlEnv = Record<string, string | undefined>;

@@ -71,6 +71,9 @@ async function withMcpClient<T>(callback: (client: Client) => Promise<T>, option
 }
 
 function parseToolJson(result: Awaited<ReturnType<Client["callTool"]>>) {
+  if (result.structuredContent && typeof result.structuredContent === "object" && !Array.isArray(result.structuredContent)) {
+    return result.structuredContent as Record<string, unknown>;
+  }
   const first = result.content[0];
   assert.equal(first?.type, "text");
   return JSON.parse(first.text) as Record<string, unknown>;
@@ -189,6 +192,13 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
       tools.tools.map((tool) => tool.name).sort(),
       ["get_scan_bundle", "get_scan_status", "scan_site"]
     );
+    const statusTool = tools.tools.find((tool) => tool.name === "get_scan_status");
+    assert.deepEqual(statusTool?.inputSchema.required, ["scanId"]);
+    assert.equal(statusTool?.inputSchema.additionalProperties, false);
+    const bundleTool = tools.tools.find((tool) => tool.name === "get_scan_bundle");
+    assert.equal(bundleTool?.inputSchema.additionalProperties, false);
+    assert.deepEqual((bundleTool?.inputSchema.properties?.detail as { enum?: string[] })?.enum, ["summary", "findings", "evidence", "full"]);
+    assert.equal((bundleTool?.inputSchema.properties?.maxBytes as { minimum?: number })?.minimum, 5_000);
   }, { toolProfile: "light" });
 });
 
@@ -479,6 +489,8 @@ test("scan_site waits by default and returns the completed scan resource", async
       body: {
         type: "certscore_scan_job",
         status: "completed",
+        score: 78,
+        riskLevel: "monitor",
         jobId: "pulse_job_123",
         scanId: "scan_123"
       }
@@ -512,22 +524,13 @@ test("scan_site waits by default and returns the completed scan resource", async
   }
 });
 
-test("get_scan_status returns normalized scanId", async () => {
-  const mock = installFetch([
-    {
-      status: 200,
-      body: { type: "certscore_pulse_status", status: "completed", jobId: "pulse_job_123", scan_id: "scan_123" }
-    }
-  ]);
-  try {
-    await withMcpClient(async (client) => {
-      const result = parseToolJson(await client.callTool({ name: "get_scan_status", arguments: { jobId: "pulse_job_123" } }));
-      assert.equal(result.scanId, "scan_123");
-      assert.match(mock.calls[0] ?? "", /pulse\/status\/pulse_job_123/);
-    });
-  } finally {
-    mock.restore();
-  }
+test("get_scan_status requires the stable scanId", async () => {
+  await withMcpClient(async (client) => {
+    const missing = await client.callTool({ name: "get_scan_status", arguments: {} });
+
+    assert.equal(missing.isError, true);
+    assert.match(JSON.stringify(missing), /Input validation error/);
+  });
 });
 
 test("get_scan_status supports API v2 scanId status with timing fields", async () => {
@@ -551,6 +554,8 @@ test("get_scan_status supports API v2 scanId status with timing fields", async (
         scanId: "00000000-0000-4000-8000-000000000123",
         domain: "example.com",
         status: "completed",
+        score: 78,
+        riskLevel: "monitor",
         startedAt: "2026-07-08T12:00:00.000Z",
         completedAt: "2026-07-08T12:00:34.000Z",
         scanTimeSeconds: 34
@@ -570,6 +575,8 @@ test("get_scan_status supports API v2 scanId status with timing fields", async (
       assert.equal(result.startedAt, "2026-07-08T12:00:00.000Z");
       assert.equal(result.completedAt, "2026-07-08T12:00:34.000Z");
       assert.equal(result.scanTimeSeconds, 34);
+      assert.equal(result.score, 78);
+      assert.equal(result.riskLevel, "monitor");
       assert.equal(mock.calls.length, 2);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status/);
       assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123$/);
@@ -637,7 +644,7 @@ test("get_report supports markdown and JSON report retrieval", async () => {
       const markdown = parseToolJson(
         await client.callTool({ name: "get_report", arguments: { scanId: "scan_123", format: "markdown" } })
       );
-      assert.equal(markdown, "# CertScore Pulse");
+      assert.equal(markdown.value, "# CertScore Pulse");
 
       const json = parseToolJson(await client.callTool({ name: "get_report", arguments: { scanId: "scan_123", detail: "full" } }));
       assert.equal(json.scanId, "scan_123");
@@ -663,11 +670,12 @@ test("get_evidence retrieves the bounded Evidence JSON artifact", async () => {
   }
 });
 
-test("get_scan_bundle returns the compact full review in one MCP call", async () => {
+test("get_scan_bundle returns a compact canonical summary by default", async () => {
   const scan = {
     type: "certscore_scan",
     scanId: "scan_123",
     domain: "example.com",
+    url: "https://example.com",
     status: "completed",
     score: 72,
     coverage: { status: "partial" },
@@ -676,18 +684,106 @@ test("get_scan_bundle returns the compact full review in one MCP call", async ()
   };
   const mock = installFetch([
     { status: 200, body: scan },
-    { status: 200, body: { ...pulse, type: "certscore_pulse_summary", executiveSummary: { issuesToReview: 1 }, counts: { totalAutomatedFindingCount: 1 } } },
-    { status: 200, body: { ...pulse, type: "certscore_pulse_evidence", evidenceSafetyNotes: ["Public-safe evidence only."], projectedFindings: pulse.findings } },
+    { status: 200, body: { ...pulse, summary: { ...pulse.summary, score: 88 }, type: "certscore_pulse_summary", executiveSummary: { issuesToReview: 1 }, counts: { totalAutomatedFindingCount: 1 } } },
+    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const raw = await client.callTool({ name: "get_scan_bundle", arguments: { scanId: "scan_123" } });
+      const bundle = parseToolJson(raw);
+      assert.equal(bundle.type, "certscore_scan_bundle");
+      assert.equal(bundle.scanId, "scan_123");
+      assert.equal(bundle.status, "completed");
+      assert.equal(bundle.score, 72);
+      assert.equal((bundle.findings as unknown[]).length, 1);
+      assert.equal(bundle.evidenceSummary, undefined);
+      assert.equal(bundle.preConsentCookiesTrackers, undefined);
+      assert.equal(bundle.recommendedNextTool, null);
+      assert.doesNotMatch(JSON.stringify(bundle), /explain_finding/);
+      assert.equal(mock.calls.length, 3);
+      assert.ok(raw.content[0]?.type === "text" && raw.content[0].text.length < 180);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("completed Light tools preserve one final canonical score and metadata", async () => {
+  const canonicalScan = {
+    type: "certscore_scan",
+    scanId: "scan_123",
+    domain: "example.com",
+    url: "https://example.com",
+    status: "completed",
+    score: 71,
+    scoreStatus: "final",
+    scoreVersion: "overall-score.v2",
+    scoreUpdatedAt: "2026-08-05T20:00:30.000Z",
+    riskLevel: "review_recommended",
+    coverage: { status: "complete" },
+    createdAt: "2026-08-05T19:59:58.000Z",
+    startedAt: "2026-08-05T20:00:00.000Z",
+    completedAt: "2026-08-05T20:00:30.000Z",
+    scanTimeSeconds: 30,
+    links: { report: "https://certscore.ai/scan/scan_123" }
+  };
+  const mock = installFetch([
+    { status: 200, body: canonicalScan },
+    { status: 200, body: { type: "certscore_scan_job", jobId: "scan_123", scanId: "scan_123", status: "completed" } },
+    { status: 200, body: canonicalScan },
+    { status: 200, body: canonicalScan },
+    { status: 200, body: { ...pulse, summary: { ...pulse.summary, score: 73 }, type: "certscore_pulse_summary" } },
+    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const created = parseToolJson(await client.callTool({ name: "scan_site", arguments: { url: "https://example.com" } }));
+      const status = parseToolJson(await client.callTool({ name: "get_scan_status", arguments: { scanId: "scan_123" } }));
+      const bundle = parseToolJson(await client.callTool({ name: "get_scan_bundle", arguments: { scanId: "scan_123" } }));
+
+      for (const result of [created, status, bundle]) {
+        assert.equal(result.score, 71);
+        assert.equal(result.scoreStatus, "final");
+        assert.equal(result.scoreVersion, "overall-score.v2");
+        assert.equal(result.scoreUpdatedAt, "2026-08-05T20:00:30.000Z");
+        assert.equal(result.riskLevel, "review_recommended");
+        assert.deepEqual(result.coverage, { status: "complete" });
+      }
+      assert.equal(created.createdAt, "2026-08-05T19:59:58.000Z");
+      assert.equal(status.createdAt, "2026-08-05T19:59:58.000Z");
+      assert.equal((bundle.timing as Record<string, unknown>).createdAt, "2026-08-05T19:59:58.000Z");
+      assert.equal(created.url, "https://example.com");
+      assert.equal(status.url, "https://example.com");
+      assert.equal(bundle.url, "https://example.com");
+      assert.equal(status.reportUrl, "https://certscore.ai/scan/scan_123");
+      assert.equal(bundle.reportUrl, "https://certscore.ai/scan/scan_123");
+      assert.equal(mock.calls.length, 6);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("get_scan_bundle opts into bounded evidence and pre-consent inventory", async () => {
+  const scan = {
+    type: "certscore_scan",
+    scanId: "scan_123",
+    domain: "example.com",
+    status: "completed",
+    score: 72,
+    coverage: { status: "partial" }
+  };
+  const mock = installFetch([
+    { status: 200, body: scan },
+    { status: 200, body: { ...pulse, type: "certscore_pulse_summary" } },
     { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } },
+    { status: 200, body: { ...pulse, type: "certscore_pulse_evidence", evidenceSafetyNotes: ["Public-safe evidence only."], projectedFindings: pulse.findings } },
     { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: "scan_123", domain: "example.com", summary: { rowCount: 1, trackerCount: 1, cookieCount: 0, requestCount: 1 }, rows: [preConsentRow("row_1")] } }
   ]);
   try {
     await withMcpClient(async (client) => {
-      const bundle = parseToolJson(await client.callTool({ name: "get_scan_bundle", arguments: { scanId: "scan_123" } }));
-      assert.equal(bundle.type, "certscore_scan_bundle");
-      assert.equal(bundle.scanId, "scan_123");
-      assert.equal(bundle.status, "completed");
-      assert.equal((bundle.findings as unknown[]).length, 1);
+      const bundle = parseToolJson(await client.callTool({ name: "get_scan_bundle", arguments: { scanId: "scan_123", detail: "evidence" } }));
+      assert.ok(bundle.evidenceSummary);
       assert.equal(((bundle.preConsentCookiesTrackers as Record<string, unknown>).rows as unknown[]).length, 1);
       assert.equal(mock.calls.length, 5);
     });

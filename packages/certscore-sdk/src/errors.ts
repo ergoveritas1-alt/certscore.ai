@@ -62,15 +62,17 @@ export class ThrottledError extends CertScoreError {
 export class CertScoreScanFailedError extends CertScoreError {
   scanId?: string;
   jobId?: string;
+  retryAfterSeconds?: number;
 
   constructor(
     message: string,
-    options: { scanId?: string | null; jobId?: string | null; status?: number; code?: string; responseBody?: unknown; cause?: unknown } = {}
+    options: { scanId?: string | null; jobId?: string | null; status?: number; code?: string; retryAfterSeconds?: number; responseBody?: unknown; cause?: unknown } = {}
   ) {
     super(message, options);
     this.name = "CertScoreScanFailedError";
     this.scanId = options.scanId ?? undefined;
     this.jobId = options.jobId ?? undefined;
+    this.retryAfterSeconds = options.retryAfterSeconds;
   }
 }
 

@@ -9,7 +9,7 @@ import {
   apiV2ScanResourceSchema,
   apiV2ScanStatusSchema
 } from "./api-v2.js";
-import { pulseResponseSchema, pulseStatusSchema } from "./pulse-v1.js";
+import { pulseAgentInterpretationSchema, pulseResponseSchema, pulseStatusSchema } from "./pulse-v1.js";
 import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 
 export const mcpPulseDetailSchema = z.enum(["tiny", "quick", "standard", "full", "summary", "evidence"]);
@@ -35,8 +35,7 @@ export const mcpScanSiteInputSchema = {
 } as const;
 
 export const mcpGetScanStatusInputSchema = {
-  jobId: z.string().min(1).optional().describe("Pulse job ID for a just-created scan that has not yet returned a scanId."),
-  scanId: z.string().min(1).optional().describe("Preferred stable CertScore scan ID for API v2 scan status.")
+  scanId: z.string().min(1).describe("Stable CertScore scan ID returned by scan_site.")
 } as const;
 
 export const mcpGetScanInputSchema = {
@@ -55,8 +54,10 @@ export const mcpGetEvidenceInputSchema = {
 
 export const mcpGetScanBundleInputSchema = {
   scanId: z.string().min(1).describe("Stable CertScore scan ID."),
-  maxFindings: z.number().int().min(1).max(50).optional().describe("Maximum compact findings to return. Defaults to 20."),
-  maxPreConsentRows: z.number().int().min(1).max(50).optional().describe("Maximum pre-consent inventory rows to return. Defaults to 20.")
+  detail: z.enum(["summary", "findings", "evidence", "full"]).optional().describe("Response detail. Defaults to summary; evidence and full opt into heavier retained context."),
+  maxBytes: z.number().int().min(5000).max(200000).optional().describe("Maximum serialized structured response size in bytes. Defaults to 50000."),
+  maxFindings: z.number().int().min(1).max(50).optional().describe("Maximum compact findings to return. Defaults to 5 for summary and 20 otherwise."),
+  maxPreConsentRows: z.number().int().min(1).max(50).optional().describe("Maximum pre-consent inventory rows when evidence is requested. Defaults to 20.")
 } as const;
 
 export const mcpExportFindingsInputSchema = {
@@ -117,6 +118,27 @@ export const mcpToolErrorPayloadSchema = z
   })
   .passthrough();
 
+const mcpExecutiveSummarySchema = z.object({
+  completionSummary: z.string().optional(),
+  domain: z.string().optional(),
+  score: z.number().int().min(0).max(100).nullable().optional(),
+  scoreLabel: z.string().optional(),
+  scoreMetadata: z.object({
+    coverageConfidence: z.string().optional(),
+    coverageRatio: z.number().nullable().optional(),
+    kind: z.string().optional(),
+    metricLabel: z.string().optional(),
+    source: z.string().optional(),
+    status: z.string().optional(),
+    version: z.string().nullable().optional(),
+    withholdingReason: z.string().nullable().optional()
+  }).passthrough().optional(),
+  riskLevel: z.string().optional(),
+  actionLabel: z.string().optional(),
+  issuesToReview: z.number().int().min(0).optional(),
+  scanTimeSeconds: z.number().nullable().optional()
+}).passthrough();
+
 export const mcpCreateScanOutputSchema = z
   .object({
     type: z.literal("certscore_mcp_scan_created"),
@@ -145,7 +167,13 @@ export const mcpScanSiteOutputSchema = z
     scanFrom: apiV2ScanFromSchema.optional(),
     startedAt: z.string().nullable().optional(),
     completedAt: z.string().nullable().optional(),
-    scanTimeSeconds: z.number().nullable().optional()
+    scanTimeSeconds: z.number().nullable().optional(),
+    score: z.number().int().min(0).max(100).nullable().optional(),
+    scoreStatus: z.enum(["provisional", "final"]).optional(),
+    scoreVersion: z.string().nullable().optional(),
+    scoreUpdatedAt: z.string().nullable().optional(),
+    riskLevel: z.string().nullable().optional(),
+    coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional()
   })
   .passthrough();
 
@@ -156,13 +184,40 @@ export const mcpScanStatusOutputSchema = z
     scanId: z.string().nullable().optional(),
     scan_id: z.string().nullable().optional(),
     domain: z.string().nullable().optional(),
+    url: z.string().nullable().optional(),
     status: z.union([apiV2ScanStatusSchema, pulseStatusSchema.shape.status]).optional(),
     resultDisposition: scanResultDispositionSchema.optional(),
     noGo: scanNoGoResultSchema.optional(),
     startedAt: z.string().nullable().optional(),
+    createdAt: z.string().nullable().optional(),
     completedAt: z.string().nullable().optional(),
     scanTimeSeconds: z.number().nullable().optional(),
-    error: mcpToolErrorPayloadSchema.shape.error.optional()
+    score: z.number().int().min(0).max(100).nullable().optional(),
+    scoreStatus: z.enum(["provisional", "final"]).optional(),
+    scoreVersion: z.string().nullable().optional(),
+    scoreUpdatedAt: z.string().nullable().optional(),
+    riskLevel: z.string().nullable().optional(),
+    coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional(),
+    phase: z.string().optional(),
+    phaseStartedAt: z.string().nullable().optional(),
+    lastUpdatedAt: z.string().optional(),
+    lastHeartbeatAt: z.string().nullable().optional(),
+    progressPercent: z.number().int().min(0).max(100).optional(),
+    progressIsEstimate: z.boolean().optional(),
+    estimatedRemainingSeconds: z.number().int().min(0).nullable().optional(),
+    stalled: z.boolean().optional(),
+    retryAfterSeconds: z.number().int().nullable().optional(),
+    error: z.object({
+      code: z.string(),
+      message: z.string(),
+      retryable: z.boolean(),
+      retryAfterSeconds: z.number().int().nullable(),
+      recommendedNextAction: z.string()
+    }).strict().optional(),
+    reportUrl: z.string().nullable().optional(),
+    links: apiV2ScanResourceSchema.shape.links.optional(),
+    recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).nullable().optional(),
+    recommendedNextAction: z.string().optional()
   })
   .passthrough();
 
@@ -181,16 +236,51 @@ export const mcpScanBundleOutputSchema = z
   .object({
     type: z.literal("certscore_scan_bundle"),
     scanId: z.string(),
+    domain: z.string(),
+    url: z.string().nullable(),
     status: apiV2ScanStatusSchema,
+    score: z.number().int().min(0).max(100).nullable(),
+    scoreStatus: z.enum(["provisional", "final"]),
+    scoreVersion: z.string().nullable(),
+    scoreUpdatedAt: z.string().nullable(),
+    riskLevel: z.string().nullable(),
     resultDisposition: scanResultDispositionSchema.nullable().optional(),
     noGo: scanNoGoResultSchema.nullable().optional(),
-    scan: apiV2ScanResourceSchema,
-    summary: z.unknown().nullable(),
-    findings: z.array(z.unknown()),
-    evidenceSummary: z.unknown().nullable(),
-    preConsentCookiesTrackers: z.unknown().nullable(),
+    coverage: apiV2ScanResourceSchema.shape.coverage.nullable(),
+    timing: z.object({
+      createdAt: z.string().nullable(),
+      startedAt: z.string().nullable(),
+      completedAt: z.string().nullable(),
+      scanTimeSeconds: z.number().nullable()
+    }).strict(),
+    summary: z.object({
+      headline: z.string().nullable(),
+      executiveSummary: mcpExecutiveSummarySchema.nullable(),
+      counts: z.record(z.union([z.number(), z.boolean(), z.null()])).nullable(),
+      agentInterpretation: pulseAgentInterpretationSchema.nullable()
+    }).strict(),
+    findings: z.array(apiV2FindingDetailSchema),
+    findingsMetadata: z.object({
+      shown: z.number().int().min(0),
+      total: z.number().int().min(0),
+      truncated: z.boolean()
+    }).strict(),
+    evidenceSummary: z.record(z.unknown()).optional(),
+    fullReport: pulseResponseSchema.optional(),
+    preConsentCookiesTrackers: z.record(z.unknown()).optional(),
     links: z.record(z.string()).optional(),
-    recommendedNextTool: z.string().nullable(),
+    reportUrl: z.string().nullable(),
+    recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).nullable(),
+    recommendedNextAction: z.string(),
+    mcpMetadata: z.object({
+      detail: z.enum(["summary", "findings", "evidence", "full"]),
+      heavyEvidenceIncluded: z.boolean(),
+      findingsTruncated: z.boolean(),
+      requestedMaxBytes: z.number().int().min(5000),
+      actualBytes: z.number().int().min(0),
+      truncated: z.boolean(),
+      truncationReason: z.string().nullable()
+    }).strict(),
     disclaimer: z.string().nullable()
   })
   .passthrough();
@@ -257,7 +347,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "scan_site",
     title: "Scan site",
-    description: "Recommended first call. Starts or reuses a public-web scan, reports freshness and anonymous quota decisions, and waits up to 45 seconds by default. If still running, use get_scan_status; otherwise use get_scan_bundle. Completed no-go scans retain completed_limited status and reason-specific guidance.",
+    description: "First call. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.",
     inputSchema: mcpScanSiteInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
     annotations: scanCreationAnnotations
@@ -272,8 +362,8 @@ export const certScoreMcpToolContracts = [
   },
   {
     name: "get_scan_status",
-    title: "Get CertScore Pulse scan status",
-    description: "Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available.",
+    title: "Get scan status",
+    description: "Poll with only the stable scanId returned by scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.",
     inputSchema: mcpGetScanStatusInputSchema,
     outputSchema: mcpScanStatusOutputSchema,
     annotations: readOnlyOpenWorldAnnotations
@@ -296,8 +386,8 @@ export const certScoreMcpToolContracts = [
   },
   {
     name: "get_scan_bundle",
-    title: "Get compact CertScore scan bundle",
-    description: "Recommended second call after scan_site. Returns the canonical scan state, compact report summary, findings, bounded evidence summary, and pre-consent inventory in one agent-friendly response.",
+    title: "Get scan bundle",
+    description: "Call after completed or completed_limited status. summary returns the canonical result and compact top findings; findings adds bounded finding detail; evidence adds bounded retained-evidence summaries and references; full adds the bounded public report. maxBytes is enforced with explicit actual-byte and truncation metadata. Never interpret no-go, not-observed, or limited coverage as proof of compliance.",
     inputSchema: mcpGetScanBundleInputSchema,
     outputSchema: mcpScanBundleOutputSchema,
     annotations: readOnlyOpenWorldAnnotations

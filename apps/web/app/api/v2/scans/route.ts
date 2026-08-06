@@ -5,7 +5,8 @@ import {
   buildApiV2Error,
   buildApiV2ErrorFromPulse,
   buildApiV2ScanJobFromPulseStatus,
-  buildApiV2ScanResource
+  buildApiV2ScanResource,
+  buildApiV2ScanStatus
 } from "../../../../lib/api-v2/scan-resource";
 import { getPublicScanRecord } from "../../../../server/scans/get-public-scan-record";
 import { getPulseRequesterContext } from "../../../../lib/pulse/request";
@@ -127,6 +128,46 @@ export async function POST(request: Request) {
           requestId: id,
           route: "api-v2-create-scan",
           status: 500
+        });
+      }
+      const canonicalStatus = buildApiV2ScanStatus(scanRecord);
+      if (canonicalStatus.status === "finalizing") {
+        const scanRetryAfter = canonicalStatus.retryAfterSeconds === null || canonicalStatus.retryAfterSeconds === undefined
+          ? undefined
+          : String(canonicalStatus.retryAfterSeconds);
+        return apiV2JsonResponse({
+          body: {
+            ...canonicalStatus,
+            ...freshnessMetadata({
+              anonymousQuota,
+              completedAt: scanRecord.scan.completedAt,
+              freshness: parsed.data.freshness ?? "latest",
+              resolutionMode: pulseResolutionMode(pulseBody),
+              terminal: false
+            })
+          },
+          headers: scanRetryAfter ? { "Retry-After": scanRetryAfter } : undefined,
+          requestId: id,
+          route: "api-v2-create-scan",
+          status: 202
+        });
+      }
+      if (canonicalStatus.status === "failed") {
+        return apiV2JsonResponse({
+          body: {
+            ...canonicalStatus,
+            ...freshnessMetadata({
+              anonymousQuota,
+              completedAt: scanRecord.scan.completedAt,
+              freshness: parsed.data.freshness ?? "latest",
+              resolutionMode: pulseResolutionMode(pulseBody),
+              terminal: false
+            }),
+            recommendedNextTool: undefined
+          },
+          requestId: id,
+          route: "api-v2-create-scan",
+          status: 200
         });
       }
       const scan = buildApiV2ScanResource(scanRecord);

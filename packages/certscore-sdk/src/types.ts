@@ -123,6 +123,9 @@ export interface ScanResource extends ScanCreationMetadata {
   completedAt?: string | null;
   scanTimeSeconds?: number | null;
   score?: number | null;
+  scoreStatus?: "provisional" | "final";
+  scoreVersion?: string | null;
+  scoreUpdatedAt?: string | null;
   riskLevel?: string | null;
   coverage?: {
     status?: string;
@@ -141,6 +144,7 @@ export interface ScanJob extends ScanCreationMetadata {
   scanId?: string | null;
   scan_id?: string | null;
   domain?: string | null;
+  url?: string | null;
   status: PulseJobStatus;
   resultDisposition?: ScanResultDisposition;
   noGo?: ScanNoGoResult;
@@ -149,8 +153,29 @@ export interface ScanJob extends ScanCreationMetadata {
   startedAt?: string | null;
   completedAt?: string | null;
   scanTimeSeconds?: number | null;
+  score?: number | null;
+  scoreStatus?: "provisional" | "final";
+  scoreVersion?: string | null;
+  scoreUpdatedAt?: string | null;
+  riskLevel?: string | null;
+  coverage?: ScanResource["coverage"] | null;
   lastUpdatedAt?: string;
+  phaseStartedAt?: string | null;
+  lastHeartbeatAt?: string | null;
+  progressPercent?: number;
+  progressIsEstimate?: boolean;
+  estimatedRemainingSeconds?: number | null;
+  stalled?: boolean;
   retryAfterSeconds?: number | null;
+  error?: {
+    code: string;
+    message: string;
+    retryable: boolean;
+    retryAfterSeconds: number | null;
+    recommendedNextAction: string;
+  };
+  reportUrl?: string | null;
+  recommendedNextAction?: string;
   links?: ApiV2Links;
   disclaimer?: string;
   message?: string;
@@ -434,6 +459,10 @@ export interface PulseScan {
   startedAt?: string | null;
   completedAt?: string | null;
   lastUpdatedAt?: string | null;
+  phaseStartedAt?: string | null;
+  lastHeartbeatAt?: string | null;
+  progressPercent?: number;
+  stalled?: boolean;
   [key: string]: unknown;
 }
 
@@ -618,6 +647,10 @@ export interface JobStatus {
   createdAt?: string;
   startedAt?: string | null;
   lastUpdatedAt?: string | null;
+  phaseStartedAt?: string | null;
+  lastHeartbeatAt?: string | null;
+  progressPercent?: number;
+  stalled?: boolean;
   completedAt?: string | null;
   elapsedSeconds?: number;
   estimatedWaitSeconds?: number | null;
@@ -625,6 +658,13 @@ export interface JobStatus {
   resultUrl?: string | null;
   reportUrl?: string | null;
   retryAfterSeconds?: number | null;
+  error?: {
+    code: string;
+    message: string;
+    retryable: boolean;
+    retryAfterSeconds: number | null;
+    recommendedNextAction: string;
+  };
   statusUrl?: string;
   nextCheckUrl?: string;
   capabilities?: Capabilities;

@@ -70,9 +70,10 @@ export function throwForTerminalStatus(status: JobStatus): never {
     });
   }
   if (FAILURE_STATUSES.has(status.status)) {
-    throw new CertScoreScanFailedError(status.message ?? `Pulse scan ended with status ${status.status}.`, {
-      code: status.status,
+    throw new CertScoreScanFailedError(status.error?.message ?? status.message ?? `Pulse scan ended with status ${status.status}.`, {
+      code: status.error?.code ?? status.status,
       jobId: status.jobId,
+      retryAfterSeconds: status.error?.retryAfterSeconds ?? undefined,
       scanId: status.scanId ?? status.scan_id ?? undefined,
       responseBody: status
     });

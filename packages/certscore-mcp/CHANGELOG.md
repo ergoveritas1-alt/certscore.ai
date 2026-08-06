@@ -1,5 +1,13 @@
 # certscore-mcp
 
+## 0.2.13
+
+- Gate Light completion on one persisted canonical result and expose matching score, risk, coverage, timestamps, version metadata, and report links across all three Light tools.
+- Add actionable terminal errors, event-backed heartbeat/stalled state, explicitly estimated progress, and deterministic scanId-only polling guidance.
+- Implement distinct summary, findings, evidence, and full bundle modes with a 5,000-byte minimum budget and explicit requested/actual/truncation metadata.
+- Remove full text/structured-content duplication, prevent Light from recommending unavailable tools, and stop advertising OAuth metadata to anonymous Light clients.
+- Add machine-readable source, evidence link, and truncation metadata to projected evidence excerpts.
+
 ## 0.2.12
 
 - Add the no-account `https://mcp.certscore.ai/mcp/light` endpoint with the focused `scan_site`, `get_scan_status`, and `get_scan_bundle` workflow.

@@ -59,7 +59,12 @@ function fixture(overrides: Partial<ScanDetailResponse["scan"]> = {}) {
     preconsentViolations: [],
     runtimeArtifacts: {},
     signals: [],
-    snapshot: {},
+    snapshot: {
+      certscore_overall: 32,
+      report_projection_status: "ready",
+      score_scored_at: "2026-06-30T12:00:10.000Z",
+      score_version: "overall-score.v1"
+    },
     trackerVendors: [],
     validationFindings: []
   } as unknown as ScanDetailResponse;
@@ -190,6 +195,9 @@ test("buildApiV2ScanResource projects a completed scan into public-safe v2 shape
   assert.equal(resource.scanId, "00000000-0000-4000-8000-000000000123");
   assert.equal(resource.domain, "example.com");
   assert.equal(resource.score, 32);
+  assert.equal(resource.scoreStatus, "final");
+  assert.equal(resource.scoreVersion, "overall-score.v1");
+  assert.equal(resource.scoreUpdatedAt, "2026-06-30T12:00:10.000Z");
   assert.equal(resource.riskLevel, "significant_review_recommended");
   assert.equal(resource.scanTimeSeconds, 9);
   assert.equal(resource.coverage?.status, "complete");
@@ -354,6 +362,9 @@ test("buildApiV2Error returns the shared error envelope", () => {
 
   assert.equal(error.type, "certscore_api_error");
   assert.equal(error.error.code, "not_found");
+  assert.equal(error.error.retryable, false);
+  assert.equal(error.error.retryAfterSeconds, null);
+  assert.ok(error.error.recommendedNextAction);
   assert.equal(error.links.docs, "https://certscore.ai/api/v2/openapi.json");
 });
 
@@ -367,17 +378,97 @@ test("buildApiV2ScanStatus exposes public scan status links", () => {
   assert.equal(status.startedAt, "2026-06-30T12:00:01.000Z");
   assert.equal(status.completedAt, "2026-06-30T12:00:10.000Z");
   assert.equal(status.scanTimeSeconds, 9);
+  assert.equal(status.url, "https://example.com");
+  assert.equal(status.score, 32);
+  assert.equal(status.scoreStatus, "final");
+  assert.equal(status.scoreVersion, "overall-score.v1");
+  assert.equal(status.scoreUpdatedAt, "2026-06-30T12:00:10.000Z");
+  assert.equal(status.riskLevel, "significant_review_recommended");
+  assert.equal(status.coverage?.status, "complete");
   assert.equal(status.retryAfterSeconds, null);
+  assert.equal(status.lastHeartbeatAt, "2026-06-30T12:00:10.000Z");
+  assert.equal(status.progressPercent, 100);
+  assert.equal(status.stalled, false);
+  assert.equal(status.reportUrl, "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123");
+  assert.match(status.recommendedNextAction ?? "", /get_scan_bundle/);
   assert.equal(status.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
 });
 
+test("buildApiV2ScanStatus keeps completed scanner work finalizing until the canonical score is ready", () => {
+  const scanRecord = {
+    ...fixture(),
+    snapshot: {
+      certscore_overall: 71,
+      report_projection_status: "pending",
+      score_scored_at: null,
+      score_version: null
+    }
+  } as unknown as ScanDetailResponse;
+  const status = buildApiV2ScanStatus(scanRecord, {
+    nowMs: Date.parse("2026-06-30T12:00:30.000Z")
+  });
+  const resource = buildApiV2ScanResource(scanRecord);
+
+  assert.equal(status.status, "finalizing");
+  assert.equal(status.phase, "report_finalization");
+  assert.equal(status.progressPercent, 89);
+  assert.equal(status.progressIsEstimate, true);
+  assert.equal(status.links?.findings, undefined);
+  assert.equal(resource.status, "finalizing");
+  assert.equal(resource.scoreStatus, "provisional");
+});
+
+test("buildApiV2ScanStatus fails closed when canonical report projection fails", () => {
+  const scanRecord = {
+    ...fixture(),
+    snapshot: {
+      certscore_overall: null,
+      report_projection_status: "failed",
+      report_projection_error: "private internal detail"
+    }
+  } as unknown as ScanDetailResponse;
+  const status = buildApiV2ScanStatus(scanRecord);
+
+  assert.equal(status.status, "failed");
+  assert.equal(status.error?.code, "report_projection_failed");
+  assert.equal(status.error?.retryable, true);
+  assert.doesNotMatch(JSON.stringify(status), /private internal detail/);
+});
+
 test("buildApiV2ScanStatus degrades unknown scan states to running", () => {
-  const status = buildApiV2ScanStatus(fixture({ status: "materializing" }));
+  const early = buildApiV2ScanStatus(fixture({ status: "materializing" }), {
+    nowMs: Date.parse("2026-06-30T12:00:11.000Z")
+  });
+  const status = buildApiV2ScanStatus(fixture({ status: "materializing" }), {
+    nowMs: Date.parse("2026-06-30T12:03:00.000Z")
+  });
 
   assert.equal(status.status, "running");
   assert.equal(status.phase, "runtime_observation");
   assert.equal(status.retryAfterSeconds, 5);
+  assert.ok((status.progressPercent ?? 0) > (early.progressPercent ?? 0));
+  assert.equal(status.progressIsEstimate, true);
+  assert.equal(status.estimatedRemainingSeconds, null);
+  assert.equal(status.stalled, true);
   assert.equal(status.links?.findings, undefined);
+});
+
+test("buildApiV2ScanStatus returns bounded terminal failure guidance", () => {
+  const status = buildApiV2ScanStatus(fixture({
+    status: "failed",
+    completedAt: "2026-06-30T12:01:20.000Z",
+    errorMessage: "Navigation timeout after 80000ms with internal target details"
+  }));
+
+  assert.equal(status.status, "failed");
+  assert.deepEqual(status.error, {
+    code: "navigation_timeout",
+    message: "The public site did not finish navigation within the scan budget.",
+    retryable: true,
+    retryAfterSeconds: 30,
+    recommendedNextAction: "Retry scan_site with freshness=refresh after the recommended delay."
+  });
+  assert.doesNotMatch(JSON.stringify(status), /internal target details/);
 });
 
 test("active scan retry timing is fast initially and backs off for long scans", () => {
@@ -433,6 +524,24 @@ test("buildApiV2ScanJobFromPulseStatus preserves completed status timing for SDK
   assert.equal(status.scanTimeSeconds, 5.1);
 });
 
+test("terminal Pulse statuses always include actionable bounded errors", () => {
+  for (const statusValue of ["failed", "expired", "rate_limited"] as const) {
+    const status = buildApiV2ScanJobFromPulseStatus({
+      jobId: "pulse_job_123",
+      scanId: "00000000-0000-4000-8000-000000000123",
+      status: statusValue,
+      retryAfterSeconds: statusValue === "rate_limited" ? 45 : null
+    });
+
+    assert.equal(status.status, statusValue);
+    assert.equal(status.error?.retryable, true);
+    assert.ok(status.error?.code);
+    assert.ok(status.error?.message);
+    assert.ok(status.error?.recommendedNextAction);
+    assert.equal(status.retryAfterSeconds, status.error?.retryAfterSeconds);
+  }
+});
+
 test("buildApiV2ErrorFromPulse maps Pulse throttles to v2 rate-limit errors", () => {
   const error = buildApiV2ErrorFromPulse({
     body: {
@@ -447,6 +556,8 @@ test("buildApiV2ErrorFromPulse maps Pulse throttles to v2 rate-limit errors", ()
   });
 
   assert.equal(error.error.code, "rate_limited");
+  assert.equal(error.error.retryable, true);
+  assert.equal(error.error.recommendedNextAction, "Wait for the recommended delay, then retry the same request.");
   assert.equal(error.error.retryAfterSeconds, 60);
 });
 
@@ -626,8 +737,35 @@ test("buildApiV2FindingList maps public Pulse findings into compact v2 summaries
   assert.equal(finding?.evidence.examples?.[0]?.resourceType, "script");
   assert.deepEqual(finding?.evidence.examples?.[0]?.projectionWarnings, ["canonical_endpoint_vendor_replaced_raw_vendor"]);
   assert.deepEqual(finding?.evidence.projectionWarnings, ["canonical_endpoint_vendor_replaced_raw_vendor"]);
+  assert.equal(finding?.evidence.excerpt?.isTruncated, false);
+  assert.equal(finding?.evidence.excerpt?.sourceUrl, "https://example.com/?redacted=1");
+  assert.equal(finding?.evidence.excerpt?.truncationMarker, null);
+  assert.match(finding?.evidence.excerpt?.evidenceUrl ?? "", /findings\/pre_consent_tracking_detected$/);
   assert.equal("rawRequestBody" in (finding?.evidence.examples?.[0] ?? {}), false);
   assert.equal(finding?.links?.self, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings/pre_consent_tracking_detected");
+});
+
+test("buildApiV2FindingList makes retained excerpt truncation machine-readable", () => {
+  const list = buildApiV2FindingList({
+    scanId: "00000000-0000-4000-8000-000000000123",
+    findings: [{
+      id: "regulatory_gap__gdpr_eprivacy__automated_decision_making_profiling_disclosure",
+      label: "Profiling disclosure needs review",
+      evidence: {
+        summary: "Policy evidence was retained: Some Mozilla.org pages use clear GIFs...[more in evidence packet]",
+        exampleEvents: [{
+          type: "policy_surface",
+          documentUrl: "https://mozilla.org/en-US/privacy/websites"
+        }]
+      }
+    }]
+  });
+
+  const excerpt = list.findings[0]?.evidence.excerpt;
+  assert.equal(excerpt?.isTruncated, true);
+  assert.equal(excerpt?.truncationMarker, "...[more in evidence packet]");
+  assert.equal(excerpt?.sourceUrl, "https://mozilla.org/en-US/privacy/websites");
+  assert.match(excerpt?.evidenceUrl ?? "", /automated_decision_making_profiling_disclosure$/);
 });
 
 test("buildApiV2FindingList derives evidence anchors from structured events when digest flags are absent", () => {

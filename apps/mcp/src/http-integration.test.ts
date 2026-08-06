@@ -86,8 +86,14 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     const health = await fetch(`${origin}/healthz`).then((response) => response.json());
     assert.equal(health.anonymousEndpoint, `${origin}/mcp/anonymous`);
     assert.equal(health.lightEndpoint, `${origin}/mcp/light`);
-    const metadata = await fetch(`${origin}/.well-known/oauth-protected-resource`).then((response) => response.json());
-    assert.deepEqual(metadata.authorization_servers, ["https://certscore.ai"]);
+    const rootMetadata = await fetch(`${origin}/.well-known/oauth-protected-resource`);
+    assert.equal(rootMetadata.status, 404);
+    const pathMetadata = await fetch(`${origin}/.well-known/oauth-protected-resource/mcp`).then((response) => response.json());
+    assert.deepEqual(pathMetadata.authorization_servers, ["https://certscore.ai"]);
+    assert.equal(pathMetadata.resource, `${origin}/mcp`);
+    const lightMetadata = await fetch(`${origin}/.well-known/oauth-protected-resource/mcp/light`);
+    assert.equal(lightMetadata.status, 404);
+    assert.equal(lightMetadata.headers.get("www-authenticate"), null);
 
     const unauthenticated = await fetch(`${origin}/mcp`, {
       method: "POST",
@@ -95,7 +101,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })
     });
     assert.equal(unauthenticated.status, 401);
-    assert.match(unauthenticated.headers.get("www-authenticate") ?? "", /oauth-protected-resource/);
+    assert.match(unauthenticated.headers.get("www-authenticate") ?? "", /oauth-protected-resource\/mcp/);
 
     const token = signCertScoreAccessToken({
       audience: origin,

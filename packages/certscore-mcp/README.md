@@ -2,7 +2,7 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: public developer preview. Version 0.2.12 adds the focused hosted CertScore Light workflow and current remote registry metadata. Local WC01 development uses `pnpm mcp:certscore`.
+Status: public developer preview. Version 0.2.13 makes the Light workflow canonical, compact, typed, recoverable, and anonymous by construction. Local WC01 development uses `pnpm mcp:certscore`.
 
 Public docs:
 
@@ -14,12 +14,12 @@ Public docs:
 ## Tools
 
 - `create_scan` - Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable.
-- `scan_site` - Recommended first call. Starts or reuses a public-web scan, reports freshness and anonymous quota decisions, and waits up to 45 seconds by default. If still running, use get_scan_status; otherwise use get_scan_bundle. Completed no-go scans retain completed_limited status and reason-specific guidance.
+- `scan_site` - First call. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.
 - `get_scan` - Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available.
-- `get_scan_status` - Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available.
+- `get_scan_status` - Poll with only the stable scanId returned by scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.
 - `get_report` - Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet.
 - `get_evidence` - Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.
-- `get_scan_bundle` - Recommended second call after scan_site. Returns the canonical scan state, compact report summary, findings, bounded evidence summary, and pre-consent inventory in one agent-friendly response.
+- `get_scan_bundle` - Call after completed or completed_limited status. summary returns the canonical result and compact top findings; findings adds bounded finding detail; evidence adds bounded retained-evidence summaries and references; full adds the bounded public report. maxBytes is enforced with explicit actual-byte and truncation metadata. Never interpret no-go, not-observed, or limited coverage as proof of compliance.
 - `export_findings` - Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows.
 - `list_findings` - List API v2 public-safe findings already projected for a scan.
 - `get_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.
@@ -39,6 +39,10 @@ MCP tools backed by API v2 scan resources return scan timing when CertScore has 
 
 This applies to `scan_site` when it returns an API v2 scan resource or job, `get_scan`, and `get_scan_status` when called with a `scanId`. `scanTimeSeconds: null` means timing is unavailable or incomplete and should not be displayed as `0`.
 
+Completed Light results are canonical. `scan_site`, terminal `get_scan_status`, and `get_scan_bundle` return the same score, risk level, coverage, and timing fields. Scores include `scoreStatus`, `scoreVersion`, and `scoreUpdatedAt`; a scan remains `finalizing` until the persisted canonical report projection is ready, so a completed response always carries `scoreStatus: "final"`.
+
+Every `failed`, `expired`, or `rate_limited` status includes a bounded `error` object with `code`, `message`, `retryable`, `retryAfterSeconds`, and `recommendedNextAction`.
+
 ## Completed-Limited No-Go Results
 
 No-go scans are usable terminal results, not transport failures. Relevant tools retain `status: "completed_limited"`, `resultDisposition: "no_go"`, the stable reason code, customer-safe title and explanation, `limitationKind` attribution, retry guidance, and a bounded `evidenceExcerpt` when retained. Unknown future reasons use generic customer copy while remaining structured as `reasonCode: "unknown"`.
@@ -54,7 +58,7 @@ https://mcp.certscore.ai/mcp
 Discovery endpoints:
 
 ```text
-https://mcp.certscore.ai/.well-known/oauth-protected-resource
+https://mcp.certscore.ai/.well-known/oauth-protected-resource/mcp
 https://certscore.ai/.well-known/oauth-authorization-server
 ```
 
@@ -72,7 +76,9 @@ For the simplest no-account workflow, use CertScore Light:
 https://mcp.certscore.ai/mcp/light
 ```
 
-Light exposes only `scan_site`, `get_scan_status`, and `get_scan_bundle`. The allowance is 20 new scans per requester IP per UTC day.
+Light exposes only `scan_site`, `get_scan_status`, and `get_scan_bundle`. The allowance is 20 new scans per requester IP per UTC day. Light is anonymous: a client should initialize it directly without opening an OAuth authorization flow. OAuth metadata applies only to `https://mcp.certscore.ai/mcp`.
+
+Codex setup: add `https://mcp.certscore.ai/mcp/light` as a remote MCP server. No account, API key, or authorization approval is expected. After connection, `tools/list` should contain exactly the three Light tools above.
 Eligible recent-result reuse does not consume the allowance. Every no-account response includes the higher-volume contact path at
 `support@certscore.ai`.
 
@@ -230,7 +236,13 @@ Local repo config for contributors:
 
 1. Call `scan_site` with a public URL. It normally returns the completed scan resource in the same tool call.
 2. Only if it returns a non-terminal job, call `get_scan_status` using the stable `scanId` until completion.
-3. Call `get_scan_bundle` for the normal compact review handoff.
+3. If status is `queued`, `running`, or `finalizing`, retain the returned `scanId` and poll `get_scan_status` using only that ID. Stop polling at `completed`, `completed_limited`, `failed`, `expired`, or `rate_limited`.
+4. For `completed` or `completed_limited`, call `get_scan_bundle` with its default `detail: "summary"`. Use `findings`, `evidence`, or `full` only when progressively deeper bounded context is required.
+5. Summarize the canonical score, risk, findings, coverage, limitations, report URL, and next action. Never treat no-go, not-observed, or limited coverage as proof of compliance.
+
+Canonical first-run prompt:
+
+> Scan these public URLs. For each one, call scan_site. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using only scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For completed or completed_limited scans, call get_scan_bundle with detail=summary. Report the canonical score, risk level, coverage, top findings, limitations, report URL, and next action. Never treat no-go, not-observed, or limited coverage as proof of compliance.
 4. Call `get_report`, `get_evidence`, `list_findings`, or `get_pre_consent_cookies_trackers` only when the task needs a dedicated view.
 5. Call `explain_finding` when a reviewer needs evidence and caveats for a specific finding.
 6. Call `get_latest_domain_scan` or `get_latest_domain_pre_consent_cookies_trackers` when the user asks for latest eligible public data for a domain.
