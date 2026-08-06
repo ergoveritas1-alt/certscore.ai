@@ -10,6 +10,7 @@ const DEFAULT_SERVICE = "certscore-web-certscore";
 const DEFAULT_BASE_URL = "https://certscore.ai";
 const DEFAULT_SMOKE_URL = "https://kbdlab.io";
 const DEFAULT_FALLBACK_DOMAIN = "webmd.com";
+const MCP_COMMAND = process.env.CERTSCORE_MCP_COMMAND?.trim() || "certscore-mcp";
 const REQUIRED_TOOLS = [
   "scan_site",
   "get_scan",
@@ -24,6 +25,9 @@ const REQUIRED_TOOLS = [
 type ToolPayload = Record<string, unknown> & {
   type?: string;
   status?: string;
+  executionMode?: "new_scan" | "reused_scan";
+  reused?: boolean;
+  freshnessDecision?: string;
   scanId?: string;
   jobId?: string | null;
   domain?: string | null;
@@ -241,7 +245,7 @@ function revokeProductionKeys(context: EcsContext, createdBy: string) {
 }
 
 function assertDoctorWithoutKey() {
-  const result = run("certscore-mcp", ["doctor"], { env: withoutApiKeyEnv() });
+  const result = run(MCP_COMMAND, ["doctor"], { env: withoutApiKeyEnv() });
   if (!result.stdout.includes("[ok] API health reachable at https://certscore.ai/api/v2/health")) {
     throw new Error("certscore-mcp doctor without a key did not reach production API health.");
   }
@@ -249,7 +253,7 @@ function assertDoctorWithoutKey() {
 }
 
 function assertDoctorWithKey(token: string) {
-  const result = run("certscore-mcp", ["doctor"], {
+  const result = run(MCP_COMMAND, ["doctor"], {
     env: { ...process.env, CERTSCORE_API_KEY: token, CERTSCORE_BASE_URL: DEFAULT_BASE_URL }
   });
   if (!result.stdout.includes("[ok] CERTSCORE_API_KEY is present")) {
@@ -263,7 +267,12 @@ function parseToolJson(result: Awaited<ReturnType<Client["callTool"]>>) {
   if (!first || first.type !== "text") {
     throw new Error("MCP tool returned no text content.");
   }
-  return JSON.parse(first.text) as ToolPayload;
+  try {
+    return JSON.parse(first.text) as ToolPayload;
+  } catch (error) {
+    const detail = first.text.trim().slice(0, 2_000) || "empty text response";
+    throw new Error(`MCP tool returned non-JSON text: ${detail}`, { cause: error });
+  }
 }
 
 function scanIdFrom(payload: ToolPayload) {
@@ -278,6 +287,9 @@ function summarize(label: string, payload: ToolPayload) {
       scanId: scanIdFrom(payload),
       jobId: payload.jobId ?? null,
       domain: payload.domain ?? payload.scan?.domain ?? null,
+      executionMode: payload.executionMode,
+      reused: payload.reused,
+      freshnessDecision: payload.freshnessDecision,
       findingCount: Array.isArray(payload.findings) ? payload.findings.length : undefined,
       rowCount: payload.summary?.rowCount ?? (Array.isArray(payload.rows) ? payload.rows.length : undefined),
       firstFindingId: payload.findings?.[0]?.id
@@ -304,7 +316,7 @@ async function runInstalledMcpSmoke(token: string) {
   const fallbackDomain = process.env.CERTSCORE_MCP_PROD_SMOKE_FALLBACK_DOMAIN?.trim() || DEFAULT_FALLBACK_DOMAIN;
   const smokeDomain = new URL(smokeUrl).hostname.replace(/^www\./, "");
   const transport = new StdioClientTransport({
-    command: "certscore-mcp",
+    command: MCP_COMMAND,
     env: {
       ...process.env,
       CERTSCORE_API_KEY: token,
@@ -417,7 +429,7 @@ async function runInstalledMcpSmoke(token: string) {
 }
 
 async function main() {
-  const version = run("certscore-mcp", ["--version"]).stdout.trim();
+  const version = run(MCP_COMMAND, ["--version"]).stdout.trim();
   console.log(`certscore_mcp_version=${version}`);
   assertDoctorWithoutKey();
 
