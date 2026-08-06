@@ -288,28 +288,44 @@ function compactBundleFinding(finding: Record<string, any>) {
     type: finding.type,
     id: finding.id,
     scanId: finding.scanId,
-    label: boundedText(finding.label, 180),
+    label: boundedText(finding.label, 140),
     criticality: finding.criticality,
     confidence: finding.confidence,
-    plainEnglish: boundedText(finding.plainEnglish, 420),
+    plainEnglish: boundedText(finding.plainEnglish, 280),
     ...(finding.resultDisposition ? { resultDisposition: finding.resultDisposition } : {}),
     ...(finding.noGo ? { noGo: finding.noGo } : {}),
-    reviewLenses: Array.isArray(finding.reviewLenses) ? finding.reviewLenses.slice(0, 4) : [],
+    reviewLenses: Array.isArray(finding.reviewLenses) ? finding.reviewLenses.slice(0, 2) : [],
     evidence: {
       basis: evidence.basis,
-      summary: boundedText(evidence.summary, 420),
+      summary: boundedText(evidence.summary, 220),
       ...(evidence.phase !== undefined ? { phase: evidence.phase } : {}),
       exampleCount: evidence.exampleCount,
       examplesShown: evidence.examplesShown,
-      ...(evidence.examplesAvailable !== undefined ? { examplesAvailable: evidence.examplesAvailable } : {}),
-      ...(evidence.authRequiredForExamples !== undefined ? { authRequiredForExamples: evidence.authRequiredForExamples } : {}),
       ...(evidence.hasTimingAnchor !== undefined ? { hasTimingAnchor: evidence.hasTimingAnchor } : {}),
       ...(evidence.hasVendorAnchor !== undefined ? { hasVendorAnchor: evidence.hasVendorAnchor } : {}),
       ...(evidence.hasConsentContext !== undefined ? { hasConsentContext: evidence.hasConsentContext } : {}),
       ...(evidence.hasPolicyAnchor !== undefined ? { hasPolicyAnchor: evidence.hasPolicyAnchor } : {})
     },
-    ...(finding.nextStep !== undefined ? { nextStep: boundedText(finding.nextStep, 260) } : {}),
-    ...(finding.links ? { links: Object.fromEntries(Object.entries(finding.links).filter(([key]) => ["self", "report", "findings", "pulse"].includes(key))) } : {})
+    ...(finding.nextStep !== undefined ? { nextStep: boundedText(finding.nextStep, 180) } : {})
+  };
+}
+
+function compactPriorityEvidenceSummary(summary: Record<string, any>) {
+  const firstDigest = Array.isArray(summary.digests) ? summary.digests[0] : null;
+  const firstReference = summary.references && typeof summary.references === "object" && !Array.isArray(summary.references)
+    ? Object.entries(summary.references).find(([, value]) => typeof value === "string")
+    : null;
+  return {
+    digests: firstDigest ? [{
+      findingId: firstDigest.findingId,
+      basis: firstDigest.basis ?? null,
+      summary: boundedText(firstDigest.summary, 180) ?? null,
+      phase: firstDigest.phase ?? null,
+      evidenceUrl: firstDigest.evidenceUrl ?? firstReference?.[1] ?? null
+    }] : [],
+    evidenceAvailable: summary.evidenceAvailable === true,
+    evidenceSafetyNotes: [],
+    references: firstDigest ? {} : firstReference ? { [firstReference[0]]: firstReference[1] } : {}
   };
 }
 
@@ -772,7 +788,7 @@ export function buildScanBundle(input: {
     bundle.summary = {
       headline: boundedText(bundle.summary?.headline, 240) ?? null,
       executiveSummary: null,
-      counts: bundle.summary?.counts ?? null,
+      counts: bundle.summary?.counts ? { totalAutomatedFindingCount: bundle.findingsMetadata.total } : null,
       agentInterpretation: null
     };
     refresh();
@@ -785,6 +801,21 @@ export function buildScanBundle(input: {
       objectKeys: 8,
       stringChars: 240
     });
+    refresh();
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.links) {
+    markBudgetOmitted("additionalLinks", "links_compacted_to_byte_limit");
+    bundle.links = Object.fromEntries(Object.entries(bundle.links).filter(([key]) => ["self", "report"].includes(key)));
+    refresh();
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.evidenceSummary) {
+    markBudgetOmitted("evidenceDetail", "evidence_compacted_to_preserve_priority_content");
+    bundle.evidenceSummary = compactPriorityEvidenceSummary(bundle.evidenceSummary);
+    refresh();
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.disclaimer === OBSERVATION_ONLY_DISCLAIMER) {
+    markBudgetOmitted("duplicateDisclaimer", "duplicate_disclaimer_omitted_to_byte_limit");
+    bundle.disclaimer = null;
     refresh();
   }
   if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 0) {

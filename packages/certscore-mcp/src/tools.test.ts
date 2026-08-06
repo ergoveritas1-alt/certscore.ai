@@ -248,9 +248,24 @@ test("findings and evidence modes preserve useful content at the 5000-byte minim
       score: 72,
       scoreStatus: "final",
       links: {
+        self: "https://certscore.ai/api/v2/scans/scan_123",
+        status: "https://certscore.ai/api/v2/scans/scan_123/status",
         report: "https://certscore.ai/scan/scan_123",
         findings: "https://certscore.ai/api/v2/scans/scan_123/findings",
-        pulse: "https://certscore.ai/api/v2/scans/scan_123/pulse"
+        pulse: "https://certscore.ai/api/v2/scans/scan_123/pulse",
+        latestDomainScan: "https://certscore.ai/api/v2/domains/example.com/latest",
+        docs: "https://certscore.ai/api/v2/openapi.json",
+        diagnostics: "https://certscore.ai/api/v2/scans/scan_123/diagnostics",
+        preConsentCookiesTrackers: "https://certscore.ai/api/v2/scans/scan_123/pre-consent-cookies-trackers",
+        summaryJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_123&detail=summary",
+        evidenceJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_123&detail=evidence",
+        fullReportUrl: "https://certscore.ai/scan/scan_123",
+        markdownUrl: "https://certscore.ai/api/v1/pulse?url=https%3A%2F%2Fexample.com&format=markdown",
+        docsUrl: "https://certscore.ai/api-pulse",
+        findingsReferenceUrl: "https://certscore.ai/findings",
+        jsonUrl: "https://certscore.ai/api/v1/pulse?url=https%3A%2F%2Fexample.com",
+        scanJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_123",
+        fullJsonUrl: "https://certscore.ai/api/v1/pulse?url=https%3A%2F%2Fexample.com&detail=full"
       }
     }
   } as any;
@@ -260,6 +275,7 @@ test("findings and evidence modes preserve useful content at the 5000-byte minim
 
   assert.equal(findings.findings.length, 1);
   assert.equal(findings.findings[0]?.id, "finding_1");
+  assert.equal(findings.findings[0]?.links, undefined);
   assert.ok(findings.mcpMetadata.actualBytes <= 5_000);
   assert.equal(evidence.findings.length, 1);
   assert.equal(evidence.evidenceSummary.digests[0]?.findingId, "finding_1");

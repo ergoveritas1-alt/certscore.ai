@@ -1,5 +1,11 @@
 # certscore-mcp
 
+## 0.2.15
+
+- Reserve the first compact finding in both `findings` and `evidence` modes before optional summary, link, coverage, and evidence detail.
+- Preserve the first evidence digest or reference while compacting oversized 5,000-byte responses.
+- Add a live-shaped regression fixture with production-scale link metadata to prevent all findings from being omitted at the minimum byte budget.
+
 ## 0.2.14
 
 - Reserve a compact finding in `findings` mode and a bounded evidence digest/reference in `evidence` mode when the requested byte budget permits.
