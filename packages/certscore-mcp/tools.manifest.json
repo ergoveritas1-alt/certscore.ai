@@ -25,7 +25,7 @@
   },
   {
     "name": "get_scan_bundle",
-    "description": "Call after completed or completed_limited status. summary returns the canonical result and compact top findings; findings adds bounded finding detail; evidence adds bounded retained-evidence summaries and references; full adds the bounded public report. maxBytes is enforced with explicit actual-byte and truncation metadata. Never interpret no-go, not-observed, or limited coverage as proof of compliance."
+    "description": "Call after completed or completed_limited status. summary returns the canonical overview without finding bodies; findings reserves space for compact findings; evidence reserves findings plus bounded evidence digests and references; full adds all available bounded sections. Every response declares detail and byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Never interpret no-go, not-observed, or limited coverage as proof of compliance."
   },
   {
     "name": "export_findings",

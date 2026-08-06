@@ -155,6 +155,16 @@ export const mcpCreateScanOutputSchema = z
   })
   .passthrough();
 
+export const mcpActionableErrorSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  retryable: z.boolean(),
+  retryAfterSeconds: z.number().int().nullable(),
+  recommendedNextAction: z.string(),
+  field: z.string().optional(),
+  mcpCode: z.number().int().optional()
+}).strict();
+
 export const mcpScanSiteOutputSchema = z
   .object({
     type: z.enum(["certscore_scan", "certscore_scan_job"]),
@@ -165,6 +175,7 @@ export const mcpScanSiteOutputSchema = z
     resultDisposition: scanResultDispositionSchema.optional(),
     noGo: scanNoGoResultSchema.optional(),
     scanFrom: apiV2ScanFromSchema.optional(),
+    createdAt: z.string().nullable().optional(),
     startedAt: z.string().nullable().optional(),
     completedAt: z.string().nullable().optional(),
     scanTimeSeconds: z.number().nullable().optional(),
@@ -173,7 +184,11 @@ export const mcpScanSiteOutputSchema = z
     scoreVersion: z.string().nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
-    coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional()
+    coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional(),
+    error: mcpActionableErrorSchema.nullable(),
+    recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).nullable(),
+    recommendedNextAction: z.string(),
+    observationOnlyDisclaimer: z.string()
   })
   .passthrough();
 
@@ -207,17 +222,12 @@ export const mcpScanStatusOutputSchema = z
     estimatedRemainingSeconds: z.number().int().min(0).nullable().optional(),
     stalled: z.boolean().optional(),
     retryAfterSeconds: z.number().int().nullable().optional(),
-    error: z.object({
-      code: z.string(),
-      message: z.string(),
-      retryable: z.boolean(),
-      retryAfterSeconds: z.number().int().nullable(),
-      recommendedNextAction: z.string()
-    }).strict().optional(),
+    error: mcpActionableErrorSchema.nullable(),
     reportUrl: z.string().nullable().optional(),
     links: apiV2ScanResourceSchema.shape.links.optional(),
-    recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).nullable().optional(),
-    recommendedNextAction: z.string().optional()
+    recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).nullable(),
+    recommendedNextAction: z.string(),
+    observationOnlyDisclaimer: z.string()
   })
   .passthrough();
 
@@ -235,6 +245,7 @@ export const mcpReportOutputSchema = z
 export const mcpScanBundleOutputSchema = z
   .object({
     type: z.literal("certscore_scan_bundle"),
+    detail: z.enum(["summary", "findings", "evidence", "full"]),
     scanId: z.string(),
     domain: z.string(),
     url: z.string().nullable(),
@@ -247,6 +258,10 @@ export const mcpScanBundleOutputSchema = z
     resultDisposition: scanResultDispositionSchema.nullable().optional(),
     noGo: scanNoGoResultSchema.nullable().optional(),
     coverage: apiV2ScanResourceSchema.shape.coverage.nullable(),
+    createdAt: z.string().nullable(),
+    startedAt: z.string().nullable(),
+    completedAt: z.string().nullable(),
+    scanTimeSeconds: z.number().nullable(),
     timing: z.object({
       createdAt: z.string().nullable(),
       startedAt: z.string().nullable(),
@@ -272,6 +287,7 @@ export const mcpScanBundleOutputSchema = z
     reportUrl: z.string().nullable(),
     recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).nullable(),
     recommendedNextAction: z.string(),
+    error: mcpActionableErrorSchema.nullable(),
     mcpMetadata: z.object({
       detail: z.enum(["summary", "findings", "evidence", "full"]),
       heavyEvidenceIncluded: z.boolean(),
@@ -279,8 +295,13 @@ export const mcpScanBundleOutputSchema = z
       requestedMaxBytes: z.number().int().min(5000),
       actualBytes: z.number().int().min(0),
       truncated: z.boolean(),
-      truncationReason: z.string().nullable()
+      truncationReason: z.string().nullable(),
+      omittedSections: z.array(z.string()),
+      nextRecommendedMaxBytes: z.number().int().min(5000).max(200000).nullable(),
+      omittedContentAvailableViaUrl: z.boolean(),
+      contentUrls: z.record(z.string())
     }).strict(),
+    observationOnlyDisclaimer: z.string(),
     disclaimer: z.string().nullable()
   })
   .passthrough();
@@ -387,7 +408,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "get_scan_bundle",
     title: "Get scan bundle",
-    description: "Call after completed or completed_limited status. summary returns the canonical result and compact top findings; findings adds bounded finding detail; evidence adds bounded retained-evidence summaries and references; full adds the bounded public report. maxBytes is enforced with explicit actual-byte and truncation metadata. Never interpret no-go, not-observed, or limited coverage as proof of compliance.",
+    description: "Call after completed or completed_limited status. summary returns the canonical overview without finding bodies; findings reserves space for compact findings; evidence reserves findings plus bounded evidence digests and references; full adds all available bounded sections. Every response declares detail and byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Never interpret no-go, not-observed, or limited coverage as proof of compliance.",
     inputSchema: mcpGetScanBundleInputSchema,
     outputSchema: mcpScanBundleOutputSchema,
     annotations: readOnlyOpenWorldAnnotations

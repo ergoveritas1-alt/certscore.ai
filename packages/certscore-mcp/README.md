@@ -2,7 +2,7 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: public developer preview. Version 0.2.13 makes the Light workflow canonical, compact, typed, recoverable, and anonymous by construction. Local WC01 development uses `pnpm mcp:certscore`.
+Status: public developer preview. Version 0.2.14 prioritizes useful findings and evidence inside small byte budgets, returns typed validation details, and makes every omission recoverable. Local WC01 development uses `pnpm mcp:certscore`.
 
 Public docs:
 
@@ -19,7 +19,7 @@ Public docs:
 - `get_scan_status` - Poll with only the stable scanId returned by scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.
 - `get_report` - Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet.
 - `get_evidence` - Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.
-- `get_scan_bundle` - Call after completed or completed_limited status. summary returns the canonical result and compact top findings; findings adds bounded finding detail; evidence adds bounded retained-evidence summaries and references; full adds the bounded public report. maxBytes is enforced with explicit actual-byte and truncation metadata. Never interpret no-go, not-observed, or limited coverage as proof of compliance.
+- `get_scan_bundle` - Call after completed or completed_limited status. summary returns the canonical overview without finding bodies; findings reserves space for compact findings; evidence reserves findings plus bounded evidence digests and references; full adds all available bounded sections. Every response declares detail and byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Never interpret no-go, not-observed, or limited coverage as proof of compliance.
 - `export_findings` - Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows.
 - `list_findings` - List API v2 public-safe findings already projected for a scan.
 - `get_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.
@@ -42,6 +42,22 @@ This applies to `scan_site` when it returns an API v2 scan resource or job, `get
 Completed Light results are canonical. `scan_site`, terminal `get_scan_status`, and `get_scan_bundle` return the same score, risk level, coverage, and timing fields. Scores include `scoreStatus`, `scoreVersion`, and `scoreUpdatedAt`; a scan remains `finalizing` until the persisted canonical report projection is ready, so a completed response always carries `scoreStatus: "final"`.
 
 Every `failed`, `expired`, or `rate_limited` status includes a bounded `error` object with `code`, `message`, `retryable`, `retryAfterSeconds`, and `recommendedNextAction`.
+
+## Light Bundle Detail and Byte Budgets
+
+Every bundle declares its selected `detail` mode. `summary` returns the overview, canonical result, coverage, limitations, counts, and report URL without finding bodies. `findings` reserves space for compact finding objects. `evidence` reserves findings plus bounded evidence digests and references. `full` adds every available section subject to the caller's byte budget.
+
+`mcpMetadata` always includes `requestedMaxBytes`, `actualBytes`, `truncated`, `truncationReason`, `omittedSections`, `nextRecommendedMaxBytes`, `omittedContentAvailableViaUrl`, and `contentUrls`. When the budget cannot retain a requested section, `recommendedNextAction` names the next useful byte limit or directs the agent to an available report/evidence URL.
+
+Input-validation errors remain MCP `-32602` errors and also include structured `invalid_arguments` details with the affected field and a safe next action. Error results use concise text plus the same machine-readable `structuredContent`; successful results never duplicate the full structured payload in text.
+
+The Light workflow is:
+
+1. Call `scan_site` with a public URL.
+2. If the result is queued, running, or finalizing, retain `scanId` and poll `get_scan_status` with only that ID.
+3. Stop polling at any terminal status. For `completed` or `completed_limited`, call `get_scan_bundle`.
+4. If the bundle is truncated, follow `recommendedNextAction`, increase `maxBytes`, or open a listed content URL.
+5. Summarize the canonical score, risk, findings, coverage, limitations, and report URL without treating no-go, not-observed, or limited coverage as proof of compliance.
 
 ## Completed-Limited No-Go Results
 
@@ -242,7 +258,7 @@ Local repo config for contributors:
 
 Canonical first-run prompt:
 
-> Scan these public URLs. For each one, call scan_site. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using only scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For completed or completed_limited scans, call get_scan_bundle with detail=summary. Report the canonical score, risk level, coverage, top findings, limitations, report URL, and next action. Never treat no-go, not-observed, or limited coverage as proof of compliance.
+> Scan these public URLs. For each one, call scan_site. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using only scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For completed or completed_limited scans, call get_scan_bundle with detail=findings. If truncated, follow recommendedNextAction or increase maxBytes. Report the canonical score, risk level, coverage, findings, limitations, report URL, and next action. Never treat no-go, not-observed, or limited coverage as proof of compliance.
 4. Call `get_report`, `get_evidence`, `list_findings`, or `get_pre_consent_cookies_trackers` only when the task needs a dedicated view.
 5. Call `explain_finding` when a reviewer needs evidence and caveats for a specific finding.
 6. Call `get_latest_domain_scan` or `get_latest_domain_pre_consent_cookies_trackers` when the user asks for latest eligible public data for a domain.
