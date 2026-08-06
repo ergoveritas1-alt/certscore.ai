@@ -5165,7 +5165,7 @@ function buildMaterializedLocalV2Detail(
       visualAccessReview: localV2NoGo.visualAccessReview,
       visual_access_review: localV2NoGo.visualAccessReview
     } : {}),
-    consent_audit_completed: true,
+    consent_audit_completed: consentControlAssessment.assessmentStatus === "complete",
     consentControlAssessment,
     consent_control_assessment: consentControlAssessment,
     consent_baseline_tracker_evidence_urls: runtimeEvidenceReportable ? promotionGradePreconsentRequestUrls : [],

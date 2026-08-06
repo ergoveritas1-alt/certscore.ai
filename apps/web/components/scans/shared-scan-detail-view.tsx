@@ -7791,6 +7791,8 @@ export async function SharedScanDetailView({
         scanFromLabel={scanRecord.scan.scanFromLabel}
         scanFromValue={scanRecord.scan.scanFromValue}
         status={scanRecord.scan.status}
+        statusLabel={isIncompleteScanCoverage ? "Completed limited" : undefined}
+        statusTone={isIncompleteScanCoverage ? "warning" : undefined}
         title={
           <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="break-words">Scan: {scanRecord.scan.domainHostname ?? "Unknown website"}</span>

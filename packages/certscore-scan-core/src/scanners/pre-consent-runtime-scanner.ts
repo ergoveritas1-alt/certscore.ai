@@ -129,6 +129,11 @@ export interface PreConsentRuntimeScannerInput {
   waitMode?: "full" | "fast";
   /** Keep the owned page alive only for the enclosing canonical policy handoff. */
   retainRenderedPolicyRecoverySession?: boolean;
+  onLifecycleCheckpoint?: (checkpoint: {
+    atMs: number;
+    label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation";
+    status: "started" | "completed";
+  }) => void;
   signal?: AbortSignal;
   /**
    * A module-local deadline may stop pre-consent collection without cancelling
@@ -333,6 +338,17 @@ export async function preConsentRuntimeScanner(
   const moduleStartedAtMs = Date.now();
   const moduleDeadlineAtMs = moduleStartedAtMs + input.internalBudgetMs;
   const moduleStartedAt = new Date(moduleStartedAtMs).toISOString();
+  const lifecycleCheckpoint = (
+    label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation",
+    status: "started" | "completed",
+  ) => {
+    try {
+      input.onLifecycleCheckpoint?.({ atMs: Date.now(), label, status });
+    } catch {
+      // Diagnostic observers must never affect evidence capture.
+    }
+  };
+  lifecycleCheckpoint("scanner_started", "completed");
   const remainingModuleBudgetMs = () => Math.max(0, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
   const timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
   const captureScope = input.captureScope ?? "combined";
@@ -373,14 +389,18 @@ export async function preConsentRuntimeScanner(
   const browserMode = input.browserMode ?? "headless";
   const ownsBrowser = !input.browser;
   let retainOwnedBrowserForPolicyRecovery = false;
+  lifecycleCheckpoint("browser_launch", "started");
   const browser = input.browser ?? await recordTiming(timingBreakdown, "browser launch", `Playwright Chromium launch (${browserMode}).`, () =>
     chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }))
   );
+  lifecycleCheckpoint("browser_launch", "completed");
+  lifecycleCheckpoint("browser_context", "started");
   const context = await recordTiming(timingBreakdown, "browser context", "New isolated browser context and page.", async () => {
     const newContext = await browser.newContext(chromiumContextOptions());
     const newPage = await newContext.newPage();
     return { newContext, newPage };
   });
+  lifecycleCheckpoint("browser_context", "completed");
   const page = context.newPage;
   const browserContext = context.newContext;
   let pageCrashObserved = false;
@@ -405,6 +425,7 @@ export async function preConsentRuntimeScanner(
   };
   input.signal?.addEventListener("abort", abortRuntime, { once: true });
   if (input.signal?.aborted) abortRuntime();
+  lifecycleCheckpoint("probe_install", "started");
   await recordTiming(
     timingBreakdown,
     "browser api probe install",
@@ -423,6 +444,7 @@ export async function preConsentRuntimeScanner(
     "Install a bounded metadata-only document.cookie write probe; cookie values are not retained.",
     () => installCookieWriteProbe(browserContext),
   );
+  lifecycleCheckpoint("probe_install", "completed");
 
   for (const fulfiller of input.routeFulfillers ?? []) {
     await browserContext.route(fulfiller.urlPattern, async (route: Route) => {
@@ -725,6 +747,7 @@ export async function preConsentRuntimeScanner(
   const scanPromise = (async (): Promise<PreConsentRuntimeScannerResult> => {
   try {
     const navigationStartedAtMs = Date.now();
+    lifecycleCheckpoint("page_navigation", "started");
     let navigationResponse = await recordTiming(timingBreakdown, "page navigation", "Initial navigation with bounded same-site transport recovery until DOMContentLoaded.", async () => {
       const candidates = [input.normalizedUrl, ...navigationTransportRecoveryUrls(input.normalizedUrl)];
       let lastError: unknown;
@@ -795,6 +818,7 @@ export async function preConsentRuntimeScanner(
       }
       throw lastError;
     });
+    lifecycleCheckpoint("page_navigation", "completed");
 
     let transientStatusRetried = false;
     if (navigationResponse && isTransientMainDocumentStatus(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {

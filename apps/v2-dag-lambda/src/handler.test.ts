@@ -16,6 +16,7 @@ import {
   LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS,
   LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS,
   LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS,
+  LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_SCANNER_WORK_TIMEOUT_MS,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES,
   LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS,
@@ -122,6 +123,37 @@ test("dedicated evidence workers preserve the standard profile module budget", a
       LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
   );
   assert.equal(preConsentModuleDeadlineMs, 35_000);
+});
+
+test("consent-proof workers reserve a bounded visual recovery window", async () => {
+  let preConsentModuleDeadlineMs: number | undefined;
+  let preConsentVisualFallbackDeadlineMs: number | undefined;
+  const result = await handler(validPayload({
+    orchestrationMode: "worker",
+    profile: "standard",
+    workerLane: "consent_proof",
+  }), {
+    runArtifactChain: async (_payload, options) => {
+      preConsentModuleDeadlineMs = options.preConsentModuleDeadlineMs;
+      preConsentVisualFallbackDeadlineMs = options.preConsentVisualFallbackDeadlineMs;
+      return {
+        artifactMetadata: {},
+        artifactPointers: {},
+        phaseTimings: [],
+      };
+    },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(preConsentModuleDeadlineMs, 35_000);
+  assert.equal(
+    preConsentModuleDeadlineMs,
+    LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_SCANNER_WORK_TIMEOUT_MS -
+      LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS -
+      4_000 -
+      6_000,
+  );
+  assert.equal(preConsentVisualFallbackDeadlineMs, 6_000);
 });
 
 test("early policy handoff packet is typed, hash-bound, and non-projectable", () => {
@@ -1102,6 +1134,11 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
   assert.equal(merged.networkEvents[0]?.path, "/scripttemplates/otSDKStub.js");
   assert.equal(merged.policySurfaceObservations[0]?.observationId, "policy_surface_privacy");
   assert.equal(merged.scanEvidenceLaneAssessment?.lanes.homepageRuntime, "usable");
+  assert.equal(merged.scanEvidenceLaneAssessment?.lanes.consent, "limited");
+  assert.deepEqual(
+    merged.scanEvidenceLaneAssessment?.limitationKeys.filter((key) => key.startsWith("consent_")),
+    ["consent_control_inventory_incomplete"],
+  );
   assert.equal(
     merged.artifactRefs.find((reference) => reference.artifactId === "runtime_debug")?.path,
     path.join(artifactRoot, "worker-runtime_evidence-runtime-evidence.json"),
@@ -1110,6 +1147,46 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
     merged.artifactRefs.find((reference) => reference.artifactId === "policy_surface_text_privacy")?.path,
     path.join(artifactRoot, "policy_surface_text_privacy.txt"),
   );
+});
+
+test("three-lane merge marks an empty consent-proof lane not testable", () => {
+  const runtimeCoverage = {
+    coverageStatus: "usable" as const,
+    fallbackModesUsed: [],
+    limitationKeys: [],
+    notes: [],
+    observationCounts: {
+      cookieEvents: 0,
+      cookiesBeforeConsent: 0,
+      networkEvents: 1,
+      normalizedVendors: 0,
+      observedJourneys: 0,
+      thirdPartyRequests: 0,
+    },
+    silentEmpty: false,
+  };
+  const merged = mergeLocalV2DagLambdaEvidenceLaneBundles({
+    artifactRoot: "/tmp/certscore-three-lane-empty-consent",
+    scanId: "scan-empty-consent",
+    consentProof: canonicalBundleFixture("scan-empty-consent", {
+      visualCapture: {
+        status: "unavailable",
+        failureReason: "unknown",
+        artifactRefs: [],
+        notes: ["Consent lane reached its deadline."],
+      },
+    }),
+    runtimeEvidence: canonicalBundleFixture("scan-empty-consent", { runtimeCoverage }),
+    policyEvidence: canonicalBundleFixture("scan-empty-consent"),
+  });
+
+  assert.equal(merged.scanEvidenceLaneAssessment?.lanes.consent, "not_testable");
+  assert.ok(merged.scanEvidenceLaneAssessment?.limitationKeys.includes(
+    "representative_pre_consent_screenshot_unavailable",
+  ));
+  assert.ok(merged.scanEvidenceLaneAssessment?.limitationKeys.includes(
+    "consent_control_inventory_incomplete",
+  ));
 });
 
 test("sharded bundle merge retains exactly one diagnostic screenshot", () => {

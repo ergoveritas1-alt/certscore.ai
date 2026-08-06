@@ -75,6 +75,13 @@ test("typed partial consent diagnostics trigger recovery without relying on erro
   }), true);
 });
 
+test("missing consent evidence after a module deadline triggers typed visual recovery", () => {
+  assert.equal(consentInspectionNeedsRecovery({
+    moduleStatus: "skipped_budget",
+    observations: [],
+  }), true);
+});
+
 test("typed consent recovery covers partial modules and missing geometry channels", () => {
   const observedControls = {
     observationId: "consent_ui_pre_consent",
