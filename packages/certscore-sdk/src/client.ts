@@ -275,7 +275,7 @@ export class CertScoreClient {
   }
 
   /** Retrieve the latest eligible public scan for a domain. */
-  async getLatestDomainScan(domain: string, options: { scanFrom?: "eu_ie" | "california"; signal?: AbortSignal } = {}): Promise<DomainLatestScan> {
+  async getLatestDomainScan(domain: string, options: { scanFrom?: "eu_de" | "eu_ie" | "california"; signal?: AbortSignal } = {}): Promise<DomainLatestScan> {
     const endpoint = this.url(`/api/v2/domains/${encodeURIComponent(domain)}/latest`);
     if (options.scanFrom) {
       endpoint.searchParams.set("scanFrom", options.scanFrom);
@@ -284,7 +284,7 @@ export class CertScoreClient {
   }
 
   /** Retrieve latest-domain public-safe Cookies & Trackers (Pre-consent) table data. */
-  async getLatestDomainPreConsentCookiesTrackers(domain: string, options: { scanFrom?: "eu_ie" | "california"; signal?: AbortSignal } = {}): Promise<PreConsentCookiesTrackers> {
+  async getLatestDomainPreConsentCookiesTrackers(domain: string, options: { scanFrom?: "eu_de" | "eu_ie" | "california"; signal?: AbortSignal } = {}): Promise<PreConsentCookiesTrackers> {
     const endpoint = this.url(`/api/v2/domains/${encodeURIComponent(domain)}/latest/pre-consent-cookies-trackers`);
     if (options.scanFrom) {
       endpoint.searchParams.set("scanFrom", options.scanFrom);

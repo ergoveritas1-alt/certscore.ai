@@ -11,6 +11,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "zod": "^3.24.2"
+    "zod": "^3.25.76"
   }
 }

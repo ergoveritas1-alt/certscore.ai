@@ -25,7 +25,6 @@ import { buildPulseStatus } from "../../../../lib/pulse/status";
 import { PULSE_MIN_REUSABLE_PAGES_REQUESTED, PULSE_SCAN_COVERAGE_PLAN_CODE } from "../../../../lib/pulse/scan-coverage";
 import { queueAlternateRegionRecovery } from "../../../../server/pulse/queue-alternate-region-recovery";
 import {
-  checkIntegrationApiKeyUsageLimit,
   parseBearerToken,
   validateCertScoreBearerToken,
   type IntegrationApiKeyRecord,
@@ -41,6 +40,7 @@ import { isAnonymousScanQuotaError } from "../../../../server/pulse/anonymous-sc
 import {
   claimPulseDomainScanCreation,
   createPulseRequest,
+  createPulseRequestWithApiKeyQuota,
   findLatestCompletedAnonymousScanForDomain,
   getPulseGptActionUsage,
   getPulseRequestByJobId,
@@ -756,21 +756,30 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       );
     }
 
-    if (apiKeyUsageKey) {
-      const usageLimit = await checkIntegrationApiKeyUsageLimit({ key: apiKeyUsageKey });
-      if (!usageLimit.allowed) {
+    const newScanRequestInput = {
+      context: { ...contextBase, mode: "url" as const, quotaClass: "scan_create" as const },
+      normalizedDomain: normalized.normalizedDomain,
+      normalizedUrl: normalized.normalizedUrl,
+      requestedUrl: rawUrl,
+      resolutionMode: "created_new_scan",
+      status: "queued"
+    };
+    const reservedRequest = apiKeyUsageKey
+      ? await createPulseRequestWithApiKeyQuota({ ...newScanRequestInput, key: apiKeyUsageKey })
+      : { allowed: true as const, ...(await createPulseRequest(newScanRequestInput)) };
+    if (!reservedRequest.allowed) {
         console.warn("[pulse] integration API scan-create quota rejected", {
-          apiKeyId: apiKeyUsageKey.publicId,
+          apiKeyId: apiKeyUsageKey?.publicId ?? null,
           domain: normalized.normalizedDomain,
-          reason: usageLimit.reason,
+          reason: reservedRequest.reason,
           requestId,
-          usage: usageLimit.usage
+          usage: reservedRequest.usage
         });
         return pulseJson(
           buildPulseError({
             code: "rate_limited",
             message: "This CertScore.ai API key has reached its new-scan limit. Recent-result reuse and result retrieval remain available. Try again after the retry window or manage your plan.",
-            retryAfterSeconds: usageLimit.retryAfterSeconds,
+            retryAfterSeconds: reservedRequest.retryAfterSeconds,
             resolution: {
               label: "Manage plan",
               url: "https://certscore.ai/app/modify-plan"
@@ -778,21 +787,12 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
             detail,
             format
           }),
-          { headers: { "Cache-Control": "no-store", "Retry-After": String(usageLimit.retryAfterSeconds) }, status: 429 },
+          { headers: { "Cache-Control": "no-store", "Retry-After": String(reservedRequest.retryAfterSeconds) }, status: 429 },
           requestId,
           routeName
         );
-      }
     }
-
-    const { publicId, jobId: createdJobId } = await createPulseRequest({
-      context: { ...contextBase, mode: "url", quotaClass: "scan_create" },
-      normalizedDomain: normalized.normalizedDomain,
-      normalizedUrl: normalized.normalizedUrl,
-      requestedUrl: rawUrl,
-      resolutionMode: "created_new_scan",
-      status: "queued"
-    });
+    const { publicId, jobId: createdJobId } = reservedRequest;
     activePulseRequestId = publicId;
 
     const throttle = await claimPulseDomainScanCreation({

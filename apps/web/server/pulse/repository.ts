@@ -1,4 +1,4 @@
-import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { query, queryOne, withWriteTransaction } from "@website-signal-risk-scanner/db";
 import { DEFAULT_SCAN_FROM, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { randomUUID } from "node:crypto";
 import {
@@ -8,6 +8,10 @@ import {
   PULSE_VERSION
 } from "../../lib/pulse/constants";
 import type { PulseRequestContext } from "../../lib/pulse/types";
+import {
+  decideIntegrationApiKeyUsageLimit,
+  type IntegrationApiKeyRecord
+} from "../integrations/api-keys";
 import { ensurePulseTables } from "./schema";
 import {
   ANONYMOUS_SCAN_DAILY_LIMIT,
@@ -87,7 +91,7 @@ export async function findLatestCompletedAnonymousScanForDomain(
   );
 }
 
-export async function createPulseRequest(input: {
+type CreatePulseRequestInput = {
   context: PulseRequestContext;
   normalizedDomain?: string | null;
   normalizedUrl?: string | null;
@@ -96,18 +100,17 @@ export async function createPulseRequest(input: {
   resolutionMode: string;
   scanId?: string | null;
   status: string;
-}) {
-  await ensurePulseTables();
-  const publicId = createPulsePublicId();
-  const jobId = pulseJobIdForPublicId(publicId);
-  await query(
-    `insert into pulse_requests (
+};
+
+const INSERT_PULSE_REQUEST_SQL = `insert into pulse_requests (
        public_id, job_id, requested_url, normalized_url, normalized_domain,
        request_channel, requested_by, request_context, status, scan_id, api_version, schema_version,
        pulse_version, projection_version, resolution_mode
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-    [
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`;
+
+function pulseRequestInsertValues(input: CreatePulseRequestInput, publicId: string, jobId: string) {
+  return [
       publicId,
       jobId,
       input.requestedUrl ?? null,
@@ -143,10 +146,84 @@ export async function createPulseRequest(input: {
       PULSE_VERSION,
       PULSE_PROJECTION_VERSION,
       input.resolutionMode
-    ]
-  );
+    ];
+}
+
+export async function createPulseRequest(input: CreatePulseRequestInput) {
+  await ensurePulseTables();
+  const publicId = createPulsePublicId();
+  const jobId = pulseJobIdForPublicId(publicId);
+  await query(INSERT_PULSE_REQUEST_SQL, pulseRequestInsertValues(input, publicId, jobId));
 
   return { publicId, jobId };
+}
+
+/** Atomically checks the shared regional key quota and reserves one accepted new-scan submission. */
+export async function createPulseRequestWithApiKeyQuota(input: CreatePulseRequestInput & {
+  key: Pick<IntegrationApiKeyRecord, "organizationId" | "publicId" | "hourlyLimit" | "dailyLimit">;
+}) {
+  await ensurePulseTables();
+  return withWriteTransaction(async (client) => {
+    if (input.key.organizationId) {
+      await client.query("select pg_advisory_xact_lock(hashtext($1))", [`integration-org:${input.key.organizationId}`]);
+    }
+    await client.query("select pg_advisory_xact_lock(hashtext($1))", [`integration-key:${input.key.publicId}`]);
+
+    const usageResult = await client.query<{
+      key_hourly_count: number;
+      key_daily_count: number;
+      organization_hourly_count: number;
+      organization_daily_count: number;
+    }>(
+      `select
+         count(*) filter (
+           where requested_by->>'apiKeyId' = $1
+             and request_context->>'quotaClass' = 'scan_create'
+             and requested_at > now() - interval '1 hour'
+         )::int as key_hourly_count,
+         count(*) filter (
+           where requested_by->>'apiKeyId' = $1
+             and request_context->>'quotaClass' = 'scan_create'
+             and requested_at > now() - interval '1 day'
+         )::int as key_daily_count,
+         count(*) filter (
+           where $2::text is not null
+             and requested_by->>'accountId' = $2
+             and request_context->>'quotaClass' = 'scan_create'
+             and requested_at > now() - interval '1 hour'
+         )::int as organization_hourly_count,
+         count(*) filter (
+           where $2::text is not null
+             and requested_by->>'accountId' = $2
+             and request_context->>'quotaClass' = 'scan_create'
+             and requested_at > now() - interval '1 day'
+         )::int as organization_daily_count
+         from pulse_requests
+        where requested_at > now() - interval '1 day'
+          and (
+            requested_by->>'apiKeyId' = $1
+            or ($2::text is not null and requested_by->>'accountId' = $2)
+          )`,
+      [input.key.publicId, input.key.organizationId]
+    );
+    const usageRow = usageResult.rows[0];
+    const decision = decideIntegrationApiKeyUsageLimit({
+      keyHourlyCount: Number(usageRow?.key_hourly_count ?? 0),
+      keyDailyCount: Number(usageRow?.key_daily_count ?? 0),
+      organizationHourlyCount: Number(usageRow?.organization_hourly_count ?? 0),
+      organizationDailyCount: Number(usageRow?.organization_daily_count ?? 0),
+      keyHourlyLimit: input.key.hourlyLimit,
+      keyDailyLimit: input.key.dailyLimit
+    });
+    if (!decision.allowed) {
+      return decision;
+    }
+
+    const publicId = createPulsePublicId();
+    const jobId = pulseJobIdForPublicId(publicId);
+    await client.query(INSERT_PULSE_REQUEST_SQL, pulseRequestInsertValues(input, publicId, jobId));
+    return { ...decision, publicId, jobId };
+  });
 }
 
 export async function getPulseGptActionUsage(input: { ipHash: string | null }) {

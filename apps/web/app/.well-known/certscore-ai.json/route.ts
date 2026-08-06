@@ -83,7 +83,7 @@ const discoveryDocument = {
     distribution: "npm",
     status: "published",
     package: "@certscore/sdk",
-    currentVersion: "0.2.6",
+    currentVersion: "0.2.8",
     install: "npm install @certscore/sdk@0.2.6"
   },
   mcp: {

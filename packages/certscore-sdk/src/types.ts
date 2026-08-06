@@ -2,7 +2,7 @@ export type PulseDetail = "tiny" | "quick" | "standard" | "full" | "summary" | "
 export type NormalizedPulseDetail = "tiny" | "standard" | "full" | "summary" | "evidence";
 export type PulseFormat = "json" | "markdown";
 export type FreshnessMode = "latest" | "refresh";
-export type ScanFrom = "eu_ie" | "california";
+export type ScanFrom = "eu_de" | "eu_ie" | "california";
 export type ScanResultDisposition = "no_go";
 export type ScanNoGoReasonCode =
   | "blank_or_unusable_page" | "loading_or_stalled" | "not_found_404" | "parked_or_placeholder"

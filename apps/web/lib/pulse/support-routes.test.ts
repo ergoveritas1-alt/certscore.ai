@@ -667,7 +667,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.sdk.docs, "https://certscore.ai/developers/sdk");
   assert.equal(aiDiscovery.sdk.distribution, "npm");
   assert.equal(aiDiscovery.sdk.status, "published");
-  assert.equal(aiDiscovery.sdk.currentVersion, "0.2.6");
+  assert.equal(aiDiscovery.sdk.currentVersion, "0.2.8");
   assert.equal(aiDiscovery.mcp.docs, "https://certscore.ai/developers/mcp");
   assert.equal(aiDiscovery.mcp.distribution, "homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");

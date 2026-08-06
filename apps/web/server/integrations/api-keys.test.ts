@@ -223,15 +223,26 @@ test("decideIntegrationApiKeyUsageLimit blocks key hourly usage first", () => {
 
 test("decideIntegrationApiKeyUsageLimit supports a per-key higher quota", () => {
   const decision = decideIntegrationApiKeyUsageLimit({
-    keyHourlyCount: 100,
-    keyDailyCount: 100,
-    keyHourlyLimit: 100,
-    keyDailyLimit: 2000,
+    keyHourlyCount: 119,
+    keyDailyCount: 2399,
+    keyHourlyLimit: 120,
+    keyDailyLimit: 2400,
     organizationHourlyCount: 0,
     organizationDailyCount: 0
   });
-  assert.equal(decision.allowed, false);
-  assert.equal(decision.reason, "api_key_hourly_limit");
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.reason, null);
+
+  const exhausted = decideIntegrationApiKeyUsageLimit({
+    keyHourlyCount: 120,
+    keyDailyCount: 2400,
+    keyHourlyLimit: 120,
+    keyDailyLimit: 2400,
+    organizationHourlyCount: 0,
+    organizationDailyCount: 0
+  });
+  assert.equal(exhausted.allowed, false);
+  assert.equal(exhausted.reason, "api_key_hourly_limit");
 });
 
 test("decideIntegrationApiKeyUsageLimit blocks key daily usage", () => {

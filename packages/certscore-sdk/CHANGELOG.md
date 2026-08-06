@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## 0.2.8
+
+- Accept `eu_de`, `eu_ie`, and `california` consistently across API v2 scan creation and latest-domain resource types.
+- Align regional API v2 submissions with the shared durable scan, polling, evidence, diagnostics, no-go, and rate-limit lifecycle.
+
 ## 0.2.7
 
 - Expose the canonical report projection version and source hash in Pulse metadata.

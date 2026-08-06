@@ -197,11 +197,21 @@ test("Pulse v1 OpenAPI has stable agent-facing operations", () => {
   assert.ok(document.components.schemas.PulseError);
 });
 
-test("API v2 draft schemas accept resource-oriented public-safe shapes", () => {
+test("API v2 accepts EU-Germany, EU-Ireland, and California scan creation with the same resource schema", () => {
   const createRequest = apiV2CreateScanRequestSchema.parse({
     url: "https://example.com",
     scanFrom: "eu_ie",
     metadata: { source: "ci" }
+  });
+  const californiaCreateRequest = apiV2CreateScanRequestSchema.parse({
+    url: "https://example.com",
+    scanFrom: "california",
+    metadata: { source: "daemon" }
+  });
+  const euGermanyCreateRequest = apiV2CreateScanRequestSchema.parse({
+    url: "https://example.com",
+    scanFrom: "eu_de",
+    metadata: { source: "regional-api-test" }
   });
   const scan = apiV2ScanResourceSchema.parse({
     type: "certscore_scan",
@@ -262,6 +272,9 @@ test("API v2 draft schemas accept resource-oriented public-safe shapes", () => {
   });
 
   assert.equal(createRequest.url, "https://example.com");
+  assert.equal(createRequest.scanFrom, "eu_ie");
+  assert.equal(euGermanyCreateRequest.scanFrom, "eu_de");
+  assert.equal(californiaCreateRequest.scanFrom, "california");
   assert.equal(scan.score, 88);
   assert.equal(scan.reused, true);
   assert.equal(scan.anonymousQuotaRemaining, 8);
@@ -325,10 +338,14 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.5");
+  assert.equal(document.info.version, "0.1.6");
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/auth/check"]);
   assert.ok(document.paths["/api/v2/scans"]);
+  assert.deepEqual(
+    document.components.schemas.CreateScanRequest.properties.scanFrom.enum,
+    ["eu_de", "eu_ie", "california"]
+  );
   assert.ok(document.paths["/api/v2/scans/{scanId}/findings/{findingId}"]);
   assert.ok(document.paths["/api/v2/domains/{domain}/latest"]);
   assert.ok(document.paths["/api/v2/scans/{scanId}/pulse"]);

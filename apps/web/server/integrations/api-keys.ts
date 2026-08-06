@@ -144,8 +144,15 @@ export async function createIntegrationApiKey(input: {
   ownerUserId?: string | null;
   createdBy?: string | null;
   expiresAt?: string | null;
+  hourlyLimit?: number;
+  dailyLimit?: number;
   prefix?: "preview" | "live" | "read_only";
 }) {
+  const hourlyLimit = input.hourlyLimit ?? INTEGRATION_API_KEY_HOURLY_LIMIT;
+  const dailyLimit = input.dailyLimit ?? INTEGRATION_API_KEY_DAILY_LIMIT;
+  if (!Number.isSafeInteger(hourlyLimit) || hourlyLimit <= 0 || !Number.isSafeInteger(dailyLimit) || dailyLimit <= 0) {
+    throw new Error("Integration API-key quota limits must be positive integers.");
+  }
   const token = generateIntegrationApiKey(
     input.prefix === "live" ? LIVE_TOKEN_PREFIX : input.prefix === "read_only" ? READ_ONLY_TOKEN_PREFIX : PREVIEW_TOKEN_PREFIX
   );
@@ -155,9 +162,9 @@ export async function createIntegrationApiKey(input: {
   await query(
     `insert into integration_api_keys (
        public_id, name, token_prefix, token_hash, scopes,
-       organization_id, owner_user_id, created_by, expires_at
+       organization_id, owner_user_id, created_by, expires_at, hourly_limit, daily_limit
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       publicId,
       input.name,
@@ -167,10 +174,12 @@ export async function createIntegrationApiKey(input: {
       input.organizationId ?? null,
       input.ownerUserId ?? null,
       input.createdBy ?? null,
-      input.expiresAt ?? null
+      input.expiresAt ?? null,
+      hourlyLimit,
+      dailyLimit
     ]
   );
-  return { publicId, token, tokenPrefix };
+  return { publicId, token, tokenPrefix, hourlyLimit, dailyLimit };
 }
 
 export type SelfServeReadOnlyApiKeyDecision =

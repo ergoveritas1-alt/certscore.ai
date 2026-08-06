@@ -582,32 +582,33 @@ test("resource clients call API v2 read endpoints", async () => {
   }
 });
 
-test("scans.create uses API v2 scan creation", async () => {
-  const mock = installFetch([
-    {
+test("scans.create uses the same API v2 submission path for every production region", async () => {
+  const regions = ["eu_de", "eu_ie", "california"] as const;
+  const mock = installFetch(regions.map((scanFrom, index) => ({
       status: 202,
-      body: { type: "certscore_scan_job", status: "queued", jobId: "job_1", scanId: "scan_123" }
-    }
-  ]);
+      body: { type: "certscore_scan_job", status: "queued", jobId: `job_${index + 1}`, scanId: `scan_${index + 1}`, scanFrom }
+    })));
 
   try {
     const client = new CertScoreClient();
-    const pending = await client.scans.create("https://example.com", {
-      freshness: "refresh",
-      metadata: { source: "test" },
-      scanFrom: "california"
-    });
+    for (const [index, scanFrom] of regions.entries()) {
+      const pending = await client.scans.create("https://example.com", {
+        freshness: "refresh",
+        metadata: { source: "test" },
+        scanFrom
+      });
 
-    assert.equal(pending.type, "certscore_scan_job");
-    assert.equal(pending.status, "queued");
-    assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
-    assert.equal(mock.callDetails[0]?.method, "POST");
-    assert.deepEqual(JSON.parse(String(mock.callDetails[0]?.body)), {
-      freshness: "refresh",
-      metadata: { source: "test" },
-      scanFrom: "california",
-      url: "https://example.com"
-    });
+      assert.equal(pending.type, "certscore_scan_job");
+      assert.equal(pending.status, "queued");
+      assert.match(mock.calls[index] ?? "", /\/api\/v2\/scans$/);
+      assert.equal(mock.callDetails[index]?.method, "POST");
+      assert.deepEqual(JSON.parse(String(mock.callDetails[index]?.body)), {
+        freshness: "refresh",
+        metadata: { source: "test" },
+        scanFrom,
+        url: "https://example.com"
+      });
+    }
   } finally {
     mock.restore();
   }

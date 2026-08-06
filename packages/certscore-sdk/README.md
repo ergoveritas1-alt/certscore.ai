@@ -6,7 +6,7 @@ CertScore outputs are automated public-web observations for review. They are not
 
 ## Status
 
-The SDK is published as `@certscore/sdk` on npm. Use version `0.2.6` or newer for typed no-account allowance and higher-volume support guidance, completed-limited no-go results, API v2 scan timing fields, and client attribution headers. See the [npm package](https://www.npmjs.com/package/@certscore/sdk) and [SDK source](https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk).
+The SDK is published as `@certscore/sdk` on npm. Use version `0.2.8` or newer for API v2 scan creation in EU-Germany, EU-Ireland, and California, plus typed no-account allowance, completed-limited no-go results, API v2 timing, and client attribution. See the [npm package](https://www.npmjs.com/package/@certscore/sdk) and [SDK source](https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk).
 
 ```bash
 npm install @certscore/sdk

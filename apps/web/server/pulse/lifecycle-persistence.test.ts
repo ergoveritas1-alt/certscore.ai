@@ -56,7 +56,7 @@ test("authenticated Pulse API keys bypass the anonymous scan quota", async () =>
 test("Pulse validates DNS before creating a queued request or claiming the domain throttle", async () => {
   const routeSource = await readFile("apps/web/app/api/v1/pulse/route.ts", "utf8");
   const dnsIndex = routeSource.lastIndexOf("const dnsStatus = await checkDomainDns");
-  const createIndex = routeSource.lastIndexOf("const { publicId, jobId: createdJobId } = await createPulseRequest");
+  const createIndex = routeSource.lastIndexOf("const reservedRequest = apiKeyUsageKey");
   const throttleIndex = routeSource.lastIndexOf("const throttle = await claimPulseDomainScanCreation");
 
   assert.ok(dnsIndex > 0);
@@ -67,12 +67,14 @@ test("Pulse validates DNS before creating a queued request or claiming the domai
 
 test("Pulse integration quota counts scan creation but not polling or recent-result reuse", async () => {
   const routeSource = await readFile("apps/web/app/api/v1/pulse/route.ts", "utf8");
-  const apiKeySource = await readFile("apps/web/server/integrations/api-keys.ts", "utf8");
+  const repositorySource = await readFile("apps/web/server/pulse/repository.ts", "utf8");
 
-  assert.match(routeSource, /mode: "url", quotaClass: "scan_create"/);
-  assert.match(apiKeySource, /request_context->>'quotaClass' = 'scan_create'/);
-  assert.ok(routeSource.indexOf("if (scanId)") < routeSource.indexOf("const usageLimit = await checkIntegrationApiKeyUsageLimit"));
-  assert.ok(routeSource.indexOf("if (jobId)") < routeSource.indexOf("const usageLimit = await checkIntegrationApiKeyUsageLimit"));
+  assert.match(routeSource, /mode: "url" as const, quotaClass: "scan_create" as const/);
+  assert.match(repositorySource, /request_context->>'quotaClass' = 'scan_create'/);
+  assert.match(repositorySource, /pg_advisory_xact_lock/);
+  assert.match(repositorySource, /withWriteTransaction/);
+  assert.ok(routeSource.indexOf("if (scanId)") < routeSource.indexOf("const reservedRequest = apiKeyUsageKey"));
+  assert.ok(routeSource.indexOf("if (jobId)") < routeSource.indexOf("const reservedRequest = apiKeyUsageKey"));
 });
 
 test("Pulse terminalizes scan-creation exceptions and anonymous quota failures", async () => {

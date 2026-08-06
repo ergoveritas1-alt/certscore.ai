@@ -1,0 +1,39 @@
+name: CertScore SDK Release
+
+on:
+  push:
+    tags:
+      - "certscore-sdk-v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - name: Verify tag and package version
+        run: |
+          expected="certscore-sdk-v$(node -p "require('./packages/certscore-sdk/package.json').version")"
+          test "${GITHUB_REF_NAME}" = "${expected}"
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @certscore/sdk test
+      - run: pnpm --filter @certscore/sdk build
+
+      - name: Publish with npm trusted publishing
+        working-directory: packages/certscore-sdk
+        run: npm publish --provenance --access public
