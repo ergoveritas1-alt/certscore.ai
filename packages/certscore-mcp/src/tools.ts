@@ -87,7 +87,6 @@ export function toToolError(error: unknown): CallToolResult {
 
   return {
     content: [{ type: "text", text: JSON.stringify(payload) }],
-    structuredContent: payload,
     isError: true
   };
 }
@@ -116,10 +115,19 @@ export function toInvalidArgumentsToolError(errorMessage: string): CallToolResul
     recommendedNextAction,
     mcpCode: -32602
   };
-  const payload = { error };
+  const payload = tool === "scan_site"
+    ? {
+        type: "certscore_tool_error",
+        status: "invalid_arguments",
+        error,
+        recommendedNextTool: null,
+        recommendedNextAction,
+        observationOnlyDisclaimer: OBSERVATION_ONLY_DISCLAIMER
+      }
+    : { error };
   return {
     content: [{ type: "text", text: JSON.stringify(payload) }],
-    structuredContent: payload,
+    ...(tool === "scan_site" ? { structuredContent: payload } : {}),
     isError: true
   };
 }

@@ -155,6 +155,10 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     await lightClient.connect(lightTransport);
     const lightTools = await lightClient.listTools();
     assert.deepEqual(lightTools.tools.map((tool) => tool.name).sort(), ["get_scan_bundle", "get_scan_status", "scan_site"]);
+    const invalidLightScan = await lightClient.callTool({ name: "scan_site", arguments: {} });
+    assert.equal(invalidLightScan.isError, true);
+    assert.equal((invalidLightScan.structuredContent as { type?: string } | undefined)?.type, "certscore_tool_error");
+    assert.equal(((invalidLightScan.structuredContent as { error?: { field?: string } } | undefined)?.error)?.field, "url");
     await lightClient.close();
 
     const invalidSession = await fetch(`${origin}/mcp`, {
