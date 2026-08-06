@@ -392,14 +392,14 @@ export function buildScanBundle(input: {
   maxBytes?: number;
   maxPreConsentRows?: number;
   preConsentCookiesTrackers?: PreConsentCookiesTrackers | null;
-  report: PulseResult;
+  report: PulseResult | null;
   scan: ScanResource;
 }) {
   const detail = input.detail ?? "summary";
   const maxFindings = Math.min(50, Math.max(1, input.maxFindings ?? (detail === "summary" ? 5 : 20)));
   const maxPreConsentRows = Math.min(50, Math.max(1, input.maxPreConsentRows ?? 20));
   const evidence = (input.evidence ?? {}) as Record<string, unknown>;
-  const report = input.report as Record<string, unknown>;
+  const report = (input.report ?? {}) as Record<string, unknown>;
   const findings = Array.isArray(input.findings.findings)
     ? input.findings.findings.slice(0, maxFindings).map((finding) => detail === "summary" ? compactBundleFinding(finding) : finding)
     : [];
@@ -486,9 +486,9 @@ export function buildScanBundle(input: {
     links,
     reportUrl: input.scan.links?.report ?? (typeof links.report === "string" ? links.report : null),
     recommendedNextTool: null,
-    recommendedNextAction: findings.length > 0
+    recommendedNextAction: input.scan.noGo?.recommendedNextAction ?? (findings.length > 0
       ? "Review the returned findings and follow their evidence links. Use detail=evidence only when deeper retained context is needed."
-      : "Review coverage and limitations before interpreting the absence of findings.",
+      : "Review coverage and limitations before interpreting the absence of findings."),
     mcpMetadata: {
       detail,
       heavyEvidenceIncluded: detail === "evidence" || detail === "full",
@@ -498,7 +498,7 @@ export function buildScanBundle(input: {
       truncated: false,
       truncationReason: null
     },
-    disclaimer: input.scan.disclaimer ?? input.report.disclaimer ?? null
+    disclaimer: input.scan.disclaimer ?? input.report?.disclaimer ?? null
   };
 
   updateBundleActualBytes(bundle);

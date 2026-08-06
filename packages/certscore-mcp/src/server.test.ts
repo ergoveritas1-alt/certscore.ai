@@ -708,6 +708,59 @@ test("get_scan_bundle returns a compact canonical summary by default", async () 
   }
 });
 
+test("get_scan_bundle returns the canonical no-go result when the Pulse report is unavailable", async () => {
+  const recommendedNextAction = "Publish the intended public website, then run the scan again.";
+  const mock = installFetch([{
+    status: 200,
+    body: {
+      type: "certscore_scan",
+      scanId: "scan_no_go",
+      domain: "example.net",
+      url: "https://example.net",
+      status: "completed_limited",
+      score: null,
+      scoreStatus: "final",
+      scoreVersion: "overall-score.v2",
+      scoreUpdatedAt: "2026-08-06T03:45:52.303Z",
+      riskLevel: null,
+      resultDisposition: "no_go",
+      noGo: {
+        reasonCode: "parked_or_placeholder",
+        title: "The domain shows a placeholder page",
+        explanation: "The retained page was a placeholder rather than the intended public website.",
+        summary: "CertScore observed a placeholder page.",
+        limitationKind: "target_site_state",
+        recommendedNextAction,
+        retryLikelyToHelp: false
+      },
+      coverage: {
+        status: "target_site_state",
+        summary: "CertScore observed a placeholder page.",
+        limitations: ["The retained page was a placeholder."]
+      }
+    }
+  }]);
+  try {
+    await withMcpClient(async (client) => {
+      const bundle = parseToolJson(await client.callTool({
+        name: "get_scan_bundle",
+        arguments: { scanId: "scan_no_go", detail: "evidence", maxBytes: 5000 }
+      }));
+      assert.equal(bundle.type, "certscore_scan_bundle");
+      assert.equal(bundle.status, "completed_limited");
+      assert.equal(bundle.score, null);
+      assert.equal(bundle.scoreStatus, "final");
+      assert.equal(bundle.resultDisposition, "no_go");
+      assert.equal(bundle.recommendedNextAction, recommendedNextAction);
+      assert.deepEqual(bundle.findings, []);
+      assert.deepEqual((bundle.evidenceSummary as Record<string, unknown>).projectedFindings, []);
+      assert.equal(mock.calls.length, 1);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
 test("completed Light tools preserve one final canonical score and metadata", async () => {
   const canonicalScan = {
     type: "certscore_scan",

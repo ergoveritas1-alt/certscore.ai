@@ -284,9 +284,22 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     toolContract("get_scan_bundle"),
     async ({ scanId, detail = "summary", maxBytes, maxFindings, maxPreConsentRows }: GetScanBundleInput) => {
       try {
+        const scan = await retryTransientOriginFailure(() => client.scans.get(scanId));
+        if (scan.status === "completed_limited" && scan.resultDisposition === "no_go") {
+          return toToolResult(buildScanBundle({
+            detail,
+            evidence: null,
+            findings: { type: "certscore_finding_list", scanId, findings: [] },
+            maxBytes,
+            maxFindings,
+            maxPreConsentRows,
+            preConsentCookiesTrackers: null,
+            report: null,
+            scan
+          }));
+        }
         const includeEvidence = detail === "evidence" || detail === "full";
-        const [scan, report, findings, evidence, preConsentCookiesTrackers] = await Promise.all([
-          retryTransientOriginFailure(() => client.scans.get(scanId)),
+        const [report, findings, evidence, preConsentCookiesTrackers] = await Promise.all([
           retryTransientOriginFailure(() => client.getScan(scanId, { detail: detail === "full" ? "full" : "summary", format: "json" })),
           retryTransientOriginFailure(() => client.findings.list(scanId)),
           includeEvidence
