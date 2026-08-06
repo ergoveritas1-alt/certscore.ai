@@ -11,6 +11,62 @@ Public docs:
 - https://certscore.ai/developers/reference
 - https://certscore.ai/api-pulse
 
+## CertScore Light: start here
+
+Light is the anonymous, no-auth Streamable HTTP endpoint for first-time and low-volume agent workflows:
+
+```text
+Light:
+https://mcp.certscore.ai/mcp/light
+
+Authentication: None
+Tools: scan_site, get_scan_status, get_scan_bundle
+```
+
+No signup, API key, bearer token, or OAuth is required. Light allows 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
+
+Codex setup:
+
+```bash
+codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
+```
+
+First-run Codex prompt:
+
+> Scan https://example.com. If the scan is still running, poll get_scan_status using the returned scanId. Then call get_scan_bundle with detail=findings and maxBytes=8000. Summarize the score, risk level, findings, evidence links, coverage limitations, and report URL. Treat results as automated public-web observations, not legal conclusions or compliance determinations.
+
+Canonical Light workflow:
+
+1. Call `scan_site` with a public URL.
+2. If the result is queued, running, or finalizing, retain `scanId`.
+3. Poll `get_scan_status` using `scanId`. Do not poll with `jobId` after `scanId` is available.
+4. Once terminal, call `get_scan_bundle`.
+5. Use `detail=findings` for a compact finding review.
+6. Use `detail=evidence` for evidence digests and references.
+7. If truncated, follow `recommendedNextAction` or increase `maxBytes`.
+8. Summarize findings together with coverage limitations and the report URL.
+
+Recommended bundle budgets are `maxBytes=5000` for `summary`, `maxBytes=8000` for `findings`, `maxBytes=8000` for `evidence`, and `maxBytes=12000` or higher for `full`. A 5,000-byte response may intentionally omit optional sections while still returning a compact finding or evidence reference when available. Inspect `actualBytes`, `truncated`, `omittedSections`, `nextRecommendedMaxBytes`, and returned report or evidence content URLs.
+
+Verification prompt:
+
+> List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://example.com and report whether the result was new or reused.
+
+Success means the tool list contains exactly the three Light tools, no authorization page appears, and `scan_site` returns a stable `scanId` plus an explicit new-or-reused decision. An eligible reused result reports that quota was not consumed.
+
+CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
+
+## Which integration should I use?
+
+| Integration | Access | Best for |
+| --- | --- | --- |
+| Light MCP | No signup, API key, or OAuth; three tools; 20 new scans per requester IP per UTC day | Evaluation and low-volume agent workflows |
+| Authenticated MCP | OAuth or scoped key; higher volume, history, and advanced diagnostic tools | Production and repeated workflows |
+| REST API | Language-neutral HTTP resources | Backend jobs, webhooks, and language-neutral integrations |
+| TypeScript SDK | Typed resource clients and polling helpers | Typed Node.js and TypeScript applications |
+
+The full/authenticated Streamable HTTP endpoint is `https://mcp.certscore.ai/mcp`. Use it after Light when the workflow requires authentication, higher volume, history, or advanced tools.
+
 ## Tools
 
 - `create_scan` - Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable.
@@ -63,7 +119,7 @@ The Light workflow is:
 
 No-go scans are usable terminal results, not transport failures. Relevant tools retain `status: "completed_limited"`, `resultDisposition: "no_go"`, the stable reason code, customer-safe title and explanation, `limitationKind` attribution, retry guidance, and a bounded `evidenceExcerpt` when retained. Unknown future reasons use generic customer copy while remaining structured as `reasonCode: "unknown"`.
 
-## Hosted Streamable HTTP
+## Full/authenticated Streamable HTTP
 
 OAuth-capable MCP clients can connect to:
 
@@ -78,7 +134,7 @@ https://mcp.certscore.ai/.well-known/oauth-protected-resource/mcp
 https://certscore.ai/.well-known/oauth-authorization-server
 ```
 
-The hosted service uses OAuth authorization code with PKCE. Default read access requests `scan:read mcp`; support-gated scan creation additionally requests `scan:create`. The same tool implementation and output contracts power stdio and hosted transports.
+The full hosted service uses OAuth authorization code with PKCE. Default read access requests `scan:read mcp`; support-gated scan creation additionally requests `scan:create`. The same tool implementation and output contracts power stdio and hosted transports.
 
 For low-volume agent discovery without account or OAuth setup, use the unauthenticated endpoint:
 
@@ -86,17 +142,7 @@ For low-volume agent discovery without account or OAuth setup, use the unauthent
 https://mcp.certscore.ai/mcp/anonymous
 ```
 
-For the simplest no-account workflow, use CertScore Light:
-
-```text
-https://mcp.certscore.ai/mcp/light
-```
-
-Light exposes only `scan_site`, `get_scan_status`, and `get_scan_bundle`. The allowance is 20 new scans per requester IP per UTC day. Light is anonymous: a client should initialize it directly without opening an OAuth authorization flow. OAuth metadata applies only to `https://mcp.certscore.ai/mcp`.
-
-Codex setup: add `https://mcp.certscore.ai/mcp/light` as a remote MCP server. No account, API key, or authorization approval is expected. After connection, `tools/list` should contain exactly the three Light tools above.
-Eligible recent-result reuse does not consume the allowance. Every no-account response includes the higher-volume contact path at
-`support@certscore.ai`.
+For the simplest no-account workflow, use the Light quickstart at the top of this document. OAuth metadata applies only to `https://mcp.certscore.ai/mcp`.
 
 ## Configuration
 
@@ -313,6 +359,12 @@ This verifies the Homebrew-installed `certscore-mcp` command against live `https
 
 ## Troubleshooting
 
+- Unexpected OAuth in Codex: remove the server and add it again with the exact Light URL `https://mcp.certscore.ai/mcp/light`. Do not configure a bearer token.
+- Successful Light connection: Streamable HTTP initialization completes, no authorization page opens, and `tools/list` returns exactly `scan_site`, `get_scan_status`, and `get_scan_bundle`.
+- Rate limited: follow `retryAfterSeconds` and `recommendedNextAction`, wait for the returned UTC reset, or reuse an eligible result.
+- Truncated bundle: follow `nextRecommendedMaxBytes`, raise `maxBytes`, or open a returned report or evidence content URL.
+- Invalid URL: correct the field named by the structured `invalid_arguments` response and retry with a public HTTP or HTTPS URL.
+- Limited result versus failure: `completed_limited` and no-go are usable terminal observations with explicit limitations. `failed`, `expired`, and connection errors are failures with retry guidance.
 - Command not found: run the Homebrew install again and confirm Homebrew's bin directory is on `PATH`.
 - Missing API key: set `CERTSCORE_API_KEY` in the MCP client environment and rerun `certscore-mcp doctor`.
 - Bad token: rotate the key or request a scoped API/MCP key from `support@certscore.ai`.

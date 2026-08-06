@@ -123,11 +123,24 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor
 ```
 
 Unauthenticated MCP workflow:
-1. Connect to CertScore Light at https://mcp.certscore.ai/mcp/light. It requires no account, key, or OAuth.
-2. Call scan_site with freshness latest; it waits up to 45 seconds and reports reuse plus anonymous quota state.
-3. Call get_scan_status only if scan_site returns a non-terminal job.
-4. Call get_scan_bundle for the normal compact review.
-5. Use dedicated report, evidence, findings, or pre-consent tools only when needed.
+1. Connect to CertScore Light at https://mcp.certscore.ai/mcp/light. It uses Streamable HTTP and requires no account, API key, bearer token, or OAuth.
+2. Codex setup: codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
+3. Call scan_site with a public URL.
+4. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using scanId. Do not poll with jobId after scanId is available.
+5. Once terminal, call get_scan_bundle.
+6. Use detail=findings with maxBytes=8000 for a compact finding review, or detail=evidence with maxBytes=8000 for evidence digests and references.
+7. Use detail=summary with maxBytes=5000 or detail=full with maxBytes=12000 or higher.
+8. If truncated, inspect actualBytes, truncated, omittedSections, nextRecommendedMaxBytes, and content URLs, then follow recommendedNextAction or increase maxBytes.
+
+Light allows 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
+
+Codex first-run prompt:
+Scan https://example.com. If the scan is still running, poll get_scan_status using the returned scanId. Then call get_scan_bundle with detail=findings and maxBytes=8000. Summarize the score, risk level, findings, evidence links, coverage limitations, and report URL. Treat results as automated public-web observations, not legal conclusions or compliance determinations.
+
+Codex verification prompt:
+List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://example.com and report whether the result was new or reused.
+
+CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
 
 Recommended flow:
 1. Check https://certscore.ai/api/v2/health.

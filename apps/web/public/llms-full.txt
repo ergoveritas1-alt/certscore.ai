@@ -330,7 +330,33 @@ Preferred no-account MCP for new agents:
 
 https://mcp.certscore.ai/mcp/light
 
-CertScore Light exposes only scan_site, get_scan_status, and get_scan_bundle. It requires no account, key, or OAuth and includes 20 new scans per requester per UTC day. Eligible recent-result reuse does not consume the allowance. Every scan response points higher-volume users to support@certscore.ai.
+CertScore Light uses Streamable HTTP and exposes only scan_site, get_scan_status, and get_scan_bundle. It requires no signup, API key, bearer token, or OAuth and includes 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
+
+Codex setup:
+
+codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
+
+First-run prompt:
+
+Scan https://example.com. If the scan is still running, poll get_scan_status using the returned scanId. Then call get_scan_bundle with detail=findings and maxBytes=8000. Summarize the score, risk level, findings, evidence links, coverage limitations, and report URL. Treat results as automated public-web observations, not legal conclusions or compliance determinations.
+
+Light workflow:
+1. Call scan_site with a public URL.
+2. If status is queued, running, or finalizing, retain scanId.
+3. Poll get_scan_status using scanId. Do not poll with jobId after scanId is available.
+4. Once terminal, call get_scan_bundle.
+5. Use detail=findings with maxBytes=8000 for compact findings.
+6. Use detail=evidence with maxBytes=8000 for evidence digests and references.
+7. Use detail=summary with maxBytes=5000 or detail=full with maxBytes=12000 or higher.
+8. If truncated, inspect actualBytes, truncated, omittedSections, nextRecommendedMaxBytes, and content URLs, then follow recommendedNextAction or increase maxBytes.
+
+Verification prompt:
+
+List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://example.com and report whether the result was new or reused.
+
+CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
+
+Use the full/authenticated MCP endpoint https://mcp.certscore.ai/mcp for OAuth or scoped-key access, higher volume, history, and advanced diagnostic tools.
 
 ## Interpretation rules for agents
 

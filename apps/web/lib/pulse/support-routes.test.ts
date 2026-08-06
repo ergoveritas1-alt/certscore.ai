@@ -504,6 +504,57 @@ test("Robots allows public developer docs and API v2 discovery while keeping gen
   }
 });
 
+test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
+  const lightPage = readFileSync("apps/web/app/mcp/light/page.tsx", "utf8");
+  const fullMcpPage = readFileSync("apps/web/app/developers/mcp/page.tsx", "utf8");
+  const readme = readFileSync("packages/certscore-mcp/README.md", "utf8");
+  const llms = readFileSync("apps/web/public/llms.txt", "utf8");
+  const llmsFull = readFileSync("apps/web/public/llms-full.txt", "utf8");
+  const docs = [lightPage, fullMcpPage, readme, llms, llmsFull];
+  const setupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
+  const firstRunPrompt = "Scan https://example.com. If the scan is still running, poll get_scan_status using the returned scanId. Then call get_scan_bundle with detail=findings and maxBytes=8000. Summarize the score, risk level, findings, evidence links, coverage limitations, and report URL. Treat results as automated public-web observations, not legal conclusions or compliance determinations.";
+  const verificationPrompt = "List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://example.com and report whether the result was new or reused.";
+  const disclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
+
+  for (const source of docs) {
+    assert.match(source, /https:\/\/mcp\.certscore\.ai\/mcp\/light/);
+    assert.match(source, /Streamable HTTP/);
+    assert.match(source, /20 new scans per requester IP per UTC day/);
+    assert.match(source, /reused eligible results do not consume quota|Reused eligible results do not consume quota/i);
+    assert.ok(source.includes(setupCommand));
+    assert.ok(source.includes(firstRunPrompt));
+    assert.ok(source.includes(verificationPrompt));
+    assert.ok(source.includes(disclaimer));
+    assert.match(source, /scan_site/);
+    assert.match(source, /get_scan_status/);
+    assert.match(source, /get_scan_bundle/);
+    assert.match(source, /scanId/);
+    assert.match(source, /jobId/);
+    assert.match(source, /nextRecommendedMaxBytes/);
+    assert.match(source, /actualBytes/);
+    assert.match(source, /omittedSections/);
+    for (const expected of ["summary", "findings", "evidence", "full", "5000", "8000", "12000"]) {
+      assert.ok(source.includes(expected), `Light onboarding should document ${expected}`);
+    }
+  }
+
+  assert.ok(
+    fullMcpPage.indexOf('title="CertScore Light: anonymous, no-auth MCP"') <
+      fullMcpPage.indexOf('title="Full/authenticated MCP"'),
+    "Full MCP docs should introduce Light before authenticated MCP"
+  );
+  assert.ok(
+    readme.indexOf("## CertScore Light: start here") <
+      readme.indexOf("## Full/authenticated Streamable HTTP"),
+    "README should introduce Light before authenticated MCP"
+  );
+  for (const integration of ["Light MCP", "Authenticated MCP", "REST API", "TypeScript SDK"]) {
+    assert.ok(lightPage.includes(integration));
+    assert.ok(fullMcpPage.includes(integration));
+    assert.ok(readme.includes(integration));
+  }
+});
+
 test("Developer API docs are discoverable by crawlers and agent manifests", async () => {
   const developerPaths = [
     "/developers",

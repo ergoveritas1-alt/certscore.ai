@@ -4,6 +4,12 @@ import { CodeBlock, DeveloperShell, Section, mcpTools } from "../developer-pages
 
 const description =
   "Connect agents to the CertScore.ai MCP server for website compliance review workflows using scan, status, finding, explanation, and latest-domain tools.";
+const lightEndpoint = "https://mcp.certscore.ai/mcp/light";
+const authenticatedEndpoint = "https://mcp.certscore.ai/mcp";
+const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
+const firstRunPrompt = "Scan https://example.com. If the scan is still running, poll get_scan_status using the returned scanId. Then call get_scan_bundle with detail=findings and maxBytes=8000. Summarize the score, risk level, findings, evidence links, coverage limitations, and report URL. Treat results as automated public-web observations, not legal conclusions or compliance determinations.";
+const verificationPrompt = "List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://example.com and report whether the result was new or reused.";
+const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -19,43 +25,74 @@ export default function DeveloperMcpPage() {
   return (
     <DeveloperShell activePath="/developers/mcp" title="MCP server" description={description}>
       <div className="space-y-12">
-        <Section eyebrow="External users" title="Current MCP access">
+        <Section eyebrow="Start here" title="CertScore Light: anonymous, no-auth MCP">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            The MCP server is distributed as a Homebrew-installable developer preview for macOS MCP clients. Install the
-            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">certscore-mcp</code> command before connecting Claude Desktop,
-            Cursor, Windsurf, or another stdio-compatible MCP client.
+            First-time agents should use the Light endpoint. It uses Streamable HTTP, requires no signup, API key, bearer token, or OAuth,
+            and exposes exactly <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">scan_site</code>,
+            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">get_scan_status</code>, and
+            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">get_scan_bundle</code>.
           </p>
+          <CodeBlock>{`Light:
+${lightEndpoint}
+
+Transport: Streamable HTTP
+Authentication: None
+Tools: scan_site, get_scan_status, get_scan_bundle`}</CodeBlock>
+          <h3 className="mt-6 font-semibold text-slate-950">Codex setup</h3>
+          <CodeBlock>{codexSetupCommand}</CodeBlock>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-            OAuth-capable clients can connect directly to the hosted Streamable HTTP endpoint at
-            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">https://mcp.certscore.ai/mcp</code>. The hosted endpoint uses
-            OAuth authorization code flow with PKCE and does not require placing a long-lived API key in client configuration.
+            Light allows 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
           </p>
         </Section>
 
-        <Section eyebrow="CertScore Light" title="Scan without signup, a key, or OAuth">
-          <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            New agents should connect directly to the unauthenticated Streamable HTTP endpoint at
-            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">https://mcp.certscore.ai/mcp/light</code>. It exposes only the
-            three tools needed for the normal workflow: scan, status when still running, and a compact canonical summary bundle. Bundle
-            modes are <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">summary</code>, <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">findings</code>,
-            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">evidence</code>, and <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">full</code>;
-            every bounded result reports requested bytes, actual bytes, and its truncation reason. New scans are
-            limited to 20 per requester IP per UTC day; reusing an eligible recent result does not consume the allowance.
-          </p>
-          <CodeBlock>{`CertScore Light endpoint:
-https://mcp.certscore.ai/mcp/light
+        <Section eyebrow="First run" title="Paste one prompt">
+          <CodeBlock>{firstRunPrompt}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
+        </Section>
 
-Tools: scan_site, get_scan_status, get_scan_bundle`}</CodeBlock>
+        <Section eyebrow="Light workflow" title="The canonical three-tool sequence">
+          <ol className="max-w-3xl list-decimal space-y-2 pl-5 text-sm leading-7 text-slate-600">
+            <li>Call <code>scan_site</code> with a public URL.</li>
+            <li>If the result is queued, running, or finalizing, retain <code>scanId</code>.</li>
+            <li>Poll <code>get_scan_status</code> using <code>scanId</code>. Do not poll with <code>jobId</code> after <code>scanId</code> is available.</li>
+            <li>Once terminal, call <code>get_scan_bundle</code>.</li>
+            <li>Use <code>detail=findings</code> for a compact finding review.</li>
+            <li>Use <code>detail=evidence</code> for evidence digests and references.</li>
+            <li>If truncated, follow <code>recommendedNextAction</code> or increase <code>maxBytes</code>.</li>
+            <li>Summarize findings together with coverage limitations and the report URL.</li>
+          </ol>
+          <CodeBlock>{`Recommended bundle budgets:
+summary   maxBytes=5000
+findings  maxBytes=8000
+evidence  maxBytes=8000
+full      maxBytes=12000 or higher`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Every no-account scan response includes the allowance, remaining scans, UTC reset time, and an invitation to contact
-            <a className="mx-1 font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">support@certscore.ai</a>
-            for a higher-volume allowance—even when CertScore reuses a recent result.
+            A 5,000-byte response may intentionally omit optional sections while preserving a compact finding or evidence reference when
+            available. Inspect <code>actualBytes</code>, <code>truncated</code>, <code>omittedSections</code>,
+            <code>nextRecommendedMaxBytes</code>, and returned report or evidence content URLs.
           </p>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
+        </Section>
+
+        <Section eyebrow="Verify" title="Confirm the Light connection">
+          <CodeBlock>{verificationPrompt}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            A scan remains <code className="rounded bg-white px-1">finalizing</code> until its canonical persisted score and report projection are ready.
-            Completed responses use one final score across all three tools and include score version and update-time metadata. Failed, expired,
-            and rate-limited scans include structured retry guidance.
+            Success means the tool list contains exactly the three Light tools, no authorization page appears, and
+            <code className="mx-1 rounded bg-white px-1">scan_site</code> returns a stable <code>scanId</code> plus an explicit
+            new-or-reused decision. An eligible reused result reports that quota was not consumed.
           </p>
+        </Section>
+
+        <Section eyebrow="Higher volume" title="Full/authenticated MCP">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Use the full endpoint for production, repeated, or advanced diagnostic workflows. It supports OAuth or a scoped key,
+            higher volume, history, and the complete tool surface. Unlike Light, this endpoint is authenticated.
+          </p>
+          <CodeBlock>{`Full/authenticated:
+${authenticatedEndpoint}
+
+Transport: Streamable HTTP
+Authentication: OAuth authorization code with PKCE`}</CodeBlock>
         </Section>
 
         <Section eyebrow="No-account agent path" title="Run up to 20 scans per day without signup">
@@ -169,8 +206,15 @@ sha256sum --check SHA256SUMS`}</CodeBlock>
 }`}</CodeBlock>
         </Section>
 
-        <Section eyebrow="Troubleshooting" title="Common install checks">
+        <Section eyebrow="Troubleshooting" title="Codex and local-client checks">
           <ul className="max-w-3xl list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
+            <li>If Codex suggests OAuth unexpectedly, remove the server and add it again with the exact Light URL <code>{lightEndpoint}</code>.</li>
+            <li>Confirm no bearer token is configured. Light authentication is <code>None</code>; OAuth metadata belongs only to <code>{authenticatedEndpoint}</code>.</li>
+            <li>A successful Streamable HTTP connection completes initialization and lists exactly the three Light tools without opening an authorization page.</li>
+            <li>For <code>rate_limited</code>, follow <code>retryAfterSeconds</code> and <code>recommendedNextAction</code>, or reuse an eligible result.</li>
+            <li>For a truncated bundle, follow <code>nextRecommendedMaxBytes</code>, raise <code>maxBytes</code>, or open a returned content URL.</li>
+            <li>For <code>invalid_arguments</code>, correct the reported URL field and retry with a public HTTP or HTTPS URL.</li>
+            <li><code>completed_limited</code> and no-go are usable terminal observations with limitations; <code>failed</code>, <code>expired</code>, and connection errors are failures.</li>
             <li>If the command is not found, reinstall the cask or check that Homebrew&apos;s bin directory is on PATH.</li>
             <li>If Node.js is not found, make sure the MCP client inherits a PATH containing Node.js and Homebrew&apos;s bin directory.</li>
             <li>If the API key is missing, set CERTSCORE_API_KEY in the MCP client environment and rerun doctor --check-auth.</li>
@@ -255,18 +299,19 @@ const status = await get_scan_status({ scanId });
           </p>
         </Section>
 
-        <Section eyebrow="Choosing an integration" title="MCP vs REST API vs SDK">
-          <div className="grid gap-5 md:grid-cols-3">
-            {[
-              ["MCP", "Best when an AI agent needs tools for scan creation, status checks, findings, and explanation flows."],
-              ["REST API", "Best for language-neutral server integrations, webhooks, backend jobs, and direct OpenAPI-based clients."],
-              ["TypeScript SDK", "Best for Node.js or TypeScript applications that want typed resource clients and built-in polling helpers."]
-            ].map(([title, body]) => (
-              <div key={title} className="rounded-lg border border-slate-200 bg-white p-4">
-                <h3 className="font-semibold text-slate-950">{title}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
-              </div>
-            ))}
+        <Section eyebrow="Choosing an integration" title="Which integration should I use?">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="min-w-full text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                <tr><th className="px-4 py-3 font-semibold">Integration</th><th className="px-4 py-3 font-semibold">Access</th><th className="px-4 py-3 font-semibold">Best for</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-600">
+                <tr><td className="px-4 py-3 font-semibold text-slate-900">Light MCP</td><td className="px-4 py-3">No signup, API key, or OAuth; three tools; 20 new scans per requester IP per UTC day</td><td className="px-4 py-3">Evaluation and low-volume agent workflows</td></tr>
+                <tr><td className="px-4 py-3 font-semibold text-slate-900">Authenticated MCP</td><td className="px-4 py-3">OAuth or scoped key; higher volume, history, and advanced diagnostic tools</td><td className="px-4 py-3">Production and repeated workflows</td></tr>
+                <tr><td className="px-4 py-3 font-semibold text-slate-900">REST API</td><td className="px-4 py-3">Language-neutral HTTP resources</td><td className="px-4 py-3">Backend jobs, webhooks, and language-neutral integrations</td></tr>
+                <tr><td className="px-4 py-3 font-semibold text-slate-900">TypeScript SDK</td><td className="px-4 py-3">Typed resource clients and polling helpers</td><td className="px-4 py-3">Typed Node.js and TypeScript applications</td></tr>
+              </tbody>
+            </table>
           </div>
         </Section>
 
