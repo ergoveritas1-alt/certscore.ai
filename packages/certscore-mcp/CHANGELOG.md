@@ -5,6 +5,7 @@
 - Reserve a compact finding in `findings` mode and a bounded evidence digest/reference in `evidence` mode when the requested byte budget permits.
 - Add selected detail, omitted sections, next recommended byte limit, and report/evidence retrieval URLs to bundle metadata.
 - Return machine-readable `invalid_arguments` details alongside MCP `-32602` validation errors.
+- Keep typed `scan_site` validation envelopes compatible with client-side output-schema validation after `tools/list` discovery.
 - Require complete actionable error objects for failed, expired, rate-limited, and completed-limited no-go results.
 - Add top-level canonical timing fields and contract coverage proving all three Light result tools remain immutable and consistent.
 

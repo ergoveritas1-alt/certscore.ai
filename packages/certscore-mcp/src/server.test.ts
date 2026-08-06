@@ -537,9 +537,11 @@ test("scan_site waits by default and returns the completed scan resource", async
 
 test("get_scan_status requires the stable scanId", async () => {
   await withMcpClient(async (client) => {
+    await client.listTools();
     const missing = await client.callTool({ name: "get_scan_status", arguments: {} });
 
     assert.equal(missing.isError, true);
+    assert.equal(missing.structuredContent, undefined);
     const payload = parseToolJson(missing);
     assert.deepEqual(payload.error, {
       code: "invalid_arguments",
@@ -555,9 +557,12 @@ test("get_scan_status requires the stable scanId", async () => {
 
 test("scan_site returns typed validation details when url is missing", async () => {
   await withMcpClient(async (client) => {
+    await client.listTools();
     const missing = await client.callTool({ name: "scan_site", arguments: {} });
     assert.equal(missing.isError, true);
     const payload = parseToolJson(missing);
+    assert.equal(payload.type, "certscore_tool_error");
+    assert.equal(payload.status, "invalid_arguments");
     assert.deepEqual(payload.error, {
       code: "invalid_arguments",
       message: "The url field is required.",
@@ -1101,7 +1106,7 @@ test("API v2 MCP tools return scan timing, findings, and latest domain resources
   }
 });
 
-test("tool errors are returned as structured JSON", async () => {
+test("tool errors are returned as machine-readable JSON without invalid success-shaped structured content", async () => {
   const mock = installFetch([
     {
       status: 400,
@@ -1119,7 +1124,7 @@ test("tool errors are returned as structured JSON", async () => {
       assert.equal(error.retryAfterSeconds, null);
       assert.equal(typeof error.recommendedNextAction, "string");
       assert.equal(raw.isError, true);
-      assert.deepEqual(raw.structuredContent, result);
+      assert.equal(raw.structuredContent, undefined);
     });
   } finally {
     mock.restore();
@@ -1138,7 +1143,7 @@ test("get_scan returns an MCP error while a scan resource is not ready", async (
       const raw = await client.callTool({ name: "get_scan", arguments: { scanId: "scan_running" } });
       const result = parseToolJson(raw);
       assert.equal(raw.isError, true);
-      assert.deepEqual(raw.structuredContent, result);
+      assert.equal(raw.structuredContent, undefined);
       assert.equal((result.error as Record<string, unknown>).code, "scan_not_ready");
       assert.equal((result.error as Record<string, unknown>).retryable, false);
       assert.equal(typeof (result.error as Record<string, unknown>).recommendedNextAction, "string");

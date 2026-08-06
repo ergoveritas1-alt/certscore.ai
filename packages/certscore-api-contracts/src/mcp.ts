@@ -162,16 +162,19 @@ export const mcpActionableErrorSchema = z.object({
   retryAfterSeconds: z.number().int().nullable(),
   recommendedNextAction: z.string(),
   field: z.string().optional(),
-  mcpCode: z.number().int().optional()
+  mcpCode: z.number().int().optional(),
+  name: z.string().optional(),
+  status: z.number().int().optional(),
+  responseBody: z.unknown().optional()
 }).strict();
 
 export const mcpScanSiteOutputSchema = z
   .object({
-    type: z.enum(["certscore_scan", "certscore_scan_job"]),
+    type: z.enum(["certscore_scan", "certscore_scan_job", "certscore_tool_error"]),
     scanId: z.string().nullable().optional(),
     jobId: z.string().optional(),
     domain: z.string().nullable().optional(),
-    status: apiV2ScanStatusSchema,
+    status: z.union([apiV2ScanStatusSchema, z.literal("invalid_arguments")]),
     resultDisposition: scanResultDispositionSchema.optional(),
     noGo: scanNoGoResultSchema.optional(),
     scanFrom: apiV2ScanFromSchema.optional(),
