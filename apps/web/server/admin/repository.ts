@@ -7,7 +7,7 @@ import { ensureMonitorSiteRequestsTable } from "../monitor-site/monitor-site-req
 import { ensureScanRequestLogTable } from "../scans/scan-request-log";
 import { adminNoGoSql } from "./admin-no-go";
 import { getAdminUsersOrderBy, type AdminUsersSortDirection, type AdminUsersSortKey } from "./admin-users-sort";
-import { parseAdminActivitySearch } from "../../lib/admin/activity-search";
+import { normalizeAdminExactHostname, normalizeAdminExactScanId, parseAdminActivitySearch } from "../../lib/admin/activity-search";
 
 export type AdminScanQueryRow = {
   completed_at: string | null;
@@ -578,6 +578,26 @@ export async function loadAdminScanActivityPageRefs(
     parsedSearch.exclusions.source.length === 0
   );
 
+  const exactHostname = normalizeAdminExactHostname(queryText);
+  const exactScanId = normalizeAdminExactScanId(queryText);
+  const canUseExactIdentityPath = Boolean(
+    since &&
+    (exactHostname || exactScanId) &&
+    !status &&
+    !freshness &&
+    !language &&
+    !industry &&
+    !access &&
+    !outcome &&
+    !source &&
+    parsedSearch.exclusions.requester.length === 0 &&
+    parsedSearch.exclusions.domain.length === 0 &&
+    parsedSearch.exclusions.scanId.length === 0 &&
+    parsedSearch.exclusions.email.length === 0 &&
+    parsedSearch.exclusions.ip.length === 0 &&
+    parsedSearch.exclusions.source.length === 0
+  );
+
   if (canUseBoundedActivityPath) {
     const boundedResult = await query<AdminScanActivityPageResultRow>(
       `select activity.row_kind,
@@ -623,6 +643,62 @@ export async function loadAdminScanActivityPageRefs(
         }];
       }),
       totalCount: boundedResult.rows[0]?.total_count ?? 0
+    };
+  }
+
+  if (canUseExactIdentityPath) {
+    const hostnameCandidates = exactHostname ? [exactHostname, `www.${exactHostname}`] : null;
+    const exactResult = await query<AdminScanActivityPageResultRow>(
+      `select activity.row_kind,
+              activity.activity_id,
+              activity.scan_id::text as scan_id,
+              activity.request_public_id,
+              activity.activity_at,
+              count(*) over ()::int as total_count
+         from (
+           select 'scan'::text as row_kind,
+                  ('scan:' || s.id::text) as activity_id,
+                  s.id as scan_id,
+                  null::text as request_public_id,
+                  coalesce(s.completed_at, s.started_at, s.created_at) as activity_at
+             from public.scans s
+             left join public.domains d on d.id = s.domain_id
+            where coalesce(s.completed_at, s.started_at, s.created_at) >= $1::timestamptz
+              and ($2::text[] is null or lower(d.hostname) = any($2::text[]))
+              and ($3::uuid is null or s.id = $3::uuid)
+              and ($4::text is null or coalesce(s.scan_config_json ->> 'scanFrom', 'default') = $4)
+           union all
+           select 'request'::text as row_kind,
+                  ('request:' || sr.public_id) as activity_id,
+                  coalesce(sr.fulfilled_by_scan_id, sr.scan_id) as scan_id,
+                  sr.public_id as request_public_id,
+                  sr.requested_at as activity_at
+             from public.scan_requests sr
+             left join public.scans s on s.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+             left join public.domains d on d.id = s.domain_id
+            where sr.requested_at >= $1::timestamptz
+              and (coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is null or sr.resolution_mode = 'reused_existing_scan')
+              and ($2::text[] is null or sr.normalized_domain = any($2::text[]) or lower(d.hostname) = any($2::text[]))
+              and ($3::uuid is null or coalesce(sr.fulfilled_by_scan_id, sr.scan_id) = $3::uuid)
+              and ($4::text is null or coalesce(s.scan_config_json ->> 'scanFrom', sr.request_context ->> 'scanFrom', 'default') = $4)
+         ) activity
+        order by activity.activity_at desc, activity.activity_id desc
+        limit $5 offset $6`,
+      [since, hostnameCandidates, exactScanId, scanFrom, limit, offset],
+      { readOnly: true }
+    );
+    return {
+      rows: exactResult.rows.flatMap((row): AdminScanActivityPageRef[] => {
+        if (!row.row_kind || !row.activity_id || !row.activity_at) return [];
+        return [{
+          activity_at: row.activity_at,
+          activity_id: row.activity_id,
+          request_public_id: row.request_public_id,
+          row_kind: row.row_kind,
+          scan_id: row.scan_id
+        }];
+      }),
+      totalCount: exactResult.rows[0]?.total_count ?? 0
     };
   }
 

@@ -902,7 +902,9 @@ test("all customer and administrative surfaces consume persisted canonical proje
     adminProjection,
     adminDetailProjection,
     apiActivityProjection,
-    supplementalSignalsProjection
+    supplementalSignalsProjection,
+    reportViewProjection,
+    scoreLifecycleProjection
   ] = await Promise.all([
     readFile("apps/web/server/scans/scan-report-projection.ts", "utf8"),
     readFile("apps/web/server/scans/get-organization-scans.ts", "utf8"),
@@ -910,7 +912,9 @@ test("all customer and administrative surfaces consume persisted canonical proje
     readFile("apps/web/server/admin/admin-scan-summary.ts", "utf8"),
     readFile("apps/web/server/admin/get-admin-scan-detail.ts", "utf8"),
     readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8"),
-    readFile("apps/web/lib/scans/scan-detail-supplemental-signals.ts", "utf8")
+    readFile("apps/web/lib/scans/scan-detail-supplemental-signals.ts", "utf8"),
+    readFile("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8"),
+    readFile("apps/web/server/scans/score-assessment-lifecycle.ts", "utf8")
   ]);
 
   assert.match(reportProjection, /canonicalConsentAssessment/);
@@ -923,8 +927,13 @@ test("all customer and administrative surfaces consume persisted canonical proje
   assert.doesNotMatch(overviewProjection, /cookie consent tool|manage choices|accept all|decline/i);
 
   assert.match(pulseProjection, /buildScanReportUnifiedFindings/);
+  assert.match(pulseProjection, /getPersistedCanonicalReportProjection/);
   assert.match(pulseProjection, /gdprEprivacyChecklist/);
   assert.match(pulseProjection, /gdprEprivacyScore/);
+
+  assert.match(reportViewProjection, /persistedCanonicalProjection\?\.checklistRows/);
+  assert.match(reportViewProjection, /persisted\.ownerUnifiedFindings/);
+  assert.match(scoreLifecycleProjection, /persistedCanonicalProjection\.legacyScoreAssessmentInput/);
 
   assert.match(adminProjection, /buildPulseProjection/);
   assert.match(adminProjection, /reportSummary/);

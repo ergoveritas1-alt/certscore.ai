@@ -107,6 +107,38 @@ test("incomplete evidence remains unknown instead of becoming a negative", () =>
   assert.equal(assessment.controls.options.state, "unknown");
 });
 
+test("an inaccessible retained frame prevents complete-empty inventory from becoming a negative", () => {
+  const input = baseInput();
+  input.surface = { status: "not_observed" };
+  input.observations = [{
+    observationId: "frame-limited",
+    observedAtMs: 100,
+    likelyPresent: false,
+    layerInspected: "first_layer",
+    documentId: "https://oxfam.org/en",
+    captureStatus: "no_evidence",
+    inventoryOutcome: "frame_inaccessible",
+    completedChannels: ["dom_inventory"],
+    incompleteChannels: [],
+    controls: [],
+  }];
+  input.geometry = {
+    assessmentStatus: "complete",
+    documentId: "https://oxfam.org/en",
+    completedChannels: ["geometry"],
+    incompleteChannels: [],
+    candidates: [],
+  };
+
+  const assessment = deriveConsentControlAssessment(input);
+
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
+  assert.equal(assessment.limitations.some((row) => row.code === "typed_inventory_incomplete"), true);
+});
+
 test("a complete assessment can never retain unknown A/R/O controls", () => {
   const input = baseInput();
   input.coverage = {

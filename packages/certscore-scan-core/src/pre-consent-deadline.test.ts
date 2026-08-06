@@ -83,3 +83,22 @@ test("outer pre-consent deadline returns an explicit bounded fallback when start
   assert.match(result.moduleRun.errors.join("; "), /no pre-consent evidence was retained/i);
   assert.ok(Date.now() - beforeMs < 500, "fallback should settle within the bounded deadline and grace window");
 });
+
+test("outer pre-consent deadline retains the latest startup lifecycle checkpoint", async () => {
+  const startedAtMs = Date.now();
+  const result = await settlePreConsentRuntimeWithinDeadline({
+    deadlineMs: 20,
+    graceMs: 10,
+    getLatestLifecycleCheckpoint: () => ({
+      atMs: startedAtMs + 5,
+      label: "page_navigation",
+      status: "started",
+    }),
+    startedAtMs,
+    run: () => new Promise<PreConsentRuntimeScannerResult>(() => undefined),
+  });
+
+  assert.match(result.moduleRun.errors.join("; "), /page_navigation:started/);
+  assert.equal(result.moduleRun.timingBreakdown?.[0]?.label, "deadline lifecycle checkpoint");
+  assert.equal(result.moduleRun.timingBreakdown?.[0]?.durationMs, 5);
+});

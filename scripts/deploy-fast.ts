@@ -50,6 +50,8 @@ type RunJson = {
 
 const SCANNER_REGIONS = ["eu-central-1", "eu-west-1", "us-west-2"] as const;
 const SCANNER_BUILD_REGION = "eu-central-1" as const;
+const SCANNER_MEMORY_SIZE = 3008;
+const SCANNER_FUNCTION_NAME = "certscore-v2-dag-local-lambda";
 const WEB_WORKFLOW = "web-aws-ecs-deploy.yml";
 const VALIDATION_WORKFLOW = "validation-aws-deploy.yml";
 const DB_WORKFLOW = "prod-db-migrate.yml";
@@ -324,6 +326,7 @@ function isDbDeployInput(file: string) {
 function isScannerDeployInput(file: string) {
   return isGlobalBuildInput(file) ||
     file.startsWith("apps/v2-dag-lambda/") ||
+    file.startsWith("infra/aws/v2-dag-lambda/") ||
     file.startsWith("packages/certscore-contracts/") ||
     file.startsWith("packages/certscore-report-adapter/") ||
     file.startsWith("packages/certscore-review-engine/") ||
@@ -398,6 +401,8 @@ async function deployDb(input: { ref: string; skip: boolean; workflowRef: string
 
 async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }): Promise<LaneResult> {
   return timedLane("Lambda scanner deploys", async () => {
+    await applyScannerMemoryConfiguration();
+
     const runtimeBaseAvailability = await Promise.all(SCANNER_REGIONS.map(async (region) => {
       const result = await run([
         "aws", "ecr", "describe-images",
@@ -488,13 +493,13 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
         await run([
           "aws", "lambda", "update-function-code",
           "--region", region,
-          "--function-name", "certscore-v2-dag-local-lambda",
+          "--function-name", SCANNER_FUNCTION_NAME,
           "--image-uri", digestImageUri
         ], { quiet: true });
         await run([
           "aws", "lambda", "wait", "function-updated-v2",
           "--region", region,
-          "--function-name", "certscore-v2-dag-local-lambda"
+          "--function-name", SCANNER_FUNCTION_NAME
         ], { quiet: true });
         return {
           durationMs: Date.now() - regionStart,
@@ -524,23 +529,74 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
   });
 }
 
+async function applyScannerMemoryConfiguration() {
+  console.log(`Applying ${SCANNER_MEMORY_SIZE} MB scanner memory configuration before image promotion.`);
+  const results = await Promise.all(SCANNER_REGIONS.map(async (region) => {
+    const current = await run([
+      "aws", "lambda", "get-function-configuration",
+      "--region", region,
+      "--function-name", SCANNER_FUNCTION_NAME,
+      "--query", "MemorySize",
+      "--output", "text"
+    ], { quiet: true });
+    const currentMemorySize = Number.parseInt(current.stdout.trim(), 10);
+    if (currentMemorySize !== SCANNER_MEMORY_SIZE) {
+      await run([
+        "aws", "lambda", "update-function-configuration",
+        "--region", region,
+        "--function-name", SCANNER_FUNCTION_NAME,
+        "--memory-size", String(SCANNER_MEMORY_SIZE)
+      ], { quiet: true });
+      await run([
+        "aws", "lambda", "wait", "function-updated-v2",
+        "--region", region,
+        "--function-name", SCANNER_FUNCTION_NAME
+      ], { quiet: true });
+    }
+    const verified = await run([
+      "aws", "lambda", "get-function-configuration",
+      "--region", region,
+      "--function-name", SCANNER_FUNCTION_NAME,
+      "--query", "{MemorySize:MemorySize,LastUpdateStatus:LastUpdateStatus,State:State}",
+      "--output", "json"
+    ], { quiet: true });
+    const payload = JSON.parse(verified.stdout) as {
+      LastUpdateStatus?: string;
+      MemorySize?: number;
+      State?: string;
+    };
+    if (
+      payload.MemorySize !== SCANNER_MEMORY_SIZE ||
+      payload.LastUpdateStatus !== "Successful" ||
+      payload.State !== "Active"
+    ) {
+      throw new Error(`${region} scanner memory configuration did not converge: ${verified.stdout.trim()}`);
+    }
+    return { changed: currentMemorySize !== SCANNER_MEMORY_SIZE, region };
+  }));
+  for (const result of results) {
+    console.log(`${result.region}: ${SCANNER_MEMORY_SIZE} MB (${result.changed ? "updated" : "already configured"})`);
+  }
+}
+
 async function verifyScanners(expectedSha: string) {
   const reports = await Promise.all(SCANNER_REGIONS.map(async (region) => {
     await run([
       "aws", "lambda", "wait", "function-updated-v2",
       "--region", region,
-      "--function-name", "certscore-v2-dag-local-lambda"
+      "--function-name", SCANNER_FUNCTION_NAME
     ], { quiet: true });
     const result = await run([
       "aws", "lambda", "get-function",
       "--region", region,
-      "--function-name", "certscore-v2-dag-local-lambda",
+      "--function-name", SCANNER_FUNCTION_NAME,
       "--query", "{ImageUri:Code.ImageUri,LastUpdateStatus:Configuration.LastUpdateStatus,State:Configuration.State,Updated:Configuration.LastModified,MemorySize:Configuration.MemorySize}",
       "--output", "json"
     ], { quiet: true });
     const payload = JSON.parse(result.stdout) as {
       ImageUri?: string;
       LastUpdateStatus?: string;
+      MemorySize?: number;
       State?: string;
     };
     const expectedDigestResult = await run([
@@ -557,6 +613,9 @@ async function verifyScanners(expectedSha: string) {
     }
     if (!payload.ImageUri?.endsWith(`@${expectedDigest}`)) {
       throw new Error(`${region} Lambda image ${payload.ImageUri ?? "unknown"} does not match ${expectedSha}`);
+    }
+    if (payload.MemorySize !== SCANNER_MEMORY_SIZE) {
+      throw new Error(`${region} Lambda memory ${payload.MemorySize ?? "unknown"} does not match ${SCANNER_MEMORY_SIZE} MB`);
     }
     if (payload.LastUpdateStatus !== "Successful" || payload.State !== "Active") {
       throw new Error(`${region} Lambda is not healthy: ${JSON.stringify(payload)}`);
@@ -678,7 +737,7 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
     lanes.push("web ECS deploy");
   }
   if (args.mode === "all" || args.mode === "scanners") {
-    lanes.push(`Lambda scanner deploys (${SCANNER_REGIONS.join(", ")}; runtime base ${args.pushScannerRuntimeBase ? "rebuild/push" : "reuse when available, cached full-image fallback otherwise"})`);
+    lanes.push(`Lambda scanner deploys (${SCANNER_REGIONS.join(", ")}; apply/verify ${SCANNER_MEMORY_SIZE} MB before image promotion; runtime base ${args.pushScannerRuntimeBase ? "rebuild/push" : "reuse when available, cached full-image fallback otherwise"})`);
   }
   if (args.mode === "all" || args.mode === "validation") {
     const skip = args.mode === "all" && !args.forceValidation && !changed.validation;

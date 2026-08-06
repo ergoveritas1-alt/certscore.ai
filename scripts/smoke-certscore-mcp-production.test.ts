@@ -9,7 +9,8 @@ const consoleLines = source
   .filter((line) => /console\.(log|info|error)/.test(line));
 
 test("production MCP smoke keeps the expected safety rails", () => {
-  assert.match(source, /command: "certscore-mcp"/);
+  assert.match(source, /CERTSCORE_MCP_COMMAND/);
+  assert.match(source, /command: MCP_COMMAND/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v2\/health/);
   assert.match(source, /scan_site/);
   assert.match(source, /get_scan_status/);

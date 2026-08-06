@@ -186,6 +186,7 @@ import { ViewerTimestamp } from "../time/viewer-timestamp";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
 import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "../../server/scans/scan-detail-checklist";
+import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
 export { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
 export { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "../../server/scans/scan-detail-checklist";
 
@@ -6335,6 +6336,27 @@ function buildScanReportRenderProjection(scanRecord: ScanDetailResponse): ScanRe
 }
 
 function getScanReportRenderProjection(scanRecord: ScanDetailResponse): ScanReportRenderProjection {
+  const persisted = getPersistedCanonicalReportProjection(scanRecord);
+  if (persisted) {
+    const runtimeInventory = buildRuntimeInventoryProjectionFromScan(scanRecord);
+    const runtimeCoverageLimited = persisted.normalizedConcerns.some((concern) =>
+      concern.originType === "runtime_artifact" &&
+      concern.originKey.startsWith("scan_quality.runtime_coverage.") &&
+      concern.evidenceBundle.rawEvidence?.runtimeCoverageStatus !== "usable"
+    );
+    return {
+      derivedContext: persisted.derivedContext,
+      globalUnifiedFindings: persisted.globalUnifiedFindings,
+      normalizedConcerns: persisted.normalizedConcerns,
+      ownerUnifiedFindings: persisted.ownerUnifiedFindings,
+      runtimeInventory,
+      runtimeInventoryPresentation: deriveRuntimeInventoryPresentationState({
+        groupedRowCount: runtimeInventory.groupedRows.length,
+        runtimeCoverageLimited,
+        scanCompleted: scanRecord.scan.status === "completed"
+      })
+    };
+  }
   if (scanRecord.scan.status !== "completed") {
     return buildScanReportRenderProjection(scanRecord);
   }
@@ -6425,6 +6447,12 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
   }
 
   try {
+    const persisted = getPersistedCanonicalReportProjection(scanRecord);
+    if (persisted) {
+      return filterContradictoryPositiveSurfaceFindings(persisted.ownerUnifiedFindings).filter(
+        (finding) => finding.unifiedFindingId !== "consent_dark_patterns_detected"
+      );
+    }
     const state = debugBuildScanReportUnifiedFindingState(scanRecord);
     const ownerFindings = buildScanReportUnifiedFindingsFromState(state);
 
@@ -7571,7 +7599,8 @@ export async function SharedScanDetailView({
       severity: example.severity
     }))
   };
-  const gdprEprivacyCoverageChecklist = deriveSharedScanDetailGdprEprivacyCoverageChecklist({
+  const persistedCanonicalProjection = getPersistedCanonicalReportProjection(scanRecord);
+  const gdprEprivacyCoverageChecklist = persistedCanonicalProjection?.checklistRows ?? deriveSharedScanDetailGdprEprivacyCoverageChecklist({
     coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
     events: scanRecord.events,
     normalizedConcerns: scanReportRenderProjection.normalizedConcerns,
@@ -7762,6 +7791,8 @@ export async function SharedScanDetailView({
         scanFromLabel={scanRecord.scan.scanFromLabel}
         scanFromValue={scanRecord.scan.scanFromValue}
         status={scanRecord.scan.status}
+        statusLabel={isIncompleteScanCoverage ? "Completed limited" : undefined}
+        statusTone={isIncompleteScanCoverage ? "warning" : undefined}
         title={
           <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="break-words">Scan: {scanRecord.scan.domainHostname ?? "Unknown website"}</span>

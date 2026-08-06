@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ScanDetailResponse } from "./get-scan-by-id";
+import type { PersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
 
 export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v16";
 export const REPORT_PROJECTION_READY_WARNING_MS = 15_000;
@@ -126,7 +127,10 @@ function serializeProjection(value: unknown) {
   return JSON.stringify(normalizeProjectionJson(value));
 }
 
-export function buildPersistedScanReportProjection(scanRecord: ScanDetailResponse) {
+export function buildPersistedScanReportProjection(
+  scanRecord: ScanDetailResponse,
+  options: { canonicalReportProjection?: PersistedCanonicalReportProjection } = {},
+) {
   const snapshot = isRecord(scanRecord.snapshot)
     ? stripReportProjectionFields(scanRecord.snapshot)
     : null;
@@ -138,6 +142,9 @@ export function buildPersistedScanReportProjection(scanRecord: ScanDetailRespons
     : null;
   const payload = {
     ...scanRecord,
+    ...(options.canonicalReportProjection
+      ? { canonicalReportProjection: options.canonicalReportProjection }
+      : {}),
     previousSnapshot,
     runtimeArtifacts,
     snapshot

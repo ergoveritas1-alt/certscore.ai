@@ -129,6 +129,11 @@ export interface PreConsentRuntimeScannerInput {
   waitMode?: "full" | "fast";
   /** Keep the owned page alive only for the enclosing canonical policy handoff. */
   retainRenderedPolicyRecoverySession?: boolean;
+  onLifecycleCheckpoint?: (checkpoint: {
+    atMs: number;
+    label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation";
+    status: "started" | "completed";
+  }) => void;
   signal?: AbortSignal;
   /**
    * A module-local deadline may stop pre-consent collection without cancelling
@@ -333,6 +338,17 @@ export async function preConsentRuntimeScanner(
   const moduleStartedAtMs = Date.now();
   const moduleDeadlineAtMs = moduleStartedAtMs + input.internalBudgetMs;
   const moduleStartedAt = new Date(moduleStartedAtMs).toISOString();
+  const lifecycleCheckpoint = (
+    label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation",
+    status: "started" | "completed",
+  ) => {
+    try {
+      input.onLifecycleCheckpoint?.({ atMs: Date.now(), label, status });
+    } catch {
+      // Diagnostic observers must never affect evidence capture.
+    }
+  };
+  lifecycleCheckpoint("scanner_started", "completed");
   const remainingModuleBudgetMs = () => Math.max(0, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
   const timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
   const captureScope = input.captureScope ?? "combined";
@@ -373,14 +389,18 @@ export async function preConsentRuntimeScanner(
   const browserMode = input.browserMode ?? "headless";
   const ownsBrowser = !input.browser;
   let retainOwnedBrowserForPolicyRecovery = false;
+  lifecycleCheckpoint("browser_launch", "started");
   const browser = input.browser ?? await recordTiming(timingBreakdown, "browser launch", `Playwright Chromium launch (${browserMode}).`, () =>
     chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }))
   );
+  lifecycleCheckpoint("browser_launch", "completed");
+  lifecycleCheckpoint("browser_context", "started");
   const context = await recordTiming(timingBreakdown, "browser context", "New isolated browser context and page.", async () => {
     const newContext = await browser.newContext(chromiumContextOptions());
     const newPage = await newContext.newPage();
     return { newContext, newPage };
   });
+  lifecycleCheckpoint("browser_context", "completed");
   const page = context.newPage;
   const browserContext = context.newContext;
   let pageCrashObserved = false;
@@ -405,6 +425,7 @@ export async function preConsentRuntimeScanner(
   };
   input.signal?.addEventListener("abort", abortRuntime, { once: true });
   if (input.signal?.aborted) abortRuntime();
+  lifecycleCheckpoint("probe_install", "started");
   await recordTiming(
     timingBreakdown,
     "browser api probe install",
@@ -423,6 +444,7 @@ export async function preConsentRuntimeScanner(
     "Install a bounded metadata-only document.cookie write probe; cookie values are not retained.",
     () => installCookieWriteProbe(browserContext),
   );
+  lifecycleCheckpoint("probe_install", "completed");
 
   for (const fulfiller of input.routeFulfillers ?? []) {
     await browserContext.route(fulfiller.urlPattern, async (route: Route) => {
@@ -725,6 +747,7 @@ export async function preConsentRuntimeScanner(
   const scanPromise = (async (): Promise<PreConsentRuntimeScannerResult> => {
   try {
     const navigationStartedAtMs = Date.now();
+    lifecycleCheckpoint("page_navigation", "started");
     let navigationResponse = await recordTiming(timingBreakdown, "page navigation", "Initial navigation with bounded same-site transport recovery until DOMContentLoaded.", async () => {
       const candidates = [input.normalizedUrl, ...navigationTransportRecoveryUrls(input.normalizedUrl)];
       let lastError: unknown;
@@ -795,6 +818,7 @@ export async function preConsentRuntimeScanner(
       }
       throw lastError;
     });
+    lifecycleCheckpoint("page_navigation", "completed");
 
     let transientStatusRetried = false;
     if (navigationResponse && isTransientMainDocumentStatus(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {
@@ -2906,6 +2930,7 @@ function emptyConsentUiObservation(scanStartedAtMs: number, documentUrl: string)
     observedAtMs: elapsed(scanStartedAtMs),
     documentUrl,
     captureStatus: "incomplete",
+    inventoryOutcome: "timed_out",
     captureDiagnostics: {
       completedChannels: [],
       timedOutChannels: ["accessibility_tree", "dom_inventory"],
@@ -4707,6 +4732,8 @@ async function readDirectCmpSemanticConsentUiObservation(
   type DirectCmpSemanticInventory = {
     controls: Array<{
       label: string;
+      contextText: string;
+      cmpScoped: boolean;
       role?: string;
       selectorHint: string;
       tagName: string;
@@ -4714,6 +4741,7 @@ async function readDirectCmpSemanticConsentUiObservation(
     }>;
   };
   const snapshot = await page.evaluate<DirectCmpSemanticInventory, {
+    canonicalCmpContainerSelectors: string[];
     canonicalConsentInventoryLabels: string[];
   }>((input) => {
     const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
@@ -4724,6 +4752,17 @@ async function readDirectCmpSemanticConsentUiObservation(
     const semanticControls = document.querySelectorAll<HTMLElement>(
       "button, [role='button'], a, input[type='button'], input[type='submit']",
     );
+    const closestCmpContainer = (element: HTMLElement) => {
+      for (const selector of input.canonicalCmpContainerSelectors) {
+        try {
+          const container = element.closest<HTMLElement>(selector);
+          if (container) return container;
+        } catch {
+          // A malformed third-party selector must not fail the bounded probe.
+        }
+      }
+      return null;
+    };
     const controls: DirectCmpSemanticInventory["controls"] = [];
     const seen = new Set<string>();
     let visited = 0;
@@ -4759,8 +4798,17 @@ async function readDirectCmpSemanticConsentUiObservation(
       seen.add(key);
       const id = element.getAttribute("id");
       const dataTestId = element.getAttribute("data-testid");
+      const cmpContainer = closestCmpContainer(element);
+      const localContext = normalize(
+        cmpContainer?.innerText ??
+        element.closest<HTMLElement>("[role='dialog'],dialog,[aria-modal='true']")?.innerText ??
+        element.parentElement?.innerText ??
+        "",
+      ).slice(0, 2_000);
       controls.push({
         label,
+        contextText: localContext,
+        cmpScoped: Boolean(cmpContainer),
         role: element.getAttribute("role") || undefined,
         selectorHint: id
           ? `#${id}`
@@ -4774,6 +4822,7 @@ async function readDirectCmpSemanticConsentUiObservation(
     }
     return { controls };
   }, {
+    canonicalCmpContainerSelectors: CANONICAL_CMP_CONTAINER_SELECTORS,
     canonicalConsentInventoryLabels: CANONICAL_CONSENT_INVENTORY_LABELS,
   }).catch((): DirectCmpSemanticInventory => ({ controls: [] }));
 
@@ -4781,13 +4830,19 @@ async function readDirectCmpSemanticConsentUiObservation(
     if (hasMultipleCanonicalConsentIntents(control.label)) return [];
     const classification = classifyConsentControlLabel({
       label: control.label,
-      contextText: "Direct CMP runtime evidence was retained before this semantic control inventory.",
-      hasConsentContext: true,
+      contextText: control.contextText,
+      hasConsentContext: control.cmpScoped,
     });
     const actionType = consentUiControlActionTypeFromClassification(classification);
     if (!actionType || (actionType === "other" && !isPaidDeclineClassification(classification))) return [];
+    // A directly observed CMP script does not make every generic page
+    // "Settings" control a consent control. Contextual and weak labels are
+    // retained only when their local DOM surface satisfies canonical consent
+    // context. Direct/equivalent labels remain eligible.
+    if (!isDirectCmpSemanticControlClassificationEligible(classification)) return [];
+    const { contextText: _contextText, cmpScoped: _cmpScoped, ...retainedControl } = control;
     return [{
-      ...control,
+      ...retainedControl,
       actionType,
       matchedTerm: classification.matchedTerm,
       matchedLocale: classification.matchedLocale,
@@ -4799,7 +4854,7 @@ async function readDirectCmpSemanticConsentUiObservation(
   return buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
     documentUrl: page.url(),
-    text: snapshot.controls.map((control) => control.label).join(" "),
+    text: snapshot.controls.map((control) => `${control.contextText} ${control.label}`).join(" ").slice(0, 12_000),
     controls,
     fallbackBasis: controls.length > 0 ? ["inventory:direct_cmp_semantic_controls"] : [],
     inventoryDiagnostics: {
@@ -5166,6 +5221,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   });
   const mainFrameObservation: ConsentUiObservation = {
     ...observation,
+    inventoryOutcome: controls.length > 0 ? "complete_with_controls" : "complete_empty",
     captureDiagnostics: {
       completedChannels: ["dom_inventory"],
       timedOutChannels: [],
@@ -5226,6 +5282,11 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     mainFrameObservation,
     {
       ...frameObservation,
+      inventoryOutcome: frameInventory.frameInaccessibleCount > 0
+        ? "frame_inaccessible"
+        : frameControls.length > 0
+          ? "complete_with_controls"
+          : "complete_empty",
       captureDiagnostics: {
         completedChannels: ["dom_inventory"],
         timedOutChannels: [],
@@ -5563,6 +5624,16 @@ async function readConsentUiObservation(
   ];
   return {
     ...observation,
+    inventoryOutcome:
+      frameInaccessibleCount > 0
+        ? "frame_inaccessible"
+        : enrichedControls.length > 0
+          ? "complete_with_controls"
+          : domInventoryCompleted
+            ? "complete_empty"
+            : accessibilityInventory.captureStatus === "timed_out"
+              ? "timed_out"
+              : "partial",
     captureStatus:
       enrichedControls.length > 0
         ? "observed"
@@ -6925,6 +6996,15 @@ function isPaidDeclineClassification(
   return classification.intent === "reject" && isPaidDeclineVariant(classification.variant);
 }
 
+export function isDirectCmpSemanticControlClassificationEligible(
+  classification: ReturnType<typeof classifyConsentControlLabel>,
+): boolean {
+  return classification.intent !== "unknown" && (
+    classification.matchStrength !== "contextual" && classification.matchStrength !== "weak" ||
+    classification.contextSatisfied === true
+  );
+}
+
 function isPaidDeclineVariant(variant: string | null | undefined): boolean {
   return variant === "reject_with_subscription" || variant === "reject_with_payment";
 }
@@ -7273,8 +7353,23 @@ export function mergeConsentUiObservations(
   const completedTypedInventoryRetained = completedChannels.some((channel) =>
     channel === "dom_inventory" || channel === "accessibility_tree"
   );
+  const activeTimedOutChannels = timedOutChannels.filter((channel) => !completedChannels.includes(channel));
+  const activeFailedChannels = failedChannels.filter((channel) => !completedChannels.includes(channel));
+  const inventoryOutcome: ConsentUiObservation["inventoryOutcome"] =
+    activeTimedOutChannels.length > 0
+      ? "timed_out"
+      : activeFailedChannels.length > 0
+        ? "partial"
+        : current.inventoryOutcome === "frame_inaccessible" || candidate.inventoryOutcome === "frame_inaccessible"
+          ? "frame_inaccessible"
+          : completedTypedInventoryRetained
+            ? controls.length > 0
+              ? "complete_with_controls"
+              : "complete_empty"
+            : candidate.inventoryOutcome ?? current.inventoryOutcome;
   return {
     ...candidate,
+    inventoryOutcome,
     captureStatus: current.captureStatus === "observed" || candidate.captureStatus === "observed"
       ? "observed"
       : completedTypedInventoryRetained &&
@@ -7285,8 +7380,8 @@ export function mergeConsentUiObservations(
         : candidate.captureStatus ?? current.captureStatus,
     captureDiagnostics: {
       completedChannels,
-      timedOutChannels: timedOutChannels.filter((channel) => !completedChannels.includes(channel)),
-      failedChannels: failedChannels.filter((channel) => !completedChannels.includes(channel)),
+      timedOutChannels: activeTimedOutChannels,
+      failedChannels: activeFailedChannels,
     },
     acceptControlObserved: current.acceptControlObserved || candidate.acceptControlObserved ||
       controls.some((control) => control.actionType === "accept_all"),
@@ -9413,7 +9508,12 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
     input.geometry.viewport.width > 0 &&
     input.geometry.viewport.height > 0;
   if (!geometryComplete) {
-    return annotateConsentUiObservation(input.current, "geometry:incomplete_not_authoritative");
+    return annotateConsentUiObservation({
+      ...input.current,
+      inventoryOutcome: input.current.inventoryOutcome === "complete_with_controls"
+        ? "complete_with_controls"
+        : "geometry_unavailable",
+    }, "geometry:incomplete_not_authoritative");
   }
 
   const geometryDocument = canonicalGeometryDocumentIdentity(input.geometry.pageUrl);
@@ -9422,6 +9522,7 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
     return {
       ...input.current,
       captureStatus: "incomplete",
+      inventoryOutcome: "document_mismatch",
       captureDiagnostics: {
         completedChannels: unique([
           ...(input.current.captureDiagnostics?.completedChannels ?? []),
@@ -9464,8 +9565,29 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
     );
   }
 
+  const completedChannels = unique([
+    ...(input.current.captureDiagnostics?.completedChannels ?? []),
+    "geometry",
+  ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["completedChannels"];
   return annotateConsentUiObservation(
-    input.current,
+    {
+      ...input.current,
+      inventoryOutcome:
+        input.current.inventoryOutcome === "frame_inaccessible"
+          ? "frame_inaccessible"
+          : input.current.controls.length > 0
+            ? "complete_with_controls"
+            : completedChannels.includes("dom_inventory")
+              ? "complete_empty"
+              : input.current.inventoryOutcome,
+      captureDiagnostics: {
+        completedChannels,
+        timedOutChannels: (input.current.captureDiagnostics?.timedOutChannels ?? [])
+          .filter((channel) => channel !== "geometry"),
+        failedChannels: (input.current.captureDiagnostics?.failedChannels ?? [])
+          .filter((channel) => channel !== "geometry"),
+      },
+    },
     input.current.controls.length > 0
       ? "geometry:did_not_corroborate_structured_controls"
       : "geometry:no_visible_first_layer_controls",
@@ -9531,6 +9653,12 @@ export function consentUiObservationFromConfirmedGeometryControls(input: {
       ...controls.map((control) => control.label),
     ].filter(Boolean).join(" ").slice(0, 12_000),
   });
+  observation.inventoryOutcome = "complete_with_controls";
+  observation.captureDiagnostics = {
+    completedChannels: ["geometry"],
+    timedOutChannels: [],
+    failedChannels: [],
+  };
   observation.evidenceRefs = [{
     artifactId: "consent_control_geometry",
     eventType: "consent_control_geometry",

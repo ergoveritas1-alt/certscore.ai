@@ -9,9 +9,11 @@ import test from "node:test";
 import {
   getLambdaResultTargetEnvironment,
   getManualSmokeResultScanId,
+  isRecoverableLateResultFailure,
   mirrorLocalV2DagLambdaArtifacts,
   parseLambdaResultMessage,
-  productionArtifactChainRejectReason
+  productionArtifactChainRejectReason,
+  verifyProductionArtifactChain,
 } from "./local-v2-dag-lambda-results";
 
 test("validation worker mirrors completed local Lambda artifacts and auxiliary screenshots", async () => {
@@ -167,6 +169,77 @@ test("production result handoff requires verifiable canonical artifact pointers"
   }) ?? "", /s3:\/\//);
 });
 
+test("production result handoff verifies retained bytes and scan identity before state recovery", async () => {
+  const scanId = "fca91cbb-cb56-4d8b-8056-a94d5472bf86";
+  const manifest = Buffer.from(JSON.stringify({
+    processor: "local-certscore-v2-dag-parallel-v1",
+    scanId,
+    targetEnvironment: "production",
+  }));
+  const bundle = Buffer.from(JSON.stringify({ scanId, schemaVersion: "certscore.v2.alpha.1" }));
+  const parsed = parseLambdaResultMessage(JSON.stringify({
+    artifactOnly: true,
+    artifactMetadata: {
+      manifestUri: { sha256: createHash("sha256").update(manifest).digest("hex"), sizeBytes: manifest.byteLength },
+      scanArtifactUri: { sha256: createHash("sha256").update(bundle).digest("hex"), sizeBytes: bundle.byteLength },
+    },
+    artifactPointers: {
+      manifestUri: "s3://certscore-artifacts/scan/LocalV2DagLambdaManifest.json",
+      scanArtifactUri: "s3://certscore-artifacts/scan/CanonicalEvidenceBundle.json",
+    },
+    completedAt: "2026-08-05T18:03:42.182Z",
+    contractVersion: "certscore.v2.lambda-dag-result.v1",
+    processor: "local-certscore-v2-dag-parallel-v1",
+    productionFindingIntegration: false,
+    scanId,
+    status: "completed",
+    targetEnvironment: "production",
+  }), "production");
+  const objects = new Map([
+    ["scan/LocalV2DagLambdaManifest.json", manifest],
+    ["scan/CanonicalEvidenceBundle.json", bundle],
+  ]);
+  const verified = await verifyProductionArtifactChain(parsed, {
+    async send(command: GetObjectCommand) {
+      const body = objects.get(String(command.input.Key));
+      assert.ok(body);
+      return { $metadata: {}, Body: Readable.from([body]) as never, ContentLength: body.byteLength };
+    },
+  });
+
+  assert.equal(verified?.manifest.sizeBytes, manifest.byteLength);
+  assert.equal(verified?.scanArtifact.sizeBytes, bundle.byteLength);
+
+  await assert.rejects(
+    verifyProductionArtifactChain(parsed, {
+      async send(command: GetObjectCommand) {
+        const body = objects.get(String(command.input.Key));
+        assert.ok(body);
+        const retained = String(command.input.Key).endsWith("CanonicalEvidenceBundle.json")
+          ? Buffer.from(body.toString("utf8").replace(scanId, "00000000-0000-0000-0000-000000000000"))
+          : body;
+        return { $metadata: {}, Body: Readable.from([retained]) as never, ContentLength: retained.byteLength };
+      },
+    }),
+    /content length|checksum or size/,
+  );
+});
+
+test("late results recover only typed transient control-plane failures", () => {
+  assert.equal(isRecoverableLateResultFailure("ops.scan_marked_failed", {
+    reason: "lambda_terminal_result_absent_after_execution_deadline",
+  }), true);
+  assert.equal(isRecoverableLateResultFailure("v2_lambda_dispatch.failed", {
+    dispatchState: "uncertain",
+  }), true);
+  assert.equal(isRecoverableLateResultFailure("ops.scan_marked_failed", {
+    reason: "manual_operator_failure",
+  }), false);
+  assert.equal(isRecoverableLateResultFailure("v2_lambda_dispatch.failed", {
+    dispatchState: "failed",
+  }), false);
+});
+
 test("validation worker retains bounded scanner runtime provenance from Lambda results", () => {
   const result = parseLambdaResultMessage(JSON.stringify({
     artifactOnly: true,
@@ -281,18 +354,21 @@ test("validation worker Lambda result poller retains leases and bounds result co
 test("validation worker frees result poll capacity after retaining the terminal result", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
   const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult");
+  const durableDeleteIndex = source.indexOf("new DeleteMessageCommand", resultIndex);
   const finalizationStartIndex = source.indexOf("startCompletedResultFinalization", resultIndex);
   const finalizationBodyIndex = source.indexOf("function startCompletedResultFinalization", finalizationStartIndex);
   const policyIndex = source.indexOf("await processEmbeddedPolicyEvidenceBeforeScoreMaterialization", finalizationBodyIndex);
   const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted", policyIndex);
-  const deleteIndex = source.indexOf("new DeleteMessageCommand", scoreIndex);
 
   assert.ok(resultIndex >= 0, "expected terminal result retention");
+  assert.ok(durableDeleteIndex > resultIndex, "durably retained results must be acknowledged");
+  assert.ok(durableDeleteIndex < finalizationStartIndex, "SQS acknowledgement must not wait for report materialization");
   assert.ok(finalizationStartIndex > resultIndex, "slow downstream work must start after terminal retention");
   assert.ok(finalizationBodyIndex > finalizationStartIndex, "expected bounded background finalization");
   assert.ok(policyIndex > finalizationBodyIndex, "policy evidence remains ahead of score materialization");
   assert.ok(scoreIndex > policyIndex, "score materialization remains canonical downstream work");
-  assert.ok(deleteIndex > scoreIndex, "SQS acknowledgement must follow background finalization");
+  assert.match(source, /reconcilePersistedCompletedResultFinalizations/);
+  assert.match(source, /artifactVerification,verifiedAt/);
 });
 
 test("validation worker runtime overlays the current policy evidence contract and terminates malformed packets", async () => {
@@ -316,19 +392,21 @@ test("validation worker runtime overlays the current policy evidence contract an
   assert.ok(transientLog > terminalDelete, "transient failures must remain retryable");
 });
 
-test("validation worker persists completion scores before acknowledging a Lambda result", async () => {
+test("validation worker durably retains results before acknowledgement and materializes only ready projections", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
-  const readinessIndex = source.indexOf("await waitForCanonicalReportInputs(input.scanId, finalizingDeadline)");
+  const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult");
+  const deleteIndex = source.indexOf("new DeleteMessageCommand", resultIndex);
+  const readinessIndex = source.indexOf("await canonicalReportInputsReady(input.scanId)");
   const tokenIndex = source.indexOf("const token = randomBytes(32)", readinessIndex);
   const requestIndex = source.indexOf("insert into public.scan_score_materialization_requests", tokenIndex);
   const ensureIndex = source.indexOf("await ensureCompletedScanScoresPersisted");
-  const deleteIndex = source.indexOf("new DeleteMessageCommand", ensureIndex);
 
+  assert.ok(deleteIndex > resultIndex, "SQS acknowledgement must follow durable result retention");
+  assert.ok(deleteIndex < ensureIndex, "SQS acknowledgement must not be coupled to downstream materialization");
   assert.ok(readinessIndex >= 0, "expected canonical report-input readiness gating");
   assert.ok(tokenIndex > readinessIndex, "materialization authorization must follow canonical input readiness");
   assert.ok(requestIndex > tokenIndex, "materialization requests must not be created before canonical input readiness");
   assert.ok(ensureIndex >= 0, "expected completion-time score persistence");
-  assert.ok(deleteIndex > ensureIndex, "SQS acknowledgement must follow score persistence");
   assert.match(source, /randomBytes\(32\)/);
   assert.match(source, /createHash\("sha256"\)/);
   assert.match(source, /scan_score_materialization_requests/);
@@ -359,12 +437,14 @@ test("validation worker records terminal completion before consuming embedded po
 test("validation worker synchronizes linked API activity before acknowledging a Lambda result", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
   const pulseUpdateIndex = source.indexOf("update pulse_requests");
+  const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult");
+  const deleteIndex = source.indexOf("new DeleteMessageCommand", resultIndex);
   const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted");
-  const deleteIndex = source.indexOf("new DeleteMessageCommand", scoreIndex);
 
   assert.ok(pulseUpdateIndex >= 0, "expected linked API activity synchronization");
   assert.ok(scoreIndex > pulseUpdateIndex, "score materialization must observe synchronized terminal activity");
-  assert.ok(deleteIndex > scoreIndex, "SQS acknowledgement must follow API activity and score persistence");
+  assert.ok(deleteIndex > resultIndex, "SQS acknowledgement must follow retained result and API activity persistence");
+  assert.ok(deleteIndex < scoreIndex, "downstream score work must not retain the SQS lease");
   assert.match(source, /status in \('queued', 'running', 'finalizing'\)/);
   assert.match(source, /elapsed_seconds = greatest/);
 });
@@ -373,10 +453,11 @@ test("validation worker continuously reconciles accepted scans without terminal 
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
   assert.match(source, /ORPHAN_RECONCILIATION_INTERVAL_MS\s*=\s*10_000/);
-  assert.match(source, /ORPHAN_RECONCILIATION_AGE_MS\s*=\s*45_000/);
-  assert.match(source, /within 45 seconds/);
+  assert.match(source, /ORPHAN_DELAY_AGE_MS\s*=\s*45_000/);
+  assert.match(source, /ORPHAN_TERMINAL_AGE_MS\s*=\s*930_000/);
+  assert.match(source, /v2_lambda_result\.delayed/);
+  assert.match(source, /lambda_terminal_result_absent_after_execution_deadline/);
   assert.match(source, /for update of s skip locked/);
-  assert.match(source, /lambda_terminal_result_absent/);
   assert.match(source, /void loopReconciliation\(\)/);
   assert.match(source, /v2_lambda_result\.received/);
   assert.match(source, /v2_lambda_result\.failed/);
@@ -385,7 +466,7 @@ test("validation worker continuously reconciles accepted scans without terminal 
 test("validation worker records Lambda result event before marking scan completed", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
   const eventInsertIndex = source.indexOf("insert into scan_events");
-  const scanCompletedIndex = source.indexOf("set completed_at = coalesce");
+  const scanCompletedIndex = source.indexOf("set completed_at = case when $3 = 'completed'");
 
   assert.ok(eventInsertIndex >= 0, "expected Lambda result event insert");
   assert.ok(scanCompletedIndex >= 0, "expected scan completion update");
