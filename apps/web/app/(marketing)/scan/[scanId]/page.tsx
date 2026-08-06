@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { SiteFooter } from "../../../../components/layout/site-footer";
@@ -38,6 +39,7 @@ type PublicScanDetailPageProps = {
   }>;
   searchParams?: Promise<{
     recentScanReused?: string;
+    source?: string;
   }>;
 };
 
@@ -100,6 +102,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const { scanId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const recentScanReused = resolvedSearchParams.recentScanReused === "1";
+  const fromLightMcpDemo = resolvedSearchParams.source === "mcp-light-demo";
   const statusProjection = await getPublicScanStatusProjection(scanId);
   if (!statusProjection) {
     notFound();
@@ -240,6 +243,15 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
           showBrowserExtensionRecovery
           viewerAccessRole="user"
         />
+        {fromLightMcpDemo ? (
+          <aside className="mt-8 flex flex-col gap-4 rounded-xl border border-sky-200 bg-sky-50 p-5 sm:flex-row sm:items-center sm:justify-between" aria-label="Authenticated MCP upgrade">
+            <div>
+              <p className="font-semibold text-slate-950">Need more scans or advanced tools? Upgrade to Authenticated MCP.</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">Keep the same core scan identifiers and canonical response fields while adding higher-volume access, history, and approved advanced tools.</p>
+            </div>
+            <Link className="inline-flex shrink-0 justify-center rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800" href="/developers/mcp#authenticated-mcp">Compare authenticated options</Link>
+          </aside>
+        ) : null}
         {displayScanRecord.scan.status === "completed" && !isNoGoReport ? (
           <div className="mt-8 space-y-4">
             <AgentSummaryActions domainLabel={publicScanDomainLabel} scanId={displayScanRecord.scan.id} />

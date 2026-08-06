@@ -11,7 +11,7 @@ Public docs:
 - https://certscore.ai/developers/reference
 - https://certscore.ai/api-pulse
 
-## CertScore Light: start here
+## Light MCP — no authentication: start here
 
 Light is the anonymous, no-auth Streamable HTTP endpoint for first-time and low-volume agent workflows:
 
@@ -59,16 +59,15 @@ Success means the tool list contains exactly the three Light tools, no authoriza
 
 CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
 
-## Which integration should I use?
+## Which MCP route should I use?
 
-| Integration | Access | Best for |
+| Route | Access | Best for |
 | --- | --- | --- |
-| Light MCP | No signup, API key, or OAuth; three tools; 20 new scans per requester IP per UTC day | Evaluation and low-volume agent workflows |
-| Authenticated MCP | OAuth or scoped key; higher volume, history, and advanced diagnostic tools | Production and repeated workflows |
-| REST API | Language-neutral HTTP resources | Backend jobs, webhooks, and language-neutral integrations |
-| TypeScript SDK | Typed resource clients and polling helpers | Typed Node.js and TypeScript applications |
+| Light MCP — no authentication | No account, API key, bearer token, browser login, or OAuth; three tools; 20 new scans per requester IP per UTC day | First-time users, testing, and discovery |
+| Hosted MCP — OAuth | Hosted Streamable HTTP with OAuth scopes, higher volume, history, and approved advanced tools | Production, team, and managed remote clients |
+| Local MCP — scoped API key | Local stdio with a scoped key and tools allowed by its scopes | Backend, local, and controlled automation workflows |
 
-The full/authenticated Streamable HTTP endpoint is `https://mcp.certscore.ai/mcp`. Use it after Light when the workflow requires authentication, higher volume, history, or advanced tools.
+The full/authenticated Streamable HTTP endpoint is `https://mcp.certscore.ai/mcp`. Use it after Light when the workflow requires authentication, higher volume, history, or advanced tools. Core identifiers and canonical response fields remain compatible when moving from Light to authenticated access.
 
 ## Tools
 
@@ -123,7 +122,7 @@ The Light workflow is:
 
 No-go scans are usable terminal results, not transport failures. Relevant tools retain `status: "completed_limited"`, `resultDisposition: "no_go"`, the stable reason code, customer-safe title and explanation, `limitationKind` attribution, retry guidance, and a bounded `evidenceExcerpt` when retained. Unknown future reasons use generic customer copy while remaining structured as `reasonCode: "unknown"`.
 
-## Full/authenticated Streamable HTTP
+## Hosted MCP — OAuth
 
 OAuth-capable MCP clients can connect to:
 
@@ -148,7 +147,7 @@ https://mcp.certscore.ai/mcp/anonymous
 
 For the simplest no-account workflow, use the Light quickstart at the top of this document. OAuth metadata applies only to `https://mcp.certscore.ai/mcp`.
 
-## Configuration
+## Local MCP — scoped API key configuration
 
 Install with Homebrew on macOS:
 
@@ -203,7 +202,7 @@ CERTSCORE_REQUEST_TIMEOUT_MS=300000
 
 `CERTSCORE_API_KEY` should be a scoped CertScore API token for the workspace or preview user. The MCP server passes it to Pulse as a bearer token and does not persist it.
 
-## API Key Access
+## Local MCP — scoped API key access
 
 Stdio API keys use `pulse:read` and `mcp`; creating scans additionally requires `pulse:scan`. Hosted OAuth uses `scan:read` and `mcp`, with support-gated `scan:create`. Request scan-creation access by emailing `support@certscore.ai` with your organization, MCP client, expected workflow, expected request volume, and contact email.
 

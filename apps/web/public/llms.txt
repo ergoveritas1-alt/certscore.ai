@@ -122,7 +122,12 @@ certscore-mcp --help
 CERTSCORE_API_KEY=<token> certscore-mcp doctor
 ```
 
-Unauthenticated MCP workflow:
+MCP route labels:
+- Light MCP — no authentication: first-time users, testing, and discovery; no account or credentials; three core tools; 20 new scans per requester IP per UTC day.
+- Hosted MCP — OAuth: production and team remote clients; account and OAuth scopes required; higher-volume and approved advanced access.
+- Local MCP — scoped API key: backend, local, and stdio clients; account and scoped key required; access follows key scopes.
+
+Light MCP — no authentication workflow:
 1. Connect to CertScore Light at https://mcp.certscore.ai/mcp/light. It uses Streamable HTTP and requires no account, API key, bearer token, browser login, or OAuth.
 2. Codex setup: codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
 3. Call scan_site with a public URL.

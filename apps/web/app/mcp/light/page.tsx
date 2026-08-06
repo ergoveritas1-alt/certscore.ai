@@ -44,10 +44,31 @@ export default function McpLightPage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <SiteHeader />
+      <section aria-labelledby="route-choice" className="border-b border-sky-200 bg-sky-50">
+        <div className="mx-auto max-w-6xl px-6 py-10">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Start here</p>
+          <h2 className="mt-2 text-3xl font-semibold text-slate-950" id="route-choice">Which route should I choose?</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">Start anonymously in one minute. Upgrade only when you need more scans, team or backend access, history, or advanced tools.</p>
+          <div className="mt-6 grid gap-5 lg:grid-cols-2">
+            <article className="rounded-xl border-2 border-sky-400 bg-white p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-800">Recommended first step</p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-950">Light MCP — no authentication</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-700">No account, API key, bearer token, browser login, or OAuth. Use it for first-time setup, testing, discovery, and low-volume public website scans.</p>
+              <a className="mt-5 inline-flex rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800" href="#quickstart">Start with Light MCP</a>
+            </article>
+            <article className="rounded-xl border border-slate-200 bg-white p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">When Light is not enough</p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-950">Authenticated MCP</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-600"><strong>Hosted MCP — OAuth</strong> is for managed remote clients. <strong>Local MCP — scoped API key</strong> is for stdio, backend, and controlled local environments.</p>
+              <Link className="mt-5 inline-flex rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-800" href="/developers/mcp#authenticated-mcp">Set up Authenticated MCP</Link>
+            </article>
+          </div>
+        </div>
+      </section>
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto grid max-w-6xl gap-10 px-6 py-16 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
           <div className="space-y-6">
-            <Badge tone="neutral">Anonymous / no-auth Light MCP</Badge>
+            <Badge tone="neutral">Light MCP — no authentication</Badge>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Give your agent a URL. Get a website privacy-risk scan.</h1>
             <p className="max-w-3xl text-lg leading-8 text-slate-600">No signup, API key, bearer token, browser login, or OAuth. Connect once and let an MCP-capable agent scan public websites for privacy, cookie, tracker, consent, policy, and disclosure risk signals.</p>
             <div className="flex flex-wrap gap-3">
@@ -68,9 +89,9 @@ export default function McpLightPage() {
       </section>
 
       <div className="mx-auto max-w-6xl space-y-14 px-6 py-14">
-        <section>
+        <section id="quickstart">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Codex quickstart</p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-950">One command, no authentication</h2>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-950">Light MCP — no authentication</h2>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">Run this command, then paste the first-run prompt into Codex. The connection uses Streamable HTTP and should not open a browser, request OAuth, or ask for an API key.</p>
           <CodeBlock>{codexSetupCommand}</CodeBlock>
           <h3 className="mt-6 font-semibold text-slate-950">First-run prompt</h3>
@@ -122,6 +143,7 @@ export default function McpLightPage() {
           <h2 className="mt-2 text-2xl font-semibold text-slate-950">Scan a public website now</h2>
           <p className="mb-5 mt-2 text-sm leading-7 text-slate-600">This starts the same no-account scan available to Light agents and opens its shareable public report.</p>
           <McpLightScanDemo />
+          <p className="mt-5 border-t border-sky-200 pt-4 text-sm font-semibold text-sky-950">Need more scans or advanced tools? Upgrade to Authenticated MCP.</p>
         </section>
 
         <section>
@@ -172,16 +194,16 @@ export default function McpLightPage() {
           </ul>
         </section>
 
-        <section>
-          <h2 className="text-2xl font-semibold text-slate-950">Which integration should I use?</h2>
+        <section aria-labelledby="comparison-heading">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">At a glance</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-950" id="comparison-heading">Compare the three MCP setup routes</h2>
           <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200 bg-white">
             <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">Integration</th><th className="px-4 py-3 font-semibold">Access</th><th className="px-4 py-3 font-semibold">Best for</th></tr></thead>
+              <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">Route</th><th className="px-4 py-3 font-semibold">Setup method</th><th className="px-4 py-3 font-semibold">Authentication</th><th className="px-4 py-3 font-semibold">Account</th><th className="px-4 py-3 font-semibold">Quota</th><th className="px-4 py-3 font-semibold">Available tools</th><th className="px-4 py-3 font-semibold">Intended user</th><th className="px-4 py-3 font-semibold">Website / access limits</th><th className="px-4 py-3 font-semibold">Upgrade path</th></tr></thead>
               <tbody className="divide-y divide-slate-100 text-slate-600">
-                <tr><td className="px-4 py-3 font-semibold text-slate-900">Light MCP</td><td className="px-4 py-3">No signup, API key, or OAuth; three tools; 20 new scans per requester IP per UTC day</td><td className="px-4 py-3">Evaluation and low-volume agent workflows</td></tr>
-                <tr><td className="px-4 py-3 font-semibold text-slate-900">Authenticated MCP</td><td className="px-4 py-3">OAuth or scoped key; higher volume, history, and advanced diagnostic tools</td><td className="px-4 py-3">Production and repeated agent workflows</td></tr>
-                <tr><td className="px-4 py-3 font-semibold text-slate-900">REST API</td><td className="px-4 py-3">Language-neutral HTTP resources</td><td className="px-4 py-3">Backend jobs, webhooks, and language-neutral integrations</td></tr>
-                <tr><td className="px-4 py-3 font-semibold text-slate-900">TypeScript SDK</td><td className="px-4 py-3">Typed resource clients and polling helpers</td><td className="px-4 py-3">Typed Node.js and TypeScript applications</td></tr>
+                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Light MCP — no authentication</td><td className="px-4 py-3">One Codex command or a remote Streamable HTTP URL</td><td className="px-4 py-3">None</td><td className="px-4 py-3">Not required</td><td className="px-4 py-3">20 new scans per requester IP per UTC day; eligible reuse is free</td><td className="px-4 py-3">scan_site, get_scan_status, get_scan_bundle</td><td className="px-4 py-3">First-time users, testing, and discovery</td><td className="px-4 py-3">Public HTTP or HTTPS websites; core tools only</td><td className="px-4 py-3">Choose authenticated access for volume, history, teams, or advanced tools</td></tr>
+                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Hosted MCP — OAuth</td><td className="px-4 py-3">Connect the hosted MCP endpoint from an OAuth-capable client</td><td className="px-4 py-3">OAuth authorization code with PKCE</td><td className="px-4 py-3">Required</td><td className="px-4 py-3">Higher-volume allowance based on access</td><td className="px-4 py-3">Core tools plus approved history and diagnostic tools</td><td className="px-4 py-3">Production, team, and managed remote clients</td><td className="px-4 py-3">Scopes control read and scan creation; scan creation may require support</td><td className="px-4 py-3">Request additional scopes or volume from support</td></tr>
+                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Local MCP — scoped API key</td><td className="px-4 py-3">Install and run the local stdio server</td><td className="px-4 py-3">Scoped API key in the client environment</td><td className="px-4 py-3">Required</td><td className="px-4 py-3">Higher-volume allowance based on key access</td><td className="px-4 py-3">Tools permitted by the key scopes</td><td className="px-4 py-3">Backend, local, and controlled automation workflows</td><td className="px-4 py-3">Key scopes control read and scan creation; protect and rotate credentials</td><td className="px-4 py-3">Request scan:create-equivalent scope, advanced access, or more volume</td></tr>
               </tbody>
             </table>
           </div>
@@ -201,9 +223,15 @@ export default function McpLightPage() {
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-6">
-          <h2 className="text-2xl font-semibold text-slate-950">Need more than Light mode?</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">The authenticated CertScore.ai MCP adds higher-volume access, history, and the complete diagnostic toolset. Email support with your expected workflow and volume.</p>
-          <div className="mt-5 flex flex-wrap gap-3"><a className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white" href="mailto:support@certscore.ai?subject=CertScore.ai%20MCP%20higher-volume%20access">Request higher volume</a><Link className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800" href="/developers/mcp">Read full MCP documentation</Link></div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Light-to-Authenticated migration</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-950">Upgrade when Light becomes a constraint</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">Upgrade when you need more than 20 new scans per requester IP per UTC day, production or team access, backend automation, scan history, advanced diagnostic tools, or support-managed scopes.</p>
+          <div className="mt-5 grid gap-4 text-sm md:grid-cols-2">
+            <div className="rounded-lg bg-slate-50 p-4"><strong className="text-slate-950">What changes</strong><p className="mt-2 leading-6 text-slate-600">Use the full endpoint, authenticate with hosted OAuth or a local scoped API key, and receive the quota and tools granted to that access.</p></div>
+            <div className="rounded-lg bg-slate-50 p-4"><strong className="text-slate-950">What stays compatible</strong><p className="mt-2 leading-6 text-slate-600">Core identifiers and canonical response fields—including <code>scanId</code>, status, score, risk, coverage, and timestamps—remain compatible.</p></div>
+          </div>
+          <p className="mt-5 text-sm font-semibold text-slate-950">Need more scans or advanced tools? Upgrade to Authenticated MCP.</p>
+          <div className="mt-5 flex flex-wrap gap-3"><Link className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white" href="/developers/mcp#authenticated-mcp">Set up Authenticated MCP</Link><a className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800" href="mailto:support@certscore.ai?subject=CertScore.ai%20MCP%20higher-volume%20access">Contact support</a></div>
         </section>
         <p className="text-sm leading-6 text-slate-500">{agentDisclaimer}</p>
       </div>

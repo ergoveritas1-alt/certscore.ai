@@ -60,7 +60,7 @@ export function McpLightScanDemo() {
   return (
     <form className="space-y-3" onSubmit={submit}>
       <div className="flex flex-col gap-3 sm:flex-row">
-        <Input aria-label="Public website URL" onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com" required type="url" value={url} />
+        <Input aria-label="Public website URL" onChange={(event) => setUrl(event.target.value)} placeholder="https://www.mozilla.org" required type="url" value={url} />
         <Button disabled={pending} type="submit">{pending ? "Starting…" : "Run a free scan"}</Button>
       </div>
       <p className="text-xs leading-5 text-slate-500">No account or API key. Uses the same 20-new-scans-per-day no-account allowance as Light MCP.</p>

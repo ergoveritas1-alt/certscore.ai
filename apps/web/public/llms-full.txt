@@ -316,17 +316,7 @@ MCP docs:
 - https://certscore.ai/developers/mcp
 - https://certscore.ai/.well-known/certscore-ai.json
 
-Unauthenticated hosted MCP:
-
-```text
-https://mcp.certscore.ai/mcp/anonymous
-```
-
-The anonymous hosted MCP endpoint requires no account, API key, or OAuth setup. It exposes public-safe scan, status, findings, evidence,
-and latest-domain tools. New scans are limited to 20 per requester IP per UTC day, and eligible recent-result reuse does not consume the
-quota. Use the OAuth-protected hosted endpoint or a scoped API key for higher-volume workflows.
-
-Preferred no-account MCP for new agents:
+Light MCP — no authentication (canonical beginner route):
 
 https://mcp.certscore.ai/mcp/light
 
@@ -359,7 +349,15 @@ List the available CertScore tools and confirm that scan_site, get_scan_status, 
 
 CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
 
-Use the full/authenticated MCP endpoint https://mcp.certscore.ai/mcp for OAuth or scoped-key access, higher volume, history, and advanced diagnostic tools.
+Hosted MCP — OAuth uses https://mcp.certscore.ai/mcp for managed remote access, higher volume, history, and approved advanced tools.
+
+Local MCP — scoped API key runs over stdio for backend, local, and controlled automation. Access follows the key scopes.
+
+Upgrade from Light when you need more scans, production or team access, backend automation, history, or advanced tools. The endpoint and authentication change; core identifiers and canonical response fields remain compatible.
+
+Need more scans or advanced tools? Upgrade to Authenticated MCP.
+
+Legacy reference: https://mcp.certscore.ai/mcp/anonymous is an older unauthenticated hosted surface. New users should choose Light MCP — no authentication instead.
 
 ## Interpretation rules for agents
 

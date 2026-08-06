@@ -510,6 +510,8 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
   const readme = readFileSync("packages/certscore-mcp/README.md", "utf8");
   const llms = readFileSync("apps/web/public/llms.txt", "utf8");
   const llmsFull = readFileSync("apps/web/public/llms-full.txt", "utf8");
+  const lightActions = readFileSync("apps/web/components/developers/mcp-light-actions.tsx", "utf8");
+  const publicScanPage = readFileSync("apps/web/app/(marketing)/scan/[scanId]/page.tsx", "utf8");
   const docs = [lightPage, fullMcpPage, readme, llms, llmsFull];
   const setupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
   const firstRunPrompt = "Scan https://www.mozilla.org. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
@@ -556,21 +558,44 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
   assert.match(lightPage, /eligible prior scan was reused and quota was not consumed/);
   assert.match(lightPage, /completed_limited.*no-go.*not-observed.*limited coverage are observations only, never proof of compliance/);
   assert.doesNotMatch(fullMcpPage, /Pass jobId only before a stable scanId is available/);
+  assert.doesNotMatch(lightPage, /jobId/);
+  assert.match(lightActions, /placeholder="https:\/\/www\.mozilla\.org"/);
+
+  for (const source of [lightPage, fullMcpPage, readme, llms, llmsFull]) {
+    for (const label of ["Light MCP — no authentication", "Hosted MCP — OAuth", "Local MCP — scoped API key"]) {
+      assert.ok(source.includes(label), `MCP onboarding should use the exact route label: ${label}`);
+    }
+  }
+  for (const source of [lightPage, fullMcpPage]) {
+    assert.match(source, /Which route should I choose\?/);
+    assert.match(source, /Start with Light MCP/);
+    assert.match(source, /Set up Authenticated MCP/);
+    for (const heading of ["Setup method", "Authentication", "Account", "Quota", "Available tools", "Intended user", "Website \/ access limits", "Upgrade path"]) {
+      assert.ok(source.includes(heading), `MCP comparison should include ${heading}`);
+    }
+    assert.match(source, /Light-to-Authenticated migration/);
+    assert.match(source, /Core identifiers and canonical response fields/);
+    assert.match(source, /Need more scans or advanced tools\? Upgrade to Authenticated MCP\./);
+  }
+  for (const issue of ["OAuth appeared unexpectedly", "No scanId was returned", "Rate limited", "Result was reused", "Bundle was truncated", "Coverage was limited"]) {
+    assert.ok(fullMcpPage.includes(issue), `MCP troubleshooting should explain ${issue}`);
+  }
+  assert.match(publicScanPage, /source === "mcp-light-demo"/);
+  assert.match(publicScanPage, /Need more scans or advanced tools\? Upgrade to Authenticated MCP\./);
 
   assert.ok(
-    fullMcpPage.indexOf('title="CertScore Light: anonymous, no-auth MCP"') <
-      fullMcpPage.indexOf('title="Full/authenticated MCP"'),
+    fullMcpPage.indexOf('title="Light MCP — no authentication"') <
+      fullMcpPage.indexOf('title="Hosted MCP — OAuth"'),
     "Full MCP docs should introduce Light before authenticated MCP"
   );
   assert.ok(
-    readme.indexOf("## CertScore Light: start here") <
-      readme.indexOf("## Full/authenticated Streamable HTTP"),
+    readme.indexOf("## Light MCP — no authentication: start here") <
+      readme.indexOf("## Hosted MCP — OAuth"),
     "README should introduce Light before authenticated MCP"
   );
-  for (const integration of ["Light MCP", "Authenticated MCP", "REST API", "TypeScript SDK"]) {
-    assert.ok(lightPage.includes(integration));
+  for (const integration of ["REST API", "TypeScript SDK"]) {
     assert.ok(fullMcpPage.includes(integration));
-    assert.ok(readme.includes(integration));
+    assert.ok(!lightPage.includes(integration), `${integration} should stay out of the beginner Light page`);
   }
 });
 
