@@ -1,6 +1,7 @@
 name: CertScore SDK Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "certscore-sdk-v*"
@@ -28,7 +29,9 @@ jobs:
       - name: Verify tag and package version
         run: |
           expected="certscore-sdk-v$(node -p "require('./packages/certscore-sdk/package.json').version")"
-          test "${GITHUB_REF_NAME}" = "${expected}"
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            test "${GITHUB_REF_NAME}" = "${expected}"
+          fi
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @certscore/sdk test
