@@ -10,7 +10,7 @@ import { createPageMetadata } from "../../../lib/seo";
 const endpoint = "https://mcp.certscore.ai/mcp/light";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
 const firstRunPrompt = "Scan https://www.mozilla.org. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
-const verificationPrompt = "List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://www.mozilla.org and report whether the result was new or reused.";
+const verificationPrompt = "List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://www.mozilla.org and report whether the result was new or reused.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
 export const metadata: Metadata = createPageMetadata({
@@ -106,10 +106,12 @@ export default function McpLightPage() {
               <tbody className="divide-y divide-slate-100 text-slate-600">
                 <tr><td className="px-4 py-3 font-mono">completed</td><td className="px-4 py-3">Call <code>get_scan_bundle</code> and summarize the result.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">reused_scan</td><td className="px-4 py-3">Report that an eligible prior result was reused and quota was not consumed.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">queued / running / finalizing</td><td className="px-4 py-3">Retain <code>scanId</code> and poll <code>get_scan_status</code> using <code>scanId</code> only.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">completed_limited / no-go</td><td className="px-4 py-3">Explain the limitation and never treat it as proof of compliance or absence of risk.</td></tr>
-                <tr><td className="px-4 py-3 font-mono">retryable error</td><td className="px-4 py-3">If no <code>scanId</code> exists, wait <code>retryAfterSeconds</code> and retry <code>scan_site</code>.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">retryable error without scanId</td><td className="px-4 py-3">Wait <code>retryAfterSeconds</code> and retry <code>scan_site</code>; do not poll status.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">invalid URL</td><td className="px-4 py-3">Correct the public HTTP or HTTPS URL, then retry <code>scan_site</code>.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">rate_limited</td><td className="px-4 py-3">Wait for the recommended delay or stop; do not guess a polling action.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">truncated bundle</td><td className="px-4 py-3">Report <code>actualBytes</code>, <code>omittedSections</code>, and <code>nextRecommendedMaxBytes</code>; increase <code>maxBytes</code> or follow a report or evidence URL.</td></tr>
               </tbody>
             </table>
           </div>
@@ -161,10 +163,12 @@ export default function McpLightPage() {
           <ul className="mt-5 list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
             <li><strong>Unexpected OAuth:</strong> remove the connection and add it again with the exact URL <code>{endpoint}</code>. Do not configure a bearer token; the Light endpoint has no authentication.</li>
             <li><strong>Connection check:</strong> a successful Streamable HTTP connection completes initialization and lists the three Light tools without opening an authorization page.</li>
+            <li><strong>Missing scanId:</strong> retry <code>scan_site</code> only when the error says <code>retryable: true</code>; never poll <code>get_scan_status</code> without <code>scanId</code>.</li>
             <li><strong>Rate limited:</strong> follow <code>retryAfterSeconds</code> and <code>recommendedNextAction</code>, or reuse an eligible result. The daily allowance resets at the returned UTC time.</li>
+            <li><strong>Reused result:</strong> report that the eligible prior scan was reused and quota was not consumed.</li>
             <li><strong>Truncated bundle:</strong> follow <code>nextRecommendedMaxBytes</code>, increase <code>maxBytes</code>, or open one of the returned content URLs.</li>
             <li><strong>Invalid URL:</strong> correct the <code>url</code> field using the structured <code>invalid_arguments</code> response, then retry <code>scan_site</code> with a public HTTP or HTTPS URL.</li>
-            <li><strong>Limited result:</strong> <code>completed_limited</code> and no-go mean the scan reached a usable terminal state with bounded observations. Transport failures instead return <code>failed</code>, <code>expired</code>, or a connection error with retry guidance.</li>
+            <li><strong>Limited result:</strong> <code>completed_limited</code>, no-go, not-observed, and limited coverage are observations only, never proof of compliance. Transport failures instead return <code>failed</code>, <code>expired</code>, or a connection error with retry guidance.</li>
           </ul>
         </section>
 

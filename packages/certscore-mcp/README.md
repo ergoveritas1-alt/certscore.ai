@@ -53,7 +53,7 @@ Recommended bundle budgets are `maxBytes=5000` for `summary`, `maxBytes=8000` fo
 
 Verification prompt:
 
-> List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://www.mozilla.org and report whether the result was new or reused.
+> List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://www.mozilla.org and report whether the result was new or reused.
 
 Success means the tool list contains exactly the three Light tools, no authorization page appears, and `scan_site` returns a stable `scanId` plus an explicit new-or-reused decision. An eligible reused result reports that quota was not consumed.
 
@@ -365,10 +365,12 @@ This verifies the Homebrew-installed `certscore-mcp` command against live `https
 
 - Unexpected OAuth in Codex: remove the server and add it again with the exact Light URL `https://mcp.certscore.ai/mcp/light`. Do not configure a bearer token.
 - Successful Light connection: Streamable HTTP initialization completes, no authorization page opens, and `tools/list` returns exactly `scan_site`, `get_scan_status`, and `get_scan_bundle`.
+- Missing scan ID: retry `scan_site` only when the error is retryable. Never call `get_scan_status` until `scanId` exists.
 - Rate limited: follow `retryAfterSeconds` and `recommendedNextAction`, wait for the returned UTC reset, or reuse an eligible result.
+- Reused result: report that the eligible prior scan was reused and quota was not consumed.
 - Truncated bundle: follow `nextRecommendedMaxBytes`, raise `maxBytes`, or open a returned report or evidence content URL.
 - Invalid URL: correct the field named by the structured `invalid_arguments` response and retry with a public HTTP or HTTPS URL.
-- Limited result versus failure: `completed_limited` and no-go are usable terminal observations with explicit limitations. `failed`, `expired`, and connection errors are failures with retry guidance.
+- Limited result versus failure: `completed_limited`, no-go, not-observed, and limited coverage are observations only, never proof of compliance. `failed`, `expired`, and connection errors are failures with retry guidance.
 - Command not found: run the Homebrew install again and confirm Homebrew's bin directory is on `PATH`.
 - Missing API key: set `CERTSCORE_API_KEY` in the MCP client environment and rerun `certscore-mcp doctor`.
 - Bad token: rotate the key or request a scoped API/MCP key from `support@certscore.ai`.

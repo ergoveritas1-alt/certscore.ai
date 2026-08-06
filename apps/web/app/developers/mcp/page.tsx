@@ -8,7 +8,7 @@ const lightEndpoint = "https://mcp.certscore.ai/mcp/light";
 const authenticatedEndpoint = "https://mcp.certscore.ai/mcp";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
 const firstRunPrompt = "Scan https://www.mozilla.org. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
-const verificationPrompt = "List the available CertScore tools. Confirm the server exposes scan_site, get_scan_status, and get_scan_bundle. Then scan https://www.mozilla.org and report whether the result was new or reused.";
+const verificationPrompt = "List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://www.mozilla.org and report whether the result was new or reused.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
 export const metadata: Metadata = createPageMetadata({
@@ -225,10 +225,12 @@ sha256sum --check SHA256SUMS`}</CodeBlock>
             <li>If Codex suggests OAuth unexpectedly, remove the server and add it again with the exact Light URL <code>{lightEndpoint}</code>.</li>
             <li>Confirm no bearer token is configured. Light authentication is <code>None</code>; OAuth metadata belongs only to <code>{authenticatedEndpoint}</code>.</li>
             <li>A successful Streamable HTTP connection completes initialization and lists exactly the three Light tools without opening an authorization page.</li>
+            <li>When <code>scanId</code> is missing, retry <code>scan_site</code> only if the error is retryable; never poll status without <code>scanId</code>.</li>
             <li>For <code>rate_limited</code>, follow <code>retryAfterSeconds</code> and <code>recommendedNextAction</code>, or reuse an eligible result.</li>
+            <li>A reused eligible result does not consume quota; report it as reused rather than as a new scan.</li>
             <li>For a truncated bundle, follow <code>nextRecommendedMaxBytes</code>, raise <code>maxBytes</code>, or open a returned content URL.</li>
             <li>For <code>invalid_arguments</code>, correct the reported URL field and retry with a public HTTP or HTTPS URL.</li>
-            <li><code>completed_limited</code> and no-go are usable terminal observations with limitations; <code>failed</code>, <code>expired</code>, and connection errors are failures.</li>
+            <li><code>completed_limited</code>, no-go, not-observed, and limited coverage are observations only, not proof of compliance; <code>failed</code>, <code>expired</code>, and connection errors are failures.</li>
             <li>If the command is not found, reinstall the cask or check that Homebrew&apos;s bin directory is on PATH.</li>
             <li>If Node.js is not found, make sure the MCP client inherits a PATH containing Node.js and Homebrew&apos;s bin directory.</li>
             <li>If the API key is missing, set CERTSCORE_API_KEY in the MCP client environment and rerun doctor --check-auth.</li>
