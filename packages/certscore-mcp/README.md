@@ -2,7 +2,7 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: public developer preview. Version 0.2.14 prioritizes useful findings and evidence inside small byte budgets, returns typed validation details, and makes every omission recoverable. Local WC01 development uses `pnpm mcp:certscore`.
+Status: public developer preview. Version 0.2.15 reserves the first compact finding and evidence digest before optional detail inside small byte budgets, returns typed validation details, and makes every omission recoverable. Local WC01 development uses `pnpm mcp:certscore`.
 
 Public docs:
 
