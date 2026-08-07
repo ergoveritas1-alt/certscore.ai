@@ -497,6 +497,7 @@ export async function getPulseRequestByJobId(jobId: string) {
 }
 
 export function pulseScanThrottleIdentity(input: { normalizedDomain: string; normalizedUrl: string; scanFrom?: ScanFrom }) {
+  // Freshness is scoped to the requested page and scanner location; query strings do not create new identities.
   const location = normalizeScanFrom(input.scanFrom);
   try {
     const url = new URL(input.normalizedUrl);
