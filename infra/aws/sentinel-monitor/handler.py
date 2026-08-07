@@ -4,7 +4,6 @@ import boto3
 REGION = os.environ.get("AWS_REGION", "us-west-2")
 API = "https://certscore.ai"
 MCP = "https://mcp.certscore.ai/mcp"
-MCP_ANONYMOUS = "https://mcp.certscore.ai/mcp/anonymous"
 ROOT = "https://ergoveritas.com"
 LOCATIONS = ["eu_ie", "eu_de", "california"]
 TRANSPORTS = ["api", "sdk", "mcp"]
@@ -19,7 +18,7 @@ def get_secret(name):
 
 def jwt(secret):
     now = int(time.time())
-    claims = {"aud": MCP, "client_id": "ergoveritas-sentinel-monitor", "exp": now + 900, "iat": now, "iss": "https://certscore.ai", "jti": str(uuid.uuid4()), "scope": "scan:read scan:create mcp", "sub": "ergoveritas-sentinel-monitor", "certscore": {"organizationId": None, "scopes": ["pulse:read", "pulse:scan", "mcp"], "source": "mcp-oauth", "userId": None}}
+    claims = {"aud": "https://mcp.certscore.ai", "client_id": "ergoveritas-sentinel-monitor", "exp": now + 900, "iat": now, "iss": "https://certscore.ai", "jti": str(uuid.uuid4()), "scope": "scan:read scan:create mcp", "sub": "ergoveritas-sentinel-monitor", "certscore": {"organizationId": None, "scopes": ["pulse:read", "pulse:scan", "mcp"], "source": "mcp-oauth", "userId": None}}
     enc = lambda x: base64.urlsafe_b64encode(json.dumps(x, separators=(",", ":")).encode()).rstrip(b"=").decode()
     body = enc({"alg": "HS256", "typ": "JWT"}) + "." + enc(claims)
     sig = base64.urlsafe_b64encode(hmac.new(secret.encode(), body.encode(), hashlib.sha256).digest()).rstrip(b"=").decode()
@@ -77,21 +76,43 @@ def rest_scan(url, loc, client, key):
     return sid, st, bundle, created
 
 def mcp_scan(url, loc, secret):
-    # The monitor uses the public Streamable HTTP MCP lane. The authenticated
-    # OAuth lane is reserved for interactive clients; anonymous MCP still
-    # exercises the MCP transport and scanner regional routing.
-    headers = {"content-type": "application/json", "accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-03-26"}
+    # Exercise the authenticated Streamable HTTP MCP lane so hourly monitoring
+    # is not constrained by the anonymous daily allowance.
+    headers = {"authorization": "Bearer " + jwt(secret), "content-type": "application/json", "accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-03-26"}
+    def decode_mcp_response(raw, content_type):
+        if not raw or not raw.strip():
+            return {}
+        if "text/event-stream" in (content_type or "").lower() or raw.lstrip().startswith(("event:", "data:")):
+            messages = []
+            for line in raw.splitlines():
+                if not line.startswith("data:"):
+                    continue
+                value = line[5:].lstrip()
+                if not value or value == "[DONE]":
+                    continue
+                try:
+                    messages.append(json.loads(value))
+                except json.JSONDecodeError:
+                    continue
+            if messages:
+                return messages[-1]
+            raise RuntimeError("MCP event stream contained no JSON-RPC message")
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise RuntimeError("MCP returned a non-JSON response: " + raw[:180]) from e
     def mcp_post(payload, session=None):
         h = {**headers, "accept-language": "en-US,en;q=0.9", "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36", **({"mcp-session-id": session} if session else {})}
-        req = urllib.request.Request(MCP_ANONYMOUS, data=json.dumps(payload).encode(), method="POST", headers=h)
-        with urllib.request.urlopen(req, timeout=840) as r:
-            raw = r.read().decode()
-            if not raw:
-                return {}, r.headers.get("mcp-session-id")
-            if raw.lstrip().startswith("event:"):
-                data = "\n".join(line[5:].lstrip() for line in raw.splitlines() if line.startswith("data:"))
-                return (json.loads(data) if data else {}), r.headers.get("mcp-session-id")
-            return json.loads(raw), r.headers.get("mcp-session-id")
+        for attempt in range(3):
+            req = urllib.request.Request(MCP, data=json.dumps(payload).encode(), method="POST", headers=h)
+            try:
+                with urllib.request.urlopen(req, timeout=840) as r:
+                    raw = r.read().decode(errors="replace")
+                    return decode_mcp_response(raw, r.headers.get("content-type")), r.headers.get("mcp-session-id") or session
+            except (urllib.error.URLError, RuntimeError) as e:
+                if attempt == 2:
+                    raise
+                time.sleep(2 * (attempt + 1))
     init, session = mcp_post({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "ergoveritas-sentinel-monitor", "version": "1.0"}}})
     # Bind the follow-up messages to the Streamable HTTP session.
     mcp_post({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}, session)
