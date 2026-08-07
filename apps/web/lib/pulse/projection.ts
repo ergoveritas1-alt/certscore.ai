@@ -1397,7 +1397,20 @@ function buildCmpLoadOrderHighlight(scanRecord: ScanDetailResponse) {
   };
 }
 
-function buildEvidenceHighlights(scanRecord: ScanDetailResponse, trackerRows?: ReturnType<typeof buildTrackerInventoryRows>) {
+export function hasProjectedFingerprintingFinding(
+  projectedFindings: Array<Pick<CertScoreFinding, "id">>
+) {
+  return projectedFindings.some((finding) =>
+    finding.id === "device_identification_fingerprinting_signal_observed" ||
+    finding.id.endsWith("__device_identification_fingerprinting_signal_observed")
+  );
+}
+
+function buildEvidenceHighlights(
+  scanRecord: ScanDetailResponse,
+  trackerRows?: ReturnType<typeof buildTrackerInventoryRows>,
+  projectedFindings: CertScoreFinding[] = []
+) {
   const snapshot = scanRecord.snapshot;
   const groupedTrackerRows = trackerRows ? buildTrackerInventoryGroupRows(trackerRows) : [];
   const thirdPartyDomainsObserved = groupedTrackerRows.length > 0
@@ -1410,11 +1423,16 @@ function buildEvidenceHighlights(scanRecord: ScanDetailResponse, trackerRows?: R
     : uniqueStrings(scanRecord.trackerVendors.map((vendor) => vendor.vendorName)).length;
   const policyRows = projectedPolicySurfaceRows(scanRecord);
   const policyTypes = uniqueStrings(policyRows.map((row) => row.type));
-  const fingerprintIndicators =
+  const projectedFingerprintingFinding = hasProjectedFingerprintingFinding(projectedFindings);
+  const legacyFingerprintIndicators =
     finiteNumber(recordValue(snapshot, "fingerprinting_indicator_count")) ??
     finiteNumber(recordValue(snapshot, "fingerprinting_signal_count")) ??
     0;
+  const fingerprintIndicators = projectedFingerprintingFinding
+    ? Math.max(1, legacyFingerprintIndicators)
+    : legacyFingerprintIndicators;
   const probableFingerprintingDetected =
+    projectedFingerprintingFinding ||
     recordValue(snapshot, "probable_fingerprinting_detected") === true ||
     recordValue(snapshot, "fingerprinting_probable") === true;
   const categories = (groupedTrackerRows.length > 0 ? groupedTrackerRows : scanRecord.trackerVendors).reduce<Record<string, number>>((accumulator, vendor) => {
@@ -2094,7 +2112,11 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     summary.riskLevel = "unknown";
   }
   const topFindingCount = topFindings.length;
-  const evidenceHighlights = buildEvidenceHighlights(hydratedScanRecord, reportSurface.trackerInventoryRows);
+  const evidenceHighlights = buildEvidenceHighlights(
+    hydratedScanRecord,
+    reportSurface.trackerInventoryRows,
+    allFindings
+  );
   const counts = buildPulseCounts({
     allFindingCount: allFindings.length,
     evidenceHighlights,

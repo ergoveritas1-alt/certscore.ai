@@ -485,6 +485,8 @@ test("verified complete-policy absence projects row-specific GDPR Transparency g
   assert.equal(outcomes.retention_disclosure_observed?.status, "Gap observed");
   assert.equal(outcomes.international_transfers_disclosure?.status, "Gap observed");
   assert.ok(retainedArticle13Signal(outcomes.retention_disclosure_observed!));
+  assert.equal(retainedArticle13Signal(outcomes.retention_disclosure_observed!)?.evidenceText, null);
+  assert.equal(retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText, null);
 });
 
 test("invariant-verified Mini evidence wins a checklist tie against deterministic placeholder evidence", () => {

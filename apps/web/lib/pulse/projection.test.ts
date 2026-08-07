@@ -26,11 +26,22 @@ const {
   buildPulseProjection,
   deriveConsentPlatform,
   getPulseExecutiveActionLabel,
+  hasProjectedFingerprintingFinding,
   hasMeaningfulPolicyAnchor,
   isPublicPulseApiFinding,
   projectedPolicySurfaceRows,
   selectPublicPulseFindingsFromUnifiedProjection
 } = require("./projection") as typeof import("./projection");
+
+test("Pulse fingerprinting highlights consume canonical projected findings", () => {
+  assert.equal(hasProjectedFingerprintingFinding([]), false);
+  assert.equal(hasProjectedFingerprintingFinding([{
+    id: "device_identification_fingerprinting_signal_observed"
+  }]), true);
+  assert.equal(hasProjectedFingerprintingFinding([{
+    id: "regulatory_gap__gdpr_eprivacy__device_identification_fingerprinting_signal_observed"
+  }]), true);
+});
 
 test("Pulse evidence preserves canonical cookie, request, and policy provenance projections", () => {
   const scanRecord = pulseScanRecord({

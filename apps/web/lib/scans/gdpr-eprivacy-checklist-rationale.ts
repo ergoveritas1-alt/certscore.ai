@@ -392,6 +392,12 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
 }
 
 function getArticle13RationalePrefix(item: GdprEprivacyCoverageChecklistItem) {
+  if (getEvidenceLabel(item) === "Potential gap") {
+    return "Scanner expected this transparency disclosure but did not retain a clear match";
+  }
+  if (getEvidenceLabel(item) === "Not observed") {
+    return "Scanner did not retain a clear matching transparency disclosure";
+  }
   if (
     item.id === "supervisory_authority_complaint_disclosure" &&
     getEvidenceLabel(item) === "Partial concern"
@@ -406,12 +412,6 @@ function getArticle13RationalePrefix(item: GdprEprivacyCoverageChecklistItem) {
   }
   if (getEvidenceLabel(item) === "Not confirmed") {
     return "Policy evidence was retained, but row-specific disclosure was not confirmed from the retained extraction";
-  }
-  if (getEvidenceLabel(item) === "Potential gap") {
-    return "Scanner expected this transparency disclosure but did not retain a clear match";
-  }
-  if (getEvidenceLabel(item) === "Not observed") {
-    return "Scanner did not retain a clear matching transparency disclosure";
   }
   return "Policy text included matching disclosure evidence";
 }

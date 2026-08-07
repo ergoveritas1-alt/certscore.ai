@@ -6851,7 +6851,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
     "gdpr_transparency_article13_topic"
   ]) ?? config.disclosureType ?? "unknown";
   const sourceUrl = getString(rawEvidence, ["sourceUrl", "source_url"]);
-  const evidenceText =
+  const observedEvidenceText =
     getStringArray(rawEvidence, ["policySnippets", "policy_snippets"])[0] ??
     concern.evidenceBundle.policySnippets[0] ??
     null;
@@ -6860,6 +6860,12 @@ function buildGdprTransparencyArticle13ConcernOutcome(
     "gdprTransparencyArticle13ConcernState",
     "gdpr_transparency_article13_concern_state"
   ]) ?? concern.observedValue ?? "ambiguous";
+  // An absence assessment is supported by the typed coverage record, not by a
+  // matching excerpt. Keeping a generic policy-document hash or provenance
+  // string here would misrepresent it as affirmative topic evidence.
+  const evidenceText = concern.regulatoryChecklistEligibility === "gap_observed"
+    ? null
+    : observedEvidenceText;
   const evidenceRefs = [
     `Evidence: ${config.label}`,
     evidenceText ? `Excerpt: ${evidenceText}` : null,
