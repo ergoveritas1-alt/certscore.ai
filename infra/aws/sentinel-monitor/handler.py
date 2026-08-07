@@ -43,6 +43,9 @@ def scan_id(x):
         if v: return v
     return None
 
+def html_escape(value):
+    return (str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;"))
+
 def status(x):
     return str((x or {}).get("status", "")).lower()
 
@@ -172,6 +175,35 @@ def handler(event, context):
     run = {"runId": run_id, "startedAt": started, "hour": hour, "jobs": len(results), "failures": len(failures), "results": results}
     ddb.put_item(Item={"pk": "run#" + run_id, **run, "expiresAt": int(time.time()) + 90 * 86400})
     if failures:
-        body = "Hourly ErgoVeritas sentinel run " + run_id + "\nStarted: " + started + "\n\n" + "\n".join("- page={page} location={location} transport={transport} scanId={sid} issue={issue}".format(sid=f.get("scanId", "n/a"), **f) for f in failures)
-        ses.send_email(FromEmailAddress=os.environ.get("ALERT_FROM", "support@certscore.ai"), Destination={"ToAddresses": ["support@certscore.ai"]}, Content={"Simple": {"Subject": {"Data": "[CertScore sentinel] " + str(len(failures)) + " issue(s)"}, "Body": {"Text": {"Data": body}}}})
+        semantic_failures = sum(1 for f in failures if f.get("missing"))
+        operational_failures = len(failures) - semantic_failures
+        summary = f"{len(failures)} of {len(results)} sentinel scans reported issues. {semantic_failures} had expected scanner signals missing and {operational_failures} had transport or freshness errors."
+        body_lines = [
+            "EXECUTIVE SUMMARY: " + summary,
+            "",
+            "Hourly ErgoVeritas sentinel run " + run_id,
+            "Started: " + started,
+            "",
+            *["- page={page} location={location} transport={transport} scanId={sid} issue={issue}".format(sid=f.get("scanId", "n/a"), **f) for f in failures]
+        ]
+        body = "\n".join(body_lines)
+        html_rows = "".join(
+            "<li><code>page=" + html_escape(f.get("page", "n/a")) + " location=" + html_escape(f.get("location", "n/a")) + " transport=" + html_escape(f.get("transport", "n/a")) + " scanId=" + html_escape(f.get("scanId", "n/a")) + "</code><br>" + html_escape(f.get("issue", "unknown issue")) + "</li>"
+            for f in failures
+        )
+        html = (
+            "<html><body>"
+            "<p><strong>EXECUTIVE SUMMARY</strong><br>" + html_escape(summary) + "</p>"
+            "<p>Hourly ErgoVeritas sentinel run <code>" + html_escape(run_id) + "</code><br>Started: " + html_escape(started) + "</p>"
+            "<h3>Details</h3><ul>" + html_rows + "</ul>"
+            "</body></html>"
+        )
+        ses.send_email(
+            FromEmailAddress=os.environ.get("ALERT_FROM", "support@certscore.ai"),
+            Destination={"ToAddresses": ["support@certscore.ai"]},
+            Content={"Simple": {
+                "Subject": {"Data": "[CertScore sentinel] " + str(len(failures)) + " issue(s)"},
+                "Body": {"Text": {"Data": body}, "Html": {"Data": html}}
+            }}
+        )
     print(json.dumps(run)); return run
