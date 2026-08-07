@@ -87,16 +87,20 @@ def rest_scan(url, loc, client, key):
             created = request(API + "/api/v2/scans", "POST", headers, {"url": url, "freshness": "refresh", "scanFrom": loc})
             break
         except RuntimeError as e:
-            if "429" not in str(e) or attempt == 5:
+            if not any(code in str(e) for code in ("429", "502", "503", "504")) or attempt == 5:
                 raise
-            # CertScore returns retryAfterSeconds in the structured 429 body;
-            # keep a safe floor so each hourly run still uses a fresh scan.
-            time.sleep(20 + attempt * 5)
+            time.sleep(10 + attempt * 10)
     sid = scan_id(created)
     if not sid: raise RuntimeError("submission returned no scan id")
     began = time.time()
     while True:
-        st = request(API + "/api/v2/scans/" + sid + "/status", headers=headers)
+        try:
+            st = request(API + "/api/v2/scans/" + sid + "/status", headers=headers)
+        except RuntimeError as e:
+            if any(code in str(e) for code in ("502", "503", "504")) and time.time() - began < 840:
+                time.sleep(15)
+                continue
+            raise
         if status(st) in ("complete", "completed", "failed", "expired", "error", "no_go", "limited"): break
         if time.time() - began > 840: raise RuntimeError("scan timed out at " + status(st))
         time.sleep(5)
@@ -173,12 +177,24 @@ def handler(event, context):
         print(json.dumps(result))
         return result
     try:
-        manifest = request(ROOT + "/.well-known/certscore-canary/manifest.json")
+        manifest = None
+        manifest_error = None
+        for attempt in range(3):
+            try:
+                manifest = request(ROOT + "/.well-known/certscore-canary/manifest.json")
+                break
+            except Exception as e:
+                manifest_error = e
+                if attempt < 2:
+                    time.sleep(5 * (attempt + 1))
+        if manifest is None:
+            raise RuntimeError(str(manifest_error))
     except Exception as e:
         # Keep the monitor useful during an edge-cache/origin transition. The five
         # sentinel contracts are also pinned here so a manifest outage is itself
-        # reported as a run issue rather than preventing all scans from starting.
-        scanner_failures.append({"issue": "sentinel manifest unavailable: " + str(e)[:500]})
+        # recorded as a corpus diagnostic rather than preventing all scans or
+        # generating a misleading scanner alert.
+        corpus_issues.append({"issue": "sentinel manifest unavailable: " + str(e)[:500]})
         manifest = {"sentinelCorpus": {"pages": [
             {"key":"sentinel-broad-baseline","url":"/.well-known/certscore-canary/sentinels/broad-baseline.html","expectedSignals":["pre_consent_storage","fingerprinting","policy_runtime_comparison","consent_controls"]},
             {"key":"sentinel-consent-stress","url":"/.well-known/certscore-canary/sentinels/consent-stress.html","expectedSignals":["responsive_geometry","aria_controls","shadow_dom","split_labels"]},
