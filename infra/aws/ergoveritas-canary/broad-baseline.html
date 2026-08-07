@@ -1,0 +1,68 @@
+<!-- CANARY TEST PAGE — intentional non-compliance for scanner validation — see /test-environment-notice -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>Sentinel canary — broad baseline v2</title>
+  <link rel="stylesheet" href="../styles.css">
+  <!-- Intentionally loaded before consent for scanner validation. -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-CANARYTEST"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-CANARYTEST', {send_page_view: true});
+  </script>
+</head>
+<body>
+  <script src="../runtime/notice.js"></script>
+  <main data-certscore-canary="broad-baseline-v2"
+        data-expected-consent="accept,options"
+        data-expected-reject="false"
+        data-expected-preconsent-storage="true"
+        data-expected-social-embed="true"
+        data-expected-fingerprinting="true"
+        data-expected-gdpr-missing="retention,international_transfers">
+    <p>Controlled test fixture; synthetic validation only.</p>
+
+    <section class="banner" aria-label="Cookie and privacy choices" data-canary-consent-surface="first-layer">
+      <h1>Privacy choices</h1>
+      <p>We use optional analytics, advertising technology, and embedded media.</p>
+      <div class="controls">
+        <button class="primary" type="button" data-consent-intent="accept">Accept all</button>
+        <button type="button" data-consent-intent="options">Manage preferences</button>
+      </div>
+      <!-- Deliberately no Reject all or Necessary only control. -->
+    </section>
+
+    <section class="notice">
+      <h2>Pre-consent runtime signals</h2>
+      <p>This fixture intentionally starts non-essential analytics, marketing requests, storage, fingerprinting, and social media content before a choice is made.</p>
+      <p><a href="../policy/broad-baseline.html">Synthetic privacy policy fixture</a></p>
+    </section>
+
+    <section class="notice" data-certscore-test-expectations="true">
+      <h2>CertScore canary expectations</h2>
+      <p>This page is intentionally non-compliant and exists only for automated scanner validation.</p>
+      <ul>
+        <li>Pre-consent Google-tag-style cookies and storage</li>
+        <li>Non-essential analytics and marketing trackers before consent</li>
+        <li>Synthetic fingerprinting activity</li>
+        <li>Social/media embed loaded before consent</li>
+        <li>Accept observed; Reject/Necessary-only not observed; Manage observed</li>
+        <li>GDPR Transparency: six topics observed; retention and international-transfer topics not observed</li>
+        <li>Policy/runtime comparison mismatch</li>
+      </ul>
+    </section>
+
+    <section class="notice">
+      <h2>Social/media embed</h2>
+      <iframe data-certscore-canary="pre-consent-social-embed" title="Synthetic pre-consent media embed" src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+    </section>
+
+    <script src="../runtime/broad-baseline-runtime.js"></script>
+  </main>
+</body>
+</html>
