@@ -514,6 +514,22 @@ test("buildApiV2ScanJobFromPulseStatus maps pending Pulse jobs to v2 status", ()
   assert.equal(status.links?.status, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status");
 });
 
+test("buildApiV2ScanJobFromPulseStatus preserves a requested page path", () => {
+  const status = buildApiV2ScanJobFromPulseStatus({
+    jobId: "job-path",
+    scanId: "scan-path",
+    domain: "ergoveritas.com",
+    status: "queued"
+  }, {
+    requestedUrl: "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
+  });
+
+  assert.equal(
+    status.url,
+    "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
+  );
+});
+
 test("buildApiV2ScanJobFromPulseStatus preserves completed status timing for SDK consumers", () => {
   const status = buildApiV2ScanJobFromPulseStatus({
     jobId: "pulse_job_123",

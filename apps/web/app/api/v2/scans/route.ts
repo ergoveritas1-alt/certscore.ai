@@ -190,7 +190,10 @@ export async function POST(request: Request) {
     }
 
     if (pulseResponse.status === 202) {
-      const scanJob = buildApiV2ScanJobFromPulseStatus(pulseStatusSchema.parse(pulseBody));
+      const scanJob = buildApiV2ScanJobFromPulseStatus(
+        pulseStatusSchema.parse(pulseBody),
+        { requestedUrl: parsed.data.url }
+      );
       const scanRetryAfter = scanJob.retryAfterSeconds === null || scanJob.retryAfterSeconds === undefined
         ? undefined
         : String(scanJob.retryAfterSeconds);

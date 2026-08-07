@@ -762,7 +762,10 @@ export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse, options: { 
   return apiV2ScanJobSchema.parse(resource);
 }
 
-export function buildApiV2ScanJobFromPulseStatus(status: PulseStatusLike): ApiV2ScanJob {
+export function buildApiV2ScanJobFromPulseStatus(
+  status: PulseStatusLike,
+  options: { requestedUrl?: string } = {}
+): ApiV2ScanJob {
   const scanId = status.scanId ?? status.scan_id ?? null;
   const normalizedStatus = normalizeScanStatus(status.status);
   const terminal = normalizedStatus === "completed" || normalizedStatus === "completed_limited" || normalizedStatus === "failed" || normalizedStatus === "expired" || normalizedStatus === "rate_limited";
@@ -809,7 +812,7 @@ export function buildApiV2ScanJobFromPulseStatus(status: PulseStatusLike): ApiV2
     jobId: status.jobId,
     scanId,
     domain: status.domain ?? null,
-    url: status.domain ? `https://${status.domain}` : null,
+    url: options.requestedUrl ?? (status.domain ? `https://${status.domain}` : null),
     status: normalizedStatus,
     ...(status.resultDisposition ? { resultDisposition: status.resultDisposition } : {}),
     ...(status.noGo ? { noGo: status.noGo } : {}),
