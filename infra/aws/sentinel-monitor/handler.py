@@ -219,7 +219,7 @@ def handler(event, context):
     jwt_secret = get_secret("certscore/oauth-jwt-secret")
     # Run exactly three scans per transport (API, SDK, MCP), one from each
     # location. The three page assignments rotate hourly, so all five sentinel
-    # contracts are covered over a rolling two-hour window and each page is
+    # contracts are covered over a rolling three-hour window and each page is
     # exercised by every transport over the full rotation.
     selected_pages = [pages[(hour + slot) % len(pages)] for slot in range(len(TRANSPORTS))]
     jobs = [
