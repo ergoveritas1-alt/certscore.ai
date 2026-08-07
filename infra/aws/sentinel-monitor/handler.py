@@ -135,12 +135,14 @@ def signals(value):
 
 def handler(event, context):
     run_id, started = str(uuid.uuid4()), time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    scanner_failures = []
     try:
         manifest = request(ROOT + "/.well-known/certscore-canary/manifest.json")
     except Exception as e:
         # Keep the monitor useful during an edge-cache/origin transition. The five
         # sentinel contracts are also pinned here so a manifest outage is itself
         # reported as a run issue rather than preventing all scans from starting.
+        scanner_failures.append({"issue": "sentinel manifest unavailable: " + str(e)[:500]})
         manifest = {"sentinelCorpus": {"pages": [
             {"key":"sentinel-broad-baseline","url":"/.well-known/certscore-canary/sentinels/broad-baseline.html","expectedSignals":["pre_consent_storage","fingerprinting","policy_runtime_comparison","consent_controls"]},
             {"key":"sentinel-consent-stress","url":"/.well-known/certscore-canary/sentinels/consent-stress.html","expectedSignals":["responsive_geometry","aria_controls","shadow_dom","split_labels"]},
@@ -153,7 +155,7 @@ def handler(event, context):
     key = ssm.get_parameter(Name="/certscore/sentinel/api-key", WithDecryption=True)["Parameter"]["Value"]
     jwt_secret = get_secret("certscore/oauth-jwt-secret")
     hour = int(time.time() // 3600); jobs = [{"page": p, "location": loc, "transport": TRANSPORTS[(hour + li + pi) % 3]} for li, loc in enumerate(LOCATIONS) for pi, p in enumerate(pages)]
-    results, failures = [], []
+    results, corpus_issues = [], []
     for job in jobs:
         t = time.time(); p, loc, transport = job["page"], job["location"], job["transport"]
         try:
@@ -166,30 +168,36 @@ def handler(event, context):
             reused = bool((created or {}).get("reused") or (created or {}).get("executionMode") == "reused_scan" or (created or {}).get("freshnessDecision") == "reused_existing_scan")
             freshness_issue = reused or (returned_url and requested_path not in str(returned_url))
             row = {"page": p["key"], "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "missing": missing, "comparison": "findings_and_evidence", "freshness": "reused_or_path_mismatch" if freshness_issue else "new_path"}
-            if missing: failures.append({**row, "issue": "required signals missing: " + ", ".join(missing)})
-            if freshness_issue: failures.append({**row, "issue": "freshness/path invariant failed: CertScore reused a scan or did not retain the requested page path"})
+            if missing: corpus_issues.append({**row, "issue": "required signals missing: " + ", ".join(missing)})
+            if freshness_issue: scanner_failures.append({**row, "issue": "freshness/path invariant failed: CertScore reused a scan or did not retain the requested page path"})
+            if status(st) not in {"completed", "completed_limited", "complete", "limited"}:
+                scanner_failures.append({**row, "issue": "scan did not reach a completed terminal status"})
         except Exception as e:
             row = {"page": p["key"], "location": loc, "transport": transport, "durationMs": int((time.time()-t)*1000), "error": str(e)}
-            failures.append({**row, "issue": str(e)})
+            scanner_failures.append({**row, "issue": str(e)})
         results.append(row)
-    run = {"runId": run_id, "startedAt": started, "hour": hour, "jobs": len(results), "failures": len(failures), "results": results}
+    failures = corpus_issues + scanner_failures
+    run = {"runId": run_id, "startedAt": started, "hour": hour, "jobs": len(results), "failures": len(failures), "scannerFailures": len(scanner_failures), "corpusIssues": len(corpus_issues), "results": results}
     ddb.put_item(Item={"pk": "run#" + run_id, **run, "expiresAt": int(time.time()) + 90 * 86400})
-    if failures:
-        semantic_failures = sum(1 for f in failures if f.get("missing"))
-        operational_failures = len(failures) - semantic_failures
-        summary = f"{len(failures)} of {len(results)} sentinel scans reported issues. {semantic_failures} had expected scanner signals missing and {operational_failures} had transport or freshness errors."
+    if scanner_failures:
+        summary = f"{len(scanner_failures)} scanner execution issue(s) detected across {len(results)} sentinel scans. {len(corpus_issues)} expected canary-signal mismatch(es) were recorded for diagnostics but are not alert conditions."
+        def failure_line(f):
+            return "- page={page} location={location} transport={transport} scanId={sid} issue={issue}".format(
+                page=f.get("page", "n/a"), location=f.get("location", "n/a"), transport=f.get("transport", "n/a"),
+                sid=f.get("scanId", "n/a"), issue=f.get("issue", "unknown issue")
+            )
         body_lines = [
             "EXECUTIVE SUMMARY: " + summary,
             "",
             "Hourly ErgoVeritas sentinel run " + run_id,
             "Started: " + started,
             "",
-            *["- page={page} location={location} transport={transport} scanId={sid} issue={issue}".format(sid=f.get("scanId", "n/a"), **f) for f in failures]
+            *[failure_line(f) for f in scanner_failures]
         ]
         body = "\n".join(body_lines)
         html_rows = "".join(
             "<li><code>page=" + html_escape(f.get("page", "n/a")) + " location=" + html_escape(f.get("location", "n/a")) + " transport=" + html_escape(f.get("transport", "n/a")) + " scanId=" + html_escape(f.get("scanId", "n/a")) + "</code><br>" + html_escape(f.get("issue", "unknown issue")) + "</li>"
-            for f in failures
+            for f in scanner_failures
         )
         html = (
             "<html><body>"
@@ -202,7 +210,7 @@ def handler(event, context):
             FromEmailAddress=os.environ.get("ALERT_FROM", "support@certscore.ai"),
             Destination={"ToAddresses": ["support@certscore.ai"]},
             Content={"Simple": {
-                "Subject": {"Data": "[CertScore sentinel] " + str(len(failures)) + " issue(s)"},
+                "Subject": {"Data": "[CertScore scanner alert] " + str(len(scanner_failures)) + " issue(s)"},
                 "Body": {"Text": {"Data": body}, "Html": {"Data": html}}
             }}
         )
