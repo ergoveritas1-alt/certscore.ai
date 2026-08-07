@@ -217,9 +217,15 @@ def handler(event, context):
     corpus_issues.extend(corpus_preflight(pages))
     key = ssm.get_parameter(Name="/certscore/sentinel/api-key", WithDecryption=True)["Parameter"]["Value"]
     jwt_secret = get_secret("certscore/oauth-jwt-secret")
-    jobs = [{"page": p, "location": loc, "transport": TRANSPORTS[(hour + li + pi) % 3]} for li, loc in enumerate(LOCATIONS) for pi, p in enumerate(pages)]
+    # Interleave regions page-by-page instead of sending five consecutive jobs
+    # through one regional origin. The small deterministic jitter below keeps
+    # the hourly run bounded while avoiding a burst at job boundaries.
+    jobs = [{"page": p, "location": loc, "transport": TRANSPORTS[(hour + li + pi) % 3]} for pi, p in enumerate(pages) for li, loc in enumerate(LOCATIONS)]
     results = []
-    for job in jobs:
+    for job_index, job in enumerate(jobs):
+        throttle_seconds = 0 if job_index == 0 else 8 + ((hour + job_index * 7) % 8)
+        if throttle_seconds:
+            time.sleep(throttle_seconds)
         t = time.time(); p, loc, transport = job["page"], job["location"], job["transport"]
         try:
             fn = mcp_scan if transport == "mcp" else rest_scan
@@ -230,13 +236,13 @@ def handler(event, context):
             returned_url = (created or {}).get("url") or (created or {}).get("request", {}).get("url")
             reused = bool((created or {}).get("reused") or (created or {}).get("executionMode") == "reused_scan" or (created or {}).get("freshnessDecision") == "reused_existing_scan")
             freshness_issue = reused or (returned_url and requested_path not in str(returned_url))
-            row = {"page": p["key"], "requestedUrl": ROOT + p["url"], "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", "freshness": "reused_or_path_mismatch" if freshness_issue else "new_path"}
+            row = {"page": p["key"], "requestedUrl": ROOT + p["url"], "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", "freshness": "reused_or_path_mismatch" if freshness_issue else "new_path"}
             if missing: corpus_issues.append({**row, "issue": "required signals missing: " + ", ".join(missing)})
             if freshness_issue: scanner_failures.append({**row, "issue": "freshness/path invariant failed: CertScore reused a scan or did not retain the requested page path"})
             if status(st) not in {"completed", "completed_limited", "complete", "limited"}:
                 scanner_failures.append({**row, "issue": "scan did not reach a completed terminal status"})
         except Exception as e:
-            row = {"page": p["key"], "location": loc, "transport": transport, "durationMs": int((time.time()-t)*1000), "error": str(e)}
+            row = {"page": p["key"], "location": loc, "transport": transport, "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "error": str(e)}
             scanner_failures.append({**row, "issue": str(e)})
         results.append(row)
     # Regional/transport variance is diagnostic only. It identifies signals that
