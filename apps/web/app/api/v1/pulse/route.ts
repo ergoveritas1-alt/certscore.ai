@@ -685,6 +685,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       recentScan ??
       (await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, {
         minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
+        normalizedUrl: normalized.normalizedUrl,
         scanFrom
       }));
     const latestScanRecord = latestScan ? await loadPulseScanRecord(latestScan.id) : null;
@@ -797,6 +798,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
 
     const throttle = await claimPulseDomainScanCreation({
       normalizedDomain: normalized.normalizedDomain,
+      normalizedUrl: normalized.normalizedUrl,
       pulseRequestId: publicId
     });
     if (!throttle.allowed) {

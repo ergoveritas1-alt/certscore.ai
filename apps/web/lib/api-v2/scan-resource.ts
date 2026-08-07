@@ -546,11 +546,14 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
   const scoreStatus = canonicalResultState === "final" ? "final" : "provisional";
   const scoreVersion = stringOrNull(scanRecord.snapshot?.score_version) ?? "gdpr-eprivacy-evidence.legacy-v1";
   const scoreUpdatedAt = dateStringOrNull(scanRecord.snapshot?.score_scored_at ?? scan.completedAt);
+  const configuredUrl = typeof scan.scanConfigJson?.normalizedUrl === "string"
+    ? scan.scanConfigJson.normalizedUrl
+    : null;
   const resource = {
     type: "certscore_scan",
     scanId: scan.id,
     domain,
-    url: domain === "unknown" ? null : `https://${domain}`,
+    url: configuredUrl ?? (domain === "unknown" ? null : `https://${domain}`),
     status: noGoProjection
       ? "completed_limited"
       : canonicalResultState === "failed"

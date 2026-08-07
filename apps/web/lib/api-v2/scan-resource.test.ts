@@ -204,6 +204,14 @@ test("buildApiV2ScanResource projects a completed scan into public-safe v2 shape
   assert.equal(resource.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
 });
 
+test("buildApiV2ScanResource preserves the configured page path", () => {
+  const resource = buildApiV2ScanResource(fixture({
+    scanConfigJson: { normalizedUrl: "https://example.com/test/consent.html" }
+  }));
+
+  assert.equal(resource.url, "https://example.com/test/consent.html");
+});
+
 test("API v2 resource links honor the configured app origin", () => {
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
   process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
