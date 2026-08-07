@@ -33,9 +33,9 @@ codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
 
 First-run Codex prompt:
 
-> Scan https://www.mozilla.org. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
+> Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
 
-Mozilla is a real, stable public site suited to demonstrating the complete scan, status, and bundle flow. The documentation placeholder `example.com` may produce a no-go, cached unavailable, or rate-limited result. Users may substitute their own public HTTP or HTTPS URL.
+ErgoVeritas is a stable, owned canary site suited to demonstrating the complete scan, status, and bundle flow. Its pages intentionally contain test signals; users may substitute their own public HTTP or HTTPS URL for production-like testing.
 
 Canonical Light workflow:
 
@@ -53,7 +53,7 @@ Recommended bundle budgets are `maxBytes=5000` for `summary`, `maxBytes=8000` fo
 
 Verification prompt:
 
-> List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://www.mozilla.org and report whether the result was new or reused.
+> List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.
 
 Success means the tool list contains exactly the three Light tools, no authorization page appears, and `scan_site` returns a stable `scanId` plus an explicit new-or-reused decision. An eligible reused result reports that quota was not consumed.
 
@@ -224,7 +224,7 @@ Agents that cannot create an account or configure OAuth can use the public API v
 ```bash
 curl -X POST https://certscore.ai/api/v2/scans \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}'
+  -d '{"url":"https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html","freshness":"latest","scanFrom":"eu_ie"}'
 ```
 
 New anonymous scans are limited to 20 per requester IP per UTC day. Reusing an eligible recent result does not consume the quota. Poll the returned status resource, then retrieve findings or evidence. Contact `support@certscore.ai` for a higher-volume allowance, including when reuse serves the current request.
@@ -329,7 +329,7 @@ With `freshness: "latest"`, CertScore reuses an eligible scan completed within t
 {
   "tool": "get_latest_domain_pre_consent_cookies_trackers",
   "arguments": {
-    "domain": "example.com",
+    "domain": "ergoveritas.com",
     "scanFrom": "eu_ie"
   }
 }
@@ -347,7 +347,7 @@ CERTSCORE_API_KEY=... pnpm mcp:certscore:smoke
 Optional:
 
 ```bash
-CERTSCORE_MCP_SMOKE_URL=https://example.com
+CERTSCORE_MCP_SMOKE_URL=https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html
 ```
 
 Without `CERTSCORE_API_KEY`, the smoke script exits successfully with a skip message.

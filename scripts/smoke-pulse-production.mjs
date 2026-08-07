@@ -117,8 +117,8 @@ async function main() {
   results.push(discovery);
 
   for (const path of [
-    "/api/v1/pulse?url=https%3A%2F%2Fexample.com&detail=tiny",
-    "/api/v1/pulse?url=https%3A%2F%2Fexample.com&detail=full"
+    "/api/v1/pulse?url=https%3A%2F%2Fergoveritas.com%2F.well-known%2Fcertscore-canary%2Fsentinels%2Fbroad-baseline.html&detail=tiny",
+    "/api/v1/pulse?url=https%3A%2F%2Fergoveritas.com%2F.well-known%2Fcertscore-canary%2Fsentinels%2Fbroad-baseline.html&detail=full"
   ]) {
     const result = await get(path);
     assertPulseHeaders(result, "pulse");
@@ -126,7 +126,7 @@ async function main() {
     results.push(result);
   }
 
-  const markdown = await get("/api/v1/pulse?url=https%3A%2F%2Fexample.com&format=markdown");
+    const markdown = await get("/api/v1/pulse?url=https%3A%2F%2Fergoveritas.com%2F.well-known%2Fcertscore-canary%2Fsentinels%2Fbroad-baseline.html&format=markdown");
   assertPulseHeaders(markdown, "pulse");
   assertPulseShape(markdown, [200, 202, 429]);
   results.push(markdown);

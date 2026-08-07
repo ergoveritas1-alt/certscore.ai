@@ -69,7 +69,7 @@ export default function DeveloperReferencePage() {
   "type": "certscore_scan_job",
   "jobId": "job_123",
   "scanId": "00000000-0000-4000-8000-000000000123",
-  "domain": "example.com",
+  "domain": "ergoveritas.com",
   "status": "queued",
   "retryAfterSeconds": 1
 }`}</CodeBlock>
@@ -90,7 +90,7 @@ export default function DeveloperReferencePage() {
               <CodeBlock>{`{
   "type": "certscore_scan",
   "scanId": "00000000-0000-4000-8000-000000000123",
-  "domain": "example.com",
+  "domain": "ergoveritas.com",
   "status": "completed",
   "score": 72,
   "links": {

@@ -60,7 +60,7 @@ curl -X POST https://certscore.ai/api/v2/keys/request \\
           </p>
           <CodeBlock>{`curl -X POST https://certscore.ai/api/v2/scans \\
   -H "Content-Type: application/json" \\
-  -d '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}'`}</CodeBlock>
+  -d '{"url":"https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html","freshness":"latest","scanFrom":"eu_ie"}'`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Health" title="Check the public API surface">
@@ -70,7 +70,7 @@ curl https://certscore.ai/api/v2/openapi.json`}</CodeBlock>
 
         <Section id="complete-curl-workflow" eyebrow="Complete curl workflow" title="Create, poll, and retrieve review data">
           <CodeBlock>{`export CERTSCORE_API_KEY="cs_live_..."
-TARGET_URL="https://example.com"
+TARGET_URL="https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
 
 SCAN_RESPONSE=$(curl -sS -D /tmp/certscore-create-headers.txt \\
   -X POST https://certscore.ai/api/v2/scans \\
@@ -129,7 +129,7 @@ jq '.summary' certscore-pre-consent-cookies-trackers.json`}</CodeBlock>
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
   -d '{
-    "url": "https://example.com",
+    "url": "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html",
     "freshness": "latest",
     "scanFrom": "eu_ie"
   }'`}</CodeBlock>
@@ -157,7 +157,7 @@ jq '.summary' certscore-pre-consent-cookies-trackers.json`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Latest domain" title="Find the latest eligible scan">
-          <CodeBlock>{`curl https://certscore.ai/api/v2/domains/example.com/latest \\
+          <CodeBlock>{`curl https://certscore.ai/api/v2/domains/ergoveritas.com/latest \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY"`}</CodeBlock>
         </Section>
 

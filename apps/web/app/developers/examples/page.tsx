@@ -41,11 +41,11 @@ export default function DeveloperExamplesPage() {
           </p>
           <CodeBlock>{`curl -X POST https://certscore.ai/api/v2/scans \\
   -H "Content-Type: application/json" \\
-  -d '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}'`}</CodeBlock>
+  -d '{"url":"https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html","freshness":"latest","scanFrom":"eu_ie"}'`}</CodeBlock>
           <CodeBlock>{`SCAN=$(curl -s -X POST https://certscore.ai/api/v2/scans \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
-  -d '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}')
+  -d '{"url":"https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html","freshness":"latest","scanFrom":"eu_ie"}')
 
 SCAN_ID=$(echo "$SCAN" | jq -r '.id // .scanId')
 
@@ -61,7 +61,7 @@ curl https://certscore.ai/api/v2/scans/$SCAN_ID/findings \\
             <CodeBlock>{`SCAN=$(curl -s -X POST https://certscore.ai/api/v2/scans \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
-  -d '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}')
+  -d '{"url":"https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html","freshness":"latest","scanFrom":"eu_ie"}')
 
 SCAN_ID=$(echo "$SCAN" | jq -r '.scanId // .id')
 
@@ -77,7 +77,7 @@ curl -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
       count: length
     })'`}</CodeBlock>
             <CodeBlock>{`curl -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
-  "https://certscore.ai/api/v2/domains/example.com/latest/pre-consent-cookies-trackers"`}</CodeBlock>
+  "https://certscore.ai/api/v2/domains/ergoveritas.com/latest/pre-consent-cookies-trackers"`}</CodeBlock>
             <p className="max-w-3xl text-sm leading-7 text-slate-600">
               CertScore.ai outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.
             </p>
@@ -85,7 +85,7 @@ curl -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
         </Section>
 
         <Section eyebrow="SDK" title="Build a review handoff">
-          <CodeBlock>{`const latest = await certscore.domains.latest("example.com");
+          <CodeBlock>{`const latest = await certscore.domains.latest("ergoveritas.com");
 
 if (latest.scan) {
   const findings = await certscore.findings.list(latest.scan.scanId);
@@ -98,7 +98,7 @@ if (latest.scan) {
         </Section>
 
         <Section eyebrow="SDK" title="Read the pre-consent cookie and tracker table">
-          <CodeBlock>{`const created = await certscore.scans.create("https://example.com", {
+          <CodeBlock>{`const created = await certscore.scans.create("https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html", {
   freshness: "latest",
   scanFrom: "eu_ie"
 });
@@ -115,7 +115,7 @@ for (const row of table.rows) {
   grouped.set(key, [...(grouped.get(key) ?? []), row]);
 }
 
-const latestTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
+const latestTable = await certscore.domains.latestPreConsentCookiesTrackers("ergoveritas.com");
 console.log(grouped, latestTable.summary.rowCount);`}</CodeBlock>
         </Section>
 
@@ -123,7 +123,7 @@ console.log(grouped, latestTable.summary.rowCount);`}</CodeBlock>
           <CodeBlock>{`get_pre_consent_cookies_trackers({ scanId: "00000000-0000-4000-8000-000000000123" })
 
 get_latest_domain_pre_consent_cookies_trackers({
-  domain: "example.com",
+  domain: "ergoveritas.com",
   scanFrom: "eu_ie"
 })`}</CodeBlock>
         </Section>

@@ -22,7 +22,7 @@ Completed no-go scans resolve normally with `status: "completed_limited"`, `resu
 import { CertScoreClient } from "@certscore/sdk";
 
 const client = new CertScoreClient();
-const pulse = await client.scan("https://example.com");
+const pulse = await client.scan("https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html");
 console.log(pulse.summary?.score, pulse.links?.fullReportUrl);
 ```
 
@@ -37,7 +37,7 @@ const certscore = new CertScoreClient({
   apiKey: process.env.CERTSCORE_API_KEY
 });
 
-const created = await certscore.scans.create("https://example.com", {
+const created = await certscore.scans.create("https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html", {
   freshness: "latest",
   scanFrom: "eu_ie"
 });
@@ -57,8 +57,8 @@ const explanation = firstFinding
   : null;
 const pulseProjection = await certscore.pulse.get(scanId);
 const pulseEvidence = await certscore.pulse.evidence(scanId);
-const latestDomainScan = await certscore.domains.latest("example.com");
-const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
+const latestDomainScan = await certscore.domains.latest("ergoveritas.com");
+const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("ergoveritas.com");
 
 console.log(status.status, diagnostics.totalWallMs, diagnostics.policyDiscovery.phaseWallMs, preConsentTable.summary.rowCount, explanation?.title, pulseProjection.disclaimer, pulseEvidence.type, latestDomainScan.scan?.scanId, latestPreConsentTable.rows.length);
 ```
@@ -101,7 +101,7 @@ for (const row of table.rows) {
   grouped.set(key, [...(grouped.get(key) ?? []), row]);
 }
 
-const latestTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
+const latestTable = await certscore.domains.latestPreConsentCookiesTrackers("ergoveritas.com");
 console.log(grouped.size, latestTable.summary.rowCount);
 ```
 
@@ -118,7 +118,7 @@ import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
 const client = new CertScoreClient();
 
 try {
-  const pulse = await client.scan("https://example.com", {
+  const pulse = await client.scan("https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html", {
     detail: "standard",
     maxWaitMs: 300_000,
     // Omit for adaptive 1s → 2s → 5s polling; set explicitly for a fixed interval.
@@ -144,11 +144,11 @@ try {
 `scanId` is the durable audit/cache handle. `scan_id` may appear in API responses as a compatibility alias, but new integrations should store `scanId`.
 
 ```ts
-const pulse = await client.scan("https://example.com");
+const pulse = await client.scan("https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html");
 const scanId = pulse.scanId;
 
 await appDb.pulseScans.upsert({
-  domain: "example.com",
+  domain: "ergoveritas.com",
   scanId,
   reportUrl: pulse.links?.fullReportUrl
 });
@@ -178,7 +178,7 @@ import {
 const client = new CertScoreClient();
 
 try {
-  await client.scan("https://example.com", { freshness: "refresh" });
+  await client.scan("https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html", { freshness: "refresh" });
 } catch (error) {
   if (error instanceof InvalidUrlError) {
     console.error("Invalid URL:", error.message);
@@ -201,7 +201,7 @@ try {
 Markdown is useful for agent or human-facing summaries.
 
 ```ts
-const markdown = await client.scan("https://example.com", {
+const markdown = await client.scan("https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html", {
   format: "markdown",
   detail: "standard"
 });
@@ -212,7 +212,7 @@ console.log(markdown);
 ## Submit Without Polling
 
 ```ts
-const job = await client.submitScan("https://example.com", {
+const job = await client.submitScan("https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html", {
   detail: "tiny"
 });
 
@@ -240,7 +240,7 @@ jobs:
           node-version: 22
       - run: node scripts/certscore-pulse-check.mjs
         env:
-          TARGET_URL: https://example.com
+          TARGET_URL: https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html
 ```
 
 Example `scripts/certscore-pulse-check.mjs`:

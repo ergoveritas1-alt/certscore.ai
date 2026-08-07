@@ -145,10 +145,10 @@ async function checkPulse(path: string, allowedStatuses: number[]) {
 
 async function checkDocsLinks() {
   const checks = [
-    ["/api/v1/pulse?url=https://example.com", [200, 202, 429, 503]],
-    ["/api/v1/pulse?url=https://example.com&detail=tiny", [200, 202, 429, 503]],
-    ["/api/v1/pulse?url=https://example.com&detail=full", [200, 202, 429, 503]],
-    ["/api/v1/pulse?url=https://example.com&format=markdown", [200, 202, 429, 503]],
+    ["/api/v1/pulse?url=https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html", [200, 202, 429, 503]],
+    ["/api/v1/pulse?url=https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html&detail=tiny", [200, 202, 429, 503]],
+    ["/api/v1/pulse?url=https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html&detail=full", [200, 202, 429, 503]],
+    ["/api/v1/pulse?url=https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html&format=markdown", [200, 202, 429, 503]],
     ["/api/v1/openapi.json", [200]],
     ["/.well-known/certscore-pulse", [200]],
     ["/llms.txt", [200]]
@@ -175,9 +175,9 @@ async function main() {
   results.push(await checkDocsPage());
   results.push(await checkOpenApi());
   results.push(await checkDiscovery());
-  results.push(await checkPulse("/api/v1/pulse?url=https://example.com&detail=tiny", [200, 202, 429, 503]));
-  results.push(await checkPulse("/api/v1/pulse?url=https://example.com&detail=full", [200, 202, 429, 503]));
-  results.push(await checkPulse("/api/v1/pulse?url=https://example.com&format=markdown", [200, 202, 429, 503]));
+  results.push(await checkPulse("/api/v1/pulse?url=https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html&detail=tiny", [200, 202, 429, 503]));
+  results.push(await checkPulse("/api/v1/pulse?url=https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html&detail=full", [200, 202, 429, 503]));
+  results.push(await checkPulse("/api/v1/pulse?url=https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html&format=markdown", [200, 202, 429, 503]));
   results.push(await checkPulse("/api/v1/pulse?url=::::", [400]));
   results.push(await checkPulse("/api/v1/pulse/status/pulse_job_nonexistent_test", [404, 503]));
   await checkDocsLinks();

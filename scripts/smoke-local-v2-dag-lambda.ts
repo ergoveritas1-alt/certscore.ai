@@ -102,7 +102,7 @@ function findFailedResultEvent(events: Awaited<ReturnType<typeof loadScanEvents>
 
 async function main() {
   const baseUrl = getArgValue("--base-url") ?? "http://localhost:3000";
-  const domain = getArgValue("--domain") ?? "example.com";
+  const domain = getArgValue("--domain") ?? "ergoveritas.com";
   const profile = getArgValue("--profile") ?? "tiny";
   const scanFrom = getArgValue("--scan-from") ?? "eu_de";
   const maxAttempts = parsePositiveIntegerArg("--attempts", 18);

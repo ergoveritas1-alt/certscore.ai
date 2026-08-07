@@ -12,8 +12,8 @@ const retryAfterHeader = {
 const scanExample = {
   type: "certscore_scan",
   scanId: "00000000-0000-4000-8000-000000000123",
-  domain: "example.com",
-  url: "https://example.com",
+  domain: "ergoveritas.com",
+  url: "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html",
   status: "completed",
   score: 82,
   scoreStatus: "final",
@@ -46,8 +46,8 @@ const scanJobExample = {
   type: "certscore_scan_job",
   jobId: "pulse_job_123",
   scanId: "00000000-0000-4000-8000-000000000123",
-  domain: "example.com",
-  url: "https://example.com",
+  domain: "ergoveritas.com",
+  url: "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html",
   status: "running",
   phase: "runtime_observation",
   startedAt: "2026-06-30T12:00:01.000Z",
@@ -101,7 +101,7 @@ const findingExample = {
       excerpt: "Public-safe projected evidence summary from the completed report.",
       isTruncated: false,
       truncationMarker: null,
-      sourceUrl: "https://example.com/privacy",
+      sourceUrl: "https://ergoveritas.com/.well-known/certscore-canary/sentinels/privacy-evidence.html",
       evidenceUrl: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings/pre_consent_tracking_detected"
     },
     examples: [{ type: "request", vendor: "Example Analytics", urlHost: "analytics.example.test", phase: "before_consent" }],
@@ -125,10 +125,10 @@ const findingListExample = {
 
 const domainLatestExample = {
   type: "certscore_domain_latest_scan",
-  domain: "example.com",
+  domain: "ergoveritas.com",
   scan: scanExample,
   links: {
-    self: "https://certscore.ai/api/v2/domains/example.com/latest",
+    self: "https://certscore.ai/api/v2/domains/ergoveritas.com/latest",
     docs: "https://certscore.ai/developers/reference"
   },
   disclaimer: apiV2Disclaimer
@@ -150,7 +150,7 @@ const scanPulseExample = {
 const preConsentCookiesTrackersExample = {
   type: "certscore_pre_consent_cookies_trackers",
   scanId: "00000000-0000-4000-8000-000000000123",
-  domain: "example.com",
+  domain: "ergoveritas.com",
   generatedAt: "2026-06-30T12:00:10.000Z",
   summary: {
     rowCount: 2,
@@ -176,7 +176,7 @@ const preConsentCookiesTrackersExample = {
       observedBeforeConsent: true,
       evidenceBasis: "public_report_projection",
       firstObservedAtMs: 1234,
-      pageUrlHost: "example.com"
+      pageUrlHost: "ergoveritas.com"
     },
     {
       id: "cookie:google:advertising:doubleclick-net",
@@ -195,7 +195,7 @@ const preConsentCookiesTrackersExample = {
       observedBeforeConsent: true,
       evidenceBasis: "public_report_projection",
       firstObservedAtMs: 512,
-      pageUrlHost: "example.com"
+      pageUrlHost: "ergoveritas.com"
     }
   ],
   links: {
@@ -375,7 +375,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
                 examples: {
                   create: {
                     summary: "Create or reuse a public-web scan",
-                    value: { url: "https://example.com", freshness: "latest", scanFrom: "eu_ie" }
+                    value: { url: "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html", freshness: "latest", scanFrom: "eu_ie" }
                   }
                 }
               }

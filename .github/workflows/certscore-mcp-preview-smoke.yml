@@ -15,7 +15,7 @@ on:
       smoke_url:
         description: "Public URL to use for the MCP smoke scan."
         required: false
-        default: "https://example.com"
+        default: "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
         type: string
 
 concurrency:
