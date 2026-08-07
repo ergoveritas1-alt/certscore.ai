@@ -170,7 +170,7 @@ export async function POST(request: Request) {
           status: 200
         });
       }
-      const scan = buildApiV2ScanResource(scanRecord);
+      const scan = buildApiV2ScanResource(scanRecord, { requestedUrl: parsed.data.url });
       const resolutionMode = pulseResolutionMode(pulseBody);
       return apiV2JsonResponse({
         body: {

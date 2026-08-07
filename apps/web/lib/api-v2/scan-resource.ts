@@ -536,7 +536,10 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
   };
 }
 
-export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2ScanResource {
+export function buildApiV2ScanResource(
+  scanRecord: ScanDetailResponse,
+  options: { requestedUrl?: string | null } = {}
+): ApiV2ScanResource {
   const scan = scanRecord.scan;
   const domain = scan.domainHostname ?? "unknown";
   const score = derivePulseReportScore({ scanRecord });
@@ -553,7 +556,10 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
     type: "certscore_scan",
     scanId: scan.id,
     domain,
-    url: configuredUrl ?? (domain === "unknown" ? null : `https://${domain}`),
+    // Preserve the caller's exact page URL when the resource is returned from
+    // the create endpoint. A domain-only fallback makes path-specific scans
+    // look interchangeable to clients and masks identity regressions.
+    url: options.requestedUrl ?? configuredUrl ?? (domain === "unknown" ? null : `https://${domain}`),
     status: noGoProjection
       ? "completed_limited"
       : canonicalResultState === "failed"
