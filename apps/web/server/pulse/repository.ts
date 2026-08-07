@@ -54,7 +54,7 @@ export function pulseJobIdForPublicId(publicId: string) {
 
 export async function findLatestCompletedAnonymousScanForDomain(
   normalizedDomain: string,
-  input?: { maxAgeHours?: number; minPagesRequested?: number; scanFrom?: ScanFrom }
+  input?: { maxAgeHours?: number; minPagesRequested?: number; normalizedUrl?: string; scanFrom?: ScanFrom }
 ) {
   await ensurePulseTables();
   const scanFrom = normalizeScanFrom(input?.scanFrom);
@@ -73,6 +73,12 @@ export async function findLatestCompletedAnonymousScanForDomain(
           return `and s.pages_requested >= $${parameters.length}`;
         })()
       : "";
+  const targetUrlClause = input?.normalizedUrl
+    ? (() => {
+        parameters.push(input.normalizedUrl);
+        return `and coalesce(s.scan_config_json->>'normalizedUrl', d.normalized_url) = $${parameters.length}`;
+      })()
+    : "";
   return queryOne<{ id: string }>(
     `select s.id
        from scans s
@@ -82,6 +88,7 @@ export async function findLatestCompletedAnonymousScanForDomain(
         and s.status = 'completed'
         and coalesce(s.scan_config_json->>'scanFrom', '${DEFAULT_SCAN_FROM}') = $3
         ${minPagesClause}
+        ${targetUrlClause}
         and (lower(d.hostname) = lower($1) or lower(d.normalized_url) = lower($2))
         ${maxAgeClause}
       order by s.completed_at desc nulls last, s.created_at desc
@@ -489,14 +496,29 @@ export async function getPulseRequestByJobId(jobId: string) {
   );
 }
 
-export async function claimPulseDomainScanCreation(input: { normalizedDomain: string; pulseRequestId: string }) {
+export function pulseScanThrottleIdentity(input: { normalizedDomain: string; normalizedUrl: string; scanFrom?: ScanFrom }) {
+  const location = normalizeScanFrom(input.scanFrom);
+  try {
+    const url = new URL(input.normalizedUrl);
+    const path = url.pathname.replace(/\/{2,}/g, "/");
+    const normalizedPath = path.length > 1 ? path.replace(/\/$/, "") : "/";
+    return normalizedPath === "/"
+      ? `${input.normalizedDomain}|${location}`
+      : `${input.normalizedDomain}${normalizedPath}|${location}`;
+  } catch {
+    return `${input.normalizedDomain}|${location}`;
+  }
+}
+
+export async function claimPulseDomainScanCreation(input: { normalizedDomain: string; normalizedUrl: string; pulseRequestId: string; scanFrom?: ScanFrom }) {
   await ensurePulseTables();
+  const throttleIdentity = pulseScanThrottleIdentity(input);
   const existing = await queryOne<{ expires_at: string }>(
     `select expires_at
        from pulse_domain_throttles
       where normalized_domain = $1
         and expires_at > now()`,
-    [input.normalizedDomain],
+    [throttleIdentity],
     { readOnly: true }
   );
 
@@ -513,7 +535,7 @@ export async function claimPulseDomainScanCreation(input: { normalizedDomain: st
        last_scan_created_at = now(),
        expires_at = now() + interval '1 minute',
        last_pulse_request_id = excluded.last_pulse_request_id`,
-    [input.normalizedDomain, input.pulseRequestId]
+    [throttleIdentity, input.pulseRequestId]
   );
 
   return { allowed: true as const, retryAfterSeconds: 0 };

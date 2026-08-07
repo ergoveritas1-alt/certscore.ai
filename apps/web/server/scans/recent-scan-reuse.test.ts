@@ -118,6 +118,22 @@ test("different domains never reuse", () => {
   assert.equal(eligibility({}, [candidate({ hostname: "other.example", normalizedUrl: "https://other.example/" })]).eligible, false);
 });
 
+test("different paths on the same domain never reuse each other's scans", () => {
+  const result = eligibility(
+    { normalizedUrl: "https://example.com/test/consent.html" },
+    [candidate({ normalizedUrl: "https://example.com/test/privacy.html" })]
+  );
+  assert.equal(result.eligible, false);
+});
+
+test("the same canonical path can reuse across scheme, www, and trailing-slash variants", () => {
+  const result = eligibility(
+    { normalizedDomain: "example.com", normalizedUrl: "http://www.example.com/test/consent/" },
+    [candidate({ hostname: "www.example.com", normalizedUrl: "https://example.com/test/consent" })]
+  );
+  assert.equal(result.eligible, true);
+});
+
 test("effective scan locations must match after canonical alias normalization", () => {
   assert.equal(eligibility({ scanFrom: "eu_ie" }, [candidate({ scanFrom: "eu_de" })]).eligible, false);
   assert.equal(eligibility({ scanFrom: "eu_de" }, [candidate({ scanFrom: "eu" })]).eligible, true);

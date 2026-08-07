@@ -196,6 +196,16 @@ function normalizeUrlForReuse(value: string) {
   }
 }
 
+function normalizedPathForReuse(value: string) {
+  try {
+    const url = new URL(/^https?:\/\//i.test(value.trim()) ? value.trim() : `https://${value.trim()}`);
+    const path = url.pathname.replace(/\/{2,}/g, "/");
+    return path.length > 1 ? path.replace(/\/$/, "") : "/";
+  } catch {
+    return "/";
+  }
+}
+
 export function isScanWithinReuseWindow(input: { completedAt: string | null; now?: Date; windowHours?: number }) {
   if (!input.completedAt) {
     return false;
@@ -242,8 +252,8 @@ export function evaluateRecentScanReuseCandidates(
         ? row.organizationId === null
         : row.organizationId === null || row.organizationId === input.organizationId;
       const targetMatches =
-        normalizeDomainForReuse(row.hostname) === requestedDomain ||
-        normalizeUrlForReuse(row.normalizedUrl) === requestedUrl;
+        normalizeDomainForReuse(row.hostname) === requestedDomain &&
+        normalizedPathForReuse(row.normalizedUrl) === normalizedPathForReuse(requestedUrl);
 
       return (
         scopeAllowed &&
@@ -302,7 +312,7 @@ async function loadRecentScanReuseCandidates(input: RecentScanReuseInput) {
               ss.scan_no_go_assessment->>'decision'
             ) as "noGoDecision",
             d.hostname,
-            d.normalized_url as "normalizedUrl",
+            coalesce(s.scan_config_json->>'normalizedUrl', d.normalized_url) as "normalizedUrl",
             s.scan_config_json->>'processor' as "v2ReportProcessor",
             (s.scan_config_json #>> '{execution,v2DagParallel,artifactOnly}') = 'true' as "v2ParallelArtifactOnly",
             (s.scan_config_json #>> '{execution,v2DagParallel,localOnly}') = 'true' as "v2ParallelLocalOnly",
@@ -338,13 +348,10 @@ async function loadRecentScanReuseCandidates(input: RecentScanReuseInput) {
               else coalesce(s.scan_config_json->>'scanFrom', '${DEFAULT_SCAN_FROM}')
             end = $4
         and s.pages_requested >= $5
-        and (
-          lower(regexp_replace(d.hostname, '^www\\.', '')) = lower(regexp_replace($6, '^www\\.', ''))
-          or lower(regexp_replace(d.normalized_url, '^https?://www\\.', 'https://')) = lower(regexp_replace($7, '^https?://www\\.', 'https://'))
-        )
+        and lower(regexp_replace(d.hostname, '^www\\.', '')) = lower(regexp_replace($6, '^www\\.', ''))
       order by s.completed_at desc, s.created_at desc
-      limit 50`,
-    [input.organizationId, now.toISOString(), windowHours, effectiveScanFrom, minPagesRequested, input.normalizedDomain, input.normalizedUrl],
+      limit 200`,
+    [input.organizationId, now.toISOString(), windowHours, effectiveScanFrom, minPagesRequested, input.normalizedDomain],
     { readOnly: true }
   );
 
