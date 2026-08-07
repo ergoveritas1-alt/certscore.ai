@@ -7,6 +7,7 @@
   <meta name="robots" content="noindex, nofollow, noarchive">
   <title>Sentinel canary — broad baseline v2</title>
   <link rel="stylesheet" href="../styles.css">
+  <style>[hidden] { display: none !important; }</style>
   <!-- Intentionally loaded before consent for scanner validation. -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-CANARYTEST"></script>
   <script>
@@ -34,6 +35,7 @@
         <button class="primary" id="canary-accept" type="button" data-consent-intent="accept">Accept all</button>
         <button id="canary-manage" type="button" data-consent-intent="options">Manage preferences</button>
       </div>
+      <p id="canary-consent-status" role="status" aria-live="polite"></p>
       <!-- Deliberately no Reject all or Necessary only control. -->
     </section>
 

@@ -35,14 +35,17 @@
   var accept = document.getElementById("canary-accept");
   var manage = document.getElementById("canary-manage");
   var save = document.getElementById("canary-save");
+  var status = document.getElementById("canary-consent-status");
   function setConsent(value) {
     document.cookie = "certscore_canary_consent=" + value + "; Path=/.well-known/certscore-canary/; SameSite=Lax; Secure";
     if (banner) banner.hidden = true;
     if (preferences) preferences.hidden = true;
+    if (status) status.textContent = value === "accepted" ? "All optional features accepted." : "Preferences saved.";
   }
   if (accept) accept.addEventListener("click", function () { setConsent("accepted"); });
   if (manage) manage.addEventListener("click", function () {
     if (preferences) preferences.hidden = false;
+    if (status) status.textContent = "Preference controls opened.";
   });
   if (save) save.addEventListener("click", function () {
     var analytics = document.getElementById("canary-analytics");
