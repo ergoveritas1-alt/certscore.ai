@@ -167,7 +167,7 @@ def handler(event, context):
             returned_url = (created or {}).get("url") or (created or {}).get("request", {}).get("url")
             reused = bool((created or {}).get("reused") or (created or {}).get("executionMode") == "reused_scan" or (created or {}).get("freshnessDecision") == "reused_existing_scan")
             freshness_issue = reused or (returned_url and requested_path not in str(returned_url))
-            row = {"page": p["key"], "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "missing": missing, "comparison": "findings_and_evidence", "freshness": "reused_or_path_mismatch" if freshness_issue else "new_path"}
+            row = {"page": p["key"], "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", "freshness": "reused_or_path_mismatch" if freshness_issue else "new_path"}
             if missing: corpus_issues.append({**row, "issue": "required signals missing: " + ", ".join(missing)})
             if freshness_issue: scanner_failures.append({**row, "issue": "freshness/path invariant failed: CertScore reused a scan or did not retain the requested page path"})
             if status(st) not in {"completed", "completed_limited", "complete", "limited"}:
@@ -176,8 +176,19 @@ def handler(event, context):
             row = {"page": p["key"], "location": loc, "transport": transport, "durationMs": int((time.time()-t)*1000), "error": str(e)}
             scanner_failures.append({**row, "issue": str(e)})
         results.append(row)
+    # Regional/transport variance is diagnostic only. It identifies signals that
+    # appear on at least one fresh scan but disappear on another, without treating
+    # an intentional canary miss as a scanner alert.
+    variance = []
+    for page in pages:
+        page_rows = [r for r in results if r.get("page") == page.get("key") and "error" not in r]
+        for signal in page.get("expectedSignals", []):
+            present = [f"{r.get('location')}/{r.get('transport')}" for r in page_rows if signal in r.get("observedSignals", [])]
+            absent = [f"{r.get('location')}/{r.get('transport')}" for r in page_rows if signal in r.get("missing", [])]
+            if present and absent:
+                variance.append({"page": page.get("key"), "signal": signal, "present": present, "missing": absent})
     failures = corpus_issues + scanner_failures
-    run = {"runId": run_id, "startedAt": started, "hour": hour, "jobs": len(results), "failures": len(failures), "scannerFailures": len(scanner_failures), "corpusIssues": len(corpus_issues), "results": results}
+    run = {"runId": run_id, "startedAt": started, "hour": hour, "jobs": len(results), "failures": len(failures), "scannerFailures": len(scanner_failures), "corpusIssues": len(corpus_issues), "regionalVariance": variance, "results": results}
     ddb.put_item(Item={"pk": "run#" + run_id, **run, "expiresAt": int(time.time()) + 90 * 86400})
     if scanner_failures:
         summary = f"{len(scanner_failures)} scanner execution issue(s) detected across {len(results)} sentinel scans. {len(corpus_issues)} expected canary-signal mismatch(es) were recorded for diagnostics but are not alert conditions."
