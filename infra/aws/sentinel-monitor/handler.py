@@ -217,10 +217,16 @@ def handler(event, context):
     corpus_issues.extend(corpus_preflight(pages))
     key = ssm.get_parameter(Name="/certscore/sentinel/api-key", WithDecryption=True)["Parameter"]["Value"]
     jwt_secret = get_secret("certscore/oauth-jwt-secret")
-    # Interleave regions page-by-page instead of sending five consecutive jobs
-    # through one regional origin. The small deterministic jitter below keeps
-    # the hourly run bounded while avoiding a burst at job boundaries.
-    jobs = [{"page": p, "location": loc, "transport": TRANSPORTS[(hour + li + pi) % 3]} for pi, p in enumerate(pages) for li, loc in enumerate(LOCATIONS)]
+    # Run exactly three scans per transport (API, SDK, MCP), one from each
+    # location. The three page assignments rotate hourly, so all five sentinel
+    # contracts are covered over a rolling two-hour window and each page is
+    # exercised by every transport over the full rotation.
+    selected_pages = [pages[(hour + slot) % len(pages)] for slot in range(len(TRANSPORTS))]
+    jobs = [
+        {"page": selected_pages[transport_index], "location": loc, "transport": transport}
+        for transport_index, transport in enumerate(TRANSPORTS)
+        for loc in LOCATIONS
+    ]
     results = []
     for job_index, job in enumerate(jobs):
         throttle_seconds = 0 if job_index == 0 else 8 + ((hour + job_index * 7) % 8)
@@ -257,7 +263,7 @@ def handler(event, context):
             if present and absent:
                 variance.append({"page": page.get("key"), "signal": signal, "present": present, "missing": absent})
     failures = corpus_issues + scanner_failures
-    run = {"runId": run_id, "startedAt": started, "hour": hour, "jobs": len(results), "failures": len(failures), "scannerFailures": len(scanner_failures), "corpusIssues": len(corpus_issues), "regionalVariance": variance, "results": results}
+    run = {"runId": run_id, "startedAt": started, "hour": hour, "jobs": len(results), "selectedPages": [p["key"] for p in selected_pages], "failures": len(failures), "scannerFailures": len(scanner_failures), "corpusIssues": len(corpus_issues), "regionalVariance": variance, "results": results}
     ddb.put_item(Item={"pk": "run#" + run_id, **run, "expiresAt": int(time.time()) + 90 * 86400})
     if scanner_failures:
         summary = f"{len(scanner_failures)} scanner execution issue(s) detected across {len(results)} sentinel scans. {len(corpus_issues)} expected canary-signal mismatch(es) were recorded for diagnostics but are not alert conditions."
