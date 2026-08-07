@@ -177,6 +177,13 @@ test("Pulse executive action label follows the same posture as the rendered repo
   assert.equal(getPulseExecutiveActionLabel("Clear"), "Complete");
 });
 
+test("Pulse exposes the canonical policy/runtime contradiction finding", () => {
+  assert.equal(isPublicPulseApiFinding({
+    id: "policy_behavior_conflict",
+    section: "Financial & Claims"
+  }), true);
+});
+
 function pulseScanRecord(overrides: Record<string, unknown> = {}) {
   return {
     accessPostureSummary: {

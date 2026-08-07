@@ -738,14 +738,18 @@ function getReviewLenses(scanRecord: ScanDetailResponse, findings: CertScoreFind
 
 function getFindingReviewLenses(finding: CertScoreFinding) {
   const lenses = new Set<string>();
-  if (/consent|cookie|privacy|tracking|vendor|fingerprinting/i.test(`${finding.section} ${finding.id}`)) {
+  if (
+    finding.id === "policy_behavior_conflict" ||
+    /consent|cookie|privacy|tracking|vendor|fingerprinting/i.test(`${finding.section} ${finding.id}`)
+  ) {
     lenses.add("GDPR / ePrivacy");
   }
   return [...lenses];
 }
 
 const PUBLIC_PULSE_DIAGNOSTIC_FINDING_IDS = new Set([
-  "scan_quality_visual_no_go"
+  "scan_quality_visual_no_go",
+  "policy_behavior_conflict"
 ]);
 
 export function isPublicPulseApiFinding(finding: Pick<CertScoreFinding, "id" | "section">) {
