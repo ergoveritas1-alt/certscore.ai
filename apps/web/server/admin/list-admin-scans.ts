@@ -420,7 +420,7 @@ export async function listAdminScansPage(
       requestedAt: linkedRequest?.requested_at ?? pulseAttribution?.requested_at ?? scan.created_at,
       requestChannel: linkedRequest?.request_channel ?? pulseAttribution?.request_channel ?? null,
       requestResolutionMode: linkedRequest?.resolution_mode ?? pulseAttribution?.resolution_mode ?? null,
-      requestedUrl: linkedRequest?.requested_url ?? pulseAttribution?.normalized_url ?? null,
+      requestedUrl: linkedRequest?.requested_url ?? pulseAttribution?.normalized_url ?? getScanPageUrl(scan.scan_config_json),
       reusedCompletedAt: linkedRequest?.reused_completed_at ?? null,
       reuseWindowHours: linkedRequest?.reuse_window_hours ?? null,
       domainId: scan.domain_id,
@@ -652,6 +652,16 @@ function getFreshRescanRequested(requestContext: unknown) {
 
 function getNestedMetadataObject(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function getScanPageUrl(scanConfig: Record<string, unknown> | null | undefined) {
+  for (const key of ["targetUrl", "startUrl", "homepageUrl", "normalizedUrl", "url"]) {
+    const value = scanConfig?.[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
 }
 
 function incrementCount(map: Map<string, number>, key: string) {

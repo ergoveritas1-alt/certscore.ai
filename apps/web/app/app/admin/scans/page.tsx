@@ -328,7 +328,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
               <tr>
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" },
-                  { label: "Requester IP" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
+                  { label: "Requester IP" }, { label: "Requested" }, { label: "Page" }, { label: "Tranco" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" },
                   { label: "A/R/O" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" }, { label: "Size" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Access" }, { label: "Industry" },
                   { label: "Scan ID" }, { label: "Scanner egress" },
@@ -358,7 +358,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                     <td className="px-2.5 py-1.5 text-[10px] leading-4 text-slate-600" title={formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}><p className="truncate">{requestedDateTime.date}</p><p className="truncate text-slate-500">{requestedDateTime.time}</p></td>
                     <td className="px-2.5 py-1.5">
                       <div className="flex min-w-0 items-center gap-1.5">
-                        <p className="min-w-0 flex-1 truncate font-semibold text-slate-900" title={scan.domainHostname ?? scan.requestedUrl ?? "Unknown target"}>{scan.domainHostname ?? scan.requestedUrl ?? "Unknown target"}</p>
+                        <p className="min-w-0 flex-1 truncate font-semibold text-slate-900" title={scan.requestedUrl ?? "Page URL unavailable"}>{scan.requestedUrl ?? "Page URL unavailable"}</p>
                         <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">{scan.scanType}</span>
                       </div>
                     </td>
