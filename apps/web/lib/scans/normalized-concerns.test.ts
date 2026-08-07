@@ -1920,6 +1920,100 @@ function makeApprovedGdprTransparencyArticle13Signal(
   };
 }
 
+test("verified row-specific policy absence creates GDPR Transparency gap concerns", () => {
+  const assessment = (topic: string) => ({
+    assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+    coverageStatus: "sufficient",
+    policyDocumentIds: ["policy-1"],
+    policyDocumentSha256: ["a".repeat(64)],
+    reasonCodes: ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"],
+    sourceUrls: ["https://ergoveritas.com/privacy.html"],
+    status: "not_observed_with_sufficient_coverage",
+    topic
+  });
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13CoverageAssessments: [
+          assessment("data_retention"),
+          assessment("international_transfers")
+        ]
+      }
+    },
+    validationFindings: []
+  });
+  const gaps = concerns.filter((concern) =>
+    concern.originKey === "gdpr_transparency.article13.data_retention" ||
+    concern.originKey === "gdpr_transparency.article13.international_transfers"
+  );
+
+  assert.equal(gaps.length, 2);
+  assert.equal(gaps.every((concern) => concern.observedValue === "missing"), true);
+  assert.equal(gaps.every((concern) => concern.regulatoryChecklistEligibility === "gap_observed"), true);
+  assert.equal(gaps.every((concern) =>
+    concern.evidenceBundle.rawEvidence?.classifierProvenance === "gdpr_transparency_absence_coverage.v1"
+  ), true);
+});
+
+test("typed policy claim/runtime/bridge evidence creates a canonical contradiction concern", () => {
+  const packets = makeMissingBridgePolicyRuntimeEvidence();
+  const policyAnchorId = packets.policyClaimCandidates[0]!.id;
+  const runtimeAnchorId = packets.runtimeBehaviorArtifacts[0]!.id;
+  const policyAnchor = {
+    ...packets.policyClaimCandidates[0],
+    claimType: "cookie_preferences_available"
+  };
+  const runtimeAnchor = {
+    ...packets.runtimeBehaviorArtifacts[0],
+    observationType: "analytics_vendor_fired_pre_consent"
+  };
+  const conflictBridge = {
+    bridgeRuleId: "wc01.policy_runtime.optional_analytics_preconsent_request_v1",
+    confidence: 0.95,
+    conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+    generatedBy: "wc01.persisted_policy_runtime_projection",
+    id: "policy_runtime_bridge:test",
+    mappingType: "deterministic_policy_runtime_mapping",
+    mappingVersion: "policy_behavior_conflict_map:v1",
+    policyAnchorRef: policyAnchorId,
+    reasoning: "A retained consent-based analytics claim conflicts with the retained pre-consent analytics request.",
+    runtimeAnchorRef: runtimeAnchorId,
+    sourceEvidenceIds: [policyAnchorId, runtimeAnchorId],
+    supportsPromotionCandidate: true
+  };
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      ...packets,
+      policyRuntimeContradictionAssessment: {
+        assessmentContractVersion: "policy_runtime_contradiction_assessment.v1",
+        conflictBridge,
+        evidenceSufficiency: {
+          conflictBridgePresent: true,
+          policyAnchorPresent: true,
+          promotionEligible: true,
+          reviewStatus: "complete",
+          runtimeAnchorPresent: true
+        },
+        policyAnchor,
+        policyClaimCandidates: [policyAnchor],
+        policyRuntimeBridgeCandidates: [conflictBridge],
+        runtimeAnchor,
+        runtimeBehaviorArtifacts: [runtimeAnchor]
+      }
+    },
+    validationFindings: []
+  });
+  const concern = concerns.find((item) =>
+    item.suggestedUnifiedFindingId === "policy_behavior_conflict"
+  );
+
+  assert.ok(concern);
+  assert.equal(concern.promotionEligibility, "eligible");
+  assert.equal(concern.externalSurfacingEligibility, "eligible");
+});
+
 test("explicit legacy_only creates no multilingual GDPR Transparency normalized concerns", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],

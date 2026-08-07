@@ -452,6 +452,41 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit t
   }
 });
 
+test("verified complete-policy absence projects row-specific GDPR Transparency gaps", () => {
+  const assessment = (topic: string) => ({
+    assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+    coverageStatus: "sufficient",
+    policyDocumentIds: ["policy-1"],
+    policyDocumentSha256: ["a".repeat(64)],
+    reasonCodes: ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"],
+    sourceUrls: ["https://ergoveritas.com/privacy.html"],
+    status: "not_observed_with_sufficient_coverage",
+    topic
+  });
+  const runtimeArtifacts = {
+    policyDisclosureSummary: {
+      article13CoverageAssessments: [
+        assessment("data_retention"),
+        assessment("international_transfers")
+      ]
+    }
+  };
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts,
+      validationFindings: []
+    }),
+    runtimeArtifacts,
+    snapshot: {}
+  });
+
+  assert.equal(outcomes.retention_disclosure_observed?.status, "Gap observed");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Gap observed");
+  assert.ok(retainedArticle13Signal(outcomes.retention_disclosure_observed!));
+});
+
 test("invariant-verified Mini evidence wins a checklist tie against deterministic placeholder evidence", () => {
   const miniExcerpt =
     "When you provide your information to us, we will only use it for the purposes for which it is provided.";

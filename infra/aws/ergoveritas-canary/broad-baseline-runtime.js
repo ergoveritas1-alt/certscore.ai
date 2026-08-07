@@ -38,6 +38,11 @@
       navigator.userAgentData.getHighEntropyValues(["architecture", "bitness", "model", "platformVersion"]);
     }
   } catch (_) {}
+  var fingerprintTransmission = new Image();
+  fingerprintTransmission.src = "../runtime/fingerprint-collect.svg?canvas_hash=CANARY&webgl_renderer=" +
+    encodeURIComponent(window.__certscoreCanaryWebglFingerprint || "unknown") +
+    "&plugin_count=" + encodeURIComponent(window.__certscoreCanaryPluginCount || 0) +
+    "&mime_type_count=" + encodeURIComponent(window.__certscoreCanaryMimeTypeCount || 0);
   window.__certscoreCanaryFeatureFingerprint = {
     language: navigator.language,
     platform: navigator.platform,

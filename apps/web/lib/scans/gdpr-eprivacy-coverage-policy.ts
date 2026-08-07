@@ -6729,13 +6729,16 @@ function getGdprTransparencyArticle13ChecklistConcern(
         rawEvidence?.gdprTransparencyModelReviewEvidence === true &&
         productionCreditProfile === "gdpr_transparency_mini_review_v1" &&
         classifierProvenance === "mini_policy_semantic_review.v2";
+      const approvedDeterministicAbsenceEvidence =
+        productionCreditProfile === "gdpr_transparency_deterministic_absence_v1" &&
+        classifierProvenance === "gdpr_transparency_absence_coverage.v1";
       return concern.originKey === `gdpr_transparency.article13.${topic}` &&
         concern.originType === "runtime_artifact" &&
         concern.promotionEligibility === "internal_only" &&
         concern.externalSurfacingEligibility === "audit_only" &&
         rawEvidence?.gdprTransparencyArticle13Evidence === true &&
         rawEvidence.productionCredit === true &&
-        (approvedDeterministicEvidence || approvedModelReviewEvidence) &&
+        (approvedDeterministicEvidence || approvedModelReviewEvidence || approvedDeterministicAbsenceEvidence) &&
         topic !== null &&
         GDPR_TRANSPARENCY_ARTICLE13_TOPIC_TO_ROW_ID[topic] === rowId;
     })
@@ -6886,7 +6889,11 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       productionCreditProfile: rawEvidence.productionCreditProfile,
       selectedEvidenceStrength: rawEvidence.selectedEvidenceStrength,
       source: "normalized_concern",
-      status: concern.regulatoryChecklistEligibility === "observed" ? "observed" : "partial"
+      status: concern.regulatoryChecklistEligibility === "observed"
+        ? "observed"
+        : concern.regulatoryChecklistEligibility === "gap_observed"
+          ? "not_observed_with_sufficient_coverage"
+          : "partial"
     },
     gdprTransparencyArticle13Concern: {
       canonicalConcernKey: concern.canonicalConcernKey,
@@ -6896,7 +6903,11 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       topic
     },
     legalFrameworkValidityMatches,
-    signalObserved: concern.regulatoryChecklistEligibility === "observed" ? true : "partial"
+    signalObserved: concern.regulatoryChecklistEligibility === "observed"
+      ? true
+      : concern.regulatoryChecklistEligibility === "gap_observed"
+        ? "not_observed_with_sufficient_coverage"
+        : "partial"
   };
 
   if (
@@ -6927,6 +6938,18 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       config.rowId,
       "Observed",
       `${config.label} evidence was retained through adapter-approved multilingual GDPR Transparency Article 13 evidence.`,
+      evidenceRefs,
+      {
+        retainedEvidence
+      }
+    );
+  }
+
+  if (concern.regulatoryChecklistEligibility === "gap_observed") {
+    return makeOutcome(
+      config.rowId,
+      "Gap observed",
+      `${config.label} was not observed in a verified, complete, target-owned policy retained with sufficient row-specific absence coverage.`,
       evidenceRefs,
       {
         retainedEvidence

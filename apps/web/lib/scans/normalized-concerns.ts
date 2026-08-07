@@ -2679,6 +2679,147 @@ function buildGdprTransparencyArticle13Concerns(
     });
 }
 
+const GDPR_TRANSPARENCY_DETERMINISTIC_ABSENCE_PROFILE =
+  "gdpr_transparency_deterministic_absence_v1";
+
+function buildGdprTransparencyArticle13AbsenceConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const summary = getPolicyDisclosureSummaryForGdprTransparency(runtimeArtifacts);
+  const assessments = getPlainRecordArray(
+    summary?.article13CoverageAssessments ?? summary?.article13_coverage_assessments
+  );
+
+  return assessments.flatMap((assessment) => {
+    const contractVersion = getRuntimeString(assessment, [
+      "assessmentContractVersion",
+      "assessment_contract_version"
+    ]);
+    const coverageStatus = getRuntimeString(assessment, ["coverageStatus", "coverage_status"]);
+    const status = getRuntimeString(assessment, ["status"]);
+    const topic = getRuntimeString(assessment, ["topic"]);
+    const sourceUrls = getRuntimeStringArray(assessment, ["sourceUrls", "source_urls"]);
+    const policyDocumentSha256 = getRuntimeStringArray(assessment, [
+      "policyDocumentSha256",
+      "policy_document_sha256"
+    ]);
+    if (
+      contractVersion !== "gdpr_transparency_article13_coverage_assessment.v1" ||
+      coverageStatus !== "sufficient" ||
+      status !== "not_observed_with_sufficient_coverage" ||
+      !topic ||
+      sourceUrls.length === 0 ||
+      policyDocumentSha256.length === 0
+    ) {
+      return [];
+    }
+
+    return [buildConcernFromSharedInput({
+      categoryId: "privacy",
+      description:
+        "A verified, complete, target-owned policy was reviewed for this GDPR Transparency topic and row-specific evidence was not observed.",
+      domainContext,
+      evidence: sourceUrls,
+      observedValue: "missing",
+      originKey: `gdpr_transparency.article13.${topic}`,
+      originType: "runtime_artifact",
+      rawEvidence: {
+        article13CoverageAssessment: assessment,
+        classifierProvenance: "gdpr_transparency_absence_coverage.v1",
+        gdprTransparencyArticle13ConcernState: "missing",
+        gdprTransparencyArticle13Evidence: true,
+        gdprTransparencyArticle13Topic: topic,
+        gdprTransparencyEvidenceProfile: GDPR_TRANSPARENCY_DETERMINISTIC_ABSENCE_PROFILE,
+        pageType: "privacy_policy",
+        policyDocumentSha256,
+        policyIsPrimarySource: true,
+        productionCredit: true,
+        productionCreditProfile: GDPR_TRANSPARENCY_DETERMINISTIC_ABSENCE_PROFILE,
+        selectedEvidenceStrength: "strong",
+        signalKey: `privacy.gdpr_transparency.article13.${topic}`,
+        sourceUrl: sourceUrls[0],
+        sourceUrls
+      },
+      severity: "medium",
+      signalKey: `privacy.gdpr_transparency.article13.${topic}`,
+      signalLabel: `GDPR Transparency Article 13 topic not observed: ${topic}`,
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: `GDPR Transparency Article 13 topic not observed: ${topic}`
+    })];
+  });
+}
+
+function buildPolicyRuntimeContradictionConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const hybrid = getRuntimeRecord(runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]);
+  const assessment =
+    getRuntimeRecord(runtimeArtifacts, [
+      "policyRuntimeContradictionAssessment",
+      "policy_runtime_contradiction_assessment"
+    ]) ??
+    getRuntimeRecord(hybrid, [
+      "policyRuntimeContradictionAssessment",
+      "policy_runtime_contradiction_assessment"
+    ]);
+  const sufficiency = getRuntimeRecord(assessment, ["evidenceSufficiency", "evidence_sufficiency"]);
+  if (
+    getRuntimeString(assessment, ["assessmentContractVersion", "assessment_contract_version"]) !==
+      "policy_runtime_contradiction_assessment.v1" ||
+    getRuntimeString(sufficiency, ["reviewStatus", "review_status"]) !== "complete" ||
+    getRuntimeBoolean(sufficiency, ["promotionEligible", "promotion_eligible"]) !== true
+  ) {
+    return [];
+  }
+  const policyClaimCandidates = [
+    ...getRuntimeObjectArray(assessment, ["policyClaimCandidates", "policy_claim_candidates"])
+  ];
+  const runtimeBehaviorArtifacts = [
+    ...getRuntimeObjectArray(assessment, ["runtimeBehaviorArtifacts", "runtime_behavior_artifacts"])
+  ];
+  const policyRuntimeBridgeCandidates = [
+    ...getRuntimeObjectArray(assessment, ["policyRuntimeBridgeCandidates", "policy_runtime_bridge_candidates"])
+  ];
+  if (
+    policyClaimCandidates.length === 0 ||
+    runtimeBehaviorArtifacts.length === 0 ||
+    policyRuntimeBridgeCandidates.length === 0
+  ) {
+    return [];
+  }
+
+  const evidence = uniqueStrings([
+    ...policyClaimCandidates.flatMap((row) => getRuntimeString(row, ["sourceUrl", "source_url"]) ?? []),
+    ...runtimeBehaviorArtifacts.flatMap((row) => getRuntimeString(row, ["url"]) ?? [])
+  ]);
+  return [buildConcernFromSharedInput({
+    categoryId: "privacy",
+    description:
+      "A retained policy claim and a directly comparable pre-consent runtime behavior were linked by a deterministic typed comparison bridge.",
+    domainContext,
+    evidence,
+    observedValue: "material_contradiction_retained",
+    originKey: "policy_runtime.deterministic_contradiction",
+    originType: "runtime_artifact",
+    rawEvidence: {
+      contradictionEvidence: assessment,
+      policyClaimCandidates,
+      policyRuntimeBridgeCandidates,
+      runtimeBehaviorArtifacts,
+      unifiedFindingId: "policy_behavior_conflict"
+    },
+    severity: "high",
+    signalKey: "privacy.policy_runtime_contradiction",
+    signalLabel: "Policy/runtime contradiction retained",
+    signalSource: "runtime_artifact_signal",
+    sourceType: "signal",
+    title: "Policy/runtime contradiction detected"
+  })];
+}
+
 const GDPR_TRANSPARENCY_MINI_REVIEW_PROFILE =
   "gdpr_transparency_mini_review_v1";
 
@@ -3554,8 +3695,10 @@ export function buildNormalizedConcerns(input: {
     ...buildCmpLoadOrderConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRtbCookieSyncConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildGdprTransparencyArticle13Concerns(input.runtimeArtifacts, input.domainContext),
+    ...buildGdprTransparencyArticle13AbsenceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildGdprTransparencyModelReviewConcerns(input.runtimeArtifacts, input.domainContext),
-    ...buildGdprTransparencyLegalFrameworkValidityConcerns(input.runtimeArtifacts, input.domainContext)
+    ...buildGdprTransparencyLegalFrameworkValidityConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildPolicyRuntimeContradictionConcerns(input.runtimeArtifacts, input.domainContext)
   ];
 
   return [

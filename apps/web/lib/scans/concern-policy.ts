@@ -2240,10 +2240,14 @@ function isGdprTransparencyArticle13EvidenceConcern(rawEvidence: Record<string, 
     profile === "gdpr_transparency_mini_review_v1" &&
     creditProfile === "gdpr_transparency_mini_review_v1" &&
     provenance === "mini_policy_semantic_review.v2";
+  const approvedDeterministicAbsenceEvidence =
+    profile === "gdpr_transparency_deterministic_absence_v1" &&
+    creditProfile === "gdpr_transparency_deterministic_absence_v1" &&
+    provenance === "gdpr_transparency_absence_coverage.v1";
 
   return rawEvidence?.gdprTransparencyArticle13Evidence === true &&
     rawEvidence.productionCredit === true &&
-    (approvedDeterministicEvidence || approvedModelReviewEvidence);
+    (approvedDeterministicEvidence || approvedModelReviewEvidence || approvedDeterministicAbsenceEvidence);
 }
 
 function isGdprTransparencyLegalFrameworkValidityConcern(
@@ -2269,6 +2273,9 @@ function getGdprTransparencyArticle13ChecklistEligibility(
   ]);
   if (state === "partial") {
     return "review_signal";
+  }
+  if (state === "missing") {
+    return "gap_observed";
   }
   if (state !== "sufficient") {
     return "none";

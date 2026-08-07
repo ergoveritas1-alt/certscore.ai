@@ -2214,7 +2214,20 @@ function browserApiProbeInstalled(bundle: CanonicalEvidenceBundle) {
   );
 }
 
-function summarizeFingerprintingEvidence(bundle: CanonicalEvidenceBundle) {
+const DEVICE_DATA_QUERY_KEY_PATTERN = /^(?:canvas(?:_hash)?|webgl(?:_renderer)?|plugin(?:_count)?|mime(?:_type)?(?:_count)?|audio(?:_hash)?|device(?:_id|_memory)?|hardware_concurrency|ua_(?:architecture|bitness|model|platform_version))$/i;
+
+function sanitizedRequestShape(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const keys = [...new Set([...url.searchParams.keys()])].sort();
+    return `${url.origin}${url.pathname}${keys.length > 0 ? `?${keys.join("&")}` : ""}`;
+  } catch {
+    return null;
+  }
+}
+
+export function summarizeFingerprintingEvidence(bundle: CanonicalEvidenceBundle) {
   const rows = browserApiAccessRows(bundle);
   const apiProbeRetained = browserApiProbeInstalled(bundle) || rows.length > 0;
   const fingerprintAttributeCategories = uniqueStrings(
@@ -2223,9 +2236,30 @@ function summarizeFingerprintingEvidence(bundle: CanonicalEvidenceBundle) {
   const coordinatedSignalClusterObserved = fingerprintAttributeCategories.filter((category) =>
     ["audio", "canvas", "high_entropy_client_hints", "webgl"].includes(category)
   ).length >= 2;
-  // Browser API access is inventory. Promotion requires a separate typed
-  // transmission, identifier-linkage, known-library, or device-payload signal.
-  const strongCorroboratorObserved = false;
+  const deviceDataLikeRequests = (bundle.networkEvents ?? []).flatMap((event) => {
+    const urlValue = requestUrl(event);
+    if (!urlValue || event.consentStateAtTime !== "pre_consent") return [];
+    try {
+      const url = new URL(urlValue);
+      const parameterNames = [...new Set([...url.searchParams.keys()])]
+        .filter((key) => DEVICE_DATA_QUERY_KEY_PATTERN.test(key));
+      return parameterNames.length >= 2
+        ? [{
+            eventId: event.eventId,
+            parameterNames: parameterNames.slice(0, 12),
+            requestShape: sanitizedRequestShape(urlValue),
+            timestampMs: event.timestampMs,
+          }]
+        : [];
+    } catch {
+      return [];
+    }
+  }).slice(0, 12);
+  // Browser API access remains inventory. Promotion requires a distinct
+  // retained transmission/device-payload corroborator from the same captured
+  // pre-consent runtime, without depending on raw query values.
+  const entropyTransmissionObserved = coordinatedSignalClusterObserved && deviceDataLikeRequests.length > 0;
+  const strongCorroboratorObserved = entropyTransmissionObserved;
   const assessmentStrength = strongCorroboratorObserved
     ? "corroborated_collection"
     : coordinatedSignalClusterObserved
@@ -2241,6 +2275,10 @@ function summarizeFingerprintingEvidence(bundle: CanonicalEvidenceBundle) {
     coordinatedSignalClusterObserved,
     coverageRetained: apiProbeRetained,
     distinctAttributeFamilyCount: fingerprintAttributeCategories.length,
+    deviceDataLikeRequestCount: deviceDataLikeRequests.length,
+    deviceDataLikeRequests,
+    entropyLinkedToIdentifier: false,
+    entropyTransmissionObserved,
     fingerprintAttributeCategories,
     fingerprintingObserved: strongCorroboratorObserved,
     highEntropySignals: uniqueStrings(rows.flatMap((row) => row.highEntropySignals)).slice(0, 12),
@@ -2291,6 +2329,110 @@ function summarizeSessionReplayEvidence(
     preConsentObserved: observed,
     requestUrls: requestUrls.slice(0, 10),
     vendors: vendors.slice(0, 10)
+  };
+}
+
+export function buildPolicyRuntimeComparisonProjection(
+  policySummary: Record<string, unknown>,
+  requestRows: Array<Record<string, unknown>>,
+) {
+  const policyText = firstString(
+    policySummary.retainedPrivacyPolicyTextExcerpt,
+    policySummary.retained_privacy_policy_text_excerpt,
+  ) ?? "";
+  const policySourceUrl = Array.isArray(policySummary.privacyPolicyUrls)
+    ? firstString(...policySummary.privacyPolicyUrls)
+    : null;
+  const policySentence = policyText
+    .split(/(?<=[.!?])\s+/)
+    .find((sentence) =>
+      /optional analytics/i.test(sentence) &&
+      /(?:basis of consent|consent[- ]based|only after.{0,80}consent|controlled by.{0,80}consent)/i.test(sentence)
+    ) ?? null;
+  const runtimeRow = requestRows.find((row) =>
+    firstString(row.runtimePhase, row.runtime_phase, row.timingStatus, row.timing_status) === "pre_consent" &&
+    firstString(row.essentiality) === "non_essential" &&
+    Boolean(firstString(row.requestUrl, row.request_url, row.url))
+  );
+  const runtimeUrl = firstString(runtimeRow?.requestUrl, runtimeRow?.request_url, runtimeRow?.url);
+  if (!policySentence || !policySourceUrl || !runtimeRow || !runtimeUrl) {
+    return {
+      contradictionAssessment: null,
+      policyClaimCandidates: [],
+      policyRuntimeBridgeCandidates: [],
+      runtimeBehaviorArtifacts: [],
+    };
+  }
+  const digest = createHash("sha256")
+    .update(`${policySourceUrl}\u0000${policySentence}\u0000${runtimeUrl}`)
+    .digest("hex")
+    .slice(0, 20);
+  const policyAnchorId = `policy_claim:cookie_preferences_available:${digest}`;
+  const runtimeAnchorId = `runtime_artifact:request:pre_consent:${digest}`;
+  const bridgeId = `policy_runtime_bridge:${digest}`;
+  const vendor = firstString(runtimeRow.vendor, runtimeRow.vendorName, runtimeRow.vendor_name);
+  const host = firstString(runtimeRow.hostname, runtimeRow.host) ?? hostnameFromUrl(runtimeUrl);
+  const policyClaimCandidate = {
+    claimType: "cookie_preferences_available",
+    confidence: 0.95,
+    documentType: "privacy_policy",
+    extractedBy: "wc01.persisted_policy_runtime_projection",
+    extractionStatus: "fetched",
+    extractionVersion: "policy_claim_candidate:v1",
+    id: policyAnchorId,
+    normalizedClaim: "Optional analytics is controlled by consent.",
+    snippet: policySentence.slice(0, 600),
+    snippetHash: `sha256:${createHash("sha256").update(policySentence).digest("hex")}`,
+    sourceUrl: policySourceUrl,
+  };
+  const runtimeBehaviorArtifact = {
+    artifactType: "request",
+    confidence: typeof runtimeRow.confidence === "number" ? runtimeRow.confidence : 0.9,
+    consentActionObserved: false,
+    host,
+    id: runtimeAnchorId,
+    observationType: "analytics_vendor_fired_pre_consent",
+    phase: "pre_consent",
+    sourceArtifactRef: firstString(runtimeRow.sourceArtifactRef, runtimeRow.source_artifact_ref) ?? runtimeUrl,
+    timestampMs: minimumNumber(runtimeRow.timestampMs, runtimeRow.timestamp_ms, runtimeRow.tsMs, runtimeRow.ts_ms),
+    url: runtimeUrl,
+    vendor,
+  };
+  const policyRuntimeBridgeCandidate = {
+    bridgeRuleId: "wc01.policy_runtime.optional_analytics_preconsent_request_v1",
+    confidence: 0.95,
+    conflictType: "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice",
+    generatedBy: "wc01.persisted_policy_runtime_projection",
+    id: bridgeId,
+    mappingType: "deterministic_policy_runtime_mapping",
+    mappingVersion: "policy_behavior_conflict_map:v1",
+    policyAnchorRef: policyAnchorId,
+    reasoning: "The retained policy states that optional analytics is consent-based while retained runtime evidence shows a classified non-essential analytics request before consent.",
+    runtimeAnchorRef: runtimeAnchorId,
+    sourceEvidenceIds: [policyAnchorId, runtimeAnchorId],
+    supportsPromotionCandidate: true,
+  };
+  const contradictionAssessment = {
+    assessmentContractVersion: "policy_runtime_contradiction_assessment.v1",
+    conflictBridge: policyRuntimeBridgeCandidate,
+    evidenceSufficiency: {
+      conflictBridgePresent: true,
+      policyAnchorPresent: true,
+      promotionEligible: true,
+      reviewStatus: "complete",
+      runtimeAnchorPresent: true,
+    },
+    policyAnchor: policyClaimCandidate,
+    policyClaimCandidates: [policyClaimCandidate],
+    policyRuntimeBridgeCandidates: [policyRuntimeBridgeCandidate],
+    runtimeAnchor: runtimeBehaviorArtifact,
+    runtimeBehaviorArtifacts: [runtimeBehaviorArtifact],
+  };
+  return {
+    contradictionAssessment,
+    policyClaimCandidates: [policyClaimCandidate],
+    policyRuntimeBridgeCandidates: [policyRuntimeBridgeCandidate],
+    runtimeBehaviorArtifacts: [runtimeBehaviorArtifact],
   };
 }
 
@@ -2505,6 +2647,50 @@ export function summarizePolicySurfaces(
     options.primaryLanguage,
     policyTextEvidenceProjection,
   );
+  const article13CoverageTopics = [
+    "automated_decision_making_or_profiling",
+    "controller_contact",
+    "data_retention",
+    "data_subject_rights",
+    "dpo_contact",
+    "international_transfers",
+    "legal_basis",
+    "processing_purposes",
+    "recipients_or_vendor_categories",
+    "supervisory_authority",
+  ] as const;
+  const completeOwnedPolicyDocuments = policyTextEvidenceProjection.documents.filter((document) =>
+    document.extractionStatus === "complete" &&
+    document.artifactVerificationStatus === "verified" &&
+    ["target_controller", "first_party_brand"].includes(document.targetRelationship)
+  );
+  const absenceCoverageSufficient =
+    policyTextEvidenceProjection.projectionStatus === "verified_complete" &&
+    policyTextExtractionHealth.policyTextExtractionStatus === "ok" &&
+    policyTextExtractionHealth.gdprTransparencyLanguageSupported === true &&
+    completeOwnedPolicyDocuments.length > 0 &&
+    completeOwnedPolicyDocuments.length === policyTextEvidenceProjection.documents.length;
+  const observedArticle13Types = new Set(dedupedArticle13DisclosureSignals
+    .filter((signal) => signal.status === "observed")
+    .map((signal) => signal.disclosureType));
+  const article13CoverageAssessments = article13CoverageTopics.map((topic) => ({
+    assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+    coverageStatus: absenceCoverageSufficient ? "sufficient" : "insufficient",
+    policyDocumentIds: completeOwnedPolicyDocuments.map((document) => document.observationId),
+    policyDocumentSha256: completeOwnedPolicyDocuments.map((document) => document.retainedTextSha256).filter(Boolean),
+    reasonCodes: observedArticle13Types.has(topic)
+      ? ["row_specific_disclosure_observed"]
+      : absenceCoverageSufficient
+        ? ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"]
+        : ["policy_absence_coverage_preconditions_not_met"],
+    sourceUrls: completeOwnedPolicyDocuments.map((document) => document.finalUrl ?? document.requestedUrl),
+    status: observedArticle13Types.has(topic)
+      ? "observed"
+      : absenceCoverageSufficient
+        ? "not_observed_with_sufficient_coverage"
+        : "insufficient_retained_evidence",
+    topic,
+  }));
   const discoveredPrivacyPolicyUrls = uniqueStrings(targetRelevantDiscoveredPrivacySurfaces
     .map((surface) => firstString(surface.normalizedUrl, surface.url))
     .filter(Boolean));
@@ -2688,6 +2874,8 @@ export function summarizePolicySurfaces(
       }
     : null;
   return {
+    article13CoverageAssessments,
+    article13_coverage_assessments: article13CoverageAssessments,
     article13DisclosureSignals: dedupedArticle13DisclosureSignals,
     article13DisclosureTypesObserved: uniqueStrings(dedupedArticle13DisclosureSignals
       .filter((signal) => signal.status === "observed")
@@ -4951,6 +5139,10 @@ function buildMaterializedLocalV2Detail(
   const fingerprintingRuntimeEvidence = browserApiAccessRows(bundle);
   const fingerprintingEvidenceSummary = summarizeFingerprintingEvidence(bundle);
   const sessionReplayEvidenceSummary = summarizeSessionReplayEvidence(reportableVendorRows, preconsentRequests, boundedRequestPurposeRows);
+  const policyRuntimeComparison = buildPolicyRuntimeComparisonProjection(
+    policySurfaceSummary as Record<string, unknown>,
+    boundedRequestPurposeRows,
+  );
   const cookieWriteObservations = cookieEvents.map((event) => {
     const matchedVendor = findObservedVendor(event, inventoryVendorRows);
     const snapshot = /^(?:browser_snapshot|periodic_cookie_snapshot|initial_cookie_snapshot)$/i.test(event.operation ?? "");
@@ -5077,6 +5269,14 @@ function buildMaterializedLocalV2Detail(
     })),
     embeddedContentSummary,
     embedded_content_summary: embeddedContentSummary,
+    policyClaimCandidates: policyRuntimeComparison.policyClaimCandidates,
+    policy_claim_candidates: policyRuntimeComparison.policyClaimCandidates,
+    policyRuntimeBridgeCandidates: policyRuntimeComparison.policyRuntimeBridgeCandidates,
+    policy_runtime_bridge_candidates: policyRuntimeComparison.policyRuntimeBridgeCandidates,
+    runtimeBehaviorArtifacts: policyRuntimeComparison.runtimeBehaviorArtifacts,
+    runtime_behavior_artifacts: policyRuntimeComparison.runtimeBehaviorArtifacts,
+    policyRuntimeContradictionAssessment: policyRuntimeComparison.contradictionAssessment,
+    policy_runtime_contradiction_assessment: policyRuntimeComparison.contradictionAssessment,
     fingerprintingEvidenceSummary,
     fingerprinting_evidence_summary: fingerprintingEvidenceSummary,
     fingerprintingRuntimeEvidence,
@@ -5248,6 +5448,14 @@ function buildMaterializedLocalV2Detail(
     })),
     embeddedContentSummary,
     embedded_content_summary: embeddedContentSummary,
+    policyClaimCandidates: policyRuntimeComparison.policyClaimCandidates,
+    policy_claim_candidates: policyRuntimeComparison.policyClaimCandidates,
+    policyRuntimeBridgeCandidates: policyRuntimeComparison.policyRuntimeBridgeCandidates,
+    policy_runtime_bridge_candidates: policyRuntimeComparison.policyRuntimeBridgeCandidates,
+    runtimeBehaviorArtifacts: policyRuntimeComparison.runtimeBehaviorArtifacts,
+    runtime_behavior_artifacts: policyRuntimeComparison.runtimeBehaviorArtifacts,
+    policyRuntimeContradictionAssessment: policyRuntimeComparison.contradictionAssessment,
+    policy_runtime_contradiction_assessment: policyRuntimeComparison.contradictionAssessment,
     fingerprintingEvidenceSummary,
     fingerprinting_evidence_summary: fingerprintingEvidenceSummary,
     fingerprintingRuntimeEvidence,

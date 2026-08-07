@@ -124,6 +124,86 @@ async function loadLocalV2DagReport() {
   };
 }
 
+test("fingerprinting projection requires retained API access plus a pre-consent device-data transmission", async () => {
+  const { summarizeFingerprintingEvidence } = await loadLocalV2DagReport();
+  const bundle = {
+    networkEvents: [{
+      consentStateAtTime: "pre_consent",
+      eventId: "fingerprint_request_1",
+      eventType: "network_request",
+      evidenceRefs: [],
+      hostname: "ergoveritas.com",
+      requestUrl: "https://ergoveritas.com/runtime/fingerprint-collect.svg?canvas_hash=secret&webgl_renderer=secret&plugin_count=3",
+      sourceScanner: "pre_consent_runtime",
+      thirdParty: false,
+      timestampMs: 900,
+      url: "https://ergoveritas.com/runtime/fingerprint-collect.svg?canvas_hash=secret&webgl_renderer=secret&plugin_count=3"
+    }],
+    runtimeTimeline: [
+      ["canvas", "HTMLCanvasElement.toDataURL"],
+      ["webgl", "WebGLRenderingContext.getParameter"],
+      ["high_entropy_client_hints", "NavigatorUAData.getHighEntropyValues"]
+    ].map(([excerpt, label], index) => ({
+      consentStateAtTime: "pre_consent",
+      eventId: `browser_api_${index}`,
+      eventType: "browser_api_access",
+      evidenceRefs: [{
+        eventType: "browser_api_access",
+        excerpt,
+        label: `Browser API access: ${label}`,
+        refId: `browser_api_${index}`
+      }],
+      hostname: "ergoveritas.com",
+      sourceScanner: "pre_consent_runtime",
+      timestampMs: 500 + index,
+      url: "https://ergoveritas.com/"
+    }))
+  } as unknown as CanonicalEvidenceBundle;
+
+  const summary = summarizeFingerprintingEvidence(bundle);
+  assert.equal(summary.coordinatedSignalClusterObserved, true);
+  assert.equal(summary.entropyTransmissionObserved, true);
+  assert.equal(summary.strongCorroboratorObserved, true);
+  assert.equal(summary.fingerprintingObserved, true);
+  assert.equal(summary.deviceDataLikeRequestCount, 1);
+  assert.equal(summary.deviceDataLikeRequests[0]?.requestShape?.includes("secret"), false);
+  assert.equal(
+    summary.deviceDataLikeRequests[0]?.requestShape,
+    "https://ergoveritas.com/runtime/fingerprint-collect.svg?canvas_hash&plugin_count&webgl_renderer"
+  );
+});
+
+test("policy/runtime projection persists a linked typed contradiction triplet", async () => {
+  const { buildPolicyRuntimeComparisonProjection } = await loadLocalV2DagReport();
+  const projection = buildPolicyRuntimeComparisonProjection({
+    privacyPolicyUrls: ["https://ergoveritas.com/privacy.html"],
+    retainedPrivacyPolicyTextExcerpt:
+      "This policy says optional analytics is consent-based and controlled by consent."
+  }, [{
+    confidence: 0.95,
+    essentiality: "non_essential",
+    hostname: "www.google-analytics.com",
+    requestUrl: "https://www.google-analytics.com/g/collect?v=2",
+    runtimePhase: "pre_consent",
+    sourceArtifactRef: "network_request:ga",
+    timestampMs: 700,
+    vendor: "Google Analytics"
+  }]);
+
+  assert.equal(projection.policyClaimCandidates.length, 1);
+  assert.equal(projection.runtimeBehaviorArtifacts.length, 1);
+  assert.equal(projection.policyRuntimeBridgeCandidates.length, 1);
+  assert.equal(projection.policyRuntimeBridgeCandidates[0]?.supportsPromotionCandidate, true);
+  assert.equal(
+    projection.policyRuntimeBridgeCandidates[0]?.policyAnchorRef,
+    projection.policyClaimCandidates[0]?.id
+  );
+  assert.equal(
+    projection.policyRuntimeBridgeCandidates[0]?.runtimeAnchorRef,
+    projection.runtimeBehaviorArtifacts[0]?.id
+  );
+});
+
 test("retained request relationships keep Amazon cross-site and same-entity dimensions separate", async () => {
   const { retainedRequestRelationships } = await loadLocalV2DagReport();
 
