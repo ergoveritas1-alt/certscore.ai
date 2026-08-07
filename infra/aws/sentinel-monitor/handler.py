@@ -46,6 +46,36 @@ def scan_id(x):
 def html_escape(value):
     return (str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;"))
 
+def acquire_hour_lock(hour, run_id):
+    """Prevent overlapping hourly runs from consuming duplicate scan quota."""
+    try:
+        ddb.put_item(
+            Item={"pk": "lock#hour#" + str(hour), "runId": run_id, "expiresAt": int(time.time()) + 2 * 3600},
+            ConditionExpression="attribute_not_exists(pk)"
+        )
+        return True
+    except ddb.meta.client.exceptions.ConditionalCheckFailedException:
+        return False
+
+def corpus_preflight(pages):
+    """Validate page availability and canary provenance before spending scan quota."""
+    issues = []
+    for page in pages:
+        url = ROOT + page["url"]
+        try:
+            req = urllib.request.Request(url, headers={"user-agent": "CertScore-canary-preflight/1.0"})
+            with urllib.request.urlopen(req, timeout=20) as response:
+                body = response.read(256 * 1024).decode(errors="replace")
+                if response.status != 200:
+                    issues.append({"page": page.get("key"), "issue": "preflight HTTP status " + str(response.status)})
+                if response.headers.get("X-Test-Environment") != "canary-compliance-testing":
+                    issues.append({"page": page.get("key"), "issue": "missing X-Test-Environment canary header"})
+                if "CANARY TEST PAGE" not in body and "controlled test environment" not in body:
+                    issues.append({"page": page.get("key"), "issue": "canary provenance marker missing from source"})
+        except Exception as e:
+            issues.append({"page": page.get("key"), "issue": "preflight failed: " + str(e)[:500]})
+    return issues
+
 def status(x):
     return str((x or {}).get("status", "")).lower()
 
@@ -136,6 +166,12 @@ def signals(value):
 def handler(event, context):
     run_id, started = str(uuid.uuid4()), time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     scanner_failures = []
+    corpus_issues = []
+    hour = int(time.time() // 3600)
+    if not acquire_hour_lock(hour, run_id):
+        result = {"runId": run_id, "startedAt": started, "hour": hour, "jobs": 0, "failures": 0, "scannerFailures": 0, "corpusIssues": 0, "skipped": "overlapping_hourly_run"}
+        print(json.dumps(result))
+        return result
     try:
         manifest = request(ROOT + "/.well-known/certscore-canary/manifest.json")
     except Exception as e:
@@ -152,10 +188,11 @@ def handler(event, context):
         ]}}
     pages = manifest.get("sentinelCorpus", {}).get("pages", [])
     if len(pages) != 5: raise RuntimeError("sentinel manifest does not contain exactly five pages")
+    corpus_issues.extend(corpus_preflight(pages))
     key = ssm.get_parameter(Name="/certscore/sentinel/api-key", WithDecryption=True)["Parameter"]["Value"]
     jwt_secret = get_secret("certscore/oauth-jwt-secret")
-    hour = int(time.time() // 3600); jobs = [{"page": p, "location": loc, "transport": TRANSPORTS[(hour + li + pi) % 3]} for li, loc in enumerate(LOCATIONS) for pi, p in enumerate(pages)]
-    results, corpus_issues = [], []
+    jobs = [{"page": p, "location": loc, "transport": TRANSPORTS[(hour + li + pi) % 3]} for li, loc in enumerate(LOCATIONS) for pi, p in enumerate(pages)]
+    results = []
     for job in jobs:
         t = time.time(); p, loc, transport = job["page"], job["location"], job["transport"]
         try:
@@ -167,7 +204,7 @@ def handler(event, context):
             returned_url = (created or {}).get("url") or (created or {}).get("request", {}).get("url")
             reused = bool((created or {}).get("reused") or (created or {}).get("executionMode") == "reused_scan" or (created or {}).get("freshnessDecision") == "reused_existing_scan")
             freshness_issue = reused or (returned_url and requested_path not in str(returned_url))
-            row = {"page": p["key"], "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", "freshness": "reused_or_path_mismatch" if freshness_issue else "new_path"}
+            row = {"page": p["key"], "requestedUrl": ROOT + p["url"], "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", "freshness": "reused_or_path_mismatch" if freshness_issue else "new_path"}
             if missing: corpus_issues.append({**row, "issue": "required signals missing: " + ", ".join(missing)})
             if freshness_issue: scanner_failures.append({**row, "issue": "freshness/path invariant failed: CertScore reused a scan or did not retain the requested page path"})
             if status(st) not in {"completed", "completed_limited", "complete", "limited"}:
