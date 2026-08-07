@@ -14,7 +14,7 @@ ses = boto3.client("sesv2", region_name=os.environ.get("SES_REGION", "us-east-1"
 ddb = boto3.resource("dynamodb", region_name=REGION).Table(os.environ["TABLE_NAME"])
 
 def get_secret(name):
-    return sm.get_secret_value(SecretId=name).get("SecretString", "")
+    return sm.get_secret_value(SecretId=name).get("SecretString", "").strip()
 
 def jwt(secret):
     now = int(time.time())
@@ -154,11 +154,21 @@ def mcp_scan(url, loc, secret):
     # Bind the follow-up messages to the Streamable HTTP session.
     mcp_post({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}, session)
     headers2 = {**headers, **({"mcp-session-id": session} if session else {})}
-    call, _ = mcp_post({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scan_site", "arguments": {"url": url, "freshness": "refresh", "scanFrom": loc, "waitForCompletion": True}}}, session)
-    result = call.get("result", call); payload = result.get("structuredContent", result) if isinstance(result, dict) else result
-    if isinstance(payload, dict) and "content" in payload: payload = payload["content"]
-    sid = scan_id(payload if isinstance(payload, dict) else result)
-    if not sid: raise RuntimeError("MCP submission returned no scan id")
+    call = None
+    payload = None
+    sid = None
+    for attempt in range(3):
+        call, _ = mcp_post({"jsonrpc": "2.0", "id": 2 + attempt, "method": "tools/call", "params": {"name": "scan_site", "arguments": {"url": url, "freshness": "refresh", "scanFrom": loc, "waitForCompletion": True}}}, session)
+        result = call.get("result", call); payload = result.get("structuredContent", result) if isinstance(result, dict) else result
+        if isinstance(payload, dict) and "content" in payload: payload = payload["content"]
+        sid = scan_id(payload if isinstance(payload, dict) else result)
+        if sid:
+            break
+        if attempt < 2:
+            time.sleep(15 * (attempt + 1))
+    if not sid:
+        diagnostic = json.dumps(call, ensure_ascii=False)[:500] if call is not None else "empty MCP response"
+        raise RuntimeError("MCP submission returned no scan id: " + diagnostic)
     evidence, _ = mcp_post({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "get_scan_bundle", "arguments": {"scanId": sid, "detail": "evidence", "maxBytes": 24000}}}, session)
     return sid, payload, {"scan": payload, "evidence": evidence}, payload
 
