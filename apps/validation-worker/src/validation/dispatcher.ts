@@ -17,6 +17,57 @@ import {
 } from "./pipeline";
 
 const IDLE_POLL_MS = 250;
+const MAX_NANO_SIGNAL_DISPATCH_ATTEMPTS = 3;
+const NANO_SIGNAL_DISPATCH_RETRY_BASE_MS = 1_000;
+const NANO_SIGNAL_DISPATCH_RETRY_MAX_MS = 30_000;
+
+export function buildNanoSignalDispatchFailureEvent(input: {
+  error: unknown;
+  pollCount: number;
+  recoveryMode: NanoSignalScanLease["recoveryMode"];
+}) {
+  const attemptCount = Math.max(0, input.pollCount) + 1;
+  const error = (input.error instanceof Error ? input.error.message : String(input.error)).slice(0, 500);
+  const terminal = attemptCount >= MAX_NANO_SIGNAL_DISPATCH_ATTEMPTS;
+  const retryDelayMs = Math.min(
+    NANO_SIGNAL_DISPATCH_RETRY_MAX_MS,
+    NANO_SIGNAL_DISPATCH_RETRY_BASE_MS * 2 ** Math.max(0, attemptCount - 1)
+  );
+
+  if (terminal) {
+    return {
+      delayMs: retryDelayMs,
+      eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
+      message: "Nano document signal enrichment failed after bounded dispatcher retries.",
+      metadataJson: {
+        attemptCount,
+        error,
+        ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
+        reason: "dispatcher_error",
+        stage: "nano_doc_signals"
+      },
+      terminal
+    } as const;
+  }
+
+  const recheckAt = new Date(Date.now() + retryDelayMs);
+  return {
+    delayMs: retryDelayMs,
+    eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
+    message: "Nano document signal enrichment retry scheduled after dispatcher failure.",
+    metadataJson: {
+      error,
+      pollCount: attemptCount,
+      recheckAfter: recheckAt.toISOString(),
+      recheckAfterEpochMs: recheckAt.getTime(),
+      recheckDelayMs: retryDelayMs,
+      ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
+      reason: "dispatcher_error",
+      stage: "nano_doc_signals"
+    },
+    terminal
+  } as const;
+}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -118,6 +169,24 @@ async function runDispatchLoop(slot: number, browserCleanup: { schedule(reason: 
             scanId: scanLease.scanId,
             slot
           });
+          const failureEvent = buildNanoSignalDispatchFailureEvent({
+            error,
+            pollCount: scanLease.pollCount,
+            recoveryMode: scanLease.recoveryMode
+          });
+          await appendScanWorkflowEvent({
+            eventType: failureEvent.eventType,
+            message: failureEvent.message,
+            metadataJson: failureEvent.metadataJson,
+            scanId: scanLease.scanId
+          }).catch((eventError) => {
+            console.error("[validation-worker] nano signal failure event persistence failed", {
+              error: eventError instanceof Error ? eventError.message : String(eventError),
+              scanId: scanLease.scanId,
+              slot
+            });
+          });
+          await sleep(failureEvent.delayMs);
           void browserCleanup?.schedule("scan_failed");
         } finally {
           await releaseNanoSignalScanLease(scanLease);

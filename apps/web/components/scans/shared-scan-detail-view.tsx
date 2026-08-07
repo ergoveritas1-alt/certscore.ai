@@ -648,30 +648,34 @@ function formatInventoryCellForCopy(value: string | number | null | undefined) {
 }
 
 export function buildInventoryPartyAttributionSegments(
-  rows: Array<Pick<InventoryGroupRow, "siteRelationship">>
+  rows: Array<Pick<InventoryGroupRow, "siteRelationship"> & Partial<Pick<InventoryGroupRow, "observedRecordCount">>>
 ) {
+  const countFor = (relationship: InventoryGroupRow["siteRelationship"]) => rows.reduce(
+    (total, row) => total + (row.siteRelationship === relationship ? Math.max(1, row.observedRecordCount ?? 1) : 0),
+    0
+  );
   return [
     {
       color: "#3b82f6",
-      count: rows.filter((row) => row.siteRelationship === "same_site").length,
+      count: countFor("same_site"),
       filter: "same_site",
       label: "Same-site"
     },
     {
       color: "#8b5cf6",
-      count: rows.filter((row) => row.siteRelationship === "cross_site").length,
+      count: countFor("cross_site"),
       filter: "cross_site",
       label: "Cross-site"
     },
     {
       color: "#f59e0b",
-      count: rows.filter((row) => row.siteRelationship === "mixed").length,
+      count: countFor("mixed"),
       filter: "mixed",
       label: "Mixed"
     },
     {
       color: "#94a3b8",
-      count: rows.filter((row) => row.siteRelationship === "unknown").length,
+      count: countFor("unknown"),
       filter: "unknown",
       label: "Unknown"
     }
@@ -680,7 +684,8 @@ export function buildInventoryPartyAttributionSegments(
 
 function InventoryPartyAttributionDonut({ rows }: { rows: InventoryGroupRow[] }) {
   const segments = buildInventoryPartyAttributionSegments(rows);
-  const total = Math.max(rows.length, 1);
+  const rawTotal = segments.reduce((total, segment) => total + segment.count, 0);
+  const total = Math.max(rawTotal, 1);
   let cursor = 0;
   const gradientStops = segments.flatMap((segment) => {
     const start = cursor;
@@ -688,7 +693,7 @@ function InventoryPartyAttributionDonut({ rows }: { rows: InventoryGroupRow[] })
     cursor = end;
     return [`${segment.color} ${start}%`, `${segment.color} ${end}%`];
   });
-  const gradient = rows.length > 0 ? `conic-gradient(${gradientStops.join(", ")})` : "conic-gradient(#e2e8f0 0 100%)";
+  const gradient = rawTotal > 0 ? `conic-gradient(${gradientStops.join(", ")})` : "conic-gradient(#e2e8f0 0 100%)";
 
   return (
     <div className="mt-3 flex items-start gap-3">
@@ -698,7 +703,7 @@ function InventoryPartyAttributionDonut({ rows }: { rows: InventoryGroupRow[] })
         style={{ background: gradient }}
       >
         <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-base font-semibold leading-none text-slate-900 shadow-sm">
-          {rows.length}
+          {rawTotal}
         </div>
       </div>
       <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-1.5">
@@ -706,7 +711,7 @@ function InventoryPartyAttributionDonut({ rows }: { rows: InventoryGroupRow[] })
           <div key={segment.filter} className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter={segment.filter} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
             <span className="truncate text-[11px] font-medium text-slate-500">{segment.label}</span>
-            <InfoTip align="end" placement="top" text={`Inventory rows whose site relationship is ${segment.label.toLowerCase()}.`} />
+            <InfoTip align="end" placement="top" text={`Retained records whose site relationship is ${segment.label.toLowerCase()}.`} />
             <span className="ml-auto text-[11px] font-semibold text-slate-700">{segment.count}</span>
           </div>
         ))}
@@ -740,7 +745,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
     return 1;
   };
   const purposeCounts = Array.from(rows.reduce((counts, row) => {
-    counts.set(row.purpose, (counts.get(row.purpose) ?? 0) + 1);
+    counts.set(row.purpose, (counts.get(row.purpose) ?? 0) + row.observedRecordCount);
     return counts;
   }, new Map<string, number>())).sort((left, right) => {
     const colorRankDelta = purposeColorRank(left[0]) - purposeColorRank(right[0]);
@@ -762,7 +767,8 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
     return (rank === 0 ? palettes.risk : rank === 2 ? palettes.neutral : palettes.review)[index % 4] ?? "#f59e0b";
   };
   const visibleTotal = topPurposes.reduce((total, [, count]) => total + count, 0);
-  const otherTotal = Math.max(0, rows.length - visibleTotal);
+  const rawTotal = rows.reduce((total, row) => total + row.observedRecordCount, 0);
+  const otherTotal = Math.max(0, rawTotal - visibleTotal);
   const chartSegments = [
     ...topPurposes.map(([purpose, count], index) => ({ color: getPurposeColor(purpose, index), count, label: purpose })),
     ...(otherTotal > 0 ? [{ color: "#f59e0b", count: otherTotal, label: "Other" }] : [])
@@ -770,11 +776,11 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
   let cursor = 0;
   const gradientStops = chartSegments.flatMap((segment) => {
     const start = cursor;
-    const end = cursor + (segment.count / Math.max(rows.length, 1)) * 100;
+    const end = cursor + (segment.count / Math.max(rawTotal, 1)) * 100;
     cursor = end;
     return [`${segment.color} ${start}%`, `${segment.color} ${end}%`];
   });
-  const gradient = rows.length > 0 ? `conic-gradient(${gradientStops.join(", ")})` : "conic-gradient(#e2e8f0 0 100%)";
+  const gradient = rawTotal > 0 ? `conic-gradient(${gradientStops.join(", ")})` : "conic-gradient(#e2e8f0 0 100%)";
 
   return (
     <div className="min-h-0 overflow-visible rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
@@ -786,7 +792,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
           style={{ background: gradient }}
         >
           <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-base font-semibold leading-none text-slate-900 shadow-sm">
-            {rows.length}
+            {rawTotal}
           </div>
         </div>
         <div className="grid min-w-0 flex-1 gap-0">
@@ -794,7 +800,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
           <div key={purpose} className="flex min-h-5 min-w-0 cursor-pointer items-center gap-2 rounded-md px-1 py-0 transition-colors hover:bg-slate-100" data-inventory-filter={purpose.toLowerCase()} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: chartSegments.find((segment) => segment.label === purpose)?.color ?? "#64748b" }} />
             <span className="min-w-0 truncate text-xs font-medium text-slate-600">{purpose}</span>
-            <InfoTip align="end" placement="top" text={`Rows classified with the ${purpose.toLowerCase()} purpose.`} />
+            <InfoTip align="end" placement="top" text={`Retained records classified with the ${purpose.toLowerCase()} purpose.`} />
             <span className="ml-auto text-xs font-semibold text-slate-800">{count}</span>
           </div>
         )) : (
@@ -827,7 +833,7 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
-      getInventoryPurposeLabel(row),
+      formatInventoryPurposeWithCount(row),
       classifyInventoryEvidence(row),
       formatFirstSeenMs(row.firstSeenMs),
       row.cookieNames.join(", ") || "—",
@@ -849,6 +855,10 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
 
 function getInventoryPurposeLabel(row: Pick<InventoryGroupRow, "purpose" | "purposes">) {
   return row.purposes.length > 0 ? row.purposes.join(", ") : row.purpose;
+}
+
+function formatInventoryPurposeWithCount(row: Pick<InventoryGroupRow, "observedRecordCount" | "purpose" | "purposes">) {
+  return `${getInventoryPurposeLabel(row)}(${row.observedRecordCount})`;
 }
 
 function countryFlag(countryCode: string | null) {
@@ -943,15 +953,15 @@ function InventoryEvidenceCell({ row }: { row: InventoryGroupRow }) {
 }
 
 function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) {
-  const beforeConsentCount = rows.filter((row) =>
-    row.type === "tracker"
-      ? row.preConsent && row.firstSeenMs !== null
-      : row.firstSeenMs !== null || /snapshot|pre-consent/i.test(row.timingEvidence ?? "")
-  ).length;
-  const necessaryCount = rows.filter((row) => classifyInventoryEvidence(row) === "Essential").length;
-  const contextualCount = rows.filter((row) => classifyInventoryEvidence(row) === "Contextual").length;
-  const reviewCount = rows.filter((row) => classifyInventoryEvidence(row) === "Review").length;
-  const nonEssentialCount = Math.max(0, rows.length - necessaryCount - contextualCount - reviewCount);
+  const rawRecordCount = rows.reduce((total, row) => total + row.observedRecordCount, 0);
+  const countEvidence = (classification: ReturnType<typeof classifyInventoryEvidence>) => rows.reduce(
+    (total, row) => total + (classifyInventoryEvidence(row) === classification ? row.observedRecordCount : 0),
+    0
+  );
+  const necessaryCount = countEvidence("Essential");
+  const contextualCount = countEvidence("Contextual");
+  const reviewCount = countEvidence("Review");
+  const nonEssentialCount = countEvidence("Non-essential");
 
   const totalClassified = necessaryCount + contextualCount + nonEssentialCount + reviewCount;
   const necessaryShare = totalClassified > 0 ? (necessaryCount / totalClassified) * 100 : 0;
@@ -968,7 +978,7 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
       <div className="mt-3 flex items-start gap-3">
         <div className="relative grid h-20 w-20 shrink-0 place-items-center rounded-full shadow-[inset_0_2px_4px_rgba(255,255,255,0.65),inset_0_-2px_4px_rgba(15,23,42,0.16),0_4px_8px_-5px_rgba(15,23,42,0.45)] ring-1 ring-white/50" style={{ background: donut }}>
           <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-center text-[11px] font-semibold text-slate-600 shadow-sm">
-            <span className="text-base leading-none text-slate-900">{beforeConsentCount}</span>
+            <span className="text-base leading-none text-slate-900">{rawRecordCount}</span>
           </div>
         </div>
         <div className="grid min-w-0 flex-1 gap-2">
@@ -1050,7 +1060,10 @@ function RuntimeInventoryTable({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-slate-900">{row.vendor}</p>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">{getInventoryPurposeLabel(row)}</p>
+                    <p className="mt-0.5 flex min-w-0 items-center text-xs text-slate-500">
+                      <span className="min-w-0 truncate">{getInventoryPurposeLabel(row)}</span>
+                      <span className="shrink-0">({row.observedRecordCount})</span>
+                    </p>
                   </div>
                   <InventoryPriorityCell priority={row.priority} />
                 </div>
@@ -1067,13 +1080,13 @@ function RuntimeInventoryTable({
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 lg:block">
             <div className="max-h-[370px] overflow-auto">
             <InventorySortRuntime tableId="preconsent-inventory-table" />
-            <table id="preconsent-inventory-table" className="w-[1280px] min-w-[1280px] max-w-[1280px] table-fixed border-collapse text-left text-[13px]">
+            <table id="preconsent-inventory-table" className="w-[1315px] min-w-[1315px] max-w-[1315px] table-fixed border-collapse text-left text-[13px]">
               <caption className="sr-only">Pre-consent cookies and trackers inventory</caption>
               <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500 shadow-[0_2px_8px_-6px_rgba(15,23,42,0.55)]">
                 <tr>
                   <th title="Cookie or tracker evidence type" className="sticky left-0 top-0 z-30 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="type" label="Type" /></th>
                   <th title="Resolved vendor or first-party entity" className="sticky left-[90px] top-0 z-30 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="vendor" label="Vendor" /></th>
-                  <th title="Observed purpose classification" className="sticky top-0 z-20 w-[130px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
+                  <th title="Observed purpose classification with retained record count" className="sticky top-0 z-20 w-[165px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
                   <th title="Consent evidence classification" className="sticky top-0 z-20 w-[105px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Evidence</th>
                   <th title="Elapsed time from scan start to observation" className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
                   <th title="Names retained for the grouped vendor or entity; tracker rows may include associated cookie names." className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">
@@ -1111,7 +1124,12 @@ function RuntimeInventoryTable({
                     <td className="sticky left-[90px] z-10 truncate whitespace-nowrap bg-white px-2 py-1.5 align-middle group-hover:bg-sky-50/55">
                       <InventoryVendorCell label={row.vendor} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={getInventoryPurposeLabel(row)}>{getInventoryPurposeLabel(row)}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5 align-middle" title={formatInventoryPurposeWithCount(row)}>
+                      <span className="flex min-w-0 items-center">
+                        <span className="min-w-0 truncate">{getInventoryPurposeLabel(row)}</span>
+                        <span className="shrink-0">({row.observedRecordCount})</span>
+                      </span>
+                    </td>
                     <td className="whitespace-nowrap px-2 py-1.5 align-middle"><InventoryEvidenceCell row={row} /></td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
                     <td className="max-w-[132px] truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
@@ -1237,6 +1255,21 @@ function getSnapshotBoolean(snapshot: Record<string, unknown>, key: string) {
 
 function getRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function getActualScannedPageUrl(scanRecord: ScanDetailResponse) {
+  const scanConfig = getRecord(scanRecord.scan.scanConfigJson);
+  const navigationSummary = getRecord(getHybridRuntimeEvidence(scanRecord.runtimeArtifacts)?.navigationSummary);
+  const pageEvidenceUrl = scanRecord.pageEvidence
+    .map((row) => getRecord(row)?.pageUrl ?? getRecord(row)?.scannedPageUrl ?? null)
+    .find((value): value is string => typeof value === "string" && /^https?:\/\//i.test(value));
+  return [
+    scanRecord.accessPostureSummary?.finalEffectiveUrl,
+    navigationSummary?.effectiveScannedPageUrl,
+    navigationSummary?.finalUrl,
+    scanConfig?.normalizedUrl,
+    pageEvidenceUrl
+  ].find((value): value is string => typeof value === "string" && /^https?:\/\//i.test(value)) ?? null;
 }
 
 function getRecordBoolean(record: unknown, key: string) {
@@ -7329,6 +7362,7 @@ export async function SharedScanDetailView({
   viewerAccessRole = "user"
 }: SharedScanDetailViewProps) {
   const scanReportAccessRole = normalizeScanReportAccessRole(viewerAccessRole);
+  const actualScannedPageUrl = getActualScannedPageUrl(scanRecord);
   const showAnalystDetail = scanReportAccessRole !== "user";
   const showAdvancedDiagnostics = scanReportAccessRole === "admin";
   const canViewSignalSnapshotReviewLenses =
@@ -7794,11 +7828,17 @@ export async function SharedScanDetailView({
         statusLabel={isIncompleteScanCoverage ? "Completed limited" : undefined}
         statusTone={isIncompleteScanCoverage ? "warning" : undefined}
         title={
-          <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="break-words">Scan: {scanRecord.scan.domainHostname ?? "Unknown website"}</span>
+          <span className="flex min-w-0 max-w-full flex-nowrap items-center gap-1.5">
+            <span className="shrink-0">Scan:</span>
+            <span
+              className="min-w-0 truncate"
+              title={actualScannedPageUrl ?? scanRecord.scan.domainHostname ?? "Unknown website"}
+            >
+              {actualScannedPageUrl ?? scanRecord.scan.domainHostname ?? "Unknown website"}
+            </span>
             <InfoTip
               align="start"
-              className="translate-y-0.5 align-middle"
+              className="shrink-0 translate-y-0.5 align-middle"
               placement="bottom"
               text={`scan_id: ${scanRecord.scan.id}`}
             />

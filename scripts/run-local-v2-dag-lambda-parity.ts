@@ -128,10 +128,16 @@ class LocalRecursiveLambdaClient {
       workspaceRoot: this.input.workspaceRoot
     });
     const resultRecord = asRecord(result);
+    if (resultRecord.status === "failed") {
+      console.error("[local-lambda-worker] failed", JSON.stringify({
+        error: resultRecord.error,
+        scanId: resultRecord.scanId,
+        workerLane: resultRecord.workerLane,
+      }));
+    }
     return {
       $metadata: {},
       Payload: Buffer.from(JSON.stringify(result)),
-      ...(resultRecord.status === "failed" ? { FunctionError: "Unhandled" } : {}),
       StatusCode: 200
     };
   }
@@ -193,7 +199,12 @@ async function main() {
     process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = process.env.S3_BUCKET ?? "scan-artifacts";
     process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR = artifactBaseDir;
     process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX = "v2-dag-lambda/local-parity";
-    process.env.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS ??= "true";
+    // Lambda's single-process Chromium mode is required for the Linux runtime,
+    // but it is unstable when the three simulated evidence lanes launch in
+    // parallel on macOS. Preserve the production default while keeping local
+    // parity evidence capture reliable.
+    process.env.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS ??=
+      process.platform === "darwin" ? "false" : "true";
     process.env.CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE = "none";
     process.env.CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE = "webmd";
     process.env.CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE = "sharded";

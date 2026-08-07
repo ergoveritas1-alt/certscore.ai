@@ -62,6 +62,13 @@ the thresholds explicitly through `--min-loaded-exact-agreement` and
 5. **Passive production sampling** reviews scans users already requested. It creates
    bug leads and post-deploy signals without generating additional scans.
 
+Owned cross-origin consent, policy, runtime-storage, and transport canaries are
+registered in `docs/certscore-v2/ergoveritas-owned-live-canaries.json`. Their source
+pages live on the independently hosted `ergoveritas.com` origin. They are no-index,
+artifact-only calibration surfaces and do not authorize consent-control interaction.
+Their expected observations are fixtures for scanner regression review, not production
+findings about the ErgoVeritas site.
+
 The approved public-target inventory is registered in:
 
 - `docs/certscore-v2/scan-quality-calibration-manifest.json`

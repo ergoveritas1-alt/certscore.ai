@@ -62,6 +62,7 @@ export function getProgressHandoffStage(input: {
 export function PendingScanDetailView({
   createdAt,
   domainHostname,
+  pageUrl,
   pendingPostCompletionWork = false,
   profile,
   scanId,
@@ -70,6 +71,7 @@ export function PendingScanDetailView({
 }: {
   createdAt: string;
   domainHostname: string | null;
+  pageUrl?: string | null;
   pendingPostCompletionWork?: boolean;
   profile: string;
   scanId: string;
@@ -181,8 +183,11 @@ export function PendingScanDetailView({
     <div className="space-y-8">
       <div>
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">CertScore.ai scan</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-          Scan: {domainHostname?.trim() || "website"}
+        <h1 className="mt-2 flex min-w-0 max-w-full items-baseline gap-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+          <span className="shrink-0">Scan:</span>
+          <span className="min-w-0 truncate" title={pageUrl?.trim() || domainHostname?.trim() || "website"}>
+            {pageUrl?.trim() || domainHostname?.trim() || "website"}
+          </span>
         </h1>
       </div>
       <LocalV2DagScanProgressCard

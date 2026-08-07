@@ -111,6 +111,16 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     isCompletedScanStatus(statusProjection.status) &&
     statusProjection.reportProjectionRequired &&
     !statusProjection.reportReady;
+  if (waitingForReportProjection) {
+    after(async () => {
+      await publishCanonicalScanReportProjection({
+        organizationId: statusProjection.organizationId,
+        scanId
+      }).catch((error) => {
+        console.error("Failed to publish canonical scan report projection from the pending report shell", error);
+      });
+    });
+  }
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
       <main className="min-h-screen bg-white">
@@ -119,6 +129,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
           <PendingScanDetailView
             createdAt={statusProjection.createdAt}
             domainHostname={statusProjection.domainHostname}
+            pageUrl={statusProjection.pageUrl}
             pendingPostCompletionWork={waitingForReportProjection}
             profile={statusProjection.profile}
             scanId={statusProjection.id}
@@ -153,6 +164,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
           <PendingScanDetailView
             createdAt={statusProjection.createdAt}
             domainHostname={statusProjection.domainHostname}
+            pageUrl={statusProjection.pageUrl}
             pendingPostCompletionWork
             profile={statusProjection.profile}
             scanId={statusProjection.id}

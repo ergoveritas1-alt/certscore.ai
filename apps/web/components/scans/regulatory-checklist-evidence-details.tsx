@@ -458,43 +458,7 @@ function getRowSpecificEvidenceRows(parsed: Record<string, unknown> | null, reta
 function getEvidenceSummaryRows(input: RegulatoryChecklistEvidenceDetailsProps) {
   const parsed = getParsedEvidence(input.jsonPayload);
   const retainedEvidence = getRetainedEvidence(input.jsonPayload);
-  const smokingGunRows = getSmokingGunEvidenceRows(retainedEvidence);
-  if (smokingGunRows.length > 0) {
-    return smokingGunRows.slice(0, 3);
-  }
-
-  const highlights = uniqueStrings(getStringArray(retainedEvidence?.evidenceHighlights));
-  if (highlights.length > 0) {
-    return highlights.slice(0, 3);
-  }
-
-  const sessionReplayEvidence = getRecord(retainedEvidence?.sessionReplayEvidence);
-  const sessionReplayVendors = getStringArray(sessionReplayEvidence?.vendors);
-  if (sessionReplayVendors.length > 0) {
-    const firstSeenMs = getNumber(sessionReplayEvidence?.firstSeenMs);
-    const collectionEndpointObserved = getBoolean(sessionReplayEvidence?.collectionEndpointObserved);
-    const consentState = getStringArray(sessionReplayEvidence?.consentStates)[0];
-    return sessionReplayVendors.slice(0, 3).map((vendor) =>
-      [
-        quote(vendor),
-        consentState ? `${quote("consentState")}: ${quote(consentState)}` : null,
-        typeof firstSeenMs === "number" ? `${quote("firstSeenMs")}: ${Math.round(firstSeenMs)}` : null,
-        typeof collectionEndpointObserved === "boolean"
-          ? `${quote("collectionEndpointObserved")}: ${collectionEndpointObserved}`
-          : null
-      ].filter((value): value is string => Boolean(value)).join(", ")
-    );
-  }
-
-  const rowSpecificRows = getRowSpecificEvidenceRows(parsed, retainedEvidence);
-  if (rowSpecificRows.length > 0) {
-    return rowSpecificRows;
-  }
-
-  return uniqueStrings(getStringArray(input.evidenceRefs)
-    .map((value) => value.replace(/^Evidence flag:\s*/i, "").replace(/[_:]+/g, " ").replace(/\s+/g, " ").trim())
-    .filter((value) => value.length > 0))
-    .slice(0, 3);
+  return parsed ? getFriendlyEvidenceRows(parsed, retainedEvidence, input.evidenceRefs ?? []) : [];
 }
 
 function getPolicyProvenanceRows(jsonPayload: string) {
@@ -573,6 +537,7 @@ function resultTraceStatusLabel(status: ResultTraceEvent["status"]) {
 
 function getPrimaryTraceSubject(record: Record<string, unknown>) {
   return getString(record.cookieName) ??
+    getString(record.name) ??
     getString(record.label) ??
     getString(record.vendor) ??
     getString(record.host) ??
@@ -651,11 +616,26 @@ function buildSmokingGunTraceEvent(record: Record<string, unknown>, coverageArea
 function formatFriendlySmokingGun(record: Record<string, unknown>, coverageArea: string) {
   const subject = getPrimaryTraceSubject(record);
   const consentState = getString(record.consentState);
-  const timing = formatHumanTimeMs(record.timestampMs) ?? formatHumanTimeMs(record.capturedAtMs);
+  const timing = formatHumanTimeMs(record.firstObservedMs) ??
+    formatHumanTimeMs(record.firstObservedAtMs) ??
+    formatHumanTimeMs(record.timestampMs) ??
+    formatHumanTimeMs(record.capturedAtMs);
   const purpose = getString(record.cookiePurpose) ?? getString(record.purpose) ?? getString(record.endpointCategory);
+  const essentiality = getString(record.essentiality) ?? getString(record.cookieEssentiality);
   const party = getString(record.cookieParty);
-  const host = getString(record.host) ?? getString(record.cookieDomain);
-  const beforeConsent = /pre[_ -]?consent/i.test(consentState ?? "") || /before consent|pre-consent/i.test(coverageArea);
+  const host = getString(record.host) ?? getString(record.cookieDomain) ?? getString(record.domain);
+  const timingEvidence = getString(record.timingEvidence);
+  const beforeConsent = /pre[_ -]?consent/i.test(consentState ?? "") ||
+    /pre[_ -]?consent/i.test(timingEvidence ?? "") ||
+    /before consent|pre-consent/i.test(coverageArea);
+  if (getString(record.cookieName) || getString(record.name)) {
+    const essentialityLabel = essentiality ? essentiality.replace(/_/g, "-") : purpose?.replace(/_/g, " ");
+    return [
+      `${subject}${host ? ` (${host})` : ""}${essentialityLabel ? ` ${essentialityLabel}` : ""}`,
+      beforeConsent ? "present in a check performed before consent" : "observed during the scan",
+      timing ? `first seen at ${timing}` : null
+    ].filter((part): part is string => Boolean(part)).join(", ") + ".";
+  }
   const details = [
     host ? `on ${host}` : null,
     purpose ? `for ${purpose.replace(/_/g, " ")}` : null,
@@ -666,10 +646,29 @@ function formatFriendlySmokingGun(record: Record<string, unknown>, coverageArea:
 }
 
 function cleanEvidenceRef(value: string) {
-  return value
+  const withoutPrefix = value
     .replace(/^Evidence flag:\s*/i, "")
     .replace(/^Evidence:\s*/i, "")
-    .replace(/[_:]+/g, " ")
+    .trim();
+  return cleanCustomerEvidenceText(withoutPrefix);
+}
+
+function cleanCustomerEvidenceText(value: string) {
+  return value
+    .replace(/firstSeenMs\s*:\s*(\d+(?:\.\d+)?)/gi, (_match, milliseconds: string) => `first observed ${formatElapsedSeconds(Number(milliseconds))} after scan start`)
+    .replace(/preConsent\s*:\s*true/gi, "observed before consent")
+    .replace(/^statusBasis\s*:\s*/i, "")
+    .replace(/^basis\s*:\s*/i, "")
+    .replace(/canonical unified findings? projected for this row\.?/gi, "The scan retained supporting evidence for this result.")
+    .replace(/projected finding evidence\s*:/gi, "Supporting evidence:")
+    .replace(/evidence packet/gi, "evidence details")
+    .replace(/periodic[_ -]+pre[_ -]?consent[_ -]+snapshot/gi, "a check performed before consent")
+    .replace(/non[_ -]+essential/gi, "non-essential")
+    .replace(/^selectedEvidenceStrength\s*:/i, "Evidence quality:")
+    .replace(/^unmatched_cookie_names\s*:/i, "Cookie names needing review:")
+    .replace(/^unmatchedAdvertisingSharingVendorLabels\s*:/i, "Vendors needing review:")
+    .replace(/^runtimeVendorRequestUrlCoherence\s*:/i, "Vendor/request comparison:")
+    .replace(/^([A-Za-z][A-Za-z0-9_]*)(\s*:)/, (_match, label: string, separator: string) => `${humanizeTraceToken(label)}${separator}`)
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -686,20 +685,33 @@ function getFriendlyEvidenceRows(
     return uniqueStrings(smokingGunRows).slice(0, 3);
   }
 
+  const preConsentStorageAssessment = getRecord(retainedEvidence?.preConsentStorageAssessment);
+  const projectedStorageRows = Array.isArray(preConsentStorageAssessment?.evidenceRows)
+    ? preConsentStorageAssessment.evidenceRows
+      .map(getRecord)
+      .filter((record): record is Record<string, unknown> => Boolean(record))
+      .filter((record) => getString(record.essentiality) === "non_essential")
+      .map((record) => formatFriendlySmokingGun(record, coverageArea))
+    : [];
+  if (projectedStorageRows.length > 0) {
+    return uniqueStrings(projectedStorageRows).slice(0, 3);
+  }
+
   const highlights = uniqueStrings(getStringArray(retainedEvidence?.evidenceHighlights)
-    .map((value) => truncateTraceText(value.replace(/"/g, ""), 150)));
+    .map((value) => truncateTraceText(cleanCustomerEvidenceText(value.replace(/"/g, "")), 150)));
   if (highlights.length > 0) {
     return highlights.slice(0, 3);
   }
 
-  const rowSpecificRows = getRowSpecificEvidenceRows(parsed, retainedEvidence)
-    .map((value) => truncateTraceText(value.replace(/"/g, ""), 150));
+  const rawRowSpecificRows = getRowSpecificEvidenceRows(parsed, retainedEvidence);
+  const onlyBasisFallback = rawRowSpecificRows.length > 0 && rawRowSpecificRows.every((value) => /^"?(?:statusBasis|basis)"?\s*:/i.test(value));
+  if (onlyBasisFallback && evidenceRefs.length > 0) {
+    return uniqueStrings(evidenceRefs.map(cleanEvidenceRef).filter(Boolean)).slice(0, 3);
+  }
+  const rowSpecificRows = rawRowSpecificRows
+    .map((value) => truncateTraceText(cleanCustomerEvidenceText(value.replace(/"/g, "")), 150));
   if (rowSpecificRows.length > 0) {
-    const onlyBasisFallback = rowSpecificRows.every((value) => /^statusBasis\s*:/i.test(value));
-    if (onlyBasisFallback && evidenceRefs.length > 0) {
-      return uniqueStrings(evidenceRefs.map(cleanEvidenceRef).filter(Boolean)).slice(0, 3);
-    }
-    return rowSpecificRows.slice(0, 3);
+    return rowSpecificRows.filter((value) => !/^missing evidence fields\s*:/i.test(value) && !/CertScore\./i.test(value)).slice(0, 3);
   }
 
   return uniqueStrings(evidenceRefs.map(cleanEvidenceRef).filter(Boolean)).slice(0, 3);
@@ -914,7 +926,7 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
   const policyEvidenceAssessment = getRecord(retainedEvidence?.policyEvidenceAssessment);
   const policyEvidenceResult = getString(policyEvidenceAssessment?.result);
   const traceSubjects = getTraceSubjects(retainedEvidence);
-  const subjectList = formatSubjectList(traceSubjects, "the signals shown in the result trace");
+  const subjectList = formatSubjectList(traceSubjects, "the signals listed in the evidence details");
   const isGapOrReview =
     assessmentStatus === "gap_observed" ||
     assessmentStatus === "review_signal" ||
@@ -936,13 +948,13 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
       /observed|not observed|checked|out of scope|not applicable/i.test(status ?? "")
     );
 
-  const verifyStep = "Rerun the v2 scan and confirm the row changes from a gap/review signal to observed, checked, not observed, or a documented coverage limitation.";
-  const evidenceStep = "Keep a short internal record of the changed control, policy surface, or tag-setting rule so the next scan can be reviewed against the same evidence.";
+  const verifyStep = "Rerun the scan and confirm the result reflects the change or clearly explains why the page could not be fully evaluated.";
+  const evidenceStep = "Keep a short internal record of what changed so the next scan can be compared with the same page and settings.";
 
   if (policyEvidenceResult === "extraction_incomplete" || policyEvidenceResult === "not_located_automatically") {
     return {
       kind: "none",
-      message: "This row records an automated retrieval limitation, not a negative policy assessment. No site remediation is indicated from this row alone; review the source policy manually or improve the canonical policy extractor.",
+      message: "The scan could not retrieve enough policy text to evaluate this item. This does not indicate a policy problem by itself. Review the source policy manually or improve how the policy page is made available to the scan.",
       steps: [],
     };
   }
@@ -951,10 +963,10 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
     return {
       kind: "steps",
       steps: [
-        "Review the retained privacy-policy surface for the row-specific disclosure.",
-        "If the disclosure exists, improve scanner extraction or matcher coverage, or add an internal review note.",
+        "Review the privacy policy for the disclosure described in this result.",
+        "If the disclosure exists, review why the scan did not identify it or add an internal review note.",
         "If the disclosure is missing, update the privacy notice or internal review record.",
-        "Rerun the scan and confirm the row changes to Observed, Partial support, Not confirmed, or a documented coverage limitation.",
+        "Rerun the scan and confirm the updated result reflects the disclosure or clearly explains why it could not be evaluated.",
       ],
     };
   }
@@ -972,10 +984,10 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
     return {
       kind: "steps",
       steps: [
-        `This row is not fully testable for ${coverageArea} in the retained scan context, so the next step is to improve observability rather than remediate a confirmed issue.`,
-        "Run the missing scanner module or repair the blocked page/path noted in the evidence packet.",
+        `The scan could not fully evaluate ${coverageArea}, so improve access to the relevant page or feature before treating this as a confirmed issue.`,
+        "Resolve any blocked or unavailable page or path noted in the evidence details.",
         "Confirm the relevant page, policy, or user-choice control is reachable without authentication or bot challenge.",
-        "Retest with the same scan profile so this row can move from not testable to observed or not observed.",
+        "Rerun the scan with the same location and settings so the result can be compared consistently.",
         evidenceStep,
       ],
     };
@@ -1020,7 +1032,7 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
       "Add or expose a clear reject-all or equivalent refusal control wherever the consent surface offers accept-all.",
       "Keep the reject path reachable without requiring unnecessary extra steps compared with accepting.",
       "Confirm the reject action stores a durable refusal state and closes or updates the consent surface.",
-      "Verify the scanner can observe successful reject action proof in a fresh run.",
+      "Rerun the scan and confirm the reject action is available and works in a fresh visit.",
       verifyStep,
     ]};
   }
@@ -1050,7 +1062,7 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
       "Add or repair a public privacy notice link in a predictable location such as the footer.",
       "Ensure the notice page loads without authentication, bot challenge, or broken redirects.",
       "Include clear sections for data collection, use, sharing, cookies/tracking, rights, and contact paths as applicable.",
-      "Verify the scanner can fetch the notice and retain a bounded evidence excerpt.",
+      "Rerun the scan and confirm the privacy notice is found and can be reviewed.",
       verifyStep,
     ]};
   }
@@ -1109,7 +1121,7 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
     return { kind: "steps", steps: [
       `Identify ${subjectList} and any other 3rd party endpoint hosts shown in the trace.`,
       "Confirm where each endpoint is operated, processed, or routed, using vendor documentation if needed.",
-      "Update transfer, vendor, or subprocessors disclosures when the retained policy surface does not cover the observed processing context.",
+      "Update transfer, vendor, or subprocessor disclosures when the privacy policy does not cover the activity observed during the scan.",
       "Remove or regionalize endpoints that are not needed for the tested page or visitor context.",
       verifyStep,
     ]};
@@ -1120,14 +1132,14 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
       "Add a clear method for users to exercise privacy rights, such as a web form, email, portal, or toll-free number where applicable.",
       "Make the method reachable from the privacy notice and relevant footer/privacy-choice surfaces.",
       "Describe the request types supported and any verification steps users should expect.",
-      "Verify the scanner can find and retain the rights-request method evidence.",
+      "Rerun the scan and confirm the rights-request method is found.",
       verifyStep,
     ]};
   }
 
   if (isGapOrReview) {
     return { kind: "steps", steps: [
-      `Review the result trace and evidence packet for the specific signal behind ${coverageArea}.`,
+      `Review the evidence details for the specific signal behind ${coverageArea}.`,
       "Update the affected consent, policy, tag-manager, vendor, or user-choice implementation.",
       "Retest in a fresh browser context so prior cookies or preferences do not hide the change.",
       verifyStep,
@@ -1137,7 +1149,7 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
 
   return {
     kind: "none",
-    message: `${coverageArea} does not currently indicate a corrective action from this scan row.`,
+    message: `${coverageArea} does not currently indicate a corrective action from this scan result.`,
     steps: [],
   };
 }
@@ -1277,7 +1289,7 @@ export function RegulatoryChecklistEvidenceDetails(input: RegulatoryChecklistEvi
       {policyProvenanceRows.length > 0 ? (
         <div className="border-t border-slate-200 px-2.5 py-1.5">
           <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] leading-5 text-slate-800">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">Policy provenance</p>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">Policy source</p>
             {policyProvenanceRows.map((row, index) => (
               <p key={`${index}:${row}`}>{row}</p>
             ))}
@@ -1288,16 +1300,21 @@ export function RegulatoryChecklistEvidenceDetails(input: RegulatoryChecklistEvi
         <div className="border-t border-slate-200 px-2.5 py-1.5">
           <div className="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-[11px] leading-5 text-sky-950">
             {evidenceSummaryRows.map((row, index) => (
-              <p className="font-mono" key={`${index}:${row}`}>{row}</p>
+              <p key={`${index}:${row}`}>{row}</p>
             ))}
           </div>
         </div>
       ) : null}
-      <EvidenceJsonBlock
-        payload={input.jsonPayload}
-        className="rounded-none border-t border-slate-800"
-        preClassName="max-h-48 px-2.5 py-2 pr-12 font-mono text-[11px] leading-5"
-      />
+      <details className="border-t border-slate-200 bg-white" open>
+        <summary className="cursor-pointer px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+          Full evidence JSON
+        </summary>
+        <EvidenceJsonBlock
+          payload={input.jsonPayload}
+          className="rounded-none border-t border-slate-800"
+          preClassName="max-h-72 px-2.5 py-2 pr-12 font-mono text-[11px] leading-5"
+        />
+      </details>
     </>
   );
 }

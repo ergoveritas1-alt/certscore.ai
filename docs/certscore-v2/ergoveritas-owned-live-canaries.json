@@ -1,0 +1,18 @@
+{
+  "contractVersion": "certscore.ergoveritas_owned_canary.1",
+  "owner": "ErgoVeritas",
+  "artifactOnly": true,
+  "consentInteractionAllowed": false,
+  "indexingAllowed": false,
+  "manifestUrl": "https://ergoveritas.com/.well-known/certscore-canary/manifest.json",
+  "targets": [
+    { "key": "ergoveritas-canary-index", "url": "https://ergoveritas.com/.well-known/certscore-canary/index.html", "lane": "transport" },
+    { "key": "ergoveritas-consent-direct", "url": "https://ergoveritas.com/.well-known/certscore-canary/consent/direct.html", "lane": "consent_controls", "accept": true, "reject": true, "options": true, "renderMode": "direct" },
+    { "key": "ergoveritas-consent-missing-reject", "url": "https://ergoveritas.com/.well-known/certscore-canary/consent/missing-reject.html", "lane": "consent_controls", "accept": true, "reject": false, "options": true, "renderMode": "direct" },
+    { "key": "ergoveritas-consent-delayed", "url": "https://ergoveritas.com/.well-known/certscore-canary/consent/delayed.html", "lane": "consent_controls", "accept": true, "reject": true, "options": true, "renderMode": "delayed" },
+    { "key": "ergoveritas-consent-shadow-dom", "url": "https://ergoveritas.com/.well-known/certscore-canary/consent/shadow-dom.html", "lane": "consent_controls", "accept": true, "reject": true, "options": true, "renderMode": "shadow_dom" },
+    { "key": "ergoveritas-policy-landing", "url": "https://ergoveritas.com/.well-known/certscore-canary/policy/index.html", "lane": "gdpr_transparency" },
+    { "key": "ergoveritas-policy-complete", "url": "https://ergoveritas.com/.well-known/certscore-canary/policy/privacy.html", "lane": "gdpr_transparency" },
+    { "key": "ergoveritas-runtime-storage", "url": "https://ergoveritas.com/.well-known/certscore-canary/runtime/storage.html", "lane": "runtime_evidence", "cookie": "certscore_canary_functional", "localStorage": "certscore_canary_storage", "thirdPartyRequests": false }
+  ]
+}

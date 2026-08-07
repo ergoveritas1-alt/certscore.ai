@@ -9,12 +9,21 @@
   <link rel="stylesheet" href="../styles.css">
   <style>[hidden] { display: none !important; }</style>
   <!-- Intentionally loaded before consent for scanner validation. -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-CANARYTEST"></script>
+  <!-- Real Ergo Veritas GA4 tag intentionally loaded before consent for canary validation. -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-X5ZM7BWET3"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-    gtag('config', 'G-CANARYTEST', {send_page_view: true});
+    gtag('config', 'G-X5ZM7BWET3', {send_page_view: true});
+  </script>
+  <!-- Real Ergo Veritas Microsoft Clarity tag intentionally loaded before consent for canary validation. -->
+  <script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+      c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+      t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+      y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "xycqqptk8i");
   </script>
 </head>
 <body>
@@ -24,6 +33,7 @@
         data-expected-reject="false"
         data-expected-preconsent-storage="true"
         data-expected-social-embed="true"
+        data-expected-session-replay="true"
         data-expected-fingerprinting="true"
         data-expected-gdpr-missing="retention,international_transfers">
     <p>Controlled test fixture; synthetic validation only.</p>
@@ -52,7 +62,7 @@
 
     <section class="notice">
       <h2>Pre-consent runtime signals</h2>
-      <p>Synthetic runtime behaviors are active before consent for scanner validation.</p>
+      <p>Real Google Analytics 4 and Microsoft Clarity tags are active before consent for scanner validation. Clarity may create its normal session-replay cookies and runtime requests.</p>
     </section>
 
     <section class="notice" data-certscore-test-expectations="true">
@@ -60,7 +70,10 @@
       <p>This page is intentionally non-compliant and exists only for automated scanner validation.</p>
       <ul>
         <li>Pre-consent Google-tag-style cookies and storage</li>
+        <li>Real Google Analytics 4 measurement tag loaded before consent</li>
+        <li>Real Microsoft Clarity session-replay tag and Clarity cookies loaded before consent</li>
         <li>Non-essential analytics and marketing trackers before consent</li>
+        <li>Session replay / behavioral analytics signal expected</li>
         <li>Synthetic fingerprinting activity</li>
         <li>Social/media embed loaded before consent</li>
         <li>Accept observed; Reject/Necessary-only not observed; Manage observed</li>
@@ -81,7 +94,7 @@
       </div>
     </section>
 
-    <script src="../runtime/broad-baseline-runtime.js?v=4bf657e8"></script>
+    <script src="../runtime/broad-baseline-runtime.js?v=5e8a2c1d"></script>
   </main>
   <footer style="width:min(760px,calc(100% - 32px));margin:48px auto 32px;padding-top:20px;border-top:1px solid #cbd5e1;text-align:center">
     <a href="../policy/broad-baseline.html">Privacy Policy</a>

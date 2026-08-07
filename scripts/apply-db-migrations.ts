@@ -67,7 +67,7 @@ async function getMigrationFiles() {
 }
 
 function requiresNonTransactionalMigration(sql: string) {
-  return /\bcreate\s+index\s+concurrently(?:\s+if\s+not\s+exists)?\b/i.test(sql);
+  return /\b(?:create|drop)\s+index\s+concurrently\b/i.test(sql);
 }
 
 async function recordAppliedMigration(client: Client, migrationName: string, checksum: string) {

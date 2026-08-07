@@ -48,9 +48,8 @@ test("RegulatoryChecklistActiveTrace renders a concise end-user result explanati
   assert.doesNotMatch(html, /after evaluating the retained gate values and evidence/);
   assert.match(html, /Basis/);
   assert.match(html, /Evidence used/);
-  assert.match(html, /x_vendor was observed before consent/);
+  assert.match(html, /x_vendor \(ads\.vendor\.example\) advertising, present in a check performed before consent, first seen at 0\.482s/);
   assert.match(html, /advertising/);
-  assert.match(html, /3rd party/);
   assert.match(html, /x_vendor/);
   assert.doesNotMatch(html, /Scan started/);
   assert.doesNotMatch(html, /Gate decision/);
@@ -80,7 +79,7 @@ test("RegulatoryChecklistActiveTrace keeps checked explanations short", () => {
   assert.match(html, /max-h-\[50vh\]/);
   assert.match(html, /overflow-y-auto/);
   assert.match(html, /Privacy notice evidence was retained/);
-  assert.match(html, /ref one/);
+  assert.match(html, /ref_one/);
   assert.doesNotMatch(html, /Why this result\?\s*<span[^>]*>Checked/);
   assert.doesNotMatch(html, /<dt[^>]*>Result<\/dt>/);
   assert.doesNotMatch(html, /Checked: evidence was observed/);
@@ -145,7 +144,7 @@ test("RegulatoryChecklistActiveTrace shows Article 13 row-specific retained snip
   assert.match(html, /https:\/\/example\.test\/privacy/);
 });
 
-test("RegulatoryChecklistEvidenceDetails renders compact retained evidence ahead of audit JSON", () => {
+test("RegulatoryChecklistEvidenceDetails renders plain-language evidence with the full JSON", () => {
   const html = renderToStaticMarkup(
     createElement(RegulatoryChecklistEvidenceDetails, {
       evidenceRefs: [
@@ -170,11 +169,13 @@ test("RegulatoryChecklistEvidenceDetails renders compact retained evidence ahead
   );
 
   assert.match(html, /Cloudflare Web Analytics/);
-  assert.equal((html.match(/<p class="font-mono">/g) ?? []).length, 1);
+  assert.match(html, /observed before consent/);
+  assert.match(html, /first observed 0\.482s after scan start/);
+  assert.match(html, /Full evidence JSON/);
   assert.match(html, /preConsent/);
   assert.match(html, /firstSeenMs/);
+  assert.match(html, /<pre/);
   assert.doesNotMatch(html, /Evidence references:/);
-  assert.match(html, /Pre-consent 3rd party tracking/);
 });
 
 test("RegulatoryChecklistCorrectionSteps gives friendly cookie consent remediation", () => {
@@ -200,7 +201,8 @@ test("RegulatoryChecklistCorrectionSteps gives friendly cookie consent remediati
   assert.match(html, /max-h-\[50vh\]/);
   assert.match(html, /Inventory TapAd_TS/);
   assert.match(html, /not written until the user has made the appropriate consent choice/);
-  assert.match(html, /Rerun the v2 scan/);
+  assert.match(html, /Rerun the scan/);
+  assert.doesNotMatch(html, /v2|gap\/review signal|documented coverage limitation/);
 });
 
 test("RegulatoryChecklistCorrectionSteps gives reviewer guidance for not-confirmed policy extraction rows", () => {
@@ -221,8 +223,8 @@ test("RegulatoryChecklistCorrectionSteps gives reviewer guidance for not-confirm
     })
   );
 
-  assert.match(html, /Review the retained privacy-policy surface for the row-specific disclosure/);
-  assert.match(html, /improve scanner extraction or matcher coverage/);
+  assert.match(html, /Review the privacy policy for the disclosure described in this result/);
+  assert.match(html, /review why the scan did not identify it/);
   assert.match(html, /update the privacy notice or internal review record/);
   assert.doesNotMatch(html, /Update the affected consent, policy, tag-manager/);
 });
@@ -291,14 +293,44 @@ test("RegulatoryChecklistEvidenceDetails prefers smoking-gun event timing over g
     })
   );
 
-  const summaryHtml = html.split("<pre")[0] ?? html;
-  assert.match(summaryHtml, /TapAd_TS/);
-  assert.match(summaryHtml, /timestampMs/);
-  assert.match(summaryHtml, /2.72s/);
-  assert.match(summaryHtml, /cookiePurpose/);
-  assert.match(summaryHtml, /advertising/);
-  assert.match(summaryHtml, /pre_consent/);
-  assert.doesNotMatch(summaryHtml, /TapAd_DID/);
+  assert.match(html, /TapAd_TS/);
+  assert.match(html, /2.72s/);
+  assert.match(html, /advertising/);
+  assert.match(html, /present in a check performed before consent/);
+  assert.match(html, /first seen at 2.72s/);
+  assert.match(html, /Full evidence JSON/);
+  assert.match(html, /timestampMs/);
+  assert.match(html, /cookiePurpose/);
+  assert.match(html, /pre_consent/);
+  assert.doesNotMatch(html, /TapAd_DID/);
+});
+
+test("RegulatoryChecklistEvidenceDetails shows each projected cookie first-observed time", () => {
+  const html = renderToStaticMarkup(
+    createElement(RegulatoryChecklistEvidenceDetails, {
+      evidenceRefs: [],
+      jsonPayload: JSON.stringify({
+        coverageArea: "Non-essential pre-consent cookies/storage",
+        retainedEvidence: {
+          preConsentStorageAssessment: {
+            evidenceRows: [{
+              domain: "ergoveritas.com",
+              essentiality: "non_essential",
+              firstObservedMs: 2_625,
+              name: "_ga_CANARY",
+              timingEvidence: "periodic_preconsent_snapshot"
+            }],
+            status: "classified_nonessential_observed"
+          }
+        },
+        status: "Potential gap"
+      })
+    })
+  );
+
+  assert.match(html, /_ga_CANARY \(ergoveritas\.com\) non-essential, present in a check performed before consent, first seen at 2.63s\./);
+  assert.match(html, /Full evidence JSON/);
+  assert.match(html, /&quot;firstObservedMs&quot;:2625/);
 });
 
 test("RegulatoryChecklistEvidenceDetails renders compact session replay retained evidence", () => {
@@ -321,7 +353,8 @@ test("RegulatoryChecklistEvidenceDetails renders compact session replay retained
   );
 
   assert.match(html, /Microsoft Clarity/);
-  assert.match(html, /consentState/);
+  assert.match(html, /first observed 2\.41s after scan start/);
+  assert.match(html, /consentStates/);
   assert.match(html, /post_accept/);
   assert.match(html, /firstSeenMs/);
   assert.match(html, /collectionEndpointObserved/);
@@ -353,9 +386,9 @@ test("RegulatoryChecklistEvidenceDetails prefers row-specific retained evidence 
     })
   );
 
-  assert.match(html, /runtimeVendorRequestUrlCoherence/);
+  assert.match(html, /Vendor\/request comparison/);
   assert.match(html, /mismatch/);
-  assert.match(html, /unmatchedAdvertisingSharingVendorLabels/);
+  assert.match(html, /Vendors needing review/);
   assert.match(html, /Meta Pixel/);
   assert.doesNotMatch(html, /Privacy notice URLs: 1/);
   assert.doesNotMatch(html, /Advertising\/sharing vendors: 1/);
@@ -396,14 +429,12 @@ test("RegulatoryChecklistEvidenceDetails renders concise runtime vendor disclosu
     })
   );
 
-  const summaryHtml = html.split("<pre")[0] ?? html;
-  assert.equal((html.match(/<p class="font-mono">/g) ?? []).length, 4);
-  assert.match(summaryHtml, /&quot;basis&quot;/);
-  assert.match(summaryHtml, /direct vendor comparison row/);
-  assert.match(summaryHtml, /&quot;selectedEvidenceStrength&quot;: &quot;limited&quot;/);
-  assert.match(summaryHtml, /_cs_c/);
-  assert.match(summaryHtml, /CertScore\.unifiedFinding\.presentationDecision\.status/);
-  assert.doesNotMatch(summaryHtml, /Required to treat a matched canonical finding/);
+  assert.match(html, /direct vendor comparison row/);
+  assert.match(html, /Evidence quality: limited/);
+  assert.match(html, /Cookie names needing review/);
+  assert.match(html, /_cs_c/);
+  assert.match(html, /selectedEvidenceStrength/);
+  assert.match(html, /CertScore/);
 });
 
 test("RegulatoryChecklistEvidenceDetails exposes canonical policy provenance", () => {
@@ -431,7 +462,7 @@ test("RegulatoryChecklistEvidenceDetails exposes canonical policy provenance", (
     })
   );
 
-  assert.match(html, /Policy provenance/);
+  assert.match(html, /Policy source/);
   assert.match(html, /Amazon Privacy Notice/);
   assert.match(html, /Source policy language: en; banner\/page language: de/);
   assert.match(html, /translation applied: No/);

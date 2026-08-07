@@ -584,7 +584,7 @@ test("GdprEprivacyCoverageChecklistCard renders concise session replay evidence 
   assert.match(html, /Microsoft Clarity, Hotjar, and Contentsquare/);
   assert.doesNotMatch(html, />Before consent</);
   assert.doesNotMatch(html, />Disclosure alignment</);
-  assert.match(html, /aria-label="Toggle evidence packet for Session replay \/ behavioral analytics"/);
+  assert.match(html, /aria-label="Toggle evidence details for Session replay \/ behavioral analytics"/);
   assert.match(html, /aria-label="Toggle correction steps for Session replay \/ behavioral analytics"/);
   assert.doesNotMatch(html, /Session replay collection was retained before a recorded consent action/);
   assert.match(html, />Observed</);
@@ -899,7 +899,7 @@ test("GdprEprivacyCoverageChecklistCard starts evidence and correction cards hid
     })
   );
 
-  assert.match(html, /aria-label="Toggle evidence packet for Pre-consent 3rd party tracking"/);
+  assert.match(html, /aria-label="Toggle evidence details for Pre-consent 3rd party tracking"/);
   assert.match(html, /aria-label="Toggle correction steps for Pre-consent 3rd party tracking"/);
   assert.doesNotMatch(html, />Evidence packet</);
   assert.doesNotMatch(html, />Correction steps</);
@@ -1355,7 +1355,7 @@ test("GdprEprivacyCoverageChecklistCard renders policy excerpts in monospace wit
     html,
     /<span class="font-mono text-\[0\.86em\] italic text-slate-700">&quot;ccount records/
   );
-  assert.match(html, /\.\.\.\[more in evidence packet\]&quot;<\/span>/);
+  assert.match(html, /\.\.\.\[more evidence available\]&quot;<\/span>/);
   assert.doesNotMatch(html, /docum\.\.\.&quot;<\/span>/);
 });
 
@@ -1710,7 +1710,7 @@ test("GdprEprivacyCoverageChecklistCard avoids duplicate observed wording for no
     })
   );
 
-  assert.match(html, /Not observed in retained scanner evidence/);
+  assert.match(html, /Not observed in scan evidence/);
   assert.doesNotMatch(html, /observed was observed/i);
   assert.doesNotMatch(html, /availability was observed/i);
 });
@@ -1935,7 +1935,7 @@ test("GdprEprivacyCoverageChecklistCard uses persistence wording without reducti
     })
   );
 
-  assert.match(html, /Potential gap from retained scanner evidence; Test row basis/i);
+  assert.match(html, /Potential issue based on scan evidence; Test row basis/i);
   assert.doesNotMatch(html, /did not materially decrease/i);
 });
 
@@ -2055,7 +2055,7 @@ test("GdprEprivacyCoverageChecklistCard does not throw when retained row rationa
     })
   );
 
-  assert.match(html, /Not confirmed from retained scanner evidence/);
+  assert.match(html, /Not confirmed by scan evidence/);
 });
 
 test("GdprEprivacyCoverageChecklistCard uses retained status basis for visible scan-context notes", () => {

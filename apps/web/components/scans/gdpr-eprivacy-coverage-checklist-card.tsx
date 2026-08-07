@@ -1389,7 +1389,7 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
     case "Not observed":
       return `No eligible evidence for ${subject} was observed in the tested context.`;
     case "Insufficient evidence":
-      return `The scan retained partial evidence for ${subject}, but not enough canonical evidence to resolve the row.`;
+      return `The scan found partial evidence for ${subject}, but not enough to reach a clear result.`;
     case "Not testable":
       return `The retained scan context did not support testing ${subject}.`;
     case "Out of scope":
@@ -1410,7 +1410,7 @@ function getChecklistRowRationale(item: GdprEprivacyCoverageChecklistItem) {
     item.note,
     item.explanation
   ].find((value) => typeof value === "string" && value.trim().length > 0)
-    ?? `${item.label} evidence was evaluated from retained scanner evidence.`;
+    ?? `${item.label} was evaluated using the evidence collected during the scan.`;
 }
 
 export function getGdprEprivacyCoverageChecklistRowRationaleForAudit(item: GdprEprivacyCoverageChecklistItem) {
@@ -1772,7 +1772,7 @@ function getArticle13RationalePrefix(item: GdprEprivacyCoverageChecklistItem) {
 function getArticle13Snippet(evidence: Record<string, unknown>) {
   const article13Signal = getRecord(evidence.article13Signal);
   const text = getString(article13Signal?.evidenceText) ?? getString(article13Signal?.evidence_text);
-  return text ? `"${truncateWholeWord(cleanPolicyExcerptStart(text), 180, "...[more in evidence packet]")}"` : null;
+  return text ? `"${truncateWholeWord(cleanPolicyExcerptStart(text), 180, "...[more evidence available]")}"` : null;
 }
 
 function getStrongestEvidenceDetail(item: GdprEprivacyCoverageChecklistItem) {
@@ -1805,7 +1805,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (policyTextExtractionLimited(item)) {
     return joinRationaleParts([
-      `Coverage limited from retained ${source}`,
+      `Coverage was limited by ${source}`,
       statusBasis,
       getPolicyTextExtractionSummary(evidence),
       missingEvidence,
@@ -1815,7 +1815,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (evidenceLabel === "Not testable") {
     return joinRationaleParts([
-      `Not testable from retained ${source}`,
+      `Could not be fully evaluated using ${source}`,
       missingEvidence ?? statusBasis,
       policySurface
     ]);
@@ -1823,7 +1823,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (evidenceLabel === "Potential gap") {
     return joinRationaleParts([
-      `Potential gap from retained ${source}`,
+      `Potential issue based on ${source}`,
       strongestDetail ?? statusBasis,
       projectedFindings,
       signalState
@@ -1832,7 +1832,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (evidenceLabel === "Partial concern") {
     return joinRationaleParts([
-      `Partial support from retained ${source}`,
+      `Partial support from ${source}`,
       strongestDetail ?? statusBasis,
       missingEvidence,
       policySurface
@@ -1841,7 +1841,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (evidenceLabel === "Not confirmed") {
     return joinRationaleParts([
-      `Not confirmed from retained ${source}`,
+      `Not confirmed by ${source}`,
       strongestDetail ?? statusBasis,
       missingEvidence,
       policySurface
@@ -1850,7 +1850,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (evidenceLabel === "Observed") {
     return joinRationaleParts([
-      `Observed from retained ${source}`,
+      `Observed in ${source}`,
       strongestDetail ?? statusBasis,
       projectedFindings,
       policySurface
@@ -1858,7 +1858,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
   }
 
   return joinRationaleParts([
-    `Not observed in retained ${source}`,
+    `Not observed in ${source}`,
     strongestDetail ?? statusBasis,
     missingEvidence,
     signalState
@@ -1874,12 +1874,12 @@ function getRetainedEvidenceSourceSummary(item: GdprEprivacyCoverageChecklistIte
     return "runtime evidence";
   }
   if (getStringArrayFromEvidenceKeys(evidence, ["projectedFindings", "projected_findings"]).length > 0 || item.criticalEvidence.projectedFindings.length > 0) {
-    return "unified finding projection evidence";
+    return "scan evidence";
   }
   if (item.criticalEvidence.missingOrIncompleteSourceSignals.length > 0) {
-    return "source-signal coverage evidence";
+    return "source evidence";
   }
-  return "scanner evidence";
+  return "scan evidence";
 }
 
 function policyTextExtractionLimited(item: GdprEprivacyCoverageChecklistItem) {
@@ -1973,7 +1973,7 @@ function getProjectedFindingSummary(evidence: Record<string, unknown>) {
   const previews = getNestedRecordStrings(evidence.projectedFindingPreview, ["label", "id"]).slice(0, 3);
   const findingEntities = getNestedRecordStrings(evidence.findingEntities, ["id", "label"]).slice(0, 3);
   const phrase = formatList(uniqueStrings([...projected, ...projectedObjects, ...previews, ...findingEntities]).slice(0, 3));
-  return phrase ? `projected finding evidence: ${phrase}` : null;
+  return phrase ? `supporting evidence: ${phrase}` : null;
 }
 
 function getSignalObservedSummary(evidence: Record<string, unknown>) {
@@ -2470,6 +2470,11 @@ function joinRationaleParts(parts: Array<string | null | undefined>) {
 
 function cleanEvidenceText(value: string) {
   return value
+    .replace(/Canonical unified findings? projected for this row\.?/gi, "The scan found supporting evidence for this result.")
+    .replace(/projected finding evidence\s*:/gi, "Supporting evidence:")
+    .replace(/unified finding projection evidence/gi, "scan evidence")
+    .replace(/retained scanner evidence/gi, "evidence collected during the scan")
+    .replace(/not enough canonical evidence/gi, "not enough evidence")
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:])/g, "$1")
     .trim();
@@ -2510,7 +2515,7 @@ function truncateWholeWord(value: string, maxLength: number, suffix = "...") {
 function renderRationaleText(value: string | null | undefined) {
   const displayValue = typeof value === "string" && value.trim().length > 0
     ? value
-    : "Retained scanner evidence was evaluated for this checklist row.";
+    : "The available scan evidence was evaluated for this checklist item.";
   return displayValue.split(/("[^"]+")/g).map((part, index) => {
     if (part.startsWith("\"") && part.endsWith("\"")) {
       return (
@@ -2813,7 +2818,7 @@ function ChecklistRows({
                     <InfoTip
                       align="start"
                       placement="bottom"
-                      text={`This finding explains how the scan evaluates ${item.label.toLowerCase()}. Use the status and evidence packet to interpret the retained signal; it is review context, not a legal conclusion.`}
+                      text={`This finding explains how the scan evaluates ${item.label.toLowerCase()}. Use the status and evidence details to interpret what was found; it is review context, not a legal conclusion.`}
                     />
                     <span
                       className={cn(
@@ -2846,7 +2851,7 @@ function ChecklistRows({
                   <RowToolButton
                     active={evidenceOpen}
                     icon="evidence"
-                    label={`Toggle evidence packet for ${item.label}`}
+                    label={`Toggle evidence details for ${item.label}`}
                     onClick={() => toggleRowTool(item.id, "evidence")}
                   />
                   <RowToolButton
@@ -2875,7 +2880,7 @@ function ChecklistRows({
                   <RowToolButton
                     active={evidenceOpen}
                     icon="evidence"
-                    label={`Toggle evidence packet for ${item.label}`}
+                    label={`Toggle evidence details for ${item.label}`}
                     onClick={() => toggleRowTool(item.id, "evidence")}
                   />
                   <RowToolButton
@@ -2890,7 +2895,7 @@ function ChecklistRows({
               {evidenceOpen ? (
                 <details className="mt-2 rounded-md border border-slate-200 bg-white" open>
                   <summary className="cursor-pointer px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                    Evidence packet
+                    Evidence details
                   </summary>
                   <div className="max-h-[50vh] overflow-y-auto">
                     <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(item)} jsonPayload={stringifyEvidenceJson(item)} />

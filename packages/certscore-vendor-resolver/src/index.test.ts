@@ -466,6 +466,39 @@ test("resolves the Wave 11 residual production batch without collapsing product 
   }
 });
 
+test("resolves documented Microsoft Clarity and identity cookies with host-bounded attribution", () => {
+  const observations = resolveVendorObservations([
+    { type: "cookie", cookieName: "CLID", hostname: "clarity.ms" },
+    { type: "cookie", cookieName: "MUID", hostname: "clarity.ms" },
+    { type: "cookie", cookieName: "MUID", hostname: "bing.com" },
+    { type: "cookie", cookieName: "MR", hostname: "c.bing.com" },
+    { type: "cookie", cookieName: "SRM_B", hostname: "c.bing.com" },
+  ]);
+
+  const clarity = observations.find((item) => item.product === "Microsoft Clarity");
+  assert.equal(clarity?.purpose, "session_replay");
+  assert.deepEqual(clarity?.matchedCookieNames, ["CLID"]);
+
+  const identity = observations.find((item) => item.product === "Microsoft Identity Synchronization");
+  assert.equal(identity?.purpose, "advertising");
+  assert.deepEqual(identity?.matchedCookieNames.sort(), ["MR", "MUID"]);
+
+  const ownerOnly = observations.find((item) => item.product === "Microsoft browser identity support");
+  assert.equal(ownerOnly?.vendor, "Microsoft");
+  assert.equal(ownerOnly?.purpose, "unknown");
+  assert.deepEqual(ownerOnly?.matchedCookieNames, ["SRM_B"]);
+});
+
+test("does not attribute Microsoft cookie names without a matching Microsoft host", () => {
+  const observations = resolveVendorObservations([
+    { type: "cookie", cookieName: "CLID", hostname: "example.test" },
+    { type: "cookie", cookieName: "MUID", hostname: "example.test" },
+    { type: "cookie", cookieName: "MR", hostname: "example.test" },
+    { type: "cookie", cookieName: "SRM_B", hostname: "example.test" },
+  ]);
+  assert.equal(observations.length, 0);
+});
+
 test("rejects Wave 11 lookalikes and unrelated paths on the same service hosts", () => {
   const observations = resolveVendorObservations([
     request("https://challenges.cloudflare.com/ordinary.js", "challenges.cloudflare.com"),

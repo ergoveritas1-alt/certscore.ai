@@ -2339,7 +2339,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
         return;
       }
 
-      if (hasExplicitContradictionBasis(packet)) {
+      if (contractDecision?.status === "pass_strong" || hasExplicitContradictionBasis(packet)) {
         overrideDecision(decision, {
           state: "confirmed",
           lane: "main",
@@ -2731,6 +2731,17 @@ function applyCrossFindingRules(decisionsById: Map<string, MutableDecision>, pac
     }
     if (primaryDecision.decisionState === "suppressed" || supportingDecision.decisionState === "suppressed") {
       continue;
+    }
+    if (rule.appliedRule === "precedence.specific_contradiction_supports_generic") {
+      const primaryContractDecision = packetsById.has(rule.primaryFindingId)
+        ? evaluateFindingEvidenceContractForPacket(packetsById.get(rule.primaryFindingId)!)
+        : null;
+      if (
+        primaryContractDecision?.status !== "pass_strong" ||
+        primaryContractDecision.externalSurfacingEligibility !== "eligible"
+      ) {
+        continue;
+      }
     }
     if (
       rule.appliedRule === "precedence.specific_contradiction_supports_preconsent" &&

@@ -10,9 +10,14 @@
 
   // Synthetic analytics and marketing requests, intentionally before consent.
   var img = new Image();
-  img.src = "https://www.google-analytics.com/collect?v=1&t=pageview&tid=G-CANARYTEST&cid=CANARY";
+  img.src = "https://www.google-analytics.com/collect?v=1&t=pageview&tid=G-X5ZM7BWET3&cid=CANARY";
   var marketing = new Image();
   marketing.src = "https://www.googletagmanager.com/gtm.js?id=GTM-CANARYTEST";
+
+  // Record a real Clarity event while the page is still pre-consent.
+  if (typeof window.clarity === "function") {
+    window.clarity("set", "canary_variant", "broad-baseline");
+  }
 
   // Deterministic, non-sensitive canvas fingerprinting signal.
   var canvas = document.createElement("canvas");

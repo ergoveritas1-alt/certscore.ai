@@ -20,7 +20,7 @@ const serverOnlyPath = require.resolve("server-only");
   paths: []
 };
 
-test("pre-consent inventory keeps purpose and evidence separate, removes requests, and places category last", () => {
+test("pre-consent inventory keeps retained counts visible in the widened purpose column", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
 
   assert.match(source, /\{presentationState\.message\}/);
@@ -30,7 +30,12 @@ test("pre-consent inventory keeps purpose and evidence separate, removes request
   assert.doesNotMatch(source, /<td[^>]*>No retained cookies or trackers were detected for this scan\.<\/td>/);
   assert.doesNotMatch(source, /No retained cookie or tracker rows for this scan\./);
   assert.match(source, /\["Type", "Vendor", "Purpose", "Evidence", "First seen", "Cookie name\(s\)", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"\]/);
-  assert.match(source, /label="Purpose"[\s\S]*>Evidence<\/[a-z]+>[\s\S]*>Relationship<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
+  assert.match(source, /label="Vendor"[\s\S]*label="Purpose"[\s\S]*>Evidence<\/[a-z]+>[\s\S]*>Relationship<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
+  assert.doesNotMatch(source, /label="Count"/);
+  assert.match(source, /w-\[165px\]/);
+  assert.match(source, /<span className="shrink-0">\(\{row\.observedRecordCount\}\)<\/span>/);
+  assert.match(source, /formatInventoryPurposeWithCount\(row\)/);
+  assert.match(source, /`\$\{getInventoryPurposeLabel\(row\)\}\(\$\{row\.observedRecordCount\}\)`/);
   assert.doesNotMatch(source, />Req\.<\/[a-z]+>/);
   assert.doesNotMatch(source, /"Requests"/);
 });
@@ -54,6 +59,13 @@ test("site relationship doughnut is derived directly from canonical site relatio
       { count: 1, filter: "unknown", label: "Unknown" }
     ]
   );
+
+  const rawSegments = buildInventoryPartyAttributionSegments([
+    { observedRecordCount: 5, siteRelationship: "same_site" },
+    { observedRecordCount: 3, siteRelationship: "cross_site" },
+    { observedRecordCount: 1, siteRelationship: "mixed" }
+  ]);
+  assert.deepEqual(rawSegments.map(({ count }) => count), [5, 3, 1, 0]);
 
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
   assert.match(source, />Site relationship</);

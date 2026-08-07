@@ -316,10 +316,10 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-          <table className="w-[2958px] min-w-[2958px] table-fixed text-left text-xs">
+          <table className="w-[3038px] min-w-[3038px] table-fixed text-left text-xs">
             <colgroup>
               <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "150px" }} />
-              <col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} /><col style={{ width: "180px" }} />
+              <col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} /><col style={{ width: "260px" }} />
               <col style={{ width: "80px" }} /><col style={{ width: "205px" }} /><col style={{ width: "135px" }} /><col style={{ width: "145px" }} />
               <col style={{ width: "180px" }} /><col style={{ width: "130px" }} /><col style={{ width: "65px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} />
               <col style={{ width: "80px" }} /><col style={{ width: "240px" }} /><col style={{ width: "160px" }} /><col style={{ width: "190px" }} /><col style={{ width: "190px" }} /><col style={{ width: "78px" }} />
@@ -358,7 +358,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                     <td className="px-2.5 py-1.5 text-[10px] leading-4 text-slate-600" title={formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}><p className="truncate">{requestedDateTime.date}</p><p className="truncate text-slate-500">{requestedDateTime.time}</p></td>
                     <td className="px-2.5 py-1.5">
                       <div className="flex min-w-0 items-center gap-1.5">
-                        <p className="min-w-0 flex-1 truncate font-semibold text-slate-900" title={scan.requestedUrl ?? "Page URL unavailable"}>{scan.requestedUrl ?? "Page URL unavailable"}</p>
+                        <p className="min-w-0 flex-1 line-clamp-2 break-all font-semibold leading-4 text-slate-900" title={scan.requestedUrl ?? "Page URL unavailable"}>{scan.requestedUrl ?? "Page URL unavailable"}</p>
                         <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">{scan.scanType}</span>
                       </div>
                     </td>

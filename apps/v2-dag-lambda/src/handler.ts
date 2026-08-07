@@ -285,6 +285,20 @@ type S3GetClient = {
   send(command: GetObjectCommand): Promise<GetObjectCommandOutput>;
 };
 
+function localV2DagLambdaS3Client(region: string): S3Client {
+  const endpoint = compactString(process.env.S3_ENDPOINT);
+  const forcePathStyle = process.env.S3_FORCE_PATH_STYLE === "true" ||
+    process.env.S3_FORCE_PATH_STYLE === "1";
+  const accessKeyId = compactString(process.env.S3_ACCESS_KEY_ID);
+  const secretAccessKey = compactString(process.env.S3_SECRET_ACCESS_KEY);
+  return new S3Client({
+    ...(endpoint ? { endpoint } : {}),
+    ...(endpoint || forcePathStyle ? { forcePathStyle } : {}),
+    ...(accessKeyId && secretAccessKey ? { credentials: { accessKeyId, secretAccessKey } } : {}),
+    region: compactString(process.env.S3_REGION) ?? region,
+  });
+}
+
 type LambdaInvokeClient = {
   send(command: InvokeCommand): Promise<InvokeCommandOutput>;
 };
@@ -1484,7 +1498,8 @@ function parseLocalV2DagLambdaShardResult(
     throw new Error(`Local v2 DAG Lambda worker response lane mismatch for ${expectedWorkerLane}.`);
   }
   if (parsed.status !== "completed") {
-    throw new Error(`Local v2 DAG Lambda worker ${expectedWorkerLane} returned ${String(parsed.status)}.`);
+    const errorMessage = compactString(asRecord(parsed.error).message);
+    throw new Error(`Local v2 DAG Lambda worker ${expectedWorkerLane} returned ${String(parsed.status)}${errorMessage ? `: ${errorMessage}` : "."}`);
   }
   const artifactPointers = parseArtifactPointersRecord(parsed.artifactPointers);
   if (!artifactPointers.scanArtifactUri) {
@@ -1577,7 +1592,7 @@ async function readWorkerBundleFromArtifactResult(
     throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} did not include a scan artifact pointer.`);
   }
   const { bucket, key } = parseS3Uri(uri);
-  const s3Client = options.s3GetClient ?? new S3Client({ region: options.awsRegion ?? LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const s3Client = options.s3GetClient ?? localV2DagLambdaS3Client(options.awsRegion ?? LOCAL_V2_DAG_LAMBDA_AWS_REGION);
   const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const body = await streamToBuffer(response.Body);
   const expected = result.artifactMetadata?.scanArtifactUri;
@@ -1594,7 +1609,7 @@ export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
   s3GetClient?: S3GetClient;
   workerResults: LocalV2DagLambdaShardResult[];
 }) {
-  const s3Client = input.s3GetClient ?? new S3Client({ region: input.awsRegion ?? LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const s3Client = input.s3GetClient ?? localV2DagLambdaS3Client(input.awsRegion ?? LOCAL_V2_DAG_LAMBDA_AWS_REGION);
   await Promise.all(input.workerResults.map(async (result) => {
     const manifestUri = result.artifactPointers?.manifestUri;
     if (!manifestUri) {
@@ -2302,7 +2317,7 @@ async function writeAndUploadFailureDiagnostic(input: {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error("Failure diagnostic upload deadline reached.")), 1_500);
   try {
-    const s3Client = input.s3Client ?? new S3Client({ region: input.payload.awsRegion });
+    const s3Client = input.s3Client ?? localV2DagLambdaS3Client(input.payload.awsRegion);
     await s3Client.send(new PutObjectCommand({
       Body: body,
       Bucket: bucket,
@@ -2399,7 +2414,7 @@ export async function uploadAuxiliaryArtifactFiles(input: {
       attemptTimeoutMs,
       maxAttempts,
       operation: (attemptSignal) => (
-        input.s3Client ?? new S3Client({ region: input.payload.awsRegion })
+        input.s3Client ?? localV2DagLambdaS3Client(input.payload.awsRegion)
       ).send(command, { abortSignal: attemptSignal }),
       operationLabel: `S3 auxiliary upload ${fileName}`,
       signal: input.signal,
@@ -2470,7 +2485,7 @@ export async function uploadArtifactFiles(input: {
       attemptTimeoutMs,
       maxAttempts,
       operation: (attemptSignal) => (
-        input.s3Client ?? new S3Client({ region: input.payload.awsRegion })
+        input.s3Client ?? localV2DagLambdaS3Client(input.payload.awsRegion)
       ).send(command, { abortSignal: attemptSignal }),
       operationLabel: `S3 ${artifact.field} upload`,
       signal: input.signal,
@@ -2792,7 +2807,7 @@ export async function publishVerifiedPolicyEvidence(input: {
     attemptTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS,
     maxAttempts: input.s3Client ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS,
     operation: (attemptSignal) => (
-      input.s3Client ?? new S3Client({ region: input.payload.awsRegion })
+      input.s3Client ?? localV2DagLambdaS3Client(input.payload.awsRegion)
     ).send(new PutObjectCommand({
       Body: body,
       Bucket: bucket,
@@ -2868,10 +2883,13 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   try {
     payload = parseLocalV2DagLambdaDispatchPayload(event);
     const workspaceRoot = options.workspaceRoot ?? process.cwd();
-    artifactRoot = buildLocalV2DagLambdaArtifactRoot({
+    const baseArtifactRoot = buildLocalV2DagLambdaArtifactRoot({
       scanId: payload.scanId,
       workspaceRoot
     });
+    artifactRoot = payload.orchestrationMode === "worker" && payload.workerLane
+      ? path.join(baseArtifactRoot, "lanes", payload.workerLane)
+      : baseArtifactRoot;
     const runArtifactChain = options.runArtifactChain ?? ((dispatchPayload, runOptions) =>
       dispatchPayload.orchestrationMode === "sharded"
         ? runLocalV2DagLambdaShardedArtifactChain(dispatchPayload, {

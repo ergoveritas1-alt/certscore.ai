@@ -11,6 +11,7 @@ export type ScanStatusProjection = {
   completedAt: string | null;
   createdAt: string;
   domainHostname: string | null;
+  pageUrl: string | null;
   errorMessage: string | null;
   id: string;
   organizationId: string | null;
@@ -45,6 +46,7 @@ type ScanStatusProjectionRow = {
   completed_at: string | Date | null;
   created_at: string | Date;
   domain_hostname: string | null;
+  page_url: string | null;
   error_message: string | null;
   id: string;
   organization_id: string | null;
@@ -69,6 +71,7 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
     completedAt: iso(row.completed_at),
     createdAt: iso(row.created_at) as string,
     domainHostname: row.domain_hostname,
+    pageUrl: row.page_url,
     errorMessage: row.error_message,
     id: row.id,
     organizationId: row.organization_id,
@@ -91,6 +94,7 @@ const PROJECTION_SQL = `select s.id,
        s.completed_at,
        s.error_message,
        d.hostname as domain_hostname,
+       nullif(s.scan_config_json #>> '{normalizedUrl}', '') as page_url,
        coalesce(
          nullif(s.scan_config_json #>> '{execution,v2DagParallel,profile}', ''),
          nullif(s.scan_config_json ->> 'profile', ''),

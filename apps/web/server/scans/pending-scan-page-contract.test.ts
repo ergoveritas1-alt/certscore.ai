@@ -80,6 +80,19 @@ test("completed v2 report routes fail closed to the verified persisted projectio
   }
 });
 
+test("completed report shells schedule the canonical projection before waiting", async () => {
+  for (const page of pages) {
+    const source = await readFile(page, "utf8");
+    const waitingState = source.indexOf("const waitingForReportProjection");
+    const schedulePublication = source.indexOf("publishCanonicalScanReportProjection({", waitingState);
+    const pendingReturn = source.indexOf("if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection)", waitingState);
+
+    assert.ok(waitingState >= 0, `${page} must identify completed scans awaiting projection`);
+    assert.ok(schedulePublication > waitingState, `${page} must schedule canonical publication for the waiting state`);
+    assert.ok(pendingReturn > schedulePublication, `${page} must schedule publication before returning the pending shell`);
+  }
+});
+
 test("terminal failed v2 scans bypass completed-report finalization", async () => {
   for (const page of pages) {
     const source = await readFile(page, "utf8");

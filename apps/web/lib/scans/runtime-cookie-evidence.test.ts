@@ -424,6 +424,121 @@ test("canonical pre-consent storage assessment counts a classified non-essential
   assert.equal(metric.value, 1);
 });
 
+test("canonical cookie knowledge classifies common Google Analytics and Meta snapshot cookies as non-essential", () => {
+  const assessment = buildPreConsentStorageAssessment({
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [
+          {
+            beforeConsent: true,
+            category: "analytics",
+            cookieName: "_ga_CANARYTEST",
+            domain: "example.test",
+            essentiality: "unknown",
+            firstObservedAtMs: 625,
+            party: "first_party",
+            setMethod: "browser_snapshot"
+          },
+          {
+            beforeConsent: true,
+            category: "advertising",
+            cookieName: "_fbp",
+            domain: "example.test",
+            essentiality: "unknown",
+            firstObservedAtMs: 626,
+            party: "first_party",
+            setMethod: "browser_snapshot"
+          }
+        ],
+        storageSummary: {
+          cookiesBeforeConsentCount: 2
+        }
+      }
+    }
+  });
+
+  assert.equal(assessment.status, "classified_nonessential_observed");
+  assert.equal(assessment.classifiedNonEssentialCount, 2);
+  assert.equal(assessment.unclassifiedCount, 0);
+  assert.equal(projectPreConsentStorageMetric(assessment).value, 2);
+  assert.deepEqual(
+    assessment.evidenceRows.map((row) => [row.name, row.essentiality, row.essentialitySource]),
+    [
+      ["_ga_CANARYTEST", "non_essential", "canonical_registry"],
+      ["_fbp", "non_essential", "canonical_registry"]
+    ]
+  );
+});
+
+test("canonical cookie knowledge classifies retained Microsoft Clarity and identity cookies without display inference", () => {
+  const assessment = buildPreConsentStorageAssessment({
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [
+          ["CLID", "clarity.ms", 1_350],
+          ["MUID", "clarity.ms", 1_350],
+          ["MUID", "bing.com", 2_150],
+          ["MR", "c.bing.com", 2_150],
+          ["SRM_B", "c.bing.com", 2_150],
+        ].map(([cookieName, domain, firstObservedAtMs]) => ({
+          beforeConsent: true,
+          category: "unknown",
+          cookieName,
+          domain,
+          essentiality: "unknown",
+          firstObservedAtMs,
+          party: "third_party",
+          setMethod: "periodic_cookie_snapshot",
+        })),
+        storageSummary: {
+          cookiesBeforeConsentCount: 5,
+        },
+      },
+    },
+  });
+
+  assert.equal(assessment.status, "classified_nonessential_observed");
+  assert.equal(assessment.classifiedNonEssentialCount, 4);
+  assert.equal(assessment.unclassifiedCount, 1);
+  assert.deepEqual(
+    assessment.evidenceRows.map((row) => [row.name, row.category, row.essentiality, row.firstObservedMs]),
+    [
+      ["CLID", "analytics", "non_essential", 1_350],
+      ["MUID", "advertising", "non_essential", 1_350],
+      ["MUID", "advertising", "non_essential", 2_150],
+      ["MR", "advertising", "non_essential", 2_150],
+      ["SRM_B", "unknown", "unknown", 2_150],
+    ],
+  );
+});
+
+test("preserves a snapshot timestamp as first-observed time without treating it as an exact cookie set time", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [{
+        beforeConsent: true,
+        cookieName: "_ga_CANARY",
+        cookieDomain: "ergoveritas.com",
+        cookieEssentiality: "non_essential",
+        cookiePurpose: "analytics",
+        operation: "browser_snapshot",
+        timestampMs: 2_625
+      }]
+    }
+  });
+  const row = inventory.rows[0];
+  const assessment = buildPreConsentStorageAssessment({
+    runtimeCookieRows: inventory.rows
+  });
+
+  assert.equal(row?.firstObservedAtMs, 2_625);
+  assert.equal(row?.setAtMs, null);
+  assert.equal(row?.timingEvidence, "periodic_cookie_snapshot");
+  assert.equal(assessment.evidenceRows[0]?.firstObservedMs, 2_625);
+  assert.equal(assessment.evidenceRows[0]?.timingEvidence, "periodic_preconsent_snapshot");
+  assert.equal(assessment.provenWriteCount, 0);
+});
+
 test("canonical pre-consent storage assessment preserves an observed Amazon ubid signal alongside unclassified rows", () => {
   const assessment = buildPreConsentStorageAssessment({
     runtimeArtifacts: {

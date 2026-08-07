@@ -16,7 +16,7 @@ export {
   type TransferMechanism,
 } from "./cookie-knowledge-base";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-30-wave20-amazon-ownership";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-08-07-wave21-microsoft-clarity-cookies";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -1593,7 +1593,7 @@ const rules: VendorRule[] = [
     purpose: "session_replay",
     regulatoryRelevance: ["consent", "behavioral_analytics", "session_replay"],
     confidence: 0.95,
-    hostPatterns: [/^www\.clarity\.ms$/i, /^scripts\.clarity\.ms$/i, /^n\.clarity\.ms$/i, /^f\.clarity\.ms$/i, /^c\.clarity\.ms$/i, /^i\.clarity\.ms$/i],
+    hostPatterns: [/^(?:www|scripts|n|f|c|i)\.clarity\.ms$/i, /^clarity\.ms$/i],
     urlPatterns: [/^https:\/\/(?:www|scripts|n|f|i)\.clarity\.ms\/(?:tag|collect|c\.gif)\b/i, /^https:\/\/c\.clarity\.ms\/c\.gif\b/i],
     cookiePatterns: [/^_clck$/i, /^_clsk$/i],
     storageKeyPatterns: [/^_clck$/i, /^_clsk$/i],
@@ -1602,14 +1602,40 @@ const rules: VendorRule[] = [
   {
     entity: "Microsoft Corporation",
     vendor: "Microsoft",
+    product: "Microsoft Clarity",
+    purpose: "session_replay",
+    regulatoryRelevance: ["consent", "behavioral_analytics", "session_replay", "cross_site_tracking"],
+    confidence: 0.98,
+    hostPatterns: [/(?:^|\.)clarity\.ms$/i],
+    cookiePatterns: [/^CLID$/i],
+    requireHostPatternForCookieMatch: true,
+    basisLabel: "clarity_third_party_clid_cookie",
+  },
+  {
+    entity: "Microsoft Corporation",
+    vendor: "Microsoft",
     product: "Microsoft Identity Synchronization",
     purpose: "advertising",
     regulatoryRelevance: ["consent", "identifier_sync", "cross_site_tracking", "advertising_measurement"],
     confidence: 0.96,
-    hostPatterns: [/^c\.bing\.com$/i],
+    hostPatterns: [/(?:^|\.)bing\.com$/i, /(?:^|\.)clarity\.ms$/i],
     urlPatterns: [/^https:\/\/c\.bing\.com\/c\.gif(?:\?|$)/i],
+    cookiePatterns: [/^(?:ANONCHK|MR|MUID|SM)$/i],
+    requireHostPatternForCookieMatch: true,
     requireUrlPatternMatch: true,
     basisLabel: "microsoft_bing_identity_sync_pixel",
+  },
+  {
+    entity: "Microsoft Corporation",
+    vendor: "Microsoft",
+    product: "Microsoft browser identity support",
+    purpose: "unknown",
+    regulatoryRelevance: ["consent", "browser_identifier", "purpose_review_required"],
+    confidence: 0.9,
+    hostPatterns: [/(?:^|\.)bing\.com$/i],
+    cookiePatterns: [/^SRM_B$/i],
+    requireHostPatternForCookieMatch: true,
+    basisLabel: "microsoft_bing_srm_b_cookie_owner_only",
   },
   {
     entity: "Hotjar Ltd",

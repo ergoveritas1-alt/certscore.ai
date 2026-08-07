@@ -147,6 +147,7 @@ export type InventoryGroupRow = {
   domains: string[];
   firstSeenMs: number | null;
   macroCategory: InventoryMacroCategory;
+  observedRecordCount: number;
   party: "first_party" | "third_party" | "unknown" | "mixed";
   siteRelationship: InventorySiteRelationship;
   entityRelationship: InventoryEntityRelationship;
@@ -1360,6 +1361,7 @@ export function buildRuntimeInventoryGroupRows(input: {
         dataFlows: (input.dataFlows ?? []).filter((flow) =>
           flow.controllingEntity.legalEntity && flow.controllingEntity.legalEntity === owner?.entity
         ),
+        observedRecordCount: row.cookieDetails.length,
         preConsent: row.cookieDetails.some((detail) => detail.observedBeforeConsent === true),
         purposes: [row.purpose],
         rawProducts: [owner?.product ?? row.vendor],
@@ -1384,6 +1386,7 @@ export function buildRuntimeInventoryGroupRows(input: {
           flow.controllingEntity.legalEntity && flow.controllingEntity.legalEntity === owner?.entity ||
           row.domains.includes(flow.endpoint)
         ),
+        observedRecordCount: row.requestCount ?? 1,
         purposes: [row.purpose],
         rawProducts: [owner?.product ?? row.rawProducts[0] ?? row.vendor],
         requestDetails: (input.requestRows ?? []).filter((request) =>
@@ -1443,6 +1446,7 @@ export function buildRuntimeInventoryGroupRows(input: {
           : purposes[0],
         vendor: existing.vendor,
       }),
+      observedRecordCount: existing.observedRecordCount + candidate.observedRecordCount,
       party: mergePartyValues(existing.party, candidate.party),
       siteRelationship: mergePartyValues(existing.siteRelationship, candidate.siteRelationship),
       entityRelationship: mergePartyValues(existing.entityRelationship, candidate.entityRelationship),

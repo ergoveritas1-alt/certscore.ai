@@ -3281,6 +3281,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained consent surfaces a
       hybridRuntimeEvidence: {
         firstLayerConsentChoices: {
           capturedBeforeInteraction: true,
+          firstObservedMs: 412,
           visibleChoiceLabels: ["Accept", "Decline"]
         },
         consentUiPathEvidence: {
@@ -3307,8 +3308,17 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained consent surfaces a
     "Evidence: retained consent surface observation",
     "Visible choice: Accept",
     "Visible choice: Decline",
+    "First consent surface observed: 0.412s after scan start",
     "Layer inspected: first_layer"
   ]);
+  assert.equal(
+    outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.firstObservedMs,
+    412
+  );
+  assert.match(
+    outcomes.consent_surface_observed?.limitation ?? "",
+    /First observed at 0\.412s after scan start/i
+  );
   assert.equal(outcomes.reject_all_path_availability?.status, "Observed");
   assert.equal(outcomes.consent_choice_quality?.status, "Review signal");
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, true);
@@ -6546,6 +6556,39 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes separates weak browser entropy fr
     outcomes.device_identification_fingerprinting_signal_observed?.criticalEvidence.retainedEvidence.promotionEligible,
     false
   );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps fingerprinting evidence out of the session replay row", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        fingerprintingEvidenceAssessment: {
+          assessmentContractVersion: "fingerprinting_evidence_assessment.v1",
+          assessmentStrength: "corroborated",
+          browserApiSignals: ["CanvasRenderingContext2D.getImageData"],
+          strongCorroboratorObserved: true
+        }
+      }
+    },
+    snapshot: {
+      fingerprinting_or_identity_vendor_detected: true,
+      session_replay_tool_detected: false,
+      session_replay_tracker_count: 0
+    }
+  });
+
+  const sessionReplay = outcomes.session_replay_fingerprinting_review;
+  assert.equal(sessionReplay?.status, "Not observed");
+  assert.deepEqual(sessionReplay?.evidenceRefs, [
+    "Session replay signal not observed",
+    "Fingerprinting evidence evaluated separately"
+  ]);
+  assert.match(sessionReplay?.limitation ?? "", /evaluated separately in the device-identification row/i);
+  assert.equal(sessionReplay?.criticalEvidence.retainedEvidence.sessionReplayObserved, false);
+  assert.equal(sessionReplay?.criticalEvidence.retainedEvidence.fingerprintingObserved, true);
+  assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Review signal");
+  assert.doesNotMatch(sessionReplay?.evidenceRefs.join(" ") ?? "", /identity vendor signal observed/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 session replay summary request and timing evidence", () => {

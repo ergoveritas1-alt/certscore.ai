@@ -121,6 +121,15 @@ test("dev image setup uses local names and refuses non-dev resource names", asyn
   assert.doesNotMatch(setupScript, /certscore-prod|certscore-v2-dag-production/);
 });
 
+test("local Lambda parity disables unstable single-process Chromium on macOS only", async () => {
+  const parityScript = await readRepoFile("scripts/run-local-v2-dag-lambda-parity.ts");
+
+  assert.match(
+    parityScript,
+    /process\.platform === "darwin" \? "false" : "true"/,
+  );
+});
+
 test("Lambda setup disables default async retries and bounds event age", async () => {
   const imageSetup = await readRepoFile("scripts/local-v2-dag-lambda/setup-dev-aws-image.sh");
   const zipSetup = await readRepoFile("scripts/local-v2-dag-lambda/setup-dev-aws.sh");

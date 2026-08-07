@@ -41,6 +41,7 @@ async function timedMaterializationPhase<T>(
   } catch (error) {
     console.error("[scan-materialization] phase failed", {
       durationMs: Date.now() - startedAt,
+      errorMessage: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
       errorName: error instanceof Error ? error.name : "UnknownError",
       phase,
       scanId,

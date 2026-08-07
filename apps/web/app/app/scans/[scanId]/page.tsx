@@ -67,8 +67,14 @@ function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanSt
     <div className="space-y-7" aria-busy="true" aria-live="polite">
       <div>
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">CertScore.ai scan</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-          Scan: {statusProjection.domainHostname?.trim() || "website"}
+        <h1 className="mt-2 flex min-w-0 max-w-full items-baseline gap-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+          <span className="shrink-0">Scan:</span>
+          <span
+            className="min-w-0 truncate"
+            title={statusProjection.pageUrl?.trim() || statusProjection.domainHostname?.trim() || "website"}
+          >
+            {statusProjection.pageUrl?.trim() || statusProjection.domainHostname?.trim() || "website"}
+          </span>
         </h1>
         <p className="mt-2 text-sm text-slate-500">Your scan is complete. Loading the latest report details.</p>
       </div>
@@ -104,6 +110,16 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     isCompletedScanStatus(statusProjection.status) &&
     statusProjection.reportProjectionRequired &&
     !statusProjection.reportReady;
+  if (waitingForReportProjection) {
+    after(async () => {
+      await publishCanonicalScanReportProjection({
+        organizationId: statusProjection.organizationId,
+        scanId
+      }).catch((error) => {
+        console.error("Failed to publish canonical scan report projection from the pending report shell", error);
+      });
+    });
+  }
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
       <>
@@ -111,6 +127,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
         <PendingScanDetailView
           createdAt={statusProjection.createdAt}
           domainHostname={statusProjection.domainHostname}
+          pageUrl={statusProjection.pageUrl}
           pendingPostCompletionWork={waitingForReportProjection}
           profile={statusProjection.profile}
           scanId={statusProjection.id}
@@ -186,6 +203,7 @@ async function ScanDetailReportContent({
       <PendingScanDetailView
         createdAt={statusProjection.createdAt}
         domainHostname={statusProjection.domainHostname}
+        pageUrl={statusProjection.pageUrl}
         pendingPostCompletionWork
         profile={statusProjection.profile}
         scanId={statusProjection.id}

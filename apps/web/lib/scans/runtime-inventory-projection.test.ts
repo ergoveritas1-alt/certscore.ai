@@ -196,6 +196,7 @@ test("projects canonical embedded players without reclassifying them as analytic
   const player = groupedRows.find((row) => row.rawProducts.includes("Vimeo Embedded Player"));
 
   assert.equal(player?.purpose, "Embedded media");
+  assert.equal(player?.observedRecordCount, 1);
   assert.equal(player?.macroCategory, "Functional");
   assert.equal(player?.priority, "medium");
   assert.deepEqual(player?.regulatoryRelevance, [
@@ -240,6 +241,7 @@ test("keeps incompatible products from one legal entity in distinct inventory ro
   const googleRows = groupedRows.filter((row) => row.canonicalEntity === "Google LLC");
 
   assert.equal(googleRows.length, 2);
+  assert.deepEqual(googleRows.map((row) => row.observedRecordCount), [1, 1]);
   assert.deepEqual(
     googleRows.map((row) => [row.rawProducts[0], row.purpose]).sort(),
     [
@@ -430,6 +432,7 @@ test("projects an untimed Taboola snapshot as advertising with review-only write
   const taboola = groupedRows.find((row) => row.type === "cookie" && row.vendor === "Taboola");
 
   assert.equal(taboola?.purpose, "Advertising");
+  assert.equal(taboola?.observedRecordCount, 1);
   assert.equal(taboola?.macroCategory, "Advertising");
   assert.equal(taboola?.priority, "review_needed");
   assert.equal(taboola?.confidence, "high");
@@ -726,10 +729,12 @@ test("separates cookie names from domains and preserves canonical ownership", ()
   const sourcepointRow = groupedRows.find((row) => row.type === "cookie" && row.vendor === "Sourcepoint");
   const oneTrustRow = groupedRows.find((row) => row.type === "cookie" && row.vendor === "OneTrust");
   assert.deepEqual(sourcepointRow?.cookieNames, ["_sp_su"]);
+  assert.equal(sourcepointRow?.observedRecordCount, 1);
   assert.deepEqual(sourcepointRow?.domains, ["bild.de"]);
   assert.equal(sourcepointRow?.macroCategory, "Essential");
   assert.deepEqual(sourcepointRow?.syncedIdentifiers, ["Google"]);
   assert.deepEqual(oneTrustRow?.cookieNames, ["optanonconsent"]);
+  assert.equal(oneTrustRow?.observedRecordCount, 1);
   assert.deepEqual(oneTrustRow?.domains, ["bild.de"]);
   assert.equal(oneTrustRow?.macroCategory, "Essential");
   assert.ok(groupedRows.every((row) => row.domains.every((domain) => !row.cookieNames.includes(domain))));

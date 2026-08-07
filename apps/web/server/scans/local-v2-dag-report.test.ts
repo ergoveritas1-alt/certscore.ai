@@ -220,8 +220,17 @@ test("policy/runtime projection persists a linked typed contradiction triplet", 
   assert.ok(contradictionConcern);
   assert.equal(contradictionConcern.promotionEligibility, "eligible");
 
-  const findings = buildScanReportUnifiedFindingsForScan(makeScanRecord({ runtimeArtifacts }));
-  assert.ok(findings.some((finding) => finding.unifiedFindingId === "policy_behavior_conflict"));
+  const baselineRecord = makeScanRecord();
+  const findings = buildScanReportUnifiedFindingsForScan(makeScanRecord({
+    runtimeArtifacts,
+    snapshot: {
+      ...baselineRecord.snapshot,
+      policy_behavior_conflict_detected: true
+    }
+  }));
+  const policyBehaviorConflict = findings.find((finding) => finding.unifiedFindingId === "policy_behavior_conflict");
+  assert.ok(policyBehaviorConflict);
+  assert.equal(policyBehaviorConflict.presentationDecision.status, "surface");
 });
 
 test("policy/runtime projection accepts an equivalent classified collection endpoint", async () => {
@@ -1376,7 +1385,11 @@ test("buildLocalV2NoGoSnapshotFields preserves every canonical no-go reason clas
 });
 
 test("final non-no-go materialization replaces a stale provisional no-go outcome", async () => {
-  const { resolveFinalMaterializedScanOutcome } = await loadLocalV2DagReport();
+  const {
+    buildFinalMaterializedAccessFields,
+    resolveFinalMaterializedScanOutcome,
+    withoutStaleLocalV2NoGoArtifacts,
+  } = await loadLocalV2DagReport();
 
   assert.equal(resolveFinalMaterializedScanOutcome({
     existingOutcome: "homepage_access_blocked",
@@ -1387,6 +1400,30 @@ test("final non-no-go materialization replaces a stale provisional no-go outcome
   assert.equal(resolveFinalMaterializedScanOutcome({
     existingOutcome: "completed_successfully",
   }), "completed_successfully");
+  assert.deepEqual(buildFinalMaterializedAccessFields({
+    existingOutcome: "homepage_visual_capture_failed",
+    runtimeCoverageStatus: "usable",
+  }), {
+    access_posture_class: null,
+    block_page_classification: null,
+    blocked_flag: false,
+    challenge_suspected: false,
+    coverage_level: "broad",
+    homepage_fetch_status: "success",
+    scan_outcome: "completed_partial",
+    stop_reason_code: null,
+    stop_reason_detail: null,
+    stop_reason_label: null,
+  });
+  assert.deepEqual(withoutStaleLocalV2NoGoArtifacts({
+    retainedRuntimeFact: true,
+    scanNoGoAssessment: { decision: "no_go" },
+    scan_no_go_assessment: { decision: "no_go" },
+    visualAccessReview: { go_no_go: "NO_GO" },
+    visual_access_review: { go_no_go: "NO_GO" },
+  }), {
+    retainedRuntimeFact: true,
+  });
 });
 
 test("buildLocalV2NoGoSnapshotFields gives Cerebras site-not-ready snapshot copy", async () => {
@@ -1425,6 +1462,46 @@ test("explicit scanner continue assessment blocks downstream raw-text no-go reco
       },
     } as unknown as CanonicalEvidenceBundle,
     consentSurfaceLikelyPresent: false,
+    runtimeActivityObserved: true,
+    lowRuntimeActivity: false,
+  });
+
+  assert.equal(result, null);
+});
+
+test("a later placeholder attempt does not override a valid representative screenshot", async () => {
+  const { buildLocalV2ScanNoGoAssessment } = await loadLocalV2DagReport();
+  const result = buildLocalV2ScanNoGoAssessment({
+    bundle: {
+      modulesRun: [{
+        moduleName: "preConsentRuntimeScanner",
+        status: "partial",
+        startedAt: "2026-08-07T20:03:47.212Z",
+        completedAt: "2026-08-07T20:03:49.967Z",
+        durationMs: 2755,
+        evidenceRefs: [],
+        errors: [
+          "CDP viewport screenshot failed: browser context closed.",
+          "1x1 screenshot placeholder used after screenshot capture failures.",
+        ],
+      }],
+      screenshots: [{
+        artifactId: "screenshot_pre_consent",
+        capturedAtMs: 924,
+        captureMethod: "primary_viewport_fallback",
+        path: "/tmp/screenshot-pre-consent.png",
+        url: "https://ergoveritas.com/canary.html",
+        pagePhase: "dom_content_loaded",
+        consentStateAtTime: "pre_consent",
+      }],
+      visualCapture: {
+        status: "available",
+        captureMethod: "primary_viewport_fallback",
+        artifactRefs: [],
+        notes: ["A valid viewport screenshot was retained before the later capture attempt failed."],
+      },
+    } as unknown as CanonicalEvidenceBundle,
+    consentSurfaceLikelyPresent: true,
     runtimeActivityObserved: true,
     lowRuntimeActivity: false,
   });

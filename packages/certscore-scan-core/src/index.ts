@@ -1264,16 +1264,23 @@ function boundModuleRunTimingBreakdown(
   moduleRun: CanonicalEvidenceBundle["modulesRun"][number],
 ): CanonicalEvidenceBundle["modulesRun"][number] {
   const timingBreakdown = moduleRun.timingBreakdown;
-  if (!timingBreakdown || timingBreakdown.length <= MAX_MODULE_TIMING_BREAKDOWN_ENTRIES) {
+  if (!timingBreakdown) {
     return moduleRun;
   }
+  const boundedTimingBreakdown = timingBreakdown.map((entry) => ({
+    ...entry,
+    ...(entry.detail ? { detail: entry.detail.slice(0, 240) } : {}),
+  }));
+  if (boundedTimingBreakdown.length <= MAX_MODULE_TIMING_BREAKDOWN_ENTRIES) {
+    return { ...moduleRun, timingBreakdown: boundedTimingBreakdown };
+  }
   const retainedCount = MAX_MODULE_TIMING_BREAKDOWN_ENTRIES - 1;
-  const omitted = timingBreakdown.slice(retainedCount);
+  const omitted = boundedTimingBreakdown.slice(retainedCount);
   const omittedDurationMs = omitted.reduce((total, entry) => total + entry.durationMs, 0);
   return {
     ...moduleRun,
     timingBreakdown: [
-      ...timingBreakdown.slice(0, retainedCount),
+      ...boundedTimingBreakdown.slice(0, retainedCount),
       {
         label: "timing entries truncated",
         durationMs: omittedDurationMs,

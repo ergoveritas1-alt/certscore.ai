@@ -28,6 +28,7 @@ function projection(overrides: Partial<ScanStatusProjection> = {}): ScanStatusPr
     completedAt: "2026-07-29T18:44:40.000Z",
     createdAt: "2026-07-29T18:44:17.000Z",
     domainHostname: "example.com",
+    pageUrl: "https://example.com/",
     errorMessage: null,
     id: "e77dfaed-f1b0-4993-bd1f-5d913e595c4a",
     organizationId: null,

@@ -85,6 +85,37 @@ export function resolveFinalMaterializedScanOutcome(input: { existingOutcome: un
   return existingOutcome ?? "completed_partial";
 }
 
+export function buildFinalMaterializedAccessFields(input: {
+  existingOutcome: unknown;
+  runtimeCoverageStatus: string | null | undefined;
+}) {
+  const existingOutcome = getString(input.existingOutcome);
+  const staleNoGo = Boolean(existingOutcome && isScanNoGoSnapshotOutcome(existingOutcome));
+  return {
+    ...(staleNoGo ? {
+      access_posture_class: null,
+      block_page_classification: null,
+      blocked_flag: false,
+      challenge_suspected: false,
+      coverage_level: input.runtimeCoverageStatus === "usable" ? "broad" : "limited_partial",
+      stop_reason_code: null,
+      stop_reason_detail: null,
+      stop_reason_label: null,
+    } : {}),
+    homepage_fetch_status: "success",
+    scan_outcome: resolveFinalMaterializedScanOutcome({ existingOutcome }),
+  } as const;
+}
+
+export function withoutStaleLocalV2NoGoArtifacts(value: Record<string, unknown> | null | undefined) {
+  const artifacts = { ...(value ?? {}) };
+  delete artifacts.scanNoGoAssessment;
+  delete artifacts.scan_no_go_assessment;
+  delete artifacts.visualAccessReview;
+  delete artifacts.visual_access_review;
+  return artifacts;
+}
+
 export function getLocalV2PrimaryLanguage(bundle: CanonicalEvidenceBundle) {
   const consentObservations = bundle.consentUiObservations ?? [];
   const policySurfaces = bundle.policySurfaceObservations ?? [];
@@ -4526,9 +4557,14 @@ export function buildLocalV2ScanNoGoAssessment(input: {
   const screenshot = (input.bundle.screenshots ?? [])
     .filter(isPreConsentScreenshotArtifact)
     .sort((left, right) => preConsentScreenshotRank(left) - preConsentScreenshotRank(right))[0] ?? null;
+  const representativeScreenshotIsPlaceholder = Boolean(
+    screenshot && /placeholder/i.test(getString(screenshot.captureMethod) ?? "")
+  );
   const screenshotPlaceholderUsed = visualCapture.status === "placeholder" ||
     visualCapture.failureReason === "placeholder_used" ||
-    moduleErrors.some((error) => LOCAL_V2_SCREENSHOT_PLACEHOLDER_PATTERN.test(error));
+    representativeScreenshotIsPlaceholder ||
+    (visualCapture.status !== "available" &&
+      moduleErrors.some((error) => LOCAL_V2_SCREENSHOT_PLACEHOLDER_PATTERN.test(error)));
   const pageContextClosed = moduleErrors.some((error) => LOCAL_V2_PAGE_CONTEXT_CLOSED_PATTERN.test(error));
   const visualCaptureFailed = screenshotPlaceholderUsed && (pageContextClosed || visualCapture.failureReason === "placeholder_used");
   const retainedVisualErrorShell = isLikelyRetainedVisualErrorShell({
@@ -5358,8 +5394,11 @@ function buildMaterializedLocalV2Detail(
     }
   };
   const timingArtifacts = buildLocalV2DagTimingArtifacts(bundle);
+  const inheritedRuntimeArtifacts = providedScanNoGoAssessment || localV2NoGo
+    ? { ...(scanRecord.runtimeArtifacts ?? {}) }
+    : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
   const runtimeArtifacts = {
-    ...(scanRecord.runtimeArtifacts ?? {}),
+    ...inheritedRuntimeArtifacts,
     ...timingArtifacts,
     local_v2_dag_scan_core_duration_ms: durationMsFromTimestamps(bundle.startedAt, bundle.completedAt),
     wc01ProductionProjection: {
@@ -5600,12 +5639,12 @@ function buildMaterializedLocalV2Detail(
       stop_reason_code: "homepage_unavailable_policy_evidence_retained",
       stop_reason_detail: "Homepage runtime was unavailable, but independently fetched first-party policy evidence was retained.",
       stop_reason_label: "Homepage unavailable; policy evidence retained",
-    } : localV2NoGo ? buildLocalV2NoGoSnapshotFields(localV2NoGo.primaryReasonCode, localV2NoGo.pageState) : {
-      homepage_fetch_status: "success",
-      scan_outcome: resolveFinalMaterializedScanOutcome({
-        existingOutcome: scanRecord.snapshot?.scan_outcome,
-      })
-    }),
+    } : localV2NoGo
+      ? buildLocalV2NoGoSnapshotFields(localV2NoGo.primaryReasonCode, localV2NoGo.pageState)
+      : buildFinalMaterializedAccessFields({
+          existingOutcome: scanRecord.snapshot?.scan_outcome,
+          runtimeCoverageStatus: effectiveRuntimeCoverageStatus,
+        })),
     legal_coverage_score: localV2NoGo ? null : score,
     pages_scanned: localV2NoGo ? 0 : Math.max(scanRecord.scan.pagesScanned, 1),
     partial_scan: true,
@@ -5771,7 +5810,7 @@ function buildMaterializedLocalV2Detail(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v7";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v8";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

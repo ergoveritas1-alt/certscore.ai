@@ -1960,6 +1960,14 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentUiPathEvidence = getObject(hybridRuntimeEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
   const rejectPathEvidence = getObject(input.runtimeArtifacts, ["rejectPathDepthAndAvailability", "reject_path_depth_and_availability"]);
   const firstLayerConsentChoices = getObject(hybridRuntimeEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
+  const consentSurfaceFirstObservedMs = [
+    getRuntimeElapsedMs(consentSurfaceInspection, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms", "observedAtMs", "observed_at_ms", "timestampMs", "timestamp_ms"]),
+    getRuntimeElapsedMs(consentControlLifecycle, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms", "observedAtMs", "observed_at_ms", "timestampMs", "timestamp_ms"]),
+    getRuntimeElapsedMs(consentUiPathEvidence, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms", "observedAtMs", "observed_at_ms", "timestampMs", "timestamp_ms"]),
+    getRuntimeElapsedMs(firstLayerConsentChoices, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms", "observedAtMs", "observed_at_ms", "timestampMs", "timestamp_ms"]),
+    ...getObjectArray(hybridRuntimeEvidence, ["consentUiObservations", "consent_ui_observations"])
+      .map((observation) => getRuntimeElapsedMs(observation, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms", "observedAtMs", "observed_at_ms", "timestampMs", "timestamp_ms"]))
+  ].filter((value): value is number => value !== null).sort((left, right) => left - right)[0] ?? null;
   const visibleChoiceLabels = getStringArray(firstLayerConsentChoices, ["visibleChoiceLabels", "visible_choice_labels"]);
   const layerInspected = getString(consentUiPathEvidence, ["layerInspected", "layer_inspected"]);
   const simpleCookieNoticeEvidence = getFirstLayerConsentChoiceEvidence(input);
@@ -2143,6 +2151,9 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
 
   if (consentSurfaceObserved) {
     const retainedLayerInspected = simpleCookieNoticeEvidence.layerInspected ?? layerInspected;
+    const consentSurfaceTimingSuffix = typeof consentSurfaceFirstObservedMs === "number"
+      ? ` First observed at ${formatElapsedSeconds(consentSurfaceFirstObservedMs)} after scan start.`
+      : "";
     const evidenceRefs = [
       "Evidence: retained consent surface observation",
       ...(
@@ -2150,18 +2161,21 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
           ? simpleCookieNoticeEvidence.visibleChoiceLabels
           : visibleChoiceLabels
       ).map((label) => `Visible choice: ${label}`).slice(0, 3),
+      typeof consentSurfaceFirstObservedMs === "number"
+        ? `First consent surface observed: ${formatElapsedSeconds(consentSurfaceFirstObservedMs)} after scan start`
+        : null,
       retainedLayerInspected ? `Layer inspected: ${retainedLayerInspected}` : null
     ].filter((value): value is string => Boolean(value));
     return makeOutcome(
       "consent_surface_observed",
       "Observed",
       simpleCookieNoticeWithChoice
-        ? "A first-layer cookie notice was observed with actionable Accept and Decline controls."
+        ? `A first-layer cookie notice was observed with actionable Accept and Decline controls.${consentSurfaceTimingSuffix}`
         : retainedInitialCookieConsentLayerEvidence
-          ? "A first-layer cookie consent surface was retained with actionable choice or preference controls."
+          ? `A first-layer cookie consent surface was retained with actionable choice or preference controls.${consentSurfaceTimingSuffix}`
           : consentInspectionIncomplete
-            ? "A consent surface was retained in the tested context, but control inspection was incomplete; control availability was not established."
-            : "A consent surface or first-layer consent controls were retained in the tested context.",
+            ? `A consent surface was retained in the tested context, but control inspection was incomplete; control availability was not established.${consentSurfaceTimingSuffix}`
+            : `A consent surface or first-layer consent controls were retained in the tested context.${consentSurfaceTimingSuffix}`,
       evidenceRefs,
       {
         retainedEvidence: {
@@ -2175,6 +2189,9 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
             ? ["first_layer_cookie_notice_observed"]
             : undefined,
           consentSurfaceObserved: true,
+          ...(typeof consentSurfaceFirstObservedMs === "number"
+            ? { firstObservedMs: consentSurfaceFirstObservedMs }
+            : {}),
           firstLayerCookieConsentBannerObserved: simpleCookieNoticeWithChoice || retainedInitialCookieConsentLayerEvidence
             ? true
             : undefined,
@@ -2327,7 +2344,7 @@ function getPreConsentStorageEvidenceRefs(assessment: PreConsentStorageAssessmen
       ? null
       : `Aggregate pre-consent storage count: ${assessment.aggregateObservedCount}`,
     `Assessment reconciliation: ${assessment.reconciliationStatus}`
-  ].filter((value): value is string => Boolean(value));
+      ].filter((value): value is string => Boolean(value));
 }
 
 function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyInput) {
@@ -10031,6 +10048,29 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
         retainedEvidence: {
           browserDeviceEntropyEvidence,
           fingerprintingObserved: false,
+          sessionReplayEvidence,
+          sessionReplayObserved: false
+        }
+      }
+    );
+  }
+
+  // Fingerprinting/device-identification evidence belongs to its own policy
+  // row. Do not let it populate the session-replay row when no replay signal
+  // was observed; the runtime evidence remains retained for the device row.
+  if (!sessionReplayObserved && fingerprintingObserved) {
+    return makeOutcome(
+      "session_replay_fingerprinting_review",
+      "Not observed",
+      "No session replay or behavioral analytics signal was observed. Device-identification or fingerprinting evidence is evaluated separately in the device-identification row.",
+      [
+        "Session replay signal not observed",
+        "Fingerprinting evidence evaluated separately"
+      ],
+      {
+        retainedEvidence: {
+          browserDeviceEntropyEvidence,
+          fingerprintingObserved: true,
           sessionReplayEvidence,
           sessionReplayObserved: false
         }

@@ -42,3 +42,40 @@ test("Article 13 absence rationale does not claim matching policy text", () => {
   assert.doesNotMatch(rationale, /included matching/i);
   assert.match(rationale, /did not retain|not observed|did not contain/i);
 });
+
+test("pre-consent storage rationale includes the retained first-observed time", () => {
+  const rationale = deriveGdprEprivacyCoverageChecklistRowRationale({
+    assessmentStatus: "gap_observed",
+    criticalEvidence: {
+      missingOrIncompleteSourceSignals: [],
+      pipeline: {
+        concernPolicyKey: "pre_consent_cookies_storage",
+        projectionStage: "coverage_policy",
+        wc01NormalizedConcernKey: "storage.preconsent",
+        ws01EvidenceRole: "runtime_evidence"
+      },
+      projectedFindings: [],
+      retainedEvidence: {
+        firstPreconsentCookieOrStorageObservedMs: 2630,
+        preConsentStorageAssessment: {
+          classifiedNonEssentialCount: 7,
+          provenWriteCount: 0
+        },
+        preConsentStorageAssessmentStatus: "classified_nonessential_observed"
+      },
+      statusBasis: "Seven non-essential storage records were retained before consent."
+    },
+    evidenceRefs: [],
+    evidenceState: "observed",
+    explanation: "Non-essential pre-consent cookies/storage were observed.",
+    id: "pre_consent_cookies_storage",
+    label: "Non-essential pre-consent cookies/storage",
+    note: "",
+    status: "Gap observed",
+    tone: "warning"
+  });
+
+  assert.match(rationale, /7 non-essential cookie or browser-storage items were observed before consent/i);
+  assert.match(rationale, /First observed at 2\.63s after scan start/i);
+  assert.doesNotMatch(rationale, /First-seen times reflect the pre-consent check/i);
+});

@@ -9,6 +9,16 @@ import {
 test("canonical NBCNews cookie knowledge separates non-essential categories from true infrastructure", () => {
   const categories = new Map([
     ["_gcl_au", "advertising"],
+    ["_ga", "analytics"],
+    ["_ga_CANARYTEST", "analytics"],
+    ["_gid", "analytics"],
+    ["_fbp", "advertising"],
+    ["_fbc", "advertising"],
+    ["CLID", "analytics"],
+    ["MUID", "advertising"],
+    ["MR", "advertising"],
+    ["ANONCHK", "advertising"],
+    ["SM", "advertising"],
     ["aam_uuid", "advertising"],
     ["sailthru_pageviews", "marketing"],
     ["_parsely_visitor", "analytics"],
@@ -37,6 +47,20 @@ test("canonical NBCNews cookie knowledge separates non-essential categories from
     name: "unclassified_nbc_cookie",
     vendor: null
   });
+});
+
+test("canonical Microsoft cookie knowledge keeps documented Clarity and identity purposes distinct", () => {
+  assert.deepEqual(resolveCanonicalCookieKnowledge("CLID"), {
+    category: "analytics",
+    dataTypes: ["cross-site browser identifier", "behavioral analytics identifier"],
+    description: "Microsoft Clarity third-party identifier recording when Clarity first observed the browser across sites using Clarity.",
+    essentiality: "non_essential",
+    name: "CLID",
+    vendor: "Microsoft Clarity",
+  });
+  assert.equal(resolveCanonicalCookieKnowledge("MUID").vendor, "Microsoft Identity Synchronization");
+  assert.equal(resolveCanonicalCookieKnowledge("MR").essentiality, "non_essential");
+  assert.equal(resolveCanonicalCookieKnowledge("SRM_B").essentiality, "unknown");
 });
 
 test("canonical Amazon cookie knowledge classifies ubid locale variants as non-essential persistent identifiers", () => {

@@ -677,7 +677,16 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
         : inferredCategory;
   const setMethod = getString(row.cookieSetMethod ?? row.cookie_set_method ?? row.setMethod ?? row.set_method ?? row.operation);
   const snapshot = /^(?:browser_snapshot|periodic_cookie_snapshot|initial_cookie_snapshot)$/i.test(setMethod ?? "");
-  const rawFirstObservedAtMs = getNumber(row.firstObservedAtMs ?? row.first_observed_at_ms);
+  const rawFirstObservedAtMs = getNumber(
+    row.firstObservedAtMs ??
+    row.first_observed_at_ms ??
+    row.observedAtMs ??
+    row.observed_at_ms ??
+    row.timestampMs ??
+    row.timestamp_ms ??
+    row.capturedAtMs ??
+    row.captured_at_ms
+  );
   const initialSnapshot = /^initial_cookie_snapshot$/i.test(setMethod ?? "") ||
     /^browser_snapshot$/i.test(setMethod ?? "") && rawFirstObservedAtMs === null;
   const rawSetAtMs = getNumber(row.setAtMs ?? row.set_at_ms);

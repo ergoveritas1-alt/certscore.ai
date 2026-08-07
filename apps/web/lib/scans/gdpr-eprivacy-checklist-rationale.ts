@@ -19,7 +19,7 @@ export function deriveGdprEprivacyCoverageChecklistRowRationale(item: GdprEpriva
     item.criticalEvidence.statusBasis,
     item.note,
     item.explanation,
-    `${item.label} evidence was evaluated from retained scanner evidence.`
+    `${item.label} was evaluated using the evidence collected during the scan.`
   ]);
 
   return truncateSentence(
@@ -77,23 +77,25 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
       : null;
     const assessment = getRecord(evidence.preConsentStorageAssessment);
     if (assessmentStatus === "partially_classified") {
-      return "Pre-consent storage was observed, but one or more records could not be classified as essential or non-essential or reconciled to the aggregate count.";
+      return "Cookies or browser storage were observed before consent, but the scan could not determine whether every item was essential or non-essential.";
     }
     if (assessmentStatus === "snapshot_presence_only") {
-      return "Non-essential storage candidates were present in a pre-consent snapshot, but retained evidence did not confirm that they were written during the scan.";
+      return "Non-essential cookies or browser storage appeared before consent, but the scan could not confirm exactly when each item was set.";
     }
     if (assessmentStatus === "insufficient_evidence") {
-      return "Pre-consent storage capture or attribution was insufficient to determine whether non-essential storage was present.";
+      return "The scan did not capture enough cookie or browser-storage detail to determine whether non-essential items were present before consent.";
     }
     if (assessmentStatus === "classified_nonessential_observed") {
       const count = getFirstNumberFromRecord(assessment, ["classifiedNonEssentialCount"]);
       const provenWriteCount = getFirstNumberFromRecord(assessment, ["provenWriteCount"]) ?? 0;
       const countPhrase = count === null
-        ? "Classified non-essential storage"
-        : `${count} classified non-essential storage record${count === 1 ? "" : "s"}`;
+        ? "Non-essential cookies or browser storage"
+        : `${count} non-essential cookie or browser-storage item${count === 1 ? "" : "s"}`;
       return provenWriteCount > 0
-        ? `${countPhrase} ${count === 1 ? "was" : "were"} retained before a recorded consent action; ${provenWriteCount} had write-level timing evidence.`
-        : `${countPhrase} ${count === 1 ? "was" : "were"} retained in pre-consent snapshot evidence; write-level timing was not retained.`;
+        ? `${countPhrase} ${count === 1 ? "was" : "were"} observed before consent.${typeof firstSeenMs === "number" ? ` First observed at ${formatElapsedSeconds(firstSeenMs)} after scan start.` : ""} Exact set time was captured for ${provenWriteCount}.`
+        : typeof firstSeenMs === "number"
+          ? `${countPhrase} ${count === 1 ? "was" : "were"} observed before consent. First observed at ${formatElapsedSeconds(firstSeenMs)} after scan start.`
+          : `${countPhrase} ${count === 1 ? "was" : "were"} observed before consent. First-seen times reflect the pre-consent check.`;
     }
     const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
       fallbackFirstSeenMs: firstSeenMs,
@@ -419,7 +421,7 @@ function getArticle13RationalePrefix(item: GdprEprivacyCoverageChecklistItem) {
 function getArticle13Snippet(evidence: Record<string, unknown>) {
   const article13Signal = getRecord(evidence.article13Signal);
   const text = getString(article13Signal?.evidenceText) ?? getString(article13Signal?.evidence_text);
-  return text ? `"${truncateWholeWord(cleanPolicyExcerptStart(text), 180, "...[more in evidence packet]")}"` : null;
+  return text ? `"${truncateWholeWord(cleanPolicyExcerptStart(text), 180, "...[more evidence available]")}"` : null;
 }
 
 function getStrongestEvidenceDetail(item: GdprEprivacyCoverageChecklistItem) {
@@ -452,7 +454,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (policyTextExtractionLimited(item)) {
     return joinRationaleParts([
-      `Coverage limited from retained ${source}`,
+      `Coverage was limited by ${source}`,
       statusBasis,
       getPolicyTextExtractionSummary(evidence),
       missingEvidence,
@@ -462,7 +464,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (evidenceLabel === "Not testable") {
     return joinRationaleParts([
-      `Not testable from retained ${source}`,
+      `Could not be fully evaluated using ${source}`,
       missingEvidence ?? statusBasis,
       policySurface
     ]);
@@ -470,7 +472,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (evidenceLabel === "Potential gap") {
     return joinRationaleParts([
-      `Potential gap from retained ${source}`,
+      `Potential issue based on ${source}`,
       strongestDetail ?? statusBasis,
       projectedFindings,
       signalState
@@ -479,7 +481,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (evidenceLabel === "Partial concern") {
     return joinRationaleParts([
-      `Partial support from retained ${source}`,
+      `Partial support from ${source}`,
       strongestDetail ?? statusBasis,
       missingEvidence,
       policySurface
@@ -488,7 +490,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (evidenceLabel === "Not confirmed") {
     return joinRationaleParts([
-      `Not confirmed from retained ${source}`,
+      `Not confirmed by ${source}`,
       strongestDetail ?? statusBasis,
       missingEvidence,
       policySurface
@@ -497,7 +499,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
 
   if (evidenceLabel === "Observed") {
     return joinRationaleParts([
-      `Observed from retained ${source}`,
+      `Observed in ${source}`,
       strongestDetail ?? statusBasis,
       projectedFindings,
       policySurface
@@ -505,7 +507,7 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
   }
 
   return joinRationaleParts([
-    `Not observed in retained ${source}`,
+    `Not observed in ${source}`,
     strongestDetail ?? statusBasis,
     missingEvidence,
     signalState
@@ -521,12 +523,12 @@ function getRetainedEvidenceSourceSummary(item: GdprEprivacyCoverageChecklistIte
     return "runtime evidence";
   }
   if (getStringArrayFromEvidenceKeys(evidence, ["projectedFindings", "projected_findings"]).length > 0 || item.criticalEvidence.projectedFindings.length > 0) {
-    return "unified finding projection evidence";
+    return "scan evidence";
   }
   if (item.criticalEvidence.missingOrIncompleteSourceSignals.length > 0) {
     return "source-signal coverage evidence";
   }
-  return "scanner evidence";
+  return "scan evidence";
 }
 
 function policyTextExtractionLimited(item: GdprEprivacyCoverageChecklistItem) {
@@ -620,7 +622,7 @@ function getProjectedFindingSummary(evidence: Record<string, unknown>) {
   const previews = getNestedRecordStrings(evidence.projectedFindingPreview, ["label", "id"]).slice(0, 3);
   const findingEntities = getNestedRecordStrings(evidence.findingEntities, ["id", "label"]).slice(0, 3);
   const phrase = formatList(uniqueStrings([...projected, ...projectedObjects, ...previews, ...findingEntities]).slice(0, 3));
-  return phrase ? `projected finding evidence: ${phrase}` : null;
+  return phrase ? `supporting evidence: ${phrase}` : null;
 }
 
 function getSignalObservedSummary(evidence: Record<string, unknown>) {
@@ -1092,6 +1094,11 @@ function joinRationaleParts(parts: Array<string | null | undefined>) {
 
 function cleanEvidenceText(value: string) {
   return value
+    .replace(/Canonical unified findings? projected for this row\.?/gi, "The scan found supporting evidence for this result.")
+    .replace(/projected finding evidence\s*:/gi, "Supporting evidence:")
+    .replace(/unified finding projection evidence/gi, "scan evidence")
+    .replace(/retained scanner evidence/gi, "evidence collected during the scan")
+    .replace(/not enough canonical evidence/gi, "not enough evidence")
     .replace(/\s+/g, " ")
     .replace(/\s+([,.;:])/g, "$1")
     .trim();
