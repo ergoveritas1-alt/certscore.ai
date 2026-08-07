@@ -1,5 +1,5 @@
 (function () {
-  var text = "ergoveritas.com is a controlled test environment used solely for automated compliance-scanning validation. Pages on this domain intentionally exhibit non-compliant behaviors for detection-testing purposes. This site is not intended for public use. Contact: ergoveritas1@gmail.com for any questions.";
+  var text = "ergoveritas.com is a controlled test environment used solely for automated compliance-scanning validation. Pages on this domain intentionally exhibit non-compliant behaviors for detection-testing purposes. This site is not intended for public use.";
   var banner = document.createElement("div");
   banner.setAttribute("role", "note");
   banner.setAttribute("data-canary-site-notice", "true");

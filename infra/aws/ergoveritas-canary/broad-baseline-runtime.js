@@ -4,6 +4,8 @@
   document.cookie = "_gid=GA1.1.CANARY; Path=/.well-known/certscore-canary/; SameSite=Lax; Secure";
   document.cookie = "_ga_CANARY=GS1.1.CANARY; Path=/.well-known/certscore-canary/; SameSite=Lax; Secure";
   document.cookie = "certscore_canary_marketing=pre_consent; Path=/.well-known/certscore-canary/; SameSite=Lax; Secure";
+  document.cookie = "_fbp=fb.1.CANARY; Path=/.well-known/certscore-canary/; SameSite=Lax; Secure";
+  document.cookie = "_gcl_au=1.1.CANARY; Path=/.well-known/certscore-canary/; SameSite=Lax; Secure";
   window.localStorage.setItem("certscore_canary_storage", "pre_consent_non_essential");
 
   // Synthetic analytics and marketing requests, intentionally before consent.
