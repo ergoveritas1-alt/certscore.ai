@@ -21,8 +21,23 @@
   if (context) {
     context.fillStyle = "#0f172a";
     context.fillRect(0, 0, 16, 16);
+    context.getImageData(0, 0, 16, 16);
     window.__certscoreCanaryCanvasFingerprint = canvas.toDataURL();
   }
+  var webglCanvas = document.createElement("canvas");
+  var webgl = webglCanvas.getContext("webgl") || webglCanvas.getContext("experimental-webgl");
+  if (webgl && typeof webgl.getParameter === "function") {
+    window.__certscoreCanaryWebglFingerprint = String(webgl.getParameter(webgl.RENDERER) || "unknown");
+  }
+  try {
+    window.__certscoreCanaryPluginCount = navigator.plugins.length;
+    window.__certscoreCanaryMimeTypeCount = navigator.mimeTypes.length;
+  } catch (_) {}
+  try {
+    if (navigator.userAgentData && typeof navigator.userAgentData.getHighEntropyValues === "function") {
+      navigator.userAgentData.getHighEntropyValues(["architecture", "bitness", "model", "platformVersion"]);
+    }
+  } catch (_) {}
   window.__certscoreCanaryFeatureFingerprint = {
     language: navigator.language,
     platform: navigator.platform,
