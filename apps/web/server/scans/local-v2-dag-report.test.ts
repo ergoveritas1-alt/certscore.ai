@@ -202,6 +202,48 @@ test("policy/runtime projection persists a linked typed contradiction triplet", 
     projection.policyRuntimeBridgeCandidates[0]?.runtimeAnchorRef,
     projection.runtimeBehaviorArtifacts[0]?.id
   );
+
+  const runtimeArtifacts = {
+    policyRuntimeContradictionAssessment: projection.contradictionAssessment,
+    policyClaimCandidates: projection.policyClaimCandidates,
+    policyRuntimeBridgeCandidates: projection.policyRuntimeBridgeCandidates,
+    runtimeBehaviorArtifacts: projection.runtimeBehaviorArtifacts
+  };
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  const contradictionConcern = concerns.find((concern) =>
+    concern.suggestedUnifiedFindingId === "policy_behavior_conflict"
+  );
+  assert.ok(contradictionConcern);
+  assert.equal(contradictionConcern.promotionEligibility, "eligible");
+
+  const findings = buildScanReportUnifiedFindingsForScan(makeScanRecord({ runtimeArtifacts }));
+  assert.ok(findings.some((finding) => finding.unifiedFindingId === "policy_behavior_conflict"));
+});
+
+test("policy/runtime projection accepts an equivalent classified collection endpoint", async () => {
+  const { buildPolicyRuntimeComparisonProjection } = await loadLocalV2DagReport();
+  const projection = buildPolicyRuntimeComparisonProjection({
+    privacyPolicyUrls: ["https://ergoveritas.com/privacy.html"],
+    retainedPrivacyPolicyTextExcerpt:
+      "This policy says optional analytics is consent-based and controlled by consent."
+  }, [{
+    classification: "tracker_beacon",
+    collectionEndpointObserved: true,
+    confidence: 0.95,
+    essentiality: "unknown",
+    hostname: "www.google-analytics.com",
+    requestUrl: "https://www.google-analytics.com/g/collect?v=2",
+    runtimePhase: "pre_consent",
+    timestampMs: 700,
+    vendor: "Google Analytics"
+  }]);
+
+  assert.ok(projection.contradictionAssessment);
+  assert.equal(projection.runtimeBehaviorArtifacts.length, 1);
 });
 
 test("retained request relationships keep Amazon cross-site and same-entity dimensions separate", async () => {

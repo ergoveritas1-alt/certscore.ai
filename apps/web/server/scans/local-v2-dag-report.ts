@@ -2349,11 +2349,24 @@ export function buildPolicyRuntimeComparisonProjection(
       /optional analytics/i.test(sentence) &&
       /(?:basis of consent|consent[- ]based|only after.{0,80}consent|controlled by.{0,80}consent)/i.test(sentence)
     ) ?? null;
-  const runtimeRow = requestRows.find((row) =>
-    firstString(row.runtimePhase, row.runtime_phase, row.timingStatus, row.timing_status) === "pre_consent" &&
-    firstString(row.essentiality) === "non_essential" &&
-    Boolean(firstString(row.requestUrl, row.request_url, row.url))
-  );
+  const runtimeRow = requestRows.find((row) => {
+    const runtimePhase = firstString(
+      row.runtimePhase,
+      row.runtime_phase,
+      row.timingStatus,
+      row.timing_status,
+    );
+    const classification = firstString(row.classification);
+    const nonEssentialClassification =
+      row.collectionEndpointObserved === true &&
+      classification !== null &&
+      ["tracker_beacon", "ad_request", "identifier_synchronization"].includes(classification);
+    return (
+      ["pre_consent", "before_consent"].includes(runtimePhase ?? "") &&
+      (firstString(row.essentiality) === "non_essential" || nonEssentialClassification) &&
+      Boolean(firstString(row.requestUrl, row.request_url, row.url))
+    );
+  });
   const runtimeUrl = firstString(runtimeRow?.requestUrl, runtimeRow?.request_url, runtimeRow?.url);
   if (!policySentence || !policySourceUrl || !runtimeRow || !runtimeUrl) {
     return {
@@ -5143,6 +5156,14 @@ function buildMaterializedLocalV2Detail(
     policySurfaceSummary as Record<string, unknown>,
     boundedRequestPurposeRows,
   );
+  console.warn(JSON.stringify({
+    event: "app.scan_detail.policy_runtime_comparison_projection",
+    scanId: scanRecord.scan.id,
+    assessmentProjected: policyRuntimeComparison.contradictionAssessment !== null,
+    policyClaimCandidateCount: policyRuntimeComparison.policyClaimCandidates.length,
+    retainedRequestPurposeRowCount: boundedRequestPurposeRows.length,
+    runtimeBehaviorArtifactCount: policyRuntimeComparison.runtimeBehaviorArtifacts.length,
+  }));
   const cookieWriteObservations = cookieEvents.map((event) => {
     const matchedVendor = findObservedVendor(event, inventoryVendorRows);
     const snapshot = /^(?:browser_snapshot|periodic_cookie_snapshot|initial_cookie_snapshot)$/i.test(event.operation ?? "");
