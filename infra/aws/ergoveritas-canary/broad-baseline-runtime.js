@@ -26,4 +26,29 @@
     platform: navigator.platform,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
   };
+
+  // Keep the two first-layer controls functional without introducing a
+  // refusal control: Accept dismisses the surface, while Manage opens a
+  // preference panel and Save records the selected synthetic choices.
+  var banner = document.querySelector('[data-canary-consent-surface="first-layer"]');
+  var preferences = document.getElementById("canary-preferences");
+  var accept = document.getElementById("canary-accept");
+  var manage = document.getElementById("canary-manage");
+  var save = document.getElementById("canary-save");
+  function setConsent(value) {
+    document.cookie = "certscore_canary_consent=" + value + "; Path=/.well-known/certscore-canary/; SameSite=Lax; Secure";
+    if (banner) banner.hidden = true;
+    if (preferences) preferences.hidden = true;
+  }
+  if (accept) accept.addEventListener("click", function () { setConsent("accepted"); });
+  if (manage) manage.addEventListener("click", function () {
+    if (preferences) preferences.hidden = false;
+  });
+  if (save) save.addEventListener("click", function () {
+    var analytics = document.getElementById("canary-analytics");
+    var media = document.getElementById("canary-media");
+    setConsent("managed");
+    document.cookie = "certscore_canary_analytics=" + (analytics && analytics.checked ? "enabled" : "disabled") + "; Path=/.well-known/certscore-canary/; SameSite=Lax; Secure";
+    document.cookie = "certscore_canary_media=" + (media && media.checked ? "enabled" : "disabled") + "; Path=/.well-known/certscore-canary/; SameSite=Lax; Secure";
+  });
 }());

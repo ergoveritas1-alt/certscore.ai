@@ -31,10 +31,21 @@
       <h1>Privacy choices</h1>
       <p>We use optional analytics, advertising technology, and embedded media.</p>
       <div class="controls">
-        <button class="primary" type="button" data-consent-intent="accept">Accept all</button>
-        <button type="button" data-consent-intent="options">Manage preferences</button>
+        <button class="primary" id="canary-accept" type="button" data-consent-intent="accept">Accept all</button>
+        <button id="canary-manage" type="button" data-consent-intent="options">Manage preferences</button>
       </div>
       <!-- Deliberately no Reject all or Necessary only control. -->
+    </section>
+
+    <section class="notice" id="canary-preferences" data-canary-preferences="true" hidden>
+      <h2>Manage preferences</h2>
+      <p>Choose which optional synthetic features may remain enabled.</p>
+      <label><input type="checkbox" checked disabled> Essential service operation</label>
+      <label><input id="canary-analytics" type="checkbox"> Analytics</label>
+      <label><input id="canary-media" type="checkbox"> Embedded media</label>
+      <div class="controls">
+        <button class="primary" id="canary-save" type="button">Save preferences</button>
+      </div>
     </section>
 
     <section class="notice">
