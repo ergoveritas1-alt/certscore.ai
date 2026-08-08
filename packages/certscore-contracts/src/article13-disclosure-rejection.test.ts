@@ -417,6 +417,15 @@ test("Article 13 rejection contract accepts complaint-to-authority language", ()
       true,
       `${mode} should accept possessive complaint-to-authority wording`,
     );
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(
+        "If you are not happy with how we handled your concern, you may submit a complaint to the Information Commissioner's Office.",
+        "supervisory_authority",
+        { mode },
+      ),
+      true,
+      `${mode} should accept a complaint route to the UK supervisory authority`,
+    );
   }
 });
 

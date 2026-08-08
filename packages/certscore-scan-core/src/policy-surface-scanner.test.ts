@@ -4440,6 +4440,20 @@ test("policySurfaceScanner deterministically retains a Lancaster-style website p
       true,
     );
     assert.match(selected?.textExcerpt ?? "", /legitimate interests/i);
+    for (const disclosureType of [
+      "controller_contact",
+      "data_retention",
+      "dpo_contact",
+      "supervisory_authority",
+    ] as const) {
+      assert.equal(
+        selected?.article13DisclosureSignals.some((signal) =>
+          signal.disclosureType === disclosureType && signal.status === "observed"
+        ),
+        true,
+        `${disclosureType} should be retained from the governing child policy`,
+      );
+    }
     assert.equal(unselected?.status, "observed");
     assert.equal(unselected?.documentFetchState, "not_attempted");
   });

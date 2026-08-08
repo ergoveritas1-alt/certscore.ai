@@ -5621,9 +5621,9 @@ function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13Dis
     },
     {
       disclosureType: "data_retention",
-      pattern: /(?:retention period|retention criteria|storage period|retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)|retained.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)|keep your (?:personal )?(?:data|information).{0,120}(?:as long as necessary|required by law|for)|stored for|kept for|as long as necessary|delete (?:it|them|the data|personal data|personal information|your information) after|deleted? or anonymi[sz]ed|expires?)/i,
-      partialPattern: /(?:retention period|retention criteria|retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)|retained.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)|keep your (?:personal )?(?:data|information).{0,120}(?:as long as necessary|required by law|for)|stored for|kept for|expires?)/i,
-      excerptPatterns: [/retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)/i, /retained.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)/i, /retention period/i, /retention criteria/i, /storage period/i, /keep your (?:personal )?(?:data|information).{0,120}(?:as long as necessary|required by law|for)/i, /stored for/i, /kept for/i, /as long as necessary/i, /delete (?:it|them|the data|personal data|personal information|your information) after/i, /deleted? or anonymi[sz]ed/i, /expires?/i, /retain/i, /retention/i],
+      pattern: /(?:retention period|retention criteria|storage period|retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)|retained.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)|(?:do not|don['’]t|will not|won['’]t) keep (?:your )?(?:personal )?(?:data|information).{0,80}(?:longer than (?:is )?necessary|beyond what is necessary)|keep your (?:personal )?(?:data|information).{0,120}(?:as long as necessary|required by law|for)|stored for|kept for|as long as necessary|delete (?:it|them|the data|personal data|personal information|your information) after|deleted? or anonymi[sz]ed|expires?)/i,
+      partialPattern: /(?:retention period|retention criteria|retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)|retained.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)|(?:do not|don['’]t|will not|won['’]t) keep (?:your )?(?:personal )?(?:data|information).{0,80}(?:longer than (?:is )?necessary|beyond what is necessary)|keep your (?:personal )?(?:data|information).{0,120}(?:as long as necessary|required by law|for)|stored for|kept for|expires?)/i,
+      excerptPatterns: [/retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)/i, /retained.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)/i, /(?:do not|don['’]t|will not|won['’]t) keep (?:your )?(?:personal )?(?:data|information).{0,80}(?:longer than (?:is )?necessary|beyond what is necessary)/i, /retention period/i, /retention criteria/i, /storage period/i, /keep your (?:personal )?(?:data|information).{0,120}(?:as long as necessary|required by law|for)/i, /stored for/i, /kept for/i, /as long as necessary/i, /delete (?:it|them|the data|personal data|personal information|your information) after/i, /deleted? or anonymi[sz]ed/i, /expires?/i, /retain/i, /retention/i],
     },
     {
       disclosureType: "data_subject_rights",
@@ -5644,9 +5644,9 @@ function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13Dis
     },
     {
       disclosureType: "supervisory_authority",
-      pattern: /(?:supervisory authority|data protection authority|lodge a complaint|complain to (?:a )?(?:regulator|authority)|\bico\b|\bcnil\b|\bdpc\b)/i,
+      pattern: /(?:supervisory authority|data protection authority|information commissioner['’]s office|lodge a complaint|complain to (?:a )?(?:regulator|authority)|\bico\b|\bcnil\b|\bdpc\b)/i,
       partialPattern: /(?:compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)|formal written complaints|regulatory authorities|local data protection authorities|unresolved complaints?|regulators?.{0,120}(?:complaints?|authorities|resolve))/i,
-      excerptPatterns: [/compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)/i, /formal written complaints/i, /regulatory authorities/i, /local data protection authorities/i, /unresolved complaints?/i, /supervisory authority/i, /data protection authority/i, /lodge a complaint/i, /complain to (?:a )?(?:regulator|authority)/i, /\bico\b/i, /\bcnil\b/i, /\bdpc\b/i],
+      excerptPatterns: [/compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)/i, /formal written complaints/i, /regulatory authorities/i, /local data protection authorities/i, /unresolved complaints?/i, /supervisory authority/i, /data protection authority/i, /information commissioner['’]s office/i, /lodge a complaint/i, /complain to (?:a )?(?:regulator|authority)/i, /\bico\b/i, /\bcnil\b/i, /\bdpc\b/i],
     },
     {
       disclosureType: "automated_decision_making_or_profiling",
@@ -5724,7 +5724,7 @@ function confidenceForArticle13DisclosureSignal(
       if (/\b(?:recipients|service providers|processors|vendors?)\b/i.test(text)) return 0.86;
       return 0.76;
     case "data_retention":
-      if (/\b(?:retention period|retention criteria|storage period|retain.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)|retained.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)|kept for|stored for|no longer needed)\b/i.test(text)) return 0.9;
+      if (/\b(?:retention period|retention criteria|storage period|retain.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)|retained.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)|(?:do not|don['’]t|will not|won['’]t) keep (?:your )?(?:personal )?(?:data|information).{0,80}(?:longer than (?:is )?necessary|beyond what is necessary)|kept for|stored for|no longer needed)\b/i.test(text)) return 0.9;
       if (/\b(?:deleted? or anonymi[sz]ed|expires?)\b/i.test(text)) return 0.76;
       return 0.68;
     case "data_subject_rights": {
@@ -5743,7 +5743,7 @@ function confidenceForArticle13DisclosureSignal(
       if (/\b(?:data protection officer|\bdpo\b)\b/i.test(text)) return 0.9;
       return 0.78;
     case "supervisory_authority":
-      if (/\b(?:supervisory authority|data protection authority|lodge a complaint|complain to (?:a )?(?:supervisory|data protection) authority|\bico\b|\bcnil\b|\bdpc\b)\b/i.test(text)) return 0.9;
+      if (/\b(?:supervisory authority|data protection authority|information commissioner['’]s office|lodge a complaint|complain to (?:a )?(?:supervisory|data protection) authority|\bico\b|\bcnil\b|\bdpc\b)\b/i.test(text)) return 0.9;
       return 0.66;
     case "automated_decision_making_or_profiling":
       if (/\b(?:solely automated|automated decision(?:-making| making)?.{0,160}(?:legal or similarly significant effects|meaningful information about the logic involved))\b/i.test(text)) return 0.9;

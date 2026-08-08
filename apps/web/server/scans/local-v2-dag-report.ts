@@ -3528,6 +3528,22 @@ function isSpecializedPrivacySurfaceForDifferentAudience(
 }
 
 function isCookieSpecificPrivacySurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
+  const reasonCodes = new Set([
+    ...(row.surface.classifierReasonCodes ?? []),
+    ...(row.surface.selectionReasonCodes ?? []),
+  ]);
+  const isCanonicalCombinedSurface =
+    reasonCodes.has("variant_combined_privacy_cookie_surface") ||
+    reasonCodes.has("combined_privacy_cookie_surface");
+  const substantivePrivacyDisclosureTypes = new Set(
+    (row.surface.article13DisclosureSignals ?? [])
+      .filter((signal) => signal.status === "observed")
+      .map((signal) => signal.disclosureType)
+      .filter((disclosureType) => disclosureType !== "automated_decision_making_or_profiling"),
+  );
+  if (isCanonicalCombinedSurface && substantivePrivacyDisclosureTypes.size >= 2) {
+    return false;
+  }
   const url = [
     row.pageUrl,
     row.surface.normalizedUrl,

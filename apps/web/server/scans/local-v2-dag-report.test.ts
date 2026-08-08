@@ -3001,6 +3001,52 @@ test("summarizePolicySurfaces prefers general privacy notices over cookie-specif
   assert.match(summary.retainedPrivacyPolicyTextExcerpt, /Privacy Policy/i);
 });
 
+test("summarizePolicySurfaces retains typed Article 13 evidence from a substantive combined website-and-cookies notice", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const policyText = [
+    "Website and Cookies Privacy Notice.",
+    "Lancaster Example University is the Data Controller for personal data and can be contacted at privacy@example.test.",
+    "The designated Data Protection Officer can be contacted at dpo@example.test.",
+    "We process personal information to operate and improve the website.",
+  ].join(" ").repeat(16);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "combined-website-cookie-policy",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy/website-and-cookies-privacy/",
+    normalizedUrl: "https://example.test/privacy/website-and-cookies-privacy/",
+    status: "fetched",
+    documentRole: "policy_document",
+    documentFetchState: "fetched",
+    documentEvaluationState: "usable",
+    targetRelationship: "target_controller",
+    classifierReasonCodes: [
+      "variant_combined_privacy_cookie_surface",
+      "combined_privacy_cookie_surface",
+    ],
+    textExcerpt: policyText,
+    article13DisclosureSignals: [{
+      disclosureType: "controller_contact",
+      status: "observed",
+      evidenceText: "Lancaster Example University is the Data Controller for personal data and can be contacted at privacy@example.test.",
+      confidence: 0.9,
+      source: "deterministic",
+    }, {
+      disclosureType: "dpo_contact",
+      status: "observed",
+      evidenceText: "The designated Data Protection Officer can be contacted at dpo@example.test.",
+      confidence: 0.9,
+      source: "deterministic",
+    }],
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.equal(summary.article13DisclosureTypesObserved.includes("controller_contact"), true);
+  assert.equal(summary.article13DisclosureTypesObserved.includes("dpo_contact"), true);
+  assert.deepEqual(summary.privacyPolicyUrls, ["https://example.test/privacy/website-and-cookies-privacy"]);
+});
+
 test("summarizePolicySurfaces excludes privacy-service marketing when a canonical privacy policy was retained", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const surfaces = dedupePolicySurfaces([
