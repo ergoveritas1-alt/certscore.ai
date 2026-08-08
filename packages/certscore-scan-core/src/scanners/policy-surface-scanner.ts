@@ -18,7 +18,7 @@ import {
   type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
 import { chromium, type Browser, type Locator, type Page } from "playwright";
-import { Resolver } from "node:dns/promises";
+import { Resolver } from "node:dns";
 import { isIP } from "node:net";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -6590,7 +6590,7 @@ async function resolvePolicyHostname(hostname: string, signal: AbortSignal): Pro
   try {
     try {
       const addresses = await awaitAbortablePolicyOperation(
-        resolver.resolve4(hostname),
+        resolvePolicyIpv4(resolver, hostname),
         signal,
         "Policy hostname resolution aborted.",
       );
@@ -6598,7 +6598,7 @@ async function resolvePolicyHostname(hostname: string, signal: AbortSignal): Pro
     } catch (error) {
       throwIfAborted(signal);
       const addresses = await awaitAbortablePolicyOperation(
-        resolver.resolve6(hostname),
+        resolvePolicyIpv6(resolver, hostname),
         signal,
         "Policy hostname resolution aborted.",
       );
@@ -6609,6 +6609,33 @@ async function resolvePolicyHostname(hostname: string, signal: AbortSignal): Pro
   } finally {
     signal.removeEventListener("abort", cancelResolution);
   }
+}
+
+function resolvePolicyIpv4(resolver: Resolver, hostname: string): Promise<string[]> {
+  // Keep DNS failures on an explicitly handled callback boundary. The
+  // promise-based Resolver can surface a late ENOTFOUND as an unhandled
+  // rejection after bounded Lambda policy work has already moved on.
+  return new Promise((resolve, reject) => {
+    resolver.resolve4(hostname, (error, addresses) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(addresses);
+    });
+  });
+}
+
+function resolvePolicyIpv6(resolver: Resolver, hostname: string): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    resolver.resolve6(hostname, (error, addresses) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(addresses);
+    });
+  });
 }
 
 export async function readBoundedResponseBody(

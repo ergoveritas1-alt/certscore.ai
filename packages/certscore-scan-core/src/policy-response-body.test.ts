@@ -138,6 +138,29 @@ test("policy HTTP transport destroys a socket stalled before response headers", 
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 });
 
+test("policy HTTP transport contains an unresolved hostname as a request failure", async () => {
+  const controller = new AbortController();
+  const unhandled: unknown[] = [];
+  const captureUnhandled = (reason: unknown) => unhandled.push(reason);
+  process.on("unhandledRejection", captureUnhandled);
+
+  try {
+    await assert.rejects(
+      requestBoundedPolicyResponse(
+        "https://policy-hostname-that-does-not-exist.invalid/privacy",
+        controller.signal,
+        0,
+        "node",
+      ),
+      /ENOTFOUND|ENODATA|did not resolve/,
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.removeListener("unhandledRejection", captureUnhandled);
+  }
+});
+
 test("policy HTTP transport destroys a response stream stalled after headers", async () => {
   const server = createServer((_request, response) => {
     response.writeHead(200, { "content-type": "text/html" });
