@@ -25,3 +25,13 @@ test("validation worker may release and retry retained production results", () =
   assert.match(resultQueuePolicy, /"sqs:ChangeMessageVisibility"/);
   assert.match(resultQueuePolicy, /certscore-v2-dag-local-production-results/);
 });
+
+test("Lambda A/R/O verification uses the role-authorized production result queue", () => {
+  const source = readFileSync("scripts/run-consent-geometry-aro-nogo-lambda-gate.ts", "utf8");
+  const defaultQueueStart = source.indexOf("function defaultQueueUrl");
+  const defaultQueueEnd = source.indexOf("function isSupportedAuxiliaryFileName", defaultQueueStart);
+  const defaultQueue = source.slice(defaultQueueStart, defaultQueueEnd);
+
+  assert.match(defaultQueue, new RegExp(productionQueueName));
+  assert.doesNotMatch(defaultQueue, new RegExp(sharedLocalQueueName));
+});

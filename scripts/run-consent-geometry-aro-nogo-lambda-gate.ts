@@ -1007,7 +1007,7 @@ function parseSqsScanId(body: string | undefined): string | null {
 }
 
 function defaultQueueUrl(region: Args["region"]): string {
-  return `https://sqs.${region}.amazonaws.com/199536052647/certscore-v2-dag-local-results`;
+  return `https://sqs.${region}.amazonaws.com/199536052647/certscore-v2-dag-local-production-results`;
 }
 
 function isSupportedAuxiliaryFileName(fileName: string): boolean {
