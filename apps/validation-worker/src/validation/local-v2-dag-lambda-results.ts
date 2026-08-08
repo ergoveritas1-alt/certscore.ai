@@ -494,6 +494,28 @@ const policyEvidenceProcessingInFlight = new Map<string, Promise<PolicyEvidenceP
 const policyEvidenceBackgroundTasks = new Set<Promise<void>>();
 const resultFinalizationBackgroundTasks = new Set<Promise<void>>();
 const resultFinalizationScanIds = new Set<string>();
+const resultFinalizationSlotWaiters: Array<() => void> = [];
+let activeResultFinalizations = 0;
+
+async function withResultFinalizationSlot<T>(operation: () => Promise<T>) {
+  if (activeResultFinalizations >= RESULT_FINALIZATION_BACKGROUND_CONCURRENCY) {
+    await new Promise<void>((resolve) => resultFinalizationSlotWaiters.push(resolve));
+  } else {
+    activeResultFinalizations += 1;
+  }
+  try {
+    return await operation();
+  } finally {
+    const next = resultFinalizationSlotWaiters.shift();
+    if (next) {
+      // Transfer the active permit directly so a newly arriving task cannot
+      // overtake the FIFO waiter and exceed the projection concurrency bound.
+      next();
+    } else {
+      activeResultFinalizations -= 1;
+    }
+  }
+}
 
 async function processPolicyEvidenceReadyMessage(input: {
   queueRegion: string;
@@ -1798,11 +1820,7 @@ async function startCompletedResultFinalization(input: {
   queueRegion: string;
   webBaseUrl?: string;
 }) {
-  if (
-    resultFinalizationBackgroundTasks.size >= RESULT_FINALIZATION_BACKGROUND_CONCURRENCY ||
-    resultFinalizationScanIds.has(input.parsed.scanId) ||
-    !(await canonicalReportInputsReady(input.parsed.scanId))
-  ) {
+  if (resultFinalizationScanIds.has(input.parsed.scanId)) {
     return false;
   }
   resultFinalizationScanIds.add(input.parsed.scanId);
@@ -1815,12 +1833,24 @@ async function startCompletedResultFinalization(input: {
           targetEnvironment: input.parsed.targetEnvironment,
         });
       }
-      await ensureCompletedScanScoresPersisted({
-        scanId: input.parsed.scanId,
-        targetEnvironment: input.parsed.targetEnvironment,
-        webBaseUrl: input.webBaseUrl,
+      // The terminal scanner result is normally retained just before the
+      // validation dispatcher persists normalized signals and unified
+      // findings. Wait for those canonical inputs in this worker-owned task
+      // instead of requiring them to exist at the exact result-receipt
+      // instant. Otherwise a fast result can miss finalization and leave the
+      // UI waiting for a page-render recovery path.
+      await waitForCanonicalReportInputs(
+        input.parsed.scanId,
+        Date.now() + MATERIALIZATION_FINALIZING_WAIT_MS,
+      );
+      await withResultFinalizationSlot(async () => {
+        await ensureCompletedScanScoresPersisted({
+          scanId: input.parsed.scanId,
+          targetEnvironment: input.parsed.targetEnvironment,
+          webBaseUrl: input.webBaseUrl,
+        });
+        await persistScannerRuntimeSnapshot(input.parsed);
       });
-      await persistScannerRuntimeSnapshot(input.parsed);
     } catch (error) {
       console.error("[validation-worker] persisted v2 DAG Lambda result finalization failed", {
         error: error instanceof Error ? error.message : String(error),

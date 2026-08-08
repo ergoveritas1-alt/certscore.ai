@@ -7,6 +7,7 @@ import {
   hasStaleLegalFrameworkReference,
   hasSubstantiveLegalBasisEvidence,
   hasSubstantiveProcessingPurposesEvidence,
+  MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS,
   policyTextEvidenceProjectionSchema,
 } from "@certscore/contracts";
 import type {
@@ -6713,7 +6714,7 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
   }
 ];
 
-const MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13 = 2_500;
+const MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13 = MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS;
 
 function getPolicyDisclosureSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   return getObject(runtimeArtifacts, ["policyDisclosureSummary", "policy_disclosure_summary"]);

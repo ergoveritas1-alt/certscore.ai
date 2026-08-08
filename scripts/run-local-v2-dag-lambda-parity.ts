@@ -641,7 +641,16 @@ function restoreEnv(values: Map<string, string | undefined>) {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
-  process.exitCode = 1;
-});
+void main().then(
+  () => {
+    // This executable is the local simulated-Lambda boundary. All evidence,
+    // manifests, and the captured terminal message have been synchronously
+    // awaited before main resolves, so lingering Playwright/SDK handles must
+    // not delay WC01 result ingestion after the simulated handler completed.
+    process.exit(0);
+  },
+  (error: unknown) => {
+    console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+    process.exit(1);
+  },
+);

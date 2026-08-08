@@ -22,7 +22,6 @@ import { BoundedPromiseCache } from "../../../../server/performance/bounded-prom
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { getPublicScanById, getScanById } from "../../../../server/scans/get-scan-by-id";
 import { loadPersistedScanReportProjection } from "../../../../server/scans/scan-report-projection";
-import { publishCanonicalScanReportProjection } from "../../../../server/scans/canonical-scan-report-publisher";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import {
   getPublicScanStatusProjection,
@@ -110,16 +109,6 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     isCompletedScanStatus(statusProjection.status) &&
     statusProjection.reportProjectionRequired &&
     !statusProjection.reportReady;
-  if (waitingForReportProjection) {
-    after(async () => {
-      await publishCanonicalScanReportProjection({
-        organizationId: statusProjection.organizationId,
-        scanId
-      }).catch((error) => {
-        console.error("Failed to publish canonical scan report projection from the pending report shell", error);
-      });
-    });
-  }
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
       <>
@@ -191,14 +180,6 @@ async function ScanDetailReportContent({
     statusProjection.reportProjectionRequired &&
     !localPersistedReportProjection
   ) {
-    after(async () => {
-      await publishCanonicalScanReportProjection({
-        organizationId: statusProjection.organizationId,
-        scanId
-      }).catch((error) => {
-        console.error("Failed to recover canonical scan report projection", error);
-      });
-    });
     return (
       <PendingScanDetailView
         createdAt={statusProjection.createdAt}

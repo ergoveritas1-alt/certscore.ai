@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import { selectSimulatedLambdaTerminalResultMessages } from "./local-v2-dag-lambda-simulated-dispatch";
 
 const terminalResult = {
@@ -36,4 +37,20 @@ test("simulated Lambda terminal routing fails closed for missing or duplicate re
     () => selectSimulatedLambdaTerminalResultMessages([terminalResult, terminalResult]),
     /received 2/
   );
+});
+
+test("local Lambda executables exit after their durable handoffs are awaited", async () => {
+  for (const path of [
+    "scripts/run-local-v2-dag-lambda-parity.ts",
+    "scripts/smoke-local-v2-dag-lambda.ts",
+  ]) {
+    const source = await readFile(path, "utf8");
+    const main = source.lastIndexOf("void main().then(");
+    const successExit = source.indexOf("process.exit(0)", main);
+    const failureExit = source.indexOf("process.exit(1)", main);
+
+    assert.ok(main >= 0, `${path} must terminate from the resolved main promise`);
+    assert.ok(successExit > main, `${path} must exit immediately after a successful durable handoff`);
+    assert.ok(failureExit > successExit, `${path} must preserve a non-zero failure exit`);
+  }
 });

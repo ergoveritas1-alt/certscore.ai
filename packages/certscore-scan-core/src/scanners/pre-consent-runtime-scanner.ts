@@ -1425,6 +1425,80 @@ export async function preConsentRuntimeScanner(
           );
         }
         retainedConsentUiObservation = preScreenshotConsentObservation;
+
+        // Complete the consent-proof packet while the settled screenshot and
+        // its paired typed inventory still describe the same untouched page.
+        // This capture is deliberately before optional CMP recaptures so a
+        // long passive wait cannot consume the geometry budget. Later typed
+        // positive evidence still overrides an earlier completed negative.
+        if (!consentGeometryDiagnosticWritten && remainingModuleBudgetMs() >= 750) {
+          const pairedObservationText = preScreenshotConsentObservation.textExcerpt;
+          const pairedGeometryTimeoutMs = Math.min(
+            fastWait ? 1_750 : 2_750,
+            Math.max(500, remainingModuleBudgetMs() - 250),
+          );
+          const pairedGeometry = await recordBoundedTiming<{
+            access: Awaited<ReturnType<typeof collectConsentGeometryPageAccess>>;
+            geometry: ConsentControlGeometryArtifact;
+          } | null>(
+            timingBreakdown,
+            "paired settled-frame consent geometry",
+            "Bounded typed geometry captured against the same live document as the protected settled screenshot and paired A/R/O inventory.",
+            pairedGeometryTimeoutMs,
+            async () => {
+              const geometryCaptureTimeoutMs = Math.max(250, pairedGeometryTimeoutMs - 300);
+              const geometry = await captureConsentControlGeometry(page, {
+                screenshotArtifactRef: settledScreenshotPath,
+                timeoutMs: geometryCaptureTimeoutMs,
+              });
+              const access = await collectConsentGeometryPageAccess(
+                page,
+                initialNavigationHttpStatus,
+                {
+                  frameTextTimeoutMs: fastWait ? 150 : 250,
+                  supplementalBodyText: pairedObservationText,
+                },
+              );
+              return { access, geometry };
+            },
+            () => null,
+          );
+          if (pairedGeometry) {
+            const geometryComplete = pairedGeometry.access.status === "loaded" &&
+              pairedGeometry.geometry.summary.confidence > 0 &&
+              pairedGeometry.geometry.pageUrl !== "about:blank" &&
+              pairedGeometry.geometry.viewport.width > 0 &&
+              pairedGeometry.geometry.viewport.height > 0;
+            const geometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
+              "ConsentControlGeometryEvidence.json",
+              {
+                ...pairedGeometry.geometry,
+                access: pairedGeometry.access,
+                egress: buildConsentGeometryEgressDiagnostic(),
+                artifactOnly: true,
+                productionFindingIntegration: false,
+              },
+            );
+            if (geometryComplete) {
+              // A completed empty geometry packet is sufficient for the
+              // negative path. Positive geometry still proceeds through the
+              // established late diagnostic so it can retain its dedicated
+              // proof screenshot and bounded scroll recovery.
+              consentGeometryDiagnosticWritten =
+                !hasConfirmedFirstLayerGeometryControls(pairedGeometry.geometry);
+              preScreenshotConsentObservation = reconcileConsentUiObservationWithCompletedGeometry({
+                artifactPath: geometryArtifactPath,
+                current: preScreenshotConsentObservation,
+                geometry: pairedGeometry.geometry,
+                geometryAccessLoaded: true,
+                pageUrl: safePageUrl(page, effectiveNavigationUrl),
+                scanStartedAtMs: input.scanStartedAtMs,
+                text: pairedObservationText,
+              });
+              retainedConsentUiObservation = preScreenshotConsentObservation;
+            }
+          }
+        }
       }
     }
 
@@ -2163,14 +2237,48 @@ export async function preConsentRuntimeScanner(
       consentObservation.controls.some((control) =>
         ["accept_all", "reject_all", "essential_only", "manage_preferences"].includes(control.actionType)
       );
-    const geometryBudgetCushionMs = input.internalBudgetMs <= 10_000
-      ? structuredFirstLayerControlsConfirmed ? 1_000 : 2_500
-      : input.waitMode === "fast" ? 8_000 : 10_000;
-    if (!consentGeometryDiagnosticWritten && remainingModuleBudgetMs() >= geometryBudgetCushionMs) {
+    const completedGeometryNegativeWithOnlyRejectedNonSurfaceCandidates =
+      consentObservation.controls.length === 0 &&
+      consentObservation.inventoryOutcome === "complete_empty" &&
+      consentObservation.captureDiagnostics?.completedChannels.includes("geometry") === true &&
+      consentObservation.basis.some((basis) =>
+        basis === "geometry:hidden_cmp_markup_separated_from_visible_surface" ||
+        basis === "geometry:no_visible_consent_surface"
+      ) &&
+      hasOnlyRejectedNonSurfaceConsentCandidates(consentObservation);
+    if (completedGeometryNegativeWithOnlyRejectedNonSurfaceCandidates) {
+      consentObservation = annotateConsentUiObservation({
+        ...consentObservation,
+        captureStatus: "no_evidence",
+        likelyPresent: false,
+      }, "geometry:late_non_surface_candidates_did_not_override");
+      retainedConsentUiObservation = consentObservation;
+    }
+    const completedGeometryNegativeHasLaterSurfaceHint =
+      consentGeometryDiagnosticWritten &&
+      consentObservation.controls.length === 0 &&
+      consentObservation.likelyPresent &&
+      consentObservation.basis.some((basis) =>
+        basis === "geometry:hidden_cmp_markup_separated_from_visible_surface" ||
+        basis === "geometry:no_visible_consent_surface"
+      );
+    const geometryBudgetCushionMs = completedGeometryNegativeHasLaterSurfaceHint
+      ? input.waitMode === "fast" ? 1_500 : 2_500
+      : input.internalBudgetMs <= 10_000
+        ? structuredFirstLayerControlsConfirmed ? 1_000 : 2_500
+        : input.waitMode === "fast" ? 8_000 : 10_000;
+    if (
+      (!consentGeometryDiagnosticWritten || completedGeometryNegativeHasLaterSurfaceHint) &&
+      remainingModuleBudgetMs() >= geometryBudgetCushionMs
+    ) {
       await recordTiming(
         timingBreakdown,
-        "consent control geometry diagnostic",
-        "Artifact-only bounded consent-control geometry diagnostic after normal pre-consent screenshot and structured inventory capture.",
+        completedGeometryNegativeHasLaterSurfaceHint
+          ? "consent control geometry revalidation"
+          : "consent control geometry diagnostic",
+        completedGeometryNegativeHasLaterSurfaceHint
+          ? "Revalidate a completed negative geometry packet after a later text-only surface hint; the newer same-session geometry remains authoritative."
+          : "Artifact-only bounded consent-control geometry diagnostic after normal pre-consent screenshot and structured inventory capture.",
         async () => {
         const access = await collectConsentGeometryPageAccess(page, initialNavigationHttpStatus, {
           frameTextTimeoutMs: input.waitMode === "fast" ? 250 : 500,
@@ -2260,6 +2368,12 @@ export async function preConsentRuntimeScanner(
           scanStartedAtMs: input.scanStartedAtMs,
           text: domText,
         });
+        if (completedGeometryNegativeHasLaterSurfaceHint) {
+          consentObservation = annotateConsentUiObservation(
+            consentObservation,
+            "geometry:revalidated_after_late_surface_hint",
+          );
+        }
         retainedConsentUiObservation = consentObservation;
         if (
           geometry.pageUrl !== "about:blank" &&
@@ -9468,6 +9582,36 @@ type AroGeometryAction = Extract<
 const GEOMETRY_CONSENT_OBSERVATION_CONTEXT_PATTERN =
   /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie/i;
 
+function hasVisibleFirstLayerConsentGeometrySurface(
+  geometry: ConsentControlGeometryArtifact,
+): boolean {
+  return geometry.containers.some((container) =>
+    container.layer === "first_layer" &&
+    container.intersectsViewport &&
+    container.boundingBox.width > 0 &&
+    container.boundingBox.height > 0 &&
+    GEOMETRY_CONSENT_OBSERVATION_CONTEXT_PATTERN.test([
+      container.selectorHint,
+      container.role,
+      container.ariaLabel,
+      container.id,
+      container.classes,
+      container.textExcerpt,
+    ].filter(Boolean).join(" "))
+  );
+}
+
+function hasOnlyRejectedNonSurfaceConsentCandidates(
+  observation: ConsentUiObservation,
+): boolean {
+  const reasons = observation.inventoryDiagnostics?.rejectionReasons ?? [];
+  return reasons.length > 0 && reasons.every((reason) =>
+    reason === "footer_nav_page_chrome" ||
+    reason === "hidden" ||
+    reason === "no_consent_context"
+  );
+}
+
 function isAroGeometryAction(
   actionType: ConsentControlGeometryArtifact["candidates"][number]["actionType"],
 ): actionType is AroGeometryAction {
@@ -9569,9 +9713,34 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
     ...(input.current.captureDiagnostics?.completedChannels ?? []),
     "geometry",
   ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["completedChannels"];
+  const completedSettledEmptyInventory =
+    input.current.controls.length === 0 &&
+    input.current.inventoryOutcome === "complete_empty" &&
+    (input.current.captureDiagnostics?.completedChannels ?? []).some((channel) =>
+      channel === "dom_inventory" || channel === "accessibility_tree"
+    ) &&
+    (input.current.captureDiagnostics?.timedOutChannels.length ?? 0) === 0 &&
+    (input.current.captureDiagnostics?.failedChannels.length ?? 0) === 0 &&
+    input.current.basis.some((basis) =>
+      basis === "settled_control_inventory_completed" ||
+      basis === "recapture:paired_settled_frame_completed_without_first_layer_controls" ||
+      basis === "inventory:paired_settled_frame_completed"
+    ) &&
+    Boolean(input.geometry.screenshotArtifactRef) &&
+    !hasVisibleFirstLayerConsentGeometrySurface(input.geometry) &&
+    (
+      (input.current.captureStatus === "no_evidence" && !input.current.likelyPresent) ||
+      hasOnlyRejectedNonSurfaceConsentCandidates(input.current)
+    );
   return annotateConsentUiObservation(
     {
       ...input.current,
+      captureStatus: completedSettledEmptyInventory
+        ? "no_evidence"
+        : input.current.captureStatus,
+      likelyPresent: completedSettledEmptyInventory
+        ? false
+        : input.current.likelyPresent,
       inventoryOutcome:
         input.current.inventoryOutcome === "frame_inaccessible"
           ? "frame_inaccessible"
@@ -9588,7 +9757,11 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
           .filter((channel) => channel !== "geometry"),
       },
     },
-    input.current.controls.length > 0
+    completedSettledEmptyInventory && input.geometry.cmp.detected
+      ? "geometry:hidden_cmp_markup_separated_from_visible_surface"
+      : completedSettledEmptyInventory
+        ? "geometry:no_visible_consent_surface"
+        : input.current.controls.length > 0
       ? "geometry:did_not_corroborate_structured_controls"
       : "geometry:no_visible_first_layer_controls",
   );

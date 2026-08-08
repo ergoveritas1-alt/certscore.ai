@@ -148,7 +148,7 @@ export async function POST(request: Request) {
           `update public.scan_snapshots
               set report_projection_version = $2,
                   report_projection_status = 'failed',
-                  report_projection_computed_at = timezone('utc', now()),
+                  report_projection_computed_at = now(),
                   report_projection_error = $3
             where scan_id = $1::uuid
               and (

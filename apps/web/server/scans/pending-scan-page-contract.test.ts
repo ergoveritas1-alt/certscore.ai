@@ -80,17 +80,28 @@ test("completed v2 report routes fail closed to the verified persisted projectio
   }
 });
 
-test("completed report shells schedule the canonical projection before waiting", async () => {
+test("completed report shells remain projection-only and never publish from the UI", async () => {
   for (const page of pages) {
     const source = await readFile(page, "utf8");
     const waitingState = source.indexOf("const waitingForReportProjection");
-    const schedulePublication = source.indexOf("publishCanonicalScanReportProjection({", waitingState);
     const pendingReturn = source.indexOf("if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection)", waitingState);
 
     assert.ok(waitingState >= 0, `${page} must identify completed scans awaiting projection`);
-    assert.ok(schedulePublication > waitingState, `${page} must schedule canonical publication for the waiting state`);
-    assert.ok(pendingReturn > schedulePublication, `${page} must schedule publication before returning the pending shell`);
+    assert.ok(pendingReturn > waitingState, `${page} must return the pending shell while the worker publishes`);
+    assert.doesNotMatch(source, /publishCanonicalScanReportProjection/);
   }
+});
+
+test("report projection timestamps preserve timestamptz semantics", async () => {
+  const [projection, backfill] = await Promise.all([
+    readFile("apps/web/server/scans/scan-report-projection.ts", "utf8"),
+    readFile("apps/web/app/api/internal/scan-report-projection-backfill/route.ts", "utf8"),
+  ]);
+
+  assert.match(projection, /report_projection_computed_at[\s\S]*?'ready', now\(\)/);
+  assert.match(backfill, /report_projection_computed_at = now\(\)/);
+  assert.doesNotMatch(projection, /timezone\('utc', now\(\)\)/);
+  assert.doesNotMatch(backfill, /timezone\('utc', now\(\)\)/);
 });
 
 test("terminal failed v2 scans bypass completed-report finalization", async () => {

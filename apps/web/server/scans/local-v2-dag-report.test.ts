@@ -2626,7 +2626,7 @@ test("summarizePolicySurfaces limits Article 13 aggregation to target-relevant p
   assert.deepEqual(summary.article13DisclosureTypesObserved, ["data_subject_rights"]);
   assert.equal(summary.privacyPolicyPresent, true);
   assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "thin");
-  assert.equal(summary.policyTextExtractionHealth.minimumTextLengthRequired, 2500);
+  assert.equal(summary.policyTextExtractionHealth.minimumTextLengthRequired, 500);
   assert.equal(summary.policyTextExtractionHealth.policySurfaceObserved, true);
   assert.equal(summary.policyTextExtractionHealth.policyUrlRetained, true);
   assert.equal(summary.policy_text_extraction_health.policyTextExtractionStatus, "thin");
@@ -3825,6 +3825,48 @@ test("summarizePolicySurfaces permits absence coverage for a verified substantiv
   assert.equal(retention?.coverageStatus, "sufficient");
   assert.equal(retention?.status, "not_observed_with_sufficient_coverage");
   assert.deepEqual(retention?.policyDocumentRoles, ["policy_document"]);
+});
+
+test("500-character policies support positive evaluation without supporting absence gaps", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const legalBasisEvidence =
+    "Our legal bases for processing personal information include contract and legitimate interests.";
+  const policyText = [
+    "Privacy Notice. Example Test is the controller for personal information.",
+    "We collect and use personal information to provide and secure our services.",
+    legalBasisEvidence,
+    "You may contact our privacy team to ask questions about this notice.",
+  ].join(" ").repeat(4).slice(0, 800);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "short-complete-privacy-policy",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    documentRole: "policy_document",
+    textExcerpt: policyText,
+    article13DisclosureSignals: [{
+      disclosureType: "legal_basis",
+      status: "observed",
+      evidenceText: legalBasisEvidence,
+      confidence: 0.94,
+      source: "deterministic",
+    }],
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+  const assessments = summary.article13CoverageAssessments as Array<Record<string, unknown>>;
+  const legalBasis = assessments.find((assessment) => assessment.topic === "legal_basis");
+  const retention = assessments.find((assessment) => assessment.topic === "data_retention");
+
+  assert.equal(summary.policyTextExtractionHealth.minimumTextLengthRequired, 500);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.equal(legalBasis?.status, "observed");
+  assert.equal(retention?.coverageStatus, "insufficient");
+  assert.equal(retention?.status, "insufficient_retained_evidence");
+  assert.equal(
+    (retention?.reasonCodes as string[]).includes("policy_text_below_absence_coverage_minimum_length"),
+    true,
+  );
 });
 
 test("summarizePolicySurfaces does not prove policy absence when the policy evidence lane is degraded", async () => {

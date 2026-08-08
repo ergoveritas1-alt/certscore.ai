@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { after } from "next/server";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
@@ -22,7 +21,6 @@ import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidenc
 import { absoluteUrl } from "../../../../lib/seo";
 import { getPublicScanById } from "../../../../server/scans/get-scan-by-id";
 import { loadPersistedScanReportProjection } from "../../../../server/scans/scan-report-projection";
-import { publishCanonicalScanReportProjection } from "../../../../server/scans/canonical-scan-report-publisher";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import {
   getPublicScanStatusProjection,
@@ -111,16 +109,6 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     isCompletedScanStatus(statusProjection.status) &&
     statusProjection.reportProjectionRequired &&
     !statusProjection.reportReady;
-  if (waitingForReportProjection) {
-    after(async () => {
-      await publishCanonicalScanReportProjection({
-        organizationId: statusProjection.organizationId,
-        scanId
-      }).catch((error) => {
-        console.error("Failed to publish canonical scan report projection from the pending report shell", error);
-      });
-    });
-  }
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
       <main className="min-h-screen bg-white">
@@ -149,14 +137,6 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     statusProjection.reportProjectionRequired &&
     !localPersistedReportProjection
   ) {
-    after(async () => {
-      await publishCanonicalScanReportProjection({
-        organizationId: statusProjection.organizationId,
-        scanId
-      }).catch((error) => {
-        console.error("Failed to recover canonical scan report projection", error);
-      });
-    });
     return (
       <main className="min-h-screen bg-white">
         <SiteHeader />

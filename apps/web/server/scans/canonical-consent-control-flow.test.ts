@@ -371,6 +371,91 @@ test("limited no-evidence inventory stays unknown through assessment, concern po
   assert.equal(statusFor("options_settings_preferences_control"), "Not confirmed");
 });
 
+test("verified same-session empty consent packet remains factual not-observed through canonical projection", () => {
+  const packet = retainedEvidencePacket({ firstLayerControls: [] });
+  packet.consentUiObservations[0]!.captureStatus = "no_evidence";
+  packet.consentUiObservations[0]!.inventoryOutcome = "complete_empty";
+  packet.consentUiObservations[0]!.likelyPresent = false;
+  packet.consentUiObservations[0]!.basis = [
+    "settled_control_inventory_completed",
+    "geometry:hidden_cmp_markup_separated_from_visible_surface",
+  ];
+  packet.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory", "accessibility_tree", "geometry"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: packet,
+    consentControlGeometryEvidence: geometryEvidence({ firstLayerControls: [] }),
+    consentSurfaceInspection: {
+      actionableControlObserved: false,
+      consentSurfaceObserved: false,
+      coverageStatus: "complete",
+      evidenceChannels: [
+        { channel: "page_script_inventory", status: "observed" },
+        { channel: "accessibility_tree", status: "observed" },
+        { channel: "geometry", status: "observed" },
+        { channel: "cmp_runtime", status: "observed" },
+      ],
+      inspectionCompleted: true,
+      limitationKeys: [],
+      observedAtMs: 1_000,
+      outcome: "no_surface_observed_complete_coverage",
+    },
+    finalUrl: GENERIC_URL,
+    noGo: false,
+    requestedUrl: GENERIC_URL,
+  });
+  const runtimeArtifacts = withPersistedFirstLayerConsentEvidence({
+    cmpFrameworkSignalObserved: true,
+    consentControlAssessment: assessment,
+  }, { consent_control_assessment: assessment });
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: [],
+  });
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    normalizedConcerns,
+    runtimeArtifacts,
+    scanCompleted: true,
+    snapshot: { cookie_banner_present: false },
+  });
+  const unifiedCandidates = buildUnifiedFindingCandidatesFromConcerns(normalizedConcerns);
+  const checklist = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+  const row = (id: string) => {
+    const found = checklist.find((candidate) => candidate.id === id);
+    assert.ok(found);
+    return found;
+  };
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.surface.status, "not_observed");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.ok(normalizedConcerns.some((concern) =>
+    concern.originKey === "consent.operational_surface.not_observed"
+  ));
+  assert.ok(!normalizedConcerns.some((concern) =>
+    concern.originKey === "consent.control_inventory.partial_first_layer"
+  ));
+  assert.ok(!unifiedCandidates.some((candidate) =>
+    candidate.normalizedConcern.suggestedUnifiedFindingId === "consent_refusal_path_missing"
+  ));
+  assert.equal(row("accept_consent_control").evidenceState, "not_observed");
+  assert.equal(row("reject_all_path_availability").evidenceState, "not_observed");
+  assert.equal(row("options_settings_preferences_control").evidenceState, "not_observed");
+  assert.notEqual(row("reject_all_path_availability").assessmentStatus, "gap_observed");
+});
+
 test("canonical consent-control flow preserves site-agnostic prominence and absence semantics", () => {
   const cases = [
     {

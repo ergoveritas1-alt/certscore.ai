@@ -371,6 +371,22 @@ test("validation worker frees result poll capacity after retaining the terminal 
   assert.match(source, /artifactVerification,verifiedAt/);
 });
 
+test("validation worker owns projection finalization across the result-to-findings race", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+  const start = source.indexOf("async function startCompletedResultFinalization");
+  const wait = source.indexOf("await waitForCanonicalReportInputs(", start);
+  const slot = source.indexOf("await withResultFinalizationSlot", wait);
+  const materialize = source.indexOf("await ensureCompletedScanScoresPersisted", slot);
+  const functionBody = source.slice(start, source.indexOf("async function mapWithConcurrency", start));
+
+  assert.ok(wait > start, "terminal retention must schedule a wait for canonical findings");
+  assert.ok(slot > wait, "completed inputs must enter bounded finalization capacity");
+  assert.ok(materialize > slot, "worker-owned materialization must follow canonical input readiness");
+  assert.doesNotMatch(functionBody, /resultFinalizationBackgroundTasks\.size\s*>=/);
+  assert.doesNotMatch(functionBody, /!\(await canonicalReportInputsReady/);
+  assert.match(source, /resultFinalizationSlotWaiters/);
+});
+
 test("validation worker runtime overlays the current policy evidence contract and terminates malformed packets", async () => {
   const [dockerfile, source] = await Promise.all([
     readFile("apps/validation-worker/Dockerfile", "utf8"),

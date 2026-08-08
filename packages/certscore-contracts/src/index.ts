@@ -6,6 +6,7 @@ import {
 export * from "./consent-control-label-classifier";
 export * from "./consent-language-classifier";
 export * from "./gdpr-transparency-topic-classifier";
+export * from "./gdpr-transparency-policy-thresholds";
 export * from "./article13-disclosure-rejection";
 export * from "./legal-framework-validity";
 export * from "./privacy-surface-classifier";

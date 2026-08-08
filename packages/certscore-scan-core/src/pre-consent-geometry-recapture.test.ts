@@ -117,6 +117,7 @@ function oxfamStyleGeometry(): ConsentControlGeometryArtifact {
     pageUrl: "https://www.oxfamamerica.org/",
     capturedAt: "2026-07-26T21:21:00.000Z",
     viewport: { width: 1366, height: 900 },
+    screenshotArtifactRef: "/tmp/screenshot-pre-consent-settled.png",
     cmp: {
       detected: true,
       name: "TrustArc",
@@ -222,6 +223,15 @@ test("same-document empty geometry completes an explicitly empty DOM inventory",
     rejectControlObserved: false,
     managePreferencesControlObserved: false,
     controls: [],
+    inventoryDiagnostics: {
+      candidateContainerCount: 1,
+      candidateControlCount: 1,
+      retainedControlCount: 0,
+      inventorySources: [],
+      candidateLabels: ["Allow All"],
+      rejectionReasons: ["hidden"],
+      timingMarkers: ["rapid_inventory_post_settle_completed"],
+    },
   };
 
   const reconciled = reconcileConsentUiObservationWithCompletedGeometry({
@@ -234,6 +244,110 @@ test("same-document empty geometry completes an explicitly empty DOM inventory",
 
   assert.equal(reconciled.inventoryOutcome, "complete_empty");
   assert.deepEqual(reconciled.captureDiagnostics?.completedChannels, ["dom_inventory", "geometry"]);
+  assert.equal(reconciled.basis.includes("geometry:hidden_cmp_markup_separated_from_visible_surface"), true);
+});
+
+test("completed settled geometry separates hidden CMP markup from a visible consent surface", () => {
+  const current = {
+    ...rapidOxfamStyleObservation,
+    documentUrl: "https://www.oxfamamerica.org/",
+    captureStatus: "observed" as const,
+    inventoryOutcome: "complete_empty" as const,
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory" as const, "accessibility_tree" as const],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    likelyPresent: true,
+    basis: [
+      "settled_control_inventory_completed",
+      "canonical_consent_control:en:accept:allow all",
+    ],
+    visibleChoiceLabels: [],
+    acceptControlObserved: false,
+    rejectControlObserved: false,
+    managePreferencesControlObserved: false,
+    controls: [],
+    inventoryDiagnostics: {
+      candidateContainerCount: 1,
+      candidateControlCount: 1,
+      retainedControlCount: 0,
+      inventorySources: [],
+      candidateLabels: ["Allow All"],
+      rejectionReasons: ["hidden"],
+      timingMarkers: ["rapid_inventory_post_settle_completed"],
+    },
+  };
+
+  const reconciled = reconcileConsentUiObservationWithCompletedGeometry({
+    current,
+    geometry: oxfamStyleGeometry(),
+    geometryAccessLoaded: true,
+    pageUrl: "https://www.oxfamamerica.org/",
+    scanStartedAtMs: Date.now() - 10_000,
+  });
+
+  assert.equal(reconciled.captureStatus, "no_evidence");
+  assert.equal(reconciled.likelyPresent, false);
+  assert.equal(reconciled.inventoryOutcome, "complete_empty");
+  assert.deepEqual(
+    reconciled.captureDiagnostics?.completedChannels,
+    ["dom_inventory", "accessibility_tree", "geometry"],
+  );
+  assert.equal(
+    reconciled.basis.includes("geometry:hidden_cmp_markup_separated_from_visible_surface"),
+    true,
+  );
+});
+
+test("completed geometry preserves a visible non-actionable consent surface", () => {
+  const geometry = oxfamStyleGeometry();
+  geometry.containers = [{
+    containerId: "container_notice",
+    selectorHint: "#onetrust-banner-sdk",
+    layer: "first_layer",
+    textExcerpt: "Cookie notice",
+    htmlExcerpt: "<div>Cookie notice</div>",
+    boundingBox: {
+      x: 0,
+      y: 650,
+      width: 1366,
+      height: 250,
+      top: 650,
+      right: 1366,
+      bottom: 900,
+      left: 0,
+    },
+    intersectsViewport: true,
+  }];
+  const current = {
+    ...rapidOxfamStyleObservation,
+    captureStatus: "observed" as const,
+    inventoryOutcome: "complete_empty" as const,
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory" as const],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    likelyPresent: true,
+    basis: ["settled_control_inventory_completed"],
+    visibleChoiceLabels: [],
+    acceptControlObserved: false,
+    rejectControlObserved: false,
+    managePreferencesControlObserved: false,
+    controls: [],
+  };
+
+  const reconciled = reconcileConsentUiObservationWithCompletedGeometry({
+    current,
+    geometry,
+    geometryAccessLoaded: true,
+    pageUrl: "https://www.oxfamamerica.org/",
+    scanStartedAtMs: Date.now() - 10_000,
+  });
+
+  assert.equal(reconciled.captureStatus, "observed");
+  assert.equal(reconciled.likelyPresent, true);
   assert.equal(reconciled.basis.includes("geometry:no_visible_first_layer_controls"), true);
 });
 

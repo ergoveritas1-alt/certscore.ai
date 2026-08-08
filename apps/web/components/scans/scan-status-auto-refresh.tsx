@@ -113,8 +113,8 @@ export function getNavigablePolledScanStatus(
   }
 
   // A completed scanner run is not yet a viewable report. The lightweight
-  // status endpoint applies the bounded projection grace period and reports
-  // `ready` after either projection completion or that fallback has elapsed.
+  // status endpoint remains read-only and reports terminal readiness only
+  // after the worker-owned canonical projection has been persisted.
   if (
     (status === "completed" || status === "completed_limited") &&
     !readiness.reportReady

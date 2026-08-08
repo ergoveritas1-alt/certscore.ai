@@ -625,7 +625,7 @@ export async function persistScanReportProjection(
             $22, $23, $24, $25, $26::jsonb,
             $31::jsonb, $32, $33, $34::timestamptz, $35, $36, $37,
             $27::jsonb, $28::jsonb,
-            $29, 'ready', timezone('utc', now()), $30, null,
+            $29, 'ready', now(), $30, null,
             $38::jsonb, $39, $40
        from public.scans s
       where s.id = $1::uuid

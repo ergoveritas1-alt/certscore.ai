@@ -173,7 +173,15 @@ async function main() {
   throw new Error(`Timed out waiting for v2_lambda_result.received for ${scanId}; events=${JSON.stringify(lambdaEvents(latestEvents))}`);
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+void main().then(
+  () => {
+    // The terminal Lambda result and its retained artifact pointers have been
+    // persisted before main resolves. Report finalization is worker-owned, so
+    // lingering AWS SDK sockets must not keep this local smoke command alive.
+    process.exit(0);
+  },
+  (error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  },
+);

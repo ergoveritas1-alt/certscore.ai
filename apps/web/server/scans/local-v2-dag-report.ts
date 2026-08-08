@@ -16,6 +16,8 @@ import {
   derivePolicySurfaceInspectionOutcome,
   evaluateLegalFrameworkValidity,
   hasStaleLegalFrameworkReference,
+  MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS,
+  MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS,
   policyTextEvidenceProjectionSchema,
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type CanonicalEvidenceBundle,
@@ -682,7 +684,7 @@ function normalizePolicyPageType(surfaceType: string) {
 }
 
 type LocalV2PolicySurface = NonNullable<CanonicalEvidenceBundle["policySurfaceObservations"]>[number];
-const MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13 = 2_500;
+const MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13 = MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS;
 
 type RetainedPolicyTextArtifactEvidence = {
   artifactId: string;
@@ -2747,6 +2749,9 @@ export function summarizePolicySurfaces(
     policyTextExtractionHealth.gdprTransparencyLanguageSupported === true &&
     completeOwnedPolicyDocuments.length > 0 &&
     completeOwnedPolicyDocuments.length === policyTextEvidenceProjection.documents.length &&
+    completeOwnedPolicyDocuments.every(
+      (document) => document.retainedTextChars >= MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS,
+    ) &&
     !policyIndexRetainedAsGoverningDocument &&
     unresolvedPolicyIndexChildren.length === 0 &&
     options.policyEvidenceLaneStatus !== "degraded";
@@ -2765,6 +2770,9 @@ export function summarizePolicySurfaces(
         ? ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"]
         : [
             "policy_absence_coverage_preconditions_not_met",
+            ...(completeOwnedPolicyDocuments.some(
+              (document) => document.retainedTextChars < MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS,
+            ) ? ["policy_text_below_absence_coverage_minimum_length"] : []),
             ...(policyIndexRetainedAsGoverningDocument ? ["policy_index_is_not_substantive_policy_document"] : []),
             ...(unresolvedPolicyIndexChildren.length > 0 ? ["material_policy_index_children_not_fully_evaluated"] : []),
             ...(options.policyEvidenceLaneStatus === "degraded" ? ["policy_evidence_lane_degraded"] : []),

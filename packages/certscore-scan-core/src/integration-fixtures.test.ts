@@ -1353,7 +1353,6 @@ test("pre-consent runtime scanner inventories compact analytics controls after s
       "viewport_first",
     );
     const observation = result.consentUiObservations[0];
-
     assert.equal(observation?.acceptControlObserved, true);
     assert.equal(observation?.rejectControlObserved, true);
     assert.equal(observation?.managePreferencesControlObserved, false);
@@ -2551,6 +2550,15 @@ test("pre-consent runtime scanner does not treat off-viewport footer settings as
       waitMode: "fast",
     });
     const observation = result.consentUiObservations[0];
+    const consentSurfaceInspection = deriveConsentSurfaceInspectionOutcome({
+      cmpRuntimeObservations: result.cmpRuntimeObservations,
+      consentUiObservations: result.consentUiObservations,
+      domSnapshots: result.domSnapshots,
+      modulesRun: [result.moduleRun],
+      networkEvents: result.networkEvents,
+      screenshots: result.screenshots,
+      visualCapture: result.visualCapture,
+    });
 
     assert.equal(result.moduleRun.status, "completed");
     assert.equal(
@@ -2588,6 +2596,31 @@ test("pre-consent runtime scanner does not treat off-viewport footer settings as
       true,
       "CMP presence without visible controls should resolve from a completed settled inventory rather than timing out unknown",
     );
+    assert.equal(observation?.captureStatus, "no_evidence");
+    assert.equal(observation?.likelyPresent, false);
+    assert.equal(
+      observation?.captureDiagnostics?.completedChannels.includes("geometry"),
+      true,
+      "the settled negative packet should retain same-session geometry",
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((entry) =>
+        entry.label === "paired settled-frame consent geometry"
+      ),
+      true,
+      "geometry should run beside the protected settled screenshot instead of depending on late spare budget",
+    );
+    const geometry = JSON.parse(await readFile(
+      path.join(tempRoot, "out", "ConsentControlGeometryEvidence.json"),
+      "utf8",
+    )) as ConsentControlGeometryArtifact;
+    assert.match(geometry.screenshotArtifactRef ?? "", /screenshot-pre-consent-settled\.png$/);
+    assert.equal(geometry.summary.firstLayerAccept, false);
+    assert.equal(geometry.summary.firstLayerReject, false);
+    assert.equal(geometry.summary.firstLayerOptions, false);
+    assert.equal(consentSurfaceInspection.inspectionCompleted, true);
+    assert.equal(consentSurfaceInspection.coverageStatus, "complete");
+    assert.equal(consentSurfaceInspection.outcome, "no_surface_observed_complete_coverage");
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomBytes } from "node:crypto";
+import { MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS } from "@certscore/contracts";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type { AuthenticatedAppUser } from "../auth-flows/types";
 import { bootstrapAppUserSession } from "../bootstrap-user";
@@ -443,10 +444,11 @@ export async function ingestBrowserScanObservedSignals(input: {
     Object.assign(policySurfaceSummary, {
       policyTextExtractionHealth: {
         extractedTextLength: retainedPrivacyText.length,
-        minimumTextLengthRequired: 2500,
+        minimumTextLengthRequired: MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS,
         nanoInvoked: false,
         policySurfaceObserved: true,
-        policyTextExtractionStatus: retainedPrivacyText.length >= 2500 ? "ok" : "thin",
+        policyTextExtractionStatus:
+          retainedPrivacyText.length >= MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS ? "ok" : "thin",
         policyUrlRetained: materialized.privacyPolicyPresent
       },
       privacyPolicyTextCharacterCount: retainedPrivacyText.length,
@@ -905,8 +907,8 @@ async function materializeBrowserScanAsCanonicalScan(input: {
         canonicalUrl,
         title,
         documentText,
-        documentText.length >= 2500 ? "ready" : "insufficient",
-        documentText.length >= 2500 ? 0.88 : 0.62,
+        documentText.length >= MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS ? "ready" : "insufficient",
+        documentText.length >= MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS ? 0.88 : 0.62,
         [`browser_extension.policy_surface:${documentType}:${canonicalUrl}`],
         JSON.stringify({ browserScanId: input.browserScanId, captureMode: BROWSER_SCAN_CAPTURE_MODE, pageType })
       ]
