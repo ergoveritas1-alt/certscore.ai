@@ -5,7 +5,7 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 const DEFAULT_BASE_URL = "https://certscore.ai";
 const DEFAULT_HEARTBEAT_STALE_MINUTES = 10;
 const DEFAULT_SCAN_QUEUE_STALE_MINUTES = 10;
-const DEFAULT_SYNTHETIC_SCAN_DOMAIN = "example.com";
+const DEFAULT_SYNTHETIC_SCAN_DOMAIN = "ergoveritas.com";
 const DEFAULT_SYNTHETIC_SCAN_TIMEOUT_MINUTES = 15;
 const VALIDATION_SETTINGS_KEY = "default";
 const execFileAsync = promisify(execFile);

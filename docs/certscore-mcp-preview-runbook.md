@@ -64,7 +64,7 @@ Optional target URL:
 
 ```bash
 CERTSCORE_API_KEY=<generated-token> \
-CERTSCORE_MCP_SMOKE_URL=https://example.com \
+CERTSCORE_MCP_SMOKE_URL=https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html \
 pnpm mcp:certscore:smoke
 ```
 

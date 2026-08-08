@@ -3,6 +3,33 @@ import test from "node:test";
 
 import { buildRegulatoryGapTopFindings } from "./regulatory-gap-top-findings";
 
+test("buildRegulatoryGapTopFindings preserves the canonical policy anchor for verified absence rows", () => {
+  const [finding] = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [{
+        assessmentStatus: "gap_observed",
+        id: "retention_disclosure_observed",
+        label: "Retention disclosure",
+        criticalEvidence: {
+          retainedEvidence: {
+            article13CoverageAssessment: {
+              sourceUrls: ["https://example.test/privacy"],
+              status: "not_observed_with_sufficient_coverage"
+            }
+          }
+        }
+      }]
+    }
+  });
+
+  assert.equal(
+    finding?.evidenceDetails?.policyEvidenceDetails?.sourceUrl,
+    "https://example.test/privacy"
+  );
+});
+
 test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () => {
   const findings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {

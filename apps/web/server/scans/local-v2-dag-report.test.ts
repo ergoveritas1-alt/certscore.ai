@@ -3661,6 +3661,153 @@ test("summarizePolicySurfaces uses a fetched child document instead of its priva
   });
 });
 
+test("summarizePolicySurfaces never uses a privacy index as sufficient Article 13 absence coverage", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const indexText = [
+    "Privacy notices. Select the notice that applies to you.",
+    "Website and Cookies Privacy Notice. Student Privacy Notice. Staff Privacy Notice.",
+  ].join(" ").repeat(30);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "privacy-index-only",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    documentRole: "policy_index",
+    textExcerpt: indexText,
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+  const assessments = summary.article13CoverageAssessments as Array<Record<string, unknown>>;
+
+  assert.equal(summary.policyTextEvidenceProjection.documents[0]?.documentRole, "policy_index");
+  assert.equal(assessments.every((assessment) => assessment.coverageStatus === "insufficient"), true);
+  assert.equal(assessments.every((assessment) => assessment.status === "insufficient_retained_evidence"), true);
+  assert.equal(assessments.every((assessment) =>
+    (assessment.reasonCodes as string[]).includes("policy_index_is_not_substantive_policy_document")
+  ), true);
+});
+
+test("summarizePolicySurfaces keeps absence coverage insufficient while a material privacy-index child is unresolved", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const childText = [
+    "Website and Cookies Privacy Notice.",
+    "We process personal information to operate this website and identify the controller.",
+    "Our legal bases include consent, contract, and legitimate interests.",
+  ].join(" ").repeat(30);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "privacy-index",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    documentRole: "policy_index",
+    textExcerpt: "Select the privacy notice that applies to you. ".repeat(30),
+  }, {
+    observationId: "website-privacy-child",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy/website-and-cookies",
+    status: "fetched",
+    documentRole: "policy_document",
+    traversalDepth: 1,
+    parentObservationId: "privacy-index",
+    parentSurfaceUrl: "https://example.test/privacy",
+    selectionReasonCodes: ["linked_from_retained_privacy_policy_index"],
+    textExcerpt: childText,
+    article13DisclosureSignals: [{
+      disclosureType: "legal_basis",
+      status: "observed",
+      evidenceText: "Our legal bases include consent, contract, and legitimate interests.",
+      confidence: 0.94,
+      source: "deterministic",
+    }],
+  }] as never, "example.test");
+  const unresolvedChild = {
+    observationId: "student-privacy-child",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy/student",
+    normalizedUrl: "https://example.test/privacy/student",
+    confidence: 0.8,
+    status: "observed",
+    documentRole: "policy_document",
+    documentFetchState: "not_attempted",
+    documentEvaluationState: "not_attempted",
+    traversalDepth: 1,
+    parentObservationId: "privacy-index",
+    parentSurfaceUrl: "https://example.test/privacy",
+    selectionReasonCodes: [
+      "linked_from_retained_privacy_policy_index",
+      "not_selected_for_bounded_fetch",
+    ],
+  } as never;
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", {
+    discoveredPolicySurfaces: [unresolvedChild],
+    primaryLanguage: "en",
+  });
+  const assessments = summary.article13CoverageAssessments as Array<Record<string, unknown>>;
+  const legalBasis = assessments.find((assessment) => assessment.topic === "legal_basis");
+  const retention = assessments.find((assessment) => assessment.topic === "data_retention");
+
+  assert.equal(legalBasis?.status, "observed");
+  assert.equal(retention?.status, "insufficient_retained_evidence");
+  assert.equal(retention?.coverageStatus, "insufficient");
+  assert.deepEqual(retention?.unresolvedPolicyIndexChildUrls, ["https://example.test/privacy/student"]);
+  assert.equal(
+    (retention?.reasonCodes as string[]).includes("material_policy_index_children_not_fully_evaluated"),
+    true,
+  );
+});
+
+test("summarizePolicySurfaces permits absence coverage for a verified substantive governing policy", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const policyText = [
+    "Privacy Notice. Example Test is the controller for personal information.",
+    "We process personal information to provide services under contract and legitimate interests.",
+  ].join(" ").repeat(30);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "direct-privacy-policy",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    documentRole: "policy_document",
+    textExcerpt: policyText,
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+  const assessments = summary.article13CoverageAssessments as Array<Record<string, unknown>>;
+  const retention = assessments.find((assessment) => assessment.topic === "data_retention");
+
+  assert.equal(retention?.coverageStatus, "sufficient");
+  assert.equal(retention?.status, "not_observed_with_sufficient_coverage");
+  assert.deepEqual(retention?.policyDocumentRoles, ["policy_document"]);
+});
+
+test("summarizePolicySurfaces does not prove policy absence when the policy evidence lane is degraded", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const policyText = [
+    "Privacy Notice. Example Test is the controller for personal information.",
+    "We process personal information to provide services under contract and legitimate interests.",
+  ].join(" ").repeat(30);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "degraded-direct-privacy-policy",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    documentRole: "policy_document",
+    textExcerpt: policyText,
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", {
+    policyEvidenceLaneStatus: "degraded",
+    primaryLanguage: "en",
+  });
+  const retention = (summary.article13CoverageAssessments as Array<Record<string, unknown>>)
+    .find((assessment) => assessment.topic === "data_retention");
+
+  assert.equal(retention?.coverageStatus, "insufficient");
+  assert.equal(retention?.status, "insufficient_retained_evidence");
+  assert.equal((retention?.reasonCodes as string[]).includes("policy_evidence_lane_degraded"), true);
+});
+
 test("summarizePolicySurfaces preserves an empty retained policy-text failure", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const surfaces = dedupePolicySurfaces([{

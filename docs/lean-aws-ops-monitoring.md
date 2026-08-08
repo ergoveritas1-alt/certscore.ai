@@ -90,7 +90,7 @@ After worker wake-up automation is in place, enable a synthetic scan canary on a
 
 ```bash
 OPS_SYNTHETIC_SCAN_ENABLED=true
-OPS_SYNTHETIC_SCAN_DOMAIN=example.com
+OPS_SYNTHETIC_SCAN_DOMAIN=ergoveritas.com
 OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES=15
 pnpm ops:monitor:prod
 ```

@@ -9,8 +9,8 @@ import { createPageMetadata } from "../../../lib/seo";
 
 const endpoint = "https://mcp.certscore.ai/mcp/light";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
-const firstRunPrompt = "Scan https://www.mozilla.org. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
-const verificationPrompt = "List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://www.mozilla.org and report whether the result was new or reused.";
+const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
+const verificationPrompt = "List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
 export const metadata: Metadata = createPageMetadata({
@@ -96,7 +96,7 @@ export default function McpLightPage() {
           <CodeBlock>{codexSetupCommand}</CodeBlock>
           <h3 className="mt-6 font-semibold text-slate-950">First-run prompt</h3>
           <CodeBlock>{firstRunPrompt}</CodeBlock>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600"><code>www.mozilla.org</code> is a real, stable public site that can demonstrate the complete scan, status, and bundle flow. Documentation placeholders such as <code>example.com</code> may produce a no-go, cached unavailable, or rate-limited result. Substitute your own public URL at any time.</p>
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">The ErgoVeritas canary page is a controlled, stable test site for demonstrating the complete scan, status, and bundle flow. Substitute your own public URL at any time.</p>
           <p className="mt-4 max-w-4xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
         </section>
 

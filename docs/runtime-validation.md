@@ -67,7 +67,7 @@ Local validation execution also requires the standalone scanner service from `WS
 ## 3. Preview scan validation
 
 1. Open `/`.
-2. Submit a public domain such as `example.com`.
+2. Submit the ErgoVeritas canary page: `https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html`.
 3. Confirm a preview `scans` row is created with `scan_type = preview`.
 4. Confirm the preview page transitions:
    - queued

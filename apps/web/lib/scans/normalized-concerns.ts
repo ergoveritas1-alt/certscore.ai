@@ -2704,13 +2704,24 @@ function buildGdprTransparencyArticle13AbsenceConcerns(
       "policyDocumentSha256",
       "policy_document_sha256"
     ]);
+    const policyDocumentIds = getRuntimeStringArray(assessment, [
+      "policyDocumentIds",
+      "policy_document_ids"
+    ]);
+    const policyDocumentRoles = getRuntimeStringArray(assessment, [
+      "policyDocumentRoles",
+      "policy_document_roles"
+    ]);
     if (
       contractVersion !== "gdpr_transparency_article13_coverage_assessment.v1" ||
       coverageStatus !== "sufficient" ||
       status !== "not_observed_with_sufficient_coverage" ||
       !topic ||
       sourceUrls.length === 0 ||
-      policyDocumentSha256.length === 0
+      policyDocumentSha256.length === 0 ||
+      policyDocumentIds.length === 0 ||
+      policyDocumentRoles.length === 0 ||
+      policyDocumentRoles.some((role) => role !== "policy_document")
     ) {
       return [];
     }
@@ -2732,6 +2743,8 @@ function buildGdprTransparencyArticle13AbsenceConcerns(
         gdprTransparencyArticle13Topic: topic,
         gdprTransparencyEvidenceProfile: GDPR_TRANSPARENCY_DETERMINISTIC_ABSENCE_PROFILE,
         pageType: "privacy_policy",
+        policyDocumentIds,
+        policyDocumentRoles,
         policyDocumentSha256,
         policyIsPrimarySource: true,
         productionCredit: true,

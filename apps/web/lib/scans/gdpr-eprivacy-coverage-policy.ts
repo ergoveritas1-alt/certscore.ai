@@ -6868,6 +6868,10 @@ function buildGdprTransparencyArticle13ConcernOutcome(
     "gdpr_transparency_article13_topic"
   ]) ?? config.disclosureType ?? "unknown";
   const sourceUrl = getString(rawEvidence, ["sourceUrl", "source_url"]);
+  const article13CoverageAssessment = getObject(rawEvidence, [
+    "article13CoverageAssessment",
+    "article13_coverage_assessment"
+  ]);
   const observedEvidenceText =
     getStringArray(rawEvidence, ["policySnippets", "policy_snippets"])[0] ??
     concern.evidenceBundle.policySnippets[0] ??
@@ -6925,6 +6929,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       state,
       topic
     },
+    ...(article13CoverageAssessment ? { article13CoverageAssessment } : {}),
     legalFrameworkValidityMatches,
     signalObserved: concern.regulatoryChecklistEligibility === "observed"
       ? true

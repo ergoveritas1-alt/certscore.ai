@@ -6,7 +6,7 @@ import { setupRequestBlocking } from "../src/browser/request-blocking";
  * Dev script to run an accessibility scan against a target URL.
  *
  * Usage:
- *   node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/run-local-accessibility-scan.ts https://example.com
+ *   node --env-file=../web/.env.local --enable-source-maps --import tsx ./scripts/run-local-accessibility-scan.ts https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html
  */
 
 async function main() {

@@ -4419,6 +4419,32 @@ test("policySurfaceScanner uses bounded Mini review to select one clearly labele
   }, { nanoAssistProvider });
 });
 
+test("policySurfaceScanner deterministically retains a Lancaster-style website privacy notice from a privacy index", async () => {
+  await withPolicyScan("policy-lancaster-style-privacy-index", async ({ result, baseUrl }) => {
+    const index = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/policies/website-privacy-index`
+    );
+    const selected = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/policies/website-and-cookies-privacy`
+    );
+    const unselected = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/policies/student-privacy`
+    );
+
+    assert.equal(index?.documentRole, "policy_index");
+    assert.equal(selected?.status, "fetched");
+    assert.equal(selected?.documentRole, "policy_document");
+    assert.equal(selected?.traversalDepth, 1);
+    assert.equal(
+      selected?.selectionReasonCodes.includes("website_privacy_notice_for_scanned_site"),
+      true,
+    );
+    assert.match(selected?.textExcerpt ?? "", /legitimate interests/i);
+    assert.equal(unselected?.status, "observed");
+    assert.equal(unselected?.documentFetchState, "not_attempted");
+  });
+});
+
 test("policySurfaceScanner does not follow links from the selected privacy-index child", async () => {
   const nanoAssistProvider: PolicyNanoAssistProvider = {
     ...createDefaultMockNanoPolicyAssistProvider(),

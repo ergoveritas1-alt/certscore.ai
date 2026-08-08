@@ -44,6 +44,21 @@ type RegulatoryGapAreaConfig = {
   priorityBase: number;
 };
 
+function getPolicySourceUrl(row: RegulatoryGapTopFindingRow) {
+  const retainedEvidence = row.criticalEvidence?.retainedEvidence ?? row.retainedEvidence;
+  if (!retainedEvidence || typeof retainedEvidence !== "object") {
+    return null;
+  }
+  const assessment = retainedEvidence.article13CoverageAssessment;
+  if (!assessment || typeof assessment !== "object" || Array.isArray(assessment)) {
+    return null;
+  }
+  const sourceUrls = (assessment as Record<string, unknown>).sourceUrls;
+  return Array.isArray(sourceUrls)
+    ? sourceUrls.find((value): value is string => typeof value === "string" && value.length > 0) ?? null
+    : null;
+}
+
 const GDPR_CONFIG: RegulatoryGapAreaConfig = {
   idPrefix: "gdpr_eprivacy",
   labelPrefix: "GDPR/ePrivacy",
@@ -150,6 +165,7 @@ function findingsForArea(
     .map(({ concernKind, row }, index): CertScoreFinding => {
       const statusLabel = row.statusLabel ?? humanizeStatus(row.status ?? "gap_observed");
       const shortSummary = getRegulatoryGapTopFindingSummary(row, config);
+      const policySourceUrl = getPolicySourceUrl(row);
       return {
         id: `regulatory_gap__${config.idPrefix}__${safeId(row.id)}`,
         label: row.label,
@@ -172,6 +188,7 @@ function findingsForArea(
             pipeline: row.criticalEvidence?.pipeline ?? null,
             projectedFindings: row.criticalEvidence?.projectedFindings ?? [],
             retainedEvidence: row.criticalEvidence?.retainedEvidence ?? row.retainedEvidence ?? null,
+            ...(policySourceUrl ? { sourceUrl: policySourceUrl } : {}),
             rowId: row.id,
             rowLabel: row.label,
             rowNote: row.note ?? null,

@@ -135,7 +135,7 @@ Main-app production note:
    - interval selector
    - pipeline pause/resume control
    - target inventory
-4. Add a manual target such as `example.com`.
+4. Add the ErgoVeritas canary page: `https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html`.
 5. Start a manual run.
 6. Confirm:
    - a `validation_runs` row is created

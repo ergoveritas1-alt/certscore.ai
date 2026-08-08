@@ -2488,6 +2488,7 @@ export function summarizePolicySurfaces(
     gdprTransparencyEvidenceProfile?: GdprTransparencyProductionEvidenceProfile | string | null;
     homepageNoGo?: boolean;
     policyTextEvidenceContext?: PolicyTextEvidenceContext;
+    policyEvidenceLaneStatus?: "complete" | "degraded" | null;
     primaryLanguage?: string | null;
     scanStartedAt?: string | null;
   } = {}
@@ -2706,14 +2707,49 @@ export function summarizePolicySurfaces(
   const completeOwnedPolicyDocuments = policyTextEvidenceProjection.documents.filter((document) =>
     document.extractionStatus === "complete" &&
     document.artifactVerificationStatus === "verified" &&
+    document.documentRole === "policy_document" &&
     ["target_controller", "first_party_brand"].includes(document.targetRelationship)
+  );
+  const explicitlyIrrelevantPolicyIndexChildReasonCodes = new Set([
+    "policy_index_child_confirmed_irrelevant",
+    "specialized_notice_for_different_audience",
+    "not_material_to_target_privacy_notice",
+  ]);
+  const completeOwnedPolicyUrls = new Set(completeOwnedPolicyDocuments
+    .flatMap((document) => [document.requestedUrl, document.finalUrl])
+    .filter(Boolean)
+    .map((url) => canonicalPolicySurfaceUrl({
+      observationId: "article13_absence_coverage_url",
+      surfaceType: "privacy_policy",
+      confidence: 1,
+      status: "fetched",
+      url,
+    } as LocalV2PolicySurface, null))
+    .filter(Boolean));
+  const unresolvedPolicyIndexChildren = targetRelevantDiscoveredPrivacySurfaces.filter((surface) => {
+    const reasonCodes = surface.selectionReasonCodes ?? [];
+    if (
+      surface.traversalDepth !== 1 ||
+      !reasonCodes.includes("linked_from_retained_privacy_policy_index") ||
+      reasonCodes.some((reasonCode) => explicitlyIrrelevantPolicyIndexChildReasonCodes.has(reasonCode))
+    ) {
+      return false;
+    }
+    const canonicalUrl = canonicalPolicySurfaceUrl(surface, null);
+    return !canonicalUrl || !completeOwnedPolicyUrls.has(canonicalUrl);
+  });
+  const policyIndexRetainedAsGoverningDocument = policyTextEvidenceProjection.documents.some((document) =>
+    document.documentRole === "policy_index"
   );
   const absenceCoverageSufficient =
     policyTextEvidenceProjection.projectionStatus === "verified_complete" &&
     policyTextExtractionHealth.policyTextExtractionStatus === "ok" &&
     policyTextExtractionHealth.gdprTransparencyLanguageSupported === true &&
     completeOwnedPolicyDocuments.length > 0 &&
-    completeOwnedPolicyDocuments.length === policyTextEvidenceProjection.documents.length;
+    completeOwnedPolicyDocuments.length === policyTextEvidenceProjection.documents.length &&
+    !policyIndexRetainedAsGoverningDocument &&
+    unresolvedPolicyIndexChildren.length === 0 &&
+    options.policyEvidenceLaneStatus !== "degraded";
   const observedArticle13Types = new Set(dedupedArticle13DisclosureSignals
     .filter((signal) => signal.status === "observed")
     .map((signal) => signal.disclosureType));
@@ -2721,12 +2757,18 @@ export function summarizePolicySurfaces(
     assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
     coverageStatus: absenceCoverageSufficient ? "sufficient" : "insufficient",
     policyDocumentIds: completeOwnedPolicyDocuments.map((document) => document.observationId),
+    policyDocumentRoles: completeOwnedPolicyDocuments.map((document) => document.documentRole),
     policyDocumentSha256: completeOwnedPolicyDocuments.map((document) => document.retainedTextSha256).filter(Boolean),
     reasonCodes: observedArticle13Types.has(topic)
       ? ["row_specific_disclosure_observed"]
       : absenceCoverageSufficient
         ? ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"]
-        : ["policy_absence_coverage_preconditions_not_met"],
+        : [
+            "policy_absence_coverage_preconditions_not_met",
+            ...(policyIndexRetainedAsGoverningDocument ? ["policy_index_is_not_substantive_policy_document"] : []),
+            ...(unresolvedPolicyIndexChildren.length > 0 ? ["material_policy_index_children_not_fully_evaluated"] : []),
+            ...(options.policyEvidenceLaneStatus === "degraded" ? ["policy_evidence_lane_degraded"] : []),
+          ],
     sourceUrls: completeOwnedPolicyDocuments.map((document) => document.finalUrl ?? document.requestedUrl),
     status: observedArticle13Types.has(topic)
       ? "observed"
@@ -2734,6 +2776,9 @@ export function summarizePolicySurfaces(
         ? "not_observed_with_sufficient_coverage"
         : "insufficient_retained_evidence",
     topic,
+    unresolvedPolicyIndexChildUrls: unresolvedPolicyIndexChildren
+      .map((surface) => firstString(surface.finalUrl, surface.normalizedUrl, surface.url))
+      .filter(Boolean),
   }));
   const discoveredPrivacyPolicyUrls = uniqueStrings(targetRelevantDiscoveredPrivacySurfaces
     .map((surface) => firstString(surface.normalizedUrl, surface.url))
@@ -3067,6 +3112,9 @@ function buildPolicyTextEvidenceProjection(
       documentEvaluationState !== "usable" ? `policy_document_evaluation_${documentEvaluationState}` : null,
       !["target_controller", "first_party_brand"].includes(relationship)
         ? "policy_document_target_ownership_unverified"
+        : null,
+      surface.documentRole === "policy_index"
+        ? "policy_index_not_substantive_policy_document"
         : null,
       !surface.contentCoverage ? "policy_content_coverage_missing" : null,
       ...documentTextCoverage.limitationKeys,
@@ -4937,6 +4985,11 @@ function buildMaterializedLocalV2Detail(
     gdprTransparencyEvidenceProfile,
     homepageNoGo: Boolean(localV2NoGo),
     policyTextEvidenceContext: options.policyTextEvidenceContext,
+    policyEvidenceLaneStatus: bundle.modulesRun
+      .filter((moduleRun) => /policySurfaceScanner/i.test(moduleRun.moduleName))
+      .some((moduleRun) => moduleRun.status !== "completed")
+        ? "degraded"
+        : "complete",
     primaryLanguage: getLocalV2PrimaryLanguage(bundle),
     scanStartedAt: bundle.startedAt,
   });

@@ -841,6 +841,7 @@ test("Pulse evidence digest requires a real policy anchor", () => {
   assert.equal(hasMeaningfulPolicyAnchor({ policyRuntimeConflict: {} }), false);
   assert.equal(hasMeaningfulPolicyAnchor({ policyEvidence: { coveredTypes: ["privacy_policy"] } }), false);
   assert.equal(hasMeaningfulPolicyAnchor({ policyEvidence: { policyUrl: "https://example.com/privacy" } }), true);
+  assert.equal(hasMeaningfulPolicyAnchor({ policyEvidenceDetails: { sourceUrl: "https://example.com/privacy" } }), true);
   assert.equal(hasMeaningfulPolicyAnchor({ policyRuntimeConflict: { policySnippet: "Cookies may be used." } }), true);
 });
 

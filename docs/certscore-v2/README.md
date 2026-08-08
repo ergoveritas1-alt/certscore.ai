@@ -99,7 +99,7 @@ The generic `accept_reject_runtime_delta_observed` candidate requires a confiden
 Run a scan:
 
 ```bash
-pnpm v2:scan --url https://example.com --profile tiny --out ./artifacts/example
+pnpm v2:scan --url https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html --profile tiny --out ./artifacts/ergoveritas-canary
 ```
 
 ### Lambda memory canary
@@ -220,13 +220,13 @@ Root-level v2 scan/demo/calibration commands load `apps/web/.env.local`, matchin
 Policy profiles additionally use Nano policy assist for policy discovery/extraction:
 
 ```bash
-pnpm v2:scan --url https://example.com --profile policy --out ./artifacts/policy-example
+pnpm v2:scan --url https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html --profile policy --out ./artifacts/ergoveritas-canary-policy
 ```
 
 Run the consent-flow scanner:
 
 ```bash
-pnpm v2:scan --url https://example.com --profile consent --out ./artifacts/consent-example
+pnpm v2:scan --url https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html --profile consent --out ./artifacts/ergoveritas-canary-consent
 ```
 
 The `consent` profile runs pre-consent runtime plus consent-flow runtime modules. `consent_flow` remains accepted as a compatibility alias.
@@ -240,7 +240,7 @@ pnpm v2:review --bundle ./artifacts/example/CanonicalEvidenceBundle.json --out .
 Run scan and review together:
 
 ```bash
-pnpm v2:demo --url https://example.com --profile tiny --out ./artifacts/example
+pnpm v2:demo --url https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html --profile tiny --out ./artifacts/ergoveritas-canary
 ```
 
 Project a saved review or bundle into the internal report-adapter draft:

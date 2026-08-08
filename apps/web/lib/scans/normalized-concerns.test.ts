@@ -1925,6 +1925,7 @@ test("verified row-specific policy absence creates GDPR Transparency gap concern
     assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
     coverageStatus: "sufficient",
     policyDocumentIds: ["policy-1"],
+    policyDocumentRoles: ["policy_document"],
     policyDocumentSha256: ["a".repeat(64)],
     reasonCodes: ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"],
     sourceUrls: ["https://ergoveritas.com/privacy.html"],
@@ -1954,6 +1955,33 @@ test("verified row-specific policy absence creates GDPR Transparency gap concern
   assert.equal(gaps.every((concern) =>
     concern.evidenceBundle.rawEvidence?.classifierProvenance === "gdpr_transparency_absence_coverage.v1"
   ), true);
+});
+
+test("privacy-index absence assessments do not create GDPR Transparency gap concerns", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13CoverageAssessments: [{
+          assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+          coverageStatus: "sufficient",
+          policyDocumentIds: ["policy-index-1"],
+          policyDocumentRoles: ["policy_index"],
+          policyDocumentSha256: ["a".repeat(64)],
+          reasonCodes: ["row_specific_disclosure_not_observed"],
+          sourceUrls: ["https://example.test/privacy"],
+          status: "not_observed_with_sufficient_coverage",
+          topic: "data_retention"
+        }]
+      }
+    },
+    validationFindings: []
+  });
+
+  assert.equal(
+    concerns.some((concern) => concern.originKey === "gdpr_transparency.article13.data_retention"),
+    false
+  );
 });
 
 test("typed policy claim/runtime/bridge evidence creates a canonical contradiction concern", () => {

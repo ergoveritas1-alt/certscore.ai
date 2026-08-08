@@ -52,7 +52,7 @@ For manual Chrome testing, load `apps/browser-extension` as an unpacked extensio
 
 ## Manual QA
 
-1. Open `http://localhost:3001/app/browser-scans/setup?bx01TargetUrl=https%3A%2F%2Fexample.com%2F`.
+1. Open `http://localhost:3001/app/browser-scans/setup?bx01TargetUrl=https%3A%2F%2Fergoveritas.com%2F.well-known%2Fcertscore-canary%2Fsentinels%2Fbroad-baseline.html`.
 2. Sign in if redirected.
 3. Open the CertScore extension from that page.
 4. Run a browser pre-consent scan.

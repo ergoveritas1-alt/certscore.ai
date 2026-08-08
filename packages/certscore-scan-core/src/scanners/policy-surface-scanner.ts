@@ -4483,6 +4483,28 @@ async function selectOneHopPolicyIndexChildren(input: {
     };
   }
 
+  const websitePrivacyCandidates = privacyCandidates.filter((candidate) =>
+    /\bwebsite\s*(?:and|&)\s*cookies?\b|\bwebsite\s+privacy\b/i.test(
+      `${candidate.linkText} ${candidate.surroundingTextExcerpt ?? ""}`,
+    )
+  );
+  if (websitePrivacyCandidates.length === 1) {
+    const selected = websitePrivacyCandidates[0]!;
+    return {
+      fetchCandidates: [{
+        ...selected,
+        selectionReasonCodes: uniqueStrings([
+          ...(selected.selectionReasonCodes ?? []),
+          "website_privacy_notice_for_scanned_site",
+          "deterministic_one_hop_selection",
+        ]),
+      }],
+      observedChildCandidates: privacyCandidates
+        .filter((candidate) => candidate.candidateId !== selected.candidateId)
+        .map(markUnselectedPrivacyIndexChild),
+    };
+  }
+
   const selectPrivacyDocumentLink = input.input.nanoAssistProvider?.selectPrivacyDocumentLink;
   if (!selectPrivacyDocumentLink) {
     if (privacyCandidates.length === 1) {

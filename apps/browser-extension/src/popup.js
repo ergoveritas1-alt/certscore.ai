@@ -45,7 +45,7 @@ async function getActiveTab() {
   if (!extensionApiAvailable) {
     return {
       id: 1,
-      url: "https://example.com/"
+      url: "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
     };
   }
 

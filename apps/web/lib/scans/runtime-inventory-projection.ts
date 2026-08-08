@@ -1469,6 +1469,40 @@ export function buildRuntimeInventoryGroupRows(input: {
   return [...compatibleRows.values()].sort(compareInventoryPriorityRows);
 }
 
+/**
+ * Preserve one display row for each retained cookie and tracker observation.
+ * The grouped projection remains available for summary cards and charts; this
+ * projection is intentionally row-level so the inventory table does not hide
+ * individual cookie names or tracker observations behind vendor aggregation.
+ */
+export function buildRuntimeInventoryUngroupedRows(input: {
+  cookieRows: RuntimeCookieEvidenceRow[];
+  dataFlows?: PreConsentDataFlow[];
+  firstPartyDomain?: string | null;
+  requestRows?: SanitizedRequestEvidenceRow[];
+  trackerRows: TrackerInventoryRow[];
+}) {
+  const cookieRows = input.cookieRows.flatMap((cookieRow) =>
+    buildRuntimeInventoryGroupRows({
+      cookieRows: [cookieRow],
+      dataFlows: input.dataFlows,
+      firstPartyDomain: input.firstPartyDomain,
+      requestRows: input.requestRows,
+      trackerRows: []
+    })
+  ).filter((row) => row.type === "cookie");
+  const trackerRows = input.trackerRows.flatMap((trackerRow) =>
+    buildRuntimeInventoryGroupRows({
+      cookieRows: input.cookieRows,
+      dataFlows: input.dataFlows,
+      firstPartyDomain: input.firstPartyDomain,
+      requestRows: input.requestRows,
+      trackerRows: [trackerRow]
+    })
+  ).filter((row) => row.type === "tracker");
+  return [...cookieRows, ...trackerRows].sort(compareInventoryPriorityRows);
+}
+
 export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailResponse) {
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
@@ -1507,6 +1541,13 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
     requestRows,
     trackerRows,
     groupedRows: buildRuntimeInventoryGroupRows({
+      cookieRows,
+      dataFlows,
+      firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
+      requestRows,
+      trackerRows
+    }),
+    ungroupedRows: buildRuntimeInventoryUngroupedRows({
       cookieRows,
       dataFlows,
       firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,

@@ -47,7 +47,7 @@ POST https://certscore.ai/api/v2/scans
 Content-Type: application/json
 
 {
-  "url": "https://example.com",
+  "url": "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html",
   "freshness": "latest",
   "scanFrom": "eu_ie"
 }
@@ -77,7 +77,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "url": "https://example.com",
+  "url": "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html",
   "freshness": "latest",
   "scanFrom": "eu_ie"
 }
@@ -228,7 +228,7 @@ import { CertScoreClient } from "@certscore/sdk";
 
 const certscore = new CertScoreClient({ apiKey: process.env.CERTSCORE_API_KEY });
 const scan = await certscore.scans.create({
-  url: "https://example.com",
+  url: "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html",
   detail: "standard"
 });
 
@@ -328,9 +328,9 @@ codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
 
 First-run prompt:
 
-Scan https://www.mozilla.org. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
+Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
 
-Mozilla is a real, stable public site for demonstrating the complete scan, status, and bundle flow. example.com may produce a no-go, cached unavailable, or rate-limited result. Users may substitute their own public URL.
+The ErgoVeritas canary page is a controlled, stable test site for demonstrating the complete scan, status, and bundle flow. Users may substitute their own public URL.
 
 Light workflow:
 1. Call scan_site with a public URL.
@@ -345,7 +345,7 @@ Light workflow:
 
 Verification prompt:
 
-List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://www.mozilla.org and report whether the result was new or reused.
+List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.
 
 CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
 

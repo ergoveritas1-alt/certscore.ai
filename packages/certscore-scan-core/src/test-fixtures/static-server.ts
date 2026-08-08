@@ -136,6 +136,7 @@ export type StaticFixturePage =
   | "policy-onetrust-index-json"
   | "policy-onetrust-notice-json"
   | "policy-privacy-document-index"
+  | "policy-lancaster-style-privacy-index"
   | "policy-privacy-center-link"
   | "policy-rendered-article13-better"
   | "policy-rendered-incomplete-substantive"
@@ -324,6 +325,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-onetrust-index-json": "policy-onetrust-index-json",
   "policy-onetrust-notice-json": "policy-onetrust-notice-json",
   "policy-privacy-document-index": "policy-privacy-document-index",
+  "policy-lancaster-style-privacy-index": "policy-lancaster-style-privacy-index",
   "policy-privacy-center-link": "policy-privacy-center",
   "policy-rendered-article13-better": "policy-rendered-article13-better",
   "policy-rendered-incomplete-substantive": "policy-rendered-incomplete-substantive",
@@ -2203,6 +2205,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,
     "policy-privacy-document-index": `<a href="/policies/privacy-index">Privacy Policy</a>`,
+    "policy-lancaster-style-privacy-index": `<a href="/policies/website-privacy-index">Privacy Policy</a>`,
     "policy-onetrust-notice-json": `<a href="/policies/onetrust-shell">Privacy Policy</a>`,
     "policy-rendered-article13-better": `<a href="/rendered-article13-better/privacy">Politique de confidentialité</a>`,
     "policy-rendered-incomplete-substantive": `<a href="/rendered-incomplete-substantive/privacy">Privacy Policy</a>`,
@@ -2882,6 +2885,27 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Privacy Policy",
       body: "Select the privacy notice that applies to this service.",
     },
+    "/policies/website-privacy-index": {
+      title: "Privacy Notices",
+      body: "Select the privacy notice that applies to you.",
+    },
+    "/policies/website-and-cookies-privacy": {
+      title: "Website and Cookies Privacy Notice",
+      body: [
+        "Website and Cookies Privacy Notice. Example Test is the controller for personal information collected through this website.",
+        "We use personal information to operate and improve the website, answer enquiries, measure usage, and provide requested services.",
+        "Our legal bases include legitimate interests, consent, contract, and compliance with legal obligations.",
+        "We share information with hosting, analytics, security, and professional service providers.",
+        "We retain personal information only as long as necessary under our retention schedule.",
+        "You may request access, correction, deletion, restriction, portability, or object to processing.",
+        "Contact our data protection officer at privacy@example.test and complain to the relevant supervisory authority.",
+        "Additional explanatory text describes the controller, purposes, legal bases, recipients, retention, individual rights, and complaint routes for website visitors.",
+      ].join(" ").repeat(4),
+    },
+    "/policies/student-privacy": {
+      title: "Student Privacy Notice",
+      body: "This separate notice applies to enrolled students and academic records.",
+    },
     "/policies/privacy-notice-current": {
       title: "Privacy Policy",
       body: [
@@ -2925,6 +2949,20 @@ function policyDocumentHtml(pathname: string): string | undefined {
       <a href="/policies/privacy-notice-legacy">Previous Privacy Policy</a>
       <a href="/policies/privacy-notice-current">Privacy Policy for this service</a>
       <a href="/support/privacy-faq">Privacy FAQ</a>
+    </main>
+  </body>
+</html>`;
+  }
+  if (pathname === "/policies/website-privacy-index") {
+    return `<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>${escapeHtml(doc.title)}</title></head>
+  <body>
+    <main>
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+      <a href="/policies/student-privacy">Student Privacy Notice</a>
+      <a href="/policies/website-and-cookies-privacy">Website and Cookies Privacy Notice</a>
     </main>
   </body>
 </html>`;

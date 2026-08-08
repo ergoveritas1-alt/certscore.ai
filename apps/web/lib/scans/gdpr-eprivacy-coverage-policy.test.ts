@@ -457,6 +457,7 @@ test("verified complete-policy absence projects row-specific GDPR Transparency g
     assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
     coverageStatus: "sufficient",
     policyDocumentIds: ["policy-1"],
+    policyDocumentRoles: ["policy_document"],
     policyDocumentSha256: ["a".repeat(64)],
     reasonCodes: ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"],
     sourceUrls: ["https://ergoveritas.com/privacy.html"],
@@ -485,6 +486,10 @@ test("verified complete-policy absence projects row-specific GDPR Transparency g
   assert.equal(outcomes.retention_disclosure_observed?.status, "Gap observed");
   assert.equal(outcomes.international_transfers_disclosure?.status, "Gap observed");
   assert.ok(retainedArticle13Signal(outcomes.retention_disclosure_observed!));
+  assert.deepEqual(
+    outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.article13CoverageAssessment,
+    assessment("data_retention")
+  );
   assert.equal(retainedArticle13Signal(outcomes.retention_disclosure_observed!)?.evidenceText, null);
   assert.equal(retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText, null);
 });

@@ -833,7 +833,7 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
-      formatInventoryPurposeWithCount(row),
+      getInventoryPurposeLabel(row),
       classifyInventoryEvidence(row),
       formatFirstSeenMs(row.firstSeenMs),
       row.cookieNames.join(", ") || "—",
@@ -855,10 +855,6 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
 
 function getInventoryPurposeLabel(row: Pick<InventoryGroupRow, "purpose" | "purposes">) {
   return row.purposes.length > 0 ? row.purposes.join(", ") : row.purpose;
-}
-
-function formatInventoryPurposeWithCount(row: Pick<InventoryGroupRow, "observedRecordCount" | "purpose" | "purposes">) {
-  return `${getInventoryPurposeLabel(row)}(${row.observedRecordCount})`;
 }
 
 function countryFlag(countryCode: string | null) {
@@ -1020,7 +1016,8 @@ function RuntimeInventoryTable({
   projection: ReturnType<typeof buildRuntimeInventoryProjectionFromScan>;
 }) {
   const groupedInventoryRows = projection.groupedRows;
-  const copyPayload = buildRuntimeInventoryCopyPayload(groupedInventoryRows);
+  const inventoryRows = projection.ungroupedRows;
+  const copyPayload = buildRuntimeInventoryCopyPayload(inventoryRows);
   const hasRetainedInventory = presentationState.status === "retained";
 
   return (
@@ -1029,11 +1026,11 @@ function RuntimeInventoryTable({
         <summary className="flex min-h-[4.75rem] cursor-pointer list-none flex-wrap items-center gap-3 px-3.5 py-4 pr-14 marker:hidden [&::-webkit-details-marker]:hidden lg:px-5 lg:pr-16">
           <ScanReportDisclosureIcon className="group-open/inventory:rotate-90" />
           <p className="inline-flex items-center gap-1.5 text-sm font-medium uppercase tracking-[0.18em] text-slate-500">
-            Pre-consent Cookies &amp; Trackers (grouped)
+            Pre-consent Cookies &amp; Trackers
             <InfoTip
               align="start"
               placement="top"
-              text="Related cookies, trackers, requests, and storage records are grouped by recognized vendor or entity. Grouped rows may be fewer than the total observed records because multiple records can belong to the same service."
+              text="Each retained cookie and tracker observation is shown as its own row. Summary cards above may still aggregate related observations for readability."
             />
           </p>
         </summary>
@@ -1055,14 +1052,13 @@ function RuntimeInventoryTable({
             </div>
           </div>
           <div className="space-y-2 lg:hidden" aria-label="Cookies and trackers mobile list">
-            {groupedInventoryRows.map((row, index) => (
+            {inventoryRows.map((row, index) => (
               <article key={`mobile-${getInventoryGroupRowRenderKey(row, index)}`} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-slate-900">{row.vendor}</p>
                     <p className="mt-0.5 flex min-w-0 items-center text-xs text-slate-500">
                       <span className="min-w-0 truncate">{getInventoryPurposeLabel(row)}</span>
-                      <span className="shrink-0">({row.observedRecordCount})</span>
                     </p>
                   </div>
                   <InventoryPriorityCell priority={row.priority} />
@@ -1086,13 +1082,13 @@ function RuntimeInventoryTable({
                 <tr>
                   <th title="Cookie or tracker evidence type" className="sticky left-0 top-0 z-30 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="type" label="Type" /></th>
                   <th title="Resolved vendor or first-party entity" className="sticky left-[90px] top-0 z-30 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="vendor" label="Vendor" /></th>
-                  <th title="Observed purpose classification with retained record count" className="sticky top-0 z-20 w-[165px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
+                  <th title="Observed purpose classification for this cookie or tracker" className="sticky top-0 z-20 w-[165px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
                   <th title="Consent evidence classification" className="sticky top-0 z-20 w-[105px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Evidence</th>
                   <th title="Elapsed time from scan start to observation" className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
-                  <th title="Names retained for the grouped vendor or entity; tracker rows may include associated cookie names." className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">
+                  <th title="Cookie or tracker names retained in this observation." className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">
                     <span className="inline-flex items-center gap-1">
                       Name(s)
-                      <InfoTip align="start" placement="top" text="Names retained for the grouped vendor or entity. Tracker rows may include associated cookie names; a dash means no name was retained." />
+                      <InfoTip align="start" placement="top" text="Cookie or tracker names retained for this row; a dash means no name was retained." />
                     </span>
                   </th>
                   <th className="sticky top-0 z-20 w-[150px] max-w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Domain</th>
@@ -1104,10 +1100,10 @@ function RuntimeInventoryTable({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
-                {groupedInventoryRows.map((row, index) => (
+                {inventoryRows.map((row, index) => (
                   <tr
                     key={getInventoryGroupRowRenderKey(row, index)}
-                    className={`group h-10 transition-colors odd:bg-slate-50/25 hover:bg-sky-50/55 ${index === 0 || groupedInventoryRows[index - 1]?.vendor !== row.vendor ? "border-t-2 border-slate-200" : ""}`}
+                    className="group h-10 transition-colors odd:bg-slate-50/25 hover:bg-sky-50/55"
                     data-category={getRuntimeInventoryMacroCategory(row)}
                     data-vendor={row.vendor}
                     data-type={row.type}
@@ -1124,10 +1120,9 @@ function RuntimeInventoryTable({
                     <td className="sticky left-[90px] z-10 truncate whitespace-nowrap bg-white px-2 py-1.5 align-middle group-hover:bg-sky-50/55">
                       <InventoryVendorCell label={row.vendor} />
                     </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 align-middle" title={formatInventoryPurposeWithCount(row)}>
+                    <td className="whitespace-nowrap px-2 py-1.5 align-middle" title={getInventoryPurposeLabel(row)}>
                       <span className="flex min-w-0 items-center">
                         <span className="min-w-0 truncate">{getInventoryPurposeLabel(row)}</span>
-                        <span className="shrink-0">({row.observedRecordCount})</span>
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 align-middle"><InventoryEvidenceCell row={row} /></td>
