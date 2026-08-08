@@ -998,6 +998,42 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes credits Amazon file-a-complaint s
   assert.match(outcome?.evidenceRefs.join(" ") ?? "", /file a complaint with our principal supervisory authority/i);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes credits a UK Information Commissioner complaint route", () => {
+  const lancasterExcerpt = [
+    "If you are not happy with the way the University has handled your concern or complaint,",
+    "you may submit a complaint to the Information Commissioner's Office.",
+  ].join(" ");
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [{
+          confidence: 0.9,
+          disclosureType: "supervisory_authority",
+          evidenceText: lancasterExcerpt,
+          selectedEvidenceStrength: "strong",
+          selectedPolicySectionExcerpt: lancasterExcerpt,
+          selectedPolicySectionHeading: "Who do I contact if I have concerns?",
+          source: "deterministic",
+          status: "observed",
+        }],
+        policyTextCoverageMode: "section_targeted",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4_000,
+        privacyPolicyUrls: ["https://www.lancaster.ac.uk/privacy/website-and-cookies-privacy/"],
+        retainedPrivacyPolicyTextExcerpt: lancasterExcerpt,
+      },
+    },
+    snapshot: {
+      privacy_policy_present: true,
+    },
+  });
+
+  const outcome = outcomes.supervisory_authority_complaint_disclosure;
+  assert.equal(outcome?.status, "Observed");
+  assert.match(outcome?.evidenceRefs.join(" ") ?? "", /submit a complaint to the Information Commissioner's Office/i);
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes sanitizes and prefers Ireland-relevant policy disclosure snippets", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
