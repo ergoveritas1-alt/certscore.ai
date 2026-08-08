@@ -408,7 +408,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           <table className="table-fixed text-left text-xs" style={{ minWidth: "2790px" }}>
             <colgroup>
               <col style={{ width: "40px" }} /><col style={{ width: "70px" }} /><col style={{ width: "175px" }} />
-              <col style={{ width: "115px" }} /><col style={{ width: "140px" }} /><col style={{ width: "70px" }} /><col style={{ width: "75px" }} />
+              <col style={{ width: "115px" }} /><col style={{ width: "220px" }} /><col style={{ width: "70px" }} /><col style={{ width: "75px" }} />
               <col style={{ width: "60px" }} /><col style={{ width: "210px" }} /><col style={{ width: "110px" }} />
               <col style={{ width: "75px" }} /><col style={{ width: "205px" }} /><col style={{ width: "135px" }} /><col style={{ width: "145px" }} />
               <col style={{ width: "55px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} /><col style={{ width: "160px" }} />
@@ -419,7 +419,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
               <tr>
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Route" },
-                  { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Site" }, { label: "Tranco" },
+                  { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Page" }, { label: "Tranco" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
                   { label: "A/R/O" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" },
                   { label: "Industry" }, { label: "Mode" }, { label: "Usage" }, { label: "Scan ID" }, { label: "Scanner egress" },
@@ -447,7 +447,11 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                     <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${routeClass(request.apiRoute)}`}>{request.apiRoute}</span></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={request.requesterName ?? provenance.label}>{request.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${sourceIpLabel(request)} · ${request.sourceIpSource.replaceAll("_", " ")}`}>{sourceIpLabel(request)}</p></td>
                     <td className="px-2.5 py-1.5 text-[10px] leading-4 text-slate-600" title={formatAdminDateTime(request.requestedAt)}><p className="truncate">{requestedDateTime.date}</p><p className="truncate text-slate-500">{requestedDateTime.time}</p></td>
-                    <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-900" title={request.normalizedDomain ?? undefined}>{request.normalizedDomain ?? "Unknown"}</p></td>
+                    <td className="px-2.5 py-1.5">
+                      <p className="line-clamp-2 break-all font-semibold leading-4 text-slate-900" title={request.requestedUrl ?? "Page URL unavailable"}>
+                        {request.requestedUrl ?? "Page URL unavailable"}
+                      </p>
+                    </td>
                     <td className="px-2.5 py-1.5 font-medium text-slate-700">{request.trancoRank ? `#${request.trancoRank.toLocaleString()}` : "—"}</td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.score !== null ? <><span>{request.score}</span><span className="text-[11px] font-normal text-slate-400">/100</span></> : "—"}</td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.topFindingCount ?? "—"}</td>

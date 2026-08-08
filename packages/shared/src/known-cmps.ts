@@ -484,12 +484,26 @@ function collectSignalsForDefinition(definition: KnownCmpDefinition, input: Know
   }
 
   for (const text of uniqueStrings(input.textSnippets ?? [])) {
-    if ([definition.canonicalName, ...definition.aliases].some((knownName) => text.toLowerCase().includes(knownName.toLowerCase())) || (definition.urlPatterns ?? []).some((pattern) => textMatches(text, pattern))) {
+    // Text snippets are rendered/document text, not URLs. Applying URL
+    // patterns here allowed short legacy aliases such as `truste` to match
+    // unrelated JavaScript identifiers such as `trustedTypes`. Require a
+    // bounded canonical name or alias; URL patterns remain authoritative only
+    // for URL/script/iframe inputs above.
+    if ([definition.canonicalName, ...definition.aliases].some((knownName) => containsBoundedCmpName(text, knownName))) {
       push("text", text);
     }
   }
 
   return signals;
+}
+
+function containsBoundedCmpName(value: string, knownName: string): boolean {
+  const escaped = knownName
+    .trim()
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\s+/g, "\\s+");
+  if (!escaped) return false;
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}(?=$|[^\\p{L}\\p{N}])`, "iu").test(value);
 }
 
 function confidenceForSignals(signals: KnownCmpSignal[]) {

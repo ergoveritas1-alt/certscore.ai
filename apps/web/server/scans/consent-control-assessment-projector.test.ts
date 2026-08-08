@@ -194,7 +194,7 @@ test("limited coordinator coverage keeps an empty first-layer inventory unknown"
 
   assert.equal(assessment.assessmentStatus, "limited");
   assert.equal(assessment.coverage.status, "limited");
-  assert.equal(assessment.surface.status, "observed_non_actionable");
+  assert.equal(assessment.surface.status, "unknown");
   assert.equal(assessment.controls.accept.state, "unknown");
   assert.equal(assessment.controls.reject.state, "unknown");
   assert.equal(assessment.controls.options.state, "unknown");

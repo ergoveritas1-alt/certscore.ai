@@ -522,6 +522,16 @@ function localV2ModuleOutcome(status: CanonicalEvidenceBundle["modulesRun"][numb
   return "unknown";
 }
 
+function localV2TimingOutcome(
+  timing: NonNullable<CanonicalEvidenceBundle["modulesRun"][number]["timingBreakdown"]>[number],
+  moduleStatus: CanonicalEvidenceBundle["modulesRun"][number]["status"],
+) {
+  if (timing.outcome === "completed" || timing.outcome === "recovered") return "success";
+  if (timing.outcome === "timed_out" || timing.outcome === "skipped") return "degraded";
+  if (timing.outcome === "failed") return "failed";
+  return localV2ModuleOutcome(moduleStatus);
+}
+
 export function buildLocalV2DagTimingArtifacts(bundle: CanonicalEvidenceBundle) {
   const modulesRun = Array.isArray(bundle.modulesRun) ? bundle.modulesRun : [];
   const modulePhases = modulesRun.map((moduleRun) => ({
@@ -537,7 +547,7 @@ export function buildLocalV2DagTimingArtifacts(bundle: CanonicalEvidenceBundle) 
       startedAt: null,
       completedAt: null,
       durationMs: timing.durationMs,
-      outcome: localV2ModuleOutcome(moduleRun.status)
+      outcome: localV2TimingOutcome(timing, moduleRun.status)
     })))
     .sort((left, right) => right.durationMs - left.durationMs)
     .slice(0, Math.max(0, 20 - modulePhases.length));
@@ -4917,6 +4927,7 @@ function buildMaterializedLocalV2Detail(
             limitationKeys: effectiveRuntimeLimitationKeys,
           }
         : undefined,
+      scanNoGoDecision: providedScanNoGoAssessment?.decision,
       screenshots: bundle.screenshots,
       visualCapture: bundle.visualCapture,
     })

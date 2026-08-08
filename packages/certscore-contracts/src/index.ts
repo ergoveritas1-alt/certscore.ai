@@ -158,6 +158,7 @@ export const scanModuleRunSchema = z.object({
     label: z.string().min(1).max(80),
     durationMs: z.number().int().nonnegative(),
     detail: z.string().max(240).optional(),
+    outcome: z.enum(["completed", "timed_out", "failed", "recovered", "skipped"]).optional(),
   })).max(40).optional(),
   recoveryDiagnostics: z.object({
     attempted: z.boolean(),
@@ -546,6 +547,14 @@ export const consentUiObservationSchema = z.object({
     candidateContainerCount: z.number().int().nonnegative(),
     candidateControlCount: z.number().int().nonnegative(),
     retainedControlCount: z.number().int().nonnegative(),
+    inspectedFrameCount: z.number().int().nonnegative().optional(),
+    inaccessibleFrameCount: z.number().int().nonnegative().optional(),
+    blockingInaccessibleFrameCount: z.number().int().nonnegative().optional(),
+    nonBlockingInaccessibleFrameCount: z.number().int().nonnegative().optional(),
+    nonBlockingInaccessibleFrameReasonCodes: z.array(z.enum([
+      "detached_frame",
+      "canonical_embedded_media",
+    ])).max(8).default([]).optional(),
     inventorySources: z.array(consentControlInventorySourceSchema).default([]),
     candidateLabels: z.array(z.string().max(120)).max(24).default([]),
     rejectionReasons: z.array(consentControlInventoryRejectionReasonSchema).default([]),
@@ -2100,11 +2109,11 @@ function deriveConsentEvidenceChannels(input: {
   const hasObservationBasis = (pattern: RegExp) => observations.some((observation) =>
     observation.basis.some((basis) => pattern.test(basis))
   );
-  const channelCompleted = (channelName: "accessibility_tree" | "dom_inventory") =>
+  const channelCompleted = (channelName: "accessibility_tree" | "dom_inventory" | "geometry") =>
     observations.some((observation) =>
       observation.captureDiagnostics?.completedChannels.includes(channelName) === true
     );
-  const channelIncomplete = (channelName: "accessibility_tree" | "dom_inventory") =>
+  const channelIncomplete = (channelName: "accessibility_tree" | "dom_inventory" | "geometry") =>
     observations.some((observation) =>
       observation.captureDiagnostics?.timedOutChannels.includes(channelName) === true ||
       observation.captureDiagnostics?.failedChannels.includes(channelName) === true
@@ -2133,8 +2142,10 @@ function deriveConsentEvidenceChannels(input: {
     channelCompleted("dom_inventory") ||
     hasObservationBasis(/(?:rapid|first_layer|generic_consent_surface|shadow_root|same_origin_frame|viewport|full_document)/i) &&
       !pageScriptIncomplete;
-  const geometryObserved = hasObservationBasis(/geometry:(?:captured|confirmed)|geometry_proof/i);
-  const geometryIncomplete = hasObservationBasis(/geometry_capture_unavailable|geometry.*(?:failed|unavailable)/i);
+  const geometryIncomplete = channelIncomplete("geometry") || hasObservationBasis(/geometry_capture_unavailable|geometry.*(?:failed|unavailable)/i);
+  const geometryObserved = !geometryIncomplete && (
+    channelCompleted("geometry") || hasObservationBasis(/geometry:(?:captured|confirmed)|geometry_proof/i)
+  );
   const consentObservationIncomplete =
     !consentLaneCompleted && (
       observations.some((observation) => observation.captureStatus === "incomplete") ||
@@ -2181,7 +2192,7 @@ function deriveConsentEvidenceChannels(input: {
     channel(
       "geometry",
       geometryObserved ? "observed" : geometryIncomplete || runtimeIncomplete ? "inspection_incomplete" : "not_observed",
-      geometryObserved ? observations.reduce((sum, observation) => sum + observation.controls.length, 0) : 0,
+      geometryObserved ? Math.max(1, observations.reduce((sum, observation) => sum + observation.controls.length, 0)) : 0,
       geometryObserved ? [] : geometryIncomplete ? ["geometry_capture_unavailable"] : runtimeIncomplete ? ["runtime_incomplete"] : ["no_geometry_evidence"],
     ),
   ];
@@ -2194,6 +2205,7 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
   modulesRun?: z.infer<typeof scanModuleRunSchema>[];
   networkEvents?: z.infer<typeof networkEventSchema>[];
   runtimeCoverage?: z.infer<typeof runtimeCoverageSummarySchema>;
+  scanNoGoDecision?: "no_go" | "continue_with_diagnostics";
   screenshots?: z.infer<typeof screenshotArtifactSchema>[];
   visualCapture?: z.infer<typeof visualCaptureSummarySchema>;
 }) {
@@ -2270,6 +2282,7 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
   ]);
   const materialLimitationKeys = (input.runtimeCoverage?.limitationKeys ?? []).filter(
     (key) => key !== "post_consent_flow_runtime_disabled" &&
+      !(key === "scan_no_go_diagnostics" && consentLaneCompleted && input.scanNoGoDecision === "continue_with_diagnostics") &&
       !(consentLaneCompleted && supersededConsentRecoveryLimitations.has(key))
   );
   const retainedVisualOrDomEvidence =

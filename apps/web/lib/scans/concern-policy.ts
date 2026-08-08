@@ -2331,6 +2331,12 @@ function getConsentNoSurfaceChecklistEligibility(input: {
   rawEvidence: Record<string, unknown> | null | undefined;
 }): NormalizedConcernRegulatoryChecklistEligibility | null {
   if (
+    input.originKey.startsWith("consent.surface_assessment.") &&
+    input.rawEvidence?.consentSurfaceAssessmentProjectionEvidence === true
+  ) {
+    return "none";
+  }
+  if (
     input.originKey === "consent.operational_surface.not_observed" &&
     input.rawEvidence?.consentOperationalSurfaceEvidence === true
   ) {

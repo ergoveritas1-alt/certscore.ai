@@ -434,6 +434,7 @@ function hasCompleteConsentSurfaceCoverage(input: GdprEprivacyCoveragePolicyInpu
 function hasTypedConsentSurfaceObservation(input: GdprEprivacyCoveragePolicyInput) {
   const assessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
   if (assessment) {
+    if (isPrivacyChoiceOnlyConsentAssessment(assessment)) return false;
     return (
       assessment.surface.status === "observed_actionable" ||
       assessment.surface.status === "observed_non_actionable"
@@ -456,7 +457,7 @@ function hasCompleteNoConsentSurfaceObservation(input: GdprEprivacyCoveragePolic
       assessment.coverage.status === "complete" &&
       assessment.document.identityStatus === "matched" &&
       assessment.scan.noGo === false &&
-      assessment.surface.status === "not_observed"
+      (assessment.surface.status === "not_observed" || isPrivacyChoiceOnlyConsentAssessment(assessment))
     );
   }
   const inspection = getConsentSurfaceInspection(input.runtimeArtifacts);
@@ -485,8 +486,9 @@ function makeIncompleteConsentSurfaceInspectionOutcome(
       return null;
     }
     const surfaceObserved =
-      assessment.surface.status === "observed_actionable" ||
-      assessment.surface.status === "observed_non_actionable";
+      !isPrivacyChoiceOnlyConsentAssessment(assessment) &&
+      (assessment.surface.status === "observed_actionable" ||
+        assessment.surface.status === "observed_non_actionable");
     return makeOutcome(
       rowId,
       surfaceObserved ? "Not confirmed" : "Not testable",
@@ -1013,6 +1015,21 @@ function getConsentControlAssessmentFromArtifacts(
   return null;
 }
 
+function isPrivacyChoiceOnlyConsentAssessment(
+  assessment: NonNullable<ReturnType<typeof getConsentControlAssessmentFromArtifacts>>,
+) {
+  return (
+    assessment.controls.privacyOptOut.state === "observed" &&
+    assessment.controls.accept.state !== "observed" &&
+    assessment.controls.reject.state !== "observed" &&
+    assessment.controls.options.state !== "observed" &&
+    !assessment.evidence.some((row) =>
+      row.layer === "first_layer" &&
+      (row.intent === "accept" || row.intent === "reject" || row.intent === "options" || row.intent === "save_preferences")
+    )
+  );
+}
+
 function getConsentPathControlLabels(
   consentUiPath: Record<string, unknown> | null,
   rejectPath: Record<string, unknown> | null
@@ -1056,8 +1073,9 @@ function getFirstLayerConsentChoiceEvidence(input: GdprEprivacyCoveragePolicyInp
       ...evidenceLabels("options"),
     ]);
     const surfaceObserved =
-      consentControlAssessment.surface.status === "observed_actionable" ||
-      consentControlAssessment.surface.status === "observed_non_actionable";
+      !isPrivacyChoiceOnlyConsentAssessment(consentControlAssessment) &&
+      (consentControlAssessment.surface.status === "observed_actionable" ||
+        consentControlAssessment.surface.status === "observed_non_actionable");
     return {
       acceptControlObserved: consentControlAssessment.controls.accept.state === "observed",
       assessment: consentControlAssessment,
@@ -1440,6 +1458,21 @@ function getConsentOperationalSurfaceConcern(
   }) ?? null;
 }
 
+function getConsentSurfaceAssessmentConcern(
+  input: GdprEprivacyCoveragePolicyInput
+) {
+  const concerns = input.normalizedConcerns ?? buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: input.runtimeArtifacts,
+    validationFindings: []
+  });
+  return concerns.find((concern) =>
+    concern.originKey.startsWith("consent.surface_assessment.") &&
+    concern.originType === "runtime_artifact" &&
+    concern.evidenceBundle.rawEvidence?.consentSurfaceAssessmentProjectionEvidence === true
+  ) ?? null;
+}
+
 function getConsentRefusalPathBeforeNonessentialActivityConcern(
   input: GdprEprivacyCoveragePolicyInput
 ) {
@@ -1537,6 +1570,13 @@ function hasRetainedInitialCookieConsentLayerEvidence(input: GdprEprivacyCoverag
 function getExplicitFirstLayerGdprConsentBannerConfirmed(input: GdprEprivacyCoveragePolicyInput) {
   const assessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
   if (assessment) {
+    if (
+      isPrivacyChoiceOnlyConsentAssessment(assessment) &&
+      assessment.assessmentStatus === "complete" &&
+      assessment.coverage.status === "complete"
+    ) {
+      return false;
+    }
     if (
       assessment.surface.status === "observed_actionable" ||
       assessment.surface.status === "observed_non_actionable"
@@ -1952,6 +1992,113 @@ function hasFingerprintingRuntimeCoverage(input: GdprEprivacyCoveragePolicyInput
 }
 
 function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const persistedAssessment = getConsentControlAssessmentFromArtifacts(input.runtimeArtifacts);
+  const assessmentConcern = getConsentSurfaceAssessmentConcern(input);
+  if (persistedAssessment && !assessmentConcern) {
+    return makeOutcome(
+      "consent_surface_observed",
+      "Not confirmed",
+      "A persisted ConsentControlAssessment v2 was retained, but its normalized consent-surface concern was unavailable to policy.",
+      ["Evidence: ConsentControlAssessment v2 retained", "Limitation: normalized consent concern missing"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "CertScore.ai.normalizedConcerns.consentSurfaceAssessment",
+            "normalized consent-surface concern",
+            "missing",
+            "Required to preserve the canonical assessment → normalized concern → concern policy flow."
+          )
+        ],
+        retainedEvidence: {
+          consentControlAssessmentSourceHash: persistedAssessment.provenance.sourceHash,
+          consentSurfaceObserved: false
+        }
+      }
+    );
+  }
+  if (assessmentConcern) {
+    const retained = assessmentConcern.evidenceBundle.rawEvidence ?? {};
+    const surfaceState = getString(retained, ["consentSurfaceState", "consent_surface_state"]);
+    const assessmentStatus = getString(retained, ["consentControlAssessmentStatus", "consent_control_assessment_status"]);
+    const coverageStatus = getString(retained, ["consentControlCoverageStatus", "consent_control_coverage_status"]);
+    const documentIdentityStatus = getString(retained, ["consentDocumentIdentityStatus", "consent_document_identity_status"]);
+    const scanNoGo = getBoolean(retained, ["scanNoGo", "scan_no_go"]);
+    const privacyChoiceOnly = getBoolean(retained, ["consentPrivacyChoiceOnlyEvidence", "consent_privacy_choice_only_evidence"]) === true;
+    const evidenceRefs = getStringArray(retained, ["consentSurfaceEvidenceRefs", "consent_surface_evidence_refs"])
+      .map((reference) => `Retained consent evidence: ${reference}`)
+      .slice(0, 6);
+    const complete =
+      assessmentStatus === "complete" &&
+      coverageStatus === "complete" &&
+      documentIdentityStatus === "matched" &&
+      scanNoGo === false;
+
+    if (!complete || surfaceState === "unknown") {
+      return makeOutcome(
+        "consent_surface_observed",
+        "Not confirmed",
+        "The canonical pre-interaction consent assessment was limited, so consent-surface presence was not confirmed from retained evidence.",
+        ["Evidence limitation: incomplete ConsentControlAssessment v2", ...evidenceRefs],
+        {
+          retainedEvidence: {
+            consentControlAssessmentStatus: assessmentStatus,
+            consentControlCoverageStatus: coverageStatus,
+            consentDocumentIdentityStatus: documentIdentityStatus,
+            consentSurfaceObserved: false,
+            consentSurfaceState: surfaceState ?? "unknown",
+            selectedEvidenceStrength: "missing"
+          }
+        }
+      );
+    }
+    if (privacyChoiceOnly) {
+      return makeOutcome(
+        "consent_surface_observed",
+        "Not observed",
+        "A complete first-layer inventory retained a privacy-choice or advertising opt-out surface, but no GDPR/ePrivacy cookie-consent surface.",
+        evidenceRefs,
+        {
+          retainedEvidence: {
+            consentPrivacyChoiceOnlyEvidence: true,
+            consentSurfaceObserved: false,
+            consentSurfaceState: surfaceState
+          }
+        }
+      );
+    }
+    if (surfaceState === "observed_actionable" || surfaceState === "observed_non_actionable") {
+      return makeOutcome(
+        "consent_surface_observed",
+        "Observed",
+        surfaceState === "observed_actionable"
+          ? "A verified first-layer consent surface with actionable controls was retained in the tested context."
+          : "A verified first-layer consent surface was retained, while actionable control availability is assessed separately.",
+        evidenceRefs,
+        {
+          retainedEvidence: {
+            consentSurfaceObserved: true,
+            consentSurfaceState: surfaceState,
+            selectedEvidenceStrength: "strong"
+          }
+        }
+      );
+    }
+    if (surfaceState === "not_observed") {
+      return makeOutcome(
+        "consent_surface_observed",
+        "Not observed",
+        "No operational consent surface was retained in the tested context.",
+        ["Evidence: complete ConsentControlAssessment v2", ...evidenceRefs],
+        {
+          retainedEvidence: {
+            consentSurfaceObserved: false,
+            consentSurfaceState: surfaceState,
+            selectedEvidenceStrength: "strong"
+          }
+        }
+      );
+    }
+  }
   const operationalSurfaceConcern = getConsentOperationalSurfaceConcern(input);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const consentSurfaceInspection =
@@ -8072,7 +8219,10 @@ function policySurfaceIsThinOrErrored(summary: Record<string, unknown> | null | 
   }
   const status = policyTextExtractionStatus(summary);
   if (status) {
-    return status !== "ok" || looksLikeCodeOrConfigText(getPolicyDisclosureText(summary));
+    // The versioned persisted projection already validates retained-text quality.
+    // Do not reinterpret localized policy prose here: doing so can contradict the
+    // canonical projection and turn legitimate localized URLs into a false limit.
+    return status !== "ok";
   }
   const charCount = getNumber(summary, ["privacyPolicyTextCharacterCount", "privacy_policy_text_character_count"]) ?? 0;
   return getBoolean(summary, ["processingErrorObserved", "processing_error_observed"]) === true ||

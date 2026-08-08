@@ -3174,6 +3174,70 @@ function getConsentControlAssessmentForConcern(
   return null;
 }
 
+function buildConsentSurfaceAssessmentConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  if (!assessment) return [];
+
+  const assessmentUsable =
+    assessment.assessmentStatus === "complete" &&
+    assessment.coverage.status === "complete" &&
+    assessment.document.identityStatus === "matched" &&
+    assessment.scan.noGo === false;
+  const privacyChoiceOnly =
+    assessment.controls.privacyOptOut.state === "observed" &&
+    assessment.controls.accept.state !== "observed" &&
+    assessment.controls.reject.state !== "observed" &&
+    assessment.controls.options.state !== "observed" &&
+    !assessment.evidence.some((row) =>
+      row.layer === "first_layer" &&
+      (row.intent === "accept" || row.intent === "reject" || row.intent === "options" || row.intent === "save_preferences")
+    );
+  const projectedSurfaceState = assessmentUsable
+    ? assessment.surface.status
+    : "unknown";
+  const runtimeEvidenceArtifacts = uniqueStrings([
+    ...assessment.surface.evidenceRefs,
+    ...assessment.controls.accept.evidenceRefs,
+    ...assessment.controls.reject.evidenceRefs,
+    ...assessment.controls.options.evidenceRefs,
+    "scan_runtime_artifacts.consent_control_assessment"
+  ]).slice(0, 12);
+
+  return [buildConcernFromSharedInput({
+    categoryId: "privacy",
+    description: assessmentUsable
+      ? "The persisted ConsentControlAssessment v2 projected the verified pre-interaction consent-surface state."
+      : "The persisted ConsentControlAssessment v2 was limited, so consent-surface presence remains unknown.",
+    domainContext,
+    evidence: runtimeEvidenceArtifacts,
+    observedValue: projectedSurfaceState,
+    originKey: `consent.surface_assessment.${projectedSurfaceState}`,
+    originType: "runtime_artifact",
+    rawEvidence: {
+      consentSurfaceAssessmentProjectionEvidence: true,
+      consentControlAssessmentContractVersion: assessment.artifactVersion,
+      consentControlAssessmentSourceHash: assessment.provenance.sourceHash,
+      consentControlAssessmentStatus: assessment.assessmentStatus,
+      consentControlCoverageStatus: assessment.coverage.status,
+      consentDocumentIdentityStatus: assessment.document.identityStatus,
+      consentPrivacyChoiceOnlyEvidence: privacyChoiceOnly,
+      consentSurfaceState: projectedSurfaceState,
+      consentSurfaceEvidenceRefs: assessment.surface.evidenceRefs,
+      runtimeEvidenceArtifacts,
+      scanNoGo: assessment.scan.noGo
+    },
+    severity: "low",
+    signalKey: "privacy.consent_surface_assessment",
+    signalLabel: "Consent surface assessment",
+    signalSource: "runtime_artifact_signal",
+    sourceType: "signal",
+    title: "Consent surface assessment projection"
+  })];
+}
+
 function buildConsentNoSurfaceConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
@@ -3216,6 +3280,15 @@ function buildConsentNoSurfaceConcerns(
     ...assessment.controls.options.evidenceRefs,
     "scan_runtime_artifacts.consent_control_assessment"
   ]).slice(0, 12);
+  const privacyChoiceOnly =
+    assessment.controls.privacyOptOut.state === "observed" &&
+    assessment.controls.accept.state !== "observed" &&
+    assessment.controls.reject.state !== "observed" &&
+    assessment.controls.options.state !== "observed" &&
+    !assessment.evidence.some((row) =>
+      row.layer === "first_layer" &&
+      (row.intent === "accept" || row.intent === "reject" || row.intent === "options" || row.intent === "save_preferences")
+    );
   const sharedEvidence = {
     cmpInfrastructureObserved,
     cmpRuntimeSignalLabels,
@@ -3226,10 +3299,11 @@ function buildConsentNoSurfaceConcerns(
     consentControlCoverageStatus: assessment.coverage.status,
     consentDocumentIdentityStatus: assessment.document.identityStatus,
     consentOperationalSurfaceEvidence: true,
+    consentPrivacyChoiceOnlyEvidence: privacyChoiceOnly,
     consentSurfaceStatus: assessment.surface.status,
     runtimeEvidenceArtifacts
   };
-  const concerns = assessment.surface.status === "not_observed" ? [
+  const concerns = assessment.surface.status === "not_observed" || privacyChoiceOnly ? [
     buildConcernFromSharedInput({
       categoryId: "privacy",
       description:
@@ -3411,9 +3485,7 @@ function buildConsentControlInventoryConcerns(
   if (
     !assessment ||
     assessment.document.identityStatus !== "matched" ||
-    assessment.scan.noGo !== false ||
-    assessment.surface.status !== "observed_actionable" &&
-    assessment.surface.status !== "observed_non_actionable"
+    assessment.scan.noGo !== false
   ) {
     return [];
   }
@@ -3439,7 +3511,9 @@ function buildConsentControlInventoryConcerns(
     buildConcernFromSharedInput({
       categoryId: "privacy",
       description:
-        "A complete, same-document first-layer consent-control inventory retained factual Accept, Reject, and Options observation states.",
+        inventoryComplete
+          ? "A complete, same-document first-layer consent-control inventory retained factual Accept, Reject, and Options observation states."
+          : "A limited, same-document first-layer consent-control assessment retained unknown or observed Accept, Reject, and Options states without converting missing evidence into absence.",
       domainContext,
       evidence: runtimeEvidenceArtifacts,
       observedValue: [
@@ -3699,6 +3773,7 @@ export function buildNormalizedConcerns(input: {
     }),
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildConsentSurfaceAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentNoSurfaceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentControlInventoryConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentDismissWithoutRejectConcerns(input.runtimeArtifacts, input.domainContext),

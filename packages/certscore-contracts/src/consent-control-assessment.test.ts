@@ -101,7 +101,35 @@ test("incomplete evidence remains unknown instead of becoming a negative", () =>
   const assessment = deriveConsentControlAssessment(input);
 
   assert.equal(assessment.assessmentStatus, "limited");
-  assert.equal(assessment.surface.status, "observed_non_actionable");
+  assert.equal(assessment.surface.status, "unknown");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
+});
+
+test("text-only likely-present evidence cannot establish a consent surface", () => {
+  const input = baseInput();
+  input.coverage = {
+    status: "limited",
+    requiredChannels: ["dom_inventory", "geometry"],
+    completedChannels: ["dom_inventory"],
+    incompleteChannels: ["geometry"],
+  };
+  input.observations = [{
+    observationId: "text-recovery-hint",
+    observedAtMs: 3_197,
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    documentId: "https://oxfam.org/en",
+    captureStatus: "observed",
+    controls: [],
+    evidenceRefs: [],
+  }];
+
+  const assessment = deriveConsentControlAssessment(input);
+
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.surface.status, "unknown");
   assert.equal(assessment.controls.accept.state, "unknown");
   assert.equal(assessment.controls.reject.state, "unknown");
   assert.equal(assessment.controls.options.state, "unknown");
@@ -313,6 +341,36 @@ test("privacy opt-out and options do not satisfy reject", () => {
   assert.equal(assessment.controls.privacyOptOut.state, "observed");
   assert.equal(assessment.controls.options.state, "observed");
   assert.equal(assessment.controls.reject.state, "not_observed");
+});
+
+test("privacy opt-out alone remains non-actionable and produces factual A/R/O absence", () => {
+  const input = baseInput();
+  input.observations = [{
+    observationId: "privacy-choice-only",
+    observedAtMs: 200,
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    captureStatus: "observed",
+    inventoryOutcome: "complete_with_controls",
+    completedChannels: ["dom_inventory", "geometry"],
+    documentId: "https://oxfam.org/en",
+    controls: [
+      candidate({
+        evidenceId: "opt-out",
+        intent: "privacy_opt_out",
+        label: "Do not sell or share my personal information",
+      }),
+    ],
+  }];
+
+  const assessment = deriveConsentControlAssessment(input);
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.surface.status, "observed_non_actionable");
+  assert.equal(assessment.controls.privacyOptOut.state, "observed");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
 });
 
 test("retains first-layer options presentation without changing control intent", () => {

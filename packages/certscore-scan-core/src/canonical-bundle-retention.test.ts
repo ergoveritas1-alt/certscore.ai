@@ -40,6 +40,7 @@ test("canonical bundle retention caps module timing breakdowns before schema val
       label: `policy timing ${index}`,
       durationMs: index + 1,
       detail: `retained diagnostic ${index}`,
+      outcome: "completed" as const,
     })),
   };
 
@@ -52,6 +53,8 @@ test("canonical bundle retention caps module timing breakdowns before schema val
   assert.equal(timingBreakdown[39]?.label, "timing entries truncated");
   assert.match(timingBreakdown[39]?.detail ?? "", /6 timing breakdown entries omitted/);
   assert.equal(timingBreakdown[39]?.durationMs, 255);
+  assert.equal(timingBreakdown[0]?.outcome, "completed");
+  assert.equal(timingBreakdown[39]?.outcome, "skipped");
 });
 
 test("retains the full pre-consent transfer total after response diagnostics are compacted", () => {

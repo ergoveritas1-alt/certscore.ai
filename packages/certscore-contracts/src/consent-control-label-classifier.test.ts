@@ -461,6 +461,49 @@ test("uses canonical Dutch and Polish controls in the default production classif
   assert.equal(multilingualPolish.intent, "options");
 });
 
+test("classifies Portuguese Preferências only with retained consent context", () => {
+  for (const [label, intent] of [["Aceitar", "accept"], ["Rejeitar", "reject"]] as const) {
+    const classification = classifyConsentControlLabel({
+      label,
+      contextText: "Nós coletamos cookies. Configure suas preferências ou aceite ou rejeite todos.",
+      localeHints: ["pt"],
+      classifierProfile: "multilingual_v1",
+    });
+    assert.equal(classification.intent, intent);
+    assert.equal(classification.contextSatisfied, true);
+    assert.equal(
+      isProductionCreditworthySupplementalConsentControlClassification(label, classification),
+      true,
+    );
+  }
+
+  const consentOptions = classifyConsentControlLabel({
+    label: "Preferências",
+    contextText: "Nós coletamos cookies. Configure suas preferências ou aceite ou rejeite todos.",
+    localeHints: ["pt"],
+  });
+  assert.equal(consentOptions.intent, "options");
+  assert.equal(consentOptions.matchedLocale, "pt");
+  assert.equal(consentOptions.matchStrength, "contextual");
+  assert.equal(consentOptions.contextSatisfied, true);
+  assert.equal(
+    isProductionCreditworthySupplementalConsentControlClassification("Preferências", consentOptions),
+    true,
+  );
+
+  const accountPreferences = classifyConsentControlLabel({
+    label: "Preferências",
+    contextText: "Minha conta, pedidos e endereço de entrega",
+    localeHints: ["pt"],
+  });
+  assert.equal(accountPreferences.intent, "unknown");
+  assert.equal(accountPreferences.contextSatisfied, false);
+  assert.equal(
+    isProductionCreditworthySupplementalConsentControlClassification("Preferências", accountPreferences),
+    false,
+  );
+});
+
 test("classifies observed Danish and Lithuanian consent labels", () => {
   const danishAccept = classifyConsentControlLabel({
     label: "Acceptér alle",
@@ -876,6 +919,33 @@ test("rejects common false-positive labels", () => {
   ]) {
     assert.equal(classifyConsentControlLabel({ label }).intent, "unknown", label);
   }
+});
+
+test("keeps generic contextual phrases bounded to complete control labels", () => {
+  assert.equal(classifyConsentControlLabel({
+    label: "Learn more about the OECD",
+    contextText: "Privacy and cookies",
+    hasConsentContext: true,
+  }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({
+    label: "Labour markets continue to be resilient",
+    contextText: "By using this site, you consent to cookies.",
+  }).intent, "unknown");
+
+  const boundedControl = classifyConsentControlLabel({
+    label: "Learn more",
+    contextText: "We use cookies. Choose your privacy preferences.",
+  });
+  assert.equal(boundedControl.intent, "options");
+  assert.equal(boundedControl.matchStrength, "contextual");
+});
+
+test("page prose cannot establish a consent surface from generic contextual phrases", () => {
+  const classification = classifyConsentSurfaceText({
+    text: "Read our privacy policy. Labour markets continue to be resilient. Learn more about our work and manage projects.",
+  });
+  assert.equal(classification.likelyPresent, false);
+  assert.equal(classification.matches.some((match) => match.kind === "control"), false);
 });
 
 test("normalizes punctuation, whitespace, and apostrophe variants", () => {

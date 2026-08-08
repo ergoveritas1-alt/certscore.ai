@@ -473,12 +473,15 @@ export function deriveMaterializedConsentControlAssessment(input: {
         incompleteChannels.length === 0
       )
     );
+  const verifiedInspectionComplete =
+    inspection?.inspectionCompleted === true &&
+    inspection.coverageStatus === "complete";
   const surfaceStatus =
-    inspection?.outcome === "actionable_surface_observed"
+    verifiedInspectionComplete && inspection?.outcome === "actionable_surface_observed"
       ? "observed_actionable"
-      : inspection?.outcome === "non_actionable_surface_observed"
+      : verifiedInspectionComplete && inspection?.outcome === "non_actionable_surface_observed"
         ? "observed_non_actionable"
-        : inspection?.outcome === "no_surface_observed_complete_coverage"
+        : verifiedInspectionComplete && inspection?.outcome === "no_surface_observed_complete_coverage"
           ? "not_observed"
           : typedFirstLayerInventoryComplete && (typedFirstLayerInventoryObservation?.controls.length ?? 0) > 0
             ? "observed_actionable"

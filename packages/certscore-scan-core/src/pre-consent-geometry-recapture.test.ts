@@ -620,6 +620,10 @@ test("pre-consent scanner retains a proof screenshot for deeply nested animated 
     });
 
     assert.equal(result.moduleRun.status, "completed", result.moduleRun.errors.join("; "));
+    assert.equal(
+      result.moduleRun.timingBreakdown?.find((entry) => entry.label === "early screenshot capture")?.outcome,
+      "completed",
+    );
     assert.equal(result.consentUiObservations[0]?.acceptControlObserved, true);
     assert.equal(result.consentUiObservations[0]?.rejectControlObserved, true);
     assert.equal(result.consentUiObservations[0]?.managePreferencesControlObserved, true);

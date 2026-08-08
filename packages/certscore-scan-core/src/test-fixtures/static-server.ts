@@ -50,6 +50,7 @@ export type StaticFixturePage =
   | "consent-late-first-layer-choice-controls"
   | "consent-late-without-cmp-runtime"
   | "consent-late-cmp-choice-controls"
+  | "consent-late-ketch-portuguese-controls"
   | "consent-renderer-contention-delayed-controls"
   | "consent-transparent-input-overlays"
   | "consent-privacy-choice-surface-reject-success"
@@ -147,6 +148,7 @@ export type StaticFixturePage =
   | "policy-manage-cookies-footer-anchor"
   | "policy-manage-cookies-embedded-config"
   | "policy-no-links"
+  | "policy-no-links-pt"
   | "policy-no-links-es"
   | "policy-noisy-policy-body"
   | "policy-notice-at-collection-link"
@@ -239,6 +241,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-late-first-layer-choice-controls": "consent-late-first-layer-choice-controls",
   "consent-late-without-cmp-runtime": "consent-late-without-cmp-runtime",
   "consent-late-cmp-choice-controls": "consent-late-cmp-choice-controls",
+  "consent-late-ketch-portuguese-controls": "consent-late-ketch-portuguese-controls",
   "consent-renderer-contention-delayed-controls": "consent-renderer-contention-delayed-controls",
   "consent-transparent-input-overlays": "consent-transparent-input-overlays",
   "consent-privacy-choice-surface-reject-success": "consent-privacy-choice-surface-reject-success",
@@ -336,6 +339,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-manage-cookies-footer-anchor": "policy-manage-cookies-footer-anchor",
   "policy-manage-cookies-embedded-config": "policy-manage-cookies-embedded-config",
   "policy-no-links": "policy-no-links",
+  "policy-no-links-pt": "policy-no-links-pt",
   "policy-no-links-es": "policy-no-links-es",
   "policy-noisy-policy-body": "policy-noisy-policy-body",
   "policy-notice-at-collection-link": "policy-notice-at-collection",
@@ -1097,7 +1101,11 @@ function pageHtml(caseName: StaticFixturePage): string {
     return "<!doctype html><html><head><title>Not Found</title></head><body>Not Found</body></html>";
   }
   return `<!doctype html>
-<html lang="${caseName === "consent-slovenian-load-controls" ? "sl" : "en"}">
+<html lang="${caseName === "consent-slovenian-load-controls"
+    ? "sl"
+    : caseName === "policy-no-links-pt"
+      ? "pt-BR"
+      : "en"}">
   <head>
     <meta charset="utf-8">
     <title>${escapeHtml(caseName)}</title>
@@ -1343,6 +1351,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     lateFirstLayerChoiceControls: caseName === "consent-late-first-layer-choice-controls",
     lateWithoutCmpRuntime: caseName === "consent-late-without-cmp-runtime",
     lateCmpChoiceControls: caseName === "consent-late-cmp-choice-controls",
+    lateKetchPortugueseControls: caseName === "consent-late-ketch-portuguese-controls",
     rendererContentionDelayedControls: caseName === "consent-renderer-contention-delayed-controls",
     transparentInputOverlays: caseName === "consent-transparent-input-overlays",
     cmpScriptLateSettings: caseName === "consent-cmp-script-late-settings",
@@ -1640,6 +1649,23 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
           if (!target) return;
           target.innerHTML = '<button id="settings" type="button">Cookie settings</button><button id="accept-all" type="button">Accept</button><button id="reject-all" type="button">Reject</button>';
         }, 3200);
+      </script>
+    `;
+  }
+  if (options.lateKetchPortugueseControls) {
+    return `
+      <main style="min-height: 900px;">
+        <h1>Comércio brasileiro</h1>
+        <p>Conteúdo principal carregado antes do banner de consentimento.</p>
+      </main>
+      <div id="late-ketch-root"></div>
+      <script>
+        window.Ketch = { fixture: true };
+        setTimeout(() => {
+          const target = document.getElementById("late-ketch-root");
+          if (!target) return;
+          target.innerHTML = '<section id="ketch-banner" role="dialog" aria-label="Preferências de cookies" style="position: fixed; inset: auto 0 0; padding: 18px; background: white; border-top: 1px solid #999;"><p>Nós coletamos cookies para oferecer um serviço personalizado. Utilize as opções do banner para configurar suas preferências quanto à coleta de cookies.</p><button id="ketch-preferences" type="button">Preferências</button><button id="ketch-reject" type="button">Rejeitar todos</button><button id="ketch-accept" type="button">Aceitar todos</button></section>';
+        }, 6500);
       </script>
     `;
   }
@@ -2200,6 +2226,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-manage-cookies-footer-anchor": `<main><p>News homepage</p></main><footer><a href="#" id="manage-cookies">Manage Cookies</a></footer>`,
     "policy-manage-cookies-embedded-config": `<main><p>News homepage</p></main><script>window.CONSENT_CONFIG={consentLinkTitle:{en:"Manage Cookies+"},privacyCenterLinkTitle:{en:"Privacy Policy"}};</script>`,
     "policy-no-links": "",
+    "policy-no-links-pt": `<main lang="pt-BR"><h1>Início</h1><p>Produtos para casa, eletrônicos e eletrodomésticos.</p></main>`,
     "policy-no-links-es": `<main lang="es"><h1>Inicio</h1><p>Información general sobre datos personales.</p></main>`,
     "policy-noisy-policy-body": `<a href="/policies/noisy-privacy">Privacy Policy</a>`,
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
@@ -2471,6 +2498,15 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/politica-de-privacidad": {
       title: "Política de privacidad",
       body: "Política de privacidad. Tratamos datos personales y explicamos los fines del tratamiento, la base jurídica, los destinatarios, la conservación y los derechos de privacidad.",
+    },
+    "/politica-de-privacidade": {
+      title: "Política de privacidade",
+      body: [
+        "A empresa é a controladora dos dados pessoais e disponibiliza contato com o encarregado de proteção de dados.",
+        "Esta política explica as finalidades do tratamento, as bases legais aplicáveis, as categorias de dados pessoais coletados e os destinatários dos dados.",
+        "Também descreve transferências internacionais, prazos e critérios de conservação, medidas de segurança e o uso de cookies necessários, funcionais, analíticos e publicitários.",
+        "O titular pode solicitar acesso, correção, portabilidade, anonimização, bloqueio, eliminação, oposição e revogação do consentimento, além de apresentar reclamação à Autoridade Nacional de Proteção de Dados.",
+      ].join(" ").repeat(8),
     },
     "/politica-de-cookies": {
       title: "Política de cookies",

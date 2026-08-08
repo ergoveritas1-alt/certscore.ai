@@ -557,15 +557,20 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         ],
         moduleRun: {
           ...preConsentResult.moduleRun,
-          errors: [
-            ...(preConsentResult.moduleRun.errors ?? []),
-            screenshotFallback.consentRecoveryCompleted
-              ? "Independent bounded consent recovery retained typed DOM-inventory and geometry evidence after the primary consent inspection was incomplete."
-              : shouldCaptureIncompleteConsentVisualFallback
-                ? "Independent full-page visual fallback retained bounded consent-surface evidence after the primary consent inspection was incomplete."
-              : fallbackConsentUiObservations.length > 0
-                ? "Visual fallback retained a pre-consent screenshot and bounded consent-surface evidence after the primary runtime page/context closed."
-                : "Screenshot-only visual fallback retained a pre-consent screenshot after the primary runtime page/context closed.",
+          timingBreakdown: [
+            ...(preConsentResult.moduleRun.timingBreakdown ?? []),
+            {
+              label: "independent consent visual fallback",
+              durationMs: 0,
+              outcome: "recovered",
+              detail: screenshotFallback.consentRecoveryCompleted
+                ? "Independent bounded consent recovery retained typed inventory and geometry after incomplete primary inspection."
+                : shouldCaptureIncompleteConsentVisualFallback
+                  ? "Independent full-page fallback retained bounded consent-surface evidence after incomplete primary inspection."
+                  : fallbackConsentUiObservations.length > 0
+                    ? "Visual fallback retained a screenshot and bounded consent-surface evidence after the primary context closed."
+                    : "Screenshot-only visual fallback retained a pre-consent screenshot after the primary context closed.",
+            },
           ],
         },
       };
@@ -1062,6 +1067,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     modulesRun: boundedModulesRun,
     networkEvents,
     runtimeCoverage,
+    scanNoGoDecision: scanNoGoEvidence?.scanNoGoAssessment.decision,
     screenshots: preConsentResult.screenshots,
     visualCapture: preConsentResult.visualCapture,
   });
@@ -1285,6 +1291,7 @@ function boundModuleRunTimingBreakdown(
         label: "timing entries truncated",
         durationMs: omittedDurationMs,
         detail: `${omitted.length} timing breakdown entries omitted to keep the canonical bundle within the contract cap.`,
+        outcome: "skipped",
       },
     ],
   };

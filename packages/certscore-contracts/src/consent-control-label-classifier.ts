@@ -877,6 +877,20 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
 
 export const consentControlTerms = CONSENT_CONTROL_PHRASE_REGISTRY;
 
+// These short editorial/navigation phrases are meaningful only when they are
+// the control's complete label. Allowing substring matches turns ordinary copy
+// such as "Learn more about the OECD" or "markets continue to be resilient"
+// into consent controls when unrelated privacy language exists elsewhere on
+// the page.
+const CONTEXTUAL_EXACT_LABEL_ONLY_PHRASES = new Set([
+  "continue",
+  "decline",
+  "details",
+  "learn more",
+  "manage",
+  "object",
+]);
+
 export function classifyConsentSurfaceText(input: {
   text?: string | null;
   localeHints?: ConsentControlLocale[];
@@ -913,6 +927,9 @@ export function classifyConsentSurfaceText(input: {
   const controlMatches = CONSENT_CONTROL_PHRASE_REGISTRY.flatMap((term): ConsentSurfaceTextMatch[] => {
     if (!localeEligible(term.locale) || term.strength === "weak") return [];
     const phrase = normalizeConsentControlText(term.phrase);
+    // Page-level text has no control boundary. Generic contextual labels must
+    // be established by the bounded control inventory, not by prose matches.
+    if (CONTEXTUAL_EXACT_LABEL_ONLY_PHRASES.has(phrase)) return [];
     return phrase && normalizedText.includes(phrase)
       ? [{ kind: "control", locale: term.locale, phrase: term.phrase, intent: term.intent }]
       : [];
@@ -1102,6 +1119,20 @@ export function isProductionCreditworthySupplementalConsentControlClassification
   const strongMatch = classification.matchStrength === "direct" || classification.matchStrength === "equivalent";
 
   if (
+    classification.matchedLocale === "pt" &&
+    (classification.intent === "accept" ||
+      classification.intent === "reject" ||
+      classification.intent === "options") &&
+    classification.matchStrength === "contextual" &&
+    classification.contextSatisfied &&
+    ((classification.intent === "accept" && normalizedLabel === "aceitar") ||
+      (classification.intent === "reject" && normalizedLabel === "rejeitar") ||
+      (classification.intent === "options" && normalizedLabel === "preferências"))
+  ) {
+    return true;
+  }
+
+  if (
     classification.matchedLocale &&
     classification.matchedLocale !== "nl" &&
     classification.matchedLocale !== "pl" &&
@@ -1168,6 +1199,9 @@ function termScore(
     return 0;
   }
   const exact = normalizedLabel === phrase;
+  if (!exact && CONTEXTUAL_EXACT_LABEL_ONLY_PHRASES.has(phrase)) {
+    return 0;
+  }
   const phraseMatch = !exact && phrase.length >= 8 && paddedIncludes(normalizedLabel, phrase);
   if (term.strength === "weak" && !exact) {
     return 0;

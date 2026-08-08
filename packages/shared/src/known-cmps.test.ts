@@ -172,6 +172,18 @@ test("recognizes canonical and alias CMP labels", () => {
   assert.equal(isKnownCmpVendorLabel("Unknown Analytics"), false);
 });
 
+test("does not infer TrustArc from JavaScript trustedTypes prose", () => {
+  assert.equal(getKnownCmpVendorName({
+    textSnippets: ["let policy = globalThis.trustedTypes?.createPolicy('safe', rules);"],
+  }), null);
+  assert.equal(getKnownCmpVendorName({
+    textSnippets: ["Privacy preferences are provided by TRUSTe."],
+  }), "TrustArc");
+  assert.equal(getKnownCmpVendorName({
+    urls: ["https://consent.trustarc.com/notice.js"],
+  }), "TrustArc");
+});
+
 test("detects first-party Borlabs Cookie runtime signals", () => {
   const [detection] = detectKnownCmps({
     domSelectors: ["#BorlabsCookieBox"],

@@ -2,6 +2,7 @@ import type { Page } from "playwright";
 import {
   classifyConsentControlLabel,
   consentControlTerms,
+  isProductionCreditworthySupplementalConsentControlClassification,
   isSupportedPrivacyEvidenceLocale,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   type ConsentControlClassifierProfile,
@@ -226,6 +227,7 @@ interface RawGeometryCandidate {
   containerIndex?: number;
   layer: ConsentControlGeometryLayer;
   enabled: boolean;
+  semanticallyInteractive: boolean;
   computedStyle: ConsentControlGeometryStyle;
   boundingBox: ConsentControlRect;
   viewport: {
@@ -287,6 +289,10 @@ const CANDIDATE_ACTION_PRIORITY_PATTERN = canonicalPhrasePattern([
     ...entry.consentControls.reject,
     ...entry.consentControls.options,
     ...entry.consentControls.necessaryOnly,
+    ...(entry.contextualConsentControls?.accept ?? []),
+    ...(entry.contextualConsentControls?.reject ?? []),
+    ...(entry.contextualConsentControls?.options ?? []),
+    ...(entry.contextualConsentControls?.necessaryOnly ?? []),
   ]),
 ]);
 const STATIC_TEXT_TAG_NAMES = new Set(["p", "span", "strong", "em", "small", "li", "h1", "h2", "h3", "h4", "h5", "h6"]);
@@ -838,7 +844,7 @@ function presentationTypeForCandidate(
 }
 
 function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabelClassification {
-  return classifyConsentControlLabel({
+  const input = {
     label: candidate.label,
     ariaLabel: candidate.ariaLabel,
     title: candidate.title,
@@ -849,7 +855,27 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
       candidate.layer === "preference_center" ||
       MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN.test(candidate.contextText),
     localeHints: localeHintsForCandidate(candidate),
+  };
+  const productionClassification = classifyConsentControlLabel(input);
+  if (productionClassification.intent !== "unknown") {
+    return productionClassification;
+  }
+  const supplementalClassification = classifyConsentControlLabel({
+    ...input,
+    classifierProfile: "multilingual_v1",
   });
+  const productionCreditworthy = [
+    candidate.label,
+    candidate.ariaLabel,
+    candidate.title,
+    candidate.value,
+  ].some((labelValue) => isProductionCreditworthySupplementalConsentControlClassification(
+    labelValue,
+    supplementalClassification,
+  ));
+  return productionCreditworthy
+    ? supplementalClassification
+    : productionClassification;
 }
 
 function diagnosticClassificationsForCandidate(candidate: RawGeometryCandidate): ConsentControlDiagnosticClassification[] | undefined {
@@ -960,7 +986,11 @@ function actionTypeForClassification(
 }
 
 function isStaticTextContextualOptionsCandidate(candidate: RawGeometryCandidate): boolean {
-  if (INTERACTIVE_TAG_NAMES.has(candidate.tagName) || INTERACTIVE_ROLE_PATTERN.test(candidate.role ?? "")) {
+  if (
+    candidate.semanticallyInteractive ||
+    INTERACTIVE_TAG_NAMES.has(candidate.tagName) ||
+    INTERACTIVE_ROLE_PATTERN.test(candidate.role ?? "")
+  ) {
     return false;
   }
   return STATIC_TEXT_TAG_NAMES.has(candidate.tagName);
@@ -1308,6 +1338,7 @@ function collectConsentGeometryInPage(input: {
       containerIndex,
       layer: container?.evidence.layer ?? layerFor(element, box),
       enabled: !(element instanceof HTMLButtonElement || element instanceof HTMLInputElement) || !element.disabled,
+      semanticallyInteractive: isSemanticallyInteractive(element),
       computedStyle: {
         display: style.display,
         visibility: style.visibility,
@@ -1517,13 +1548,13 @@ function collectConsentGeometryInPage(input: {
     // Tokenized aria labels are implementation keys, not user-facing control
     // names (for example `BUTTONS.REJECT`). Prefer the rendered label while
     // retaining the token separately in ariaLabel for diagnostics.
-    for (const candidate of [aria, labelledBy, title, value, text]) {
+    for (const candidate of [aria, labelledBy, text, title, value]) {
       const normalized = compactText(candidate || "");
       if (normalized && !isLocalizationToken(normalized)) {
         return normalized;
       }
     }
-    return compactText(aria || labelledBy || title || value || text);
+    return compactText(aria || labelledBy || text || title || value);
   }
 
   function isLocalizationToken(value: string): boolean {

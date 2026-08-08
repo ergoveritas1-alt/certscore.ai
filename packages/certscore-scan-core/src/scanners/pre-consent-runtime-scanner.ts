@@ -990,6 +990,7 @@ export async function preConsentRuntimeScanner(
           screenshotErrors,
           timeoutMs: Math.min(input.screenshotTimeoutMs ?? 5_000, 3_000),
         }),
+        visualCaptureTimingOutcome,
       )
       : null;
     const earlyConsentGeometryPromise = (input.screenshotMode ?? "always") === "always"
@@ -1359,6 +1360,7 @@ export async function preConsentRuntimeScanner(
             settledVisualCheckpointScreenshotMaxMs,
           ),
         }),
+        visualCaptureTimingOutcome,
       );
       if (settledCapture.status === "available") {
         const settledScreenshot: ScreenshotArtifact = {
@@ -1953,6 +1955,7 @@ export async function preConsentRuntimeScanner(
               screenshotErrors,
               timeoutMs: Math.min(1_500, remainingModuleBudgetMs()),
             }),
+            visualCaptureTimingOutcome,
           );
           if (synchronizedCapture.status === "available") {
             const synchronizedScreenshot: ScreenshotArtifact = {
@@ -2058,12 +2061,16 @@ export async function preConsentRuntimeScanner(
     });
     if (shouldCaptureScreenshot && !earlyScreenshotCaptured) {
       const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
-      const screenshotCapture = await recordTiming(timingBreakdown, "screenshot capture", "Full-page pre-consent screenshot with 1x1 fallback on failure.", () =>
-        capturePreConsentScreenshot(page, screenshotPath, {
+      const screenshotCapture = await recordTiming(
+        timingBreakdown,
+        "screenshot capture",
+        "Full-page pre-consent screenshot with 1x1 fallback on failure.",
+        () => capturePreConsentScreenshot(page, screenshotPath, {
           captureMode: input.screenshotCaptureMode ?? "viewport_first",
           screenshotErrors,
           timeoutMs: input.screenshotTimeoutMs ?? 5_000,
-        })
+        }),
+        visualCaptureTimingOutcome,
       );
       screenshots.push({
         artifactId: "screenshot_pre_consent",
@@ -2427,6 +2434,7 @@ export async function preConsentRuntimeScanner(
           screenshotErrors,
           timeoutMs: Math.min(1_500, remainingModuleBudgetMs()),
         }),
+        visualCaptureTimingOutcome,
       );
       if (synchronizedCapture.status === "available") {
         const synchronizedScreenshot: ScreenshotArtifact = {
@@ -2490,6 +2498,7 @@ export async function preConsentRuntimeScanner(
             screenshotErrors,
             timeoutMs: Math.min(input.screenshotTimeoutMs ?? 5_000, 3_000),
           }),
+          visualCaptureTimingOutcome,
         ));
         screenshots.push({
           artifactId: "screenshot_pre_consent_no_go_confirmation",
@@ -2922,15 +2931,23 @@ async function recordTiming<T>(
   label: string,
   detail: string,
   run: () => Promise<T>,
+  outcomeFromResult?: (result: T) => NonNullable<ScanModuleRun["timingBreakdown"]>[number]["outcome"],
 ): Promise<T> {
   const startedAtMs = Date.now();
+  let outcome: NonNullable<ScanModuleRun["timingBreakdown"]>[number]["outcome"] = "completed";
   try {
-    return await run();
+    const result = await run();
+    outcome = outcomeFromResult?.(result) ?? "completed";
+    return result;
+  } catch (error) {
+    outcome = "failed";
+    throw error;
   } finally {
     timingBreakdown.push({
       label,
       detail,
       durationMs: Date.now() - startedAtMs,
+      outcome,
     });
   }
 }
@@ -2946,12 +2963,23 @@ async function recordParentTiming<T>(
   timingBreakdown.push({ label, detail, durationMs: 0 });
   try {
     return await run();
-  } finally {
+  } catch (error) {
     timingBreakdown[timingIndex] = {
       label,
       detail,
       durationMs: Date.now() - startedAtMs,
+      outcome: "failed",
     };
+    throw error;
+  } finally {
+    if (timingBreakdown[timingIndex]?.outcome !== "failed") {
+      timingBreakdown[timingIndex] = {
+        label,
+        detail,
+        durationMs: Date.now() - startedAtMs,
+        outcome: "completed",
+      };
+    }
   }
 }
 
@@ -2964,7 +2992,7 @@ async function recordBoundedTiming<T>(
   fallback: () => T,
 ): Promise<T> {
   const startedAtMs = Date.now();
-  let outcome = "completed";
+  let outcome: NonNullable<ScanModuleRun["timingBreakdown"]>[number]["outcome"] = "completed";
   let failureMessage: string | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -2999,6 +3027,7 @@ async function recordBoundedTiming<T>(
       label,
       detail: outcomeDetail,
       durationMs: Date.now() - startedAtMs,
+      outcome,
     });
   }
 }
@@ -3012,7 +3041,17 @@ function recordInstantTiming(
     label,
     detail,
     durationMs: 0,
+    outcome: /\bskipp?ed\b/i.test(label) ? "skipped" : "completed",
   });
+}
+
+function visualCaptureTimingOutcome(
+  capture: VisualCaptureSummary,
+): NonNullable<ScanModuleRun["timingBreakdown"]>[number]["outcome"] {
+  if (capture.status === "placeholder" || capture.status === "unavailable") return "failed";
+  return capture.notes.some((note) => /recover|fallback|retr(?:y|ies)/i.test(note))
+    ? "recovered"
+    : "completed";
 }
 
 function errorMessage(error: unknown): string {
@@ -4832,7 +4871,6 @@ async function readCheapConsentTextObservation(
   return canonicalSurfaceText.recoveryHintObserved && !observation.likelyPresent
     ? {
         ...observation,
-        likelyPresent: true,
         basis: [...observation.basis, "canonical_multilingual_consent_recovery_hint"],
         confidence: Math.max(observation.confidence, canonicalSurfaceText.confidence),
       }
@@ -5383,6 +5421,12 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       candidateContainerCount: frameControls.length > 0 ? 1 : 0,
       candidateControlCount: frameInventory.controls.length,
       retainedControlCount: frameControls.length,
+      inspectedFrameCount: frameInventory.inspectedFrameCount,
+      inaccessibleFrameCount:
+        frameInventory.frameInaccessibleCount + frameInventory.nonBlockingFrameInaccessibleCount,
+      blockingInaccessibleFrameCount: frameInventory.frameInaccessibleCount,
+      nonBlockingInaccessibleFrameCount: frameInventory.nonBlockingFrameInaccessibleCount,
+      nonBlockingInaccessibleFrameReasonCodes: frameInventory.nonBlockingFrameReasonCodes,
       inventorySources: frameControls.length > 0 ? ["same_origin_frame"] : [],
       candidateLabels: frameInventory.controls.map((control) => control.label),
       rejectionReasons: frameInventory.frameInaccessibleCount > 0 ? ["frame_inaccessible"] : [],
@@ -5418,6 +5462,9 @@ async function readRapidChildFrameConsentInventory(
 ): Promise<{
   controls: ConsentUiInventoryControl[];
   frameInaccessibleCount: number;
+  nonBlockingFrameInaccessibleCount: number;
+  nonBlockingFrameReasonCodes: Array<"detached_frame" | "canonical_embedded_media">;
+  inspectedFrameCount: number;
   textExcerpts: string[];
 }> {
   const frames = page.frames()
@@ -5467,9 +5514,21 @@ async function readRapidChildFrameConsentInventory(
     };
   }));
   const completed = rows.filter((row): row is NonNullable<typeof row> => row !== null);
+  const failedFrames = frames.filter((_, index) => rows[index] === null);
+  const failedFrameRelevance = failedFrames.map((frame) => classifyInaccessibleConsentFrame({
+    detached: frame.isDetached(),
+    url: frame.url(),
+  }));
   return {
     controls: completed.flatMap((row) => row.controls).slice(0, 12),
-    frameInaccessibleCount: rows.length - completed.length,
+    frameInaccessibleCount: failedFrameRelevance.filter((row) => row.blocksConsentCompleteness).length,
+    nonBlockingFrameInaccessibleCount: failedFrameRelevance.filter((row) => !row.blocksConsentCompleteness).length,
+    nonBlockingFrameReasonCodes: unique(failedFrameRelevance
+      .map((row) => row.reasonCode)
+      .filter((reason): reason is "detached_frame" | "canonical_embedded_media" =>
+        reason === "detached_frame" || reason === "canonical_embedded_media"
+      )) as Array<"detached_frame" | "canonical_embedded_media">,
+    inspectedFrameCount: frames.length,
     textExcerpts: completed.map((row) => row.textExcerpt).filter(Boolean),
   };
 }
@@ -5536,7 +5595,14 @@ async function readConsentUiObservation(
     return { controls: [], diagnostics: undefined, frameInaccessibleCount: 0, probeSucceeded: false };
   });
   const frameInventory = inventory.controls.some((control) => control.inventorySource === "same_origin_frame")
-    ? { controls: [], frameInaccessibleCount: 0, textExcerpts: [] }
+    ? {
+        controls: [],
+        frameInaccessibleCount: 0,
+        nonBlockingFrameInaccessibleCount: 0,
+        nonBlockingFrameReasonCodes: [] as Array<"detached_frame" | "canonical_embedded_media">,
+        inspectedFrameCount: 0,
+        textExcerpts: [],
+      }
     : await readAccessibleFrameConsentInventory(page);
   const accessibilityInventory = await readAccessibilityConsentInventory(page);
   const combinedControls = [
@@ -5602,9 +5668,15 @@ async function readConsentUiObservation(
   if (!inventoryProbeInstallSucceeded || !inventory.probeSucceeded) {
     rejectedReasons.add("inventory_probe_failed");
   }
-  const hasActionableClassifiedControl = classifiedControls.some((control) =>
-    control.actionType === "accept_all" || control.actionType === "reject_all"
-  );
+  const hasEligibleActionableControlInSameSurface = (candidate: typeof classifiedControls[number]) =>
+    classifiedControls.some((control) =>
+      control !== candidate &&
+      (control.actionType === "accept_all" || control.actionType === "reject_all") &&
+      !isStaticTextConsentInventoryControl(control) &&
+      !isCompositeConsentInventoryControl(control) &&
+      (control.frameUrl ?? "main") === (candidate.frameUrl ?? "main") &&
+      (control.inventoryContainerKey ?? "unknown") === (candidate.inventoryContainerKey ?? "unknown")
+    );
   const retainedControlKeys = new Set<string>();
   const enrichedControls = classifiedControls.filter((control) => {
     if (
@@ -5626,7 +5698,8 @@ async function readConsentUiObservation(
     if (
       control.actionType === "manage_preferences" &&
       (control.matchStrength === "contextual" || control.matchStrength === "weak") &&
-      !hasActionableClassifiedControl
+      control.inventorySource !== "full_document_cmp" &&
+      !hasEligibleActionableControlInSameSurface(control)
     ) {
       rejectedReasons.add("no_consent_context");
       return false;
@@ -5634,7 +5707,7 @@ async function readConsentUiObservation(
     if (
       control.inventorySource === "accessibility_tree" &&
       control.actionType === "manage_preferences" &&
-      !hasActionableClassifiedControl &&
+      !hasEligibleActionableControlInSameSurface(control) &&
       probeDiagnostics?.rejectionReasons?.includes("footer_nav_page_chrome")
     ) {
       rejectedReasons.add("footer_nav_page_chrome");
@@ -5702,6 +5775,12 @@ async function readConsentUiObservation(
     ),
     candidateControlCount: Math.max(probeDiagnostics?.candidateControlCount ?? 0, combinedControls.length),
     retainedControlCount: enrichedControls.length,
+    inspectedFrameCount: frameInventory.inspectedFrameCount,
+    inaccessibleFrameCount:
+      frameInventory.frameInaccessibleCount + frameInventory.nonBlockingFrameInaccessibleCount,
+    blockingInaccessibleFrameCount: frameInventory.frameInaccessibleCount,
+    nonBlockingInaccessibleFrameCount: frameInventory.nonBlockingFrameInaccessibleCount,
+    nonBlockingInaccessibleFrameReasonCodes: frameInventory.nonBlockingFrameReasonCodes,
     inventorySources: consentInventoryDiagnosticSources(retainedInventorySources, retainedRootSources),
     candidateLabels: unique([
       ...safeStringArray(probeDiagnostics?.candidateLabels, 24),
@@ -6065,6 +6144,9 @@ async function readAccessibleFrameConsentInventory(
 ): Promise<{
   controls: ConsentUiInventoryControl[];
   frameInaccessibleCount: number;
+  nonBlockingFrameInaccessibleCount: number;
+  nonBlockingFrameReasonCodes: Array<"detached_frame" | "canonical_embedded_media">;
+  inspectedFrameCount: number;
   textExcerpts: string[];
 }> {
   const frames = page.frames()
@@ -6073,13 +6155,26 @@ async function readAccessibleFrameConsentInventory(
   const controls: ConsentUiInventoryControl[] = [];
   const textExcerpts: string[] = [];
   let frameInaccessibleCount = 0;
+  let nonBlockingFrameInaccessibleCount = 0;
+  const nonBlockingFrameReasonCodes = new Set<"detached_frame" | "canonical_embedded_media">();
   for (const frame of frames) {
     await frame.waitForLoadState("domcontentloaded", { timeout: 250 }).catch(() => undefined);
     const frameInventory = await boundedFrameInventoryRead(frame).catch(() => {
       return null;
     });
     if (!frameInventory) {
-      frameInaccessibleCount += 1;
+      const relevance = classifyInaccessibleConsentFrame({
+        detached: frame.isDetached(),
+        url: frame.url(),
+      });
+      if (relevance.blocksConsentCompleteness) {
+        frameInaccessibleCount += 1;
+      } else {
+        nonBlockingFrameInaccessibleCount += 1;
+        if (relevance.reasonCode === "detached_frame" || relevance.reasonCode === "canonical_embedded_media") {
+          nonBlockingFrameReasonCodes.add(relevance.reasonCode);
+        }
+      }
       continue;
     }
     controls.push(...frameInventory.controls.slice(0, 8));
@@ -6093,8 +6188,49 @@ async function readAccessibleFrameConsentInventory(
   return {
     controls: controls.slice(0, 12),
     frameInaccessibleCount,
+    nonBlockingFrameInaccessibleCount,
+    nonBlockingFrameReasonCodes: [...nonBlockingFrameReasonCodes],
+    inspectedFrameCount: frames.length,
     textExcerpts,
   };
+}
+
+export function classifyInaccessibleConsentFrame(input: {
+  detached: boolean;
+  url: string;
+}): {
+  blocksConsentCompleteness: boolean;
+  reasonCode: "detached_frame" | "canonical_embedded_media" | "known_cmp_frame" | "unknown_frame";
+} {
+  if (input.detached) {
+    return { blocksConsentCompleteness: false, reasonCode: "detached_frame" };
+  }
+  const url = input.url.trim();
+  const hostname = getHostname(url);
+  const knownCmp = KNOWN_CMP_REGISTRY.some((definition) =>
+    definition.domains.some((domain) => hostname === domain || hostname?.endsWith(`.${domain}`) === true) ||
+    definition.iframePatterns?.some((pattern) => pattern.test(url)) === true ||
+    definition.urlPatterns?.some((pattern) => pattern.test(url)) === true
+  );
+  if (knownCmp) {
+    return { blocksConsentCompleteness: true, reasonCode: "known_cmp_frame" };
+  }
+  const vendor = resolveVendorObservations([{
+    type: "iframe",
+    url,
+    ...(hostname ? { hostname } : {}),
+    sourceScanner: SOURCE_SCANNER,
+    scenario: SCENARIO,
+  }]).find((observation) =>
+    observation.confidence >= 0.9 &&
+    observation.purpose === "infrastructure" &&
+    observation.regulatoryRelevance.includes("embedded_content") &&
+    !observation.regulatoryRelevance.some((value) => value === "consent" || value === "consent_management")
+  );
+  if (vendor) {
+    return { blocksConsentCompleteness: false, reasonCode: "canonical_embedded_media" };
+  }
+  return { blocksConsentCompleteness: true, reasonCode: "unknown_frame" };
 }
 
 function boundedFrameInventoryRead(frame: Frame): Promise<{
@@ -7557,6 +7693,26 @@ function mergeConsentInventoryDiagnostics(
       candidate?.candidateControlCount ?? 0,
     ),
     retainedControlCount,
+    inspectedFrameCount: Math.max(
+      current?.inspectedFrameCount ?? 0,
+      candidate?.inspectedFrameCount ?? 0,
+    ),
+    inaccessibleFrameCount: Math.max(
+      current?.inaccessibleFrameCount ?? 0,
+      candidate?.inaccessibleFrameCount ?? 0,
+    ),
+    blockingInaccessibleFrameCount: Math.max(
+      current?.blockingInaccessibleFrameCount ?? 0,
+      candidate?.blockingInaccessibleFrameCount ?? 0,
+    ),
+    nonBlockingInaccessibleFrameCount: Math.max(
+      current?.nonBlockingInaccessibleFrameCount ?? 0,
+      candidate?.nonBlockingInaccessibleFrameCount ?? 0,
+    ),
+    nonBlockingInaccessibleFrameReasonCodes: unique([
+      ...(current?.nonBlockingInaccessibleFrameReasonCodes ?? []),
+      ...(candidate?.nonBlockingInaccessibleFrameReasonCodes ?? []),
+    ]) as NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["nonBlockingInaccessibleFrameReasonCodes"],
     inventorySources: unique([
       ...(current?.inventorySources ?? []),
       ...(candidate?.inventorySources ?? []),
@@ -10230,6 +10386,7 @@ async function retryPreConsentScreenshotInFreshContext(input: {
         await retryContext.close().catch(() => undefined);
       }
     },
+    (result) => visualCaptureTimingOutcome(result.visualCapture),
   );
 }
 

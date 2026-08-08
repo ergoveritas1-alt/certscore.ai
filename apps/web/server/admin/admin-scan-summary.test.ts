@@ -57,6 +57,15 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   assert.doesNotMatch(source, /getAnonymousScanById/);
 });
 
+test("API activity shows the requested page URL instead of the normalized domain", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+
+  assert.match(pageSource, /\{ label: "Page" \}/);
+  assert.match(pageSource, /title=\{request\.requestedUrl \?\? "Page URL unavailable"\}/);
+  assert.match(pageSource, /\{request\.requestedUrl \?\? "Page URL unavailable"\}/);
+  assert.doesNotMatch(pageSource, /title=\{request\.normalizedDomain \?\? undefined\}/);
+});
+
 test("API activity navigation is read-only and does not repair summaries", async () => {
   const listSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
   const pageSource = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");

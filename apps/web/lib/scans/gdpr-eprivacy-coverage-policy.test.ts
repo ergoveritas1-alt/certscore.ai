@@ -89,7 +89,7 @@ function makeCanonicalConsentAssessment(input: {
   }>;
   coverage?: "complete" | "limited";
   noGo?: boolean;
-  surface?: "observed_actionable" | "observed_non_actionable" | "not_observed";
+  surface?: "observed_actionable" | "observed_non_actionable" | "not_observed" | "unknown";
 }) {
   const finalUrl = "https://consent-assessment.example/";
   const controls = input.controls ?? [];
@@ -2230,6 +2230,39 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats thin policy extraction as 
   assert.match(outcomes.legal_basis_disclosure_observed?.limitation ?? "", /did not extract enough usable policy text/i);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes trusts a usable typed projection for localized policy prose", () => {
+  const portuguesePolicyText = [
+    "Nossa política de privacidade explica como a Havan trata dados pessoais, as finalidades do tratamento e os direitos dos titulares.",
+    "Para gerenciar cookies em navegadores, consulte Chrome: (https://support.google.com/chrome/answer/95647?hl=pt-BR).",
+    "Também estão disponíveis Firefox: (https://support.mozilla.org/pt-BR/kb/ativando-e-desativando-cookies) e Safari: (http://safari.helpmax.net/ps/privacidade-e-seguranca/como-remover-cookies/).",
+  ].join(" ").repeat(12);
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: portuguesePolicyText.length,
+        privacyPolicyUrls: ["https://example.test/politica-de-privacidade"],
+        retainedPrivacyPolicyTextExcerpt: portuguesePolicyText,
+      },
+    },
+    snapshot: {
+      privacy_policy_present: true,
+    },
+  });
+
+  assert.equal(outcomes.privacy_notice_availability?.status, "Observed");
+  assert.equal(
+    outcomes.privacy_notice_availability?.criticalEvidence.retainedEvidence.signalObserved,
+    true,
+  );
+  assert.doesNotMatch(
+    outcomes.privacy_notice_availability?.limitation ?? "",
+    /substantive notice content was not available|substantive policy body not retained/i,
+  );
+  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes explains an empty retained policy separately", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -2750,7 +2783,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes rejects code/config excerpts as G
           extractedTextLength: codePolicyText.length,
           minimumTextLengthRequired: 2500,
           policySurfaceObserved: true,
-          policyTextExtractionStatus: "ok",
+          policyTextExtractionStatus: "low_quality_extracted_code_or_config",
           policyUrlRetained: true
         },
         privacyPolicyPresent: true,
@@ -8143,6 +8176,31 @@ test("limited canonical consent assessment cannot create missing-control finding
   );
   assert.notEqual(outcomes.reject_all_path_availability?.status, "Gap observed");
   assert.notEqual(outcomes.options_settings_preferences_control?.status, "Gap observed");
+  assert.notEqual(outcomes.consent_choice_quality?.status, "Gap observed");
+});
+
+test("limited unknown consent surface retains a normalized unknown A/R/O inventory", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    coverage: "limited",
+    controls: [],
+    surface: "unknown",
+  });
+  const canonicalInput = makeCanonicalConsentPolicyInput(assessment);
+  const inventoryConcern = canonicalInput.normalizedConcerns.find((concern) =>
+    concern.originKey === "consent.control_inventory.partial_first_layer"
+  );
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    ...canonicalInput,
+    snapshot: { cookie_banner_present: false },
+  });
+
+  assert.equal(inventoryConcern?.evidenceBundle.rawEvidence?.firstLayerAcceptState, "unknown");
+  assert.equal(inventoryConcern?.evidenceBundle.rawEvidence?.firstLayerRejectState, "unknown");
+  assert.equal(inventoryConcern?.evidenceBundle.rawEvidence?.firstLayerOptionsState, "unknown");
+  assert.equal(outcomes.accept_consent_control?.status, "Not testable");
+  assert.equal(outcomes.reject_all_path_availability?.status, "Not testable");
+  assert.equal(outcomes.options_settings_preferences_control?.status, "Not testable");
   assert.notEqual(outcomes.consent_choice_quality?.status, "Gap observed");
 });
 

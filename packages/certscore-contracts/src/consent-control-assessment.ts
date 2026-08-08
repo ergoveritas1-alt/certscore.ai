@@ -422,15 +422,28 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     .slice(0, 96);
 
   const firstLayerEvidence = evidence.filter((item) => item.layer === "first_layer");
-  const actionable = firstLayerEvidence.length > 0;
+  const actionableConsentEvidence = firstLayerEvidence.filter((item) => item.intent !== "privacy_opt_out");
+  // A sale/share or advertising opt-out is retained consent-adjacent evidence,
+  // but it does not prove that a GDPR/ePrivacy cookie-consent surface exists.
+  // Keep the privacy choice observable without promoting it to actionable A/R/O.
+  const actionable = actionableConsentEvidence.length > 0;
   const surfaceExplicitlyNotObserved = input.surface?.status === "not_observed";
+  const verifiedRetainedSurfaceObservation = observations.some((observation) =>
+    observation.captureStatus === "observed" &&
+    observation.likelyPresent === true &&
+    observation.layerInspected === "first_layer" &&
+    (observation.incompleteChannels?.length ?? 0) === 0 &&
+    Boolean(canonicalId) &&
+    observation.documentId === canonicalId &&
+    (observation.controls.length > 0 || (observation.evidenceRefs?.length ?? 0) > 0)
+  );
   const surfaceObserved =
     input.surface?.status === "observed_actionable" ||
     input.surface?.status === "observed_non_actionable" ||
     actionable ||
     (
       !surfaceExplicitlyNotObserved &&
-      observations.some((observation) => observation.likelyPresent)
+      verifiedRetainedSurfaceObservation
     );
   const coverageStatus = input.coverage?.status ?? "limited";
   const requiredChannels = unique(input.coverage?.requiredChannels ?? DEFAULT_REQUIRED_CHANNELS);
@@ -522,7 +535,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   if (actionable && input.surface?.status === "not_observed") {
     contradictionRows.push({
       reasonCode: "retained_actionable_control_overrides_later_surface_absence",
-      earlierEvidenceId: firstLayerEvidence[0]?.evidenceId ?? null,
+      earlierEvidenceId: actionableConsentEvidence[0]?.evidenceId ?? null,
       laterEvidenceId: null,
       affectedFields: ["surface"],
     });

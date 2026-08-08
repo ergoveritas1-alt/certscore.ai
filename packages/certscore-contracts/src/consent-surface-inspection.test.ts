@@ -72,6 +72,44 @@ test("complete bounded inspection can retain that no consent surface was observe
   assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "navigation_network")?.status, "not_observed");
 });
 
+test("verified empty consent evidence remains complete through non-terminal scan diagnostics", () => {
+  const input = baseInput();
+  input.runtimeCoverage = {
+    ...input.runtimeCoverage!,
+    limitationKeys: ["scan_no_go_diagnostics"],
+    notes: ["Potential no-go evidence was contradicted by retained normal-site evidence."],
+  };
+  input.scanNoGoDecision = "continue_with_diagnostics";
+  input.screenshots = [{
+    artifactId: "screenshot_pre_consent_settled",
+    capturedAtMs: 950,
+    captureMethod: "primary_viewport_fallback",
+    consentStateAtTime: "pre_consent",
+    pagePhase: "network_idle",
+    path: "/bounded/settled.png",
+    url: "https://example.test/",
+  }];
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    captureStatus: "no_evidence",
+    inventoryOutcome: "complete_empty",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "accessibility_tree", "geometry"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    layerInspected: "first_layer",
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "no_surface_observed_complete_coverage");
+  assert.equal(outcome.coverageStatus, "complete");
+  assert.equal(outcome.inspectionCompleted, true);
+  assert.equal(outcome.limitationKeys.includes("scan_no_go_diagnostics"), false);
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.status, "observed");
+});
+
 test("an ambiguous OK acknowledgment retains a non-actionable consent surface", () => {
   const input = baseInput();
   input.consentUiObservations![0] = {

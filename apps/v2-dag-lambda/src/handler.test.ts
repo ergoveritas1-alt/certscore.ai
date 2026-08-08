@@ -1176,7 +1176,24 @@ test("three-lane merge marks an empty consent-proof lane not testable", () => {
         notes: ["Consent lane reached its deadline."],
       },
     }),
-    runtimeEvidence: canonicalBundleFixture("scan-empty-consent", { runtimeCoverage }),
+    runtimeEvidence: canonicalBundleFixture("scan-empty-consent", {
+      consentUiObservations: [{
+        observationId: "runtime-lane-must-not-fill-consent-proof",
+        observedAtMs: 1_000,
+        likelyPresent: true,
+        basis: ["runtime_lane_only"],
+        textExcerpt: "Aceitar todos Rejeitar todos Preferências",
+        layerInspected: "first_layer",
+        visibleChoiceLabels: ["Aceitar todos", "Rejeitar todos", "Preferências"],
+        acceptControlObserved: true,
+        rejectControlObserved: true,
+        managePreferencesControlObserved: true,
+        controls: [],
+        evidenceRefs: [],
+        confidence: 0.95,
+      }],
+      runtimeCoverage,
+    }),
     policyEvidence: canonicalBundleFixture("scan-empty-consent"),
   });
 
@@ -1187,6 +1204,11 @@ test("three-lane merge marks an empty consent-proof lane not testable", () => {
   assert.ok(merged.scanEvidenceLaneAssessment?.limitationKeys.includes(
     "consent_control_inventory_incomplete",
   ));
+  assert.deepEqual(
+    merged.consentUiObservations,
+    [],
+    "runtime-lane consent-like observations must not fill an empty consent-proof lane",
+  );
 });
 
 test("sharded bundle merge retains exactly one diagnostic screenshot", () => {

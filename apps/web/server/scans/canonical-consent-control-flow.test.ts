@@ -20,11 +20,11 @@ import { withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-pr
 const GENERIC_URL = "https://site-under-test.example/";
 
 type FixtureControl = {
-  actionType: "accept_all" | "reject_all" | "manage_preferences" | "save_preferences" | "other";
+  actionType: "accept_all" | "reject_all" | "manage_preferences" | "save_preferences" | "do_not_sell_share" | "other";
   classifierReasonCodes?: string[];
   classifierVariant?: string;
   label: string;
-  matchedLocale?: "en" | "sl";
+  matchedLocale?: "en" | "pt" | "sl";
   matchedTerm?: string;
   matchStrength?: "direct" | "equivalent" | "contextual";
   presentationType?: "dedicated_button" | "inline_link";
@@ -293,19 +293,20 @@ test("limited empty first-layer inventory remains unknown through every canonica
   };
 
   assert.equal(assessment.assessmentStatus, "limited");
-  assert.equal(assessment.surface.status, "observed_non_actionable");
+  assert.equal(assessment.surface.status, "unknown");
   assert.equal(assessment.controls.accept.state, "unknown");
   assert.equal(assessment.controls.reject.state, "unknown");
   assert.equal(assessment.controls.options.state, "unknown");
   assert.ok(normalizedConcerns.some((concern) =>
-    concern.originKey === "consent.control_inventory.partial_first_layer"
+    concern.originKey === "consent.surface_assessment.unknown" &&
+    concern.evidenceBundle.rawEvidence?.consentSurfaceAssessmentProjectionEvidence === true
   ));
   assert.ok(!normalizedConcerns.some((concern) =>
     concern.originKey === "consent.refusal_path.unavailable_before_nonessential_activity"
   ));
-  assert.equal(byId("accept_consent_control").status, "Not confirmed");
-  assert.equal(byId("options_settings_preferences_control").status, "Not confirmed");
-  assert.equal(byId("reject_all_path_availability").status, "Not confirmed");
+  assert.equal(byId("accept_consent_control").status, "Not testable");
+  assert.equal(byId("options_settings_preferences_control").status, "Not testable");
+  assert.equal(byId("reject_all_path_availability").status, "Not testable");
   assert.equal(byId("reject_all_path_availability").evidenceState, "not_testable");
   assert.equal(getEvidenceLabel(byId("reject_all_path_availability")), "Not testable");
 });
@@ -366,9 +367,9 @@ test("limited no-evidence inventory stays unknown through assessment, concern po
   assert.ok(!normalizedConcerns.some((concern) =>
     concern.originKey === "consent.operational_surface.not_observed"
   ));
-  assert.equal(statusFor("accept_consent_control"), "Not confirmed");
+  assert.equal(statusFor("accept_consent_control"), "Not testable");
   assert.equal(statusFor("reject_all_path_availability"), "Not testable");
-  assert.equal(statusFor("options_settings_preferences_control"), "Not confirmed");
+  assert.equal(statusFor("options_settings_preferences_control"), "Not testable");
 });
 
 test("verified same-session empty consent packet remains factual not-observed through canonical projection", () => {
@@ -454,6 +455,88 @@ test("verified same-session empty consent packet remains factual not-observed th
   assert.equal(row("reject_all_path_availability").evidenceState, "not_observed");
   assert.equal(row("options_settings_preferences_control").evidenceState, "not_observed");
   assert.notEqual(row("reject_all_path_availability").assessmentStatus, "gap_observed");
+});
+
+test("California privacy choice stays separate while absent cookie-consent A/R/O projects as not observed", () => {
+  const packet = retainedEvidencePacket({
+    firstLayerControls: [{
+      actionType: "do_not_sell_share",
+      label: "Do Not Sell or Share My Personal Information",
+    }],
+  });
+  packet.consentUiObservations[0]!.inventoryOutcome = "complete_with_controls";
+  packet.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory", "geometry"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: packet,
+    consentControlGeometryEvidence: geometryEvidence({
+      firstLayerControls: [{
+        actionType: "do_not_sell_share",
+        label: "Do Not Sell or Share My Personal Information",
+      }],
+    }),
+    consentSurfaceInspection: {
+      actionableControlObserved: true,
+      consentSurfaceObserved: true,
+      coverageStatus: "complete",
+      evidenceChannels: [
+        { channel: "page_script_inventory", status: "observed" },
+        { channel: "geometry", status: "observed" },
+      ],
+      inspectionCompleted: true,
+      limitationKeys: [],
+      observedAtMs: 1_000,
+      outcome: "actionable_surface_observed",
+    },
+    finalUrl: GENERIC_URL,
+    noGo: false,
+    requestedUrl: GENERIC_URL,
+  });
+  const runtimeArtifacts = withPersistedFirstLayerConsentEvidence({
+    cmpFrameworkSignalObserved: true,
+    consentControlAssessment: assessment,
+  }, { consent_control_assessment: assessment });
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: [],
+  });
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    normalizedConcerns,
+    runtimeArtifacts,
+    scanCompleted: true,
+    snapshot: { cookie_banner_present: false },
+  });
+  const checklist = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+  const row = (id: string) => {
+    const found = checklist.find((candidate) => candidate.id === id);
+    assert.ok(found);
+    return found;
+  };
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.surface.status, "observed_non_actionable");
+  assert.equal(assessment.controls.privacyOptOut.state, "observed");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
+  assert.ok(normalizedConcerns.some((concern) =>
+    concern.originKey === "consent.operational_surface.not_observed" &&
+    concern.evidenceBundle.rawEvidence?.consentPrivacyChoiceOnlyEvidence === true
+  ));
+  assert.equal(row("consent_surface_observed").status, "Not observed");
+  assert.equal(row("accept_consent_control").evidenceState, "not_observed");
+  assert.equal(row("reject_all_path_availability").evidenceState, "not_observed");
+  assert.equal(row("options_settings_preferences_control").evidenceState, "not_observed");
 });
 
 test("canonical consent-control flow preserves site-agnostic prominence and absence semantics", () => {
@@ -698,6 +781,51 @@ test("canonical consent-control flow consumes Slovenian typed controls without d
       evidence.label === "Naloži samo nujne" &&
       evidence.intent === "reject" &&
       evidence.classifier?.matchedTerm === "naloži samo nujne"
+    ),
+    true,
+  );
+});
+
+test("canonical consent-control flow consumes Portuguese Ketch A/R/O without downstream label inference", () => {
+  const story = projectConsentStory({
+    firstLayerControls: [
+      {
+        actionType: "accept_all",
+        label: "Aceitar todos",
+        matchedLocale: "pt",
+        matchedTerm: "aceitar todos",
+      },
+      {
+        actionType: "reject_all",
+        label: "Rejeitar todos",
+        matchedLocale: "pt",
+        matchedTerm: "rejeitar todos",
+      },
+      {
+        actionType: "manage_preferences",
+        classifierReasonCodes: ["matched_options", "requires_consent_context", "context_satisfied"],
+        label: "Preferências",
+        matchedLocale: "pt",
+        matchedTerm: "preferências",
+        matchStrength: "contextual",
+        presentationType: "dedicated_button",
+      },
+    ],
+  });
+
+  assert.equal(story.assessment.assessmentStatus, "complete");
+  assert.equal(story.assessment.controls.accept.state, "observed");
+  assert.equal(story.assessment.controls.reject.state, "observed");
+  assert.equal(story.assessment.controls.options.state, "observed");
+  assert.equal(story.row.status, "Observed");
+  assert.equal(story.rejectRow.status, "Observed");
+  assert.equal(story.gapFindingObserved, false);
+  assert.equal(story.score.score, 100);
+  assert.equal(
+    story.assessment.evidence.some((evidence) =>
+      evidence.label === "Preferências" &&
+      evidence.intent === "options" &&
+      evidence.classifier?.matchedTerm === "preferências"
     ),
     true,
   );

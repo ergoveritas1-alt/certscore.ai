@@ -1588,6 +1588,37 @@ test("buildLocalV2DagTimingArtifacts retains bounded module and policy timings",
   assert.equal(timing.v2DagPolicyDiscoveryDiagnostics.shortCircuitReason, "static_core_policy_coverage");
 });
 
+test("buildLocalV2DagTimingArtifacts projects retained child outcomes independently from a partial module", async () => {
+  const { buildLocalV2DagTimingArtifacts } = await loadLocalV2DagReport();
+  const timing = buildLocalV2DagTimingArtifacts({
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "partial",
+      startedAt: "2026-08-08T20:00:00.000Z",
+      completedAt: "2026-08-08T20:00:08.000Z",
+      durationMs: 8000,
+      timingBreakdown: [
+        { label: "typed inventory", durationMs: 900, outcome: "completed" },
+        { label: "protected screenshot", durationMs: 4500, outcome: "failed" },
+        { label: "independent visual fallback", durationMs: 700, outcome: "recovered" },
+        { label: "CMP probe", durationMs: 1250, outcome: "timed_out" },
+      ],
+      evidenceRefs: [],
+      errors: ["Protected screenshot failed."],
+    }],
+    policySurfaceObservations: [],
+  } as unknown as CanonicalEvidenceBundle);
+
+  const childOutcomes = new Map(
+    timing.buildPhaseSummaries.slice(1).map((phase) => [phase.phase, phase.outcome]),
+  );
+  assert.equal(timing.buildPhaseSummaries[0]?.outcome, "degraded");
+  assert.equal(childOutcomes.get("preConsentRuntimeScanner:typed inventory"), "success");
+  assert.equal(childOutcomes.get("preConsentRuntimeScanner:protected screenshot"), "failed");
+  assert.equal(childOutcomes.get("preConsentRuntimeScanner:independent visual fallback"), "success");
+  assert.equal(childOutcomes.get("preConsentRuntimeScanner:CMP probe"), "degraded");
+});
+
 test("buildLocalV2DagTimingArtifacts tolerates retained legacy bundles without module timings", async () => {
   const { buildLocalV2DagTimingArtifacts } = await loadLocalV2DagReport();
   const timing = buildLocalV2DagTimingArtifacts({

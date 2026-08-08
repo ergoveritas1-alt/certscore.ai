@@ -544,6 +544,33 @@ test("does not count contextual options words in static banner text as first-lay
   assert.equal(staticTextCandidate, undefined);
 });
 
+test("captures a Portuguese Preferências button only inside a first-layer cookie surface", async () => {
+  const artifact = await captureFixture(`
+    <main><button>Preferências</button></main>
+    <section id="ketch-banner" role="dialog" aria-label="Preferências de cookies" style="position: fixed; inset: auto 0 0; padding: 20px; background: white;">
+      <p>Nós coletamos cookies para oferecer um serviço personalizado.</p>
+      <span aria-label="Cookies- Privacy Tools" title="Preferências" tabindex="0" onclick="void 0">Preferências</span>
+      <span aria-label="deny cookies" tabindex="0" onclick="void 0"><div class="dp-bar-button" title="Rejeitar">Rejeitar todos</div></span>
+      <span aria-label="dismiss cookie message" tabindex="0" onclick="void 0"><div class="dp-bar-button" title="Aceitar">Aceitar todos</div></span>
+    </section>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.cmpName, "Ketch");
+  assert.equal(artifact.summary.firstLayerAccept, true, JSON.stringify(artifact.candidates, null, 2));
+  assert.equal(artifact.summary.firstLayerReject, true, JSON.stringify(artifact.candidates, null, 2));
+  assert.equal(
+    artifact.summary.firstLayerOptions,
+    true,
+    JSON.stringify(artifact.candidates.filter((candidate) => candidate.label === "Preferências"), null, 2),
+  );
+  const optionsCandidates = artifact.candidates.filter((candidate) =>
+    candidate.actionType === "manage_preferences"
+  );
+  assert.equal(optionsCandidates.length, 1);
+  assert.equal(optionsCandidates[0]?.decisionStatus, "confirmed_visible");
+});
+
 test("captures Microsoft-style Manage cookies as a first-layer options control", async () => {
   const artifact = await captureFixture(`
     <div style="position: fixed; left: 0; top: 0; right: 0; padding: 20px; background: white;">

@@ -1763,6 +1763,52 @@ test("dedicated consent-proof capture retains same-session A/R/O evidence withou
   }
 });
 
+test("dedicated consent-proof capture retains delayed Portuguese Ketch A/R/O and synchronized visual proof", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-consent-proof-ketch-pt-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-late-ketch-portuguese-controls"),
+      path.join(tempRoot, "consent-proof-ketch-pt"),
+      "fast",
+      "always",
+      "viewport_first",
+      12_000,
+      "consent_proof",
+    );
+    const observation = bundle.consentUiObservations[0];
+    const controlLabels = observation?.controls.map((control) => control.label) ?? [];
+
+    assert.equal(bundle.cmpRuntimeObservations.some((cmp) => cmp.vendor === "Ketch"), true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.ok(controlLabels.includes("Aceitar todos"));
+    assert.ok(controlLabels.includes("Rejeitar todos"));
+    assert.ok(controlLabels.includes("Preferências"));
+    assert.equal(observation?.inventoryOutcome, "complete_with_controls");
+    assert.ok(bundle.screenshots.some((screenshot) =>
+      screenshot.artifactId === "screenshot_pre_consent_settled" ||
+      screenshot.artifactId === "screenshot_pre_consent_cmp_controls"
+    ));
+    assert.equal(
+      bundle.modulesRun[0]?.timingBreakdown?.some((entry) =>
+        entry.label === "early CMP-gated passive render wait"
+      ),
+      true,
+      "the consent-proof lane should independently recognize Ketch and enter its bounded passive render gate",
+    );
+    assert.equal(
+      observation?.basis.includes("recapture:post_passive_cmp_screenshot"),
+      true,
+      "the delayed Ketch controls should be retained from the same untouched consent-proof session",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner retains hit-testable transparent consent input overlays", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-transparent-input-overlays-"));
