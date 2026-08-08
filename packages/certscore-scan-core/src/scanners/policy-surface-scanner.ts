@@ -2071,7 +2071,7 @@ async function processPolicyCandidate({
     return {
       observation: observationFromCandidate(effectiveCandidate, {
         status: "failed",
-        documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection, analysisVisibleText),
+        documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection),
         httpStatus: fetched.status,
         finalUrl: fetchedFinalUrl,
         redirectChain: policyFetchRedirectChain(fetched),
@@ -2224,7 +2224,7 @@ async function processPolicyCandidate({
   return {
     observation: observationFromCandidate(effectiveCandidate, {
       status: "fetched",
-      documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection, analysisVisibleText),
+      documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection),
       httpStatus: fetched.status,
       finalUrl: fetchedFinalUrl,
       redirectChain: policyFetchRedirectChain(fetched),
@@ -4446,14 +4446,18 @@ async function selectOneHopPolicyIndexChildren(input: {
       "one_hop_policy_document_candidate",
     ]),
   }));
-  const privacyCandidates = childCandidates.filter((candidate) =>
-    candidate.deterministicSurfaceType === "privacy_policy" &&
-    candidate.fetchable &&
-    candidate.sameOrigin &&
-    candidate.deterministicScore >= 0.5
-  );
+  const privacyCandidates = childCandidates.flatMap((candidate) => {
+    const privacyCandidate = privacyIndexPrivacyChildCandidate(candidate);
+    return privacyCandidate &&
+      privacyCandidate.fetchable &&
+      privacyCandidate.sameOrigin &&
+      privacyCandidate.deterministicScore >= 0.5
+      ? [privacyCandidate]
+      : [];
+  });
+  const privacyCandidateUrls = new Set(privacyCandidates.map((candidate) => candidate.normalizedUrl));
   const nonPrivacyCandidates = childCandidates.filter((candidate) =>
-    candidate.deterministicSurfaceType !== "privacy_policy"
+    !privacyCandidateUrls.has(candidate.normalizedUrl)
   );
 
   if (privacyCandidates.length === 0) {
@@ -4485,7 +4489,7 @@ async function selectOneHopPolicyIndexChildren(input: {
 
   const websitePrivacyCandidates = privacyCandidates.filter((candidate) =>
     /\bwebsite\s*(?:and|&)\s*cookies?\b|\bwebsite\s+privacy\b/i.test(
-      `${candidate.linkText} ${candidate.surroundingTextExcerpt ?? ""}`,
+      candidate.linkText,
     )
   );
   if (websitePrivacyCandidates.length === 1) {
@@ -4585,6 +4589,32 @@ async function selectOneHopPolicyIndexChildren(input: {
   }
 }
 
+function privacyIndexPrivacyChildCandidate(
+  candidate: PolicySurfaceCandidate,
+): PolicySurfaceCandidate | undefined {
+  if (candidate.deterministicSurfaceType === "privacy_policy") return candidate;
+  if (
+    candidate.deterministicSurfaceType !== "cookie_policy" ||
+    !candidate.deterministicClassifierReasonCodes.includes("variant_combined_privacy_cookie_surface")
+  ) {
+    return undefined;
+  }
+  return {
+    ...candidate,
+    deterministicSurfaceType: "privacy_policy",
+    deterministicClassifierReasonCodes: uniqueStrings([
+      ...candidate.deterministicClassifierReasonCodes,
+      "combined_privacy_cookie_surface",
+      "privacy_index_child_projection",
+    ]),
+    selectionReasonCodes: uniqueStrings([
+      ...(candidate.selectionReasonCodes ?? []),
+      "combined_privacy_cookie_surface",
+      "privacy_index_child_projection",
+    ]),
+  };
+}
+
 function selectLatestDatedPrivacyDocument(
   candidates: PolicySurfaceCandidate[],
   scanStartedAtMs: number,
@@ -4633,13 +4663,18 @@ function observationsForUnselectedPrivacyIndexChildren(
 function policyDocumentRoleForChildSelection(
   candidate: PolicySurfaceCandidate,
   selection: { fetchCandidates: PolicySurfaceCandidate[]; observedChildCandidates: PolicySurfaceCandidate[] },
-  documentText: string,
 ): "policy_document" | "policy_index" | "unknown" {
   if (candidate.deterministicSurfaceType !== "privacy_policy") return "unknown";
-  if (shouldUseDirectPolicyDocumentText(documentText)) return "policy_document";
-  const privacyChildCount = [...selection.fetchCandidates, ...selection.observedChildCandidates]
+  const retainedChildren = [...selection.fetchCandidates, ...selection.observedChildCandidates];
+  if (retainedChildren.some((child) =>
+    child.selectionReasonCodes?.includes("website_privacy_notice_for_scanned_site")
+  )) {
+    return "policy_index";
+  }
+  const privacyChildCount = retainedChildren
     .filter((child) => child.deterministicSurfaceType === "privacy_policy").length;
-  return privacyChildCount >= 2 ? "policy_index" : "policy_document";
+  if (privacyChildCount >= 2) return "policy_index";
+  return "policy_document";
 }
 
 export function isGdprNoticeSupplementLink(linkText: string, normalizedUrl: string, surroundingTextExcerpt: string): boolean {

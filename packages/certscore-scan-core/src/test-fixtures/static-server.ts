@@ -2887,7 +2887,11 @@ function policyDocumentHtml(pathname: string): string | undefined {
     },
     "/policies/website-privacy-index": {
       title: "Privacy Notices",
-      body: "Select the privacy notice that applies to you.",
+      body: [
+        "Privacy at Example Test. We are committed to protecting personal information and explain how the university handles data across its activities.",
+        "This privacy hub introduces our approach, governance, security, accountability, and contact routes. Select the privacy notice that applies to you for the full disclosures relevant to that relationship.",
+        "Separate notices cover students, staff, research participants, visitors, website users, cookies, events, and other university services.",
+      ].join(" ").repeat(4),
     },
     "/policies/website-and-cookies-privacy": {
       title: "Website and Cookies Privacy Notice",
@@ -2962,7 +2966,7 @@ function policyDocumentHtml(pathname: string): string | undefined {
       <h1>${escapeHtml(doc.title)}</h1>
       <p>${escapeHtml(doc.body)}</p>
       <a href="/policies/student-privacy">Student Privacy Notice</a>
-      <a href="/policies/website-and-cookies-privacy">Website and Cookies Privacy Notice</a>
+      <a href="/policies/website-and-cookies-privacy">Website and Cookies</a>
     </main>
   </body>
 </html>`;

@@ -105,6 +105,21 @@ test("classifies the retained Slovenian privacy and combined privacy-cookie labe
   );
 });
 
+test("classifies an English website-and-cookies notice as a combined privacy-cookie surface", () => {
+  const combined = classifyPrivacySurface({
+    linkText: "Website and Cookies",
+    localeHints: ["en"],
+  });
+
+  assert.equal(combined.surfaceType, "cookie_policy");
+  assert.equal(combined.matchedLocale, "en");
+  assert.equal(combined.variant, "combined_privacy_cookie_surface");
+  assert.equal(
+    combined.reasonCodes.includes("variant_combined_privacy_cookie_surface"),
+    true,
+  );
+});
+
 test("classifies Dutch privacy-reglement document links without visible anchor text", () => {
   const classification = classifyPrivacySurface({
     linkText: "https://over.example.test/wp-content/uploads/2026/03/NOS-Privacy-Reglement-Maart-2026.pdf",
