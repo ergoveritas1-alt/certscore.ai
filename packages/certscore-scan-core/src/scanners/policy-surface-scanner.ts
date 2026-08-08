@@ -5645,9 +5645,9 @@ function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13Dis
     },
     {
       disclosureType: "supervisory_authority",
-      pattern: /(?:supervisory authority|data protection authority|information commissioner['’]s office|lodge a complaint|complain to (?:a )?(?:regulator|authority)|\bico\b|\bcnil\b|\bdpc\b)/i,
+      pattern: /(?:(?:lodge|file|submit|make) a complaint.{0,160}(?:supervisory authority|data protection authority|information commissioner['’]s office|regulator|authority)|complain to (?:a )?(?:regulator|authority)|supervisory authority|data protection authority|\bico\b|\bcnil\b|\bdpc\b)/i,
       partialPattern: /(?:compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)|formal written complaints|regulatory authorities|local data protection authorities|unresolved complaints?|regulators?.{0,120}(?:complaints?|authorities|resolve))/i,
-      excerptPatterns: [/compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)/i, /formal written complaints/i, /regulatory authorities/i, /local data protection authorities/i, /unresolved complaints?/i, /supervisory authority/i, /data protection authority/i, /information commissioner['’]s office/i, /lodge a complaint/i, /complain to (?:a )?(?:regulator|authority)/i, /\bico\b/i, /\bcnil\b/i, /\bdpc\b/i],
+      excerptPatterns: [/(?:lodge|file|submit|make) a complaint.{0,160}(?:supervisory authority|data protection authority|information commissioner['’]s office|regulator|authority)/i, /complain to (?:a )?(?:regulator|authority)/i, /compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)/i, /formal written complaints/i, /regulatory authorities/i, /local data protection authorities/i, /unresolved complaints?/i, /supervisory authority/i, /data protection authority/i, /\bico\b/i, /\bcnil\b/i, /\bdpc\b/i],
     },
     {
       disclosureType: "automated_decision_making_or_profiling",
@@ -5744,7 +5744,7 @@ function confidenceForArticle13DisclosureSignal(
       if (/\b(?:data protection officer|\bdpo\b)\b/i.test(text)) return 0.9;
       return 0.78;
     case "supervisory_authority":
-      if (/\b(?:supervisory authority|data protection authority|information commissioner['’]s office|lodge a complaint|complain to (?:a )?(?:supervisory|data protection) authority|\bico\b|\bcnil\b|\bdpc\b)\b/i.test(text)) return 0.9;
+      if (/\b(?:(?:lodge|file|submit|make) a complaint.{0,160}(?:supervisory authority|data protection authority|information commissioner['’]s office|regulator|authority)|complain to (?:a )?(?:supervisory|data protection) authority|supervisory authority|data protection authority|\bico\b|\bcnil\b|\bdpc\b)\b/i.test(text)) return 0.9;
       return 0.66;
     case "automated_decision_making_or_profiling":
       if (/\b(?:solely automated|automated decision(?:-making| making)?.{0,160}(?:legal or similarly significant effects|meaningful information about the logic involved))\b/i.test(text)) return 0.9;
