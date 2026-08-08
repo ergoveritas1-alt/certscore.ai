@@ -2902,7 +2902,7 @@ function policyDocumentHtml(pathname: string): string | undefined {
         "We share information with hosting, analytics, security, and professional service providers.",
         "We do not keep data longer than is necessary and follow the University's retention schedule.",
         "You may request access, correction, deletion, restriction, portability, or object to processing.",
-        "Contact our data protection officer at privacy@example.test. If you are not satisfied, you may submit a complaint to the Information Commissioner's Office.",
+        "Contact our data protection officer at privacy@example.test. If you are not satisfied, you may submit a complaint to the Information Commissioner&rsquo;s Office.",
         "Additional explanatory text describes the controller, purposes, legal bases, recipients, retention, individual rights, and complaint routes for website visitors.",
       ].join(" ").repeat(4),
     },

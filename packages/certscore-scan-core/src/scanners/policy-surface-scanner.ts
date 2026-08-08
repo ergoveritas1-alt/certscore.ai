@@ -5585,7 +5585,8 @@ function mergePolicyFacts(
 }
 
 function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13DisclosureSignals" | "discardedArticle13DisclosureSignals"> {
-  if (!assessPolicyTextQuality(text).usable) {
+  const normalizedText = normalizeWhitespace(decodeBasicHtmlEntities(text));
+  if (!assessPolicyTextQuality(normalizedText).usable) {
     return {
       article13DisclosureSignals: [],
       discardedArticle13DisclosureSignals: [],
@@ -5659,15 +5660,15 @@ function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13Dis
   const discardedArticle13DisclosureSignals: PolicySurfaceObservation["discardedArticle13DisclosureSignals"] = [];
 
   for (const rule of rules) {
-    const rawStatus = rule.pattern.test(text)
+    const rawStatus = rule.pattern.test(normalizedText)
       ? "observed" as const
-      : rule.partialPattern?.test(text)
+      : rule.partialPattern?.test(normalizedText)
         ? "partial" as const
         : null;
     if (!rawStatus) {
       continue;
     }
-    const evidenceText = boundedExcerptForPatterns(text, rawStatus === "partial" && rule.partialPattern
+    const evidenceText = boundedExcerptForPatterns(normalizedText, rawStatus === "partial" && rule.partialPattern
       ? [rule.partialPattern, ...rule.excerptPatterns]
       : rule.excerptPatterns).slice(0, rule.maxEvidenceChars ?? 320);
     const rejectReason = article13DisclosureRejectReason(evidenceText, rule.disclosureType);
@@ -8315,7 +8316,7 @@ function decodeBasicHtmlEntities(value: string): string {
   return value
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
-    .replace(/&apos;|&#39;|&#x27;/gi, "'")
+    .replace(/&apos;|&lsquo;|&rsquo;|&#39;|&#x27;|&#8216;|&#8217;|&#x2018;|&#x2019;/gi, "'")
     .replace(/&quot;|&#34;|&#x22;/gi, "\"")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">");
