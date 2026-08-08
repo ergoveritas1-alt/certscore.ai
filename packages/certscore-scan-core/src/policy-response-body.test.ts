@@ -11,6 +11,7 @@ import {
   awaitAbortablePolicyOperation,
   canonicalPolicyUrlIdentity,
   decodeBoundedPolicyResponseBody,
+  policyResponseTransportForEnvironment,
   readBoundedResponseBody,
   requestBoundedPolicyResponse,
 } from "./scanners/policy-surface-scanner.js";
@@ -87,6 +88,18 @@ test("policy URL identity removes sensitive query names and values", () => {
   );
 });
 
+test("policy response transport avoids bundled fetch inside AWS Lambda", () => {
+  assert.equal(policyResponseTransportForEnvironment({}), "fetch_with_node_fallback");
+  assert.equal(
+    policyResponseTransportForEnvironment({ AWS_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-local-lambda" }),
+    "node",
+  );
+  assert.equal(
+    policyResponseTransportForEnvironment({ AWS_LAMBDA_RUNTIME_API: "127.0.0.1:9001" }),
+    "node",
+  );
+});
+
 test("policy operations stop when transport work ignores abort before response headers", async () => {
   const controller = new AbortController();
   const startedAtMs = Date.now();
@@ -113,6 +126,8 @@ test("policy HTTP transport destroys a socket stalled before response headers", 
   const pending = requestBoundedPolicyResponse(
     `http://127.0.0.1:${address.port}/stalled-policy`,
     controller.signal,
+    5,
+    "node",
   );
 
   setTimeout(() => controller.abort(new Error("policy socket deadline reached")), 20);
@@ -137,6 +152,8 @@ test("policy HTTP transport destroys a response stream stalled after headers", a
   const pending = requestBoundedPolicyResponse(
     `http://127.0.0.1:${address.port}/half-open-policy`,
     controller.signal,
+    5,
+    "node",
   );
 
   setTimeout(() => controller.abort(new Error("policy response deadline reached")), 20);
@@ -145,6 +162,69 @@ test("policy HTTP transport destroys a response stream stalled after headers", a
   assert.ok(Date.now() - startedAtMs < 250);
   server.closeAllConnections();
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+});
+
+test("Lambda-safe policy transport follows redirects without returning to bundled fetch", async () => {
+  const policyText = "Privacy notice with retention, recipient, rights, and transfer disclosures.";
+  const server = createServer((request, response) => {
+    if (request.url === "/redirect") {
+      response.writeHead(302, { location: "/policy" });
+      response.end();
+      return;
+    }
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(policyText);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+
+  try {
+    const result = await requestBoundedPolicyResponse(
+      `http://127.0.0.1:${address.port}/redirect`,
+      new AbortController().signal,
+      5,
+      "node",
+    );
+
+    assert.equal(result.status, 200);
+    assert.equal(result.finalUrl, `http://127.0.0.1:${address.port}/policy`);
+    assert.equal(new TextDecoder().decode(result.body), policyText);
+    assert.equal(result.truncated, false);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test("Lambda-safe policy transport rejects an abruptly closed response", async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, {
+      "content-length": "1000",
+      "content-type": "text/html; charset=utf-8",
+    });
+    response.write("<html><body>partial privacy notice");
+    response.socket?.destroy();
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+
+  try {
+    await assert.rejects(
+      requestBoundedPolicyResponse(
+        `http://127.0.0.1:${address.port}/abrupt-policy`,
+        new AbortController().signal,
+        5,
+        "node",
+      ),
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });
 
 test("policy response reads retain a bounded prefix and cancel the remaining stream", async () => {

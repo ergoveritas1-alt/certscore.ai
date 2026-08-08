@@ -28,7 +28,11 @@ import {
   inflateSync,
 } from "node:zlib";
 import type { ArtifactWriter } from "../artifact-writer.js";
-import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
+import {
+  chromiumContextOptions,
+  chromiumLaunchOptions,
+  isAwsLambdaRuntime,
+} from "../playwright-runtime.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
 import { getRegistrableDomainFromUrl } from "../domain-utils.js";
 import { httpTransportFallbackUrl } from "../transport-fallback.js";
@@ -6388,11 +6392,28 @@ type BoundedPolicyResponse = {
   truncated: boolean;
 };
 
+export type PolicyResponseTransport = "fetch_with_node_fallback" | "node";
+
+export function policyResponseTransportForEnvironment(
+  env: NodeJS.ProcessEnv = process.env,
+): PolicyResponseTransport {
+  // Node's bundled Undici parser can terminate the process when a bounded
+  // Web Streams response is paused and its peer closes the socket. Lambda
+  // policy lanes use the existing bounded node:http(s) transport so that a
+  // remote response can fail closed without bypassing the handler's terminal
+  // publication path.
+  return isAwsLambdaRuntime(env) ? "node" : "fetch_with_node_fallback";
+}
+
 export async function requestBoundedPolicyResponse(
   url: string,
   signal: AbortSignal,
   redirectsRemaining = 5,
+  transport = policyResponseTransportForEnvironment(),
 ): Promise<BoundedPolicyResponse> {
+  if (transport === "node") {
+    return requestBoundedPolicyResponseWithNodeTransport(url, signal, redirectsRemaining);
+  }
   throwIfAborted(signal);
   try {
     return await requestBoundedPolicyResponseWithFetch(url, signal, redirectsRemaining);
@@ -6494,7 +6515,7 @@ async function requestBoundedPolicyResponseWithNodeTransport(
       if (status >= 300 && status < 400 && location && redirectsRemaining > 0) {
         incoming.resume();
         const redirectedUrl = new URL(location, parsed).toString();
-        void requestBoundedPolicyResponse(redirectedUrl, signal, redirectsRemaining - 1)
+        void requestBoundedPolicyResponseWithNodeTransport(redirectedUrl, signal, redirectsRemaining - 1)
           .then(finishResolve, finishReject);
         return;
       }
@@ -6536,12 +6557,21 @@ async function requestBoundedPolicyResponseWithNodeTransport(
         status,
         truncated,
       }));
+      incoming.once("aborted", () => {
+        finishReject(new Error("Policy HTTP response ended before its declared body completed."));
+      });
+      incoming.once("close", () => {
+        if (!incoming.complete && !truncated) {
+          finishReject(new Error("Policy HTTP response closed before completion."));
+        }
+      });
       incoming.once("error", finishReject);
     });
     const abortRequest = () => {
       const reason = abortReason(signal);
       const error = new Error(reason?.message ?? "Policy HTTP request aborted.", { cause: reason ?? undefined });
       error.name = "AbortError";
+      finishReject(error);
       activeResponse?.destroy(error);
       request.destroy(error);
     };

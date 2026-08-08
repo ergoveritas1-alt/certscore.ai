@@ -1,4 +1,4 @@
-import base64, hashlib, hmac, json, os, time, uuid, urllib.request, urllib.error
+import base64, datetime, hashlib, hmac, json, os, time, uuid, urllib.parse, urllib.request, urllib.error
 import boto3
 
 REGION = os.environ.get("AWS_REGION", "us-west-2")
@@ -78,6 +78,76 @@ def corpus_preflight(pages):
 
 def status(x):
     return str((x or {}).get("status", "")).lower()
+
+def parse_utc_timestamp(value):
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        return parsed.astimezone(datetime.timezone.utc)
+    except ValueError:
+        return None
+
+def scan_creation_metadata_reports_reuse(created):
+    created = created if isinstance(created, dict) else {}
+    return bool(
+        created.get("reused") is True
+        or created.get("executionMode") == "reused_scan"
+        or created.get("freshnessDecision") in ("reused_existing_scan", "returned_stale_while_refreshing")
+    )
+
+def assess_authoritative_freshness(requested_url, run_started_at, authoritative, created=None):
+    """Verify freshness and page identity from the persisted scan resource.
+
+    MCP creation metadata is retained only as a diagnostic because an active
+    refresh can transiently describe reuse even when the durable scan is new.
+    """
+    authoritative = authoritative if isinstance(authoritative, dict) else {}
+    returned_url = authoritative.get("url")
+    created_at = authoritative.get("createdAt")
+    requested = urllib.parse.urlsplit(requested_url) if isinstance(requested_url, str) else None
+    returned = urllib.parse.urlsplit(returned_url) if isinstance(returned_url, str) else None
+    run_started = parse_utc_timestamp(run_started_at)
+    scan_created = parse_utc_timestamp(created_at)
+    reasons = []
+    reason_codes = []
+    if not requested or not requested.hostname or not returned or not returned.hostname:
+        reason_codes.append("authoritative_url_unavailable")
+        reasons.append("the persisted scan URL was unavailable")
+    elif requested.hostname.lower() != returned.hostname.lower() or requested.path != returned.path:
+        reason_codes.append("authoritative_path_mismatch")
+        reasons.append("the persisted scan did not retain the requested host and page path")
+    if run_started is None or scan_created is None:
+        reason_codes.append("authoritative_creation_time_unavailable")
+        reasons.append("the persisted scan creation time could not be verified")
+    elif scan_created < run_started - datetime.timedelta(seconds=30):
+        reason_codes.append("authoritative_scan_reused")
+        reasons.append("the persisted scan predates the sentinel run")
+    issue = bool(reason_codes)
+    return {
+        "authoritativeCreatedAt": created_at if isinstance(created_at, str) else None,
+        "authoritativeUrl": returned_url if isinstance(returned_url, str) else None,
+        "creationMetadataFreshnessDecision": created.get("freshnessDecision") if isinstance(created, dict) else None,
+        "creationMetadataReportedReuse": scan_creation_metadata_reports_reuse(created),
+        "freshness": "reused_or_path_mismatch" if issue else "new_path",
+        "freshnessIssue": issue,
+        "freshnessReason": "; ".join(reasons) if reasons else None,
+        "freshnessReasonCodes": reason_codes,
+    }
+
+def load_authoritative_scan(scan_id, api_key):
+    headers = {"authorization": "Bearer " + api_key}
+    last_error = None
+    for attempt in range(3):
+        try:
+            return request(API + "/api/v2/scans/" + scan_id, headers=headers, timeout=10)
+        except Exception as error:
+            last_error = error
+            if attempt < 2:
+                time.sleep(2 * (attempt + 1))
+    raise RuntimeError("authoritative scan verification failed: " + str(last_error)[:400])
 
 def rest_scan(url, loc, client, key):
     headers = {"authorization": "Bearer " + key, "x-certscore-client": client, "content-type": "application/json"}
@@ -238,13 +308,17 @@ def handler(event, context):
             out = fn(ROOT + p["url"], loc, jwt_secret) if transport == "mcp" else fn(ROOT + p["url"], loc, transport, key)
             sid, st, bundle, created = out; observed = signals(bundle)
             missing = [s for s in p.get("expectedSignals", []) if not observed.get(s)]
-            requested_path = p["url"]
-            returned_url = (created or {}).get("url") or (created or {}).get("request", {}).get("url")
-            reused = bool((created or {}).get("reused") or (created or {}).get("executionMode") == "reused_scan" or (created or {}).get("freshnessDecision") == "reused_existing_scan")
-            freshness_issue = reused or (returned_url and requested_path not in str(returned_url))
-            row = {"page": p["key"], "requestedUrl": ROOT + p["url"], "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", "freshness": "reused_or_path_mismatch" if freshness_issue else "new_path"}
+            requested_url = ROOT + p["url"]
+            try:
+                authoritative = load_authoritative_scan(sid, key)
+                freshness = assess_authoritative_freshness(requested_url, started, authoritative, created)
+            except Exception as error:
+                freshness = assess_authoritative_freshness(requested_url, started, {}, created)
+                freshness["freshnessVerificationError"] = str(error)[:500]
+            freshness_issue = freshness["freshnessIssue"]
+            row = {"page": p["key"], "requestedUrl": requested_url, "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", **freshness}
             if missing: corpus_issues.append({**row, "issue": "required signals missing: " + ", ".join(missing)})
-            if freshness_issue: scanner_failures.append({**row, "issue": "freshness/path invariant failed: CertScore reused a scan or did not retain the requested page path"})
+            if freshness_issue: scanner_failures.append({**row, "issue": "freshness/path invariant failed: " + freshness["freshnessReason"]})
             if status(st) not in {"completed", "completed_limited", "complete", "limited"}:
                 scanner_failures.append({**row, "issue": "scan did not reach a completed terminal status"})
         except Exception as e:
