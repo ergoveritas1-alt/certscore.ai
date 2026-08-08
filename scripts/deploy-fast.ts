@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -426,7 +426,14 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
       region,
       path.join(dockerConfigRoot, region)
     ])) as Record<(typeof SCANNER_REGIONS)[number], string>;
-    await Promise.all(Object.values(dockerConfigByRegion).map((directory) => mkdir(directory, { recursive: true })));
+    await Promise.all(Object.values(dockerConfigByRegion).map(async (directory) => {
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        path.join(directory, "config.json"),
+        `${JSON.stringify({ auths: {} }, null, 2)}\n`,
+        "utf8",
+      );
+    }));
 
     try {
       // Each region gets an isolated temporary Docker credential store. This
