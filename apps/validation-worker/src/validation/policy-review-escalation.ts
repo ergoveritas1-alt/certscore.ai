@@ -465,11 +465,11 @@ export function composeHybridPolicyReviewArtifact(input: {
   const rows = POLICY_REVIEW_TOPICS.flatMap((topic) => {
     const nanoRow = nanoByTopic.get(topic);
     const miniRow = miniByTopic.get(topic);
-    const row = input.topics.includes(topic)
-      ? miniRow?.status === "observed" && nanoRow?.status !== "observed"
-        ? nanoRow
-        : miniRow
-      : nanoRow;
+    // Mini is authoritative whenever routing escalates a topic. Its row has
+    // already been checked against the complete retained packet by the
+    // deterministic invariants, so Nano disagreement must not suppress
+    // evidence Mini recovered from the bounded topic review.
+    const row = input.topics.includes(topic) ? miniRow : nanoRow;
     return row ? [row] : [];
   });
   const completed =

@@ -52,6 +52,10 @@ const workerEnvSchema = z.object({
   CERTSCORE_ESCALATION_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
   CERTSCORE_MINI_REVIEW_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional())
     .transform((value) => value === "1"),
+  CERTSCORE_MINI_EXCEPTION_ROUTING_ENABLED: z.preprocess(
+    emptyStringToUndefined,
+    z.enum(["0", "1"]).optional()
+  ).transform((value) => value === "1"),
   CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED: z.preprocess(
     emptyStringToUndefined,
     z.enum(["0", "1"]).optional()

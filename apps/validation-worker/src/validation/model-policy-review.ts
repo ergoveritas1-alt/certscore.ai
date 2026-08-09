@@ -1352,6 +1352,167 @@ function hasSufficientCookiePolicyCoverage(packet: PolicyReviewPacket) {
   );
 }
 
+export function buildDeterministicCookieInventoryRow(
+  packet: PolicyReviewPacket,
+): PolicyModelReviewRow {
+  const policyIdentifiers = policyCookieIdentifiers(packet);
+  const runtimeIdentifiers = runtimeCookieIdentifiers(packet);
+  const identifiers = [...new Set([...policyIdentifiers, ...runtimeIdentifiers])];
+  if (identifiers.length > 0) {
+    const policyDocuments = policyIdentifiers.length > 0
+      ? packet.documents.filter((document) =>
+          isTargetPolicyDocument(document) && document.documentType === "cookie_policy"
+        )
+      : [];
+    return policyModelReviewRowSchema.parse({
+      topic: "cookie_inventory",
+      reviewSource: "deterministic",
+      status: "observed",
+      confidence: runtimeIdentifiers.length > 0 && !runtimeCoverageIsUsable(packet) ? 0.85 : 0.95,
+      sourceDocumentIds: policyDocuments.map((document) => document.documentId).slice(0, 20),
+      sourceUrls: policyDocuments.map((document) => document.canonicalUrl).slice(0, 20),
+      evidenceExcerpts: [`Retained cookie/storage names: ${identifiers.slice(0, 20).join(", ")}.`],
+      conflictingExcerpts: [],
+      reasonCodes: [
+        "retained_cookie_storage_name_observed",
+        ...(policyIdentifiers.length > 0 ? ["policy_cookie_name_observed"] : []),
+        ...(runtimeIdentifiers.length > 0 ? ["runtime_cookie_storage_name_observed"] : []),
+        "deterministic_runtime_evidence_projection",
+        "policy_review_invariants_applied_v1",
+      ],
+      rationale:
+        `The scan retained ${identifiers.length} identifiable cookie/storage name${identifiers.length === 1 ? "" : "s"} from ${policyIdentifiers.length > 0 && runtimeIdentifiers.length > 0 ? "policy and runtime evidence" : policyIdentifiers.length > 0 ? "policy evidence" : "runtime evidence"}.`,
+    });
+  }
+
+  const sufficientCoverage = topicCoverageIsSufficient(packet, "cookie_inventory") ||
+    hasSufficientCookiePolicyCoverage(packet);
+  return policyModelReviewRowSchema.parse({
+    topic: "cookie_inventory",
+    reviewSource: "deterministic",
+    status: sufficientCoverage
+      ? "not_observed_with_sufficient_coverage"
+      : "insufficient_retained_evidence",
+    confidence: sufficientCoverage ? 0.9 : 0.75,
+    sourceDocumentIds: [],
+    sourceUrls: [],
+    evidenceExcerpts: [],
+    conflictingExcerpts: [],
+    reasonCodes: [
+      "deterministic_cookie_storage_name_required",
+      sufficientCoverage
+        ? "retained_cookie_categories_without_named_identifiers"
+        : "cookie_storage_name_coverage_not_retained",
+      "deterministic_runtime_evidence_projection",
+      "policy_review_invariants_applied_v1",
+    ],
+    rationale: sufficientCoverage
+      ? "Retained cookie-policy and runtime evidence contained no typed or directly named cookie/storage identifier; categories alone do not establish a named-cookie inventory."
+      : "The retained evidence did not contain an identifiable cookie or storage name.",
+  });
+}
+
+export type PolicyRuntimeSemanticReviewPlan = {
+  claimExcerpts: string[];
+  reasonCodes: string[];
+  requiresMiniReview: boolean;
+};
+
+export function planPolicyRuntimeSemanticReview(
+  packet: PolicyReviewPacket,
+): PolicyRuntimeSemanticReviewPlan {
+  if (!runtimeCoverageIsUsable(packet)) {
+    return {
+      claimExcerpts: [],
+      reasonCodes: ["runtime_coverage_not_usable"],
+      requiresMiniReview: false,
+    };
+  }
+  const hasCookies = runtimeCookieIdentifiers(packet).length > 0;
+  const hasRetainedRuntimeValue = (value: unknown) => Array.isArray(value)
+    ? value.length > 0
+    : Object.keys(getRecord(value)).length > 0;
+  const hasTrackers = ["trackerVendors", "sessionReplay", "vendors"].some((key) =>
+    hasRetainedRuntimeValue(packet.runtimeContext[key])
+  );
+  const hasPreconsent = Array.isArray(packet.runtimeContext.preconsent)
+    ? packet.runtimeContext.preconsent.length > 0
+    : Object.keys(getRecord(packet.runtimeContext.preconsent)).length > 0;
+  const claimPatterns: Array<{ pattern: RegExp; runtimeComparable: boolean }> = [
+    {
+      pattern: /\b(?:do not|don't|never|will not)\b.{0,100}\b(?:track|tracking|behavioral advertising|targeted advertising)\b/i,
+      runtimeComparable: hasTrackers,
+    },
+    {
+      pattern: /\b(?:only|solely)\b.{0,80}\b(?:necessary|essential|strictly necessary)\b.{0,80}\bcookies?\b/i,
+      runtimeComparable: hasCookies || hasTrackers,
+    },
+    {
+      pattern: /\b(?:do not|don't|never|will not)\b.{0,100}\b(?:third[- ]part(?:y|ies)|analytics providers?|advertising networks?)\b/i,
+      runtimeComparable: hasTrackers,
+    },
+    {
+      pattern: /\b(?:before|prior to|until)\b.{0,80}\bconsent\b.{0,120}\b(?:no|not|do not|don't|will not)\b.{0,100}\b(?:cookies?|track|tracking)\b/i,
+      runtimeComparable: hasPreconsent || hasCookies || hasTrackers,
+    },
+    {
+      pattern: /\b(?:do not|don't|never|will not|without (?:your )?consent|only after (?:your )?consent)\b.{0,160}\b(?:cookies?|track(?:ing)?|third[- ]part(?:y|ies)|analytics|advertising|session replay|fingerprint(?:ing)?)\b/i,
+      runtimeComparable: hasCookies || hasTrackers || hasPreconsent,
+    },
+    {
+      pattern: /\b(?:cookies?|track(?:ing)?|third[- ]part(?:y|ies)|analytics|advertising|session replay|fingerprint(?:ing)?)\b.{0,160}\b(?:do not|don't|never|will not|only after (?:your )?consent|until (?:you )?consent)\b/i,
+      runtimeComparable: hasCookies || hasTrackers || hasPreconsent,
+    },
+  ];
+  const claimExcerpts: string[] = [];
+  for (const document of packet.documents.filter(isTargetPolicyDocument)) {
+    for (const candidate of claimPatterns) {
+      if (!candidate.runtimeComparable) continue;
+      const match = candidate.pattern.exec(document.text);
+      candidate.pattern.lastIndex = 0;
+      if (!match || match.index === undefined) continue;
+      claimExcerpts.push(document.text
+        .slice(Math.max(0, match.index - 120), Math.min(document.text.length, match.index + match[0].length + 240))
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 600));
+    }
+  }
+  return {
+    claimExcerpts: [...new Set(claimExcerpts)].slice(0, 4),
+    reasonCodes: claimExcerpts.length > 0
+      ? ["explicit_policy_promise_with_comparable_runtime_fact"]
+      : ["no_directly_comparable_policy_promise_retained"],
+    requiresMiniReview: claimExcerpts.length > 0,
+  };
+}
+
+export function buildNoComparablePolicyRuntimeRow(
+  packet: PolicyReviewPacket,
+): PolicyModelReviewRow {
+  const plan = planPolicyRuntimeSemanticReview(packet);
+  return policyModelReviewRowSchema.parse({
+    topic: "policy_runtime_consistency",
+    reviewSource: "deterministic",
+    status: "insufficient_retained_evidence",
+    comparisonOutcome: "insufficient_comparison_evidence",
+    confidence: 1,
+    sourceDocumentIds: [],
+    sourceUrls: [],
+    evidenceExcerpts: [],
+    conflictingExcerpts: [],
+    reasonCodes: [
+      ...plan.reasonCodes,
+      "mutual_silence_not_alignment",
+      "deterministic_runtime_evidence_projection",
+      "policy_review_invariants_applied_v1",
+    ],
+    rationale: plan.reasonCodes.includes("runtime_coverage_not_usable")
+      ? "Runtime coverage was not usable, so a policy/runtime comparison could not be made."
+      : "No specific retained policy promise was directly comparable with a retained runtime fact; mutual silence is not treated as alignment.",
+  });
+}
+
 function hasSubstantiveRetentionEvidence(packet: PolicyReviewPacket) {
   const policyText = packet.documents.map((document) => document.text).join("\n");
   return [
@@ -2119,7 +2280,12 @@ export async function reviewPolicyPacketWithModel(input: {
     const rawOutput = useResponsesApi
       ? responseOutputText(payload)
       : payload.choices?.[0]?.message?.content ?? "";
-    const rows = parseRows(rawOutput, input.packet, topics);
+    const reviewSource = /^gpt-5\.4-nano(?:-|$)/.test(input.model)
+      ? "nano" as const
+      : "mini" as const;
+    const rows = parseRows(rawOutput, input.packet, topics).map((row) =>
+      policyModelReviewRowSchema.parse({ ...row, reviewSource })
+    );
     const usage: ReviewUsage = {
       cachedPromptTokens:
         payload.usage?.prompt_tokens_details?.cached_tokens ??

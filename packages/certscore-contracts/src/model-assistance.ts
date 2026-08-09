@@ -96,6 +96,7 @@ export const modelAssistProvenanceSchema = z.object({
 
 export const policyModelReviewRowSchema = z.object({
   topic: policyReviewTopicSchema,
+  reviewSource: z.enum(["mini", "nano", "deterministic"]).optional(),
   status: policyReviewStatusSchema,
   comparisonOutcome: policyRuntimeComparisonOutcomeSchema.optional(),
   confidence: z.number().min(0).max(1),

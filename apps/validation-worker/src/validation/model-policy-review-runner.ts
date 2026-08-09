@@ -1,6 +1,8 @@
 import { policyModelReviewArtifactSchema } from "@certscore/contracts";
 import {
   buildPolicyReviewCacheKey,
+  buildDeterministicCookieInventoryRow,
+  buildNoComparablePolicyRuntimeRow,
   buildStaticPolicyReviewPacket,
   POLICY_MODEL_REVIEW_CONTRACT_VERSION,
   POLICY_MODEL_REVIEW_PROMPT_VERSION,
@@ -8,6 +10,7 @@ import {
   STATIC_POLICY_REVIEW_TOPICS,
   deriveDeterministicLegalFrameworkSignals,
   deriveDeterministicPolicyReviewSignals,
+  planPolicyRuntimeSemanticReview,
   reviewPolicyPacketWithModel,
   reviewPolicyPacketWithMini,
   summarizePolicyReviewArtifact,
@@ -225,7 +228,13 @@ function composeParallelPolicyArtifact(input: {
   runtimeArtifact: ReturnType<typeof policyModelReviewArtifactSchema.parse>;
   staticArtifact: ReturnType<typeof policyModelReviewArtifactSchema.parse>;
 }) {
-  const rows = [...input.staticArtifact.rows, ...input.runtimeArtifact.rows];
+  const rows = [
+    ...input.staticArtifact.rows.map((row) => ({
+      ...row,
+      reviewSource: row.reviewSource ?? "mini" as const,
+    })),
+    ...input.runtimeArtifact.rows,
+  ];
   const cacheKey = buildPolicyReviewCacheKey({
     contentHash: input.packet.contentHash,
     model: input.model,
@@ -250,12 +259,113 @@ function composeParallelPolicyArtifact(input: {
           ...input.runtimeArtifact.provenance.reasonCodes,
           "verified_static_policy_review_join",
           "terminal_runtime_delta_review",
+          ...(input.runtimeArtifact.provenance.reasonCodes.includes(
+            "deterministic_runtime_topic_routing_v1"
+          )
+            ? [
+                "mini_exception_routing_enabled",
+                "owner_approved_mini_exception_routing_2026_08_08",
+              ]
+            : []),
         ])].slice(0, 30),
         usedForProductionProjection: false,
       },
       productionEligible: false,
     }),
     mode: input.mode,
+  });
+}
+
+export async function runMiniExceptionRuntimeReview(input: {
+  apiKey?: string;
+  model: string;
+  packet: PolicyReviewPacket;
+}) {
+  const cookieRow = buildDeterministicCookieInventoryRow(input.packet);
+  const comparisonPlan = planPolicyRuntimeSemanticReview(input.packet);
+  const comparisonArtifact = comparisonPlan.requiresMiniReview
+    ? await reviewPolicyPacketWithModel({
+        apiKey: input.apiKey,
+        mode: "shadow",
+        model: input.model,
+        packet: input.packet,
+        reviewPhase: "runtime_delta",
+        topics: ["policy_runtime_consistency"],
+      })
+    : null;
+  const comparisonRow = comparisonArtifact?.rows.find(
+    (row) => row.topic === "policy_runtime_consistency"
+  );
+  const completed = comparisonPlan.requiresMiniReview
+    ? comparisonArtifact?.status === "completed" && Boolean(comparisonRow)
+    : true;
+  const rows = completed
+    ? [
+        cookieRow,
+        comparisonRow
+          ? { ...comparisonRow, reviewSource: "mini" as const }
+          : buildNoComparablePolicyRuntimeRow(input.packet),
+      ]
+    : [];
+  const baseProvenance = comparisonArtifact?.provenance ?? {
+    role: "review" as const,
+    provider: "openai" as const,
+    requestedModel: input.model,
+    resolvedModel: input.model,
+    taskType: "policy_semantic_deterministic_runtime_review",
+    promptVersion: POLICY_MODEL_REVIEW_PROMPT_VERSION,
+    schemaVersion: "policy_semantic_review_output.v2",
+    inputRefs: input.packet.documents.map((document) => document.documentId),
+    outputRefs: [],
+    contentHash: input.packet.contentHash,
+    confidence: 1,
+    reasonCodes: [],
+    uncertaintyNotes: [],
+    latencyMs: 0,
+    promptTokens: 0,
+    cachedPromptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    usedForProductionProjection: false,
+  };
+  return policyModelReviewArtifactSchema.parse({
+    contractVersion: POLICY_MODEL_REVIEW_CONTRACT_VERSION,
+    mode: "shadow",
+    status: completed ? "completed" : "failed",
+    scanId: input.packet.scanId,
+    cacheKey: buildPolicyReviewCacheKey({
+      contentHash: input.packet.contentHash,
+      model: `${input.model}:mini-exception-runtime-v1`,
+      reviewPhase: "runtime_delta",
+    }),
+    rows,
+    deterministicLegalFrameworkSignals: deriveDeterministicLegalFrameworkSignals(input.packet),
+    deterministicPolicyReviewSignals: deriveDeterministicPolicyReviewSignals(input.packet),
+    failureReason: completed
+      ? null
+      : comparisonArtifact?.failureReason ?? "Mini policy/runtime comparison was incomplete.",
+    provenance: {
+      ...baseProvenance,
+      taskType: comparisonPlan.requiresMiniReview
+        ? "policy_semantic_mini_exception_runtime_review"
+        : "policy_semantic_deterministic_runtime_review",
+      contentHash: input.packet.contentHash,
+      confidence: rows.length > 0
+        ? rows.reduce((sum, row) => sum + row.confidence, 0) / rows.length
+        : null,
+      inputRefs: input.packet.documents.map((document) => document.documentId),
+      outputRefs: rows.flatMap((row) => row.sourceDocumentIds).slice(0, 100),
+      reasonCodes: [...new Set([
+        ...baseProvenance.reasonCodes,
+        "deterministic_cookie_inventory_projection",
+        "deterministic_runtime_topic_routing_v1",
+        ...(comparisonPlan.requiresMiniReview
+          ? ["mini_explicit_policy_runtime_comparison"]
+          : ["mini_runtime_call_avoided_no_comparable_claim"]),
+      ])].slice(0, 30),
+      usedForProductionProjection: false,
+    },
+    productionEligible: false,
   });
 }
 
@@ -578,6 +688,7 @@ export async function runPolicyReviewPacket(input: {
   model: string;
   packet: PolicyReviewPacket;
   reuseEarlyStatic?: boolean;
+  useMiniExceptionRuntime?: boolean;
 }) {
   const cacheKey = buildPolicyReviewCacheKey({
     contentHash: input.packet.contentHash,
@@ -620,14 +731,20 @@ export async function runPolicyReviewPacket(input: {
   if (!artifact && input.reuseEarlyStatic) {
     const [staticArtifact, runtimeArtifact] = await runConcurrentPolicyReviewJoin({
       loadStatic: () => loadMatchingStaticArtifact(input),
-      reviewRuntime: () => reviewPolicyPacketWithMini({
-        apiKey: input.apiKey,
-        mode: "shadow",
-        model: input.model,
-        packet: input.packet,
-        reviewPhase: "runtime_delta",
-        topics: RUNTIME_POLICY_REVIEW_TOPICS,
-      }),
+      reviewRuntime: () => input.useMiniExceptionRuntime
+        ? runMiniExceptionRuntimeReview({
+            apiKey: input.apiKey,
+            model: input.model,
+            packet: input.packet,
+          })
+        : reviewPolicyPacketWithMini({
+            apiKey: input.apiKey,
+            mode: "shadow",
+            model: input.model,
+            packet: input.packet,
+            reviewPhase: "runtime_delta",
+            topics: RUNTIME_POLICY_REVIEW_TOPICS,
+          }),
     });
     if (staticArtifact) {
       if (hasExactlyTopics(runtimeArtifact, RUNTIME_POLICY_REVIEW_TOPICS)) {

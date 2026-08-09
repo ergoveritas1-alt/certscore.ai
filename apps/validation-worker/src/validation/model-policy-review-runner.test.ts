@@ -12,6 +12,7 @@ import {
   finalizeArtifactProjectionMode,
   rebindCachedStaticArtifact,
   runConcurrentPolicyReviewJoin,
+  runMiniExceptionRuntimeReview,
   waitForUsableStaticReview,
 } from "./model-policy-review-runner";
 
@@ -101,6 +102,61 @@ test("enforced Nano review remains non-production even when row invariants pass"
   assert.equal(finalized.productionEligible, false);
   assert.equal(finalized.provenance.usedForProductionProjection, false);
   assert.ok(finalized.provenance.reasonCodes.includes("unapproved_production_review_model"));
+});
+
+test("Mini-exception runtime review avoids a model call for typed facts without a comparable claim", async () => {
+  const packet: PolicyReviewPacket = {
+    contentHash: "b".repeat(64),
+    documents: [{
+      canonicalUrl: "https://example.test/privacy",
+      contentCoverage: {
+        status: "complete",
+        sourceTextChars: 100,
+        extractedSectionCount: 1,
+        retainedSectionCount: 1,
+        retainedStrongSectionCount: 1,
+        retainedTableRowCount: 0,
+        limitationKeys: [],
+        packetTextTruncated: false,
+      },
+      documentEvaluationState: "usable",
+      documentFetchState: "fetched",
+      documentId: "policy-1",
+      documentOwnerEntity: "Example",
+      documentType: "privacy_policy",
+      extractedCandidates: {},
+      ownershipConfidence: 1,
+      ownershipReasonCodes: ["same_registrable_domain_as_scan_target"],
+      targetRelationship: "target_controller",
+      text: "We explain our privacy practices and provide contact details.",
+    }],
+    evidenceCoverage: {
+      coverageLimitations: [],
+      policySurfaceInspection: { coverageStatus: "complete" },
+      runtimeCoverage: { coverageStatus: "usable" },
+    },
+    policyCandidates: [],
+    runtimeContext: { cookies: [{ cookieName: "_ga" }] },
+    scanContext: { region: "eu_ie", targetUrl: "https://example.test" },
+    scanDate: "2026-08-08",
+    scanId: "scan-1",
+  };
+  const runtime = await runMiniExceptionRuntimeReview({
+    model: "gpt-5.4-mini",
+    packet,
+  });
+  assert.equal(runtime.status, "completed");
+  assert.equal(runtime.rows.length, 2);
+  assert.equal(runtime.provenance.promptTokens, 0);
+  assert.ok(runtime.provenance.reasonCodes.includes("mini_runtime_call_avoided_no_comparable_claim"));
+  assert.equal(
+    runtime.rows.find((row) => row.topic === "cookie_inventory")?.status,
+    "observed",
+  );
+  assert.equal(
+    runtime.rows.find((row) => row.topic === "policy_runtime_consistency")?.status,
+    "insufficient_retained_evidence",
+  );
 });
 
 test("cached static review references are rebound to the current retained document", () => {

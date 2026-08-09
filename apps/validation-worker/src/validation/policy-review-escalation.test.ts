@@ -134,7 +134,7 @@ test("hybrid shadow artifact uses Mini only for escalated topics and never proje
   );
 });
 
-test("bounded Mini cannot create an observed row without Nano consensus", () => {
+test("bounded Mini remains authoritative for escalated evidence", () => {
   const fullPacket = packet();
   const nanoBase = artifact("gpt-5.4-nano");
   const nano = policyModelReviewArtifactSchema.parse({
@@ -161,7 +161,7 @@ test("bounded Mini cannot create an observed row without Nano consensus", () => 
   });
   assert.equal(
     hybrid.rows.find((row) => row.topic === "international_transfers")?.status,
-    "ambiguous",
+    "observed",
   );
 });
 

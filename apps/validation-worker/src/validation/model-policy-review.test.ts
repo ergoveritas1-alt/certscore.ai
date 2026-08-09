@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildPolicyReviewCacheKey,
+  buildDeterministicCookieInventoryRow,
+  buildNoComparablePolicyRuntimeRow,
   buildPolicyReviewInput,
   buildPolicyReviewPacket,
   buildPolicyReviewPacketFromCanonicalBundle,
@@ -9,6 +11,7 @@ import {
   buildStaticPolicyReviewPacket,
   deriveDeterministicLegalFrameworkSignals,
   deriveDeterministicPolicyReviewSignals,
+  planPolicyRuntimeSemanticReview,
   reviewPolicyPacketWithMini,
   STATIC_POLICY_REVIEW_TOPICS,
   selectBoundedPolicyReviewText
@@ -1178,6 +1181,45 @@ test("runtime cookie names establish observed cookie/storage names", async () =>
   assert.ok(cookieInventory?.reasonCodes.includes("retained_cookie_storage_name_observed"));
   assert.ok(cookieInventory?.reasonCodes.includes("runtime_cookie_storage_name_observed"));
   assert.match(cookieInventory?.rationale ?? "", /runtime evidence/i);
+});
+
+test("deterministic cookie inventory preserves typed runtime evidence without a model call", () => {
+  const packet = buildFixturePacket("We use cookie categories and provide cookie settings.");
+  packet.runtimeContext.cookies = [{ cookieName: "_ga" }, { cookieName: "OptanonConsent" }];
+  const row = buildDeterministicCookieInventoryRow(packet);
+  assert.equal(row.status, "observed");
+  assert.equal(row.reviewSource, "deterministic");
+  assert.match(row.evidenceExcerpts[0] ?? "", /_ga/);
+  assert.ok(row.reasonCodes.includes("policy_review_invariants_applied_v1"));
+});
+
+test("runtime comparison bypasses Mini when no directly comparable policy promise exists", () => {
+  const packet = buildFixturePacket("We explain our privacy practices and provide contact details.");
+  packet.runtimeContext.cookies = [{ cookieName: "_ga" }];
+  const plan = planPolicyRuntimeSemanticReview(packet);
+  assert.equal(plan.requiresMiniReview, false);
+  const row = buildNoComparablePolicyRuntimeRow(packet);
+  assert.equal(row.status, "insufficient_retained_evidence");
+  assert.equal(row.comparisonOutcome, "insufficient_comparison_evidence");
+  assert.ok(row.reasonCodes.includes("mutual_silence_not_alignment"));
+});
+
+test("explicit tracking promise with comparable runtime evidence routes to Mini", () => {
+  const packet = buildFixturePacket(
+    "We do not use tracking or targeted advertising on this website. Contact our privacy office for questions."
+  );
+  const plan = planPolicyRuntimeSemanticReview(packet);
+  assert.equal(plan.requiresMiniReview, true);
+  assert.ok(plan.claimExcerpts.some((excerpt) => /do not use tracking/i.test(excerpt)));
+});
+
+test("reversed consent-gated cookie promise also routes to Mini", () => {
+  const packet = buildFixturePacket(
+    "Analytics cookies are not placed until you consent. Contact our privacy office for questions."
+  );
+  packet.runtimeContext.cookies = [{ cookieName: "_ga" }];
+  const plan = planPolicyRuntimeSemanticReview(packet);
+  assert.equal(plan.requiresMiniReview, true);
 });
 
 test("runtime storage keys establish observed cookie/storage names", async () => {

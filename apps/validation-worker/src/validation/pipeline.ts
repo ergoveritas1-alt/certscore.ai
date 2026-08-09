@@ -200,6 +200,7 @@ async function runPolicyModelReview(input: {
     reuseEarlyStatic:
       env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED &&
       env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED,
+    useMiniExceptionRuntime: env.CERTSCORE_MINI_EXCEPTION_ROUTING_ENABLED,
   });
   const nanoShadow = env.CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED &&
     !env.CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED
