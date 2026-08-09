@@ -2004,9 +2004,7 @@ export async function reviewPolicyPacketWithModel(input: {
 
   try {
     const useResponsesApi = /^gpt-5\.6(?:-|$)/.test(input.model);
-    const reasoningEffort = input.reviewPhase === "static" || input.reviewPhase === "escalated"
-      ? "low"
-      : null;
+    const reasoningEffort = input.reviewPhase === "static" ? "low" : null;
     const boundedEscalationTransport = input.reviewPhase === "escalated";
     const criticReview = input.reviewPhase === "critic";
     const reviewInput = JSON.stringify({

@@ -464,8 +464,6 @@ test("escalated Mini review uses the compact evidence-preserving output contract
   });
 
   assert.equal(requestBody?.max_completion_tokens, 900);
-  assert.equal(requestBody?.reasoning_effort, "low");
-  assert.equal("temperature" in (requestBody ?? {}), false);
   const responseFormat = requestBody?.response_format as {
     json_schema?: {
       schema?: {
