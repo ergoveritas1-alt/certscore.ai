@@ -119,7 +119,7 @@ export function findRuntimeCookieOwner(cookieName: string | null | undefined, ho
   if (!trimmed) return null;
   const observation = resolveCanonicalOwner({ cookieName: trimmed, hostname: normalizedHostname ?? undefined });
   if (!observation) {
-    const knowledge = resolveCanonicalCookieKnowledge(trimmed);
+    const knowledge = resolveCanonicalCookieKnowledge(trimmed, { cookieDomain: normalizedHostname });
     const vendor = resolveCanonicalVendorLabel(knowledge.vendor);
     if (!vendor) return null;
     return {

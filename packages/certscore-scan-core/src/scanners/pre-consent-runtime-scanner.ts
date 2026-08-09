@@ -326,7 +326,12 @@ export function applyFinalDocumentPartyClassification(input: {
   }
 
   for (const event of input.cookieEvents) {
-    const knowledge = resolveCanonicalCookieKnowledge(event.cookieName);
+    const knowledge = resolveCanonicalCookieKnowledge(event.cookieName, {
+      cookieDomain: event.cookieDomain,
+      hostname: event.hostname,
+      initiatorChain: event.initiatorChain,
+      setterScriptUrl: event.setterScriptUrl,
+    });
     const hostname = getHostname(event.cookieDomain ?? event.hostname);
     const party = classifyCookieParty(event.cookieDomain ?? hostname, firstPartyHostname);
     event.hostname = hostname ?? undefined;
@@ -1818,13 +1823,18 @@ export async function preConsentRuntimeScanner(
     retainedCookieSnapshot = cookieSnapshot;
     for (const cookie of cookies) {
       const documentWrite = [...documentCookieWrites].reverse().find((write) => write.name === cookie.name);
-      const knowledge = resolveCanonicalCookieKnowledge(cookie.name);
       const cookieHostname = getHostname(cookie.domain) ?? undefined;
       const cookieRegistrableDomain = getRegistrableDomain(cookieHostname) ?? undefined;
       const cookieParty = classifyCookieParty(cookie.domain, firstPartyHostname);
       const initiatorChain = boundedInitiatorChain(documentWrite?.initiatorChain ?? []);
       const setterScriptUrl = boundedInitiatorUrl(documentWrite?.scriptUrl) ??
         initiatorChain.find((value) => /^https?:\/\//i.test(value));
+      const knowledge = resolveCanonicalCookieKnowledge(cookie.name, {
+        cookieDomain: cookie.domain,
+        hostname: cookieHostname,
+        initiatorChain,
+        setterScriptUrl,
+      });
       const snapshotCookieEvent: CookieEvent = {
         eventId: nextId("cookie"),
         eventType: "cookie",
@@ -3289,13 +3299,18 @@ export async function preConsentRuntimeScanner(
     networkResponseEvents.push(responseEvent);
 
     for (const cookieMetadata of setCookieMetadata) {
-      const knowledge = resolveCanonicalCookieKnowledge(cookieMetadata.name);
       const initiatorChain = boundedInitiatorChain([
         ...(requestEvent?.initiatorStack ?? []),
         requestEvent?.responsibleScriptUrl,
       ]);
       const setterScriptUrl = boundedInitiatorUrl(requestEvent?.responsibleScriptUrl) ??
         initiatorChain.find((value) => /^https?:\/\//i.test(value));
+      const knowledge = resolveCanonicalCookieKnowledge(cookieMetadata.name, {
+        cookieDomain: cookieMetadata.domain,
+        hostname,
+        initiatorChain,
+        setterScriptUrl,
+      });
       const cookieParty = classifyCookieParty(cookieMetadata.domain ?? hostname, firstPartyHostname);
       const cookieEvent: CookieEvent = {
         eventId: nextId("cookie"),
