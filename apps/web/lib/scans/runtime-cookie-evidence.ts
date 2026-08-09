@@ -650,7 +650,15 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     return null;
   }
   const domain = getString(row.domain ?? row.cookieDomain ?? row.cookie_domain)?.replace(/^\.+/, "") ?? null;
-  const knowledge = resolveCanonicalCookieKnowledge(cookieName);
+  const knowledge = resolveCanonicalCookieKnowledge(cookieName, {
+    cookieDomain: domain,
+    hostname: getString(row.initiatorDomain ?? row.initiator_domain ?? row.cookieInitiatorDomain ?? row.cookie_initiator_domain),
+    initiatorChain: getStringArray(row.initiatorChain ?? row.initiator_chain),
+    setterScriptUrl: getString(
+      row.setterScriptUrl ?? row.setter_script_url ?? row.initiatorUrl ?? row.initiator_url ??
+      row.sourceRequestUrl ?? row.source_request_url ?? row.responseUrl ?? row.response_url
+    ),
+  });
   const explicitCategory = getString(row.category ?? row.cookieCategory ?? row.cookie_category);
   const retainedEssentiality = getString(row.essentiality ?? row.cookieEssentiality ?? row.cookie_essentiality);
   const typedRetainedEssentiality = retainedEssentiality === "essential" || retainedEssentiality === "non_essential"
@@ -815,7 +823,7 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
 
 function normalizeInitialCookieRow(cookieName: string, domain: string | null): RuntimeCookieEvidenceRow {
   const normalizedDomain = domain?.replace(/^\.+/, "") ?? null;
-  const knowledge = resolveCanonicalCookieKnowledge(cookieName);
+  const knowledge = resolveCanonicalCookieKnowledge(cookieName, { cookieDomain: normalizedDomain });
   const category = knowledge.category !== "unknown"
     ? knowledge.category
     : classifyRuntimeCookieCategory(cookieName, normalizedDomain);

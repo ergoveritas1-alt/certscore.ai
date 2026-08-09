@@ -188,3 +188,60 @@ test("final document party classification retains typed Microsoft Clarity cookie
   );
   assert.ok(cookieEvents.every((event) => event.cookieParty === "third_party"));
 });
+
+test("final document party classification applies domain-aware canonical cookie knowledge", () => {
+  const cookieEvents = [
+    {
+      cookieName: "sa-user-id-v4",
+      cookieDomain: ".example.com",
+      setterScriptUrl: "https://tags.srv.stackadapt.com/events.js",
+    },
+    {
+      cookieName: "i",
+      cookieDomain: ".openx.net",
+    },
+    {
+      cookieName: "i",
+      cookieDomain: ".example.com",
+    },
+  ].map((cookie, index) => ({
+    eventId: `cookie-context-${index}`,
+    eventType: "cookie",
+    timestampMs: index + 1,
+    sourceScanner: "fixture",
+    scenario: "fresh_pre_consent",
+    consentStateAtTime: "pre_consent",
+    pagePhase: "network_idle",
+    ...cookie,
+    cookieParty: "unknown",
+    cookieClassificationBasis: ["browser_snapshot"],
+    operation: "browser_snapshot",
+    vendorAssociated: false,
+    cookiePurpose: "unknown",
+    cookieEssentiality: "unknown",
+    cookieEssentialityReasonCodes: [],
+    valueRedacted: true,
+    evidenceRefs: [],
+    confidence: 1,
+    directVsInferred: "direct",
+  })) as CookieEvent[];
+
+  applyFinalDocumentPartyClassification({
+    finalDocumentUrl: "https://example.com/",
+    networkEvents: [],
+    networkResponseEvents: [],
+    cookieEvents,
+    scriptEvents: [],
+    iframeEvents: [],
+  });
+
+  assert.deepEqual(cookieEvents.map((event) => [
+    event.cookieName,
+    event.cookiePurpose,
+    event.cookieEssentiality,
+  ]), [
+    ["sa-user-id-v4", "advertising", "non_essential"],
+    ["i", "advertising", "non_essential"],
+    ["i", "unknown", "unknown"],
+  ]);
+});

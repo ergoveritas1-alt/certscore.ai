@@ -85,6 +85,107 @@ test("canonical LinkedIn and TikTok cookie knowledge preserves consent and adver
   assert.equal(resolveCanonicalCookieKnowledge("ttcsid_pixel123").essentiality, "non_essential");
 });
 
+test("canonical infrastructure families identify documented AWS and Cloudflare affinity cookies", () => {
+  for (const name of ["AWSALB", "AWSALBCORS", "AWSALBTG", "AWSALBTGCORS", "AWSALBAPP-0"]) {
+    const knowledge = resolveCanonicalCookieKnowledge(name);
+    assert.equal(knowledge.category, "infrastructure");
+    assert.equal(knowledge.essentiality, "essential");
+    assert.equal(knowledge.vendor, "Amazon Web Services");
+  }
+  assert.equal(resolveCanonicalCookieKnowledge("__cflb").category, "infrastructure");
+  assert.equal(resolveCanonicalCookieKnowledge("__cflb").vendor, "Cloudflare");
+  assert.equal(resolveCanonicalCookieKnowledge("MYAWSALB").category, "unknown");
+});
+
+test("canonical Google and YouTube families preserve security, personalization, and rollout purposes", () => {
+  for (const name of ["YSC", "__Secure-YEC", "AEC"]) {
+    assert.equal(resolveCanonicalCookieKnowledge(name).category, "security");
+    assert.equal(resolveCanonicalCookieKnowledge(name).essentiality, "essential");
+  }
+  for (const name of ["VISITOR_INFO1_LIVE", "__Secure-YNID"]) {
+    assert.equal(resolveCanonicalCookieKnowledge(name).category, "personalization");
+    assert.equal(resolveCanonicalCookieKnowledge(name).essentiality, "non_essential");
+  }
+  assert.equal(resolveCanonicalCookieKnowledge("__Secure-ROLLOUT_TOKEN").category, "analytics");
+  assert.equal(resolveCanonicalCookieKnowledge("VISITOR_PRIVACY_METADATA").category, "unknown");
+});
+
+test("canonical advertising and experience families classify only documented exact names", () => {
+  const expected = new Map([
+    ["_scid", ["advertising", "Snap"]],
+    ["uuid2", ["advertising", "Xandr"]],
+    ["anj", ["advertising", "Xandr"]],
+    ["mbox", ["personalization", "Adobe Target"]],
+    ["at_check", ["personalization", "Adobe Target"]],
+    ["_cb", ["analytics", "Chartbeat"]],
+    ["_cb_svref", ["analytics", "Chartbeat"]],
+    ["_chartbeat2", ["analytics", "Chartbeat"]],
+    ["_ym_visorc", ["session_replay", "Yandex Metrica"]],
+    ["_ym_visorc_123", ["session_replay", "Yandex Metrica"]],
+    ["_cc_id", ["advertising", "Lotame"]],
+    ["panoramaId", ["advertising", "Lotame"]],
+  ]);
+  for (const [name, [category, vendor]] of expected) {
+    const knowledge = resolveCanonicalCookieKnowledge(name);
+    assert.equal(knowledge.category, category);
+    assert.equal(knowledge.vendor, vendor);
+    assert.equal(knowledge.essentiality, "non_essential");
+  }
+  for (const name of ["_scid_r", "sa-user-id-v2", "_tt_enable_cookie", "_rdt_uuid"]) {
+    assert.equal(resolveCanonicalCookieKnowledge(name).category, "unknown");
+  }
+});
+
+test("canonical context-bound advertising families require a matching vendor host", () => {
+  const cases = [
+    ["sa-user-id-v4", "tags.srv.stackadapt.com", "StackAdapt"],
+    ["id5", "id5-sync.com", "ID5"],
+    ["3pi", "cdn.id5-sync.com", "ID5"],
+    ["callback", "id5-sync.com", "ID5"],
+    ["tuuid", "bidswitch.net", "BidSwitch"],
+    ["tuuid_lu", "sync.360yield.com", "BidSwitch"],
+    ["audit", "rubiconproject.com", "Magnite / Rubicon"],
+    ["khaos_p", "pixel.rubiconproject.com", "Magnite / Rubicon"],
+    ["XANDR_PANID", "adnxs.com", "Xandr"],
+    ["i", "openx.net", "OpenX"],
+  ];
+  for (const [name, cookieDomain, vendor] of cases) {
+    const knowledge = resolveCanonicalCookieKnowledge(name, { cookieDomain });
+    assert.equal(knowledge.category, "advertising");
+    assert.equal(knowledge.essentiality, "non_essential");
+    assert.equal(knowledge.vendor, vendor);
+    assert.equal(resolveCanonicalCookieKnowledge(name).category, "unknown");
+  }
+  assert.equal(resolveCanonicalCookieKnowledge("i", { cookieDomain: "yandex.com" }).category, "unknown");
+  assert.equal(resolveCanonicalCookieKnowledge("audit", { cookieDomain: "example.com" }).category, "unknown");
+});
+
+test("canonical cookie context accepts bounded setter and initiator hosts", () => {
+  assert.equal(resolveCanonicalCookieKnowledge("sa-user-id", {
+    cookieDomain: "example.com",
+    setterScriptUrl: "https://tags.srv.stackadapt.com/events.js?site=example",
+  }).vendor, "StackAdapt");
+  assert.equal(resolveCanonicalCookieKnowledge("g_state", {
+    cookieDomain: "example.com",
+    initiatorChain: ["https://accounts.google.com/gsi/client"],
+  }).vendor, "Google Identity Services");
+  assert.equal(resolveCanonicalCookieKnowledge("g_state", { cookieDomain: "example.com" }).category, "unknown");
+});
+
+test("canonical documented utility families preserve purpose and essentiality distinctions", () => {
+  for (const name of ["ARRAffinity", "ARRAffinitySameSite"]) {
+    const knowledge = resolveCanonicalCookieKnowledge(name);
+    assert.equal(knowledge.category, "infrastructure");
+    assert.equal(knowledge.essentiality, "essential");
+    assert.equal(knowledge.vendor, "Microsoft Azure");
+  }
+  assert.equal(resolveCanonicalCookieKnowledge("s_cc").category, "analytics");
+  assert.equal(resolveCanonicalCookieKnowledge("s_cc").essentiality, "non_essential");
+  assert.equal(resolveCanonicalCookieKnowledge("utag_main").category, "tag_management");
+  assert.equal(resolveCanonicalCookieKnowledge("utag_main_v_id").category, "tag_management");
+  assert.equal(resolveCanonicalCookieKnowledge("utag_main").essentiality, "unknown");
+});
+
 test("canonical Amazon cookie knowledge classifies ubid locale variants as non-essential persistent identifiers", () => {
   assert.deepEqual(resolveCanonicalCookieKnowledge("ubid-acbde"), {
     category: "analytics",

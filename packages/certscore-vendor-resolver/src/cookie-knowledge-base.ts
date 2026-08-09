@@ -2,9 +2,12 @@ export type CanonicalCookieCategory =
   | "advertising"
   | "analytics"
   | "consent_management"
+  | "infrastructure"
   | "marketing"
   | "personalization"
   | "security"
+  | "session_replay"
+  | "tag_management"
   | "unknown";
 
 export type CanonicalCookieKnowledge = {
@@ -16,7 +19,15 @@ export type CanonicalCookieKnowledge = {
   vendor: string | null;
 };
 
+export type CanonicalCookieContext = {
+  cookieDomain?: string | null;
+  hostname?: string | null;
+  initiatorChain?: readonly string[] | null;
+  setterScriptUrl?: string | null;
+};
+
 type CookieKnowledgeRule = Omit<CanonicalCookieKnowledge, "name"> & {
+  contextHostPatterns?: readonly RegExp[];
   pattern: RegExp;
 };
 
@@ -166,6 +177,194 @@ const COOKIE_KNOWLEDGE_RULES: readonly CookieKnowledgeRule[] = [
     vendor: "TikTok",
   },
   {
+    pattern: /^(?:AWSALB|AWSALBCORS|AWSALBTG|AWSALBTGCORS|AWSALBAPP-\d+)$/i,
+    category: "infrastructure",
+    dataTypes: ["load-balancer target affinity", "session routing"],
+    description: "Amazon Web Services load-balancer cookie used to preserve target affinity and route a session to the selected application target.",
+    essentiality: "essential",
+    vendor: "Amazon Web Services",
+  },
+  {
+    pattern: /^__cflb$/i,
+    category: "infrastructure",
+    dataTypes: ["load-balancer target affinity", "session routing"],
+    description: "Cloudflare load-balancer cookie used to preserve session affinity to a selected origin endpoint.",
+    essentiality: "essential",
+    vendor: "Cloudflare",
+  },
+  {
+    pattern: /^YSC$/i,
+    category: "security",
+    dataTypes: ["session identifier", "fraud and abuse prevention"],
+    description: "YouTube session cookie used by Google to help detect and resolve fraud, abuse, and security incidents.",
+    essentiality: "essential",
+    vendor: "Google / YouTube",
+  },
+  {
+    pattern: /^(?:VISITOR_INFO1_LIVE|__Secure-YNID)$/i,
+    category: "personalization",
+    dataTypes: ["visitor identifier", "content personalization", "service analytics"],
+    description: "Google and YouTube visitor cookie used for service analytics and personalized content or recommendations.",
+    essentiality: "non_essential",
+    vendor: "Google / YouTube",
+  },
+  {
+    pattern: /^(?:__Secure-YEC|AEC)$/i,
+    category: "security",
+    dataTypes: ["fraud and abuse prevention", "security signal"],
+    description: "Google security cookie used to help detect and prevent fraud, abuse, spam, and other malicious activity.",
+    essentiality: "essential",
+    vendor: "Google / YouTube",
+  },
+  {
+    pattern: /^__Secure-ROLLOUT_TOKEN$/i,
+    category: "analytics",
+    dataTypes: ["feature rollout assignment", "feature experiment measurement"],
+    description: "YouTube cookie used to manage phased feature rollouts and measure feature experiments.",
+    essentiality: "non_essential",
+    vendor: "Google / YouTube",
+  },
+  {
+    pattern: /^_scid$/i,
+    category: "advertising",
+    dataTypes: ["advertising identifier", "marketing measurement"],
+    description: "Snap pseudonymous visitor identifier used for advertising delivery and marketing measurement.",
+    essentiality: "non_essential",
+    vendor: "Snap",
+  },
+  {
+    pattern: /^(?:uuid2|anj)$/i,
+    category: "advertising",
+    dataTypes: ["advertising identifier", "identifier synchronization"],
+    description: "Xandr advertising-platform cookie used for pseudonymous audience recognition and advertising identifier synchronization.",
+    essentiality: "non_essential",
+    vendor: "Xandr",
+  },
+  {
+    pattern: /^(?:mbox|at_check)$/i,
+    category: "personalization",
+    dataTypes: ["experience assignment", "cookie capability signal"],
+    description: "Adobe Target cookie used to support personalized experience assignment or verify browser cookie support for Target activity.",
+    essentiality: "non_essential",
+    vendor: "Adobe Target",
+  },
+  {
+    pattern: /^(?:_cb|_cb_svref|_chartbeat2)$/i,
+    category: "analytics",
+    dataTypes: ["visitor identifier", "content engagement", "referrer context"],
+    description: "Chartbeat first-party analytics cookie used to distinguish visitors and measure content engagement or referrer context.",
+    essentiality: "non_essential",
+    vendor: "Chartbeat",
+  },
+  {
+    pattern: /^_ym_visorc(?:_.+)?$/i,
+    category: "session_replay",
+    dataTypes: ["session replay state", "behavioral analytics"],
+    description: "Yandex Metrica cookie used to support Session Replay and related behavioral analytics.",
+    essentiality: "non_essential",
+    vendor: "Yandex Metrica",
+  },
+  {
+    pattern: /^(?:_cc_id|panoramaId)$/i,
+    category: "advertising",
+    dataTypes: ["pseudonymous audience identifier", "advertising profile identifier"],
+    description: "Lotame pseudonymous identifier used for audience profiles, advertising activation, and measurement.",
+    essentiality: "non_essential",
+    vendor: "Lotame",
+  },
+  {
+    pattern: /^sa-user-id(?:-v[234])?$/i,
+    contextHostPatterns: [/(?:^|\.)stackadapt\.com$/i],
+    category: "advertising",
+    dataTypes: ["advertising identifier", "cross-site audience identifier"],
+    description: "StackAdapt pseudonymous user identifier used for advertising delivery, retargeting, and campaign measurement.",
+    essentiality: "non_essential",
+    vendor: "StackAdapt",
+  },
+  {
+    pattern: /^(?:id5|3pi|callback)$/i,
+    contextHostPatterns: [/(?:^|\.)id5-sync\.com$/i],
+    category: "advertising",
+    dataTypes: ["identity-resolution identifier", "cookie-sync state"],
+    description: "ID5 identity cookie used for pseudonymous user recognition or bounded cookie-synchronization state.",
+    essentiality: "non_essential",
+    vendor: "ID5",
+  },
+  {
+    pattern: /^(?:tuuid|tuuid_lu)$/i,
+    contextHostPatterns: [
+      /(?:^|\.)bidswitch\.(?:com|net)$/i,
+      /(?:^|\.)360yield\.com$/i,
+      /(?:^|\.)impact-ad\.jp$/i,
+      /(?:^|\.)company-target\.com$/i,
+    ],
+    category: "advertising",
+    dataTypes: ["advertising identifier", "cookie-sync identifier"],
+    description: "BidSwitch integration cookie used for pseudonymous user matching, advertising delivery, and measurement.",
+    essentiality: "non_essential",
+    vendor: "BidSwitch",
+  },
+  {
+    pattern: /^(?:audit|audit_p|khaos_p)$/i,
+    contextHostPatterns: [/(?:^|\.)rubiconproject\.com$/i],
+    category: "advertising",
+    dataTypes: ["advertising platform state", "pseudonymous advertising identifier"],
+    description: "Magnite and Rubicon advertising-platform cookie used for programmatic advertising state or pseudonymous browser recognition.",
+    essentiality: "non_essential",
+    vendor: "Magnite / Rubicon",
+  },
+  {
+    pattern: /^XANDR_PANID$/i,
+    contextHostPatterns: [/(?:^|\.)adnxs\.com$/i],
+    category: "advertising",
+    dataTypes: ["advertising identifier", "browser identifier"],
+    description: "Xandr pseudonymous advertising identifier used to distinguish browsers for advertising delivery and measurement.",
+    essentiality: "non_essential",
+    vendor: "Xandr",
+  },
+  {
+    pattern: /^i$/i,
+    contextHostPatterns: [/(?:^|\.)openx\.net$/i],
+    category: "advertising",
+    dataTypes: ["advertising identifier", "browser identifier"],
+    description: "OpenX pseudonymous browser identifier used for programmatic advertising and related measurement.",
+    essentiality: "non_essential",
+    vendor: "OpenX",
+  },
+  {
+    pattern: /^g_state$/i,
+    contextHostPatterns: [/(?:^|\.)accounts\.google\.com$/i],
+    category: "infrastructure",
+    dataTypes: ["sign-out state", "authentication user-experience state"],
+    description: "Google Identity Services cookie used to retain One Tap or automatic-sign-in sign-out state and prevent repeated sign-in prompts.",
+    essentiality: "essential",
+    vendor: "Google Identity Services",
+  },
+  {
+    pattern: /^s_cc$/i,
+    category: "analytics",
+    dataTypes: ["cookie capability signal"],
+    description: "Adobe Analytics session cookie used to determine whether the browser supports and accepts cookies.",
+    essentiality: "non_essential",
+    vendor: "Adobe Analytics",
+  },
+  {
+    pattern: /^utag_main(?:_.+)?$/i,
+    category: "tag_management",
+    dataTypes: ["visitor identifier", "session metadata", "tag-management state"],
+    description: "Tealium iQ cookie family used to maintain visitor, session, event-count, and tag-management state.",
+    essentiality: "unknown",
+    vendor: "Tealium iQ Tag Management",
+  },
+  {
+    pattern: /^ARRAffinity(?:SameSite)?$/i,
+    category: "infrastructure",
+    dataTypes: ["load-balancer target affinity", "session routing"],
+    description: "Microsoft Azure affinity cookie used to route subsequent requests in a session to the same application instance.",
+    essentiality: "essential",
+    vendor: "Microsoft Azure",
+  },
+  {
     pattern: /^aam_uuid$/i,
     category: "advertising",
     dataTypes: ["audience identifier", "ID-sync identifier"],
@@ -281,9 +480,16 @@ const COOKIE_KNOWLEDGE_RULES: readonly CookieKnowledgeRule[] = [
 
 export function resolveCanonicalCookieKnowledge(
   cookieName: string | null | undefined,
+  context: CanonicalCookieContext = {},
 ): CanonicalCookieKnowledge {
   const name = cookieName?.trim() ?? "";
-  const rule = COOKIE_KNOWLEDGE_RULES.find((candidate) => candidate.pattern.test(name));
+  const contextHosts = canonicalCookieContextHosts(context);
+  const rule = COOKIE_KNOWLEDGE_RULES.find((candidate) =>
+    candidate.pattern.test(name) &&
+    (!candidate.contextHostPatterns || candidate.contextHostPatterns.some((pattern) =>
+      contextHosts.some((hostname) => pattern.test(hostname))
+    ))
+  );
   if (!rule) {
     return {
       category: "unknown",
@@ -302,6 +508,26 @@ export function resolveCanonicalCookieKnowledge(
     name,
     vendor: rule.vendor,
   };
+}
+
+function canonicalCookieContextHosts(context: CanonicalCookieContext): string[] {
+  const values = [
+    context.cookieDomain,
+    context.hostname,
+    context.setterScriptUrl,
+    ...(context.initiatorChain ?? []),
+  ];
+  return [...new Set(values.map(canonicalCookieContextHostname).filter((value): value is string => Boolean(value)))];
+}
+
+function canonicalCookieContextHostname(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed.includes("://") ? trimmed : `https://${trimmed.replace(/^\.+/, "")}`).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 export type TransferMechanism = {

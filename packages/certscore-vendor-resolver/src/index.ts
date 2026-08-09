@@ -11,12 +11,13 @@ export {
   resolveCanonicalCookieKnowledge,
   resolveCanonicalVendorLegalContext,
   type CanonicalCookieCategory,
+  type CanonicalCookieContext,
   type CanonicalCookieKnowledge,
   type CanonicalVendorLegalContext,
   type TransferMechanism,
 } from "./cookie-knowledge-base";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-08-07-wave21-microsoft-clarity-cookies";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-08-09-wave22-cookie-knowledge-expansion";
 
 export type VendorResolverEvidenceType =
   | "request"
