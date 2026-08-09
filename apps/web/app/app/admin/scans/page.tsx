@@ -316,10 +316,10 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-          <table className="w-[3038px] min-w-[3038px] table-fixed text-left text-xs">
+          <table className="w-[2957px] min-w-[2957px] table-fixed text-left text-xs">
             <colgroup>
-              <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "150px" }} />
-              <col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} /><col style={{ width: "260px" }} />
+              <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "173px" }} />
+              <col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} /><col style={{ width: "156px" }} />
               <col style={{ width: "80px" }} /><col style={{ width: "205px" }} /><col style={{ width: "135px" }} /><col style={{ width: "145px" }} />
               <col style={{ width: "180px" }} /><col style={{ width: "130px" }} /><col style={{ width: "65px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} />
               <col style={{ width: "80px" }} /><col style={{ width: "240px" }} /><col style={{ width: "160px" }} /><col style={{ width: "190px" }} /><col style={{ width: "190px" }} /><col style={{ width: "78px" }} />

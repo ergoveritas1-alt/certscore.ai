@@ -405,12 +405,12 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
         />
 
         <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="table-fixed text-left text-xs" style={{ minWidth: "2790px" }}>
+          <table className="table-fixed text-left text-xs" style={{ width: "2812px", minWidth: "2812px" }}>
             <colgroup>
-              <col style={{ width: "40px" }} /><col style={{ width: "70px" }} /><col style={{ width: "175px" }} />
-              <col style={{ width: "115px" }} /><col style={{ width: "220px" }} /><col style={{ width: "70px" }} /><col style={{ width: "75px" }} />
-              <col style={{ width: "60px" }} /><col style={{ width: "210px" }} /><col style={{ width: "110px" }} />
-              <col style={{ width: "75px" }} /><col style={{ width: "205px" }} /><col style={{ width: "135px" }} /><col style={{ width: "145px" }} />
+              <col style={{ width: "100px" }} /><col style={{ width: "70px" }} /><col style={{ width: "150px" }} />
+              <col style={{ width: "100px" }} /><col style={{ width: "160px" }} /><col style={{ width: "60px" }} /><col style={{ width: "60px" }} />
+              <col style={{ width: "50px" }} /><col style={{ width: "170px" }} /><col style={{ width: "75px" }} />
+              <col style={{ width: "164px" }} /><col style={{ width: "205px" }} /><col style={{ width: "135px" }} /><col style={{ width: "145px" }} />
               <col style={{ width: "55px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} /><col style={{ width: "160px" }} />
               <col style={{ width: "120px" }} /><col style={{ width: "130px" }} /><col style={{ width: "70px" }} /><col style={{ width: "120px" }} /><col style={{ width: "190px" }} /><col style={{ width: "190px" }} />
               <col style={{ width: "78px" }} />
@@ -420,8 +420,8 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Route" },
                   { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Page" }, { label: "Tranco" },
-                  { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
-                  { label: "A/R/O" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" },
+                  { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "A/R/O" },
+                  { label: "Access" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" },
                   { label: "Industry" }, { label: "Mode" }, { label: "Usage" }, { label: "Scan ID" }, { label: "Scanner egress" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }
                 ].map(({ label, className }) => <th className={`border-b border-slate-200 px-2.5 py-1.5 font-semibold ${className ?? ""}`} key={label}>{label}</th>)}
@@ -456,8 +456,8 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.score !== null ? <><span>{request.score}</span><span className="text-[11px] font-normal text-slate-400">/100</span></> : "—"}</td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.topFindingCount ?? "—"}</td>
                     <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="Privacy" label="Privacy notice" result={matrix?.privacyConsent.privacyNotice ?? null} /><EvidenceCode code="CMP" label="CMP framework" result={matrix?.privacyConsent.cmp ?? null} /></p><p className="truncate text-[10px] text-slate-500" title={evidenceTitle("Consent mechanism", matrix?.privacyConsent.mechanism ?? null)}>Mechanism {matrix?.privacyConsent.cmpVendorName ?? (matrix?.privacyConsent.mechanism ? EVIDENCE_MARKS[matrix.privacyConsent.mechanism.status].mark : "·")}</p></td>
-                    <td className="truncate px-2.5 py-1.5 font-medium text-slate-700" title={request.noGoReason ?? undefined}>{accessLabel(request)}</td>
                     <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="A" label="Accept" result={matrix?.privacyConsent.accept ?? null} /><EvidenceCode code="R" label="Reject" result={matrix?.privacyConsent.reject ?? null} /><EvidenceCode code="O" label="Options" result={matrix?.privacyConsent.options ?? null} /></p><p className="truncate text-[10px] text-slate-400">Canonical controls</p></td>
+                    <td className="px-2.5 py-1.5 font-medium leading-4 text-slate-700" title={request.noGoReason ?? undefined}><span className="line-clamp-2 break-words">{accessLabel(request)}</span></td>
                     <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transparency.aggregate ?? null} labels={TRANSPARENCY_LABELS} policyEvidence={matrix?.policyEvidence} results={matrix?.transparency.results ?? null} /></td>
                     <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transport.aggregate ?? null} labels={TRANSPORT_LABELS} results={matrix?.transport.results ?? null} /></td>
                     <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.runtime.aggregate ?? null} labels={RUNTIME_LABELS} results={matrix?.runtime.results ?? null} /></td>
