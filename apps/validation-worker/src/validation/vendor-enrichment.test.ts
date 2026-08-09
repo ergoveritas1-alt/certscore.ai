@@ -1,6 +1,72 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { collectResolvedRuntimeVendors, collectVendorEnrichmentCandidates } from "./vendor-enrichment";
+import { collectResolvedRuntimeVendors, collectVendorEnrichmentCandidates, resolveCanonicalVendorCandidate } from "./vendor-enrichment";
+
+test("uses a unique canonical resolver identity before legacy static vendor fallback", () => {
+  const resolved = resolveCanonicalVendorCandidate({
+    beforeConsent: true,
+    collectionEndpointType: "request",
+    cookieNames: [],
+    firstPartyOrThirdParty: "third_party",
+    hostname: "connect.facebook.net",
+    sampleUrls: ["https://connect.facebook.net/en_US/fbevents.js"]
+  });
+  assert.equal(resolved?.canonicalName, "Meta Pixel");
+  assert.equal(resolved?.confidence, 0.96);
+  assert.deepEqual(resolved?.cookieNames, []);
+  assert.match(resolved?.id ?? "", /^canonical:vendor_/);
+  assert.equal(resolved?.vendorCategory, "advertising");
+});
+
+test("leaves ambiguous canonical host identities for conservative fallback handling", () => {
+  assert.equal(resolveCanonicalVendorCandidate({
+    beforeConsent: true,
+    collectionEndpointType: "request",
+    cookieNames: [],
+    firstPartyOrThirdParty: "third_party",
+    hostname: "ad.doubleclick.net",
+    sampleUrls: []
+  }), null);
+});
+
+test("canonicalizes uniquely resolved runtime vendor labels without forcing ambiguous hosts", () => {
+  const vendors = collectResolvedRuntimeVendors({
+    requestedHostname: "example.com",
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        requestToVendorObservations: [
+          {
+            category: "audience_measurement",
+            confidence: "high",
+            hostname: "static.cloudflareinsights.com",
+            preConsent: true,
+            vendor: "Cloudflare Bot Management"
+          },
+          {
+            category: "advertising_measurement",
+            confidence: "high",
+            hostname: "ad.doubleclick.net",
+            preConsent: true,
+            vendor: "Google Ads / DoubleClick"
+          }
+        ],
+        requestObservations: [
+          {
+            domain: "static.cloudflareinsights.com",
+            preConsent: true,
+            url: "https://static.cloudflareinsights.com/beacon.min.js"
+          }
+        ]
+      }
+    }
+  });
+
+  const cloudflare = vendors.find((vendor) => vendor.hostname === "static.cloudflareinsights.com");
+  assert.equal(cloudflare?.vendorName, "Cloudflare Web Analytics");
+  assert.equal(cloudflare?.vendorCategory, "analytics");
+  const doubleclick = vendors.find((vendor) => vendor.hostname === "ad.doubleclick.net");
+  assert.equal(doubleclick?.vendorName, "Google Ads / DoubleClick");
+});
 
 test("retains concrete pre-consent request URLs for unresolved vendor candidates", () => {
   const candidates = collectVendorEnrichmentCandidates({

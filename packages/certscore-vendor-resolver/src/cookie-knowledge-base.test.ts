@@ -63,6 +63,28 @@ test("canonical Microsoft cookie knowledge keeps documented Clarity and identity
   assert.equal(resolveCanonicalCookieKnowledge("SRM_B").essentiality, "unknown");
 });
 
+test("canonical audit candidates classify documented UET, Google publisher, and HubSpot cookies", () => {
+  for (const name of ["_uetsid", "_uetvid", "__gads", "__gpi", "__hstc", "hubspotutk", "__hssc", "__hssrc"]) {
+    const knowledge = resolveCanonicalCookieKnowledge(name);
+    assert.equal(knowledge.essentiality, "non_essential");
+    assert.ok(knowledge.description.length > 20);
+    assert.ok(knowledge.dataTypes.length > 0);
+  }
+  assert.equal(resolveCanonicalCookieKnowledge("_uetsid").vendor, "Microsoft Advertising / Bing UET");
+  assert.equal(resolveCanonicalCookieKnowledge("hubspotutk").vendor, "HubSpot");
+});
+
+test("canonical LinkedIn and TikTok cookie knowledge preserves consent and advertising distinctions", () => {
+  assert.equal(resolveCanonicalCookieKnowledge("lidc").essentiality, "essential");
+  assert.equal(resolveCanonicalCookieKnowledge("lidc").category, "security");
+  assert.equal(resolveCanonicalCookieKnowledge("li_gc").essentiality, "essential");
+  assert.equal(resolveCanonicalCookieKnowledge("li_gc").category, "consent_management");
+  assert.equal(resolveCanonicalCookieKnowledge("li_sugr").essentiality, "non_essential");
+  assert.equal(resolveCanonicalCookieKnowledge("li_sugr").category, "advertising");
+  assert.equal(resolveCanonicalCookieKnowledge("ttcsid_pixel123").vendor, "TikTok");
+  assert.equal(resolveCanonicalCookieKnowledge("ttcsid_pixel123").essentiality, "non_essential");
+});
+
 test("canonical Amazon cookie knowledge classifies ubid locale variants as non-essential persistent identifiers", () => {
   assert.deepEqual(resolveCanonicalCookieKnowledge("ubid-acbde"), {
     category: "analytics",

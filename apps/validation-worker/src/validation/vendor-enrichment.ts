@@ -3,6 +3,7 @@ import {
   KNOWN_CMP_REGISTRY,
   isKnownCmpInfrastructureUrl
 } from "../../../../packages/shared/src/known-cmps";
+import { resolveVendorObservations } from "@certscore/vendor-resolver";
 import { getWorkerEnv } from "../env";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
@@ -583,14 +584,29 @@ export function collectResolvedRuntimeVendors(input: {
     const evidenceSource = RUNTIME_VENDOR_SOURCE;
     const confidenceLabel = getString(row.confidence);
     const confidence = confidenceLabel === "high" ? 0.95 : confidenceLabel === "medium" ? 0.7 : 0.45;
-    const key = `${vendorName}|${hostname}|${evidenceSource}`;
+    const sampleUrls = uniqueStrings([
+      ...(row.preConsent === true || row.pre_consent === true ? [...getRequestUrlsFromRow(row), ...getRequestUrlsForHost(hybrid, hostname)] : []),
+      ...getPreconsentRequestUrlsForHost(hybrid, hostname)
+    ]).slice(0, 5);
+    const canonical = resolveCanonicalVendorCandidate({
+      beforeConsent: row.preConsent === true || row.pre_consent === true,
+      collectionEndpointType: "request",
+      cookieNames: [],
+      firstPartyOrThirdParty: "third_party",
+      hostname,
+      sampleUrls
+    });
+    const resolvedVendorName = canonical?.canonicalName ?? vendorName;
+    const resolvedVendorCategory = canonical?.vendorCategory ?? vendorCategory;
+    const resolvedConfidence = canonical?.confidence ?? confidence;
+    const key = `${resolvedVendorName}|${hostname}|${evidenceSource}`;
     const existing = rows.get(key);
     const beforeConsent = row.preConsent === true || row.pre_consent === true;
     if (existing) {
       existing.beforeConsent = existing.beforeConsent || beforeConsent;
       existing.sampleUrls = uniqueStrings([
         ...existing.sampleUrls,
-        ...(beforeConsent ? [...getRequestUrlsFromRow(row), ...getRequestUrlsForHost(hybrid, hostname)] : []),
+        ...sampleUrls,
         ...getPreconsentRequestUrlsForHost(hybrid, hostname)
       ]).slice(0, 5);
       continue;
@@ -603,12 +619,9 @@ export function collectResolvedRuntimeVendors(input: {
       detectionSource: evidenceSource,
       firstPartyOrThirdParty: "third_party",
       hostname,
-      sampleUrls: uniqueStrings([
-        ...(beforeConsent ? [...getRequestUrlsFromRow(row), ...getRequestUrlsForHost(hybrid, hostname)] : []),
-        ...getPreconsentRequestUrlsForHost(hybrid, hostname)
-      ]).slice(0, 5),
-      vendorCategory,
-      vendorName
+      sampleUrls,
+      vendorCategory: resolvedVendorCategory,
+      vendorName: resolvedVendorName
     });
   }
 
@@ -636,6 +649,38 @@ function matchCandidateToRegistry(input: {
   return null;
 }
 
+function canonicalVendorCategory(purpose: string): VendorRegistryEntry["vendorCategory"] {
+  if (["advertising", "analytics", "session_replay"].includes(purpose)) {
+    return purpose as VendorRegistryEntry["vendorCategory"];
+  }
+  if (["consent_management", "tag_management", "infrastructure", "security", "performance_monitoring", "customer_support"].includes(purpose)) {
+    return "functional";
+  }
+  return "unknown";
+}
+
+export function resolveCanonicalVendorCandidate(candidate: VendorCandidate): VendorRegistryEntry | null {
+  const inputs = candidate.sampleUrls.length > 0
+    ? candidate.sampleUrls.map((url) => ({ type: "request" as const, hostname: candidate.hostname, url, matchSource: "network_request" as const }))
+    : [{ type: "request" as const, hostname: candidate.hostname, matchSource: "network_request" as const }];
+  const observations = resolveVendorObservations(inputs);
+  const identities = new Set(observations.map((observation) => `${observation.entity}\u0000${observation.product ?? observation.vendor}\u0000${observation.purpose}`));
+  if (identities.size !== 1) {
+    return null;
+  }
+  const observation = [...observations].sort((left, right) => right.confidence - left.confidence)[0];
+  if (!observation) {
+    return null;
+  }
+  return {
+    canonicalName: observation.product ?? observation.vendor,
+    confidence: observation.confidence,
+    cookieNames: [],
+    id: `canonical:${observation.observationId}`,
+    vendorCategory: canonicalVendorCategory(observation.purpose)
+  };
+}
+
 function matchCandidateToStaticRules(candidate: VendorCandidate): VendorRegistryEntry | null {
   const rule = STATIC_VENDOR_RULES.find((entry) => {
     const hostMatched = entry.domains.some((domain) => candidate.hostname === domain || candidate.hostname.endsWith(`.${domain}`));
@@ -660,6 +705,10 @@ function matchCandidateToStaticRules(candidate: VendorCandidate): VendorRegistry
     id: `static:${rule.vendorName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
     vendorCategory: rule.vendorCategory
   };
+}
+
+function matchCandidateToCanonicalOrStaticRules(candidate: VendorCandidate): VendorRegistryEntry | null {
+  return resolveCanonicalVendorCandidate(candidate) ?? matchCandidateToStaticRules(candidate);
 }
 
 function isFirstPartyProxyHost(hostname: string, requestedHostname: string | null) {
@@ -954,7 +1003,7 @@ export async function enrichUnknownScanVendors(input: { hostname: string; scanId
       continue;
     }
 
-    const staticMatch = matchCandidateToStaticRules(candidate);
+    const staticMatch = matchCandidateToCanonicalOrStaticRules(candidate);
     if (staticMatch) {
       matchedCandidates.set(candidate.hostname, staticMatch);
       staticResolvedCount += 1;
