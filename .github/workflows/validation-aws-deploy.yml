@@ -79,6 +79,10 @@ jobs:
       VALIDATION_WORKER_LAMBDA_RESULT_POLL_ENABLED: "1"
       VALIDATION_WORKER_LAMBDA_RESULT_POLL_SECONDS: "2"
       CERTSCORE_REVIEW_MODEL: ${{ vars.CERTSCORE_REVIEW_MODEL || 'gpt-5.4-mini' }}
+      CERTSCORE_ROUTINE_REVIEW_MODEL: ${{ vars.CERTSCORE_ROUTINE_REVIEW_MODEL || 'gpt-5.4-nano' }}
+      CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED: ${{ vars.CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED || '0' }}
+      CERTSCORE_EXTRACTION_REUSE_SHADOW_ENABLED: ${{ vars.CERTSCORE_EXTRACTION_REUSE_SHADOW_ENABLED || '0' }}
+      CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED: ${{ vars.CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED || '0' }}
       CERTSCORE_MINI_REVIEW_ENABLED: "1"
       CERTSCORE_MODEL_REVIEW_MODE: "enforced"
       CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED: "1"
@@ -294,6 +298,10 @@ jobs:
                             .name != "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED"
                             and .name != "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS"
                             and .name != "CERTSCORE_REVIEW_MODEL"
+                            and .name != "CERTSCORE_ROUTINE_REVIEW_MODEL"
+                            and .name != "CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED"
+                            and .name != "CERTSCORE_EXTRACTION_REUSE_SHADOW_ENABLED"
+                            and .name != "CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED"
                             and .name != "CERTSCORE_MINI_REVIEW_ENABLED"
                             and .name != "CERTSCORE_MODEL_REVIEW_MODE"
                             and .name != "CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED"
@@ -311,6 +319,22 @@ jobs:
                             {
                               "name": "CERTSCORE_REVIEW_MODEL",
                               "value": env.CERTSCORE_REVIEW_MODEL
+                            },
+                            {
+                              "name": "CERTSCORE_ROUTINE_REVIEW_MODEL",
+                              "value": env.CERTSCORE_ROUTINE_REVIEW_MODEL
+                            },
+                            {
+                              "name": "CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED",
+                              "value": env.CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED
+                            },
+                            {
+                              "name": "CERTSCORE_EXTRACTION_REUSE_SHADOW_ENABLED",
+                              "value": env.CERTSCORE_EXTRACTION_REUSE_SHADOW_ENABLED
+                            },
+                            {
+                              "name": "CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED",
+                              "value": env.CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED
                             },
                             {
                               "name": "CERTSCORE_MINI_REVIEW_ENABLED",

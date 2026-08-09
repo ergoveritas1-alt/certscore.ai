@@ -10,6 +10,7 @@ import {
   determineValidationCollectAction,
   getNanoDocumentSourceDedupKeys,
   isolateLikelyLegalDocumentText,
+  isSentinelPolicyReviewTarget,
   looksLikeIntermediaryOrBlockPage,
   looksLikeSoft404PolicyDocument,
   promoteSectionFinancialReviewFindings,
@@ -21,6 +22,23 @@ import {
   shouldRetryRejectedNanoDocumentSource,
   shouldQueueNanoDocumentSourceForExtraction
 } from "./pipeline";
+
+test("retained-extraction shadow cohort is limited to owned sentinel pages", () => {
+  assert.equal(
+    isSentinelPolicyReviewTarget(
+      "https://ergoveritas.com/.well-known/certscore-canary/sentinels/privacy-evidence.html",
+    ),
+    true,
+  );
+  assert.equal(isSentinelPolicyReviewTarget("https://ergoveritas.com/privacy"), false);
+  assert.equal(
+    isSentinelPolicyReviewTarget(
+      "https://example.com/.well-known/certscore-canary/sentinels/privacy-evidence.html",
+    ),
+    false,
+  );
+  assert.equal(isSentinelPolicyReviewTarget("not a url"), false);
+});
 
 function buildArtifacts(overrides?: {
   accessibilityRuleExamples?: Array<Record<string, unknown>>;

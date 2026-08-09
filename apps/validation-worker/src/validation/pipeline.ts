@@ -84,6 +84,7 @@ const NANO_SIGNAL_ENRICHMENT_POLL_MS = 2_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
 const VALIDATION_VERDICT_BATCH_SIZE = 12;
+const SENTINEL_POLICY_REVIEW_PATH_PREFIX = "/.well-known/certscore-canary/sentinels/";
 
 const FINANCIAL_COMMERCIAL_SIGNAL_KEYS = new Set([
   "financial.performance_claim_text_present",
@@ -107,6 +108,17 @@ const FINANCIAL_COMMERCIAL_SIGNAL_KEYS = new Set([
   "commercial.promo_price_or_free_claim_present",
   "commercial.variable_fee_language_present_without_explanation"
 ]);
+
+export function isSentinelPolicyReviewTarget(targetUrl: string | null | undefined) {
+  if (!targetUrl) return false;
+  try {
+    const parsed = new URL(targetUrl);
+    return parsed.hostname === "ergoveritas.com" &&
+      parsed.pathname.startsWith(SENTINEL_POLICY_REVIEW_PATH_PREFIX);
+  } catch {
+    return false;
+  }
+}
 
 async function runPolicyModelReview(input: {
   artifacts: Awaited<ReturnType<typeof loadNanoSignalEnrichmentInputs>>;
@@ -207,7 +219,8 @@ async function runPolicyModelReview(input: {
         packet,
       })
     : Promise.resolve(null);
-  const extractionReuseShadow = env.CERTSCORE_EXTRACTION_REUSE_SHADOW_ENABLED
+  const extractionReuseShadow = env.CERTSCORE_EXTRACTION_REUSE_SHADOW_ENABLED &&
+    isSentinelPolicyReviewTarget(packet.scanContext.targetUrl)
     ? runExtractionReusePolicyReviewShadow({
         apiKey: env.OPENAI_API_KEY,
         model: env.CERTSCORE_REVIEW_MODEL,
