@@ -1222,6 +1222,16 @@ test("reversed consent-gated cookie promise also routes to Mini", () => {
   assert.equal(plan.requiresMiniReview, true);
 });
 
+test("affirmative runtime disclosure with matching retained facts routes to Mini", () => {
+  const packet = buildFixturePacket(
+    "Calibration pages may intentionally expose cookies, browser storage values, analytics, and session replay tags."
+  );
+  packet.runtimeContext.cookies = [{ cookieName: "sentinel_runtime" }];
+  const plan = planPolicyRuntimeSemanticReview(packet);
+  assert.equal(plan.requiresMiniReview, true);
+  assert.ok(plan.claimExcerpts.some((excerpt) => /intentionally expose cookies/i.test(excerpt)));
+});
+
 test("runtime storage keys establish observed cookie/storage names", async () => {
   const packet = buildFixturePacket("This policy describes our use of browser storage.");
   packet.runtimeContext.storageKeys = ["consent-preferences"];

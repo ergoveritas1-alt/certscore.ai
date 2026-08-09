@@ -1463,6 +1463,14 @@ export function planPolicyRuntimeSemanticReview(
       pattern: /\b(?:cookies?|track(?:ing)?|third[- ]part(?:y|ies)|analytics|advertising|session replay|fingerprint(?:ing)?)\b.{0,160}\b(?:do not|don't|never|will not|only after (?:your )?consent|until (?:you )?consent)\b/i,
       runtimeComparable: hasCookies || hasTrackers || hasPreconsent,
     },
+    {
+      pattern: /\b(?:may|can|will|we (?:use|employ|allow)|services? (?:may|can|will))\b.{0,120}\b(?:set|place|use|expose|collect through)\b.{0,100}\b(?:cookies?|browser storage|local storage|analytics|session replay|tracking tags?)\b/i,
+      runtimeComparable: hasCookies || hasTrackers,
+    },
+    {
+      pattern: /\b(?:cookies?|browser storage|local storage|analytics|session replay|tracking tags?)\b.{0,120}\b(?:may|can|will|are|is)\b.{0,80}\b(?:set|placed|used|exposed|collected)\b/i,
+      runtimeComparable: hasCookies || hasTrackers,
+    },
   ];
   const claimExcerpts: string[] = [];
   for (const document of packet.documents.filter(isTargetPolicyDocument)) {
