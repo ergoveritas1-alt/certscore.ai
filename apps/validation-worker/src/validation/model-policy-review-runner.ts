@@ -1,11 +1,13 @@
 import { policyModelReviewArtifactSchema } from "@certscore/contracts";
 import {
   buildPolicyReviewCacheKey,
+  buildPolicyRuntimeSemanticContentHash,
   buildDeterministicCookieInventoryRow,
   buildNoComparablePolicyRuntimeRow,
   buildStaticPolicyReviewPacket,
   POLICY_MODEL_REVIEW_CONTRACT_VERSION,
   POLICY_MODEL_REVIEW_PROMPT_VERSION,
+  POLICY_REVIEW_TOPICS,
   RUNTIME_POLICY_REVIEW_TOPICS,
   STATIC_POLICY_REVIEW_TOPICS,
   deriveDeterministicLegalFrameworkSignals,
@@ -73,6 +75,21 @@ function hasExactlyTopics(
   return artifact.status === "completed" &&
     artifact.rows.length === topics.length &&
     topics.every((topic) => artifact.rows.some((row) => row.topic === topic));
+}
+
+export function isRuntimeSemanticCacheReusable(
+  artifact: ReturnType<typeof policyModelReviewArtifactSchema.parse>,
+) {
+  if (!hasExactlyTopics(artifact, POLICY_REVIEW_TOPICS)) return false;
+  const runtimeRow = artifact.rows.find(
+    (row) => row.topic === "policy_runtime_consistency",
+  );
+  if (!runtimeRow) return false;
+  return ![
+    runtimeRow.rationale,
+    ...runtimeRow.evidenceExcerpts,
+    ...runtimeRow.conflictingExcerpts,
+  ].some((value) => /\b\d[\d,]*(?:\.\d+)?\s*(?:ms|milliseconds?|s|secs?|seconds?)\b/i.test(value));
 }
 
 function stablePolicyUrl(value: string) {
@@ -222,6 +239,7 @@ export async function runStaticPolicyReviewPacket(input: {
 }
 
 function composeParallelPolicyArtifact(input: {
+  cacheContentHash?: string;
   mode: "shadow" | "enforced";
   model: string;
   packet: PolicyReviewPacket;
@@ -236,7 +254,7 @@ function composeParallelPolicyArtifact(input: {
     ...input.runtimeArtifact.rows,
   ];
   const cacheKey = buildPolicyReviewCacheKey({
-    contentHash: input.packet.contentHash,
+    contentHash: input.cacheContentHash ?? input.packet.contentHash,
     model: input.model,
   });
   return finalizeArtifactProjectionMode({
@@ -259,6 +277,9 @@ function composeParallelPolicyArtifact(input: {
           ...input.runtimeArtifact.provenance.reasonCodes,
           "verified_static_policy_review_join",
           "terminal_runtime_delta_review",
+          ...(input.cacheContentHash && input.cacheContentHash !== input.packet.contentHash
+            ? ["runtime_semantic_cache_identity_v1"]
+            : []),
           ...(input.runtimeArtifact.provenance.reasonCodes.includes(
             "deterministic_runtime_topic_routing_v1"
           )
@@ -689,9 +710,18 @@ export async function runPolicyReviewPacket(input: {
   packet: PolicyReviewPacket;
   reuseEarlyStatic?: boolean;
   useMiniExceptionRuntime?: boolean;
+  useRuntimeSemanticCache?: boolean;
 }) {
+  const runtimeSemanticCacheEligible = Boolean(
+    input.useMiniExceptionRuntime &&
+    input.useRuntimeSemanticCache &&
+    planPolicyRuntimeSemanticReview(input.packet).requiresMiniReview
+  );
+  const cacheContentHash = runtimeSemanticCacheEligible
+    ? buildPolicyRuntimeSemanticContentHash(input.packet)
+    : input.packet.contentHash;
   const cacheKey = buildPolicyReviewCacheKey({
-    contentHash: input.packet.contentHash,
+    contentHash: cacheContentHash,
     model: input.model
   });
   const reusable = await loadReusableModelReviewArtifact({
@@ -703,7 +733,11 @@ export async function runPolicyReviewPacket(input: {
   let parallelJoin = false;
   if (reusable?.review_json) {
     const parsed = policyModelReviewArtifactSchema.safeParse(reusable.review_json);
-    if (parsed.success) {
+    if (
+      parsed.success &&
+      hasExactlyTopics(parsed.data, POLICY_REVIEW_TOPICS) &&
+      (!runtimeSemanticCacheEligible || isRuntimeSemanticCacheReusable(parsed.data))
+    ) {
       cacheHit = true;
       artifact = finalizeArtifactProjectionMode({
         artifact: rebindCachedStaticArtifact({
@@ -715,7 +749,9 @@ export async function runPolicyReviewPacket(input: {
               reasonCodes: [
                 ...new Set([
                   ...parsed.data.provenance.reasonCodes,
-                  "content_hash_cache_reuse"
+                  runtimeSemanticCacheEligible
+                    ? "runtime_semantic_cache_reuse"
+                    : "content_hash_cache_reuse"
                 ])
               ],
               usedForProductionProjection: false
@@ -750,6 +786,7 @@ export async function runPolicyReviewPacket(input: {
       if (hasExactlyTopics(runtimeArtifact, RUNTIME_POLICY_REVIEW_TOPICS)) {
         parallelJoin = true;
         artifact = composeParallelPolicyArtifact({
+          cacheContentHash,
           mode: input.mode,
           model: input.model,
           packet: input.packet,

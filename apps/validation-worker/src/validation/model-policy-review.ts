@@ -928,6 +928,46 @@ export function buildPolicyStaticContentHash(packet: PolicyReviewPacket) {
   }));
 }
 
+const POLICY_RUNTIME_SEMANTIC_CACHE_VERSION = "policy_runtime_semantic_cache.v1";
+const POLICY_RUNTIME_TIMING_BAND_MS = 5_000;
+
+function normalizeRuntimeSemanticValue(value: unknown, key: string | null = null): unknown {
+  if (key === "observedAtMs" && typeof value === "number" && Number.isFinite(value)) {
+    return {
+      timingBand: Math.floor(value / POLICY_RUNTIME_TIMING_BAND_MS),
+      timingBandMs: POLICY_RUNTIME_TIMING_BAND_MS,
+    };
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeRuntimeSemanticValue(entry));
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .map(([entryKey, entry]) => [
+        entryKey,
+        normalizeRuntimeSemanticValue(entry, entryKey),
+      ]));
+  }
+  return value;
+}
+
+/**
+ * Identifies a same-day policy/runtime comparison without scan UUIDs or
+ * sub-second execution jitter. Every retained semantic fact remains in the
+ * identity, and observation timing remains separated into five-second bands.
+ */
+export function buildPolicyRuntimeSemanticContentHash(packet: PolicyReviewPacket) {
+  return sha256(stableJson({
+    cacheVersion: POLICY_RUNTIME_SEMANTIC_CACHE_VERSION,
+    policyIdentity: buildPolicyStaticContentHash(packet),
+    region: packet.scanContext.region,
+    runtimeContext: normalizeRuntimeSemanticValue(packet.runtimeContext),
+    runtimeCoverage: normalizeRuntimeSemanticValue(packet.evidenceCoverage.runtimeCoverage),
+    scanDay: packet.scanDate?.slice(0, 10) ?? null,
+    targetUrl: packet.scanContext.targetUrl,
+  }));
+}
+
 /**
  * Returns the exact bounded input used for the six policy-only semantic rows.
  * Early and terminal consumers must use this projection for both transport and

@@ -7,6 +7,7 @@ import {
   buildPolicyReviewInput,
   buildPolicyReviewPacket,
   buildPolicyReviewPacketFromCanonicalBundle,
+  buildPolicyRuntimeSemanticContentHash,
   buildPolicyStaticContentHash,
   buildStaticPolicyReviewPacket,
   deriveDeterministicLegalFrameworkSignals,
@@ -1230,6 +1231,59 @@ test("affirmative runtime disclosure with matching retained facts routes to Mini
   const plan = planPolicyRuntimeSemanticReview(packet);
   assert.equal(plan.requiresMiniReview, true);
   assert.ok(plan.claimExcerpts.some((excerpt) => /intentionally expose cookies/i.test(excerpt)));
+});
+
+test("runtime semantic identity ignores only same-day scan metadata and timing jitter", () => {
+  const first = buildFixturePacket(
+    "Calibration pages may intentionally expose cookies and analytics tags.",
+  );
+  first.scanDate = "2026-08-09T04:46:57.798Z";
+  first.scanId = "scan-first";
+  first.runtimeContext = {
+    consentUi: [{ captureStatus: "no_evidence", observedAtMs: 3_283 }],
+    cookies: [{ cookieName: "sentinel_runtime", observedAtMs: 3_289 }],
+    preconsent: { preConsentTrackingObserved: false },
+    storageKeys: ["sentinel_storage"],
+  };
+  const repeated = structuredClone(first);
+  repeated.contentHash = "f".repeat(64);
+  repeated.scanDate = "2026-08-09T05:04:39.397Z";
+  repeated.scanId = "scan-repeated";
+  (repeated.runtimeContext.consentUi as Array<Record<string, unknown>>)[0]!.observedAtMs = 2_504;
+  (repeated.runtimeContext.cookies as Array<Record<string, unknown>>)[0]!.observedAtMs = 2_543;
+
+  assert.equal(
+    buildPolicyRuntimeSemanticContentHash(first),
+    buildPolicyRuntimeSemanticContentHash(repeated),
+  );
+
+  const changedCookie = structuredClone(repeated);
+  (changedCookie.runtimeContext.cookies as Array<Record<string, unknown>>)[0]!.cookieName = "different_cookie";
+  assert.notEqual(
+    buildPolicyRuntimeSemanticContentHash(first),
+    buildPolicyRuntimeSemanticContentHash(changedCookie),
+  );
+
+  const changedConsentState = structuredClone(repeated);
+  (changedConsentState.runtimeContext.preconsent as Record<string, unknown>).preConsentTrackingObserved = true;
+  assert.notEqual(
+    buildPolicyRuntimeSemanticContentHash(first),
+    buildPolicyRuntimeSemanticContentHash(changedConsentState),
+  );
+
+  const changedTimingBand = structuredClone(repeated);
+  (changedTimingBand.runtimeContext.cookies as Array<Record<string, unknown>>)[0]!.observedAtMs = 7_543;
+  assert.notEqual(
+    buildPolicyRuntimeSemanticContentHash(first),
+    buildPolicyRuntimeSemanticContentHash(changedTimingBand),
+  );
+
+  const nextDay = structuredClone(repeated);
+  nextDay.scanDate = "2026-08-10T00:00:01.000Z";
+  assert.notEqual(
+    buildPolicyRuntimeSemanticContentHash(first),
+    buildPolicyRuntimeSemanticContentHash(nextDay),
+  );
 });
 
 test("runtime storage keys establish observed cookie/storage names", async () => {

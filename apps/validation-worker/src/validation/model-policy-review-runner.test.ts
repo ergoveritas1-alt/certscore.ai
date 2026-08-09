@@ -10,6 +10,7 @@ import {
 } from "./model-policy-review";
 import {
   finalizeArtifactProjectionMode,
+  isRuntimeSemanticCacheReusable,
   rebindCachedStaticArtifact,
   runConcurrentPolicyReviewJoin,
   runMiniExceptionRuntimeReview,
@@ -201,6 +202,33 @@ test("cached static review references are rebound to the current retained docume
   assert.deepEqual(rebound.rows[0]?.sourceDocumentIds, ["current-policy-document"]);
   assert.deepEqual(rebound.provenance.inputRefs, ["current-policy-document"]);
   assert.equal(rebound.productionEligible, false);
+});
+
+test("runtime semantic cache rejects timing-specific model output", () => {
+  const reusable = artifact();
+  assert.equal(isRuntimeSemanticCacheReusable(reusable), true);
+
+  const timingSpecific = policyModelReviewArtifactSchema.parse({
+    ...reusable,
+    rows: reusable.rows.map((row) => row.topic === "policy_runtime_consistency"
+      ? { ...row, rationale: "The cookie was observed at 3289 ms." }
+      : row),
+  });
+  assert.equal(isRuntimeSemanticCacheReusable(timingSpecific), false);
+
+  const abbreviatedTiming = policyModelReviewArtifactSchema.parse({
+    ...reusable,
+    rows: reusable.rows.map((row) => row.topic === "policy_runtime_consistency"
+      ? { ...row, rationale: "The runtime event appeared at 3.2s." }
+      : row),
+  });
+  assert.equal(isRuntimeSemanticCacheReusable(abbreviatedTiming), false);
+
+  const incomplete = policyModelReviewArtifactSchema.parse({
+    ...reusable,
+    rows: reusable.rows.filter((row) => row.topic !== "policy_runtime_consistency"),
+  });
+  assert.equal(isRuntimeSemanticCacheReusable(incomplete), false);
 });
 
 test("terminal join waits for a concurrently persisted usable static review", async () => {

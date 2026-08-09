@@ -85,6 +85,7 @@ jobs:
       CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED: ${{ vars.CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED || '0' }}
       CERTSCORE_MINI_REVIEW_ENABLED: "1"
       CERTSCORE_MINI_EXCEPTION_ROUTING_ENABLED: ${{ vars.CERTSCORE_MINI_EXCEPTION_ROUTING_ENABLED || '0' }}
+      CERTSCORE_RUNTIME_SEMANTIC_CACHE_ENABLED: ${{ vars.CERTSCORE_RUNTIME_SEMANTIC_CACHE_ENABLED || '0' }}
       CERTSCORE_MODEL_REVIEW_MODE: "enforced"
       CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED: "1"
       CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED: "1"
@@ -305,6 +306,7 @@ jobs:
                             and .name != "CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED"
                             and .name != "CERTSCORE_MINI_REVIEW_ENABLED"
                             and .name != "CERTSCORE_MINI_EXCEPTION_ROUTING_ENABLED"
+                            and .name != "CERTSCORE_RUNTIME_SEMANTIC_CACHE_ENABLED"
                             and .name != "CERTSCORE_MODEL_REVIEW_MODE"
                             and .name != "CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED"
                             and .name != "CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED"
@@ -345,6 +347,10 @@ jobs:
                             {
                               "name": "CERTSCORE_MINI_EXCEPTION_ROUTING_ENABLED",
                               "value": env.CERTSCORE_MINI_EXCEPTION_ROUTING_ENABLED
+                            },
+                            {
+                              "name": "CERTSCORE_RUNTIME_SEMANTIC_CACHE_ENABLED",
+                              "value": env.CERTSCORE_RUNTIME_SEMANTIC_CACHE_ENABLED
                             },
                             {
                               "name": "CERTSCORE_MODEL_REVIEW_MODE",
