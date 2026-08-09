@@ -3,6 +3,7 @@ import {
   buildPolicyReviewCacheKey,
   buildDeterministicCookieInventoryRow,
   buildNoComparablePolicyRuntimeRow,
+  buildPolicyRuntimeComparisonTransport,
   buildStaticPolicyReviewPacket,
   POLICY_MODEL_REVIEW_CONTRACT_VERSION,
   POLICY_MODEL_REVIEW_PROMPT_VERSION,
@@ -283,6 +284,9 @@ export async function runMiniExceptionRuntimeReview(input: {
 }) {
   const cookieRow = buildDeterministicCookieInventoryRow(input.packet);
   const comparisonPlan = planPolicyRuntimeSemanticReview(input.packet);
+  const comparisonTransport = comparisonPlan.requiresMiniReview
+    ? buildPolicyRuntimeComparisonTransport(input.packet, comparisonPlan)
+    : null;
   const comparisonArtifact = comparisonPlan.requiresMiniReview
     ? await reviewPolicyPacketWithModel({
         apiKey: input.apiKey,
@@ -291,6 +295,7 @@ export async function runMiniExceptionRuntimeReview(input: {
         packet: input.packet,
         reviewPhase: "runtime_delta",
         topics: ["policy_runtime_consistency"],
+        transportPacket: comparisonTransport ?? undefined,
       })
     : null;
   const comparisonRow = comparisonArtifact?.rows.find(
@@ -335,7 +340,7 @@ export async function runMiniExceptionRuntimeReview(input: {
     scanId: input.packet.scanId,
     cacheKey: buildPolicyReviewCacheKey({
       contentHash: input.packet.contentHash,
-      model: `${input.model}:mini-exception-runtime-v1`,
+      model: `${input.model}:mini-exception-runtime-v2`,
       reviewPhase: "runtime_delta",
     }),
     rows,
@@ -360,7 +365,10 @@ export async function runMiniExceptionRuntimeReview(input: {
         "deterministic_cookie_inventory_projection",
         "deterministic_runtime_topic_routing_v1",
         ...(comparisonPlan.requiresMiniReview
-          ? ["mini_explicit_policy_runtime_comparison"]
+          ? [
+              "mini_explicit_policy_runtime_comparison",
+              "bounded_policy_runtime_comparison_transport_v1",
+            ]
           : ["mini_runtime_call_avoided_no_comparable_claim"]),
       ])].slice(0, 30),
       usedForProductionProjection: false,

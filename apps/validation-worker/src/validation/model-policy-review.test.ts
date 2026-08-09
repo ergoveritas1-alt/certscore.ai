@@ -7,6 +7,7 @@ import {
   buildPolicyReviewInput,
   buildPolicyReviewPacket,
   buildPolicyReviewPacketFromCanonicalBundle,
+  buildPolicyRuntimeComparisonTransport,
   buildPolicyStaticContentHash,
   buildStaticPolicyReviewPacket,
   deriveDeterministicLegalFrameworkSignals,
@@ -1230,6 +1231,89 @@ test("affirmative runtime disclosure with matching retained facts routes to Mini
   const plan = planPolicyRuntimeSemanticReview(packet);
   assert.equal(plan.requiresMiniReview, true);
   assert.ok(plan.claimExcerpts.some((excerpt) => /intentionally expose cookies/i.test(excerpt)));
+});
+
+test("runtime comparison transport retains the matched claim and typed facts but omits unrelated policy text", () => {
+  const unrelatedMarker = "UNRELATED_POLICY_SECTION_SHOULD_NOT_BE_TRANSPORTED";
+  const packet = buildFixturePacket(
+    `Calibration pages may intentionally expose cookies and analytics tags. ${"General policy prose. ".repeat(80)} ${unrelatedMarker}`,
+  );
+  packet.runtimeContext = {
+    cmp: [{ vendor: "Unrelated CMP context" }],
+    cookies: Array.from({ length: 30 }, (_, index) => ({
+      cookieDomain: "example.test",
+      cookieName: `runtime_cookie_${index}`,
+      observedAtMs: index,
+    })),
+    trackerVendors: [{ vendor: "Example Analytics", purpose: "analytics" }],
+  };
+  const plan = planPolicyRuntimeSemanticReview(packet);
+  const transport = buildPolicyRuntimeComparisonTransport(packet, plan);
+
+  assert.equal(plan.requiresMiniReview, true);
+  assert.equal(transport.documents.length, 1);
+  assert.match(transport.documents[0]?.text ?? "", /intentionally expose cookies/i);
+  assert.doesNotMatch(transport.documents[0]?.text ?? "", new RegExp(unrelatedMarker));
+  assert.equal(transport.policyCandidates.length, 0);
+  assert.equal("cmp" in transport.runtimeContext, false);
+  assert.equal((transport.runtimeContext.cookies as unknown[]).length, 30);
+  assert.equal((packet.runtimeContext.cookies as unknown[]).length, 30);
+  assert.match(packet.documents[0]?.text ?? "", new RegExp(unrelatedMarker));
+});
+
+test("runtime comparison request uses the single-topic prompt and compact output bound", async () => {
+  const packet = buildFixturePacket(
+    "Calibration pages may intentionally expose cookies and analytics tags.",
+  );
+  packet.runtimeContext.cookies = [{ cookieName: "sentinel_runtime" }];
+  const transport = buildPolicyRuntimeComparisonTransport(packet);
+  let requestBody: Record<string, unknown> | undefined;
+
+  await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({
+        model: "gpt-5.4-mini",
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              rows: {
+                policy_runtime_consistency: {
+                  status: "observed",
+                  confidence: 0.98,
+                  sourceDocumentIds: [packet.documents[0]!.documentId],
+                  sourceUrls: [packet.documents[0]!.canonicalUrl],
+                  evidenceExcerpts: ["Calibration pages may intentionally expose cookies and analytics tags."],
+                  conflictingExcerpts: [],
+                  reasonCodes: ["typed_policy_runtime_comparison"],
+                  rationale: "The retained disclosure matches the retained runtime cookie.",
+                },
+              },
+            }),
+          },
+        }],
+      }), { status: 200 });
+    },
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet,
+    reviewPhase: "runtime_delta",
+    topics: ["policy_runtime_consistency"],
+    transportPacket: transport,
+  });
+
+  assert.equal(requestBody?.max_completion_tokens, 900);
+  const messages = requestBody?.messages as Array<{ content?: string }>;
+  assert.match(messages[0]?.content ?? "", /Perform one evidence-scoped policy\/runtime comparison/);
+  assert.doesNotMatch(messages[0]?.content ?? "", /retention passage/i);
+  const responseFormat = requestBody?.response_format as {
+    json_schema?: { schema?: { properties?: { rows?: { properties?: Record<string, unknown> } } } };
+  };
+  assert.deepEqual(
+    Object.keys(responseFormat.json_schema?.schema?.properties?.rows?.properties ?? {}),
+    ["policy_runtime_consistency"],
+  );
 });
 
 test("runtime storage keys establish observed cookie/storage names", async () => {
