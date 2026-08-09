@@ -223,6 +223,7 @@ async function runPolicyModelReview(input: {
     isSentinelPolicyReviewTarget(packet.scanContext.targetUrl)
     ? runExtractionReusePolicyReviewShadow({
         apiKey: env.OPENAI_API_KEY,
+        canonicalMiniReferenceArtifact: canonicalReview.then((review) => review.artifact),
         model: env.CERTSCORE_REVIEW_MODEL,
         packet,
       })

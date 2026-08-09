@@ -230,6 +230,10 @@ test("extraction reuse transport skips only verified observed topics and remains
   assert.equal(transport.topics.includes("legal_basis"), false);
   assert.equal(transport.topics.includes("international_transfers"), true);
   assert.equal(transport.topics.includes("policy_runtime_consistency"), true);
+  assert.equal(transport.metrics.contractVersion, "policy_extraction_reuse_transport.v2");
+  assert.ok(transport.metrics.reductionRate > 0.75);
+  assert.ok(transport.packet.documents[0]!.text.length <= 3_600);
+  assert.match(transport.packet.documents[0]!.text, /Retention: as long as necessary/);
   const mini = artifact("gpt-5.4-mini", transport.topics);
   const hybrid = composeExtractionReuseShadowArtifact({
     miniArtifact: mini,
@@ -244,4 +248,28 @@ test("extraction reuse transport skips only verified observed topics and remains
     hybrid.rows.find((row) => row.topic === "legal_basis")?.rationale ?? "",
     /Reused verified topic-specific evidence/,
   );
+});
+
+test("extraction reuse records an honest zero-call canonical fallback when nothing is reusable", () => {
+  const fullPacket = packet();
+  const transport = buildMiniExtractionReuseTransport(fullPacket);
+  assert.equal(
+    transport.reuseDecisions.some((decision) => decision.canReuseObserved),
+    false,
+  );
+  const fallback = composeExtractionReuseShadowArtifact({
+    canonicalFallback: true,
+    miniArtifact: artifact("gpt-5.4-mini"),
+    packet: fullPacket,
+    reuseDecisions: transport.reuseDecisions,
+    topics: transport.topics,
+  });
+  assert.equal(fallback.status, "completed");
+  assert.equal(fallback.provenance.requestedModel, "gpt-5.4-mini:canonical-fallback");
+  assert.ok(
+    fallback.provenance.reasonCodes.includes(
+      "canonical_mini_fallback_no_additional_model_call",
+    ),
+  );
+  assert.equal(fallback.productionEligible, false);
 });

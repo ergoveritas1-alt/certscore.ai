@@ -12,7 +12,7 @@ import {
 import { routeNanoPolicyReview } from "./policy-review-routing";
 
 const ESCALATION_TRANSPORT_VERSION = "policy_mini_escalation_transport.v1";
-const EXTRACTION_REUSE_TRANSPORT_VERSION = "policy_extraction_reuse_transport.v1";
+const EXTRACTION_REUSE_TRANSPORT_VERSION = "policy_extraction_reuse_transport.v2";
 
 const EXTRACTION_REUSABLE_TOPICS = [
   "processing_purposes",
@@ -29,6 +29,15 @@ const EXTRACTION_TOPIC_TO_COVERAGE_AREA = {
   vendor_disclosures: "recipients_or_vendor_categories",
   data_subject_rights: "data_subject_rights",
 } as const satisfies Record<(typeof EXTRACTION_REUSABLE_TOPICS)[number], string>;
+
+const TOPIC_TO_RETAINED_COVERAGE_AREA = {
+  processing_purposes: "processing_purposes",
+  legal_basis: "legal_basis",
+  data_retention: "data_retention",
+  international_transfers: "international_transfers",
+  vendor_disclosures: "recipients_or_vendor_categories",
+  data_subject_rights: "data_subject_rights",
+} as const satisfies Partial<Record<PolicyReviewTopic, string>>;
 
 export type RetainedExtractionReuseDecision = {
   canReuseObserved: boolean;
@@ -106,6 +115,59 @@ function record(value: unknown): Record<string, unknown> {
 
 function stringValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function collectBoundedStrings(value: unknown, output: string[], depth = 0) {
+  if (output.length >= 48 || depth > 4) return;
+  if (typeof value === "string") {
+    const normalized = value.replace(/\s+/g, " ").trim();
+    if (normalized.length >= 8 && !output.includes(normalized)) {
+      output.push(normalized.slice(0, 500));
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value.slice(0, 24)) {
+      collectBoundedStrings(entry, output, depth + 1);
+    }
+    return;
+  }
+  if (value !== null && typeof value === "object") {
+    for (const entry of Object.values(value as Record<string, unknown>).slice(0, 24)) {
+      collectBoundedStrings(entry, output, depth + 1);
+    }
+  }
+}
+
+function extractionEscalationPassages(
+  packet: PolicyReviewPacket,
+  topics: readonly PolicyReviewTopic[],
+) {
+  const passages: string[] = [];
+  const collectCandidate = (candidate: Record<string, unknown>) => {
+    for (const topic of topics) {
+      for (const key of TOPIC_CANDIDATE_KEYS[topic]) {
+        if (key !== "retained_article13_section_evidence") {
+          collectBoundedStrings(candidate[key], passages);
+          continue;
+        }
+        const coverageArea = TOPIC_TO_RETAINED_COVERAGE_AREA[
+          topic as keyof typeof TOPIC_TO_RETAINED_COVERAGE_AREA
+        ];
+        const retainedEvidence = candidate[key];
+        if (!coverageArea || !Array.isArray(retainedEvidence)) continue;
+        for (const entry of retainedEvidence.slice(0, 24)) {
+          const retained = record(entry);
+          if (stringValue(retained.coverageArea) === coverageArea) {
+            collectBoundedStrings(retained, passages);
+          }
+        }
+      }
+    }
+  };
+  packet.documents.forEach((document) => collectCandidate(document.extractedCandidates));
+  packet.policyCandidates.forEach(collectCandidate);
+  return passages.slice(0, 48);
 }
 
 /**
@@ -205,8 +267,11 @@ function compactCandidates(
 }
 
 export function buildBoundedMiniTopicTransport(input: {
+  documentTextLimit?: number;
+  expandRuntimeConsistencyAnchors?: boolean;
   packet: PolicyReviewPacket;
   passageExcerpts?: readonly string[];
+  preambleChars?: number;
   topics: readonly PolicyReviewTopic[];
   transportVersion: string;
 }) {
@@ -215,10 +280,12 @@ export function buildBoundedMiniTopicTransport(input: {
     ...document,
     extractedCandidates: {},
     text: selectEscalatedPolicyReviewText({
+      expandRuntimeConsistencyAnchors: input.expandRuntimeConsistencyAnchors,
       nanoExcerpts: passageExcerpts,
+      preambleChars: input.preambleChars,
       rawText: document.text,
       topics: input.topics,
-    }),
+    }, input.documentTextLimit),
   }));
   const runtimeRequired = input.topics.some((topic) =>
     topic === "cookie_inventory" || topic === "policy_runtime_consistency"
@@ -294,62 +361,29 @@ export function buildMiniExtractionReuseTransport(packet: PolicyReviewPacket) {
   const topics = reuseDecisions
     .filter((decision) => !decision.canReuseObserved)
     .map((decision) => decision.topic);
-  const documents = packet.documents.map((document) => ({
-    ...document,
-    extractedCandidates: {},
-    text: selectEscalatedPolicyReviewText({
-      nanoExcerpts: [],
-      rawText: document.text,
-      topics,
-    }),
-  }));
-  const runtimeRequired = topics.some((topic) =>
-    topic === "cookie_inventory" || topic === "policy_runtime_consistency"
-  );
-  const transportProjection = {
-    transportVersion: EXTRACTION_REUSE_TRANSPORT_VERSION,
-    originalContentHash: packet.contentHash,
+  const passageExcerpts = extractionEscalationPassages(packet, topics);
+  const bounded = buildBoundedMiniTopicTransport({
+    documentTextLimit: 3_600,
+    expandRuntimeConsistencyAnchors: false,
+    packet,
+    passageExcerpts,
+    preambleChars: 360,
     topics,
-    documents: documents.map((document) => ({
-      documentId: document.documentId,
-      text: document.text,
-    })),
-    reusedTopics: reuseDecisions
-      .filter((decision) => decision.canReuseObserved)
-      .map((decision) => decision.topic),
-    runtimeRequired,
-  };
-  const transportPacket: PolicyReviewPacket = {
-    ...packet,
-    contentHash: sha256(JSON.stringify(transportProjection)),
-    documents,
-    policyCandidates: compactCandidates(packet.policyCandidates, topics),
-    runtimeContext: runtimeRequired ? packet.runtimeContext : {},
-  };
-  const fullTextCharacters = packet.documents.reduce(
-    (sum, document) => sum + document.text.length,
-    0,
-  );
-  const transportedTextCharacters = documents.reduce(
-    (sum, document) => sum + document.text.length,
-    0,
-  );
+    transportVersion: EXTRACTION_REUSE_TRANSPORT_VERSION,
+  });
   return {
     metrics: {
-      contractVersion: EXTRACTION_REUSE_TRANSPORT_VERSION,
-      fullTextCharacters,
-      reductionRate: fullTextCharacters > 0
-        ? 1 - transportedTextCharacters / fullTextCharacters
-        : 0,
-      transportedTextCharacters,
+      ...bounded.metrics,
+      retainedPassageCount: passageExcerpts.length,
     },
-    packet: transportPacket,
+    packet: bounded.packet,
     reuseDecisions,
     topics,
   };
 }
 
 export function composeExtractionReuseShadowArtifact(input: {
+  canonicalFallback?: boolean;
   miniArtifact: PolicyModelReviewArtifact;
   packet: PolicyReviewPacket;
   reuseDecisions: readonly RetainedExtractionReuseDecision[];
@@ -395,15 +429,23 @@ export function composeExtractionReuseShadowArtifact(input: {
       : input.miniArtifact.failureReason ?? "Extraction-reuse review was incomplete.",
     provenance: {
       ...input.miniArtifact.provenance,
-      requestedModel: "hybrid:retained-extraction+gpt-5.4-mini",
-      resolvedModel: "hybrid:retained-extraction+gpt-5.4-mini",
+      requestedModel: input.canonicalFallback
+        ? "gpt-5.4-mini:canonical-fallback"
+        : "hybrid:retained-extraction+gpt-5.4-mini",
+      resolvedModel: input.canonicalFallback
+        ? "gpt-5.4-mini:canonical-fallback"
+        : "hybrid:retained-extraction+gpt-5.4-mini",
       taskType: "policy_semantic_extraction_reuse_shadow_review",
       contentHash: input.packet.contentHash,
       inputRefs: input.packet.documents.map((document) => document.documentId),
       outputRefs: rows.flatMap((row) => row.sourceDocumentIds).slice(0, 100),
       reasonCodes: [
-        "verified_retained_extraction_reuse",
-        "mini_bounded_escalation_review",
+        ...(input.canonicalFallback
+          ? ["canonical_mini_fallback_no_additional_model_call"]
+          : [
+              "verified_retained_extraction_reuse",
+              "mini_bounded_escalation_review",
+            ]),
         "extraction_reuse_shadow_non_projectable",
       ],
       usedForProductionProjection: false,

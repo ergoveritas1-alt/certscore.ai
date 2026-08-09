@@ -428,30 +428,37 @@ export async function runNanoPolicyReviewShadow(input: {
 
 export async function runExtractionReusePolicyReviewShadow(input: {
   apiKey?: string;
+  canonicalMiniReferenceArtifact?: Promise<ReturnType<typeof policyModelReviewArtifactSchema.parse>>;
   model: string;
   packet: PolicyReviewPacket;
 }) {
   const transport = buildMiniExtractionReuseTransport(input.packet);
-  const miniArtifact = await reviewPolicyPacketWithModel({
-    apiKey: input.apiKey,
-    mode: "shadow",
-    model: input.model,
-    packet: input.packet,
-    reviewPhase: "escalated",
-    topics: transport.topics,
-    transportPacket: transport.packet,
-  });
+  const reusableTopicCount = transport.reuseDecisions.filter(
+    (decision) => decision.canReuseObserved,
+  ).length;
+  const fallbackToCanonical = reusableTopicCount === 0;
+  const miniArtifact = fallbackToCanonical && input.canonicalMiniReferenceArtifact
+    ? await input.canonicalMiniReferenceArtifact
+    : await reviewPolicyPacketWithModel({
+        apiKey: input.apiKey,
+        mode: "shadow",
+        model: input.model,
+        packet: input.packet,
+        reviewPhase: "escalated",
+        topics: transport.topics,
+        transportPacket: transport.packet,
+      });
   const artifact = composeExtractionReuseShadowArtifact({
+    canonicalFallback: fallbackToCanonical,
     miniArtifact,
     packet: input.packet,
     reuseDecisions: transport.reuseDecisions,
     topics: transport.topics,
   });
-  const reusableTopicCount = transport.reuseDecisions.filter(
-    (decision) => decision.canReuseObserved,
-  ).length;
   const routing = {
     escalatedTopicCount: transport.topics.length,
+    fallbackToCanonical,
+    miniCallAvoided: fallbackToCanonical && Boolean(input.canonicalMiniReferenceArtifact),
     reusableTopicCount,
     reusableTopics: transport.reuseDecisions
       .filter((decision) => decision.canReuseObserved)
@@ -463,7 +470,18 @@ export async function runExtractionReusePolicyReviewShadow(input: {
     cacheHit: false,
     packet: input.packet,
     reviewKind: "policy_semantic_extraction_reuse_shadow",
-    supplementalMetrics: { routing },
+    supplementalMetrics: {
+      routing,
+      ...(routing.miniCallAvoided
+        ? {
+            cachedPromptTokens: 0,
+            completionTokens: 0,
+            latencyMs: 0,
+            promptTokens: 0,
+            totalTokens: 0,
+          }
+        : {}),
+    },
   });
   return { artifact, routing, summary };
 }

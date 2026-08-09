@@ -393,7 +393,9 @@ export function selectBoundedPolicyReviewText(rawText: string, limit = MAX_DOCUM
 }
 
 export function selectEscalatedPolicyReviewText(input: {
+  expandRuntimeConsistencyAnchors?: boolean;
   nanoExcerpts?: readonly string[];
+  preambleChars?: number;
   rawText: string;
   topics: readonly PolicyReviewTopic[];
 }, limit = 7_000) {
@@ -415,7 +417,7 @@ export function selectEscalatedPolicyReviewText(input: {
     retainedChars += separator.length + bounded.length;
   };
 
-  addExcerpt(input.rawText.slice(0, 900));
+  addExcerpt(input.rawText.slice(0, input.preambleChars ?? 900));
   for (const excerpt of input.nanoExcerpts ?? []) {
     const exactIndex = input.rawText.indexOf(excerpt);
     if (exactIndex >= 0) {
@@ -425,7 +427,9 @@ export function selectEscalatedPolicyReviewText(input: {
       ));
     }
   }
-  const includeAllTopics = input.topics.includes("policy_runtime_consistency");
+  const includeAllTopics =
+    (input.expandRuntimeConsistencyAnchors ?? true) &&
+    input.topics.includes("policy_runtime_consistency");
   const anchorTopics = includeAllTopics ? POLICY_REVIEW_TOPICS : input.topics;
   for (const topic of anchorTopics) {
     for (const anchor of POLICY_REVIEW_TEXT_ANCHORS_BY_TOPIC[topic]) {
