@@ -1015,22 +1015,6 @@ function buildSystemPrompt(
   boundedEscalationTransport = false,
   criticReview = false,
 ) {
-  if (
-    topics.length === 1 &&
-    topics[0] === "policy_runtime_consistency" &&
-    !criticReview
-  ) {
-    return [
-      "Perform one evidence-scoped policy/runtime comparison for a website risk-signal product.",
-      "Classify policy_runtime_consistency exactly once; do not make a legal determination or invent facts.",
-      "Compare only an explicit retained policy claim with a directly comparable retained runtime fact from the same region and consent state.",
-      "Use observed when an affirmative disclosure is supported and no material mismatch is retained.",
-      "Use conflicting only for a material disagreement, ambiguous when the retained comparison has multiple reasonable readings, and insufficient_retained_evidence when a reliable comparison cannot be made.",
-      "Mutual silence is not alignment and omitted transport text is not evidence of absence.",
-      "Return source references and bounded verbatim excerpts. Keep the rationale under 180 characters, at most six reason codes, and excerpts under 240 characters.",
-      "Never promote or create a customer-facing finding.",
-    ].join(" ");
-  }
   return [
     "You perform evidence-scoped privacy policy review for a website risk-signal product.",
     `Canonical review labels are: ${topics.map((topic) => POLICY_REVIEW_TOPIC_DEFINITIONS[topic].displayLabel).join("; ")}.`,
@@ -1433,92 +1417,6 @@ export type PolicyRuntimeSemanticReviewPlan = {
   reasonCodes: string[];
   requiresMiniReview: boolean;
 };
-
-const POLICY_RUNTIME_TRANSPORT_VERSION = "policy_runtime_comparison_transport.v1";
-
-function compactPolicyRuntimeValue(value: unknown, depth = 0): unknown {
-  if (typeof value === "string") return value.slice(0, 240);
-  if (typeof value === "number" || typeof value === "boolean" || value === null) return value;
-  if (depth >= 3) return "[bounded]";
-  if (Array.isArray(value)) {
-    // Runtime packet arrays are already bounded at canonical construction.
-    // Preserve every retained entry; compact fields rather than sampling facts.
-    return value.map((entry) => compactPolicyRuntimeValue(entry, depth + 1));
-  }
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .map(([key, entry]) => [key.slice(0, 120), compactPolicyRuntimeValue(entry, depth + 1)]),
-    );
-  }
-  return null;
-}
-
-/**
- * Builds the comparison-only transport sent to Mini. The complete retained
- * packet remains authoritative for parsing, invariant enforcement, and
- * provenance; this projection only removes unrelated request text.
- */
-export function buildPolicyRuntimeComparisonTransport(
-  packet: PolicyReviewPacket,
-  plan = planPolicyRuntimeSemanticReview(packet),
-): PolicyReviewPacket {
-  const normalizedClaims = plan.claimExcerpts.map((excerpt) => ({
-    excerpt,
-    normalized: excerpt.replace(/\s+/g, " ").trim().toLowerCase(),
-  }));
-  const documents = packet.documents.flatMap((document) => {
-    const normalizedDocument = document.text.replace(/\s+/g, " ").trim().toLowerCase();
-    const matchedExcerpts = normalizedClaims
-      .filter((claim) => normalizedDocument.includes(claim.normalized))
-      .map((claim) => claim.excerpt);
-    if (matchedExcerpts.length === 0) return [];
-    return [{
-      ...document,
-      extractedCandidates: {},
-      text: [...new Set(matchedExcerpts)].join("\n\n[…omitted unrelated retained text…]\n\n").slice(0, 2_400),
-    }];
-  });
-  const runtimeKeys = [
-    "cookies",
-    "localStorageKeys",
-    "preconsent",
-    "sessionReplay",
-    "sessionStorageKeys",
-    "storageKeys",
-    "trackerVendors",
-    "vendors",
-  ];
-  const runtimeContext = Object.fromEntries(runtimeKeys.flatMap((key) =>
-    key in packet.runtimeContext
-      ? [[key, compactPolicyRuntimeValue(packet.runtimeContext[key])]]
-      : [],
-  ));
-  const runtimeCoverage = compactPolicyRuntimeValue(packet.evidenceCoverage.runtimeCoverage);
-  const projection = {
-    transportVersion: POLICY_RUNTIME_TRANSPORT_VERSION,
-    originalContentHash: packet.contentHash,
-    documents: documents.map((document) => ({
-      documentId: document.documentId,
-      text: document.text,
-    })),
-    runtimeContext,
-    runtimeCoverage,
-    scanContext: packet.scanContext,
-  };
-  return {
-    ...packet,
-    contentHash: sha256(stableJson(projection)),
-    documents,
-    evidenceCoverage: {
-      coverageLimitations: [],
-      policySurfaceInspection: {},
-      runtimeCoverage: getRecord(runtimeCoverage),
-    },
-    policyCandidates: [],
-    runtimeContext,
-  };
-}
 
 export function planPolicyRuntimeSemanticReview(
   packet: PolicyReviewPacket,
@@ -2276,8 +2174,7 @@ export async function reviewPolicyPacketWithModel(input: {
   try {
     const useResponsesApi = /^gpt-5\.6(?:-|$)/.test(input.model);
     const reasoningEffort = input.reviewPhase === "static" ? "low" : null;
-    const boundedEscalationTransport =
-      input.reviewPhase === "escalated" || input.reviewPhase === "runtime_delta";
+    const boundedEscalationTransport = input.reviewPhase === "escalated";
     const criticReview = input.reviewPhase === "critic";
     const reviewInput = JSON.stringify({
       ...buildPolicyReviewInput(input.transportPacket ?? input.packet),
@@ -2303,7 +2200,7 @@ export async function reviewPolicyPacketWithModel(input: {
         : {}),
     });
     const maxCompletionTokens = input.reviewPhase === "runtime_delta"
-      ? 900
+      ? 2_200
       : input.reviewPhase === "escalated"
         ? Math.min(2_400, Math.max(700, topics.length * 450))
         : 6_000;
