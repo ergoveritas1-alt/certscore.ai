@@ -1,7 +1,6 @@
 import { policyModelReviewArtifactSchema } from "@certscore/contracts";
 import {
   buildPolicyReviewCacheKey,
-  buildPolicyStaticContentHash,
   buildStaticPolicyReviewPacket,
   POLICY_MODEL_REVIEW_CONTRACT_VERSION,
   POLICY_MODEL_REVIEW_PROMPT_VERSION,
@@ -9,6 +8,7 @@ import {
   STATIC_POLICY_REVIEW_TOPICS,
   deriveDeterministicLegalFrameworkSignals,
   deriveDeterministicPolicyReviewSignals,
+  reviewPolicyPacketWithModel,
   reviewPolicyPacketWithMini,
   summarizePolicyReviewArtifact,
   type PolicyReviewPacket
@@ -17,11 +17,28 @@ import {
   loadReusableModelReviewArtifact,
   upsertScanModelReviewArtifact
 } from "./repository";
+import {
+  isApprovedProductionPolicyReviewModel,
+  summarizeNanoRouting,
+} from "./policy-review-routing";
+import {
+  buildBoundedMiniTopicTransport,
+  buildMiniExtractionReuseTransport,
+  composeExtractionReuseShadowArtifact,
+} from "./policy-review-escalation";
+import {
+  composeDualNanoConsensusShadowArtifact,
+  routeDualNanoPolicyReview,
+  summarizeDualNanoConsensus,
+} from "./policy-review-consensus";
 
 type PolicyReviewArtifactKind =
   | "policy_semantic"
   | "policy_semantic_static"
-  | "policy_semantic_parallel_shadow";
+  | "policy_semantic_parallel_shadow"
+  | "policy_semantic_nano_shadow"
+  | "policy_semantic_extraction_reuse_shadow"
+  | "policy_semantic_dual_nano_shadow";
 
 const STATIC_REVIEW_JOIN_WAIT_MS = 6_000;
 const STATIC_REVIEW_JOIN_POLL_MS = 500;
@@ -55,16 +72,81 @@ function hasExactlyTopics(
     topics.every((topic) => artifact.rows.some((row) => row.topic === topic));
 }
 
+function stablePolicyUrl(value: string) {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+export function rebindCachedStaticArtifact(input: {
+  artifact: ReturnType<typeof policyModelReviewArtifactSchema.parse>;
+  packet: PolicyReviewPacket;
+}) {
+  const documentIdByUrl = new Map(
+    input.packet.documents.map((document) => [
+      stablePolicyUrl(document.canonicalUrl),
+      document.documentId,
+    ]),
+  );
+  const documentIdForUrl = (sourceUrl: string) =>
+    documentIdByUrl.get(stablePolicyUrl(sourceUrl)) ?? null;
+  const rows = input.artifact.rows.map((row) => ({
+    ...row,
+    sourceDocumentIds: [...new Set(
+      row.sourceUrls.flatMap((sourceUrl) => {
+        const documentId = documentIdForUrl(sourceUrl);
+        return documentId ? [documentId] : [];
+      }),
+    )],
+  }));
+  const deterministicLegalFrameworkSignals = input.artifact.deterministicLegalFrameworkSignals
+    .flatMap((signal) => {
+      const sourceDocumentId = documentIdForUrl(signal.sourceUrl);
+      return sourceDocumentId ? [{ ...signal, sourceDocumentId }] : [];
+    });
+  const deterministicPolicyReviewSignals = input.artifact.deterministicPolicyReviewSignals
+    .flatMap((signal) => {
+      const sourceDocumentId = documentIdForUrl(signal.sourceUrl);
+      return sourceDocumentId ? [{ ...signal, sourceDocumentId }] : [];
+    });
+  return policyModelReviewArtifactSchema.parse({
+    ...input.artifact,
+    deterministicLegalFrameworkSignals,
+    deterministicPolicyReviewSignals,
+    rows,
+    scanId: input.packet.scanId,
+    provenance: {
+      ...input.artifact.provenance,
+      contentHash: input.packet.contentHash,
+      inputRefs: input.packet.documents.map((document) => document.documentId),
+      outputRefs: rows.flatMap((row) => row.sourceDocumentIds).slice(0, 100),
+      reasonCodes: [...new Set([
+        ...input.artifact.provenance.reasonCodes,
+        "cached_evidence_refs_rebound_to_current_packet",
+      ])].slice(0, 30),
+      usedForProductionProjection: false,
+    },
+    productionEligible: false,
+  });
+}
+
 async function persistReviewArtifact(input: {
   artifact: ReturnType<typeof policyModelReviewArtifactSchema.parse>;
   cacheHit: boolean;
   packet: PolicyReviewPacket;
   reviewKind: PolicyReviewArtifactKind;
+  supplementalMetrics?: Record<string, unknown>;
 }) {
   const summary = {
     ...summarizePolicyReviewArtifact(input.artifact),
     cacheHit: input.cacheHit,
     reviewStatus: input.artifact.status,
+    ...input.supplementalMetrics,
   };
   await upsertScanModelReviewArtifact({
     cacheKey: input.artifact.cacheKey,
@@ -104,19 +186,19 @@ export async function runStaticPolicyReviewPacket(input: {
     ? policyModelReviewArtifactSchema.safeParse(reusable.review_json)
     : null;
   const artifact = parsedReusable?.success && hasExactlyTopics(parsedReusable.data, STATIC_POLICY_REVIEW_TOPICS)
-    ? policyModelReviewArtifactSchema.parse({
-        ...parsedReusable.data,
-        mode: "shadow",
-        scanId: staticPacket.scanId,
-        productionEligible: false,
-        provenance: {
-          ...parsedReusable.data.provenance,
-          reasonCodes: [...new Set([
-            ...parsedReusable.data.provenance.reasonCodes,
-            "static_content_hash_cache_reuse",
-          ])],
-          usedForProductionProjection: false,
-        },
+    ? rebindCachedStaticArtifact({
+        artifact: policyModelReviewArtifactSchema.parse({
+          ...parsedReusable.data,
+          mode: "shadow",
+          provenance: {
+            ...parsedReusable.data.provenance,
+            reasonCodes: [...new Set([
+              ...parsedReusable.data.provenance.reasonCodes,
+              "static_content_hash_cache_reuse",
+            ])],
+          },
+        }),
+        packet: staticPacket,
       })
     : await reviewPolicyPacketWithMini({
         apiKey: input.apiKey,
@@ -181,12 +263,13 @@ async function loadMatchingStaticArtifact(input: {
   model: string;
   packet: PolicyReviewPacket;
 }) {
+  const staticPacket = buildStaticPolicyReviewPacket(input.packet);
   const staticCacheKey = buildPolicyReviewCacheKey({
-    contentHash: buildPolicyStaticContentHash(input.packet),
+    contentHash: staticPacket.contentHash,
     model: input.model,
     reviewPhase: "static",
   });
-  return waitForUsableStaticReview({
+  const artifact = await waitForUsableStaticReview({
     load: async () => {
       const early = await loadReusableModelReviewArtifact({
         cacheKey: staticCacheKey,
@@ -200,6 +283,9 @@ async function loadMatchingStaticArtifact(input: {
     },
     isUsable: (artifact) => hasExactlyTopics(artifact, STATIC_POLICY_REVIEW_TOPICS),
   });
+  return artifact
+    ? rebindCachedStaticArtifact({ artifact, packet: staticPacket })
+    : null;
 }
 
 export async function runConcurrentPolicyReviewJoin<TStatic, TRuntime>(input: {
@@ -249,8 +335,13 @@ export function finalizeArtifactProjectionMode(input: {
   artifact: ReturnType<typeof policyModelReviewArtifactSchema.parse>;
   mode: "shadow" | "enforced";
 }) {
+  const approvedProductionModel = isApprovedProductionPolicyReviewModel({
+    requestedModel: input.artifact.provenance.requestedModel,
+    resolvedModel: input.artifact.provenance.resolvedModel,
+  });
   const productionEligible =
     input.mode === "enforced" &&
+    approvedProductionModel &&
     input.artifact.status === "completed" &&
     input.artifact.rows.length === 8 &&
     input.artifact.rows.every((row) =>
@@ -266,13 +357,201 @@ export function finalizeArtifactProjectionMode(input: {
           ...input.artifact.provenance.reasonCodes,
           productionEligible
             ? "approved_precision_first_production_projection_v1"
-            : "production_projection_withheld"
+            : "production_projection_withheld",
+          approvedProductionModel
+            ? "approved_gpt_5_4_mini_production_model_v1"
+            : "unapproved_production_review_model",
         ])
       ].slice(0, 30),
       usedForProductionProjection: productionEligible
     },
     productionEligible
   });
+}
+
+export async function runNanoPolicyReviewShadow(input: {
+  apiKey?: string;
+  miniReferenceArtifact?: Promise<ReturnType<typeof policyModelReviewArtifactSchema.parse>>;
+  model: string;
+  packet: PolicyReviewPacket;
+}) {
+  const cacheKey = buildPolicyReviewCacheKey({
+    contentHash: input.packet.contentHash,
+    model: input.model,
+  });
+  const reusable = await loadReusableModelReviewArtifact({
+    cacheKey,
+    reviewKind: "policy_semantic_nano_shadow",
+  });
+  const parsedReusable = reusable?.review_json
+    ? policyModelReviewArtifactSchema.safeParse(reusable.review_json)
+    : null;
+  const reviewed = parsedReusable?.success
+    ? parsedReusable.data
+    : await reviewPolicyPacketWithModel({
+        apiKey: input.apiKey,
+        mode: "shadow",
+        model: input.model,
+        packet: input.packet,
+      });
+  const artifact = policyModelReviewArtifactSchema.parse({
+    ...reviewed,
+    mode: "shadow",
+    productionEligible: false,
+    scanId: input.packet.scanId,
+    provenance: {
+      ...reviewed.provenance,
+      reasonCodes: [...new Set([
+        ...reviewed.provenance.reasonCodes,
+        "nano_routine_shadow_non_projectable",
+        ...(parsedReusable?.success ? ["content_hash_cache_reuse"] : []),
+      ])].slice(0, 30),
+      usedForProductionProjection: false,
+    },
+  });
+  const miniReferenceArtifact = input.miniReferenceArtifact
+    ? await input.miniReferenceArtifact
+    : null;
+  const routing = summarizeNanoRouting({
+    miniReferenceArtifact,
+    nanoArtifact: artifact,
+  });
+  const summary = await persistReviewArtifact({
+    artifact,
+    cacheHit: Boolean(parsedReusable?.success),
+    packet: input.packet,
+    reviewKind: "policy_semantic_nano_shadow",
+    supplementalMetrics: { routing },
+  });
+  return { artifact, routing, summary };
+}
+
+export async function runExtractionReusePolicyReviewShadow(input: {
+  apiKey?: string;
+  model: string;
+  packet: PolicyReviewPacket;
+}) {
+  const transport = buildMiniExtractionReuseTransport(input.packet);
+  const miniArtifact = await reviewPolicyPacketWithModel({
+    apiKey: input.apiKey,
+    mode: "shadow",
+    model: input.model,
+    packet: input.packet,
+    reviewPhase: "escalated",
+    topics: transport.topics,
+    transportPacket: transport.packet,
+  });
+  const artifact = composeExtractionReuseShadowArtifact({
+    miniArtifact,
+    packet: input.packet,
+    reuseDecisions: transport.reuseDecisions,
+    topics: transport.topics,
+  });
+  const reusableTopicCount = transport.reuseDecisions.filter(
+    (decision) => decision.canReuseObserved,
+  ).length;
+  const routing = {
+    escalatedTopicCount: transport.topics.length,
+    reusableTopicCount,
+    reusableTopics: transport.reuseDecisions
+      .filter((decision) => decision.canReuseObserved)
+      .map((decision) => decision.topic),
+    transportMetrics: transport.metrics,
+  };
+  const summary = await persistReviewArtifact({
+    artifact,
+    cacheHit: false,
+    packet: input.packet,
+    reviewKind: "policy_semantic_extraction_reuse_shadow",
+    supplementalMetrics: { routing },
+  });
+  return { artifact, routing, summary };
+}
+
+export async function runDualNanoConsensusPolicyReviewShadow(input: {
+  apiKey?: string;
+  canonicalMiniReferenceArtifact?: Promise<ReturnType<typeof policyModelReviewArtifactSchema.parse>>;
+  miniModel: string;
+  nanoModel: string;
+  packet: PolicyReviewPacket;
+}) {
+  const primaryResult = await runNanoPolicyReviewShadow({
+    apiKey: input.apiKey,
+    model: input.nanoModel,
+    packet: input.packet,
+  });
+  const primaryArtifact = primaryResult.artifact;
+  const criticArtifact = await reviewPolicyPacketWithModel({
+    apiKey: input.apiKey,
+    candidateArtifact: primaryArtifact,
+    mode: "shadow",
+    model: input.nanoModel,
+    packet: input.packet,
+    reviewPhase: "critic",
+  });
+  const decisions = routeDualNanoPolicyReview({
+    criticArtifact,
+    primaryArtifact,
+  });
+  const escalationTopics = decisions
+    .filter((decision) => decision.requiresMiniEscalation)
+    .map((decision) => decision.topic);
+  const escalationExcerpts = [...primaryArtifact.rows, ...criticArtifact.rows]
+    .filter((row) => escalationTopics.includes(row.topic))
+    .flatMap((row) => [...row.evidenceExcerpts, ...row.conflictingExcerpts]);
+  const boundedTransport = buildBoundedMiniTopicTransport({
+    packet: input.packet,
+    passageExcerpts: escalationExcerpts,
+    topics: escalationTopics,
+    transportVersion: "policy_dual_nano_mini_transport.v1",
+  });
+  const miniArtifact = escalationTopics.length > 0
+    ? await reviewPolicyPacketWithModel({
+        apiKey: input.apiKey,
+        mode: "shadow",
+        model: input.miniModel,
+        packet: input.packet,
+        reviewPhase: "escalated",
+        topics: escalationTopics,
+        transportPacket: boundedTransport.packet,
+      })
+    : null;
+  const artifact = composeDualNanoConsensusShadowArtifact({
+    criticArtifact,
+    decisions,
+    miniArtifact,
+    packet: input.packet,
+    primaryArtifact,
+  });
+  const canonicalMiniArtifact = input.canonicalMiniReferenceArtifact
+    ? await input.canonicalMiniReferenceArtifact
+    : null;
+  const routing = summarizeDualNanoConsensus({
+    canonicalMiniArtifact,
+    criticArtifact,
+    decisions,
+    miniEscalationArtifact: miniArtifact,
+    primaryArtifact,
+  });
+  const summary = await persistReviewArtifact({
+    artifact,
+    cacheHit: false,
+    packet: input.packet,
+    reviewKind: "policy_semantic_dual_nano_shadow",
+    supplementalMetrics: {
+      boundedMiniTransport: boundedTransport.metrics,
+      routing,
+    },
+  });
+  return {
+    artifact,
+    boundedMiniTransport: boundedTransport.metrics,
+    criticArtifact,
+    miniArtifact,
+    primaryArtifact,
+    routing,
+    summary,
+  };
 }
 
 export async function runPolicyReviewPacket(input: {
@@ -298,20 +577,22 @@ export async function runPolicyReviewPacket(input: {
     if (parsed.success) {
       cacheHit = true;
       artifact = finalizeArtifactProjectionMode({
-        artifact: policyModelReviewArtifactSchema.parse({
-          ...parsed.data,
-          mode: input.mode,
-          scanId: input.packet.scanId,
-          provenance: {
-            ...parsed.data.provenance,
-            reasonCodes: [
-              ...new Set([
-                ...parsed.data.provenance.reasonCodes,
-                "content_hash_cache_reuse"
-              ])
-            ],
-            usedForProductionProjection: false
-          }
+        artifact: rebindCachedStaticArtifact({
+          artifact: policyModelReviewArtifactSchema.parse({
+            ...parsed.data,
+            mode: input.mode,
+            provenance: {
+              ...parsed.data.provenance,
+              reasonCodes: [
+                ...new Set([
+                  ...parsed.data.provenance.reasonCodes,
+                  "content_hash_cache_reuse"
+                ])
+              ],
+              usedForProductionProjection: false
+            }
+          }),
+          packet: input.packet,
         }),
         mode: input.mode
       });

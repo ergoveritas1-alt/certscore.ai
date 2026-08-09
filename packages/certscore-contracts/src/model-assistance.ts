@@ -88,6 +88,7 @@ export const modelAssistProvenanceSchema = z.object({
   uncertaintyNotes: z.array(z.string().min(1).max(500)).max(20).default([]),
   latencyMs: z.number().int().nonnegative().nullable().default(null),
   promptTokens: z.number().int().nonnegative().nullable().default(null),
+  cachedPromptTokens: z.number().int().nonnegative().nullable().default(null),
   completionTokens: z.number().int().nonnegative().nullable().default(null),
   totalTokens: z.number().int().nonnegative().nullable().default(null),
   usedForProductionProjection: z.boolean().default(false),

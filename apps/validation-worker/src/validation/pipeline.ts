@@ -62,7 +62,10 @@ import {
   buildPolicyReviewPacketFromCanonicalBundle
 } from "./model-policy-review";
 import {
+  runDualNanoConsensusPolicyReviewShadow,
+  runExtractionReusePolicyReviewShadow,
   runParallelPolicyReviewShadow,
+  runNanoPolicyReviewShadow,
   runPolicyReviewPacket,
 } from "./model-policy-review-runner";
 import {
@@ -161,7 +164,8 @@ async function runPolicyModelReview(input: {
       pointer: canonicalPointer
     });
     canonicalPacket = buildPolicyReviewPacketFromCanonicalBundle(canonicalBundle, {
-      scanId: input.scanId
+      scanId: input.scanId,
+      verifiedRetainedBundle: true,
     });
   }
   const packet = canonicalPacket ?? legacyPacket;
@@ -185,7 +189,38 @@ async function runPolicyModelReview(input: {
       env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED &&
       env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED,
   });
-  const [result, parallelShadow] = await Promise.all([
+  const nanoShadow = env.CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED &&
+    !env.CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED
+    ? runNanoPolicyReviewShadow({
+        apiKey: env.OPENAI_API_KEY,
+        miniReferenceArtifact: canonicalReview.then((review) => review.artifact),
+        model: env.CERTSCORE_ROUTINE_REVIEW_MODEL,
+        packet,
+      })
+    : Promise.resolve(null);
+  const dualNanoConsensusShadow = env.CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED
+    ? runDualNanoConsensusPolicyReviewShadow({
+        apiKey: env.OPENAI_API_KEY,
+        canonicalMiniReferenceArtifact: canonicalReview.then((review) => review.artifact),
+        miniModel: env.CERTSCORE_REVIEW_MODEL,
+        nanoModel: env.CERTSCORE_ROUTINE_REVIEW_MODEL,
+        packet,
+      })
+    : Promise.resolve(null);
+  const extractionReuseShadow = env.CERTSCORE_EXTRACTION_REUSE_SHADOW_ENABLED
+    ? runExtractionReusePolicyReviewShadow({
+        apiKey: env.OPENAI_API_KEY,
+        model: env.CERTSCORE_REVIEW_MODEL,
+        packet,
+      })
+    : Promise.resolve(null);
+  const [
+    result,
+    parallelShadow,
+    routineNanoShadow,
+    retainedExtractionShadow,
+    dualNanoShadow,
+  ] = await Promise.all([
     canonicalReview,
     env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED &&
     !env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED
@@ -195,6 +230,9 @@ async function runPolicyModelReview(input: {
           packet,
         })
       : Promise.resolve(null),
+    nanoShadow,
+    extractionReuseShadow,
+    dualNanoConsensusShadow,
   ]);
   const parallelShadowSummary = (() => {
     if (!parallelShadow || !("artifact" in parallelShadow) || !parallelShadow.artifact) {
@@ -222,9 +260,55 @@ async function runPolicyModelReview(input: {
       },
     };
   })();
+  const extractionReuseShadowSummary = (() => {
+    if (!retainedExtractionShadow) return null;
+    const canonicalByTopic = new Map(
+      result.artifact.rows.map((row) => [row.topic, row.status]),
+    );
+    const comparisons = retainedExtractionShadow.artifact.rows.map((row) => ({
+      exact: canonicalByTopic.get(row.topic) === row.status,
+      topic: row.topic,
+    }));
+    const exactCount = comparisons.filter((row) => row.exact).length;
+    return {
+      reviewStatus: retainedExtractionShadow.artifact.status,
+      routing: retainedExtractionShadow.routing,
+      summary: retainedExtractionShadow.summary,
+      parity: {
+        exactStatusAgreementCount: exactCount,
+        exactStatusAgreementRate: comparisons.length > 0
+          ? exactCount / comparisons.length
+          : 0,
+        mismatchedTopics: comparisons.filter((row) => !row.exact).map((row) => row.topic),
+        topicCount: comparisons.length,
+      },
+    };
+  })();
   return {
     ...result.summary,
     ...(parallelShadowSummary ? { parallelShadow: parallelShadowSummary } : {}),
+    ...(extractionReuseShadowSummary
+      ? { extractionReuseShadow: extractionReuseShadowSummary }
+      : {}),
+    ...(routineNanoShadow
+      ? {
+          routineNanoShadow: {
+            reviewStatus: routineNanoShadow.artifact.status,
+            routing: routineNanoShadow.routing,
+            summary: routineNanoShadow.summary,
+          },
+        }
+      : {}),
+    ...(dualNanoShadow
+      ? {
+          dualNanoConsensusShadow: {
+            boundedMiniTransport: dualNanoShadow.boundedMiniTransport,
+            reviewStatus: dualNanoShadow.artifact.status,
+            routing: dualNanoShadow.routing,
+            summary: dualNanoShadow.summary,
+          },
+        }
+      : {}),
     sourceMode: canonicalPacket
       ? "verified_canonical_evidence_bundle"
       : "legacy_document_sources"

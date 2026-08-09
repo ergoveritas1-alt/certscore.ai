@@ -36,6 +36,19 @@ const workerEnvSchema = z.object({
   VALIDATION_NANO_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4-nano")),
   CERTSCORE_EXTRACTION_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4-nano")),
   CERTSCORE_REVIEW_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4-mini")),
+  CERTSCORE_ROUTINE_REVIEW_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).default("gpt-5.4-nano")),
+  CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED: z.preprocess(
+    emptyStringToUndefined,
+    z.enum(["0", "1"]).optional()
+  ).transform((value) => value === "1"),
+  CERTSCORE_EXTRACTION_REUSE_SHADOW_ENABLED: z.preprocess(
+    emptyStringToUndefined,
+    z.enum(["0", "1"]).optional()
+  ).transform((value) => value === "1"),
+  CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED: z.preprocess(
+    emptyStringToUndefined,
+    z.enum(["0", "1"]).optional()
+  ).transform((value) => value === "1"),
   CERTSCORE_ESCALATION_MODEL: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
   CERTSCORE_MINI_REVIEW_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional())
     .transform((value) => value === "1"),

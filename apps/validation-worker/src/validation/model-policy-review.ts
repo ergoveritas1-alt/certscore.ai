@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   POLICY_REVIEW_TOPIC_DEFINITIONS,
+  LEGAL_FRAMEWORK_VALIDITY_REGISTRY,
   classifyGdprTransparencyTopics,
   evaluateLegalFrameworkValidity,
   policyModelReviewArtifactSchema,
@@ -20,18 +21,6 @@ const POLICY_REVIEW_INVARIANT_VERSION = "policy_review_invariants.v10";
 const MAX_DOCUMENTS = 6;
 const MAX_DOCUMENT_TEXT_CHARS = 18_000;
 const MAX_PACKET_TEXT_CHARS = 54_000;
-const POLICY_REVIEW_TEXT_ANCHORS = [
-  /\b(?:international transfers?|cross-border transfers?|data transfers?)\b/i,
-  /\b(?:personal data|personal information|information|data)\b.{0,100}\b(?:transferred|processed|stored|accessed)\b.{0,140}\b(?:united states|other jurisdictions|other countries|outside)\b/i,
-  /\b(?:sharing personal information|how we share|categories of third parties|service providers|advertising networks|analytics providers)\b/i,
-  /\b(?:retention|how long we retain|as long as necessary|retention criteria)\b/i,
-  /\b(?:your privacy rights|your rights|california privacy rights|other state privacy rights)\b/i,
-  /\b(?:legal basis|lawful basis|article 6|legitimate interests?)\b/i,
-  /\b(?:how we use|purposes? for which|processing purposes?)\b/i,
-  /\b(?:contact us|privacy officer|privacy office|data protection officer|controller)\b/i,
-  /\b(?:supervisory authority|data protection authority|lodge a complaint)\b/i,
-  /\b(?:cookie inventory|cookies? and other technologies|cookie names?)\b/i
-] as const;
 export const POLICY_REVIEW_TOPICS = [
   "processing_purposes",
   "legal_basis",
@@ -55,6 +44,38 @@ export const RUNTIME_POLICY_REVIEW_TOPICS = [
   "policy_runtime_consistency",
 ] as const;
 export type PolicyReviewTopic = (typeof POLICY_REVIEW_TOPICS)[number];
+
+const POLICY_REVIEW_TEXT_ANCHORS_BY_TOPIC = {
+  processing_purposes: [
+    /\b(?:how we use|purposes? for which|processing purposes?)\b/i,
+  ],
+  legal_basis: [
+    /\b(?:legal basis|lawful basis|article 6|legitimate interests?)\b/i,
+  ],
+  data_retention: [
+    /\b(?:retention|how long we retain|as long as necessary|retention criteria)\b/i,
+  ],
+  international_transfers: [
+    /\b(?:international transfers?|cross-border transfers?|data transfers?)\b/i,
+    /\b(?:personal data|personal information|information|data)\b.{0,100}\b(?:transferred|processed|stored|accessed)\b.{0,140}\b(?:united states|other jurisdictions|other countries|outside)\b/i,
+  ],
+  vendor_disclosures: [
+    /\b(?:sharing personal information|how we share|categories of third parties|service providers|advertising networks|analytics providers)\b/i,
+  ],
+  data_subject_rights: [
+    /\b(?:your privacy rights|your rights|california privacy rights|other state privacy rights)\b/i,
+    /\b(?:contact us|privacy officer|privacy office|data protection officer|controller)\b/i,
+    /\b(?:supervisory authority|data protection authority|lodge a complaint)\b/i,
+  ],
+  cookie_inventory: [
+    /\b(?:cookie inventory|cookies? and other technologies|cookie names?)\b/i,
+  ],
+  policy_runtime_consistency: [],
+} as const satisfies Record<PolicyReviewTopic, readonly RegExp[]>;
+
+const POLICY_REVIEW_TEXT_ANCHORS = Object.values(
+  POLICY_REVIEW_TEXT_ANCHORS_BY_TOPIC,
+).flat();
 
 type FetchLike = typeof fetch;
 
@@ -101,6 +122,7 @@ export type PolicyReviewPacket = {
 };
 
 type ReviewUsage = {
+  cachedPromptTokens: number | null;
   completionTokens: number | null;
   promptTokens: number | null;
   totalTokens: number | null;
@@ -370,6 +392,58 @@ export function selectBoundedPolicyReviewText(rawText: string, limit = MAX_DOCUM
   return excerpts.join("").slice(0, limit);
 }
 
+export function selectEscalatedPolicyReviewText(input: {
+  nanoExcerpts?: readonly string[];
+  rawText: string;
+  topics: readonly PolicyReviewTopic[];
+}, limit = 7_000) {
+  const excerpts: string[] = [];
+  let retainedChars = 0;
+  const addExcerpt = (value: string) => {
+    if (retainedChars >= limit) return;
+    const excerpt = value.trim();
+    if (!excerpt) return;
+    const normalized = excerpt.replace(/\s+/g, " ").toLowerCase();
+    if (excerpts.some((retained) =>
+      retained.replace(/\s+/g, " ").toLowerCase().includes(normalized)
+    )) return;
+    const separator = excerpts.length > 0 ? "\n\n[…]\n\n" : "";
+    const remaining = limit - retainedChars - separator.length;
+    if (remaining <= 0) return;
+    const bounded = excerpt.slice(0, remaining);
+    excerpts.push(`${separator}${bounded}`);
+    retainedChars += separator.length + bounded.length;
+  };
+
+  addExcerpt(input.rawText.slice(0, 900));
+  for (const excerpt of input.nanoExcerpts ?? []) {
+    const exactIndex = input.rawText.indexOf(excerpt);
+    if (exactIndex >= 0) {
+      addExcerpt(input.rawText.slice(
+        Math.max(0, exactIndex - 360),
+        Math.min(input.rawText.length, exactIndex + excerpt.length + 720),
+      ));
+    }
+  }
+  const includeAllTopics = input.topics.includes("policy_runtime_consistency");
+  const anchorTopics = includeAllTopics ? POLICY_REVIEW_TOPICS : input.topics;
+  for (const topic of anchorTopics) {
+    for (const anchor of POLICY_REVIEW_TEXT_ANCHORS_BY_TOPIC[topic]) {
+      const match = anchor.exec(input.rawText);
+      anchor.lastIndex = 0;
+      if (match?.index === undefined) continue;
+      addExcerpt(input.rawText.slice(
+        Math.max(0, match.index - 360),
+        Math.min(input.rawText.length, match.index + match[0].length + 1_240),
+      ));
+    }
+  }
+  if (input.topics.includes("data_subject_rights")) {
+    addExcerpt(input.rawText.slice(-1_200));
+  }
+  return excerpts.join("").slice(0, limit);
+}
+
 export function buildPolicyReviewPacket(input: {
   documentSources: Array<Record<string, unknown>>;
   evidenceCoverage?: {
@@ -519,6 +593,7 @@ export function buildPolicyReviewPacket(input: {
     policyCandidates,
     runtimeContext,
     scanContext,
+    scanDate: input.scanDate ?? null,
   }));
 
   return {
@@ -565,7 +640,7 @@ function canonicalBundlePolicyText(
 
 export function buildPolicyReviewPacketFromCanonicalBundle(
   bundle: CanonicalEvidenceBundle,
-  options: { scanId?: string } = {}
+  options: { scanId?: string; verifiedRetainedBundle?: boolean } = {}
 ) {
   const policySurfaces = bundle.policySurfaceObservations
     .filter((surface) => surface.documentEvaluationState === "usable" || surface.status === "fetched")
@@ -667,7 +742,12 @@ export function buildPolicyReviewPacketFromCanonicalBundle(
     documentSources,
     evidenceCoverage: {
       coverageLimitations: [],
-      policySurfaceInspection: bundle.policySurfaceInspection ?? {},
+      policySurfaceInspection: {
+        ...(bundle.policySurfaceInspection ?? {}),
+        ...(options.verifiedRetainedBundle
+          ? { retainedCanonicalBundleVerified: true }
+          : {}),
+      },
       runtimeCoverage: bundle.runtimeCoverage ?? {},
     },
     policyCandidates,
@@ -742,6 +822,26 @@ export function buildPolicyReviewPacketFromVerifiedPolicyEvidence(
 
 function buildStaticPolicyReviewProjection(packet: PolicyReviewPacket) {
   const inspection = packet.evidenceCoverage.policySurfaceInspection;
+  const scanTimestamp = packet.scanDate ? Date.parse(packet.scanDate) : Number.NaN;
+  const frameworkBoundaryDates = LEGAL_FRAMEWORK_VALIDITY_REGISTRY.flatMap((entry) => [
+    entry.effectiveFrom,
+    entry.invalidatedFrom,
+    entry.supersededFrom,
+  ])
+    .filter((value): value is string => typeof value === "string")
+    .filter((value) => !Number.isFinite(scanTimestamp) || Date.parse(`${value}T00:00:00.000Z`) <= scanTimestamp)
+    .sort();
+  const legalFrameworkValidityEpoch = frameworkBoundaryDates.at(-1) ?? null;
+  const legalFrameworkRegistryHash = sha256(stableJson(
+    LEGAL_FRAMEWORK_VALIDITY_REGISTRY.map((entry) => ({
+      canonicalId: entry.canonicalId,
+      canonicalStatus: entry.canonicalStatus,
+      effectiveFrom: entry.effectiveFrom,
+      invalidatedFrom: entry.invalidatedFrom ?? null,
+      supersededFrom: entry.supersededFrom ?? null,
+      supersededBy: entry.supersededBy ?? null,
+    })),
+  ));
   return {
     documents: packet.documents,
     evidenceCoverage: {
@@ -754,6 +854,7 @@ function buildStaticPolicyReviewProjection(packet: PolicyReviewPacket) {
         inspectionCompleted: inspection.inspectionCompleted === true,
         privacyPolicyObserved: inspection.privacyPolicyObserved === true,
         limitationKeys: getStringArray(inspection.limitationKeys),
+        legalFrameworkRegistryHash,
       },
       runtimeCoverage: {},
     },
@@ -767,14 +868,28 @@ function buildStaticPolicyReviewProjection(packet: PolicyReviewPacket) {
       region: null,
       targetUrl: packet.scanContext.targetUrl,
     },
-    // Framework validity is date-sensitive, but sub-day handoff timestamps are
-    // not. Both early and terminal packets therefore review against one scan day.
-    scanDate: packet.scanDate?.slice(0, 10) ?? null,
+    // Framework validity changes only at registry boundaries. Keying static
+    // policy semantics by that epoch preserves date-correct evaluation while
+    // allowing unchanged policies to reuse Mini review across ordinary days.
+    scanDate: legalFrameworkValidityEpoch,
   } satisfies Omit<PolicyReviewPacket, "contentHash" | "scanId">;
 }
 
 export function buildPolicyStaticContentHash(packet: PolicyReviewPacket) {
-  return sha256(stableJson(buildStaticPolicyReviewProjection(packet)));
+  const projection = buildStaticPolicyReviewProjection(packet);
+  return sha256(stableJson({
+    ...projection,
+    scanContext: {
+      ...projection.scanContext,
+      // Target URL is scan identity. Static reuse remains bound by the typed
+      // document ownership and target-relationship fields retained below.
+      targetUrl: null,
+    },
+    documents: projection.documents.map((document) => {
+      const { documentId: _scanSpecificDocumentId, ...stableDocument } = document;
+      return stableDocument;
+    }),
+  }));
 }
 
 /**
@@ -788,19 +903,21 @@ export function buildStaticPolicyReviewPacket(
   const staticProjection = buildStaticPolicyReviewProjection(packet);
   return {
     ...staticProjection,
-    contentHash: sha256(stableJson(staticProjection)),
+    contentHash: buildPolicyStaticContentHash(packet),
     scanId: packet.scanId,
   };
 }
 
 export function buildPolicyReviewCacheKey(input: {
+  candidateReviewCacheKey?: string;
   contentHash: string;
   model: string;
-  reviewPhase?: "full" | "static" | "runtime_delta";
+  reviewPhase?: "full" | "static" | "runtime_delta" | "escalated" | "critic";
 }) {
   const reasoningEffort = input.reviewPhase === "static" ? "low" : "model_default";
   return sha256(stableJson({
     contentHash: input.contentHash,
+    candidateReviewCacheKey: input.candidateReviewCacheKey ?? null,
     contractVersion: POLICY_MODEL_REVIEW_CONTRACT_VERSION,
     model: input.model,
     promptVersion: POLICY_MODEL_REVIEW_PROMPT_VERSION,
@@ -857,7 +974,11 @@ export function deriveDeterministicPolicyReviewSignals(packet: PolicyReviewPacke
     }));
 }
 
-function buildSystemPrompt(topics: readonly PolicyReviewTopic[] = POLICY_REVIEW_TOPICS) {
+function buildSystemPrompt(
+  topics: readonly PolicyReviewTopic[] = POLICY_REVIEW_TOPICS,
+  boundedEscalationTransport = false,
+  criticReview = false,
+) {
   return [
     "You perform evidence-scoped privacy policy review for a website risk-signal product.",
     `Canonical review labels are: ${Object.values(POLICY_REVIEW_TOPIC_DEFINITIONS).map((definition) => definition.displayLabel).join("; ")}.`,
@@ -876,7 +997,19 @@ function buildSystemPrompt(topics: readonly PolicyReviewTopic[] = POLICY_REVIEW_
     "The deterministic legal-framework registry supplied separately is authoritative for framework dates and validity.",
     "Return bounded verbatim excerpts and source references.",
     "Keep each rationale under 320 characters, retain at most two evidence excerpts and one conflicting excerpt per topic, and keep each excerpt under 360 characters.",
-    "Never promote or create a customer-facing finding."
+    "Never promote or create a customer-facing finding.",
+    ...(boundedEscalationTransport
+      ? [
+          "This is a verified bounded passage projection for escalated topics. Omitted text is not evidence of absence. Use insufficient_retained_evidence unless the supplied typed coverage and retained passage establish the requested status.",
+        ]
+      : []),
+    ...(criticReview
+      ? [
+          "Act as an independent critic of the supplied candidate review. Re-read the retained evidence yourself; do not defer to the candidate labels or confidence.",
+          "Search specifically for wrong-topic evidence, unsupported absence, ownership errors, contradictions, and excerpts that do not support the candidate status.",
+          "Return your own complete classification for every requested topic using the canonical schema.",
+        ]
+      : []),
   ].join(" ");
 }
 
@@ -1699,9 +1832,29 @@ function parseRows(
     throw new Error("Structured policy review output did not include the required topic map.");
   }
   const rowMap = parsed.rows as Record<string, unknown>;
+  const retainedSourceUrls = new Set(
+    packet.documents.map((document) => document.canonicalUrl),
+  );
   const rows = topics.map((topic) => {
+    const candidate = getRecord(rowMap[topic]);
+    const candidateSourceUrls = Array.isArray(candidate.sourceUrls)
+      ? candidate.sourceUrls.filter((value): value is string => typeof value === "string")
+      : [];
+    const verifiedSourceUrls = candidateSourceUrls.filter((value) =>
+      retainedSourceUrls.has(value)
+    );
+    const candidateReasonCodes = Array.isArray(candidate.reasonCodes)
+      ? candidate.reasonCodes.filter((value): value is string => typeof value === "string")
+      : [];
     const row = policyModelReviewRowSchema.parse({
-      ...getRecord(rowMap[topic]),
+      ...candidate,
+      reasonCodes: [...new Set([
+        ...candidateReasonCodes,
+        ...(verifiedSourceUrls.length < candidateSourceUrls.length
+          ? ["unverified_source_url_removed"]
+          : []),
+      ])].slice(0, 20),
+      sourceUrls: verifiedSourceUrls,
       topic
     });
     return policyModelReviewRowSchema.parse({
@@ -1782,19 +1935,22 @@ function responseOutputText(payload: {
   throw new Error("OpenAI policy review did not return structured output text.");
 }
 
-export async function reviewPolicyPacketWithMini(input: {
+export async function reviewPolicyPacketWithModel(input: {
   apiKey?: string;
+  candidateArtifact?: PolicyModelReviewArtifact;
   fetchImpl?: FetchLike;
   mode: "shadow" | "enforced";
   model: string;
   packet: PolicyReviewPacket;
-  reviewPhase?: "full" | "static" | "runtime_delta";
+  reviewPhase?: "full" | "static" | "runtime_delta" | "escalated" | "critic";
+  transportPacket?: PolicyReviewPacket;
   topics?: readonly PolicyReviewTopic[];
 }): Promise<PolicyModelReviewArtifact> {
   const startedAt = Date.now();
   const topics = input.topics ?? POLICY_REVIEW_TOPICS;
   const cacheKey = buildPolicyReviewCacheKey({
-    contentHash: input.packet.contentHash,
+    candidateReviewCacheKey: input.candidateArtifact?.cacheKey,
+    contentHash: input.transportPacket?.contentHash ?? input.packet.contentHash,
     model: input.model,
     reviewPhase: input.reviewPhase,
   });
@@ -1812,7 +1968,36 @@ export async function reviewPolicyPacketWithMini(input: {
   try {
     const useResponsesApi = /^gpt-5\.6(?:-|$)/.test(input.model);
     const reasoningEffort = input.reviewPhase === "static" ? "low" : null;
-    const reviewInput = JSON.stringify(buildPolicyReviewInput(input.packet));
+    const boundedEscalationTransport = input.reviewPhase === "escalated";
+    const criticReview = input.reviewPhase === "critic";
+    const reviewInput = JSON.stringify({
+      ...buildPolicyReviewInput(input.transportPacket ?? input.packet),
+      ...(input.candidateArtifact
+        ? {
+            candidateReview: input.candidateArtifact.rows.map((row) => ({
+              confidence: row.confidence,
+              evidenceExcerpts: row.evidenceExcerpts,
+              reasonCodes: row.reasonCodes,
+              status: row.status,
+              topic: row.topic,
+            })),
+          }
+        : {}),
+      ...(boundedEscalationTransport
+        ? {
+            transport: {
+              boundedPassageProjection: true,
+              fullRetainedContentHash: input.packet.contentHash,
+              transportContentHash: input.transportPacket?.contentHash ?? input.packet.contentHash,
+            },
+          }
+        : {}),
+    });
+    const maxCompletionTokens = input.reviewPhase === "runtime_delta"
+      ? 2_200
+      : input.reviewPhase === "escalated"
+        ? Math.min(6_000, Math.max(1_200, topics.length * 800))
+        : 6_000;
     const response = await (input.fetchImpl ?? fetch)(
       useResponsesApi ? OPENAI_RESPONSES_API_URL : OPENAI_API_URL,
       {
@@ -1825,9 +2010,9 @@ export async function reviewPolicyPacketWithMini(input: {
         useResponsesApi
           ? {
             model: input.model,
-            instructions: buildSystemPrompt(topics),
+            instructions: buildSystemPrompt(topics, boundedEscalationTransport, criticReview),
             input: reviewInput,
-            max_output_tokens: input.reviewPhase === "runtime_delta" ? 2_200 : 6_000,
+            max_output_tokens: maxCompletionTokens,
             reasoning: { effort: reasoningEffort ?? "medium" },
             text: {
               format: {
@@ -1840,7 +2025,7 @@ export async function reviewPolicyPacketWithMini(input: {
           }
           : {
             model: input.model,
-            max_completion_tokens: input.reviewPhase === "runtime_delta" ? 2_200 : 6_000,
+            max_completion_tokens: maxCompletionTokens,
             ...(reasoningEffort
               ? { reasoning_effort: reasoningEffort }
               : { temperature: 0 }),
@@ -1853,7 +2038,7 @@ export async function reviewPolicyPacketWithMini(input: {
               }
             },
             messages: [
-              { role: "system", content: buildSystemPrompt(topics) },
+              { role: "system", content: buildSystemPrompt(topics, boundedEscalationTransport, criticReview) },
               {
                 role: "user",
                 content: reviewInput
@@ -1885,6 +2070,8 @@ export async function reviewPolicyPacketWithMini(input: {
         output_tokens?: number;
         prompt_tokens?: number;
         total_tokens?: number;
+        input_tokens_details?: { cached_tokens?: number };
+        prompt_tokens_details?: { cached_tokens?: number };
       };
     };
     if (useResponsesApi && payload.status !== "completed") {
@@ -1897,6 +2084,10 @@ export async function reviewPolicyPacketWithMini(input: {
       : payload.choices?.[0]?.message?.content ?? "";
     const rows = parseRows(rawOutput, input.packet, topics);
     const usage: ReviewUsage = {
+      cachedPromptTokens:
+        payload.usage?.prompt_tokens_details?.cached_tokens ??
+        payload.usage?.input_tokens_details?.cached_tokens ??
+        null,
       completionTokens:
         payload.usage?.completion_tokens ??
         payload.usage?.output_tokens ??
@@ -1927,7 +2118,11 @@ export async function reviewPolicyPacketWithMini(input: {
           ? "policy_semantic_static_review"
           : input.reviewPhase === "runtime_delta"
             ? "policy_semantic_runtime_delta_review"
-            : "policy_semantic_review",
+            : input.reviewPhase === "escalated"
+              ? "policy_semantic_escalation_review"
+              : input.reviewPhase === "critic"
+                ? "policy_semantic_critic_review"
+              : "policy_semantic_review",
         promptVersion: POLICY_MODEL_REVIEW_PROMPT_VERSION,
         schemaVersion: POLICY_REVIEW_SCHEMA_VERSION,
         inputRefs: input.packet.documents.map((document) => document.documentId),
@@ -1947,6 +2142,7 @@ export async function reviewPolicyPacketWithMini(input: {
         uncertaintyNotes: [],
         latencyMs: Date.now() - startedAt,
         promptTokens: usage.promptTokens,
+        cachedPromptTokens: usage.cachedPromptTokens,
         completionTokens: usage.completionTokens,
         totalTokens: usage.totalTokens,
         usedForProductionProjection: false
@@ -1965,6 +2161,8 @@ export async function reviewPolicyPacketWithMini(input: {
   }
 }
 
+export const reviewPolicyPacketWithMini = reviewPolicyPacketWithModel;
+
 export function summarizePolicyReviewArtifact(artifact: PolicyModelReviewArtifact) {
   const statusCounts = Object.fromEntries(
     [
@@ -1982,6 +2180,7 @@ export function summarizePolicyReviewArtifact(artifact: PolicyModelReviewArtifac
     deterministicPolicyReviewSignalCount: artifact.deterministicPolicyReviewSignals.length,
     latencyMs: artifact.provenance.latencyMs,
     promptTokens: artifact.provenance.promptTokens,
+    cachedPromptTokens: artifact.provenance.cachedPromptTokens,
     completionTokens: artifact.provenance.completionTokens,
     totalTokens: artifact.provenance.totalTokens,
     productionEligible: artifact.productionEligible
