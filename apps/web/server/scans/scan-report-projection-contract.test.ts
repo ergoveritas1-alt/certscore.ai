@@ -16,6 +16,7 @@ import {
   readPersistedScanReportProjection,
   REPORT_PROJECTION_READY_WARNING_MS,
   sanitizeJsonbValue,
+  ScanReportProjectionTooLargeError,
   SCAN_REPORT_PROJECTION_VERSION
 } from "./scan-report-projection-contract";
 import type { ScanDetailResponse } from "./get-scan-by-id";
@@ -249,7 +250,13 @@ test("oversized display projections fail closed instead of truncating evidence",
   } as unknown as ScanDetailResponse;
   assert.throws(
     () => buildPersistedScanReportProjection(scanRecord),
-    /maximum is/
+    (error) => {
+      assert.ok(error instanceof ScanReportProjectionTooLargeError);
+      assert.equal(error.scanId, scanRecord.scan.id);
+      assert.equal(error.maxBytes, MAX_SCAN_REPORT_PROJECTION_BYTES);
+      assert.ok(error.sizeBytes > error.maxBytes);
+      return true;
+    }
   );
 });
 

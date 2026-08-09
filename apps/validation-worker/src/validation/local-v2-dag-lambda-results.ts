@@ -143,18 +143,20 @@ export type LocalV2DagLambdaResultPollerOptions = {
   webBaseUrl?: string;
 };
 
-async function completedScoreMaterializationExists(scanId: string) {
-  const row = await queryOne<{ materialization_complete: boolean }>(
-    `select exists (
-              select 1
-                from public.scan_score_materialization_requests
-               where scan_id = $1::uuid
-                 and status = 'completed'
-            ) as materialization_complete`,
-    [scanId],
-    { readOnly: true }
+type ScoreMaterializationState = "completed" | "pending" | "terminal_failure";
+
+async function scoreMaterializationState(scanId: string) {
+  const row = await queryOne<{ status: ScoreMaterializationState }>(
+    `select status
+       from public.scan_score_materialization_requests
+      where scan_id = $1::uuid`,
+    [scanId]
   );
-  return row?.materialization_complete === true;
+  return row?.status ?? null;
+}
+
+async function completedScoreMaterializationExists(scanId: string) {
+  return (await scoreMaterializationState(scanId)) === "completed";
 }
 
 async function canonicalReportInputsReady(scanId: string) {
@@ -189,7 +191,11 @@ export async function ensureCompletedScanScoresPersisted(input: {
   targetEnvironment: LambdaTargetEnvironment;
   webBaseUrl?: string;
 }) {
-  if (await completedScoreMaterializationExists(input.scanId)) return { alreadyPersisted: true };
+  const existingState = await scoreMaterializationState(input.scanId);
+  if (existingState === "completed") return { alreadyPersisted: true };
+  if (existingState === "terminal_failure") {
+    return { alreadyPersisted: false, terminalFailure: true as const };
+  }
   const finalizingDeadline = Date.now() + MATERIALIZATION_FINALIZING_WAIT_MS;
   if (!(await canonicalReportInputsReady(input.scanId))) {
     throw new Error("Canonical report inputs are not ready for materialization.");
@@ -207,10 +213,14 @@ export async function ensureCompletedScanScoresPersisted(input: {
            requested_at = now(),
            completed_at = null,
            last_error = null
-       where public.scan_score_materialization_requests.status <> 'completed'`,
+       where public.scan_score_materialization_requests.status = 'pending'`,
     [input.scanId, tokenSha256]
   );
-  if (await completedScoreMaterializationExists(input.scanId)) return { alreadyPersisted: true };
+  const claimedState = await scoreMaterializationState(input.scanId);
+  if (claimedState === "completed") return { alreadyPersisted: true };
+  if (claimedState === "terminal_failure") {
+    return { alreadyPersisted: false, terminalFailure: true as const };
+  }
 
   const baseUrl = input.webBaseUrl?.trim() ||
     (input.targetEnvironment === "production" ? "https://certscore.ai" : "http://localhost:3000");

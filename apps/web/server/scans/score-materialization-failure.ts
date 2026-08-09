@@ -1,5 +1,5 @@
 type MaterializationFailureDisposition = {
-  code: "contract_validation_failed" | "materialization_failed_transient" | "materialization_not_ready";
+  code: "contract_validation_failed" | "materialization_failed_transient" | "materialization_not_ready" | "projection_too_large";
   diagnostic: string;
   retryAfterSeconds?: number;
   retryable: boolean;
@@ -28,6 +28,20 @@ function isSchemaValidationError(error: unknown) {
   );
 }
 
+function isProjectionTooLargeError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  return (
+    record.name === "ScanReportProjectionTooLargeError" &&
+    typeof record.scanId === "string" &&
+    typeof record.sizeBytes === "number" &&
+    typeof record.maxBytes === "number" &&
+    Number.isSafeInteger(record.sizeBytes) &&
+    Number.isSafeInteger(record.maxBytes) &&
+    record.sizeBytes > record.maxBytes
+  );
+}
+
 function lifecyclePhase(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   const match = /^Score lifecycle ([a-z0-9-]+) failed(?:[:.]|$)/i.exec(message);
@@ -44,6 +58,13 @@ function projectionNotReadyReason(error: unknown) {
 
 export function classifyScoreMaterializationFailure(error: unknown): MaterializationFailureDisposition {
   const chain = errorChain(error);
+  if (chain.some(isProjectionTooLargeError)) {
+    return {
+      code: "projection_too_large",
+      diagnostic: "projection_too_large",
+      retryable: false,
+    };
+  }
   const notReadyReason = chain.map(projectionNotReadyReason).find((value) => value !== null);
   if (notReadyReason) {
     return {

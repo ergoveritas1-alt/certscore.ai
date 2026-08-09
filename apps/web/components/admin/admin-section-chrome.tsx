@@ -37,6 +37,7 @@ export function AdminSectionChrome({ children }: AdminSectionChromeProps) {
           <Link
             key={item.href}
             href={item.href}
+            prefetch={false}
             className="app-raised-button rounded-full px-4 py-2 text-sm text-slate-700 hover:text-slate-950"
           >
             {item.label}

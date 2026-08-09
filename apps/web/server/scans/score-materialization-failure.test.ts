@@ -1,7 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { z } from "zod";
+import { ScanReportProjectionTooLargeError } from "./scan-report-projection-contract";
 import { classifyScoreMaterializationFailure } from "./score-materialization-failure";
+
+test("oversized canonical projections fail terminally instead of retrying", () => {
+  const error = new ScanReportProjectionTooLargeError({
+    maxBytes: 6 * 1024 * 1024,
+    scanId: "2f82eaa3-dd92-42ff-bd43-31a04b7ae207",
+    sizeBytes: 11_189_950,
+  });
+
+  assert.deepEqual(classifyScoreMaterializationFailure(error), {
+    code: "projection_too_large",
+    diagnostic: "projection_too_large",
+    retryable: false,
+  });
+});
 
 test("schema contract failures are terminal and expose only bounded diagnostics", () => {
   let validationError: unknown;

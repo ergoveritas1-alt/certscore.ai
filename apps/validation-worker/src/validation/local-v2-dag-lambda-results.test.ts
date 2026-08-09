@@ -427,13 +427,17 @@ test("validation worker durably retains results before acknowledgement and mater
   assert.match(source, /createHash\("sha256"\)/);
   assert.match(source, /scan_score_materialization_requests/);
   assert.match(source, /result\.complete !== true/);
-  assert.match(source, /completedScoreMaterializationExists/);
+  assert.match(source, /scoreMaterializationState/);
   assert.match(source, /status = 'completed'/);
   assert.match(source, /for \(const mode of \["publish_report", "finalize"\] as const\)/);
   assert.match(source, /result\.reportReady !== true/);
   assert.doesNotMatch(source, /async function completedScoreMaterializationExists[\s\S]*?scan_score_assessments/);
   assert.match(source, /response\.status === 422 && failure\?\.retryable === false/);
   assert.match(source, /terminal score materialization failure acknowledged/);
+  assert.match(source, /existingState === "terminal_failure"/);
+  assert.match(source, /claimedState === "terminal_failure"/);
+  assert.match(source, /where public\.scan_score_materialization_requests\.status = 'pending'/);
+  assert.doesNotMatch(source, /status <> 'completed'/);
 });
 
 test("validation worker records terminal completion before consuming embedded policy evidence", async () => {
