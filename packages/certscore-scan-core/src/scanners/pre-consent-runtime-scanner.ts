@@ -79,6 +79,8 @@ const CONSENT_GATE_PROGRESS_REVIEW_MS = 15_000;
 const CONSENT_GATE_STRONG_CMP_FLOOR_MS = 18_000;
 const CONSENT_GATE_PARTIAL_EVIDENCE_MS = 20_000;
 const CONSENT_GATE_HARD_CAP_MS = 25_000;
+export const LATE_CONSENT_GEOMETRY_SHADOW_BUDGET_MS = 1_500;
+const LATE_CONSENT_GEOMETRY_SHADOW_CAPTURE_MS = 1_250;
 const CANONICAL_CONSENT_INVENTORY_LABELS = unique(
   consentControlTerms
     .filter((term) => term.strength !== "weak")
@@ -127,6 +129,11 @@ export interface PreConsentRuntimeScannerInput {
   screenshotMode?: "always" | "selective" | "never";
   screenshotTimeoutMs?: number;
   waitMode?: "full" | "fast";
+  /**
+   * Retains a bounded auxiliary geometry packet after canonical capture ends.
+   * This shadow packet is never returned as canonical evidence or projected.
+   */
+  lateConsentGeometryShadowEnabled?: boolean;
   /** Keep the owned page alive only for the enclosing canonical policy handoff. */
   retainRenderedPolicyRecoverySession?: boolean;
   onLifecycleCheckpoint?: (checkpoint: {
@@ -150,6 +157,79 @@ export interface FixtureRouteFulfiller {
   body?: string;
   headers?: Record<string, string>;
   setCookieHeaders?: string[];
+}
+
+export function shouldCaptureLateConsentGeometryShadow(input: {
+  captureScope: PreConsentRuntimeScannerInput["captureScope"];
+  cmpRuntimeObservations: CmpRuntimeObservation[];
+  consentGeometryDiagnosticWritten: boolean;
+  consentObservation: ConsentUiObservation;
+  enabled: boolean;
+}) {
+  return input.enabled &&
+    input.captureScope === "consent_proof" &&
+    !input.consentGeometryDiagnosticWritten &&
+    input.consentObservation.controls.length === 0 &&
+    hasHighConfidenceDirectCmpRuntimeEvidence(input.cmpRuntimeObservations);
+}
+
+export type LateConsentGeometryShadowArtifact = {
+  artifactType: "consent_control_late_geometry_shadow";
+  artifactVersion: "1.0";
+  shadowOnly: true;
+  productionProjectable: false;
+  canonicalEvidenceModified: false;
+  captureStatus: "completed" | "incomplete";
+  capturedAtMs: number;
+  durationMs: number;
+  timing: NonNullable<ScanModuleRun["timingBreakdown"]>;
+  eligibility: {
+    reasonCodes: string[];
+    cmpObservationIds: string[];
+    canonicalControlCount: number;
+    canonicalCaptureStatus: ConsentUiObservation["captureStatus"];
+    canonicalInventoryOutcome: ConsentUiObservation["inventoryOutcome"];
+  };
+  geometry?: ConsentControlGeometryArtifact;
+  access?: Awaited<ReturnType<typeof collectConsentGeometryPageAccess>>;
+};
+
+export function buildLateConsentGeometryShadowArtifact(input: {
+  access?: Awaited<ReturnType<typeof collectConsentGeometryPageAccess>>;
+  capturedAtMs: number;
+  cmpRuntimeObservations: CmpRuntimeObservation[];
+  consentObservation: ConsentUiObservation;
+  durationMs: number;
+  geometry?: ConsentControlGeometryArtifact;
+  timing?: NonNullable<ScanModuleRun["timingBreakdown"]>;
+}): LateConsentGeometryShadowArtifact {
+  const completed = Boolean(input.geometry && input.access);
+  return {
+    artifactType: "consent_control_late_geometry_shadow",
+    artifactVersion: "1.0",
+    shadowOnly: true,
+    productionProjectable: false,
+    canonicalEvidenceModified: false,
+    captureStatus: completed ? "completed" : "incomplete",
+    capturedAtMs: input.capturedAtMs,
+    durationMs: input.durationMs,
+    timing: input.timing ?? [],
+    eligibility: {
+      reasonCodes: [
+        "high_confidence_direct_cmp_runtime",
+        "no_canonical_actionable_control_retained",
+        "canonical_geometry_not_completed",
+      ],
+      cmpObservationIds: input.cmpRuntimeObservations
+        .filter((observation) => observation.directVsInferred === "direct" && observation.confidence >= 0.9)
+        .map((observation) => observation.observationId)
+        .slice(0, 12),
+      canonicalControlCount: input.consentObservation.controls.length,
+      canonicalCaptureStatus: input.consentObservation.captureStatus,
+      canonicalInventoryOutcome: input.consentObservation.inventoryOutcome,
+    },
+    ...(completed ? { geometry: input.geometry, access: input.access } : {}),
+  };
 }
 
 export async function readDeclaredDocumentLanguage(page: Page): Promise<string | null> {
@@ -2591,6 +2671,24 @@ export async function preConsentRuntimeScanner(
         })();
     retainedTransportSecurityObservation = transportSecurityObservation ?? undefined;
     retainedTransportSecurityArtifactRef = transportSecurityArtifactRef;
+
+    if (shouldCaptureLateConsentGeometryShadow({
+      captureScope: input.captureScope,
+      cmpRuntimeObservations,
+      consentGeometryDiagnosticWritten,
+      consentObservation,
+      enabled: input.lateConsentGeometryShadowEnabled === true,
+    })) {
+      await captureLateConsentGeometryShadow({
+        artifactWriter: input.artifactWriter,
+        cmpRuntimeObservations,
+        consentObservation,
+        page,
+        scanStartedAtMs: input.scanStartedAtMs,
+        screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
+      }).catch(() => undefined);
+      throwIfAborted(input.signal);
+    }
 
     if (navigationNotes.length > 0) {
       visualCapture = {
@@ -9680,6 +9778,50 @@ function visualCaptureFromScreenshotSummary(
     }],
     notes: summary.notes,
   };
+}
+
+async function captureLateConsentGeometryShadow(input: {
+  artifactWriter: ArtifactWriter;
+  cmpRuntimeObservations: CmpRuntimeObservation[];
+  consentObservation: ConsentUiObservation;
+  page: Page;
+  scanStartedAtMs: number;
+  screenshotArtifactRef?: string;
+}) {
+  const startedAtMs = Date.now();
+  const shadowTiming: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
+  const capture = await recordBoundedTiming<{
+    access: Awaited<ReturnType<typeof collectConsentGeometryPageAccess>>;
+    geometry: ConsentControlGeometryArtifact;
+  } | null>(
+    shadowTiming,
+    "late consent geometry shadow",
+    "Auxiliary same-session geometry for high-confidence CMP/no-control calibration; never returned as canonical evidence or projected.",
+    LATE_CONSENT_GEOMETRY_SHADOW_CAPTURE_MS,
+    async () => {
+      const geometry = await captureConsentControlGeometry(input.page, {
+        screenshotArtifactRef: input.screenshotArtifactRef,
+        timeoutMs: 900,
+      });
+      const access = await collectConsentGeometryPageAccess(input.page, undefined, {
+        frameTextTimeoutMs: 100,
+        supplementalBodyText: input.consentObservation.textExcerpt,
+      });
+      return { access, geometry };
+    },
+    () => null,
+  );
+  await input.artifactWriter.writeJsonArtifact(
+    "ConsentControlLateGeometryShadow.json",
+    buildLateConsentGeometryShadowArtifact({
+      ...(capture ? { geometry: capture.geometry, access: capture.access } : {}),
+      cmpRuntimeObservations: input.cmpRuntimeObservations,
+      consentObservation: input.consentObservation,
+      capturedAtMs: elapsed(input.scanStartedAtMs),
+      durationMs: Date.now() - startedAtMs,
+      timing: shadowTiming,
+    }),
+  );
 }
 
 function preferredPreConsentScreenshotRef(screenshots: ScreenshotArtifact[]): string | undefined {

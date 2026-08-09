@@ -44,6 +44,7 @@ import { consentFlowRuntimeScannerPlaceholder, policySurfaceScannerPlaceholder }
 import {
   consentUiObservationFromConfirmedGeometryControls,
   detectConsentUi,
+  LATE_CONSENT_GEOMETRY_SHADOW_BUDGET_MS,
   preConsentRuntimeScanner,
   readRapidFirstLayerConsentUiObservation,
   readDeclaredDocumentLanguage,
@@ -333,10 +334,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     preConsentEnabled,
     evidenceLane,
   });
-  const preConsentModuleDeadlineMs = Math.max(
+  const canonicalPreConsentModuleDeadlineMs = Math.max(
     1_000,
     Math.min(input.preConsentModuleDeadlineMs ?? scanProfile.internalBudgetMs, scanProfile.internalBudgetMs),
   );
+  const lateConsentGeometryShadowEnabled = evidenceLane === "consent_proof" &&
+    isLateConsentGeometryShadowEnabled();
+  const preConsentModuleDeadlineMs = canonicalPreConsentModuleDeadlineMs +
+    (lateConsentGeometryShadowEnabled ? LATE_CONSENT_GEOMETRY_SHADOW_BUDGET_MS : 0);
   let latestPreConsentLifecycleCheckpoint: {
     atMs: number;
     label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation";
@@ -363,6 +368,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotCaptureMode: "viewport_first",
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
+        lateConsentGeometryShadowEnabled,
         onLifecycleCheckpoint: (checkpoint) => {
           latestPreConsentLifecycleCheckpoint = checkpoint;
         },
@@ -3209,6 +3215,11 @@ function isLocalHeadedFallbackEnabled() {
 
 function isCaptureReplayHeadedRetryEnabled() {
   const explicit = process.env.CERTSCORE_V2_CAPTURE_REPLAY_HEADED_RETRY?.trim();
+  return explicit === "1" || explicit === "true";
+}
+
+export function isLateConsentGeometryShadowEnabled() {
+  const explicit = process.env.CERTSCORE_CONSENT_LATE_GEOMETRY_SHADOW_ENABLED?.trim().toLowerCase();
   return explicit === "1" || explicit === "true";
 }
 
