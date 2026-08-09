@@ -182,7 +182,39 @@ const policyReviewRowOutputSchema = {
   }
 } as const;
 
-function policyReviewJsonSchemaFor(topics: readonly PolicyReviewTopic[]) {
+function policyReviewJsonSchemaFor(
+  topics: readonly PolicyReviewTopic[],
+  compactEscalationOutput = false,
+) {
+  const rowSchema = compactEscalationOutput
+    ? {
+        ...policyReviewRowOutputSchema,
+        properties: {
+          ...policyReviewRowOutputSchema.properties,
+          sourceDocumentIds: {
+            ...policyReviewRowOutputSchema.properties.sourceDocumentIds,
+            maxItems: 2,
+          },
+          sourceUrls: {
+            ...policyReviewRowOutputSchema.properties.sourceUrls,
+            maxItems: 2,
+          },
+          evidenceExcerpts: {
+            ...policyReviewRowOutputSchema.properties.evidenceExcerpts,
+            items: { type: "string", maxLength: 240 },
+          },
+          conflictingExcerpts: {
+            ...policyReviewRowOutputSchema.properties.conflictingExcerpts,
+            items: { type: "string", maxLength: 240 },
+          },
+          reasonCodes: {
+            ...policyReviewRowOutputSchema.properties.reasonCodes,
+            maxItems: 6,
+          },
+          rationale: { type: "string", maxLength: 180 },
+        },
+      }
+    : policyReviewRowOutputSchema;
   return {
   type: "object",
   additionalProperties: false,
@@ -193,7 +225,7 @@ function policyReviewJsonSchemaFor(topics: readonly PolicyReviewTopic[]) {
       additionalProperties: false,
       required: [...topics],
       properties: Object.fromEntries(
-        topics.map((topic) => [topic, policyReviewRowOutputSchema])
+        topics.map((topic) => [topic, rowSchema])
       )
     }
   }
@@ -985,7 +1017,7 @@ function buildSystemPrompt(
 ) {
   return [
     "You perform evidence-scoped privacy policy review for a website risk-signal product.",
-    `Canonical review labels are: ${Object.values(POLICY_REVIEW_TOPIC_DEFINITIONS).map((definition) => definition.displayLabel).join("; ")}.`,
+    `Canonical review labels are: ${topics.map((topic) => POLICY_REVIEW_TOPIC_DEFINITIONS[topic].displayLabel).join("; ")}.`,
     `Classify exactly these topics once each: ${topics.join(", ")}.`,
     "Do not make a legal determination and do not invent facts.",
     "Observed requires a directly relevant substantive passage, not merely disclosure-shaped text.",
@@ -1005,6 +1037,7 @@ function buildSystemPrompt(
     ...(boundedEscalationTransport
       ? [
           "This is a verified bounded passage projection for escalated topics. Omitted text is not evidence of absence. Use insufficient_retained_evidence unless the supplied typed coverage and retained passage establish the requested status.",
+          "Keep escalation output compact: rationale at most 180 characters, at most six reason codes, and excerpts at most 240 characters. Use one evidence excerpt unless a policy/runtime comparison requires one policy excerpt and one runtime excerpt.",
         ]
       : []),
     ...(criticReview
@@ -2000,7 +2033,7 @@ export async function reviewPolicyPacketWithModel(input: {
     const maxCompletionTokens = input.reviewPhase === "runtime_delta"
       ? 2_200
       : input.reviewPhase === "escalated"
-        ? Math.min(6_000, Math.max(1_200, topics.length * 800))
+        ? Math.min(2_400, Math.max(700, topics.length * 450))
         : 6_000;
     const response = await (input.fetchImpl ?? fetch)(
       useResponsesApi ? OPENAI_RESPONSES_API_URL : OPENAI_API_URL,
@@ -2023,7 +2056,7 @@ export async function reviewPolicyPacketWithModel(input: {
                 type: "json_schema",
                 name: "policy_semantic_review",
                 strict: true,
-                schema: policyReviewJsonSchemaFor(topics)
+                schema: policyReviewJsonSchemaFor(topics, boundedEscalationTransport)
               }
             }
           }
@@ -2038,7 +2071,7 @@ export async function reviewPolicyPacketWithModel(input: {
               json_schema: {
                 name: "policy_semantic_review",
                 strict: true,
-                schema: policyReviewJsonSchemaFor(topics)
+                schema: policyReviewJsonSchemaFor(topics, boundedEscalationTransport)
               }
             },
             messages: [

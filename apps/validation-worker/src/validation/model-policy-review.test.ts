@@ -430,6 +430,66 @@ test("Mini request uses bounded output limits and the compact transport view", a
   assert.equal(rowProperties?.rationale?.maxLength, 320);
 });
 
+test("escalated Mini review uses the compact evidence-preserving output contract", async () => {
+  const packet = buildFixturePacket(
+    "We retain account data as long as necessary. Runtime evidence retained one cookie name."
+  );
+  const escalatedTopics = ["data_retention", "policy_runtime_consistency"] as const;
+  const rows = completeRows();
+  let requestBody: Record<string, unknown> | undefined;
+
+  await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({
+        model: "gpt-5.4-mini",
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              rows: Object.fromEntries(
+                escalatedTopics.map((topic) => [topic, rows[topic]])
+              ),
+            }),
+          },
+        }],
+      }), { status: 200 });
+    },
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet,
+    reviewPhase: "escalated",
+    topics: escalatedTopics,
+    transportPacket: packet,
+  });
+
+  assert.equal(requestBody?.max_completion_tokens, 900);
+  const responseFormat = requestBody?.response_format as {
+    json_schema?: {
+      schema?: {
+        properties?: {
+          rows?: {
+            properties?: {
+              data_retention?: {
+                properties?: {
+                  evidenceExcerpts?: { items?: { maxLength?: number } };
+                  rationale?: { maxLength?: number };
+                  reasonCodes?: { maxItems?: number };
+                };
+              };
+            };
+          };
+        };
+      };
+    };
+  };
+  const rowProperties = responseFormat.json_schema?.schema?.properties?.rows
+    ?.properties?.data_retention?.properties;
+  assert.equal(rowProperties?.evidenceExcerpts?.items?.maxLength, 240);
+  assert.equal(rowProperties?.reasonCodes?.maxItems, 6);
+  assert.equal(rowProperties?.rationale?.maxLength, 180);
+});
+
 test("static policy review requests only policy-stable topics with a bounded output limit", async () => {
   const packet = buildFixturePacket(
     "We use personal data to provide services and retain it only as long as necessary."
