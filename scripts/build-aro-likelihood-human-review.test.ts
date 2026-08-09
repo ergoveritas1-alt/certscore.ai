@@ -47,6 +47,33 @@ test("review bucket classification keeps failures and completed negatives distin
   assert.equal(classifyReviewBucket(row("4", "d.test", { document_identity_status: "mismatched" })), "redirect_or_document_mismatch");
 });
 
+test("corroborated potential challenge evidence remains a usable partial inventory when no-go was contradicted", () => {
+  const diagnostic = row("5", "diagnostic.test", {
+    assessment_no_go: false,
+    accept_observed: true,
+    options_observed: true,
+    accept_reason_codes: [
+      "same_document_first_layer_control_observed",
+      "potential_security_challenge",
+      "scan_no_go_corroborated",
+      "first_layer_inventory_incomplete",
+    ],
+    reject_reason_codes: [
+      "potential_security_challenge",
+      "scan_no_go_corroborated",
+      "first_layer_inventory_incomplete",
+    ],
+    options_reason_codes: [
+      "same_document_first_layer_control_observed",
+      "potential_security_challenge",
+      "scan_no_go_corroborated",
+      "first_layer_inventory_incomplete",
+    ],
+  });
+
+  assert.equal(classifyReviewBucket(diagnostic), "partial_inventory");
+});
+
 test("cohort selection is deterministic, unique by domain, and holds out calibration domains", () => {
   const rows = Array.from({ length: 120 }, (_, index) => row(String(index + 1), `site-${index + 1}.test`,
     index % 7 === 0 ? { assessment_no_go: true } : {}));

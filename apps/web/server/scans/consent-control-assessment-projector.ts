@@ -146,6 +146,7 @@ function geometryInput(
     typeof summary?.firstLayerOptions === "boolean" &&
     typeof summary?.confidence === "number" &&
     summary.confidence > 0 &&
+    !(Array.isArray(summary.limitations) && summary.limitations.includes("visible_accessible_intent_conflict")) &&
     Boolean(pageUrl) &&
     Boolean(canonicalDocumentId);
   const assessmentStatus = !complete

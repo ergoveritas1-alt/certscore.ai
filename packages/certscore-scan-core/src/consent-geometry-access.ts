@@ -35,7 +35,10 @@ const ACCESS_NO_GO_PATTERNS: Array<{ code: string; pattern: RegExp }> = [
   { code: "temporarily_restricted", pattern: /\baccess is temporarily restricted\b/i },
   { code: "forbidden_text", pattern: /\b(?:403|forbidden)\b/i },
   { code: "bot_security_check", pattern: /\b(?:additional security check|security verification|security check|security checkpoint|browser verification|verify you are not a bot|checking your browser|human verification|captcha|hcaptcha|i am human|robot or human|press\s*&\s*hold|press and hold|confirm that you'?re human|failed to verify your browser|unable to give you access|detected unusual activity)\b/i },
-  { code: "cloudflare_challenge", pattern: /\b(?:cloudflare|ray id|cf-browser-verification)\b/i },
+  // A bare Cloudflare mention is common on healthy sites hosted by Cloudflare
+  // Pages and is not challenge evidence. Keep this limited to challenge/error
+  // markers; generic bot-security copy is classified by the rule above.
+  { code: "cloudflare_challenge", pattern: /\b(?:ray id|cf-browser-verification)\b/i },
   { code: "cloudflare_origin_error", pattern: /\b(?:ssl handshake failed|invalid ssl certificate|origin is unreachable|web server is down|connection timed out|cloudflare 52[0-6])\b/i },
   { code: "imperva_challenge", pattern: /\b(?:imperva|incapsula)\b/i },
   { code: "kasada_challenge", pattern: /\b(?:kasada|x-kpsdk|protected by kasada)\b/i },

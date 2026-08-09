@@ -65,7 +65,12 @@ function completeInspection(outcome: string, observed: boolean) {
   };
 }
 
-function geometry(candidates: Array<Record<string, unknown>>, summary = {
+function geometry(candidates: Array<Record<string, unknown>>, summary: {
+  firstLayerAccept: boolean;
+  firstLayerReject: boolean;
+  firstLayerOptions: boolean;
+  limitations?: string[];
+} = {
   firstLayerAccept: true,
   firstLayerReject: true,
   firstLayerOptions: true,
@@ -511,6 +516,50 @@ test("geometry projection carries a custom first-layer settings control into Con
   assert.equal(options?.layer, "first_layer");
   assert.equal(options?.visible, true);
   assert.equal(options?.actionable, true);
+});
+
+test("geometry intent conflicts keep the assessment limited instead of proving reject absence", () => {
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+    { actionType: "manage_preferences", label: "Manage Preferences", visible: true, layer: "first_layer" },
+    {
+      actionType: "other",
+      classifierReasonCodes: ["visible_accessible_intent_conflict"],
+      label: "Do Not Sell or Share My Personal Information",
+      visible: true,
+      layer: "first_layer",
+    },
+  ], { captureStatus: "incomplete" });
+  source.consentUiObservations[0]!.inventoryOutcome = "partial";
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: geometry([
+      {
+        candidateId: "intent-conflict",
+        actionType: "other",
+        classifierReasonCodes: ["visible_accessible_intent_conflict"],
+        label: "Do Not Sell or Share My Personal Information",
+        layer: "first_layer",
+        enabled: true,
+        decisionStatus: "ambiguous",
+      },
+    ], {
+      firstLayerAccept: true,
+      firstLayerReject: false,
+      firstLayerOptions: true,
+      limitations: ["visible_accessible_intent_conflict"],
+    }),
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: "https://oxfam.org/en",
+    noGo: false,
+    requestedUrl: "https://oxfam.org/en",
+  });
+
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "observed");
 });
 
 test("CNN retained geometry keeps an explicitly inventoried missing reject as not_observed", () => {

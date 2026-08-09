@@ -7,6 +7,7 @@ import {
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   type ConsentControlClassifierProfile,
   type ConsentControlLabelClassification,
+  type ConsentControlLabelClassifierInput,
   type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
 import {
@@ -856,11 +857,15 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
       MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN.test(candidate.contextText),
     localeHints: localeHintsForCandidate(candidate),
   };
-  const productionClassification = classifyConsentControlLabel(input);
+  const visibleAccessibleConflict = classifyVisibleAccessibleIntentConflict(candidate, input);
+  if (visibleAccessibleConflict) {
+    return visibleAccessibleConflict;
+  }
+  const productionClassification = classifyConsentControlLabelWithLocaleFallback(input);
   if (productionClassification.intent !== "unknown") {
     return productionClassification;
   }
-  const supplementalClassification = classifyConsentControlLabel({
+  const supplementalClassification = classifyConsentControlLabelWithLocaleFallback({
     ...input,
     classifierProfile: "multilingual_v1",
   });
@@ -876,6 +881,79 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
   return productionCreditworthy
     ? supplementalClassification
     : productionClassification;
+}
+
+function classifyVisibleAccessibleIntentConflict(
+  candidate: RawGeometryCandidate,
+  context: Pick<
+    ConsentControlLabelClassifierInput,
+    "contextText" | "hasConsentContext" | "hasPreferenceContext" | "localeHints"
+  >,
+): ConsentControlLabelClassification | null {
+  const visibleLabel = normalizeLabel(candidate.label);
+  const accessibleLabel = normalizeLabel(candidate.ariaLabel ?? "");
+  if (!visibleLabel || !accessibleLabel || visibleLabel === accessibleLabel) {
+    return null;
+  }
+  const visibleClassification = classifyConsentControlLabelWithLocaleFallback({
+    ...context,
+    label: candidate.label,
+  });
+  const accessibleClassification = classifyConsentControlLabelWithLocaleFallback({
+    ...context,
+    label: candidate.ariaLabel,
+  });
+  if (
+    visibleClassification.intent === "unknown" ||
+    accessibleClassification.intent === "unknown" ||
+    visibleClassification.intent === accessibleClassification.intent
+  ) {
+    return null;
+  }
+  return {
+    intent: "unknown",
+    semanticRole: "unknown",
+    confidence: Math.min(
+      visibleClassification.confidence,
+      accessibleClassification.confidence,
+      0.5,
+    ),
+    reasonCodes: [
+      "visible_accessible_intent_conflict",
+      `visible_intent_${visibleClassification.intent}`,
+      `accessible_intent_${accessibleClassification.intent}`,
+    ],
+    contextSatisfied:
+      visibleClassification.contextSatisfied && accessibleClassification.contextSatisfied,
+  };
+}
+
+function classifyConsentControlLabelWithLocaleFallback(
+  input: ConsentControlLabelClassifierInput,
+): ConsentControlLabelClassification {
+  const classification = classifyConsentControlLabel(input);
+  if (
+    classification.intent !== "unknown" ||
+    !input.localeHints?.length ||
+    input.hasConsentContext !== true
+  ) {
+    return classification;
+  }
+
+  const localeFallback = classifyConsentControlLabel({
+    ...input,
+    localeHints: undefined,
+  });
+  if (localeFallback.intent === "unknown") {
+    return classification;
+  }
+  return {
+    ...localeFallback,
+    reasonCodes: [
+      ...localeFallback.reasonCodes,
+      "document_locale_mismatch_recovered",
+    ],
+  };
 }
 
 function diagnosticClassificationsForCandidate(candidate: RawGeometryCandidate): ConsentControlDiagnosticClassification[] | undefined {
@@ -1077,6 +1155,11 @@ function summarizeConsentControlGeometry(
     })
     .map((candidate) => `${candidate.actionType}:${candidate.label}:${candidate.decisionStatus}`)
     .slice(0, 12);
+  if (candidates.some((candidate) =>
+    candidate.classifierReasonCodes.includes("visible_accessible_intent_conflict")
+  )) {
+    limitations.unshift("visible_accessible_intent_conflict");
+  }
   const observedCount = [firstLayerAccept, firstLayerReject, firstLayerOptions].filter(Boolean).length;
   if (cmp.detected && observedCount === 0) {
     limitations.unshift("cmp_detected_without_visible_first_layer_controls");
@@ -1548,7 +1631,7 @@ function collectConsentGeometryInPage(input: {
     // Tokenized aria labels are implementation keys, not user-facing control
     // names (for example `BUTTONS.REJECT`). Prefer the rendered label while
     // retaining the token separately in ariaLabel for diagnostics.
-    for (const candidate of [aria, labelledBy, text, title, value]) {
+    for (const candidate of [text, labelledBy, aria, title, value]) {
       const normalized = compactText(candidate || "");
       if (normalized && !isLocalizationToken(normalized)) {
         return normalized;

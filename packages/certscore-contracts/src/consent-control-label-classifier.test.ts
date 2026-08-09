@@ -306,6 +306,27 @@ test("classifies observed English options labels", () => {
     "unknown",
     "the compact label must retain consent context before receiving necessary-only credit",
   );
+  const acceptRequired = classifyConsentControlLabel({
+    label: "Accept required",
+    contextText: "We use cookies and similar technologies. Choose your cookie consent preferences.",
+  });
+  assert.equal(acceptRequired.intent, "reject");
+  assert.equal(acceptRequired.variant, "necessary_only");
+  assert.equal(acceptRequired.matchedTerm, "accept required");
+  assert.equal(
+    classifyConsentControlLabel({ label: "Accept required" }).intent,
+    "unknown",
+    "the compact label must retain consent context before receiving necessary-only credit",
+  );
+  assert.equal(classifyConsentControlLabel({
+    label: "Parameters",
+    contextText: "We use cookies and similar technologies. Choose your cookie consent preferences.",
+  }).intent, "options");
+  assert.equal(
+    classifyConsentControlLabel({ label: "Parameters" }).intent,
+    "unknown",
+    "generic parameters must retain consent context before receiving options credit",
+  );
   assert.equal(classifyConsentControlLabel({
     label: "Personalise",
     contextText: "Data privacy at Dailymotion. We use cookies and partners for advertising measurement.",

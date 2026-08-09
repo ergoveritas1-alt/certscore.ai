@@ -2712,6 +2712,123 @@ test("pre-consent runtime scanner skips CMP recapture without first-layer surfac
   }
 });
 
+test("consent-proof lane pairs completed empty CMP inventory with geometry and a synchronized viewport", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-consent-proof-synchronized-empty-"));
+  try {
+    const url = server.urlFor("consent-cmp-script-offscreen-footer-settings");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 25_000,
+      artifactWriter,
+      captureScope: "consent_proof",
+      routeFulfillers,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "selective",
+      waitMode: "fast",
+    });
+    const observation = result.consentUiObservations[0];
+    const timingBreakdown = result.moduleRun.timingBreakdown ?? [];
+    const proofDurationMs = timingBreakdown
+      .filter((entry) =>
+        entry.label === "synchronized empty CMP screenshot" ||
+        entry.label === "synchronized empty CMP geometry"
+      )
+      .reduce((total, entry) => total + entry.durationMs, 0);
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(observation?.captureStatus, "no_evidence");
+    assert.equal(observation?.inventoryOutcome, "complete_empty");
+    assert.equal(observation?.controls.length, 0);
+    assert.equal(
+      observation?.captureDiagnostics?.completedChannels.includes("geometry"),
+      true,
+      "completed empty proof should retain consent-owned typed geometry",
+    );
+    assert.equal(
+      result.screenshots.some((screenshot) =>
+        screenshot.artifactId === "screenshot_pre_consent_cmp_empty"
+      ),
+      true,
+      "completed empty proof should retain a synchronized viewport artifact",
+    );
+    assert.equal(
+      timingBreakdown.some((entry) => entry.label === "supplemental full-page screenshot"),
+      false,
+      "the synchronized proof should replace the lower-priority full-page retry",
+    );
+    assert.equal(
+      proofDurationMs > 0 && proofDurationMs <= 2_150,
+      true,
+      `synchronized proof should remain inside the replaced work budget; durationMs=${proofDurationMs}`,
+    );
+    const geometry = JSON.parse(await readFile(
+      path.join(tempRoot, "out", "ConsentControlGeometryEvidence.json"),
+      "utf8",
+    )) as ConsentControlGeometryArtifact;
+    assert.match(
+      geometry.screenshotArtifactRef ?? "",
+      /screenshot-pre-consent-cmp-empty\.png$/,
+      "geometry and representative screenshot must remain explicitly bound",
+    );
+    assert.equal(geometry.summary.firstLayerAccept, false);
+    assert.equal(geometry.summary.firstLayerReject, false);
+    assert.equal(geometry.summary.firstLayerOptions, false);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("consent-proof lane binds a completed generic negative inventory to a representative viewport", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-consent-proof-generic-negative-"));
+  try {
+    const url = server.urlFor("generic-cdn-noise");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 25_000,
+      artifactWriter,
+      captureScope: "consent_proof",
+      routeFulfillers,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "selective",
+      waitMode: "fast",
+    });
+    const geometry = JSON.parse(await readFile(
+      path.join(tempRoot, "out", "ConsentControlGeometryEvidence.json"),
+      "utf8",
+    )) as ConsentControlGeometryArtifact;
+    const proofScreenshot = result.screenshots.find((screenshot) =>
+      screenshot.artifactId === "screenshot_pre_consent_geometry_proof"
+    );
+    const proofTiming = result.moduleRun.timingBreakdown?.find((entry) =>
+      entry.label === "consent geometry representative screenshot"
+    );
+
+    assert.equal(result.moduleRun.status, "completed", result.moduleRun.errors.join("; "));
+    assert.ok(proofScreenshot, "generic negative geometry must retain a representative viewport");
+    assert.equal(geometry.screenshotArtifactRef, proofScreenshot?.path);
+    assert.equal(geometry.summary.firstLayerAccept, false);
+    assert.equal(geometry.summary.firstLayerReject, false);
+    assert.equal(geometry.summary.firstLayerOptions, false);
+    assert.equal(
+      typeof proofTiming?.durationMs === "number" && proofTiming.durationMs <= 950,
+      true,
+      `representative screenshot must stay within its bounded latency allowance; durationMs=${proofTiming?.durationMs ?? "missing"}`,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner does not classify bare generic choice controls without consent context", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-generic-bare-choice-controls-"));

@@ -90,6 +90,27 @@ test("classifies an inline preferences link beside accept and reject as part of 
   assert.ok(options?.reasons.includes("inline_options_link_grouped_with_first_layer_accept_and_reject"));
 });
 
+test("retains localized consent controls when banner locale differs from document locale", async () => {
+  const artifact = await captureFixture(`
+    <script>document.documentElement.lang = "en";</script>
+    <section id="cookie-banner" role="dialog" aria-label="Cookie- und Datenschutzeinstellungen" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: white;">
+      <p>Wir verwenden Cookies und ähnliche Technologien.</p>
+      <button type="button">Ablehnen</button>
+      <button type="button">Einstellungen</button>
+      <button type="button">Akzeptieren</button>
+    </section>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  for (const label of ["Ablehnen", "Einstellungen", "Akzeptieren"]) {
+    const candidate = findCandidate(artifact, label);
+    assert.equal(candidate?.decisionStatus, "confirmed_visible");
+    assert.ok(candidate?.classifierReasonCodes.includes("document_locale_mismatch_recovered"));
+  }
+});
+
 test("classifies sibling-wrapped inline preferences as one retained consent action cluster", async () => {
   const artifact = await captureFixture(`
     <section id="cookie-banner" role="dialog" aria-label="Cookies and advertising choices" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: white;">
@@ -586,6 +607,54 @@ test("captures Microsoft-style Manage cookies as a first-layer options control",
   assert.equal(artifact.summary.firstLayerOptions, true);
   assert.equal(findCandidate(artifact, "Manage cookies")?.actionType, "manage_preferences");
   assert.equal(findCandidate(artifact, "Manage cookies")?.decisionStatus, "confirmed_visible");
+});
+
+test("captures contextual Parameters and Accept required controls", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-label="Cookie consent" style="position: fixed; left: 120px; bottom: 40px; width: 760px; padding: 20px; background: white;">
+      <p>We use cookies and similar technologies for analytics and advertising. Choose your cookie consent preferences.</p>
+      <button style="margin: 4px; padding: 8px 16px;">Parameters</button>
+      <button style="margin: 4px; padding: 8px 16px;">Accept required</button>
+      <button style="margin: 4px; padding: 8px 16px;">Accept all</button>
+    </section>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Parameters")?.actionType, "manage_preferences");
+  assert.equal(findCandidate(artifact, "Accept required")?.actionType, "reject_all");
+});
+
+test("keeps conflicting visible privacy opt-out and accessible reject labels unknown", async () => {
+  const artifact = await captureFixture(`
+    <section role="dialog" aria-label="Cookie choices" style="position: fixed; inset: auto 0 0; padding: 20px; background: white;">
+      <p>We use cookies and optional data processing for advertising and analytics.</p>
+      <button>Manage Preferences</button>
+      <button>Accept</button>
+      <button aria-label="Reject all optional data processing and close this banner">Do Not Sell or Share My Personal Information</button>
+    </section>
+  `);
+
+  const conflict = findCandidate(artifact, "Do Not Sell or Share My Personal Information");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(conflict?.actionType, "other");
+  assert.equal(conflict?.decisionStatus, "ambiguous");
+  assert.equal(
+    conflict?.ariaLabel,
+    "Reject all optional data processing and close this banner",
+    "both conflicting labels must remain retained evidence",
+  );
+  assert.equal(
+    conflict?.classifierReasonCodes.includes("visible_accessible_intent_conflict"),
+    true,
+  );
+  assert.equal(
+    artifact.summary.limitations.includes("visible_accessible_intent_conflict"),
+    true,
+  );
 });
 
 test("captures BMW-style Customise as a first-layer options control", async () => {

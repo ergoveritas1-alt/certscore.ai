@@ -1920,13 +1920,140 @@ export async function preConsentRuntimeScanner(
       const weakCmpRecaptureWaitMs = fastWait ? 2_250 : 2_750;
       const requestedRecaptureTimeoutMs = fastWait ? 2_500 : 3_000;
       const recaptureTimeoutMs = Math.min(requestedRecaptureTimeoutMs, remainingModuleBudgetMs());
+      const captureSynchronizedEmptyCmpProof = async (): Promise<ConsentUiObservation | null> => {
+        const eligible =
+          input.captureScope === "consent_proof" &&
+          highConfidenceCmpRuntimeEvidence &&
+          !consentGeometryDiagnosticWritten &&
+          consentObservation.controls.length === 0 &&
+          consentObservation.inventoryOutcome === "complete_empty" &&
+          remainingModuleBudgetMs() >= 2_000;
+        if (!eligible) {
+          return null;
+        }
+
+        const screenshotPath = input.artifactWriter.artifactPath(
+          "screenshot-pre-consent-cmp-empty.png",
+        );
+        const screenshotCapture = await recordTiming(
+          timingBreakdown,
+          "synchronized empty CMP screenshot",
+          "Bounded viewport capture paired with a completed empty typed inventory before lower-priority supplemental full-page recovery.",
+          () => capturePreConsentScreenshot(page, screenshotPath, {
+            captureMode: "viewport_first",
+            screenshotErrors,
+            timeoutMs: Math.min(900, remainingModuleBudgetMs()),
+          }),
+          visualCaptureTimingOutcome,
+        );
+        if (screenshotCapture.status !== "available") {
+          return null;
+        }
+
+        const screenshot: ScreenshotArtifact = {
+          artifactId: "screenshot_pre_consent_cmp_empty",
+          capturedAtMs: elapsed(input.scanStartedAtMs),
+          captureMethod: screenshotCapture.captureMethod,
+          path: screenshotPath,
+          url: page.url(),
+          pagePhase: "network_idle",
+          consentStateAtTime: "pre_consent",
+        };
+        screenshots.unshift(screenshot);
+        const synchronizedVisualCapture = visualCaptureFromScreenshotSummary(
+          screenshotCapture,
+          screenshotPath,
+          screenshot.artifactId,
+        );
+        visualCapture = {
+          ...synchronizedVisualCapture,
+          artifactRefs: uniqueEvidenceRefs([
+            ...synchronizedVisualCapture.artifactRefs,
+            ...visualCapture.artifactRefs,
+          ]),
+          notes: unique([
+            ...synchronizedVisualCapture.notes,
+            ...visualCapture.notes,
+            "Completed empty typed inventory, geometry, and viewport evidence were retained from one untouched consent-proof session.",
+          ]),
+        };
+
+        const pairedGeometry = await recordBoundedTiming<{
+          access: Awaited<ReturnType<typeof collectConsentGeometryPageAccess>>;
+          geometry: ConsentControlGeometryArtifact;
+        } | null>(
+          timingBreakdown,
+          "synchronized empty CMP geometry",
+          "Typed A/R/O geometry captured immediately against the untouched document retained in the synchronized empty-CMP screenshot.",
+          Math.min(1_250, remainingModuleBudgetMs()),
+          async () => {
+            const geometry = await captureConsentControlGeometry(page, {
+              screenshotArtifactRef: screenshotPath,
+              timeoutMs: Math.min(950, remainingModuleBudgetMs()),
+            });
+            const access = await collectConsentGeometryPageAccess(
+              page,
+              initialNavigationHttpStatus,
+              {
+                frameTextTimeoutMs: 100,
+                supplementalBodyText: consentObservation.textExcerpt,
+              },
+            );
+            return { access, geometry };
+          },
+          () => null,
+        );
+        if (!pairedGeometry) {
+          return null;
+        }
+        const geometryComplete = pairedGeometry.access.status === "loaded" &&
+          pairedGeometry.geometry.summary.confidence > 0 &&
+          pairedGeometry.geometry.pageUrl !== "about:blank" &&
+          pairedGeometry.geometry.viewport.width > 0 &&
+          pairedGeometry.geometry.viewport.height > 0;
+        if (!geometryComplete) {
+          return null;
+        }
+
+        const geometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
+          "ConsentControlGeometryEvidence.json",
+          {
+            ...pairedGeometry.geometry,
+            access: pairedGeometry.access,
+            egress: buildConsentGeometryEgressDiagnostic(),
+            artifactOnly: true,
+            productionFindingIntegration: false,
+          },
+        );
+        consentGeometryDiagnosticWritten = true;
+        return reconcileConsentUiObservationWithCompletedGeometry({
+          artifactPath: geometryArtifactPath,
+          current: consentObservation,
+          geometry: pairedGeometry.geometry,
+          geometryAccessLoaded: true,
+          pageUrl: safePageUrl(page, effectiveNavigationUrl),
+          scanStartedAtMs: input.scanStartedAtMs,
+          text: consentObservation.textExcerpt,
+        });
+      };
       const runHighConfidenceAdaptiveRecapture = () => detectConsentUiWithAdaptiveCmpGates({
         cmpRuntimeObservations,
         initialObservation: consentObservation,
         navigationStartedAtMs,
-        onTenSecondGate: earlyScreenshotCaptured &&
+        onTenSecondGate: (
+          earlyScreenshotCaptured &&
           (input.screenshotCaptureMode ?? "viewport_first") === "viewport_first"
+        ) || (
+          input.captureScope === "consent_proof" &&
+          highConfidenceCmpRuntimeEvidence &&
+          consentObservation.controls.length === 0 &&
+          consentObservation.inventoryOutcome === "complete_empty"
+        )
           ? async () => {
+            const synchronizedEmptyProof = await captureSynchronizedEmptyCmpProof();
+            if (synchronizedEmptyProof) {
+              return synchronizedEmptyProof;
+            }
             supplementalScreenshotAttempted = true;
             const supplementalCapture = await recordTiming(
               timingBreakdown,
@@ -2367,6 +2494,46 @@ export async function preConsentRuntimeScanner(
           ? "Revalidate a completed negative geometry packet after a later text-only surface hint; the newer same-session geometry remains authoritative."
           : "Artifact-only bounded consent-control geometry diagnostic after normal pre-consent screenshot and structured inventory capture.",
         async () => {
+        if (
+          input.captureScope === "consent_proof" &&
+          (input.screenshotMode ?? "always") !== "never" &&
+          !preferredPreConsentScreenshotRef(screenshots) &&
+          remainingModuleBudgetMs() >= 900
+        ) {
+          const representativeScreenshot = await recordTiming(
+            timingBreakdown,
+            "consent geometry representative screenshot",
+            "Bounded same-session viewport evidence retained before typed geometry; pixels are not used to classify controls.",
+            () => captureConsentGeometryProofScreenshot(page, input, {
+              screenshotErrors,
+              timeoutMs: Math.min(450, Math.max(1, remainingModuleBudgetMs())),
+            }),
+          );
+          if (representativeScreenshot) {
+            screenshots.unshift(representativeScreenshot);
+            const representativeVisualCapture = visualCaptureFromScreenshotSummary(
+              {
+                status: "available",
+                captureMethod: representativeScreenshot.captureMethod,
+                artifactRefs: [],
+                notes: ["Representative pre-consent viewport retained immediately before typed geometry."],
+              },
+              representativeScreenshot.path,
+              representativeScreenshot.artifactId,
+            );
+            visualCapture = {
+              ...representativeVisualCapture,
+              artifactRefs: uniqueEvidenceRefs([
+                ...representativeVisualCapture.artifactRefs,
+                ...visualCapture.artifactRefs,
+              ]),
+              notes: unique([
+                ...representativeVisualCapture.notes,
+                ...visualCapture.notes,
+              ]),
+            };
+          }
+        }
         const access = await collectConsentGeometryPageAccess(page, initialNavigationHttpStatus, {
           frameTextTimeoutMs: input.waitMode === "fast" ? 250 : 500,
           supplementalBodyText: domText,
@@ -2428,7 +2595,8 @@ export async function preConsentRuntimeScanner(
             geometry = recapturedGeometry;
           }
         }
-        const geometryProofScreenshot = hasConfirmedFirstLayerGeometryControls(geometry)
+        const geometryProofScreenshot = hasConfirmedFirstLayerGeometryControls(geometry) &&
+            !screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof")
           ? await captureConsentGeometryProofScreenshot(page, input, {
             screenshotErrors,
             timeoutMs: input.waitMode === "fast" ? 10_000 : 12_500,
@@ -7700,15 +7868,26 @@ export function mergeConsentUiObservations(
   ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["failedChannels"];
   const completedTypedInventoryRetained = completedChannels.some((channel) =>
     channel === "dom_inventory" || channel === "accessibility_tree"
-  );
+  ) || current.inventoryOutcome === "complete_empty" ||
+    current.inventoryOutcome === "complete_with_controls" ||
+    candidate.inventoryOutcome === "complete_empty" ||
+    candidate.inventoryOutcome === "complete_with_controls";
   const activeTimedOutChannels = timedOutChannels.filter((channel) => !completedChannels.includes(channel));
   const activeFailedChannels = failedChannels.filter((channel) => !completedChannels.includes(channel));
+  const inventoryDiagnostics = mergeConsentInventoryDiagnostics(
+    current.inventoryDiagnostics,
+    candidate.inventoryDiagnostics,
+    controls.length,
+  );
+  const blockingFrameInaccessible =
+    (current.inventoryOutcome === "frame_inaccessible" || candidate.inventoryOutcome === "frame_inaccessible") &&
+    (inventoryDiagnostics.blockingInaccessibleFrameCount ?? 0) > 0;
   const inventoryOutcome: ConsentUiObservation["inventoryOutcome"] =
     activeTimedOutChannels.length > 0
       ? "timed_out"
       : activeFailedChannels.length > 0
         ? "partial"
-        : current.inventoryOutcome === "frame_inaccessible" || candidate.inventoryOutcome === "frame_inaccessible"
+        : blockingFrameInaccessible
           ? "frame_inaccessible"
           : completedTypedInventoryRetained
             ? controls.length > 0
@@ -7749,11 +7928,7 @@ export function mergeConsentUiObservations(
       ...current.evidenceRefs,
       ...candidate.evidenceRefs,
     ]),
-    inventoryDiagnostics: mergeConsentInventoryDiagnostics(
-      current.inventoryDiagnostics,
-      candidate.inventoryDiagnostics,
-      controls.length,
-    ),
+    inventoryDiagnostics,
     layerInspected:
       current.layerInspected === "first_layer" || candidate.layerInspected === "first_layer"
         ? "first_layer"
@@ -9828,6 +10003,7 @@ function preferredPreConsentScreenshotRef(screenshots: ScreenshotArtifact[]): st
   return (
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_cmp_controls")?.path ??
+    screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_cmp_empty")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_settled")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent")?.path ??
@@ -9934,6 +10110,10 @@ function canonicalGeometryDocumentIdentity(value: string | undefined): string | 
   }
 }
 
+function normalizeConsentControlIdentityLabel(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+}
+
 export function reconcileConsentUiObservationWithCompletedGeometry(input: {
   artifactPath?: string;
   current: ConsentUiObservation;
@@ -9991,6 +10171,57 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
         ]),
       },
     };
+  }
+
+  const conflictingGeometryCandidates = input.geometry.candidates.filter((candidate) =>
+    candidate.classifierReasonCodes.includes("visible_accessible_intent_conflict")
+  );
+  if (conflictingGeometryCandidates.length > 0) {
+    const conflictingLabels = new Set(conflictingGeometryCandidates.flatMap((candidate) => [
+      candidate.label,
+      candidate.ariaLabel,
+    ]).filter((label): label is string => Boolean(label)).map(normalizeConsentControlIdentityLabel));
+    const retainedControls = input.current.controls.filter((control) =>
+      !conflictingLabels.has(normalizeConsentControlIdentityLabel(control.label))
+    );
+    const conflictControls: ConsentUiObservation["controls"] = conflictingGeometryCandidates.map((candidate) => ({
+      actionType: "other",
+      artifactRef: input.artifactPath,
+      classifierReasonCodes: candidate.classifierReasonCodes,
+      confidence: candidate.classifierConfidence,
+      label: candidate.label.slice(0, 120),
+      matchStrength: candidate.matchStrength as ConsentUiObservation["controls"][number]["matchStrength"],
+      matchedLocale: candidate.matchedLocale as ConsentUiObservation["controls"][number]["matchedLocale"],
+      matchedTerm: candidate.matchedTerm,
+      placementType: candidate.placementType,
+      presentationType: candidate.presentationType,
+      role: candidate.role,
+      selectorHint: candidate.selectorHint,
+      tagName: candidate.tagName.slice(0, 32),
+      visible: true,
+    }));
+    const controls = uniqueConsentObservationControls([
+      ...retainedControls,
+      ...conflictControls,
+    ]);
+    return annotateConsentUiObservation({
+      ...input.current,
+      acceptControlObserved: controls.some((control) => control.actionType === "accept_all"),
+      rejectControlObserved: controls.some((control) => control.actionType === "reject_all"),
+      managePreferencesControlObserved: controls.some((control) => control.actionType === "manage_preferences"),
+      captureStatus: "incomplete",
+      inventoryOutcome: "partial",
+      controls,
+      visibleChoiceLabels: unique(controls.map((control) => control.label)).slice(0, 24),
+      captureDiagnostics: {
+        completedChannels: unique([
+          ...(input.current.captureDiagnostics?.completedChannels ?? []),
+          "geometry",
+        ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["completedChannels"],
+        timedOutChannels: input.current.captureDiagnostics?.timedOutChannels ?? [],
+        failedChannels: input.current.captureDiagnostics?.failedChannels ?? [],
+      },
+    }, "geometry:visible_accessible_intent_conflict");
   }
 
   const geometryObservation = consentUiObservationFromConfirmedGeometryControls({

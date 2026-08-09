@@ -68,6 +68,7 @@ test("known CMP and unknown inaccessible frames remain fail-closed", () => {
 test("merged retained observation preserves bounded inaccessible-frame diagnostics", () => {
   const current = observation();
   const candidate = observation();
+  candidate.inventoryOutcome = "frame_inaccessible";
   candidate.inventoryDiagnostics = {
     candidateContainerCount: 0,
     candidateControlCount: 0,
@@ -92,4 +93,29 @@ test("merged retained observation preserves bounded inaccessible-frame diagnosti
     merged.inventoryDiagnostics?.nonBlockingInaccessibleFrameReasonCodes,
     ["detached_frame"],
   );
+});
+
+test("a blocking inaccessible consent frame keeps the merged inventory fail-closed", () => {
+  const current = observation();
+  const candidate = observation();
+  candidate.inventoryOutcome = "frame_inaccessible";
+  candidate.inventoryDiagnostics = {
+    candidateContainerCount: 0,
+    candidateControlCount: 0,
+    retainedControlCount: 0,
+    inspectedFrameCount: 2,
+    inaccessibleFrameCount: 1,
+    blockingInaccessibleFrameCount: 1,
+    nonBlockingInaccessibleFrameCount: 0,
+    nonBlockingInaccessibleFrameReasonCodes: [],
+    inventorySources: [],
+    candidateLabels: [],
+    rejectionReasons: [],
+    timingMarkers: [],
+  };
+
+  const merged = mergeConsentUiObservations(current, candidate, "test:blocking-frame-merge");
+
+  assert.equal(merged.inventoryOutcome, "frame_inaccessible");
+  assert.equal(merged.inventoryDiagnostics?.blockingInaccessibleFrameCount, 1);
 });

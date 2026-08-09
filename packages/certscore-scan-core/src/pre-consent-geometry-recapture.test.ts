@@ -205,6 +205,65 @@ test("completed geometry cannot erase stronger structured A/R/O evidence", () =>
   assert.ok(reconciled.basis.includes("geometry:did_not_corroborate_structured_controls"));
 });
 
+test("visible and accessible intent conflicts keep the affected control unknown", () => {
+  const current = {
+    ...rapidOxfamStyleObservation,
+    inventoryOutcome: "complete_with_controls" as const,
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory" as const, "accessibility_tree" as const],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    controls: rapidOxfamStyleObservation.controls.map((control) =>
+      control.actionType === "reject_all"
+        ? { ...control, label: "Reject all optional data processing and close this banner" }
+        : control
+    ),
+  };
+  const conflictGeometry = oxfamStyleGeometry();
+  const template = conflictGeometry.candidates[0]!;
+  conflictGeometry.candidates = [{
+    ...template,
+    candidateId: "candidate_conflict",
+    label: "Do Not Sell or Share My Personal Information",
+    normalizedLabel: "do not sell or share my personal information",
+    actionType: "other",
+    ariaLabel: "Reject all optional data processing and close this banner",
+    classifierReasonCodes: [
+      "visible_accessible_intent_conflict",
+      "visible_intent_privacy_opt_out",
+      "accessible_intent_reject",
+    ],
+    classifierConfidence: 0.5,
+    decisionStatus: "ambiguous",
+    reasons: ["unclassified_control"],
+  }];
+  conflictGeometry.summary.limitations = ["visible_accessible_intent_conflict"];
+
+  const reconciled = reconcileConsentUiObservationWithCompletedGeometry({
+    artifactPath: "/tmp/ConsentControlGeometryEvidence.json",
+    current,
+    geometry: conflictGeometry,
+    geometryAccessLoaded: true,
+    pageUrl: "https://www.oxfamamerica.org/",
+    scanStartedAtMs: Date.now() - 10_000,
+  });
+
+  assert.equal(reconciled.captureStatus, "incomplete");
+  assert.equal(reconciled.inventoryOutcome, "partial");
+  assert.equal(reconciled.acceptControlObserved, true);
+  assert.equal(reconciled.rejectControlObserved, false);
+  assert.equal(reconciled.managePreferencesControlObserved, true);
+  assert.equal(
+    reconciled.controls.some((control) =>
+      control.actionType === "other" &&
+      control.classifierReasonCodes?.includes("visible_accessible_intent_conflict")
+    ),
+    true,
+  );
+  assert.equal(reconciled.basis.includes("geometry:visible_accessible_intent_conflict"), true);
+});
+
 test("same-document empty geometry completes an explicitly empty DOM inventory", () => {
   const current = {
     ...rapidOxfamStyleObservation,
@@ -245,6 +304,39 @@ test("same-document empty geometry completes an explicitly empty DOM inventory",
   assert.equal(reconciled.inventoryOutcome, "complete_empty");
   assert.deepEqual(reconciled.captureDiagnostics?.completedChannels, ["dom_inventory", "geometry"]);
   assert.equal(reconciled.basis.includes("geometry:hidden_cmp_markup_separated_from_visible_surface"), true);
+});
+
+test("completed same-document geometry reconciles a previously unavailable empty inventory", () => {
+  const current = {
+    ...rapidOxfamStyleObservation,
+    documentUrl: "https://www.oxfamamerica.org/",
+    captureStatus: "no_evidence" as const,
+    inventoryOutcome: "geometry_unavailable" as const,
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory" as const],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    likelyPresent: false,
+    basis: ["settled_control_inventory_completed", "geometry:incomplete_not_authoritative"],
+    visibleChoiceLabels: [],
+    acceptControlObserved: false,
+    rejectControlObserved: false,
+    managePreferencesControlObserved: false,
+    controls: [],
+  };
+
+  const reconciled = reconcileConsentUiObservationWithCompletedGeometry({
+    current,
+    geometry: oxfamStyleGeometry(),
+    geometryAccessLoaded: true,
+    pageUrl: "https://www.oxfamamerica.org/",
+    scanStartedAtMs: Date.now() - 10_000,
+  });
+
+  assert.equal(reconciled.inventoryOutcome, "complete_empty");
+  assert.deepEqual(reconciled.captureDiagnostics?.completedChannels, ["dom_inventory", "geometry"]);
+  assert.equal(reconciled.basis.includes("geometry:no_visible_first_layer_controls"), true);
 });
 
 test("completed settled geometry separates hidden CMP markup from a visible consent surface", () => {

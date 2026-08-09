@@ -79,7 +79,6 @@ const FAILURE_REASONS = new Set([
   "loading_or_stalled",
   "navigation_transport_failure",
   "scan_no_go_assessment",
-  "scan_no_go_corroborated",
 ]);
 
 function parseArgs(argv: string[]): Args {

@@ -139,6 +139,17 @@ test("classifyConsentGeometryAccess leaves ordinary pages eligible for A/R/O", (
   assert.deepEqual(diagnostic.reasonCodes, []);
 });
 
+test("classifyConsentGeometryAccess does not treat ordinary Cloudflare Pages attribution as a challenge", () => {
+  const diagnostic = classifyConsentGeometryAccess({
+    httpStatus: 200,
+    title: "Arne Brachhold",
+    bodyText: "Senior manager and software architect. Powered by Astro, Minimal Mistakes & Cloudflare Pages. Privacy Policy.",
+  });
+
+  assert.equal(diagnostic.status, "loaded");
+  assert.deepEqual(diagnostic.reasonCodes, []);
+});
+
 test("classifyConsentGeometryAccess marks navigation timeouts distinctly", () => {
   const diagnostic = classifyConsentGeometryAccess({
     errorMessage: "page.goto: Timeout 15000ms exceeded.",
