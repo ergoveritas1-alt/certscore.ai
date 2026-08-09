@@ -8,6 +8,7 @@ import {
   isDirectCmpSemanticControlClassificationEligible,
   reconcileConsentUiRecapture,
   reconcilePostSettleConsentUiObservation,
+  shouldRunBoundedSameSessionConsentPacketRecovery,
   shouldRunImmediateStructuredConsentRecovery,
   shouldCaptureSettledPreConsentScreenshot,
   shouldRecaptureConsentUiAfterTimeout,
@@ -211,6 +212,81 @@ test("an incomplete inventory after the settled screenshot cannot be marked comp
       "recapture:post_settled_screenshot_inventory_incomplete",
     ],
   })), false);
+});
+
+test("a verified independent packet supersedes historical incomplete capture markers", () => {
+  const completed = observation({
+    captureStatus: "observed",
+    inventoryOutcome: "complete_with_controls",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    basis: [
+      "recapture:post_settle_inventory_incomplete",
+      "geometry_capture_unavailable",
+      "recovery:independent_consent_capture_completed",
+    ],
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    acceptControlObserved: true,
+    controls: [{ label: "Accept", actionType: "accept_all", visible: true, classifierReasonCodes: [] }],
+  });
+
+  assert.equal(shouldRunImmediateStructuredConsentRecovery(completed), false);
+  assert.equal(shouldRunBoundedSameSessionConsentPacketRecovery({
+    observation: completed,
+    representativeScreenshotAvailable: true,
+  }), false);
+
+  const failedTerminalAttempt = observation({
+    ...completed,
+    boundedSameSessionRecoveryOutcome: "geometry_incomplete",
+  });
+  assert.equal(shouldRunBoundedSameSessionConsentPacketRecovery({
+    observation: failedTerminalAttempt,
+    representativeScreenshotAvailable: true,
+  }), true);
+});
+
+test("bounded same-session packet recovery is reserved for active packet gaps", () => {
+  const incomplete = observation({
+    captureStatus: "incomplete",
+    inventoryOutcome: "timed_out",
+    captureDiagnostics: {
+      completedChannels: ["geometry"],
+      timedOutChannels: ["dom_inventory"],
+      failedChannels: [],
+    },
+    basis: ["recapture:post_settle_inventory_incomplete"],
+  });
+  assert.equal(shouldRunBoundedSameSessionConsentPacketRecovery({
+    observation: incomplete,
+    representativeScreenshotAvailable: true,
+  }), true);
+
+  const completed = observation({
+    captureStatus: "observed",
+    inventoryOutcome: "complete_with_controls",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    acceptControlObserved: true,
+    controls: [{ label: "Accept", actionType: "accept_all", visible: true, classifierReasonCodes: [] }],
+  });
+  assert.equal(shouldRunBoundedSameSessionConsentPacketRecovery({
+    observation: completed,
+    representativeScreenshotAvailable: true,
+  }), false);
+  assert.equal(shouldRunBoundedSameSessionConsentPacketRecovery({
+    observation: completed,
+    representativeScreenshotAvailable: false,
+  }), true);
 });
 
 test("a newly retained options control strengthens an existing accept and reject inventory", () => {

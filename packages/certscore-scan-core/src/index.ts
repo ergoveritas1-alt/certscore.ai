@@ -27,6 +27,7 @@ import {
   canonicalEvidenceBundleSchema,
   deriveConsentSurfaceInspectionOutcome,
   derivePolicySurfaceInspectionOutcome,
+  isVerifiedTerminalConsentPacket,
 } from "@certscore/contracts";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
 import type { ScanNoGoReasonCode } from "@website-signal-risk-scanner/shared";
@@ -2715,10 +2716,7 @@ export function consentInspectionNeedsRecovery(input: {
   observations: ConsentUiObservation[];
 }): boolean {
   const verifiedRecoveryCompleted = input.observations.some((observation) =>
-    observation.captureStatus !== "incomplete" &&
-    observation.basis.includes("recovery:independent_consent_capture_completed") &&
-    observation.captureDiagnostics?.completedChannels.includes("dom_inventory") === true &&
-    observation.captureDiagnostics.completedChannels.includes("geometry")
+    isVerifiedTerminalConsentPacket(observation)
   );
   if (verifiedRecoveryCompleted) {
     return false;

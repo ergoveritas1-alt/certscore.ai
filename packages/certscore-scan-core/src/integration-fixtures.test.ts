@@ -24,11 +24,15 @@ import {
   type FixtureRouteFulfiller,
   consentUiObservationFromConfirmedGeometryControls,
   consentControlsFromAccessibilityTree,
+  finalizeBoundedSameSessionConsentPacket,
   preConsentRuntimeScanner,
   readRapidFirstLayerConsentUiObservation,
   shouldRunImmediateStructuredConsentRecovery,
 } from "./scanners/pre-consent-runtime-scanner.js";
-import type { ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
+import {
+  captureConsentControlGeometry,
+  type ConsentControlGeometryArtifact,
+} from "./consent-control-geometry.js";
 import { inspectBundle, type BundleInspectionReport } from "./inspector.js";
 import { runScan } from "./index.js";
 import {
@@ -2824,6 +2828,115 @@ test("consent-proof lane binds a completed generic negative inventory to a repre
       `representative screenshot must stay within its bounded latency allowance; durationMs=${proofTiming?.durationMs ?? "missing"}`,
     );
   } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("bounded same-session recovery carries a real empty browser packet through canonical inspection", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-bounded-empty-packet-"));
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+    const page = await context.newPage();
+    const url = server.urlFor("generic-cdn-noise");
+    const scanStartedAtMs = Date.now();
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    const screenshotPath = path.join(tempRoot, "bounded-recovery.png");
+    await page.screenshot({ path: screenshotPath, fullPage: false });
+    const recoveryInventory = await readRapidFirstLayerConsentUiObservation(
+      page,
+      scanStartedAtMs,
+      900,
+      "retry",
+    );
+    const geometry = await captureConsentControlGeometry(page, {
+      screenshotArtifactRef: screenshotPath,
+      timeoutMs: 1_100,
+    });
+    const completedPacket = finalizeBoundedSameSessionConsentPacket({
+      artifactPath: path.join(tempRoot, "ConsentControlGeometryEvidence.json"),
+      current: {
+        ...recoveryInventory,
+        captureStatus: "incomplete",
+        inventoryOutcome: "timed_out",
+        captureDiagnostics: {
+          completedChannels: [],
+          timedOutChannels: ["dom_inventory"],
+          failedChannels: [],
+        },
+        basis: ["recapture:post_settle_inventory_incomplete"],
+      },
+      geometry,
+      pageUrl: url,
+      recoveryInventory,
+      scanStartedAtMs,
+    });
+    const inspection = deriveConsentSurfaceInspectionOutcome({
+      cmpRuntimeObservations: [],
+      consentUiObservations: [completedPacket],
+      domSnapshots: [{
+        artifactId: "dom_pre_consent",
+        capturedAtMs: completedPacket.observedAtMs,
+        consentStateAtTime: "pre_consent",
+        pagePhase: "settled",
+        path: path.join(tempRoot, "dom.json"),
+        url,
+      }],
+      modulesRun: [{
+        moduleName: "preConsentRuntimeScanner",
+        status: "partial",
+        startedAt: new Date(scanStartedAtMs).toISOString(),
+        completedAt: new Date().toISOString(),
+        evidenceRefs: [],
+        errors: ["Fixture retained an earlier incomplete inventory."],
+      }],
+      networkEvents: [],
+      runtimeCoverage: {
+        coverageStatus: "limited_partial",
+        limitationKeys: ["pre_consent_runtime_partial", "consent_ui_capture_timed_out"],
+        fallbackModesUsed: [],
+        observationCounts: {
+          networkEvents: 0,
+          thirdPartyRequests: 0,
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+        },
+        silentEmpty: false,
+        notes: [],
+      },
+      screenshots: [{
+        artifactId: "screenshot_pre_consent_packet_recovery",
+        capturedAtMs: completedPacket.observedAtMs,
+        captureMethod: "primary_viewport_fallback",
+        consentStateAtTime: "pre_consent",
+        pagePhase: "network_idle",
+        path: screenshotPath,
+        url,
+      }],
+      visualCapture: {
+        status: "available",
+        captureMethod: "primary_viewport_fallback",
+        artifactRefs: [],
+        notes: [],
+      },
+    });
+
+    assert.equal(completedPacket.boundedSameSessionRecoveryOutcome, "completed");
+    assert.equal(completedPacket.inventoryOutcome, "complete_empty");
+    assert.equal(completedPacket.captureStatus, "no_evidence");
+    assert.equal(completedPacket.captureDiagnostics?.timedOutChannels.length, 0);
+    assert.equal(completedPacket.captureDiagnostics?.completedChannels.includes("geometry"), true);
+    assert.equal(completedPacket.basis.includes("settled_control_inventory_completed"), true);
+    assert.equal(inspection.outcome, "no_surface_observed_complete_coverage");
+    assert.equal(inspection.coverageStatus, "complete");
+    assert.equal(inspection.inspectionCompleted, true);
+    await context.close();
+  } finally {
+    await browser.close();
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
   }

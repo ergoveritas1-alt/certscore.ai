@@ -100,5 +100,49 @@ class AuthoritativeFreshnessTests(unittest.TestCase):
         self.assertFalse(result["freshnessIssue"])
 
 
+class HourlyJobRotationTests(unittest.TestCase):
+    pages = [{"key": f"page-{index}"} for index in range(5)]
+
+    def test_each_hour_covers_every_transport_and_location_with_distinct_pages(self):
+        for hour in range(15):
+            jobs = handler.build_hourly_jobs(self.pages, hour)
+
+            self.assertEqual(len(jobs), 3)
+            self.assertEqual({job["transport"] for job in jobs}, set(handler.TRANSPORTS))
+            self.assertEqual({job["location"] for job in jobs}, set(handler.LOCATIONS))
+            self.assertEqual(len({job["page"]["key"] for job in jobs}), 3)
+
+    def test_each_transport_covers_every_page_over_five_hours(self):
+        jobs = [
+            job
+            for hour in range(5)
+            for job in handler.build_hourly_jobs(self.pages, hour)
+        ]
+
+        for transport in handler.TRANSPORTS:
+            transport_pages = {
+                job["page"]["key"]
+                for job in jobs
+                if job["transport"] == transport
+            }
+            self.assertEqual(transport_pages, {page["key"] for page in self.pages})
+
+    def test_fifteen_hour_cycle_covers_every_page_location_transport_tuple_once(self):
+        tuples = [
+            (job["page"]["key"], job["location"], job["transport"])
+            for hour in range(15)
+            for job in handler.build_hourly_jobs(self.pages, hour)
+        ]
+
+        expected = {
+            (page["key"], location, transport)
+            for page in self.pages
+            for location in handler.LOCATIONS
+            for transport in handler.TRANSPORTS
+        }
+        self.assertEqual(len(tuples), 45)
+        self.assertEqual(set(tuples), expected)
+
+
 if __name__ == "__main__":
     unittest.main()

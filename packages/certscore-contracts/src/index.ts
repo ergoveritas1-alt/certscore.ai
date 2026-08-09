@@ -501,6 +501,13 @@ export const consentUiObservationSchema = z.object({
       "network_cmp",
     ])).max(8).default([]),
   }).optional(),
+  boundedSameSessionRecoveryOutcome: z.enum([
+    "completed",
+    "screenshot_failed",
+    "inventory_incomplete",
+    "geometry_incomplete",
+    "geometry_budget_unavailable",
+  ]).optional(),
   likelyPresent: z.boolean(),
   basis: z.array(z.string()),
   textExcerpt: z.string().optional(),
@@ -2050,6 +2057,73 @@ export const consentSurfaceInspectionOutcomeSchema = z.object({
 
 type ConsentEvidenceChannel = z.infer<typeof consentSurfaceInspectionOutcomeSchema>["evidenceChannels"][number];
 
+function consentPacketDocumentIdentity(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return `${url.protocol}//${url.host.toLowerCase()}${pathname}`;
+  } catch {
+    return null;
+  }
+}
+
+export function isVerifiedTerminalConsentPacket(
+  observation: z.infer<typeof consentUiObservationSchema>,
+  context?: {
+    expectedDocumentUrl?: string | null;
+    representativeScreenshotUrls?: string[];
+  },
+): boolean {
+  const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
+  const timedOutChannels = observation.captureDiagnostics?.timedOutChannels ?? [];
+  const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
+  const controls = observation.controls ?? [];
+  const terminalBasis = (observation.basis ?? []).some((basis) =>
+    basis === "recovery:independent_consent_capture_completed" ||
+    basis === "recovery:bounded_same_session_consent_packet_completed"
+  );
+  const coherentInventory =
+    observation.inventoryOutcome === "complete_empty"
+      ? observation.captureStatus === "no_evidence" &&
+        observation.likelyPresent === false &&
+        controls.length === 0
+      : observation.inventoryOutcome === "complete_with_controls" &&
+        observation.captureStatus === "observed" &&
+        observation.likelyPresent === true &&
+        controls.length > 0;
+  if (
+    !terminalBasis ||
+    !coherentInventory ||
+    observation.layerInspected !== "first_layer" ||
+    !completedChannels.includes("dom_inventory") ||
+    !completedChannels.includes("geometry") ||
+    timedOutChannels.length > 0 ||
+    failedChannels.length > 0 ||
+    (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) > 0 ||
+    (
+      observation.boundedSameSessionRecoveryOutcome !== undefined &&
+      observation.boundedSameSessionRecoveryOutcome !== "completed"
+    )
+  ) {
+    return false;
+  }
+
+  const observationDocument = consentPacketDocumentIdentity(observation.documentUrl);
+  const expectedDocument = consentPacketDocumentIdentity(context?.expectedDocumentUrl);
+  if (expectedDocument && observationDocument !== expectedDocument) {
+    return false;
+  }
+  if (context?.representativeScreenshotUrls) {
+    if (!observationDocument) return false;
+    const screenshotBoundToObservation = context.representativeScreenshotUrls.some((url) =>
+      consentPacketDocumentIdentity(url) === observationDocument
+    );
+    if (!screenshotBoundToObservation) return false;
+  }
+  return true;
+}
+
 function hasVerifiedPositiveConsentCapture(
   observations: z.infer<typeof consentUiObservationSchema>[],
 ): boolean {
@@ -2058,7 +2132,16 @@ function hasVerifiedPositiveConsentCapture(
     observation.likelyPresent &&
     observation.layerInspected === "first_layer" &&
     observation.captureDiagnostics?.completedChannels.includes("dom_inventory") === true &&
-    observation.captureDiagnostics.completedChannels.includes("accessibility_tree") &&
+    (
+      observation.captureDiagnostics.completedChannels.includes("accessibility_tree") ||
+      observation.captureDiagnostics.completedChannels.includes("geometry")
+    ) &&
+    observation.captureDiagnostics.timedOutChannels.length === 0 &&
+    observation.captureDiagnostics.failedChannels.length === 0 &&
+    observation.inventoryOutcome !== "frame_inaccessible" &&
+    observation.inventoryOutcome !== "document_mismatch" &&
+    observation.inventoryOutcome !== "geometry_unavailable" &&
+    (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) === 0 &&
     (
       observation.acceptControlObserved ||
       observation.rejectControlObserved ||
@@ -2070,6 +2153,10 @@ function hasVerifiedPositiveConsentCapture(
 
 function hasVerifiedNegativeConsentCapture(
   observations: z.infer<typeof consentUiObservationSchema>[],
+  context?: {
+    expectedDocumentUrl?: string | null;
+    representativeScreenshotUrls?: string[];
+  },
 ): boolean {
   return observations.some((observation) =>
     observation.inventoryOutcome === "complete_empty" &&
@@ -2081,7 +2168,11 @@ function hasVerifiedNegativeConsentCapture(
     observation.captureDiagnostics.completedChannels.includes("geometry") &&
     observation.captureDiagnostics.timedOutChannels.length === 0 &&
     observation.captureDiagnostics.failedChannels.length === 0 &&
-    observation.basis.includes("settled_control_inventory_completed")
+    (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) === 0 &&
+    (
+      observation.basis.includes("settled_control_inventory_completed") ||
+      isVerifiedTerminalConsentPacket(observation, context)
+    )
   );
 }
 
@@ -2096,15 +2187,23 @@ function deriveConsentEvidenceChannels(input: {
 }): ConsentEvidenceChannel[] {
   const preConsentRun = input.modulesRun.find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
   const observations = input.consentUiObservations;
-  const independentRecoveryCompleted = observations.some((observation) =>
-    observation.captureStatus !== "incomplete" &&
-    observation.basis.includes("recovery:independent_consent_capture_completed") &&
-    observation.captureDiagnostics?.completedChannels.includes("dom_inventory") === true &&
-    observation.captureDiagnostics.completedChannels.includes("geometry")
+  const expectedDocumentUrl = input.domSnapshots.at(-1)?.url ??
+    observations.at(-1)?.documentUrl ?? null;
+  const representativeScreenshotUrls = input.screenshots
+    .filter((screenshot) => screenshot.consentStateAtTime === "pre_consent")
+    .map((screenshot) => screenshot.url);
+  const terminalRecoveryCompleted = observations.some((observation) =>
+    isVerifiedTerminalConsentPacket(observation, {
+      expectedDocumentUrl,
+      representativeScreenshotUrls,
+    })
   );
   const verifiedPositiveCaptureCompleted = hasVerifiedPositiveConsentCapture(observations);
-  const verifiedNegativeCaptureCompleted = hasVerifiedNegativeConsentCapture(observations);
-  const consentLaneCompleted = independentRecoveryCompleted || verifiedPositiveCaptureCompleted || verifiedNegativeCaptureCompleted;
+  const verifiedNegativeCaptureCompleted = hasVerifiedNegativeConsentCapture(observations, {
+    expectedDocumentUrl,
+    representativeScreenshotUrls,
+  });
+  const consentLaneCompleted = terminalRecoveryCompleted || verifiedPositiveCaptureCompleted || verifiedNegativeCaptureCompleted;
   const runtimeIncomplete = preConsentRun?.status !== "completed" && !consentLaneCompleted;
   const hasObservationBasis = (pattern: RegExp) => observations.some((observation) =>
     observation.basis.some((basis) => pattern.test(basis))
@@ -2244,15 +2343,23 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
   // script/library signal cannot be projected as a confirmed banner.
   const consentSurfaceObserved = Boolean(visibleObservation);
   const preConsentRun = (input.modulesRun ?? []).find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
-  const independentRecoveryCompleted = observations.some((observation) =>
-    observation.captureStatus !== "incomplete" &&
-    observation.basis.includes("recovery:independent_consent_capture_completed") &&
-    observation.captureDiagnostics?.completedChannels.includes("dom_inventory") === true &&
-    observation.captureDiagnostics.completedChannels.includes("geometry")
+  const expectedDocumentUrl = input.domSnapshots?.at(-1)?.url ??
+    observations.at(-1)?.documentUrl ?? null;
+  const representativeScreenshotUrls = (input.screenshots ?? [])
+    .filter((screenshot) => screenshot.consentStateAtTime === "pre_consent")
+    .map((screenshot) => screenshot.url);
+  const terminalRecoveryCompleted = observations.some((observation) =>
+    isVerifiedTerminalConsentPacket(observation, {
+      expectedDocumentUrl,
+      representativeScreenshotUrls,
+    })
   );
   const verifiedPositiveCaptureCompleted = hasVerifiedPositiveConsentCapture(observations);
-  const verifiedNegativeCaptureCompleted = hasVerifiedNegativeConsentCapture(observations);
-  const consentLaneCompleted = independentRecoveryCompleted || verifiedPositiveCaptureCompleted || verifiedNegativeCaptureCompleted;
+  const verifiedNegativeCaptureCompleted = hasVerifiedNegativeConsentCapture(observations, {
+    expectedDocumentUrl,
+    representativeScreenshotUrls,
+  });
+  const consentLaneCompleted = terminalRecoveryCompleted || verifiedPositiveCaptureCompleted || verifiedNegativeCaptureCompleted;
   const observationFailed = observations.length === 0 || !consentLaneCompleted && observations.some((observation) =>
     observation.captureStatus === "incomplete" ||
     (
@@ -2264,7 +2371,7 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
       )
     )
   );
-  const settledInventoryCompleted = observations.some((observation) =>
+  const settledInventoryCompleted = terminalRecoveryCompleted || observations.some((observation) =>
     observation.basis.includes("settled_control_inventory_completed")
   );
   const supersededConsentRecoveryLimitations = new Set([

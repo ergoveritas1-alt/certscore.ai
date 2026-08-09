@@ -1,5 +1,6 @@
 import {
   deriveConsentControlAssessment,
+  isVerifiedTerminalConsentPacket,
   type CanonicalEvidenceBundle,
   type ConsentControlAssessment,
   type ConsentControlAssessmentCandidate,
@@ -207,17 +208,24 @@ export function deriveMaterializedConsentControlAssessment(input: {
     observation: CanonicalEvidenceBundle["consentUiObservations"][number],
   ) => {
     const controls = observation.controls ?? [];
-    const finalInventoryIncomplete = (observation.basis ?? []).some((basis) =>
+    const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
+    const timedOutChannels = observation.captureDiagnostics?.timedOutChannels ?? [];
+    const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
+    const terminalVerifiedPacket = isVerifiedTerminalConsentPacket(observation, {
+      expectedDocumentUrl: canonicalDocumentId,
+      representativeScreenshotUrls: retainedVisualDocumentArtifacts.map((artifact) => artifact.documentId),
+    });
+    const finalInventoryIncomplete = !terminalVerifiedPacket && (observation.basis ?? []).some((basis) =>
       basis === "recapture:paired_settled_frame_inventory_incomplete" ||
       basis === "recapture:post_settle_inventory_incomplete" ||
       basis === "recapture:post_settled_screenshot_inventory_incomplete" ||
       basis === "recapture:post_settle_inventory_budget_unavailable" ||
       basis === "recapture:immediate_timeout_recovery_budget_unavailable"
     );
-    if (finalInventoryIncomplete) return false;
-    const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
-    const timedOutChannels = observation.captureDiagnostics?.timedOutChannels ?? [];
-    const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
+    const blockingInaccessibleFrame =
+      observation.inventoryOutcome === "frame_inaccessible" ||
+      (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) > 0;
+    if (finalInventoryIncomplete || blockingInaccessibleFrame) return false;
     const completedTypedChannel = (["dom_inventory", "accessibility_tree"] as const).some((channel) =>
       completedChannels.includes(channel) &&
       !timedOutChannels.includes(channel) &&

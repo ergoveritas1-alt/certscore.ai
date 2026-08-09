@@ -1556,6 +1556,43 @@ test("policySurfaceScanner fast mode stops stalled rendered discovery at the sof
   });
 });
 
+test("policySurfaceScanner warms the primary page-locale policy path before weak generic guesses", async () => {
+  const stalledBrowser = {
+    async newContext() {
+      return {
+        async newPage() {
+          return {
+            async goto() {
+              await new Promise<never>(() => undefined);
+            },
+          };
+        },
+        async close() {},
+      };
+    },
+  } as unknown as Browser;
+
+  await withPolicyScan("policy-no-links-pt", async ({ result, baseUrl }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.equal(privacy?.normalizedUrl, `${baseUrl}/politica-de-privacidade`);
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.documentEvaluationState, "usable");
+    assert.equal(
+      privacy?.classifierReasonCodes.includes("common_path_primary_locale_privacy"),
+      true,
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label === "static policy fetch warmup"),
+      true,
+    );
+  }, {
+    browser: stalledBrowser,
+    discoveryMode: "fast",
+    internalBudgetMs: 1_800,
+  });
+});
+
 test("policySurfaceScanner honors a parent absolute deadline and returns coverage-limited evidence", async () => {
   let contextClosed = false;
   let rejectNavigation: ((reason?: unknown) => void) | undefined;

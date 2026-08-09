@@ -119,3 +119,49 @@ test("a blocking inaccessible consent frame keeps the merged inventory fail-clos
   assert.equal(merged.inventoryOutcome, "frame_inaccessible");
   assert.equal(merged.inventoryDiagnostics?.blockingInaccessibleFrameCount, 1);
 });
+
+test("a later completed same-session frame pass clears only the active blocking count", () => {
+  const current = observation();
+  current.inventoryOutcome = "frame_inaccessible";
+  current.inventoryDiagnostics = {
+    candidateContainerCount: 0,
+    candidateControlCount: 0,
+    retainedControlCount: 0,
+    inspectedFrameCount: 2,
+    inaccessibleFrameCount: 1,
+    blockingInaccessibleFrameCount: 1,
+    nonBlockingInaccessibleFrameCount: 0,
+    nonBlockingInaccessibleFrameReasonCodes: [],
+    inventorySources: [],
+    candidateLabels: [],
+    rejectionReasons: ["frame_inaccessible"],
+    timingMarkers: ["rapid_inventory_initial_child_frames_completed"],
+  };
+  const candidate = observation();
+  candidate.captureDiagnostics = {
+    completedChannels: ["dom_inventory"],
+    timedOutChannels: [],
+    failedChannels: [],
+  };
+  candidate.inventoryDiagnostics = {
+    candidateContainerCount: 0,
+    candidateControlCount: 0,
+    retainedControlCount: 0,
+    inspectedFrameCount: 2,
+    inaccessibleFrameCount: 0,
+    blockingInaccessibleFrameCount: 0,
+    nonBlockingInaccessibleFrameCount: 0,
+    nonBlockingInaccessibleFrameReasonCodes: [],
+    inventorySources: [],
+    candidateLabels: [],
+    rejectionReasons: [],
+    timingMarkers: ["rapid_inventory_retry_child_frames_completed"],
+  };
+
+  const merged = mergeConsentUiObservations(current, candidate, "test:frame-recovery");
+
+  assert.equal(merged.inventoryOutcome, "complete_empty");
+  assert.equal(merged.inventoryDiagnostics?.inaccessibleFrameCount, 1);
+  assert.equal(merged.inventoryDiagnostics?.blockingInaccessibleFrameCount, 0);
+  assert.ok(merged.inventoryDiagnostics?.timingMarkers.includes("blocking_inaccessible_frame_recovered"));
+});

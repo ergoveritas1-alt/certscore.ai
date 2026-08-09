@@ -22,6 +22,7 @@ import {
   classifyConsentSurfaceText,
   classifyPrivacySurface,
   consentControlTerms,
+  isVerifiedTerminalConsentPacket,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
 } from "@certscore/contracts";
 import {
@@ -2659,6 +2660,177 @@ export async function preConsentRuntimeScanner(
       );
     }
 
+    const finalDocumentId = canonicalGeometryDocumentIdentity(safePageUrl(page, effectiveNavigationUrl));
+    const representativeScreenshotAvailable = screenshots.some((screenshot) =>
+      screenshot.captureMethod !== "primary_placeholder" &&
+      screenshot.captureMethod !== "fresh_context_placeholder" &&
+      canonicalGeometryDocumentIdentity(screenshot.url) === finalDocumentId
+    );
+    const boundedSameSessionPacketRecoveryEligible =
+      input.captureScope === "consent_proof" &&
+      (input.screenshotMode ?? "always") !== "never" &&
+      finalDocumentId !== null &&
+      !isTerminalVisualErrorShellText(domText || consentObservation.textExcerpt || "") &&
+      remainingModuleBudgetMs() >= 2_000 &&
+      shouldRunBoundedSameSessionConsentPacketRecovery({
+        observation: consentObservation,
+        representativeScreenshotAvailable,
+      });
+    if (boundedSameSessionPacketRecoveryEligible) {
+      let boundedRecoveryOutcome: NonNullable<ConsentUiObservation["boundedSameSessionRecoveryOutcome"]> =
+        "screenshot_failed";
+      await recordTiming(
+        timingBreakdown,
+        "bounded same-session consent packet settle",
+        "One final passive settle window for an incomplete consent-proof packet; no consent control is clicked.",
+        () => page.waitForTimeout(Math.min(300, remainingModuleBudgetMs())).catch(() => undefined),
+      );
+
+      const recoveryScreenshotPath = input.artifactWriter.artifactPath(
+        "screenshot-pre-consent-packet-recovery.png",
+      );
+      const recoveryScreenshotCapture = await recordTiming(
+        timingBreakdown,
+        "bounded same-session consent packet screenshot",
+        "Representative viewport retained immediately before the final typed inventory and geometry retry on the untouched document.",
+        () => capturePreConsentScreenshot(page, recoveryScreenshotPath, {
+          captureMode: "viewport_first",
+          screenshotErrors,
+          timeoutMs: Math.min(700, remainingModuleBudgetMs()),
+        }),
+        visualCaptureTimingOutcome,
+      );
+      if (recoveryScreenshotCapture.status === "available") {
+        boundedRecoveryOutcome = "inventory_incomplete";
+        const recoveryScreenshot: ScreenshotArtifact = {
+          artifactId: "screenshot_pre_consent_packet_recovery",
+          capturedAtMs: elapsed(input.scanStartedAtMs),
+          captureMethod: recoveryScreenshotCapture.captureMethod,
+          path: recoveryScreenshotPath,
+          url: page.url(),
+          pagePhase: "network_idle",
+          consentStateAtTime: "pre_consent",
+        };
+        screenshots.unshift(recoveryScreenshot);
+        const recoveryVisualCapture = visualCaptureFromScreenshotSummary(
+          recoveryScreenshotCapture,
+          recoveryScreenshotPath,
+          recoveryScreenshot.artifactId,
+        );
+        visualCapture = {
+          ...recoveryVisualCapture,
+          artifactRefs: uniqueEvidenceRefs([
+            ...recoveryVisualCapture.artifactRefs,
+            ...visualCapture.artifactRefs,
+          ]),
+          notes: unique([
+            ...recoveryVisualCapture.notes,
+            ...visualCapture.notes,
+            "A bounded final same-session screenshot, typed inventory, and geometry packet was attempted without interacting with consent controls.",
+          ]),
+        };
+
+        const recoveryInventoryTimeoutMs = Math.min(900, remainingModuleBudgetMs());
+        const recoveryInventory = await recordBoundedTiming(
+          timingBreakdown,
+          "bounded same-session consent packet inventory",
+          "Final canonical DOM inventory paired to the recovery screenshot; incomplete reads remain fail-closed.",
+          recoveryInventoryTimeoutMs,
+          () => readRapidFirstLayerConsentUiObservation(
+            page,
+            input.scanStartedAtMs,
+            recoveryInventoryTimeoutMs,
+            "retry",
+          ),
+          () => annotateConsentUiObservation(
+            emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
+            "recovery:bounded_same_session_inventory_incomplete",
+          ),
+        );
+        const recoveryInventoryDocumentId = canonicalGeometryDocumentIdentity(
+          recoveryInventory.documentUrl ?? page.url(),
+        );
+        const recoveryTypedInventoryComplete =
+          !isIncompleteConsentUiCapture(recoveryInventory) &&
+          (recoveryInventory.captureDiagnostics?.completedChannels ?? []).some((channel) =>
+            channel === "dom_inventory" || channel === "accessibility_tree"
+          ) &&
+          recoveryInventoryDocumentId === finalDocumentId;
+        if (recoveryTypedInventoryComplete && remainingModuleBudgetMs() >= 700) {
+          boundedRecoveryOutcome = "geometry_incomplete";
+          const recoveryGeometryTimeoutMs = Math.min(1_100, remainingModuleBudgetMs());
+          const recoveryGeometry = await recordBoundedTiming<{
+            access: Awaited<ReturnType<typeof collectConsentGeometryPageAccess>>;
+            geometry: ConsentControlGeometryArtifact;
+          } | null>(
+            timingBreakdown,
+            "bounded same-session consent packet geometry",
+            "Typed geometry and page-access proof captured immediately after the paired final inventory.",
+            recoveryGeometryTimeoutMs,
+            async () => {
+              const geometry = await captureConsentControlGeometry(page, {
+                screenshotArtifactRef: recoveryScreenshotPath,
+                timeoutMs: Math.max(250, recoveryGeometryTimeoutMs - 150),
+              });
+              const access = await collectConsentGeometryPageAccess(page, initialNavigationHttpStatus, {
+                frameTextTimeoutMs: 100,
+                supplementalBodyText: recoveryInventory.textExcerpt,
+              });
+              return { access, geometry };
+            },
+            () => null,
+          );
+          const recoveryGeometryDocumentId = canonicalGeometryDocumentIdentity(
+            recoveryGeometry?.geometry.pageUrl,
+          );
+          const recoveryGeometryComplete = Boolean(
+            recoveryGeometry &&
+            recoveryGeometry.access.status === "loaded" &&
+            recoveryGeometry.geometry.summary.confidence > 0 &&
+            recoveryGeometry.geometry.viewport.width > 0 &&
+            recoveryGeometry.geometry.viewport.height > 0 &&
+            recoveryGeometryDocumentId === finalDocumentId,
+          );
+          if (recoveryGeometry && recoveryGeometryComplete) {
+            const recoveryGeometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
+              "ConsentControlGeometryEvidence.json",
+              {
+                ...recoveryGeometry.geometry,
+                access: recoveryGeometry.access,
+                egress: buildConsentGeometryEgressDiagnostic(),
+                artifactOnly: true,
+                productionFindingIntegration: false,
+              },
+            );
+            consentGeometryDiagnosticWritten = true;
+            consentObservation = finalizeBoundedSameSessionConsentPacket({
+              artifactPath: recoveryGeometryArtifactPath,
+              current: consentObservation,
+              geometry: recoveryGeometry.geometry,
+              pageUrl: safePageUrl(page, effectiveNavigationUrl),
+              recoveryInventory,
+              scanStartedAtMs: input.scanStartedAtMs,
+            });
+            boundedRecoveryOutcome = consentObservation.boundedSameSessionRecoveryOutcome ??
+              "geometry_incomplete";
+            retainedConsentUiObservation = consentObservation;
+          }
+        } else if (recoveryTypedInventoryComplete) {
+          boundedRecoveryOutcome = "geometry_budget_unavailable";
+        }
+      }
+      if (boundedRecoveryOutcome !== "completed") {
+        consentObservation = {
+          ...annotateConsentUiObservation(
+            consentObservation,
+            `recovery:bounded_same_session_consent_packet_${boundedRecoveryOutcome}`,
+          ),
+          boundedSameSessionRecoveryOutcome: boundedRecoveryOutcome,
+        };
+        retainedConsentUiObservation = consentObservation;
+      }
+    }
+
     // A fast initial screenshot can legitimately precede a late-rendering CMP.
     // Once structured first-layer controls are retained, preserve a second
     // screenshot from that same DOM state even when no direct CMP runtime
@@ -3395,6 +3567,27 @@ function isIncompleteConsentUiCapture(observation: ConsentUiObservation): boolea
     failedChannels.some((channel) => channel === "dom_inventory" || channel === "accessibility_tree")
   );
 
+  const activeTypedInventoryFailure = timedOutChannels.some((channel) =>
+    channel === "dom_inventory" || channel === "accessibility_tree"
+  ) || failedChannels.some((channel) =>
+    channel === "dom_inventory" || channel === "accessibility_tree"
+  );
+  const blockingInaccessibleFrame =
+    observation.inventoryOutcome === "frame_inaccessible" &&
+    (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 1) > 0;
+  const pairedSameSessionCompletion =
+    completedTypedInventory &&
+    !activeTypedInventoryFailure &&
+    !blockingInaccessibleFrame &&
+    (observation.inventoryOutcome === "complete_empty" || observation.inventoryOutcome === "complete_with_controls") &&
+    observation.basis.some((basis) =>
+      basis === "inventory:paired_settled_frame_completed" ||
+      basis === "recapture:paired_settled_frame_typed_controls"
+    );
+  if (pairedSameSessionCompletion || isVerifiedTerminalConsentPacket(observation)) {
+    return false;
+  }
+
   const retainedIncompleteBasis = observation.basis.some((basis) =>
     basis === "bounded_capture_timeout_or_failure" ||
     basis === "inventory:probe_failed" ||
@@ -3403,8 +3596,14 @@ function isIncompleteConsentUiCapture(observation: ConsentUiObservation): boolea
     basis === "recapture:post_settle_inventory_incomplete" ||
     basis === "recapture:post_settled_screenshot_inventory_incomplete"
   );
+  const finalInventoryIncompleteBasis = observation.basis.some((basis) =>
+    basis === "recapture:post_settle_inventory_incomplete" ||
+    basis === "recapture:post_settled_screenshot_inventory_incomplete"
+  );
 
-  return (observation.captureStatus === "incomplete" && !completedTypedInventory) ||
+  return blockingInaccessibleFrame ||
+    (activeTypedInventoryFailure && (!completedTypedInventory || finalInventoryIncompleteBasis)) ||
+    (observation.captureStatus === "incomplete" && !completedTypedInventory) ||
     typedInventoryIncomplete ||
     (!completedTypedInventory && retainedIncompleteBasis);
 }
@@ -3427,6 +3626,26 @@ export function shouldRunImmediateStructuredConsentRecovery(
     isIncompleteConsentUiCapture(observation) &&
     !hasSufficientFirstLayerConsentControls(observation),
   );
+}
+
+export function shouldRunBoundedSameSessionConsentPacketRecovery(input: {
+  observation: ConsentUiObservation;
+  representativeScreenshotAvailable: boolean;
+}): boolean {
+  const completedChannels = input.observation.captureDiagnostics?.completedChannels ?? [];
+  const terminalPacketCompletion = isVerifiedTerminalConsentPacket(input.observation);
+  const geometryCompleted =
+    completedChannels.includes("geometry") &&
+    input.observation.inventoryOutcome !== "geometry_unavailable" &&
+    input.observation.inventoryOutcome !== "document_mismatch" &&
+    (terminalPacketCompletion || !input.observation.basis.some((basis) =>
+        basis === "geometry_capture_unavailable" ||
+        basis === "geometry:incomplete_not_authoritative" ||
+        basis === "geometry:document_mismatch_not_authoritative"
+      ));
+  return isIncompleteConsentUiCapture(input.observation) ||
+    !geometryCompleted ||
+    !input.representativeScreenshotAvailable;
 }
 
 async function recoverIncompleteConsentUiObservation(input: {
@@ -7896,6 +8115,8 @@ export function mergeConsentUiObservations(
             : candidate.inventoryOutcome ?? current.inventoryOutcome;
   return {
     ...candidate,
+    boundedSameSessionRecoveryOutcome:
+      candidate.boundedSameSessionRecoveryOutcome ?? current.boundedSameSessionRecoveryOutcome,
     inventoryOutcome,
     captureStatus: current.captureStatus === "observed" || candidate.captureStatus === "observed"
       ? "observed"
@@ -7956,6 +8177,16 @@ function mergeConsentInventoryDiagnostics(
   candidate: ConsentUiObservation["inventoryDiagnostics"],
   retainedControlCount: number,
 ): NonNullable<ConsentUiObservation["inventoryDiagnostics"]> {
+  const candidateCompletedFrameInventory =
+    (candidate?.timingMarkers ?? []).some((marker) =>
+      marker.includes("child_frames_completed") || marker === "bounded_same_session_frame_inventory_completed"
+    );
+  const currentBlockingFrameCount = current?.blockingInaccessibleFrameCount ?? 0;
+  const candidateBlockingFrameCount = candidate?.blockingInaccessibleFrameCount ?? 0;
+  const blockingFrameRecovered =
+    candidateCompletedFrameInventory &&
+    currentBlockingFrameCount > 0 &&
+    candidateBlockingFrameCount === 0;
   return {
     candidateContainerCount: Math.max(
       current?.candidateContainerCount ?? 0,
@@ -7974,10 +8205,12 @@ function mergeConsentInventoryDiagnostics(
       current?.inaccessibleFrameCount ?? 0,
       candidate?.inaccessibleFrameCount ?? 0,
     ),
-    blockingInaccessibleFrameCount: Math.max(
-      current?.blockingInaccessibleFrameCount ?? 0,
-      candidate?.blockingInaccessibleFrameCount ?? 0,
-    ),
+    // This count describes the active final inventory, not the maximum ever
+    // seen. A later completed same-session frame pass can clear a transient
+    // inaccessible frame while the timing marker below preserves the history.
+    blockingInaccessibleFrameCount: candidateCompletedFrameInventory
+      ? candidateBlockingFrameCount
+      : Math.max(currentBlockingFrameCount, candidateBlockingFrameCount),
     nonBlockingInaccessibleFrameCount: Math.max(
       current?.nonBlockingInaccessibleFrameCount ?? 0,
       candidate?.nonBlockingInaccessibleFrameCount ?? 0,
@@ -8001,6 +8234,7 @@ function mergeConsentInventoryDiagnostics(
     timingMarkers: unique([
       ...(current?.timingMarkers ?? []),
       ...(candidate?.timingMarkers ?? []),
+      ...(blockingFrameRecovered ? ["blocking_inaccessible_frame_recovered"] : []),
     ]),
   };
 }
@@ -10002,6 +10236,7 @@ async function captureLateConsentGeometryShadow(input: {
 function preferredPreConsentScreenshotRef(screenshots: ScreenshotArtifact[]): string | undefined {
   return (
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof")?.path ??
+    screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_packet_recovery")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_cmp_controls")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_cmp_empty")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_settled")?.path ??
@@ -10294,6 +10529,73 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
       ? "geometry:did_not_corroborate_structured_controls"
       : "geometry:no_visible_first_layer_controls",
   );
+}
+
+export function finalizeBoundedSameSessionConsentPacket(input: {
+  artifactPath: string;
+  current: ConsentUiObservation;
+  geometry: ConsentControlGeometryArtifact;
+  pageUrl: string;
+  recoveryInventory: ConsentUiObservation;
+  scanStartedAtMs: number;
+}): ConsentUiObservation {
+  const finalDocumentId = canonicalGeometryDocumentIdentity(input.pageUrl);
+  const currentObservationDocumentId = canonicalGeometryDocumentIdentity(input.current.documentUrl);
+  const completedRecoveryInventory = annotateConsentInventoryTimingMarkers({
+    ...input.recoveryInventory,
+    basis: unique([
+      ...input.recoveryInventory.basis,
+      ...(input.recoveryInventory.inventoryOutcome === "complete_empty"
+        ? ["settled_control_inventory_completed"]
+        : []),
+      "recovery:bounded_same_session_inventory_completed",
+    ]),
+  }, ["bounded_same_session_frame_inventory_completed"]);
+  const reconciledRecoveryInventory =
+    currentObservationDocumentId === finalDocumentId && input.current.controls.length > 0
+      ? mergeConsentUiObservations(
+        input.current,
+        completedRecoveryInventory,
+        "recovery:bounded_same_session_inventory_completed",
+      )
+      : completedRecoveryInventory;
+  const geometryReconciled = reconcileConsentUiObservationWithCompletedGeometry({
+    artifactPath: input.artifactPath,
+    current: reconciledRecoveryInventory,
+    geometry: input.geometry,
+    geometryAccessLoaded: true,
+    pageUrl: input.pageUrl,
+    scanStartedAtMs: input.scanStartedAtMs,
+    text: input.recoveryInventory.textExcerpt,
+  });
+  const geometryPacketCompleted =
+    geometryReconciled.captureStatus !== "incomplete" &&
+    (
+      geometryReconciled.inventoryOutcome === "complete_empty" ||
+      geometryReconciled.inventoryOutcome === "complete_with_controls"
+    ) &&
+    (geometryReconciled.captureDiagnostics?.timedOutChannels.length ?? 0) === 0 &&
+    (geometryReconciled.captureDiagnostics?.failedChannels.length ?? 0) === 0 &&
+    (geometryReconciled.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) === 0;
+  const outcome: NonNullable<ConsentUiObservation["boundedSameSessionRecoveryOutcome"]> =
+    geometryPacketCompleted ? "completed" : "geometry_incomplete";
+  return {
+    ...annotateConsentUiObservation(
+      geometryReconciled,
+      `recovery:bounded_same_session_consent_packet_${outcome}`,
+    ),
+    boundedSameSessionRecoveryOutcome: outcome,
+    evidenceRefs: uniqueEvidenceRefs([
+      ...geometryReconciled.evidenceRefs,
+      {
+        artifactId: "consent_control_geometry",
+        eventType: "consent_control_geometry",
+        label: "Bounded final same-session consent-control geometry evidence",
+        path: input.artifactPath,
+        refId: "consent_control_geometry_evidence",
+      },
+    ]),
+  };
 }
 
 export function consentUiObservationFromConfirmedGeometryControls(input: {

@@ -251,6 +251,117 @@ test("an incomplete inventory paired to the final settled frame invalidates an e
   assert.equal(assessment.controls.options.state, "unknown");
 });
 
+test("a later verified same-session packet supersedes historical incomplete inventory diagnostics", () => {
+  const url = "https://recovered-packet.example/";
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+    { actionType: "manage_preferences", label: "Settings", visible: true, layer: "first_layer" },
+  ], { url });
+  source.screenshots = [{
+    artifactId: "screenshot_pre_consent_packet_recovery",
+    capturedAtMs: 6_490,
+    consentStateAtTime: "pre_consent",
+    pagePhase: "network_idle",
+    path: "artifacts/recovery.png",
+    url,
+  }];
+  source.consentUiObservations[0]!.documentUrl = url;
+  source.consentUiObservations[0]!.inventoryOutcome = "complete_with_controls";
+  source.consentUiObservations[0]!.boundedSameSessionRecoveryOutcome = "completed";
+  source.consentUiObservations[0]!.basis = [
+    "recapture:post_settle_inventory_incomplete",
+    "geometry_capture_unavailable",
+    "recovery:bounded_same_session_consent_packet_completed",
+  ];
+  source.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory", "geometry"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: {
+      artifactVersion: "consent_control_geometry.v1",
+      pageUrl: url,
+      summary: {
+        firstLayerAccept: true,
+        firstLayerReject: false,
+        firstLayerOptions: true,
+        cmpDetected: true,
+        confidence: 0.9,
+        limitations: [],
+      },
+      viewport: { width: 1440, height: 900 },
+      candidates: [],
+    },
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "observed");
+});
+
+test("a relevant inaccessible frame remains fail-closed despite observed controls and geometry", () => {
+  const url = "https://blocking-frame.example/";
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+    { actionType: "reject_all", label: "Decline", visible: true, layer: "first_layer" },
+  ], { url });
+  source.consentUiObservations[0]!.inventoryOutcome = "frame_inaccessible";
+  source.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory", "geometry"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+  source.consentUiObservations[0]!.inventoryDiagnostics = {
+    candidateContainerCount: 1,
+    candidateControlCount: 2,
+    retainedControlCount: 2,
+    inspectedFrameCount: 2,
+    inaccessibleFrameCount: 1,
+    blockingInaccessibleFrameCount: 1,
+    nonBlockingInaccessibleFrameCount: 0,
+    nonBlockingInaccessibleFrameReasonCodes: [],
+    inventorySources: ["viewport"],
+    candidateLabels: ["Accept", "Decline"],
+    rejectionReasons: ["frame_inaccessible"],
+    timingMarkers: [],
+  };
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: {
+      artifactVersion: "consent_control_geometry.v1",
+      pageUrl: url,
+      summary: {
+        firstLayerAccept: true,
+        firstLayerReject: true,
+        firstLayerOptions: false,
+        cmpDetected: true,
+        confidence: 0.9,
+        limitations: [],
+      },
+      viewport: { width: 1440, height: 900 },
+      candidates: [],
+    },
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.controls.options.state, "unknown");
+});
+
 test("limited no-evidence DOM inventory does not certify first-layer negatives", () => {
   const url = "https://no-banner.example/";
   const source = bundle([], {

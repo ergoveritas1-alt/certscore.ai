@@ -247,6 +247,22 @@ def signals(value):
     aliases = {"pre_consent_storage":["pre_consent","pre-consent","storage"],"fingerprinting":["fingerprint"],"policy_runtime_comparison":["policy/runtime","policy_runtime","comparison"],"consent_controls":["consent","accept","reject"],"responsive_geometry":["geometry","viewport"],"aria_controls":["aria"],"shadow_dom":["shadow"],"split_labels":["split_label","nested span"],"false_positive_decoy":["false_positive","decoy"],"truncated_policy":["truncated"],"wrong_domain_supplement":["wrong-domain","wrong_domain"],"missing_topics":["missing_topics","insufficient"],"third_party_iframe":["iframe"],"canvas_fingerprinting":["canvas"],"rtl_layout":["rtl"],"mixed_scripts":["mixed-script","cjk","arabic"],"necessary_only":["necessary-only","essential only"],"localized_controls":["localized","locale"]}
     return {k: any(w in text for w in ws) for k, ws in aliases.items()}
 
+def build_hourly_jobs(pages, hour):
+    """Choose three scans while maximizing coverage across the stable lanes.
+
+    Every hour exercises all transports, all locations, and three distinct
+    pages. Each transport covers every location over three hours, every page
+    over five hours, and every page/location combination over 15 hours.
+    """
+    return [
+        {
+            "page": pages[(hour + 2 * transport_index) % len(pages)],
+            "location": LOCATIONS[(hour + transport_index) % len(LOCATIONS)],
+            "transport": transport,
+        }
+        for transport_index, transport in enumerate(TRANSPORTS)
+    ]
+
 def handler(event, context):
     run_id, started = str(uuid.uuid4()), time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     scanner_failures = []
@@ -287,16 +303,11 @@ def handler(event, context):
     corpus_issues.extend(corpus_preflight(pages))
     key = ssm.get_parameter(Name="/certscore/sentinel/api-key", WithDecryption=True)["Parameter"]["Value"]
     jwt_secret = get_secret("certscore/oauth-jwt-secret")
-    # Run exactly three scans per transport (API, SDK, MCP), one from each
-    # location. The three page assignments rotate hourly, so all five sentinel
-    # contracts are covered over a rolling three-hour window and each page is
-    # exercised by every transport over the full rotation.
-    selected_pages = [pages[(hour + slot) % len(pages)] for slot in range(len(TRANSPORTS))]
-    jobs = [
-        {"page": selected_pages[transport_index], "location": loc, "transport": transport}
-        for transport_index, transport in enumerate(TRANSPORTS)
-        for loc in LOCATIONS
-    ]
+    # Three scans per hour cover all three transports and all three locations.
+    # The coprime five-page and three-location rotations yield complete
+    # page/location/transport coverage once per 15-hour cycle.
+    jobs = build_hourly_jobs(pages, hour)
+    selected_pages = [job["page"] for job in jobs]
     results = []
     for job_index, job in enumerate(jobs):
         throttle_seconds = 0 if job_index == 0 else 8 + ((hour + job_index * 7) % 8)

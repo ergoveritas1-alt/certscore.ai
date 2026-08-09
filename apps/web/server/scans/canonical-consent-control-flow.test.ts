@@ -374,11 +374,22 @@ test("limited no-evidence inventory stays unknown through assessment, concern po
 
 test("verified same-session empty consent packet remains factual not-observed through canonical projection", () => {
   const packet = retainedEvidencePacket({ firstLayerControls: [] });
+  packet.screenshots = [{
+    artifactId: "screenshot_pre_consent_packet_recovery",
+    capturedAtMs: 990,
+    captureMethod: "primary_viewport_fallback",
+    consentStateAtTime: "pre_consent",
+    pagePhase: "network_idle",
+    path: "artifacts/bounded-recovery.png",
+    url: GENERIC_URL,
+  }];
+  packet.consentUiObservations[0]!.documentUrl = GENERIC_URL;
   packet.consentUiObservations[0]!.captureStatus = "no_evidence";
   packet.consentUiObservations[0]!.inventoryOutcome = "complete_empty";
   packet.consentUiObservations[0]!.likelyPresent = false;
+  packet.consentUiObservations[0]!.boundedSameSessionRecoveryOutcome = "completed";
   packet.consentUiObservations[0]!.basis = [
-    "settled_control_inventory_completed",
+    "recovery:bounded_same_session_consent_packet_completed",
     "geometry:hidden_cmp_markup_separated_from_visible_surface",
   ];
   packet.consentUiObservations[0]!.captureDiagnostics = {

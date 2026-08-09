@@ -772,10 +772,20 @@ export async function policySurfaceScanner(
     const observedStaticFetchCandidates = deterministicStaticFetchCandidates.filter((candidate) =>
       policyCandidateDiscoveryPriority(candidate) === 0
     );
+    const primaryLocaleCommonPathFetchCandidates = deterministicCommonPathFetchFallback(commonPathCandidates)
+      .filter((candidate) =>
+        candidate.fetchable &&
+        !candidate.observationOnly &&
+        candidate.deterministicClassifierReasonCodes.includes("common_path_primary_locale_privacy")
+      )
+      .slice(0, 1);
     const speculativeStaticFetchCandidates = (
       observedStaticFetchCandidates.length > 0
         ? observedStaticFetchCandidates
-        : deterministicStaticFetchCandidates
+        : dedupeCandidates([
+          ...primaryLocaleCommonPathFetchCandidates,
+          ...deterministicStaticFetchCandidates,
+        ])
     ).slice(0, POLICY_FETCH_CONCURRENCY);
     const speculativeStaticFetchPromise = speculativeStaticFetchCandidates.length > 0
       ? recordPolicyTiming(

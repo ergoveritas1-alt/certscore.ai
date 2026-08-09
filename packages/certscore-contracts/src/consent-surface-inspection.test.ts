@@ -205,9 +205,20 @@ test("independent typed DOM and geometry recovery completes consent inspection w
     coverageStatus: "limited_partial",
     limitationKeys: ["pre_consent_runtime_partial", "consent_ui_capture_timed_out"],
   };
+  input.screenshots = [{
+    artifactId: "screenshot_pre_consent_independent_recovery",
+    capturedAtMs: 950,
+    captureMethod: "independent_visual_fallback_viewport",
+    consentStateAtTime: "pre_consent",
+    pagePhase: "network_idle",
+    path: "/bounded/independent-recovery.png",
+    url: "https://example.test/",
+  }];
   input.consentUiObservations![0] = {
     ...input.consentUiObservations![0]!,
+    documentUrl: "https://example.test/",
     captureStatus: "no_evidence",
+    inventoryOutcome: "complete_empty",
     captureDiagnostics: {
       completedChannels: ["dom_inventory", "geometry"],
       timedOutChannels: [],
@@ -218,6 +229,7 @@ test("independent typed DOM and geometry recovery completes consent inspection w
       "geometry:captured",
       "recovery:independent_consent_capture_completed",
     ],
+    layerInspected: "first_layer",
   };
 
   const outcome = deriveConsentSurfaceInspectionOutcome(input);
@@ -229,6 +241,85 @@ test("independent typed DOM and geometry recovery completes consent inspection w
   assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "page_script_inventory")?.status, "observed");
   assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.status, "observed");
   assert.equal(outcome.limitationKeys.includes("consent_surface_inspection_runtime_partial"), false);
+});
+
+test("bounded same-session empty packet completes canonical negative inspection", () => {
+  const input = baseInput();
+  input.modulesRun![0]!.status = "partial";
+  input.runtimeCoverage = {
+    ...input.runtimeCoverage!,
+    coverageStatus: "limited_partial",
+    limitationKeys: ["pre_consent_runtime_partial", "consent_ui_capture_timed_out"],
+  };
+  input.screenshots = [{
+    artifactId: "screenshot_pre_consent_packet_recovery",
+    capturedAtMs: 950,
+    captureMethod: "primary_viewport_fallback",
+    consentStateAtTime: "pre_consent",
+    pagePhase: "network_idle",
+    path: "/bounded/recovery.png",
+    url: "https://example.test/",
+  }];
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    documentUrl: "https://example.test/",
+    captureStatus: "no_evidence",
+    inventoryOutcome: "complete_empty",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    boundedSameSessionRecoveryOutcome: "completed",
+    basis: ["recovery:bounded_same_session_consent_packet_completed"],
+    layerInspected: "first_layer",
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "no_surface_observed_complete_coverage");
+  assert.equal(outcome.coverageStatus, "complete");
+  assert.equal(outcome.inspectionCompleted, true);
+  assert.deepEqual(outcome.limitationKeys, []);
+});
+
+test("bounded same-session empty packet stays limited when its screenshot is document-mismatched", () => {
+  const input = baseInput();
+  input.modulesRun![0]!.status = "partial";
+  input.runtimeCoverage = {
+    ...input.runtimeCoverage!,
+    coverageStatus: "limited_partial",
+    limitationKeys: ["pre_consent_runtime_partial"],
+  };
+  input.screenshots = [{
+    artifactId: "screenshot_pre_consent_packet_recovery",
+    capturedAtMs: 950,
+    captureMethod: "primary_viewport_fallback",
+    consentStateAtTime: "pre_consent",
+    pagePhase: "network_idle",
+    path: "/bounded/recovery.png",
+    url: "https://other-document.test/",
+  }];
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    documentUrl: "https://example.test/",
+    captureStatus: "no_evidence",
+    inventoryOutcome: "complete_empty",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    boundedSameSessionRecoveryOutcome: "completed",
+    basis: ["recovery:bounded_same_session_consent_packet_completed"],
+    layerInspected: "first_layer",
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "indeterminate_limited_coverage");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.equal(outcome.inspectionCompleted, false);
 });
 
 test("verified complete-empty consent proof is not limited by unrelated runtime diagnostics", () => {
@@ -323,6 +414,98 @@ test("corroborated positive DOM and accessibility capture completes a partial co
   assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "accessibility_tree")?.status, "observed");
   assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.status, "not_observed");
   assert.equal(outcome.limitationKeys.includes("consent_surface_inspection_runtime_partial"), false);
+});
+
+test("same-document DOM and geometry complete a positive inventory without duplicate accessibility capture", () => {
+  const input = baseInput();
+  input.modulesRun![0]!.status = "partial";
+  input.runtimeCoverage = {
+    ...input.runtimeCoverage!,
+    coverageStatus: "limited_partial",
+    limitationKeys: ["pre_consent_runtime_partial", "scan_no_go_diagnostics"],
+  };
+  input.scanNoGoDecision = "continue_with_diagnostics";
+  input.screenshots = [{
+    artifactId: "screenshot_pre_consent_cmp_controls",
+    capturedAtMs: 950,
+    captureMethod: "primary_viewport_fallback",
+    consentStateAtTime: "pre_consent",
+    pagePhase: "network_idle",
+    path: "/bounded/controls.png",
+    url: "https://example.test/",
+  }];
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    captureStatus: "observed",
+    inventoryOutcome: "complete_with_controls",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    basis: ["settled_control_inventory_completed", "geometry:confirmed_first_layer_controls"],
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    visibleChoiceLabels: ["Accept", "Decline"],
+    acceptControlObserved: true,
+    rejectControlObserved: true,
+    controls: [
+      { actionType: "accept_all", classifierReasonCodes: ["canonical_match"], label: "Accept", visible: true },
+      { actionType: "reject_all", classifierReasonCodes: ["canonical_match"], label: "Decline", visible: true },
+    ],
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "actionable_surface_observed");
+  assert.equal(outcome.coverageStatus, "complete");
+  assert.equal(outcome.inspectionCompleted, true);
+  assert.equal(outcome.limitationKeys.includes("scan_no_go_diagnostics"), false);
+  assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.status, "observed");
+});
+
+test("DOM and geometry do not complete a positive inventory while a relevant frame remains inaccessible", () => {
+  const input = baseInput();
+  input.modulesRun![0]!.status = "partial";
+  input.runtimeCoverage = {
+    ...input.runtimeCoverage!,
+    coverageStatus: "limited_partial",
+    limitationKeys: ["pre_consent_runtime_partial"],
+  };
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    captureStatus: "observed",
+    inventoryOutcome: "frame_inaccessible",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    acceptControlObserved: true,
+    controls: [{ actionType: "accept_all", classifierReasonCodes: ["canonical_match"], label: "Accept", visible: true }],
+    inventoryDiagnostics: {
+      candidateContainerCount: 1,
+      candidateControlCount: 1,
+      retainedControlCount: 1,
+      inspectedFrameCount: 2,
+      inaccessibleFrameCount: 1,
+      blockingInaccessibleFrameCount: 1,
+      nonBlockingInaccessibleFrameCount: 0,
+      nonBlockingInaccessibleFrameReasonCodes: [],
+      inventorySources: ["viewport"],
+      candidateLabels: ["Accept"],
+      rejectionReasons: ["frame_inaccessible"],
+      timingMarkers: [],
+    },
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "actionable_surface_observed");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.equal(outcome.inspectionCompleted, false);
 });
 
 test("corroborating inventory channels do not complete a partial negative consent lane without geometry", () => {

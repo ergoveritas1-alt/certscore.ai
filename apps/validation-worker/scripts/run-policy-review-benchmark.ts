@@ -5,10 +5,12 @@ import {
   type IndependentPolicyReviewPacket
 } from "../src/validation/model-review-independent-review";
 import {
-  reviewPolicyPacketWithMini,
+  reviewPolicyPacketWithModel,
   summarizePolicyReviewArtifact,
   type PolicyReviewPacket
 } from "../src/validation/model-policy-review";
+import { summarizeNanoRouting } from "../src/validation/policy-review-routing";
+import { policyModelReviewArtifactSchema } from "@certscore/contracts";
 
 function getArgValue(flag: string) {
   const index = process.argv.indexOf(flag);
@@ -90,6 +92,7 @@ async function main() {
   );
   const onlyCaseId = getArgValue("--case");
   const concurrency = positiveInteger(getArgValue("--concurrency"), 3);
+  const resume = process.argv.includes("--resume");
   const allPackets = await loadPackets(packetDir);
   const packets = onlyCaseId
     ? allPackets.filter((packet) => packet.caseId === onlyCaseId)
@@ -119,16 +122,40 @@ async function main() {
     outputPath: string;
     status: string;
     summary: ReturnType<typeof summarizePolicyReviewArtifact>;
+    routing?: ReturnType<typeof summarizeNanoRouting>;
   }> = [];
 
   await runWithConcurrency(packets, concurrency, async (packet) => {
-    const artifact = await reviewPolicyPacketWithMini({
+    const outputPath = path.join(outDir, `${packet.caseId}.json`);
+    let artifact = null;
+    if (resume) {
+      try {
+        const existing = JSON.parse(await readFile(outputPath, "utf8")) as {
+          evidenceHash?: unknown;
+          modelArtifact?: unknown;
+        };
+        const parsed = policyModelReviewArtifactSchema.safeParse(existing.modelArtifact);
+        if (
+          existing.evidenceHash === packet.evidenceHash &&
+          parsed.success &&
+          parsed.data.status === "completed" &&
+          parsed.data.provenance.requestedModel === model
+        ) {
+          artifact = parsed.data;
+        }
+      } catch {
+        artifact = null;
+      }
+    }
+    artifact ??= await reviewPolicyPacketWithModel({
       apiKey: process.env.OPENAI_API_KEY,
       mode: "shadow",
       model,
       packet: benchmarkPacket(packet)
     });
-    const outputPath = path.join(outDir, `${packet.caseId}.json`);
+    const routing = /^gpt-5\.4-nano(?:-|$)/.test(model)
+      ? summarizeNanoRouting({ nanoArtifact: artifact })
+      : undefined;
     await writeFile(
       outputPath,
       `${JSON.stringify({
@@ -137,6 +164,7 @@ async function main() {
         targetUrl: packet.targetUrl,
         evidenceHash: packet.evidenceHash,
         modelArtifact: artifact,
+        ...(routing ? { routing } : {}),
         productionEligible: false
       }, null, 2)}\n`,
       "utf8"
@@ -146,7 +174,8 @@ async function main() {
       evidenceHash: packet.evidenceHash,
       outputPath: path.relative(outDir, outputPath),
       status: artifact.status,
-      summary: summarizePolicyReviewArtifact(artifact)
+      summary: summarizePolicyReviewArtifact(artifact),
+      ...(routing ? { routing } : {}),
     };
     results.push(result);
     console.log(
@@ -184,6 +213,24 @@ async function main() {
       .length,
     failedCount: sortedResults.filter((result) => result.status === "failed")
       .length,
+    routing: /^gpt-5\.4-nano(?:-|$)/.test(model)
+      ? (() => {
+          const decisions = sortedResults.flatMap((result) => result.routing?.decisions ?? []);
+          const escalationTopicCount = decisions.filter(
+            (decision) => decision.requiresMiniEscalation
+          ).length;
+          return {
+            contractVersion: "nano_policy_corpus_routing.v1",
+            bypassedTopicCount: decisions.length - escalationTopicCount,
+            escalationTopicCount,
+            estimatedMiniTopicReductionRate: decisions.length > 0
+              ? (decisions.length - escalationTopicCount) / decisions.length
+              : null,
+            productionProjectable: false,
+            topicCount: decisions.length,
+          };
+        })()
+      : null,
     productionEligible: false,
     results: sortedResults
   };
