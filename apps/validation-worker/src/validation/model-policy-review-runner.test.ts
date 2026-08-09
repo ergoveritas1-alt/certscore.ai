@@ -4,9 +4,13 @@ import {
   policyModelReviewArtifactSchema,
   POLICY_REVIEW_TOPIC_DEFINITIONS
 } from "@certscore/contracts";
-import { summarizePolicyReviewArtifact } from "./model-policy-review";
+import {
+  summarizePolicyReviewArtifact,
+  type PolicyReviewPacket,
+} from "./model-policy-review";
 import {
   finalizeArtifactProjectionMode,
+  rebindCachedStaticArtifact,
   runConcurrentPolicyReviewJoin,
   waitForUsableStaticReview,
 } from "./model-policy-review-runner";
@@ -79,6 +83,68 @@ test("shadow review remains non-production", () => {
   assert.equal(finalized.productionEligible, false);
   assert.equal(finalized.provenance.usedForProductionProjection, false);
   assert.equal(summarizePolicyReviewArtifact(finalized).productionEligible, false);
+});
+
+test("enforced Nano review remains non-production even when row invariants pass", () => {
+  const nano = artifact();
+  const finalized = finalizeArtifactProjectionMode({
+    artifact: policyModelReviewArtifactSchema.parse({
+      ...nano,
+      provenance: {
+        ...nano.provenance,
+        requestedModel: "gpt-5.4-nano",
+        resolvedModel: "gpt-5.4-nano-2026-03-17",
+      },
+    }),
+    mode: "enforced",
+  });
+  assert.equal(finalized.productionEligible, false);
+  assert.equal(finalized.provenance.usedForProductionProjection, false);
+  assert.ok(finalized.provenance.reasonCodes.includes("unapproved_production_review_model"));
+});
+
+test("cached static review references are rebound to the current retained document", () => {
+  const packet: PolicyReviewPacket = {
+    contentHash: "b".repeat(64),
+    documents: [{
+      canonicalUrl: "https://example.test/privacy",
+      contentCoverage: {
+        status: "complete",
+        sourceTextChars: 100,
+        extractedSectionCount: 1,
+        retainedSectionCount: 1,
+        retainedStrongSectionCount: 1,
+        retainedTableRowCount: 0,
+        limitationKeys: [],
+        packetTextTruncated: false,
+      },
+      documentEvaluationState: "usable",
+      documentFetchState: "fetched",
+      documentId: "current-policy-document",
+      documentOwnerEntity: "Example",
+      documentType: "privacy_policy",
+      extractedCandidates: {},
+      ownershipConfidence: 1,
+      ownershipReasonCodes: ["same_registrable_domain_as_scan_target"],
+      targetRelationship: "target_controller",
+      text: "Direct retained policy evidence.",
+    }],
+    evidenceCoverage: {
+      coverageLimitations: [],
+      policySurfaceInspection: {},
+      runtimeCoverage: {},
+    },
+    policyCandidates: [],
+    runtimeContext: {},
+    scanContext: { region: null, targetUrl: "https://example.test" },
+    scanDate: "2023-07-10",
+    scanId: "current-scan",
+  };
+  const rebound = rebindCachedStaticArtifact({ artifact: artifact(), packet });
+  assert.equal(rebound.scanId, "current-scan");
+  assert.deepEqual(rebound.rows[0]?.sourceDocumentIds, ["current-policy-document"]);
+  assert.deepEqual(rebound.provenance.inputRefs, ["current-policy-document"]);
+  assert.equal(rebound.productionEligible, false);
 });
 
 test("terminal join waits for a concurrently persisted usable static review", async () => {

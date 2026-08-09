@@ -469,7 +469,7 @@ test("static policy review requests only policy-stable topics with a bounded out
   assert.equal(artifact.productionEligible, false);
 });
 
-test("static policy review hash joins same-day packets but changes across scan dates", () => {
+test("static policy review hash reuses ordinary dates but changes at framework-validity boundaries", () => {
   const packet = buildFixturePacket("We use personal data to provide requested services.");
   const sameDayPacket = {
     ...packet,
@@ -479,15 +479,40 @@ test("static policy review hash joins same-day packets but changes across scan d
     ...packet,
     scanDate: "2026-07-26T00:00:01.000Z",
   };
+  const beforeLatestFrameworkBoundary = {
+    ...packet,
+    scanDate: "2023-07-09T23:59:59.000Z",
+  };
 
   assert.equal(
     buildPolicyStaticContentHash(packet),
     buildPolicyStaticContentHash(sameDayPacket),
   );
-  assert.notEqual(
+  assert.equal(
     buildPolicyStaticContentHash(packet),
     buildPolicyStaticContentHash(nextDayPacket),
   );
+  assert.notEqual(
+    buildPolicyStaticContentHash(packet),
+    buildPolicyStaticContentHash(beforeLatestFrameworkBoundary),
+  );
+});
+
+test("static policy review hash ignores scan-specific document ids", () => {
+  const packet = buildFixturePacket("We use personal data to provide requested services.");
+  const repeatedScanPacket = {
+    ...packet,
+    scanId: "scan-repeated",
+    documents: packet.documents.map((document) => ({
+      ...document,
+      documentId: "new-scan-policy-document",
+    })),
+  };
+  assert.equal(
+    buildPolicyStaticContentHash(packet),
+    buildPolicyStaticContentHash(repeatedScanPacket),
+  );
+  assert.notEqual(packet.documents[0]?.documentId, repeatedScanPacket.documents[0]?.documentId);
 });
 
 test("static policy projection ignores non-semantic handoff drift without losing retained policy evidence", () => {
@@ -538,7 +563,7 @@ test("static policy projection ignores non-semantic handoff drift without losing
   assert.equal(earlyStatic.documents, earlyPacket.documents);
   assert.equal(earlyStatic.policyCandidates, earlyPacket.policyCandidates);
   assert.equal(earlyStatic.scanContext.region, null);
-  assert.equal(earlyStatic.scanDate, "2026-07-25");
+  assert.equal(earlyStatic.scanDate, "2023-07-10");
   assert.deepEqual(earlyStatic.runtimeContext, {});
   assert.deepEqual(earlyStatic.evidenceCoverage.runtimeCoverage, {});
   assert.equal(
@@ -1310,6 +1335,29 @@ test("malformed Mini output fails closed with an explicit non-production artifac
   assert.match(artifact.failureReason ?? "", /required topic map/i);
   assert.equal(artifact.rows.length, 0);
   assert.equal(artifact.productionEligible, false);
+});
+
+test("unverified model source URLs are removed instead of repaired or retained", async () => {
+  const packet = buildFixturePacket("We process data to provide donation services.");
+  const rows = completeRows({
+    legal_basis: {
+      sourceUrls: ["policy_surface_123"],
+    },
+  });
+  const artifact = await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async () => new Response(JSON.stringify({
+      model: "gpt-5.4-mini",
+      choices: [{ message: { content: JSON.stringify({ rows }) } }],
+    }), { status: 200 }),
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet,
+  });
+  const legalBasis = artifact.rows.find((row) => row.topic === "legal_basis");
+  assert.equal(artifact.status, "completed");
+  assert.deepEqual(legalBasis?.sourceUrls, []);
+  assert.ok(legalBasis?.reasonCodes.includes("unverified_source_url_removed"));
 });
 
 test("policy cache key changes with model or content", () => {
