@@ -27,13 +27,15 @@ export async function GET(request: Request) {
 
   const nextPath = getSafeRedirectPath(requestUrl.searchParams.get("next"));
   const callbackURL = new URL(nextPath, requestOrigin).toString();
+  const newUserCallbackURL = new URL("/auth/google/complete", requestOrigin);
+  newUserCallbackURL.searchParams.set("next", nextPath);
   const errorCallbackURL = new URL("/login?error=google_sign_in_failed", requestOrigin).toString();
   const result = await getAuth().api.signInSocial({
     body: {
       callbackURL,
       disableRedirect: true,
       errorCallbackURL,
-      newUserCallbackURL: callbackURL,
+      newUserCallbackURL: newUserCallbackURL.toString(),
       provider: "google"
     },
     headers: authHeaders

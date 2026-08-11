@@ -27,10 +27,15 @@ test("membership role persistence defaults to user and rejects new admin assignm
 
 test("bootstrap and role updates consume the non-admin assignment policy", () => {
   const bootstrap = readFileSync(new URL("../../server/bootstrap-user.ts", import.meta.url), "utf8");
+  const selfServeProvisioner = readFileSync(
+    new URL("../../server/auth-flows/provision-self-serve-user.ts", import.meta.url),
+    "utf8"
+  );
   const roleAction = readFileSync(new URL("../../server/admin/update-membership-role.ts", import.meta.url), "utf8");
   const roleForm = readFileSync(new URL("../../components/admin/membership-role-form.tsx", import.meta.url), "utf8");
 
-  assert.match(bootstrap, /role: DEFAULT_NEW_MEMBERSHIP_ROLE/);
+  assert.doesNotMatch(bootstrap, /createOrganizationMembership|ensureOrganizationForUser/);
+  assert.match(selfServeProvisioner, /role: DEFAULT_NEW_MEMBERSHIP_ROLE/);
   assert.doesNotMatch(bootstrap, /role: "admin"/);
   assert.match(roleAction, /z\.enum\(ASSIGNABLE_MEMBERSHIP_ROLES\)/);
   assert.doesNotMatch(roleAction, /z\.enum\(\["admin"/);

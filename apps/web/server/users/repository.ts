@@ -1,6 +1,6 @@
 import "server-only";
 
-import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { query, queryOne, withWriteTransaction } from "@website-signal-risk-scanner/db";
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
 import type { AssignableMembershipRole } from "../../lib/auth/membership-role-policy";
 
@@ -216,6 +216,71 @@ export async function createOrganizationForUser(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown database error.";
     throw new Error(`Failed to create the user's workspace: ${message}`);
+  }
+}
+
+export async function ensureOrganizationForUser(input: {
+  name: string;
+  role: AssignableMembershipRole;
+  slug: string;
+  userId: string;
+}): Promise<{ created: boolean; membershipId: string; organizationId: string }> {
+  try {
+    return await withWriteTransaction(async (client) => {
+      const lockedUser = await client.query<{ id: string }>(
+        `select id
+           from users
+          where id = $1
+          for update`,
+        [input.userId]
+      );
+      if (!lockedUser.rows[0]) {
+        throw new Error("The user profile does not exist.");
+      }
+
+      const existing = await client.query<{ membership_id: string; organization_id: string }>(
+        `select id as membership_id, organization_id
+           from organization_members
+          where user_id = $1`,
+        [input.userId]
+      );
+      if (existing.rows[0]) {
+        return {
+          created: false,
+          membershipId: existing.rows[0].membership_id,
+          organizationId: existing.rows[0].organization_id
+        };
+      }
+
+      const created = await client.query<{ membership_id: string; organization_id: string }>(
+        `with created_organization as (
+           insert into organizations (name, slug)
+           values ($1, $2)
+           returning id
+         ),
+         created_membership as (
+           insert into organization_members (organization_id, user_id, role)
+           select id, $3, $4 from created_organization
+           returning id, organization_id
+         )
+         select id as membership_id, organization_id
+           from created_membership`,
+        [input.name, input.slug, input.userId, input.role]
+      );
+      const row = created.rows[0];
+      if (!row) {
+        throw new Error("Unknown error");
+      }
+
+      return {
+        created: true,
+        membershipId: row.membership_id,
+        organizationId: row.organization_id
+      };
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown database error.";
+    throw new Error(`Failed to ensure the user's workspace: ${message}`);
   }
 }
 

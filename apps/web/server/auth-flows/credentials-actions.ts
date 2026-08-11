@@ -12,6 +12,7 @@ import { bootstrapAppUserSession } from "../bootstrap-user";
 import { initialCredentialsActionState, type CredentialsActionState } from "./action-state";
 import { findAppUserByEmail, normalizeEmail } from "./user";
 import { credentialsSchema, getAuthMode } from "./validators";
+import { provisionSelfServeUserSession } from "./provision-self-serve-user";
 
 function deriveDisplayName(email: string) {
   const localPart = email.split("@")[0]?.trim();
@@ -133,7 +134,7 @@ export async function submitCredentialsAction(
         headers: headerStore
       });
 
-      await bootstrapAppUserSession({
+      await provisionSelfServeUserSession({
         authProvider: "password",
         email: response.user.email,
         fullName: response.user.name ?? null,
